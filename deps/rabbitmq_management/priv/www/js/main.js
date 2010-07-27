@@ -14,9 +14,10 @@ function apply_url(url) {
 }
 
 function update() {
-    with_req('/json/' + current_page, function(text) {
-            var json = JSON.parse(text);
-            var template = current_page.split('/', 1);
+    var [reqs, template] = dispatch(current_page);
+
+    with_req('/json' + reqs[0], function(text) {
+            var json = jQuery.parseJSON(text);
             var html = format(template, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
@@ -25,6 +26,16 @@ function update() {
             });
             $('a[href="#' + current_page + '"]').addClass('selected');
     });
+}
+
+function dispatch(page) {
+    if (page == 'consuming-channels') {
+        return [['/stats/channel_queue_stats/?group_by=channel'],
+                'consuming-channels'];
+    }
+    else {
+        return [['/' + page], current_page.split('/', 1)];
+    }
 }
 
 function replace_content(id, html) {

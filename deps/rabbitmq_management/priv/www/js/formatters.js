@@ -5,6 +5,11 @@ function fmt_string(str) {
     return str;
 }
 
+function fmt_num(num) {
+    if (num == undefined) return UNKNOWN_REPR;
+    return num.toFixed(0);
+}
+
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
 
@@ -30,6 +35,13 @@ function fmt_color(r) {
     if (r > 0.75) return 'red';
     else if (r > 0.5) return 'yellow';
     else return 'green';
+}
+
+function fmt_rate(obj, name) {
+    if (obj[name] == undefined) return '';
+
+    return fmt_num(obj[name + '_rate']) + '/s' +
+        '<sub>(' + fmt_num(obj[name]) + ' total)</sub>';
 }
 
 function alt_rows(i) {
