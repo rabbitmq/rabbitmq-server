@@ -69,4 +69,11 @@ ip(IP) ->
 table(unknown) ->
     unknown;
 table(Table) ->
-    {struct, [{Name, Value} || {Name, _Type, Value} <- Table]}.
+    {struct, [{Name, tuple(Value)} || {Name, _Type, Value} <- Table]}.
+
+tuple(unknown) ->
+    unknown;
+tuple(Tuple) when is_tuple(Tuple) ->
+    tuple_to_list(Tuple);
+tuple(Term) ->
+    Term.

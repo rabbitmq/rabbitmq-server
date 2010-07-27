@@ -59,7 +59,8 @@ format(#amqqueue{name = Name,
      {pid,              QPid},
      {messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}] ++ Stats,
      [{fun rabbit_management_format:pid/1,
-       [pid, exclusive_owner, exclusive_consumer_pid]}]).
+       [pid, exclusive_owner, exclusive_consumer_pid]},
+      {fun rabbit_management_format:table/1, [backing_queue_status]}]).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
