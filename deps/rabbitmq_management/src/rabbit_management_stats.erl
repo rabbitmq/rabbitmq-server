@@ -34,7 +34,8 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {queue_stats, connection_stats}).
+-record(state, {tables}).
+-define(TABLES, [queue_stats, connection_stats, channel_stats]).
 
 %%----------------------------------------------------------------------------
 
@@ -107,59 +108,51 @@ sum(Table, Keys) ->
 
 %%----------------------------------------------------------------------------
 
+%% TODO some sort of generalised query mechanism
+
 init([]) ->
-    {ok, #state{queue_stats = ets:new(anon, [private]),
-                connection_stats = ets:new(anon, [private])}}.
+    {ok, #state{tables =
+                    orddict:from_list(
+                      [{Key, ets:new(anon, [private])} || Key <- ?TABLES])}}.
 
-handle_call({get_queue_stats, QPids}, State = #state{queue_stats = Table}) ->
-    {ok, [lookup_element(Table, id(QPid)) || QPid <- QPids], State};
+handle_call({get_queue_stats, QPids}, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(queue_stats, Tables),
+    {ok, [lookup_element(Table, {id(QPid), stats}) || QPid <- QPids], State};
 
-handle_call(get_connections, State = #state{connection_stats = Table}) ->
+handle_call(get_connections, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(connection_stats, Tables),
     {ok, [Stats ++ lookup_element(Table, {Pid, stats}) ||
              {{Pid, create}, Stats} <- ets:tab2list(Table)], State};
 
-handle_call({get_connection, Id}, State = #state{connection_stats = Table}) ->
+handle_call({get_connection, Id}, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(connection_stats, Tables),
     {ok, result_or_error(lookup_element(Table, {Id, create}) ++
                              lookup_element(Table, {Id, stats})), State};
 
-handle_call(get_overview, State = #state{connection_stats = Table}) ->
+handle_call(get_overview, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(connection_stats, Tables),
     {ok, sum(Table, [recv_oct, send_oct, recv_oct_rate, send_oct_rate]), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(#event{type = queue_stats, props = Stats},
-             State = #state{queue_stats = Table}) ->
-    ets:insert(Table, {id(Stats), Stats}),
-    {ok, State};
+handle_event(Event = #event{type = queue_stats}, State) ->
+    handle_stats(queue_stats, Event, [], State);
 
-handle_event(#event{type = queue_deleted, props = [{pid, Pid}]},
-             State = #state{queue_stats = Table}) ->
-    ets:delete(Table, Pid),
-    {ok, State};
+handle_event(Event = #event{type = queue_deleted}, State) ->
+    handle_deleted(connection_stats, Event, State);
 
-handle_event(#event{type = connection_created, props = Stats},
-             State = #state{connection_stats = Table}) ->
-    ets:insert(Table, {{id(Stats), create}, Stats}),
-    {ok, State};
+handle_event(Event = #event{type = connection_created}, State) ->
+    handle_created(connection_stats, Event, State);
 
-handle_event(#event{type = connection_stats, props = Stats,
-                    timestamp = Timestamp},
-             State = #state{connection_stats = Table}) ->
-    ets:insert(Table,
-               {{id(Stats), stats},
-                rates(Table, Stats, Timestamp, [recv_oct, send_oct]),
-                Timestamp}),
-    {ok, State};
+handle_event(Event = #event{type = connection_stats}, State) ->
+    handle_stats(connection_stats, Event, [recv_oct, send_oct], State);
 
-handle_event(#event{type = connection_closed, props = [{pid, Pid}]},
-             State = #state{connection_stats = Table}) ->
-    ets:delete(Table, {Pid, create}),
-    ets:delete(Table, {Pid, stats}),
-    {ok, State};
+handle_event(Event = #event{type = connection_closed}, State) ->
+    handle_deleted(connection_stats, Event, State);
 
-handle_event(_Event, State) ->
-    %% io:format("Got event ~p~n", [Event]),
+handle_event(Event, State) ->
+    io:format("Got event ~p~n", [Event]),
     {ok, State}.
 
 handle_info(_Info, State) ->
@@ -172,3 +165,23 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
+
+handle_created(TName, #event{props = Stats}, State = #state{tables = Tables}) ->
+    ets:insert(orddict:fetch(TName, Tables), {{id(Stats), create}, Stats}),
+    {ok, State}.
+
+handle_stats(TName, #event{props = Stats, timestamp = Timestamp},
+             RatesKeys, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(TName, Tables),
+    ets:insert(Table,
+               {{id(Stats), stats},
+                rates(Table, Stats, Timestamp, RatesKeys),
+                Timestamp}),
+    {ok, State}.
+
+handle_deleted(TName, #event{props = [{pid, Pid}]},
+               State = #state{tables = Tables}) ->
+    Table = orddict:fetch(TName, Tables),
+    ets:delete(Table, {Pid, create}),
+    ets:delete(Table, {Pid, stats}),
+    {ok, State}.
