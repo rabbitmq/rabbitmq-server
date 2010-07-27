@@ -52,8 +52,7 @@
                   from = none,
                   phase = terminate_channels}).
 
--define(INFO_KEYS,
-        (amqp_connection:info_keys() ++ [max_channel, heartbeat])).
+-define(INFO_KEYS, (amqp_connection:info_keys() ++ [max_channel, heartbeat])).
 
 %%---------------------------------------------------------------------------
 %% Internal interface

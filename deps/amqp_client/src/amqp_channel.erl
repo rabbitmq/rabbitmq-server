@@ -628,13 +628,8 @@ handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(Reason, #state{sup = Sup, driver = Driver}) ->
-    case Reason of
-        normal ->
-            amqp_channel_util:terminate_channel_infrastructure(Driver, Sup);
-        _ ->
-            ok
-    end.
+terminate(_Reason, #state{sup = Sup, driver = Driver}) ->
+    amqp_channel_util:terminate_channel_infrastructure(Driver, Sup);
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
