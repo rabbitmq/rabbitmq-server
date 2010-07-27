@@ -27,7 +27,9 @@
 -export([start/0]).
 
 -export([get_queue_stats/1, get_connections/0, get_connection/1,
-         get_overview/0]).
+         get_overview/0, get_msg_stats/4]).
+
+-export([group_sum/2]).
 
 -export([pget/2, add/2]).
 
@@ -35,7 +37,10 @@
          terminate/2, code_change/3]).
 
 -record(state, {tables}).
--define(TABLES, [queue_stats, connection_stats, channel_stats]).
+-define(TABLES, [queue_stats, connection_stats, channel_stats,
+                 channel_exchange_stats, channel_queue_stats,
+                 channel_queue_exchange_stats]).
+-define(FINE_STATS, [ack, deliver, deliver_no_ack, get, get_no_ack, publish]).
 
 %%----------------------------------------------------------------------------
 
@@ -54,6 +59,13 @@ get_connection(Id) ->
 get_overview() ->
     gen_event:call(rabbit_event, ?MODULE, get_overview, infinity).
 
+get_msg_stats(Type, GroupBy, MatchKey, MatchValue) ->
+    gen_event:call(rabbit_event, ?MODULE,
+                   {get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
+                   infinity).
+
+%%----------------------------------------------------------------------------
+
 pget(Key, List) ->
     pget(Key, List, unknown).
 
@@ -67,8 +79,6 @@ add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
 add(A, B)       -> A + B.
 
-%%----------------------------------------------------------------------------
-
 lookup_element(Table, Key) ->
     lookup_element(Table, Key, 2).
 
@@ -80,18 +90,20 @@ lookup_element(Table, Key, Pos) ->
 result_or_error([]) -> error;
 result_or_error(S)  -> S.
 
-rates(Table, Stats, Timestamp, Keys) ->
+%% TODO To say these need unit tests is an understatement
+
+rates(Table, Id, Stats, Timestamp, Keys) ->
     Stats ++ lists:filter(
                fun (unknown) -> false;
                    (_)       -> true
                end,
-               [rate(Table, Stats, Timestamp, Key) || Key <- Keys]).
+               [rate(Table, Id, Stats, Timestamp, Key) || Key <- Keys]).
 
-rate(Table, Stats, Timestamp, Key) ->
-    Old = lookup_element(Table, {id(Stats), stats}),
-    OldTS = lookup_element(Table, {id(Stats), stats}, 3),
-    case OldTS of
-        [] ->
+rate(Table, Id, Stats, Timestamp, Key) ->
+    Old = lookup_element(Table, Id),
+    OldTS = lookup_element(Table, Id, 3),
+    case OldTS == [] orelse not proplists:is_defined(Key, Old) of
+        true ->
             unknown;
         _ ->
             Diff = pget(Key, Stats) - pget(Key, Old),
@@ -106,9 +118,31 @@ sum(Table, Keys) ->
                 [{Key, 0} || Key <- Keys],
                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
+format_id({ChPid, #resource{name=XName, virtual_host=XVhost}}) ->
+    [{channel, ChPid}, {exchange_name, XName}, {exchange_vhost, XVhost}];
+format_id({ChPid, QPid}) ->
+    [{channel, ChPid}, {queue, QPid}];
+format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
+    [{channel, ChPid}, {queue, QPid},
+     {exchange_name, XName}, {exchange_vhost, XVhost}].
+
+group_sum(GroupBy, List) ->
+    Res =
+        lists:foldl(fun ({Ids, New}, Acc) ->
+                            Id = {GroupBy, pget(GroupBy, Ids)},
+                            dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
+                                        New, Acc)
+                    end,
+                    dict:new(),
+                    [I || I <- List]),
+    [{[Ids], Stats} || {Ids, Stats} <- dict:to_list(Res)].
+
+gs_update(Cur, New) ->
+    [{Key, Val + pget(Key, Cur, 0)} || {Key, Val} <- New].
+
 %%----------------------------------------------------------------------------
 
-%% TODO some sort of generalised query mechanism
+%% TODO some sort of generalised query mechanism for the coarse stats?
 
 init([]) ->
     {ok, #state{tables =
@@ -133,6 +167,29 @@ handle_call(get_overview, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
     {ok, sum(Table, [recv_oct, send_oct, recv_oct_rate, send_oct_rate]), State};
 
+handle_call({get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
+            State = #state{tables = Tables}) ->
+    Table = orddict:fetch(Type, Tables),
+    All = [{format_id(Id), Stats} ||
+              {Id, Stats, _Timestamp} <- ets:tab2list(Table)],
+    Group = case {Type, GroupBy} of
+                {_, undefined}                             -> false;
+                {channel_queue_stats, "channel"}           -> true;
+                {channel_queue_stats, "queue"}             -> true;
+                {channel_exchange_stats, "channel"}        -> true;
+                {channel_exchange_stats, "exchange"}       -> true;
+                {channel_queue_exchange_stats, "channel"}  -> true;
+                {channel_queue_exchange_stats, "exchange"} -> true;
+                {channel_queue_exchange_stats, "queue"}    -> true;
+                {_, _}                                     -> bad_request
+            end,
+    Res = case Group of
+              false -> All;
+              true  -> group_sum(list_to_atom(GroupBy), All);
+              _     -> bad_request
+          end,
+    {ok, Res, State};
+
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
@@ -151,8 +208,28 @@ handle_event(Event = #event{type = connection_stats}, State) ->
 handle_event(Event = #event{type = connection_closed}, State) ->
     handle_deleted(connection_stats, Event, State);
 
-handle_event(Event, State) ->
-    io:format("Got event ~p~n", [Event]),
+handle_event(Event = #event{type = channel_created}, State) ->
+    handle_created(channel_stats, Event, State);
+
+handle_event(Event = #event{type = channel_stats, props = Stats,
+                            timestamp = Timestamp}, State) ->
+    handle_stats(channel_stats, Event, [], State),
+    [[handle_fine_stats(Type, id(Stats), S, Timestamp, State) ||
+         S <- pget(Type, Stats)] ||
+        Type <- [channel_queue_stats, channel_exchange_stats,
+                 channel_queue_exchange_stats]],
+    {ok, State};
+
+handle_event(Event = #event{type = channel_closed,
+                            props = [{pid, Pid}]}, State) ->
+    handle_deleted(channel_stats, Event, State),
+    [delete_fine_stats(Type, id(Pid), State) ||
+        Type <- [channel_queue_stats, channel_exchange_stats,
+                 channel_queue_exchange_stats]],
+    {ok, State};
+
+handle_event(_Event, State) ->
+%%    io:format("Got event ~p~n", [Event]),
     {ok, State}.
 
 handle_info(_Info, State) ->
@@ -173,9 +250,10 @@ handle_created(TName, #event{props = Stats}, State = #state{tables = Tables}) ->
 handle_stats(TName, #event{props = Stats, timestamp = Timestamp},
              RatesKeys, State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
+    Id = {id(Stats), stats},
     ets:insert(Table,
-               {{id(Stats), stats},
-                rates(Table, Stats, Timestamp, RatesKeys),
+               {Id,
+                rates(Table, Id, Stats, Timestamp, RatesKeys),
                 Timestamp}),
     {ok, State}.
 
@@ -185,3 +263,20 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     ets:delete(Table, {Pid, create}),
     ets:delete(Table, {Pid, stats}),
     {ok, State}.
+
+handle_fine_stats(Type, ChPid, {Ids, Stats}, Timestamp,
+                  State = #state{tables = Tables}) ->
+    Table = orddict:fetch(Type, Tables),
+    Id = fine_stats_key(ChPid, Ids),
+    Res = rates(Table, Id, Stats, Timestamp, ?FINE_STATS),
+    delete_fine_stats(Type, ChPid, State),
+    ets:insert(Table, {Id, Res, Timestamp}).
+
+delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
+    Table = orddict:fetch(Type, Tables),
+    ets:match_delete(Table, {{ChPid, '_'}, '_', '_'}),
+    ets:match_delete(Table, {{ChPid, '_', '_'}, '_', '_'}).
+
+fine_stats_key(ChPid, {QPid, X})              -> {ChPid, id(QPid), X};
+fine_stats_key(ChPid, QPid) when is_pid(QPid) -> {ChPid, id(QPid)};
+fine_stats_key(ChPid, X)                      -> {ChPid, X}.
