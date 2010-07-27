@@ -312,7 +312,6 @@ noreply(NewState) ->
 
 ensure_stats_timer(State = #ch{stats_level = none}) ->
     State;
-
 ensure_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
     internal_emit_stats(State),
     {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
@@ -1198,11 +1197,9 @@ maybe_incr_stats(QXIncs, Measure, _State) ->
 incr_stats({QPid, _} = QX, Inc, Measure) ->
     maybe_monitor(QPid),
     update_measures(queue_exchange_stats, QX, Inc, Measure);
-
 incr_stats(QPid, Inc, Measure) when is_pid(QPid) ->
     maybe_monitor(QPid),
     update_measures(queue_stats, QPid, Inc, Measure);
-
 incr_stats(X, Inc, Measure) ->
     update_measures(exchange_stats, X, Inc, Measure).
 
