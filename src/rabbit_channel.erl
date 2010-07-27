@@ -1232,11 +1232,11 @@ internal_emit_stats(State = #ch{stats_level = Level}) ->
             rabbit_event:notify(channel_stats, CoarseStats);
         fine ->
             FineStats =
-                [{queue_stats,
+                [{channel_queue_stats,
                   [{QPid, Stats} || {{queue_stats, QPid}, Stats} <- get()]},
-                 {exchange_stats,
+                 {channel_exchange_stats,
                   [{X, Stats} || {{exchange_stats, X}, Stats} <- get()]},
-                 {queue_exchange_stats,
+                 {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
             rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
