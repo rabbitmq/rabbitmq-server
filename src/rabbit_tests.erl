@@ -1181,19 +1181,16 @@ test_statistics_event_receiver(Pid) ->
             test_statistics_event_receiver(Pid)
     end.
 
-test_statistics_receive_event(Ch, Retries, Matcher) ->
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
     rabbit_channel:emit_stats(Ch),
+    test_statistics_receive_event1(Ch, Matcher).
+
+test_statistics_receive_event1(Ch, Matcher) ->
     receive #event{type = channel_stats, props = Props} ->
             case Matcher(Props) of
-                true ->
-                    Props;
-                _    ->
-                    case Retries of
-                        0 -> throw(failed_to_receive_matching_event);
-                        _ -> timer:sleep(10), 
-                             test_statistics_receive_event(Ch, Retries - 1,
-                                                           Matcher)
-                    end
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
             end
     after 1000 -> throw(failed_to_receive_event)
     end.
@@ -1203,11 +1200,11 @@ test_statistics() ->
 
     %% ATM this just tests the queue / exchange stats in channels. That's
     %% by far the most complex code though.
-    
+
     %% Set up a channel and queue
     {_Writer, Ch, _MRef} = test_spawn(fun test_statistics_receiver/1),
     rabbit_channel:do(Ch, #'queue.declare'{}),
-    QName = receive #'queue.declare_ok'{queue = Q0} -> 
+    QName = receive #'queue.declare_ok'{queue = Q0} ->
                     Q0
             after 1000 -> throw(failed_to_receive_queue_declare_ok)
             end,
@@ -1216,13 +1213,13 @@ test_statistics() ->
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
     rabbit_tests_event_receiver:start(self()),
-    
+
     %% Check stats empty
-    Event = test_statistics_receive_event(Ch, 0, fun (_) -> true end),
+    Event = test_statistics_receive_event(Ch, fun (_) -> true end),
     [] = proplists:get_value(channel_queue_stats, Event),
     [] = proplists:get_value(channel_exchange_stats, Event),
     [] = proplists:get_value(channel_queue_exchange_stats, Event),
-    
+
     %% Publish and get a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
                                            routing_key = QName},
@@ -1231,7 +1228,7 @@ test_statistics() ->
 
     %% Check the stats reflect that
     Event2 = test_statistics_receive_event(
-               Ch, 10,
+               Ch,
                fun (E) ->
                        length(proplists:get_value(
                                 channel_queue_exchange_stats, E)) > 0
@@ -1244,7 +1241,7 @@ test_statistics() ->
     %% Check the stats remove stuff on queue deletion
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
     Event3 = test_statistics_receive_event(
-               Ch, 10,
+               Ch,
                fun (E) ->
                        length(proplists:get_value(
                                 channel_queue_exchange_stats, E)) == 0

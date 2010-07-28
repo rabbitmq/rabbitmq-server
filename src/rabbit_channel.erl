@@ -38,7 +38,7 @@
 -export([start_link/6, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1]).
+-export([emit_stats/1, flush/1]).
 
 -export([flow_timeout/2]).
 
@@ -160,6 +160,9 @@ info_all(Items) ->
 emit_stats(Pid) ->
     gen_server2:pcast(Pid, 7, emit_stats).
 
+flush(Pid) ->
+    gen_server2:call(Pid, flush).
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
@@ -203,6 +206,9 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
+
+handle_call(flush, _from, State) ->
+    reply(ok, State);
 
 handle_call(_Request, _From, State) ->
     noreply(State).
