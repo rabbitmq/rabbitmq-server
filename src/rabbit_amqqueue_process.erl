@@ -56,8 +56,10 @@
             backing_queue_state,
             active_consumers,
             blocked_consumers,
+            expires,
             sync_timer_ref,
             rate_timer_ref,
+            expiry_timer_ref,
             stats_timer_ref,
             stats_level
            }).
@@ -110,17 +112,19 @@ init(Q) ->
     {ok, BQ} = application:get_env(backing_queue_module),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
 
-    {ok, #q{q = Q#amqqueue{pid = self()},
-            exclusive_consumer = none,
-            has_had_consumers = false,
-            backing_queue = BQ,
+    {ok, #q{q                   = Q#amqqueue{pid = self()},
+            exclusive_consumer  = none,
+            has_had_consumers   = false,
+            backing_queue       = BQ,
             backing_queue_state = undefined,
-            active_consumers = queue:new(),
-            blocked_consumers = queue:new(),
-            sync_timer_ref = undefined,
-            rate_timer_ref = undefined,
-            stats_timer_ref = undefined,
-            stats_level = StatsLevel}, hibernate,
+            active_consumers    = queue:new(),
+            blocked_consumers   = queue:new(),
+            expires             = undefined,
+            sync_timer_ref      = undefined,
+            rate_timer_ref      = undefined,
+            expiry_timer_ref    = undefined,
+            stats_timer_ref     = undefined,
+            stats_level         = StatsLevel}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -142,6 +146,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
+    case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
+        {long, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
+        undefined       -> State
+    end.
+
 declare(Recover, From,
         State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
                    backing_queue = BQ, backing_queue_state = undefined}) ->
@@ -159,7 +169,7 @@ declare(Recover, From,
                        queue_created,
                        [{Item, i(Item, State)} ||
                            Item <- [pid|?CREATION_EVENT_KEYS]]),
-                     noreply(State#q{backing_queue_state = BQS});
+                     noreply(init_expires(State#q{backing_queue_state = BQS}));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
 
@@ -233,6 +243,27 @@ stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{rate_timer_ref = undefined}.
+    
+stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
+    State;
+stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State#q{expiry_timer_ref = undefined}.
+
+%% We only wish to expire where there are no consumers *and* when
+%% basic.get hasn't been called for the configured period.
+ensure_expiry_timer(State = #q{expires = undefined}) ->
+    State;
+ensure_expiry_timer(State = #q{expires = Expires}) ->
+    case is_unused(State) of
+        true ->
+            NewState = stop_expiry_timer(State),
+            {ok, TRef} = timer:apply_after(
+                           Expires, rabbit_amqqueue, maybe_expire, [self()]),
+            NewState#q{expiry_timer_ref = TRef};
+        false ->
+            State
+    end.
 
 ensure_stats_timer(State = #q{stats_level = none}) ->
     State;
@@ -476,7 +507,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                                       _    -> rollback_transaction(Txn, ChPid,
                                                                    State1)
                                   end,
-                         {ok, requeue_and_run(sets:to_list(ChAckTags), State2)}
+                         {ok, requeue_and_run(sets:to_list(ChAckTags),
+                                              ensure_expiry_timer(State2))}
             end
     end.
 
@@ -651,8 +683,9 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName},
                        backing_queue_state = BQS, backing_queue = BQ}) ->
     AckRequired = not NoAck,
+    State1 = ensure_expiry_timer(State),
     case BQ:fetch(AckRequired, BQS) of
-        {empty, BQS1} -> reply(empty, State#q{backing_queue_state = BQS1});
+        {empty, BQS1} -> reply(empty, State1#q{backing_queue_state = BQS1});
         {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
             case AckRequired of
                 true ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
@@ -661,7 +694,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                 false -> ok
             end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
-            reply({ok, Remaining, Msg}, State#q{backing_queue_state = BQS1})
+            reply({ok, Remaining, Msg}, State1#q{backing_queue_state = BQS1})
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid,
@@ -728,7 +761,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                                               ChPid, ConsumerTag,
                                               State#q.blocked_consumers)},
             case should_auto_delete(NewState) of
-                false -> reply(ok, NewState);
+                false -> reply(ok, ensure_expiry_timer(NewState));
                 true  -> {stop, normal, ok, NewState}
             end
     end;
@@ -760,8 +793,6 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     case lookup_ch(ChPid) of
         not_found ->
-            rabbit_log:warning("Ignoring requeue from unknown ch: ~p~n",
-                               [ChPid]),
             noreply(State);
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
@@ -790,7 +821,7 @@ handle_cast({ack, Txn, AckTags, ChPid},
                     _    -> {C#cr{txn = Txn}, BQ:tx_ack(Txn, AckTags, BQS)}
                 end,
             store_ch_record(C1),
-            noreply(State #q { backing_queue_state = BQS1 })
+            noreply(State#q{backing_queue_state = BQS1})
     end;
 
 handle_cast({rollback, Txn, ChPid}, State) ->
@@ -846,6 +877,13 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
+handle_cast(maybe_expire, State) ->
+    case is_unused(State) of
+        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
+                 {stop, normal, State};
+        false -> noreply(ensure_expiry_timer(State))
+    end;
+    
 handle_cast(emit_stats, State) ->
     emit_stats(State),
     noreply(State).

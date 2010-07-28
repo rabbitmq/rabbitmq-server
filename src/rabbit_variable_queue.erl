@@ -368,10 +368,10 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(QueueName, IsDurable, _Recover) ->
+init(QueueName, IsDurable, Recover) ->
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(
-          QueueName,
+          QueueName, Recover,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (Guid) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)

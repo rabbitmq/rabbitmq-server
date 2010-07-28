@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2]).
+         set_maximum_since_use/2, maybe_expire/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -55,6 +55,8 @@
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
+
+-define(EXPIRES_TYPE, long).
 
 %%----------------------------------------------------------------------------
 
@@ -84,8 +86,8 @@
 -spec(with_or_die/2 :: (name(), qfun(A)) -> A).
 -spec(assert_equivalence/5 ::
         (rabbit_types:amqqueue(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:maybe(pid))
-        -> ok).
+         rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
+        -> 'ok' | no_return()).
 -spec(check_exclusive_access/2 :: (rabbit_types:amqqueue(), pid()) -> 'ok').
 -spec(with_exclusive_access_or_die/3 :: (name(), pid(), qfun(A)) -> A).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
@@ -148,6 +150,7 @@
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
 
@@ -188,6 +191,7 @@ recover_durable_queues(DurableQueues) ->
     [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
+    ok = check_declare_arguments(QueueName, Args),
     Q = start_queue_process(#amqqueue{name = QueueName,
                                       durable = Durable,
                                       auto_delete = AutoDelete,
@@ -255,11 +259,13 @@ with(Name, F) ->
 with_or_die(Name, F) ->
     with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
 
-assert_equivalence(#amqqueue{durable = Durable, auto_delete = AutoDelete} = Q,
-                   Durable, AutoDelete, _Args, Owner) ->
+assert_equivalence(#amqqueue{durable     = Durable,
+                             auto_delete = AutoDelete} = Q,
+                   Durable, AutoDelete, RequiredArgs, Owner) ->
+    assert_args_equivalence(Q, RequiredArgs),
     check_exclusive_access(Q, Owner, strict);
 assert_equivalence(#amqqueue{name = QueueName},
-                   _Durable, _AutoDelete, _Args, _Owner) ->
+                   _Durable, _AutoDelete, _RequiredArgs, _Owner) ->
     rabbit_misc:protocol_error(
       not_allowed, "parameters for ~s not equivalent",
       [rabbit_misc:rs(QueueName)]).
@@ -279,6 +285,32 @@ check_exclusive_access(#amqqueue{name = QueueName}, _ReaderPid, _MatchType) ->
 with_exclusive_access_or_die(Name, ReaderPid, F) ->
     with_or_die(Name,
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
+
+assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
+                       RequiredArgs) ->
+    rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
+                                        [<<"x-expires">>]).
+
+check_declare_arguments(QueueName, Args) ->
+    [case Fun(rabbit_misc:table_lookup(Args, Key)) of
+         ok             -> ok;
+         {error, Error} -> rabbit_misc:protocol_error(
+                             precondition_failed,
+                             "Invalid arguments in declaration of queue ~s: "
+                             "~w (on argument: ~w)",
+                             [rabbit_misc:rs(QueueName), Error, Key])
+     end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
+    ok.
+
+check_expires_argument(undefined) ->
+    ok;
+check_expires_argument({?EXPIRES_TYPE, Expires})
+  when is_integer(Expires) andalso Expires > 0 ->
+    ok;
+check_expires_argument({?EXPIRES_TYPE, _Expires}) ->
+    {error, expires_zero_or_less};
+check_expires_argument(_) ->
+    {error, expires_not_of_type_long}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
@@ -422,6 +454,9 @@ set_ram_duration_target(QPid, Duration) ->
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:pcast(QPid, 8, {set_maximum_since_use, Age}).
+
+maybe_expire(QPid) ->
+    gen_server2:pcast(QPid, 8, maybe_expire).
 
 on_node_down(Node) ->
     [Hook() ||

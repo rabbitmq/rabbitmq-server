@@ -1085,6 +1085,11 @@ expect_normal_channel_termination(MRef, Ch) ->
     after 1000 -> throw(channel_failed_to_exit)
     end.
 
+gobble_channel_exit() ->
+    receive {channel_exit, _, _} -> ok
+    after 1000 -> throw(channel_exit_not_received)
+    end.
+
 test_memory_pressure() ->
     {Writer0, Ch0, MRef0} = test_memory_pressure_spawn(),
     [ok = rabbit_channel:conserve_memory(Ch0, Conserve) ||
@@ -1107,6 +1112,7 @@ test_memory_pressure() ->
     Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
     ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
     expect_normal_channel_termination(MRef0, Ch0),
+    gobble_channel_exit(),
 
     {Writer1, Ch1, MRef1} = test_memory_pressure_spawn(),
     ok = rabbit_channel:conserve_memory(Ch1, true),
@@ -1118,19 +1124,23 @@ test_memory_pressure() ->
     %% send back the wrong flow_ok. Channel should die.
     ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
     expect_normal_channel_termination(MRef1, Ch1),
+    gobble_channel_exit(),
 
     {_Writer2, Ch2, MRef2} = test_memory_pressure_spawn(),
     %% just out of the blue, send a flow_ok. Life should end.
     ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
     expect_normal_channel_termination(MRef2, Ch2),
+    gobble_channel_exit(),
 
     {_Writer3, Ch3, MRef3} = test_memory_pressure_spawn(),
     ok = rabbit_channel:conserve_memory(Ch3, true),
+    ok = test_memory_pressure_receive_flow(false),
     receive {'DOWN', MRef3, process, Ch3, _} ->
             ok
     after 12000 ->
             throw(channel_failed_to_exit)
     end,
+    gobble_channel_exit(),
 
     alarm_handler:set_alarm({vm_memory_high_watermark, []}),
     Me = self(),
@@ -1209,9 +1219,9 @@ test_statistics() ->
     
     %% Check stats empty
     Event = test_statistics_receive_event(Ch, 10, fun (_) -> true end),
-    [] = proplists:get_value(queue_stats, Event),
-    [] = proplists:get_value(exchange_stats, Event),
-    [] = proplists:get_value(queue_exchange_stats, Event),
+    [] = proplists:get_value(channel_queue_stats, Event),
+    [] = proplists:get_value(channel_exchange_stats, Event),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event),
     
     %% Publish and get a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
@@ -1223,24 +1233,26 @@ test_statistics() ->
     Event2 = test_statistics_receive_event(
                Ch, 10,
                fun (E) ->
-                       length(proplists:get_value(queue_exchange_stats, E)) > 0
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) > 0
                end),
-    [{QPid,[{get,1}]}] = proplists:get_value(queue_stats, Event2),
-    [{X,[{publish,1}]}] = proplists:get_value(exchange_stats, Event2),
+    [{QPid,[{get,1}]}] = proplists:get_value(channel_queue_stats, Event2),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
     [{{QPid,X},[{publish,1}]}] =
-        proplists:get_value(queue_exchange_stats, Event2),
+        proplists:get_value(channel_queue_exchange_stats, Event2),
 
     %% Check the stats remove stuff on queue deletion
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
     Event3 = test_statistics_receive_event(
                Ch, 10,
                fun (E) ->
-                       length(proplists:get_value(queue_exchange_stats, E)) == 0
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) == 0
                end),
 
-    [] = proplists:get_value(queue_stats, Event3),
-    [{X,[{publish,1}]}] = proplists:get_value(exchange_stats, Event3),
-    [] = proplists:get_value(queue_exchange_stats, Event3),
+    [] = proplists:get_value(channel_queue_stats, Event3),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event3),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event3),
 
     rabbit_tests_event_receiver:stop(),
     passed.
@@ -1630,7 +1642,7 @@ test_queue() ->
 
 init_test_queue() ->
     rabbit_queue_index:init(
-      test_queue(), false,
+      test_queue(), true, false,
       fun (Guid) ->
               rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
       end).
