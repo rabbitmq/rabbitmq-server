@@ -978,7 +978,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
             end;
         {empty, _} ->
             rabbit_misc:protocol_error(
-              not_found, "unknown delivery tag ~w", [DeliveryTag])
+              precondition_failed, "unknown delivery tag ~w", [DeliveryTag])
     end.
 
 add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->

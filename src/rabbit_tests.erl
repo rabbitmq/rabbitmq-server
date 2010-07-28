@@ -1546,7 +1546,7 @@ test_queue() ->
 
 init_test_queue() ->
     rabbit_queue_index:init(
-      test_queue(), false,
+      test_queue(), true, false,
       fun (Guid) ->
               rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
       end).
