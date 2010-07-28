@@ -1218,7 +1218,7 @@ test_statistics() ->
     rabbit_tests_event_receiver:start(self()),
     
     %% Check stats empty
-    Event = test_statistics_receive_event(Ch, 10, fun (_) -> true end),
+    Event = test_statistics_receive_event(Ch, 0, fun (_) -> true end),
     [] = proplists:get_value(channel_queue_stats, Event),
     [] = proplists:get_value(channel_exchange_stats, Event),
     [] = proplists:get_value(channel_queue_exchange_stats, Event),
