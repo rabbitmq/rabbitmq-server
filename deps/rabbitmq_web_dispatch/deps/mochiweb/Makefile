@@ -25,7 +25,8 @@ $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 	cp -r $< $@
 
 $(CHECKOUT_DIR):
-	git clone -b $(REVISION) $(UPSTREAM_GIT) $@
+	git clone $(UPSTREAM_GIT) $@
+	(cd $@ && git checkout $(REVISION)) || rm -rf $@
 
 %.ez: $(LIB_PACKAGE_DIR)
 	$(MAKE) -C $(LIB_PACKAGE_DIR) clean all
