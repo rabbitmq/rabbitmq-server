@@ -207,7 +207,7 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
-handle_call(flush, _from, State) ->
+handle_call(flush, _From, State) ->
     reply(ok, State);
 
 handle_call(_Request, _From, State) ->
