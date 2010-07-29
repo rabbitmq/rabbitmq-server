@@ -33,7 +33,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/7, stop/1, writer/1, framing_channel/1, channel/1]).
+-export([start_link/7, writer/1, framing_channel/1, channel/1]).
 
 -export([init/1]).
 
@@ -56,8 +56,6 @@
 start_link(Sock, Channel, FrameMax, ReaderPid, Username, VHost, Collector) ->
     supervisor2:start_link(?MODULE, [Sock, Channel, FrameMax, ReaderPid,
                                      Username, VHost, Collector]).
-stop(Pid) ->
-    supervisor2:stop(Pid).
 
 writer(Pid) ->
     hd(supervisor2:find_child(Pid, writer, worker, [rabbit_writer])).
