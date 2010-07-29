@@ -65,12 +65,13 @@
          acks_uncommitted,
          prefetch_count]).
 
--define(INFO_KEYS,
+-define(CREATION_EVENT_KEYS,
         [connection,
          number,
          user,
-         vhost]
-        ++ ?STATISTICS_KEYS).
+         vhost]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
 
 %%----------------------------------------------------------------------------
 
@@ -169,33 +170,31 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
-    rabbit_event:notify(channel_created, [{pid,             self()},
-                                          {connection_pid,  ReaderPid},
-                                          {channel,         Channel},
-                                          {user,            Username},
-                                          {vhost,           VHost}]),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    {ok, #ch{state                   = starting,
-             channel                 = Channel,
-             reader_pid              = ReaderPid,
-             writer_pid              = WriterPid,
-             limiter_pid             = undefined,
-             transaction_id          = none,
-             tx_participants         = sets:new(),
-             next_tag                = 1,
-             uncommitted_ack_q       = queue:new(),
-             unacked_message_q       = queue:new(),
-             username                = Username,
-             virtual_host            = VHost,
-             most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new(),
-             blocking                = dict:new(),
-             queue_collector_pid     = CollectorPid,
-             flow                    = #flow{server = true, client = true,
-                                             pending = none},
-             stats_timer_ref         = undefined,
-             stats_level             = StatsLevel},
-     hibernate,
+    State = #ch{state                   = starting,
+                channel                 = Channel,
+                reader_pid              = ReaderPid,
+                writer_pid              = WriterPid,
+                limiter_pid             = undefined,
+                transaction_id          = none,
+                tx_participants         = sets:new(),
+                next_tag                = 1,
+                uncommitted_ack_q       = queue:new(),
+                unacked_message_q       = queue:new(),
+                username                = Username,
+                virtual_host            = VHost,
+                most_recently_declared_queue = <<>>,
+                consumer_mapping        = dict:new(),
+                blocking                = dict:new(),
+                queue_collector_pid     = CollectorPid,
+                flow                    = #flow{server = true, client = true,
+                                                pending = none},
+                stats_timer_ref         = undefined,
+                stats_level             = StatsLevel},
+    rabbit_event:notify(
+      channel_created,
+      [{Item, i(Item, State)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
+    {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(info, _From, State) ->
