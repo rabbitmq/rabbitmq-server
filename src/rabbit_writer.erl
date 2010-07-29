@@ -50,12 +50,10 @@
 
 -spec(start/3 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer())
-        -> pid()).
+         non_neg_integer()) -> rabbit_types:ok(pid())).
 -spec(start_link/3 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer())
-        -> pid()).
+         non_neg_integer()) -> rabbit_types:ok(pid())).
 -spec(send_command/2 ::
         (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(send_command/3 ::
@@ -85,14 +83,14 @@
 %%----------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax) ->
-    spawn(?MODULE, mainloop, [#wstate{sock = Sock,
-                                      channel = Channel,
-                                      frame_max = FrameMax}]).
+    {ok, spawn(?MODULE, mainloop, [#wstate{sock = Sock,
+                                           channel = Channel,
+                                           frame_max = FrameMax}])}.
 
 start_link(Sock, Channel, FrameMax) ->
-    spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
-                                           channel = Channel,
-                                           frame_max = FrameMax}]).
+    {ok, spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
+                                                channel = Channel,
+                                                frame_max = FrameMax}])}.
 
 mainloop(State) ->
     receive
