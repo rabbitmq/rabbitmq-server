@@ -37,6 +37,14 @@
 -export([stats_level/1]).
 -export([notify/2]).
 
+-opaque(state() :: {atom(), atom()}).
+
+-spec(init_stats_timer/0 :: () -> state()).
+-spec(ensure_stats_timer/3 ::
+        (state(), fun (() -> 'ok'), fun (() -> 'ok')) -> state()).
+-spec(stop_stats_timer/2 :: (state(), fun (() -> 'ok')) -> state()).
+-spec(stats_level/1 :: (state()) -> atom()).
+-spec(notify/2 :: (atom(), term()) -> 'ok').
 
 -record(state, {level, timer}).
 
