@@ -56,8 +56,10 @@ open_channel(ProposedNumber, MaxChannel, Driver, StartArgs, Channels) ->
 %%---------------------------------------------------------------------------
 
 start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
-    FramingPid = rabbit_framing_channel:start_link(fun(X) -> X end, [self()]),
-    WriterPid = rabbit_writer:start_link(Sock, ChannelNumber, ?FRAME_MIN_SIZE),
+    {ok, FramingPid} = rabbit_framing_channel:start_link(
+                         fun(X) -> {ok, X} end, [self()]),
+    {ok, WriterPid} = rabbit_writer:start_link(Sock, ChannelNumber,
+                                               ?FRAME_MIN_SIZE),
     case MainReader of
         none -> ok;
         _    -> amqp_main_reader:register_framing_channel(
@@ -65,8 +67,8 @@ start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
     end,
     {FramingPid, WriterPid};
 start_channel_infrastructure(direct, ChannelNumber, {User, VHost, Collector}) ->
-    Peer = rabbit_channel:start_link(ChannelNumber, self(), self(), User, VHost,
-                                     Collector),
+    {ok, Peer} = rabbit_channel:start_link(ChannelNumber, self(), self(),
+                                           User, VHost, Collector),
     {Peer, Peer}.
 
 terminate_channel_infrastructure(network, {FramingPid, WriterPid}) ->
