@@ -62,7 +62,7 @@ to_json(ReqData, Context) ->
                                      ]), ReqData, Context}.
 
 format({Ids, Stats}) ->
-    [{stats, Stats}|Ids].
+    [{stats, {struct, Stats}}|Ids].
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
