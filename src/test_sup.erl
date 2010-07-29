@@ -34,7 +34,7 @@
 -behaviour(supervisor2).
 
 -export([test_supervisor_delayed_restart/0,
-         init/1, start_child/0, run_child/0]).
+         init/1, start_child/0]).
 
 test_supervisor_delayed_restart() ->
     passed = test_supervisor_delayed_restart(
