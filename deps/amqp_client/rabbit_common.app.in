@@ -15,7 +15,8 @@
              rabbit_net,
              rabbit_heartbeat,
              gen_server2,
-             priority_queue
+             priority_queue,
+             supervisor2
   ]},
   {registered, []},
   {env, []},
