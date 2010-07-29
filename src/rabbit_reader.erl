@@ -60,7 +60,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector, stats_timer_ref, stats_level}).
+             queue_collector, stats_timer}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -251,7 +251,6 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
     {ok, Collector} = rabbit_queue_collector:start_link(),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     try
         mainloop(Parent, Deb, switch_callback(
                                 #v1{sock = ClientSock,
@@ -265,8 +264,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     recv_ref = none,
                                     connection_state = pre_init,
                                     queue_collector = Collector,
-                                    stats_timer_ref = undefined,
-                                    stats_level = StatsLevel},
+                                    stats_timer =
+                                        rabbit_event:init_stats_timer()},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -354,8 +353,7 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
                                    end),
             mainloop(Parent, Deb, State);
         {'$gen_cast', emit_stats} ->
-            internal_emit_stats(State),
-            mainloop(Parent, Deb, State#v1{stats_timer_ref = undefined});
+            mainloop(Parent, Deb, stop_stats_timer(State));
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
@@ -603,14 +601,22 @@ check_version(ClientVersion, ServerVersion) ->
           (ClientMajor == ServerMajor andalso
            ClientMinor >= ServerMinor).
 
-ensure_stats_timer(State = #v1{stats_level = none}) ->
-    State;
-ensure_stats_timer(State = #v1{stats_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                   rabbit_reader, emit_stats, [self()]),
-    State#v1{stats_timer_ref = TRef};
-ensure_stats_timer(State) ->
-    State.
+ensure_stats_timer(State = #v1{stats_timer = StatsTimer}) ->
+    ReaderPid = self(),
+    StatsTimer1 = rabbit_event:ensure_stats_timer(
+                    StatsTimer,
+                    %% Don't run internal_emit_stats here, in normal use
+                    %% ensure_stats_timer will get invoked almost immediately
+                    %% after stop_stats_timer and we'll emit double events
+                    fun() -> ok end,
+                    fun() -> emit_stats(ReaderPid) end),
+    State#v1{stats_timer = StatsTimer1}.
+
+stop_stats_timer(State = #v1{stats_timer = StatsTimer}) ->
+    StatsTimer1 = rabbit_event:stop_stats_timer(
+                    StatsTimer,
+                    fun() -> internal_emit_stats(State) end),
+    State#v1{stats_timer = StatsTimer1}.
 
 %%--------------------------------------------------------------------------
 

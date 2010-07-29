@@ -1251,6 +1251,7 @@ test_statistics() ->
     [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event3),
     [] = proplists:get_value(channel_queue_exchange_stats, Event3),
 
+    rabbit_channel:shutdown(Ch),
     rabbit_tests_event_receiver:stop(),
     passed.
 

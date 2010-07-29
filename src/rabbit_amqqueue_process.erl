@@ -60,8 +60,7 @@
             sync_timer_ref,
             rate_timer_ref,
             expiry_timer_ref,
-            stats_timer_ref,
-            stats_level
+            stats_timer
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -110,7 +109,6 @@ init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     {ok, BQ} = application:get_env(backing_queue_module),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
 
     {ok, #q{q                   = Q#amqqueue{pid = self()},
             exclusive_consumer  = none,
@@ -123,8 +121,7 @@ init(Q) ->
             sync_timer_ref      = undefined,
             rate_timer_ref      = undefined,
             expiry_timer_ref    = undefined,
-            stats_timer_ref     = undefined,
-            stats_level         = StatsLevel}, hibernate,
+            stats_timer         = rabbit_event:init_stats_timer()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -265,26 +262,19 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
             State
     end.
 
-ensure_stats_timer(State = #q{stats_level = none}) ->
-    State;
-ensure_stats_timer(State = #q{stats_timer_ref = undefined, q = Q}) ->
-    {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
-                                      rabbit_amqqueue, emit_stats, [Q]),
-    emit_stats(State),
-    State#q{stats_timer_ref = TRef};
-ensure_stats_timer(State) ->
-    State.
+ensure_stats_timer(State = #q{stats_timer = StatsTimer,
+                              q = Q}) ->
+    StatsTimer1 = rabbit_event:ensure_stats_timer(
+                    StatsTimer,
+                    fun() -> emit_stats(State) end,
+                    fun() -> rabbit_amqqueue:emit_stats(Q) end),
+    State#q{stats_timer = StatsTimer1}.
 
-stop_stats_timer(State = #q{stats_level = none}) ->
-    State;
-stop_stats_timer(State = #q{stats_timer_ref = undefined}) ->
-    emit_stats(State),
-    State;
-stop_stats_timer(State = #q{stats_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
-    emit_stats(State),
-    State#q{stats_timer_ref = undefined}.
-
+stop_stats_timer(State = #q{stats_timer = StatsTimer}) ->
+    StatsTimer1 = rabbit_event:stop_stats_timer(
+                    StatsTimer,
+                    fun() -> emit_stats(State) end),
+    State#q{stats_timer = StatsTimer1}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->

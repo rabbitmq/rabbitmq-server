@@ -50,7 +50,7 @@
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, flow,
-             stats_timer_ref, stats_level}).
+             stats_timer}).
 
 -record(flow, {server, client, pending}).
 
@@ -170,7 +170,6 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     State = #ch{state                   = starting,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
@@ -189,8 +188,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
                 queue_collector_pid     = CollectorPid,
                 flow                    = #flow{server = true, client = true,
                                                 pending = none},
-                stats_timer_ref         = undefined,
-                stats_level             = StatsLevel},
+                stats_timer             = rabbit_event:init_stats_timer()},
     rabbit_event:notify(
       channel_created,
       [{Item, i(Item, State)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
@@ -277,7 +275,7 @@ handle_cast({flow_timeout, _Ref}, State) ->
 
 handle_cast(emit_stats, State) ->
     internal_emit_stats(State),
-    noreply(State).
+    {noreply, State}.
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
@@ -315,25 +313,19 @@ reply(Reply, NewState) ->
 noreply(NewState) ->
     {noreply, ensure_stats_timer(NewState), hibernate}.
 
-ensure_stats_timer(State = #ch{stats_level = none}) ->
-    State;
-ensure_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
-    internal_emit_stats(State),
-    {ok, TRef} = timer:apply_interval(?STATS_INTERVAL,
-                                      rabbit_channel, emit_stats, [self()]),
-    State#ch{stats_timer_ref = TRef};
-ensure_stats_timer(State) ->
-    State.
+ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
+    ChPid = self(),
+    StatsTimer1 = rabbit_event:ensure_stats_timer(
+                    StatsTimer,
+                    fun() -> internal_emit_stats(State) end,
+                    fun() -> emit_stats(ChPid) end),
+    State#ch{stats_timer = StatsTimer1}.
 
-stop_stats_timer(State = #ch{stats_level = none}) ->
-    State;
-stop_stats_timer(State = #ch{stats_timer_ref = undefined}) ->
-    internal_emit_stats(State),
-    State;
-stop_stats_timer(State = #ch{stats_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
-    internal_emit_stats(State),
-    State#ch{stats_timer_ref = undefined}.
+stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
+    StatsTimer1 = rabbit_event:stop_stats_timer(
+                    StatsTimer,
+                    fun() -> internal_emit_stats(State) end),
+    State#ch{stats_timer = StatsTimer1}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -1194,10 +1186,11 @@ i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-maybe_incr_stats(_QXIncs, _Measure, #ch{stats_level = none}) ->
-    ok;
-maybe_incr_stats(QXIncs, Measure, _State) ->
-    [incr_stats(QX, Inc, Measure) || {QX, Inc} <- QXIncs].
+maybe_incr_stats(QXIncs, Measure, #ch{stats_timer = StatsTimer}) ->
+    case rabbit_event:stats_level(StatsTimer) of
+        fine -> [incr_stats(QX, Inc, Measure) || {QX, Inc} <- QXIncs];
+        _    -> ok
+    end.
 
 incr_stats({QPid, _} = QX, Inc, Measure) ->
     maybe_monitor(QPid),
@@ -1227,9 +1220,9 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State = #ch{stats_level = Level}) ->
+internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
     CoarseStats = [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS],
-    case Level of
+    case rabbit_event:stats_level(StatsTimer) of
         coarse ->
             rabbit_event:notify(channel_stats, CoarseStats);
         fine ->
