@@ -37,7 +37,19 @@
          init/1, start_child/0, run_child/0]).
 
 test_supervisor_delayed_restart() ->
-    {ok, SupPid} = start_link(),
+    passed = test_supervisor_delayed_restart(
+               simple_one_for_one_terminate,
+               fun (SupPid) ->
+                       {ok, _ChildPid} = supervisor2:start_child(SupPid, []),
+                       ok
+               end),
+    passed = test_supervisor_delayed_restart(
+               one_for_one,
+               fun (_SupPid) -> ok end).
+
+test_supervisor_delayed_restart(RestartStrategy, PostStartLinkFun) ->
+    {ok, SupPid} = start_link(RestartStrategy),
+    ok = PostStartLinkFun(SupPid),
     ok = ping_child(SupPid),
     ok = exit_child(SupPid),
     timer:sleep(10),
@@ -51,16 +63,16 @@ test_supervisor_delayed_restart() ->
     rabbit_misc:unlink_and_capture_exit(SupPid),
     passed.
 
-start_link() ->
-    supervisor2:start_link(?MODULE, []).
+start_link(RestartStrategy) ->
+    supervisor2:start_link(?MODULE, [RestartStrategy]).
 
-init([]) ->
-    {ok, {{one_for_one, 1, 1},
+init([RestartStrategy]) ->
+    {ok, {{RestartStrategy, 1, 1},
           [{test, {test_sup, start_child, []}, {permanent, 1},
             16#ffffffff, worker, [test_sup]}]}}.
 
 start_child() ->
-    {ok, spawn_link(fun run_child/0)}.
+    {ok, proc_lib:spawn_link(fun run_child/0)}.
 
 ping_child(SupPid) ->
     Ref = make_ref(),
@@ -74,7 +86,8 @@ exit_child(SupPid) ->
     ok.
 
 get_child_pid(SupPid) ->
-    [{test, ChildPid, worker, [test_sup]}] = supervisor2:which_children(SupPid),
+    [{_Id, ChildPid, worker, [test_sup]}] =
+        supervisor2:which_children(SupPid),
     ChildPid.
 
 run_child() ->

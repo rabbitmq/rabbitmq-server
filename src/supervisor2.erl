@@ -342,8 +342,8 @@ handle_call(which_children, _From, State) ->
     {reply, Resp, State}.
 
 
-handle_cast({delayed_restart, {RestartType, Reason, Child}},
-            State = #state{children = [Child]}) when ?is_simple(State) ->
+handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
+  when ?is_simple(State) ->
     {ok, NState} = do_restart(RestartType, Reason, Child, State),
     {noreply, NState};
 handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
