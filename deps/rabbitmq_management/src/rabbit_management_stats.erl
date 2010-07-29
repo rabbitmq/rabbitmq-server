@@ -92,6 +92,10 @@ result_or_error(S)  -> S.
 
 %% TODO To say these need unit tests is an understatement
 
+%% TODO until we do rates properly (i.e. looking at a time series)
+%% we have the problem that an object which stops emitting events will look
+%% like its rate has stayed up. This might make time series more important.
+
 rates(Table, Id, Stats, Timestamp, Keys) ->
     Stats ++ lists:filter(
                fun (unknown) -> false;
