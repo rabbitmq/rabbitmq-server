@@ -37,19 +37,15 @@
          init/1, start_child/0]).
 
 test_supervisor_delayed_restart() ->
-    passed = test_supervisor_delayed_restart(
-               simple_one_for_one_terminate,
-               fun (SupPid) ->
-                       {ok, _ChildPid} = supervisor2:start_child(SupPid, []),
-                       ok
-               end),
-    passed = test_supervisor_delayed_restart(
-               one_for_one,
-               fun (_SupPid) -> ok end).
+    passed = with_sup(simple_one_for_one_terminate,
+                      fun (SupPid) ->
+                              {ok, _ChildPid} =
+                                  supervisor2:start_child(SupPid, []),
+                              test_supervisor_delayed_restart(SupPid)
+                      end),
+    passed = with_sup(one_for_one, fun test_supervisor_delayed_restart/1).
 
-test_supervisor_delayed_restart(RestartStrategy, PostStartLinkFun) ->
-    {ok, SupPid} = start_link(RestartStrategy),
-    ok = PostStartLinkFun(SupPid),
+test_supervisor_delayed_restart(SupPid) ->
     ok = ping_child(SupPid),
     ok = exit_child(SupPid),
     timer:sleep(10),
@@ -59,12 +55,14 @@ test_supervisor_delayed_restart(RestartStrategy, PostStartLinkFun) ->
     timeout = ping_child(SupPid),
     timer:sleep(1010),
     ok = ping_child(SupPid),
-    exit(SupPid, shutdown),
-    rabbit_misc:unlink_and_capture_exit(SupPid),
     passed.
 
-start_link(RestartStrategy) ->
-    supervisor2:start_link(?MODULE, [RestartStrategy]).
+with_sup(RestartStrategy, Fun) ->
+    {ok, SupPid} = supervisor2:start_link(?MODULE, [RestartStrategy]),
+    Res = Fun(SupPid),
+    exit(SupPid, shutdown),
+    rabbit_misc:unlink_and_capture_exit(SupPid),
+    Res.
 
 init([RestartStrategy]) ->
     {ok, {{RestartStrategy, 1, 1},
