@@ -40,12 +40,12 @@ test_supervisor_delayed_restart() ->
     {ok, SupPid} = start_link(),
     ok = ping_child(SupPid),
     ok = exit_child(SupPid),
-    timer:sleep(1000),
+    timer:sleep(10),
     ok = ping_child(SupPid),
     ok = exit_child(SupPid),
-    timer:sleep(1000),
+    timer:sleep(10),
     timeout = ping_child(SupPid),
-    timer:sleep(5000),
+    timer:sleep(1010),
     ok = ping_child(SupPid),
     exit(SupPid, shutdown),
     rabbit_misc:unlink_and_capture_exit(SupPid),
@@ -56,7 +56,7 @@ start_link() ->
 
 init([]) ->
     {ok, {{one_for_one, 1, 1},
-          [{test, {test_sup, start_child, []}, {permanent, 3},
+          [{test, {test_sup, start_child, []}, {permanent, 1},
             16#ffffffff, worker, [test_sup]}]}}.
 
 start_child() ->
