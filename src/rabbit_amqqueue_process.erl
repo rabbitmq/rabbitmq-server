@@ -88,14 +88,15 @@
         ]).
 
 -define(CREATION_EVENT_KEYS,
-        [name,
+        [pid,
+         name,
          durable,
          auto_delete,
          arguments,
          owner_pid
         ]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
@@ -165,7 +166,7 @@ declare(Recover, From,
                      rabbit_event:notify(
                        queue_created,
                        [{Item, i(Item, State)} ||
-                           Item <- [pid|?CREATION_EVENT_KEYS]]),
+                           Item <- ?CREATION_EVENT_KEYS]),
                      noreply(init_expires(State#q{backing_queue_state = BQS}));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -264,17 +265,15 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
 
 ensure_stats_timer(State = #q{stats_timer = StatsTimer,
                               q = Q}) ->
-    StatsTimer1 = rabbit_event:ensure_stats_timer(
-                    StatsTimer,
-                    fun() -> emit_stats(State) end,
-                    fun() -> rabbit_amqqueue:emit_stats(Q) end),
-    State#q{stats_timer = StatsTimer1}.
+    State#q{stats_timer = rabbit_event:ensure_stats_timer(
+                            StatsTimer,
+                            fun() -> emit_stats(State) end,
+                            fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
 
 stop_stats_timer(State = #q{stats_timer = StatsTimer}) ->
-    StatsTimer1 = rabbit_event:stop_stats_timer(
-                    StatsTimer,
-                    fun() -> emit_stats(State) end),
-    State#q{stats_timer = StatsTimer1}.
+    State#q{stats_timer = rabbit_event:stop_stats_timer(
+                            StatsTimer,
+                            fun() -> emit_stats(State) end)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->

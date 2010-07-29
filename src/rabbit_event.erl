@@ -60,7 +60,6 @@ ensure_stats_timer(State, _NowFun, _TimerFun) ->
 stop_stats_timer(State = #state{level = none}, _NowFun) ->
     State;
 stop_stats_timer(State = #state{timer = undefined}, NowFun) ->
-    NowFun(),
     State;
 stop_stats_timer(State = #state{timer = TRef}, NowFun) ->
     {ok, cancel} = timer:cancel(TRef),

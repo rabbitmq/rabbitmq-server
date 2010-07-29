@@ -66,12 +66,13 @@
          prefetch_count]).
 
 -define(CREATION_EVENT_KEYS,
-        [connection,
+        [pid,
+         connection,
          number,
          user,
          vhost]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
@@ -191,7 +192,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
                 stats_timer             = rabbit_event:init_stats_timer()},
     rabbit_event:notify(
       channel_created,
-      [{Item, i(Item, State)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
+      [{Item, i(Item, State)} || Item <- ?CREATION_EVENT_KEYS]),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -315,17 +316,15 @@ noreply(NewState) ->
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
-    StatsTimer1 = rabbit_event:ensure_stats_timer(
-                    StatsTimer,
-                    fun() -> internal_emit_stats(State) end,
-                    fun() -> emit_stats(ChPid) end),
-    State#ch{stats_timer = StatsTimer1}.
+    State#ch{stats_timer = rabbit_event:ensure_stats_timer(
+                             StatsTimer,
+                             fun() -> internal_emit_stats(State) end,
+                             fun() -> emit_stats(ChPid) end)}.
 
 stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    StatsTimer1 = rabbit_event:stop_stats_timer(
-                    StatsTimer,
-                    fun() -> internal_emit_stats(State) end),
-    State#ch{stats_timer = StatsTimer1}.
+    State#ch{stats_timer = rabbit_event:stop_stats_timer(
+                             StatsTimer,
+                             fun() -> internal_emit_stats(State) end)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.

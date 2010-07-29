@@ -65,11 +65,11 @@
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
 
--define(CREATION_EVENT_KEYS, [address, port, peer_address, peer_port,
+-define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
                               user, vhost, timeout, frame_max,
                               client_properties]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %% connection lifecycle
 %%
@@ -603,20 +603,19 @@ check_version(ClientVersion, ServerVersion) ->
 
 ensure_stats_timer(State = #v1{stats_timer = StatsTimer}) ->
     ReaderPid = self(),
-    StatsTimer1 = rabbit_event:ensure_stats_timer(
-                    StatsTimer,
-                    %% Don't run internal_emit_stats here, in normal use
-                    %% ensure_stats_timer will get invoked almost immediately
-                    %% after stop_stats_timer and we'll emit double events
-                    fun() -> ok end,
-                    fun() -> emit_stats(ReaderPid) end),
-    State#v1{stats_timer = StatsTimer1}.
+    State#v1{stats_timer = rabbit_event:ensure_stats_timer(
+                             StatsTimer,
+                             %% Don't run internal_emit_stats here, in normal
+                             %% use ensure_stats_timer will get invoked almost
+                             %% immediately after stop_stats_timer and we'll
+                             %% emit double events
+                             fun() -> ok end,
+                             fun() -> emit_stats(ReaderPid) end)}.
 
 stop_stats_timer(State = #v1{stats_timer = StatsTimer}) ->
-    StatsTimer1 = rabbit_event:stop_stats_timer(
-                    StatsTimer,
-                    fun() -> internal_emit_stats(State) end),
-    State#v1{stats_timer = StatsTimer1}.
+    State#v1{stats_timer = rabbit_event:stop_stats_timer(
+                             StatsTimer,
+                             fun() -> internal_emit_stats(State) end)}.
 
 %%--------------------------------------------------------------------------
 
@@ -696,7 +695,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath,
                               connection = NewConnection},
             rabbit_event:notify(
               connection_created,
-              [{Item, i(Item, State1)} || Item <- [pid|?CREATION_EVENT_KEYS]]),
+              [{Item, i(Item, State1)} || Item <- ?CREATION_EVENT_KEYS]),
             State1;
        true ->
             %% FIXME: 'host' is supposed to only contain one
