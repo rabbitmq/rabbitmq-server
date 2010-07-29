@@ -260,8 +260,8 @@ handle_stats(TName, #event{props = Stats, timestamp = Timestamp},
 handle_deleted(TName, #event{props = [{pid, Pid}]},
                State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
-    ets:delete(Table, {Pid, create}),
-    ets:delete(Table, {Pid, stats}),
+    ets:delete(Table, {id(Pid), create}),
+    ets:delete(Table, {id(Pid), stats}),
     {ok, State}.
 
 handle_fine_stats(Type, ChPid, {Ids, Stats}, Timestamp,
