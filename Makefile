@@ -271,6 +271,8 @@ install: all docs_all install_dirs
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
+	mkdir -p $(TARGET_DIR)/plugins
+	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
 
 install_dirs:
 	@ OK=true && \
