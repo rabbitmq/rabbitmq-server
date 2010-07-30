@@ -78,7 +78,7 @@
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> pid()).
+       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -102,10 +102,8 @@
 %%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [Channel, ReaderPid, WriterPid,
-                            Username, VHost, CollectorPid], []),
-    Pid.
+    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid,
+                                     Username, VHost, CollectorPid], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -968,7 +966,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
             end;
         {empty, _} ->
             rabbit_misc:protocol_error(
-              not_found, "unknown delivery tag ~w", [DeliveryTag])
+              precondition_failed, "unknown delivery tag ~w", [DeliveryTag])
     end.
 
 add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->
@@ -1032,7 +1030,7 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
-    LPid = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+    {ok, LPid} = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
 

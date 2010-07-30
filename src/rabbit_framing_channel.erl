@@ -40,13 +40,14 @@
 %%--------------------------------------------------------------------
 
 start_link(StartFun, StartArgs, Protocol) ->
-    spawn_link(
-      fun () ->
-              %% we trap exits so that a normal termination of the
-              %% channel or reader process terminates us too.
-              process_flag(trap_exit, true),
-              mainloop(apply(StartFun, StartArgs), Protocol)
-      end).
+    {ok, spawn_link(
+           fun () ->
+                   %% we trap exits so that a normal termination of
+                   %% the channel or reader process terminates us too.
+                   process_flag(trap_exit, true),
+                   {ok, ChannelPid} = apply(StartFun, StartArgs),
+                   mainloop(ChannelPid, Protocol)
+           end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},

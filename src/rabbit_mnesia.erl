@@ -77,7 +77,7 @@ status() ->
                                                 {disc,      disc_copies},
                                                 {ram,       ram_copies}],
                             begin
-                                Nodes = mnesia:table_info(schema, CopyType),
+                                Nodes = nodes_of_type(CopyType),
                                 Nodes =/= []
                             end];
                  no -> case mnesia:system_info(db_nodes) of
@@ -144,6 +144,15 @@ empty_ram_only_tables() ->
 
 %%--------------------------------------------------------------------
 
+nodes_of_type(Type) ->
+    %% This function should return the nodes of a certain type (ram,
+    %% disc or disc_only) in the current cluster.  The type of nodes
+    %% is determined when the cluster is initially configured.
+    %% Specifically, we check whether a certain table, which we know
+    %% will be written to disk on a disc node, is stored on disk or in
+    %% RAM.
+    mnesia:table_info(rabbit_durable_exchange, Type).
+
 table_definitions() ->
     [{rabbit_user,
       [{record_name, user},
@@ -175,6 +184,8 @@ table_definitions() ->
       [{record_name, reverse_route},
        {attributes, record_info(fields, reverse_route)},
        {type, ordered_set}]},
+     %% Consider the implications to nodes_of_type/1 before altering
+     %% the next entry.
      {rabbit_durable_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
@@ -253,20 +264,9 @@ read_cluster_nodes_config() ->
     case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
-            case application:get_env(cluster_config) of
+            case application:get_env(cluster_nodes) of
                 undefined -> [];
-                {ok, DefaultFileName} ->
-                    case file:consult(DefaultFileName) of
-                        {ok, [ClusterNodes]} -> ClusterNodes;
-                        {error, enoent} ->
-                            error_logger:warning_msg(
-                              "default cluster config file ~p does not exist~n",
-                              [DefaultFileName]),
-                            [];
-                        {error, Reason} ->
-                            throw({error, {cannot_read_cluster_nodes_config,
-                                           DefaultFileName, Reason}})
-                    end
+                {ok, ClusterNodes} -> ClusterNodes
             end;
         {error, Reason} ->
             throw({error, {cannot_read_cluster_nodes_config,
