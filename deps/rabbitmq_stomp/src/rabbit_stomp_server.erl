@@ -380,10 +380,10 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
     ok = rabbit_access_control:check_vhost_access(U,
                                                   list_to_binary(VirtualHost)),
     {ok, CollectorPid} = rabbit_queue_collector:start_link(),
-    ChPid = 
-        rabbit_channel:start_link(?MODULE, self(), self(),
-                                  U#user.username, list_to_binary(VirtualHost),
-                                  CollectorPid),
+    {ok, ChPid} = rabbit_channel:start_link(?MODULE, self(), self(),
+                                            U#user.username,
+                                            list_to_binary(VirtualHost),
+                                            CollectorPid),
     {ok, #'channel.open_ok'{}, State1} =
         simple_method_sync_rpc(#'channel.open'{},
                                State#state{channel = ChPid,
