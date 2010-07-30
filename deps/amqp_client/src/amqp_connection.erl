@@ -96,14 +96,14 @@ start_link(Type, AmqpParams) ->
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
+%% @doc Invokes open_channel(ConnectionPid, none). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
 
-%% @spec (ConnectionPid, ChannelNumber) -> ChannelPid
+%% @spec (ConnectionPid, ChannelNumber) -> {ok, ChannelPid} | {error, term()}
 %% where
-%%      ChannelNumber = integer()
+%%      ChannelNumber = integer() | 'none'
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.
@@ -115,7 +115,7 @@ open_channel(ConnectionPid, ChannelNumber) ->
 %% @spec (ConnectionPid) -> ok | Error
 %% where
 %%      ConnectionPid = pid()
-%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 

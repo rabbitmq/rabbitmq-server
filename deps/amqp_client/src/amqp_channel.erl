@@ -264,8 +264,10 @@ do_rpc(State = #state{rpc_requests = RequestQueue,
             State;
         empty ->
             case Closing of
-                {connection, Reason} -> self() ! {shutdown, Reason};
-                _                    -> ok
+                {connection, Reason} ->
+                    self() ! {shutdown, {connection_closing, Reason}};
+                _ ->
+                    ok
             end,
             State
     end.
@@ -325,6 +327,12 @@ check_block(_Method, _AmqpMsg, #state{}) ->
 
 shutdown_with_reason({_, 200, _}, State) ->
     {stop, normal, State};
+shutdown_with_reason({connection_closing, {_, 200, _}}, State) ->
+    {stop, normal, State};
+shutdown_with_reason({connection_closing, normal}, State) ->
+    {stop, normal, State};
+shutdown_with_reason({connection_closing, _} = Reason, State) ->
+    {stop, Reason, State};
 shutdown_with_reason(Reason, State) ->
     {stop, Reason, State}.
 
@@ -610,7 +618,7 @@ handle_info({connection_closing, CloseType, Reason},
                                Reason}),
             {noreply, State};
         _ ->
-            shutdown_with_reason(Reason, State)
+            shutdown_with_reason({connection_closing, Reason}, State)
     end;
 
 %% This is for a channel exception that is sent by the direct
@@ -629,7 +637,7 @@ handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
 
 %% @private
 terminate(_Reason, #state{sup = Sup, driver = Driver}) ->
-    amqp_channel_util:terminate_channel_infrastructure(Driver, Sup);
+    amqp_channel_util:terminate_channel_infrastructure(Driver, Sup).
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

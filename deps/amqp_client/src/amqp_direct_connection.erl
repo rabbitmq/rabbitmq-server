@@ -36,8 +36,7 @@
 -record(state, {sup,
                 params = #amqp_params{},
                 closing = false,
-                server_properties,
-                channels = amqp_channel_util:new_channel_dict()}).
+                server_properties}).
 
 -record(closing, {reason,
                   close = none, %% At least one of close and reply has to be
@@ -81,13 +80,14 @@ handle_cast(Message, State) ->
               [self(), Message]),
     {noreply, set_closing_state(abrupt, internal_error_closing(), State)}.
 
-handle_info({shutdown, Reason}, State) ->
-    {_, Code, _} = Reason,
-    if Code =:= 200 -> {stop, normal, State};
-       true         -> {stop, Reason, State}
-    end;
-handle_info({'DOWN', _, process, Pid, Reason}, State) ->
-    handle_channel_exit(Pid, Reason, State).
+handle_info({hard_error_in_channel, Pid, Reason}, State) ->
+    ?LOG_WARN("Connection (~p) closing: channel (~p) received hard error ~p "
+              "from server~n", [self(), Pid, Reason]),
+    {stop, Reason, State};
+handle_info({channel_internal_error, _Pid, _Reason}, State) ->
+    {noreply, set_closing_state(abrupt, internal_error_closing(), State)};
+handle_info(all_channels_terminated, State) ->
+    {noreply, all_channels_terminated(State)}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -102,19 +102,11 @@ code_change(_OldVsn, State, _Extra) ->
 handle_command({open_channel, ProposedNumber}, _From,
                State = #state{sup = Sup,
                               params = #amqp_params{username = User,
-                                                    virtual_host = VHost},
-                              channels = Channels}) ->
+                                                    virtual_host = VHost}}) ->
     Collector = amqp_infra_sup:child(Sup, collector),
-    try amqp_channel_util:open_channel(Sup, ProposedNumber, ?MAX_CHANNEL_NUMBER,
-                                       direct, [User, VHost, Collector],
-                                       Channels) of
-        {ChannelPid, NewChannels} ->
-            {reply, ChannelPid, State#state{channels = NewChannels}}
-    catch
-        error:out_of_channel_numbers = Error ->
-            {reply, {Error, ?MAX_CHANNEL_NUMBER}, State}
-    end;
-
+    Reply = amqp_channel_util:open_channel(Sup, ProposedNumber, direct,
+                                           [User, VHost, Collector]),
+    {reply, Reply, State};
 handle_command({close, Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
                                                 close = Close,
@@ -129,9 +121,11 @@ i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
 i(supervisor,        State) -> State#state.sup;
-i(num_channels,      State) -> amqp_channel_util:num_channels(
-                                   State#state.channels);
-i(Item,             _State) -> throw({bad_argument, Item}).
+i(num_channels, #state{sup = Sup}) ->
+    ChMgr = amqp_infra_sup:child(Sup, channels_manager),
+    amqp_channels_manager:num_channels(ChMgr);
+i(Item, _State) ->
+    throw({bad_argument, Item}).
 
 %%---------------------------------------------------------------------------
 %% Closing
@@ -146,58 +140,61 @@ i(Item,             _State) -> throw({bad_argument, Item}).
 %% (i.e.: a given reason can override the currently set one if it is later
 %% mentioned in the above list). We can rely on erlang's comparison of atoms
 %% for this.
-set_closing_state(ChannelCloseType, Closing,
-                  #state{closing = false,
-                         channels = Channels} = State) ->
-    amqp_channel_util:broadcast_to_channels(
-        {connection_closing, ChannelCloseType, closing_to_reason(Closing)},
-        Channels),
-    check_trigger_all_channels_closed_event(State#state{closing = Closing});
+set_closing_state(ChannelCloseType, Closing, State = #state{closing = false}) ->
+    NewState = State#state{closing = Closing},
+    signal_connection_closing(ChannelCloseType, NewState),
+    NewState;
 %% Already closing, override situation
 set_closing_state(ChannelCloseType, NewClosing,
-                  #state{closing = CurClosing,
-                         channels = Channels} = State) ->
+                  State = #state{closing = CurClosing}) ->
+    ResClosing =
+        if
+            %% Override (rely on erlang's comparison of atoms)
+            NewClosing#closing.reason >= CurClosing#closing.reason ->
+                NewClosing;
+            %% Do not override
+            true ->
+                CurClosing
+        end,
+    NewState = State#state{closing = ResClosing},
     %% Do not override reason in channels (because it might cause channels to
     %% to exit with different reasons) but do cause them to close abruptly
     %% if the new closing type requires it
     case ChannelCloseType of
-        abrupt ->
-            amqp_channel_util:broadcast_to_channels(
-                {connection_closing, ChannelCloseType,
-                 closing_to_reason(CurClosing)},
-                Channels);
-        _ -> ok
-   end,
-   ResClosing =
-       if
-           %% Override (rely on erlang's comparison of atoms)
-           NewClosing#closing.reason >= CurClosing#closing.reason ->
-               NewClosing;
-           %% Do not override
-           true ->
-               CurClosing
-       end,
-   State#state{closing = ResClosing}.
+        abrupt -> signal_connection_closing(abrupt, NewState);
+        _      -> ok
+    end,
+    NewState.
 
-%% The all_channels_closed_event is called when all channels have been closed
-%% after the connection broadcasts a connection_closing message to all channels
-all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
+signal_connection_closing(ChannelCloseType, #state{sup = Sup,
+                                                   closing = Closing}) ->
+    ChMgr = amqp_infra_sup:child(Sup, channels_manager),
+    amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
+                                                    closing_to_reason(Closing)).
+
+%% This is triggered by the channels manager after all channels have exited
+%% due to the connection being closed
+all_channels_terminated(State = #state{sup = Sup, closing = Closing}) ->
+    #state{closing = #closing{}} = State, % assertion
     Collector = amqp_infra_sup:child(Sup, collector),
     rabbit_queue_collector:delete_all(Collector),
     rabbit_queue_collector:shutdown(Collector),
     rabbit_misc:unlink_and_capture_exit(Collector),
-    case Closing#closing.from of
-        none -> ok;
-        From -> gen_server:reply(From, ok)
+    case Closing#closing.from of none -> ok;
+                                 From -> gen_server:reply(From, ok)
     end,
-    self() ! {shutdown, closing_to_reason(Closing)},
-    State.
+    exit(closing_to_reason(Closing)).
 
+closing_to_reason(#closing{close = #'connection.close'{reply_code = 200},
+                           reply = none}) ->
+    normal;
 closing_to_reason(#closing{reason = Reason,
                            close = #'connection.close'{reply_code = Code,
                                                        reply_text = Text},
                            reply = none}) ->
     {Reason, Code, Text};
+closing_to_reason(#closing{reply = {_, 200, _}, close = none}) ->
+    normal;
 closing_to_reason(#closing{reason = Reason,
                            reply = {_, Code, Text},
                            close = none}) ->
@@ -206,35 +203,6 @@ closing_to_reason(#closing{reason = Reason,
 internal_error_closing() ->
     #closing{reason = internal_error,
              reply = {internal_error, ?INTERNAL_ERROR, <<>>}}.
-
-%%---------------------------------------------------------------------------
-%% Channel utilities
-%%---------------------------------------------------------------------------
-
-unregister_channel(Pid, State = #state{channels = Channels}) ->
-    NewChannels = amqp_channel_util:unregister_channel_pid(Pid, Channels),
-    NewState = State#state{channels = NewChannels},
-    check_trigger_all_channels_closed_event(NewState).
-
-check_trigger_all_channels_closed_event(#state{closing = false} = State) ->
-    State;
-check_trigger_all_channels_closed_event(
-        #state{channels = Channels} = State) ->
-    case amqp_channel_util:is_channel_dict_empty(Channels) of
-        true  -> all_channels_closed_event(State);
-        false -> State
-    end.
-
-handle_channel_exit(Pid, Reason,
-            #state{channels = Channels, closing = Closing} = State) ->
-    case amqp_channel_util:handle_exit(Pid, Reason, Channels, Closing) of
-        stop   -> {stop, Reason, State};
-        normal -> {noreply, unregister_channel(Pid, State)};
-        close  -> {noreply, set_closing_state(abrupt, internal_error_closing(),
-                                              unregister_channel(Pid, State))};
-        other  -> {noreply, set_closing_state(abrupt, internal_error_closing(),
-                                              State)}
-    end.
 
 %%---------------------------------------------------------------------------
 %% Connecting to the broker
@@ -251,8 +219,11 @@ post_init(State = #state{sup = Sup,
     rabbit_access_control:user_pass_login(User, Pass),
     rabbit_access_control:check_vhost_access(
             #user{username = User, password = Pass}, VHost),
-    CollectorChild =
-        {worker, collector, {rabbit_queue_collector, start_link, []}},
-    {ok, _} = amqp_infra_sup:start_child(Sup, CollectorChild),
+    CollectorChild = {worker, collector,
+                      {rabbit_queue_collector, start_link, []}},
+    ChMgrChild = {worker, channels_manager,
+                  {amqp_channels_manager, start_link, [0]}},
+    {all_ok, _} =
+        amqp_infra_sup:start_children(Sup, [CollectorChild, ChMgrChild]),
     ServerProperties = rabbit_reader:server_properties(),
     State#state{server_properties = ServerProperties}.

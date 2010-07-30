@@ -39,12 +39,4 @@ start_link(ChannelNumber, Driver, InfraArgs) ->
     InfraChildren = amqp_channel_util:channel_infrastructure_children(
                             Driver, ChannelPid, ChannelNumber, InfraArgs),
     {all_ok, _} = amqp_infra_sup:start_children(Sup, InfraChildren),
-    case Driver of
-        direct  -> ok;
-        network -> [_Sock, MainReader] = InfraArgs,
-                   FramingPid = amqp_infra_sup:child(Sup, framing),
-                   amqp_main_reader:register_framing_channel(
-                           MainReader, ChannelNumber, FramingPid)
-    end,
-    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
     {ok, Sup}.
