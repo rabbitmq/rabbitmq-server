@@ -40,7 +40,6 @@
 ##   OCF_RESKEY_nodename
 ##   OCF_RESKEY_ip
 ##   OCF_RESKEY_port
-##   OCF_RESKEY_cluster_config_file
 ##   OCF_RESKEY_config_file
 ##   OCF_RESKEY_log_base
 ##   OCF_RESKEY_mnesia_base
@@ -117,14 +116,6 @@ The IP Port for rabbitmq-server to listen on
 <content type="integer" default="" />
 </parameter>
 
-<parameter name="cluster_config_file" unique="0" required="0">
-<longdesc lang="en">
-Location of the cluster config file
-</longdesc>
-<shortdesc lang="en">Cluster config file path</shortdesc>
-<content type="string" default="" />
-</parameter>
-
 <parameter name="config_file" unique="0" required="0">
 <longdesc lang="en">
 Location of the config file
@@ -184,7 +175,6 @@ RABBITMQ_CTL=$OCF_RESKEY_ctl
 RABBITMQ_NODENAME=$OCF_RESKEY_nodename
 RABBITMQ_NODE_IP_ADDRESS=$OCF_RESKEY_ip
 RABBITMQ_NODE_PORT=$OCF_RESKEY_port
-RABBITMQ_CLUSTER_CONFIG_FILE=$OCF_RESKEY_cluster_config_file
 RABBITMQ_CONFIG_FILE=$OCF_RESKEY_config_file
 RABBITMQ_LOG_BASE=$OCF_RESKEY_log_base
 RABBITMQ_MNESIA_BASE=$OCF_RESKEY_mnesia_base
@@ -195,7 +185,6 @@ RABBITMQ_SERVER_START_ARGS=$OCF_RESKEY_server_start_args
 export_vars() {
     [ ! -z $RABBITMQ_NODE_IP_ADDRESS ]     && export RABBITMQ_NODE_IP_ADDRESS
     [ ! -z $RABBITMQ_NODE_PORT ]           && export RABBITMQ_NODE_PORT
-    [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && export RABBITMQ_CLUSTER_CONFIG_FILE
     [ ! -z $RABBITMQ_CONFIG_FILE ]         && export RABBITMQ_CONFIG_FILE
     [ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
     [ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
@@ -215,11 +204,6 @@ rabbit_validate_partial() {
 }
 
 rabbit_validate_full() {
-    if [ ! -z $RABBITMQ_CLUSTER_CONFIG_FILE ] && [ ! -e $RABBITMQ_CLUSTER_CONFIG_FILE ]; then
-        ocf_log err "rabbitmq-server cluster_config_file $RABBITMQ_CLUSTER_CONFIG_FILE does not exist or is not a file";
-        exit $OCF_ERR_INSTALLED;
-    fi
-
     if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e $RABBITMQ_CONFIG_FILE ]; then
         ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
         exit $OCF_ERR_INSTALLED;
