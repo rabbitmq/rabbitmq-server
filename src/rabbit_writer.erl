@@ -33,14 +33,14 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/3, start_link/3, shutdown/1, mainloop/1]).
+-export([start/4, start_link/4, shutdown/1, mainloop/1]).
 -export([send_command/2, send_command/3, send_command_and_signal_back/3,
          send_command_and_signal_back/4, send_command_and_notify/5]).
--export([internal_send_command/3, internal_send_command/5]).
+-export([internal_send_command/4, internal_send_command/6]).
 
 -import(gen_tcp).
 
--record(wstate, {sock, channel, frame_max}).
+-record(wstate, {sock, channel, frame_max, protocol}).
 
 -define(HIBERNATE_AFTER, 5000).
 
@@ -48,12 +48,14 @@
 
 -ifdef(use_specs).
 
--spec(start/3 ::
+-spec(start/4 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer()) -> rabbit_types:ok(pid())).
--spec(start_link/3 ::
+         non_neg_integer(), rabbit_types:protocol())
+        -> rabbit_types:ok(pid())).
+-spec(start_link/4 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer()) -> rabbit_types:ok(pid())).
+         non_neg_integer(), rabbit_types:protocol())
+        -> rabbit_types:ok(pid())).
 -spec(send_command/2 ::
         (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(send_command/3 ::
@@ -68,29 +70,31 @@
         (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
          rabbit_types:content())
         -> 'ok').
--spec(internal_send_command/3 ::
+-spec(internal_send_command/4 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         rabbit_framing:amqp_method_record())
+         rabbit_framing:amqp_method_record(), rabbit_types:protocol())
         -> 'ok').
--spec(internal_send_command/5 ::
+-spec(internal_send_command/6 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          rabbit_framing:amqp_method_record(), rabbit_types:content(),
-         non_neg_integer())
+         non_neg_integer(), rabbit_types:protocol())
         -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax) ->
+start(Sock, Channel, FrameMax, Protocol) ->
     {ok, spawn(?MODULE, mainloop, [#wstate{sock = Sock,
                                            channel = Channel,
-                                           frame_max = FrameMax}])}.
+                                           frame_max = FrameMax,
+                                           protocol = Protocol}])}.
 
-start_link(Sock, Channel, FrameMax) ->
+start_link(Sock, Channel, FrameMax, Protocol) ->
     {ok, spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
                                                 channel = Channel,
-                                                frame_max = FrameMax}])}.
+                                                frame_max = FrameMax,
+                                                protocol = Protocol}])}.
 
 mainloop(State) ->
     receive
@@ -100,35 +104,40 @@ mainloop(State) ->
     end.
 
 handle_message({send_command, MethodRecord},
-               State = #wstate{sock = Sock, channel = Channel}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord),
+               State = #wstate{sock = Sock, channel = Channel,
+                               protocol = Protocol}) ->
+    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
     State;
 handle_message({send_command, MethodRecord, Content},
                State = #wstate{sock = Sock,
                                channel = Channel,
-                               frame_max = FrameMax}) ->
+                               frame_max = FrameMax,
+                               protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax),
+                                     Content, FrameMax, Protocol),
     State;
 handle_message({send_command_and_signal_back, MethodRecord, Parent},
-               State = #wstate{sock = Sock, channel = Channel}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord),
+               State = #wstate{sock = Sock, channel = Channel,
+                               protocol = Protocol}) ->
+    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
     Parent ! rabbit_writer_send_command_signal,
     State;
 handle_message({send_command_and_signal_back, MethodRecord, Content, Parent},
                State = #wstate{sock = Sock,
                                channel = Channel,
-                               frame_max = FrameMax}) ->
+                               frame_max = FrameMax,
+                               protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax),
+                                     Content, FrameMax, Protocol),
     Parent ! rabbit_writer_send_command_signal,
     State;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
                State = #wstate{sock = Sock,
                                channel = Channel,
-                               frame_max = FrameMax}) ->
+                               frame_max = FrameMax,
+                               protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax),
+                                     Content, FrameMax, Protocol),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
     State;
 handle_message({inet_reply, _, ok}, State) ->
@@ -169,30 +178,32 @@ shutdown(W) ->
 
 %---------------------------------------------------------------------------
 
-assemble_frames(Channel, MethodRecord) ->
+assemble_frames(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
-    rabbit_binary_generator:build_simple_method_frame(Channel, MethodRecord).
+    rabbit_binary_generator:build_simple_method_frame(Channel, MethodRecord,
+                                                      Protocol).
 
-assemble_frames(Channel, MethodRecord, Content, FrameMax) ->
+assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, Content),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    true = rabbit_framing:method_has_content(MethodName), % assertion
+    true = Protocol:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
-                    Channel, MethodRecord),
+                    Channel, MethodRecord, Protocol),
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
-                      Channel, Content, FrameMax),
+                      Channel, Content, FrameMax, Protocol),
     [MethodFrame | ContentFrames].
 
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(inet_error,
                                fun () -> rabbit_net:send(Sock, Data) end).
 
-internal_send_command(Sock, Channel, MethodRecord) ->
-    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord)).
+internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
+    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord, Protocol)).
 
-internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax) ->
+internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
+                      Protocol) ->
     ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord,
-                                        Content, FrameMax)).
+                                        Content, FrameMax, Protocol)).
 
 %% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
 %% Status} to obtain the result. That is bad when it is called from
@@ -212,13 +223,14 @@ internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax) ->
 %% Also note that the port has bounded buffers and port_command blocks
 %% when these are full. So the fact that we process the result
 %% asynchronously does not impact flow control.
-internal_send_command_async(Sock, Channel, MethodRecord) ->
-    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord)),
+internal_send_command_async(Sock, Channel, MethodRecord, Protocol) ->
+    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord, Protocol)),
     ok.
 
-internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax) ->
+internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax,
+                            Protocol) ->
     true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
-                                              Content, FrameMax)),
+                                          Content, FrameMax, Protocol)),
     ok.
 
 port_cmd(Sock, Data) ->

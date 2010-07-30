@@ -504,8 +504,10 @@ test_content_framing(FrameMax, BodyBin) ->
         rabbit_binary_generator:build_simple_content_frames(
           1,
           rabbit_binary_generator:ensure_content_encoded(
-            rabbit_basic:build_content(#'P_basic'{}, BodyBin)),
-          FrameMax),
+            rabbit_basic:build_content(#'P_basic'{}, BodyBin),
+            rabbit_framing_amqp_0_9_1),
+          FrameMax,
+          rabbit_framing_amqp_0_9_1),
     %% header is formatted correctly and the size is the total of the
     %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
