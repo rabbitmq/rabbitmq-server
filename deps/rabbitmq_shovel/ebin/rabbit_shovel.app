@@ -2,7 +2,6 @@
  [{description, "Data Shovel for RabbitMQ"},
   {vsn, "0.01"},
   {modules, [
-    supervisor3,
     rabbit_shovel,
     rabbit_shovel_sup,
     rabbit_shovel_worker
