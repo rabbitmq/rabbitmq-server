@@ -57,9 +57,9 @@ open_channel(ProposedNumber, MaxChannel, Driver, StartArgs, Channels) ->
 
 start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
     {ok, FramingPid} = rabbit_framing_channel:start_link(
-                         fun(X) -> {ok, X} end, [self()]),
+                         fun(X) -> {ok, X} end, [self()], ?PROTOCOL),
     {ok, WriterPid} = rabbit_writer:start_link(Sock, ChannelNumber,
-                                               ?FRAME_MIN_SIZE),
+                                               ?FRAME_MIN_SIZE, ?PROTOCOL),
     case MainReader of
         none -> ok;
         _    -> amqp_main_reader:register_framing_channel(
@@ -231,8 +231,8 @@ handle_channel_exit(_Pid, normal, _Closing) ->
     normal;
 handle_channel_exit(Pid, {server_initiated_close, Code, _Text}, false) ->
     %% Channel terminating (server sent 'channel.close')
-    {IsHardError, _, _} = rabbit_framing:lookup_amqp_exception(
-                            rabbit_framing:amqp_exception(Code)),
+    {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
+                            ?PROTOCOL:amqp_exception(Code)),
     case IsHardError of
         true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) "
                            "received hard error from server~n", [self(), Pid]),

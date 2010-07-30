@@ -123,7 +123,7 @@ handle_inet_async({inet_async, Sock, _, Msg},
     end.
 
 handle_frame(Type, Channel, Payload, State) ->
-    case rabbit_reader:analyze_frame(Type, Payload) of
+    case rabbit_reader:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when Channel /= 0 ->
             rabbit_misc:die(frame_error);
         trace when Channel /= 0 ->
