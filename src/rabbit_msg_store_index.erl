@@ -29,51 +29,19 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_sup).
+-module(rabbit_msg_store_index).
 
--behaviour(supervisor).
+-export([behaviour_info/1]).
 
--export([start_link/0, start_child/1, start_child/2, start_child/3,
-         start_restartable_child/1, start_restartable_child/2, stop_child/1]).
-
--export([init/1]).
-
--include("rabbit.hrl").
-
--define(SERVER, ?MODULE).
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-start_child(Mod) ->
-    start_child(Mod, []).
-
-start_child(Mod, Args) ->
-    start_child(Mod, Mod, Args).
-
-start_child(ChildId, Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER,
-                                     {ChildId, {Mod, start_link, Args},
-                                      transient, ?MAX_WAIT, worker, [Mod]}),
-    ok.
-
-start_restartable_child(Mod) ->
-    start_restartable_child(Mod, []).
-
-start_restartable_child(Mod, Args) ->
-    Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),
-    {ok, _} = supervisor:start_child(
-                ?SERVER,
-                {Name, {rabbit_restartable_sup, start_link,
-                        [Name, {Mod, start_link, Args}]},
-                 transient, infinity, supervisor, [rabbit_restartable_sup]}),
-    ok.
-
-stop_child(ChildId) ->
-    case supervisor:terminate_child(?SERVER, ChildId) of
-        ok -> supervisor:delete_child(?SERVER, ChildId);
-        E  -> E
-    end.
-
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+behaviour_info(callbacks) ->
+    [{new,            1},
+     {recover,        1},
+     {lookup,         2},
+     {insert,         2},
+     {update,         2},
+     {update_fields,  3},
+     {delete,         2},
+     {delete_by_file, 2},
+     {terminate,      1}];
+behaviour_info(_Other) ->
+    undefined.

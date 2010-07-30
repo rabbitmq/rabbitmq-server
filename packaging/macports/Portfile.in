@@ -75,28 +75,20 @@ post-destroot {
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
-    reinplace -E "s:(CLUSTER_CONFIG_FILE)=/:\\1=${prefix}/:" \
-        ${realsbin}/rabbitmq-multi \
-        ${realsbin}/rabbitmq-server \
-        ${realsbin}/rabbitmqctl
-    reinplace -E "s:(LOG_BASE)=/:\\1=${prefix}/:" \
-        ${realsbin}/rabbitmq-multi \
-        ${realsbin}/rabbitmq-server \
-        ${realsbin}/rabbitmqctl
-    reinplace -E "s:(MNESIA_BASE)=/:\\1=${prefix}/:" \
-        ${realsbin}/rabbitmq-multi \
-        ${realsbin}/rabbitmq-server \
-        ${realsbin}/rabbitmqctl
-    reinplace -E "s:(PIDS_FILE)=/:\\1=${prefix}/:" \
-        ${realsbin}/rabbitmq-multi \
-        ${realsbin}/rabbitmq-server \
-        ${realsbin}/rabbitmqctl
+    foreach var {CONFIG_FILE CLUSTER_CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
+        reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
+            ${realsbin}/rabbitmq-multi \
+            ${realsbin}/rabbitmq-server \
+            ${realsbin}/rabbitmqctl
+    }
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-multi
     xinstall -m 555 ${filespath}/rabbitmq-asroot-script-wrapper \
                 ${wrappersbin}/rabbitmq-activate-plugins
 
+    reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:" \
+                ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
                 ${wrappersbin}/rabbitmq-multi
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \

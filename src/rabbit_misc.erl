@@ -38,9 +38,10 @@
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4,
          protocol_error/3, protocol_error/4, protocol_error/1]).
--export([not_found/1]).
+-export([not_found/1, assert_args_equivalence/4]).
 -export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
+-export([table_lookup/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -61,7 +62,8 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
+-export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+         unlink_and_capture_exit/1]).
 
 -import(mnesia).
 -import(lists).
@@ -97,12 +99,19 @@
         -> no_return()).
 -spec(protocol_error/1 :: (rabbit_types:amqp_error()) -> no_return()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
+-spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
+                                    rabbit_framing:amqp_table(),
+                                    rabbit_types:r(any()), [binary()]) ->
+                                        'ok' | no_return()).
 -spec(get_config/1 ::
         (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).
 -spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 ::
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
+-spec(table_lookup/2 ::
+        (rabbit_framing:amqp_table(), binary())
+         -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
@@ -168,7 +177,10 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(dict_cons/3 :: (any(), any(), dict:dictionary()) -> dict:dictionary()).
+-spec(dict_cons/3 :: (any(), any(), dict:dictionary()) ->
+                          dict:dictionary()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
+                             orddict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -207,6 +219,20 @@ protocol_error(#amqp_error{} = Error) ->
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
+assert_args_equivalence(Orig, New, Name, Keys) ->
+    [assert_args_equivalence1(Orig, New, Name, Key) || Key <- Keys],
+    ok.
+
+assert_args_equivalence1(Orig, New, Name, Key) ->
+    case {table_lookup(Orig, Key), table_lookup(New, Key)} of
+        {Same, Same}  -> ok;
+        {Orig1, New1} -> protocol_error(
+                           not_allowed,
+                           "cannot redeclare ~s with inequivalent args for ~s: "
+                           "required ~w, received ~w",
+                           [rabbit_misc:rs(Name), Key, New1, Orig1])
+    end.
+
 get_config(Key) ->
     case dirty_read({rabbit_config, Key}) of
         {ok, {rabbit_config, Key, V}} -> {ok, V};
@@ -228,6 +254,12 @@ dirty_read(ReadSpec) ->
         []       -> {error, not_found}
     end.
 
+table_lookup(Table, Key) ->
+    case lists:keysearch(Key, 1, Table) of
+        {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
+        false                           -> undefined
+    end.
+
 r(#resource{virtual_host = VHostPath}, Kind, Name)
   when is_binary(Name) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = Name};
@@ -240,9 +272,9 @@ r(VHostPath, Kind) when is_binary(VHostPath) ->
 r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
     r_arg(VHostPath, Kind, Table, Key);
 r_arg(VHostPath, Kind, Table, Key) ->
-    case lists:keysearch(Key, 1, Table) of
-        {value, {_, longstr, NameBin}} -> r(VHostPath, Kind, NameBin);
-        false                          -> undefined
+    case table_lookup(Table, Key) of
+        {longstr, NameBin} -> r(VHostPath, Kind, NameBin);
+        undefined          -> undefined
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
@@ -585,7 +617,7 @@ string_to_pid(Str) ->
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
         nomatch ->
             throw(Err)
-    end. 
+    end.
 
 version_compare(A, B, lte) ->
     case version_compare(A, B) of
@@ -660,6 +692,9 @@ recursive_delete1(Path) ->
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
+
+orddict_cons(Key, Value, Dict) ->
+    orddict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
 unlink_and_capture_exit(Pid) ->
     unlink(Pid),

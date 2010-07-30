@@ -160,6 +160,12 @@ action(cluster, Node, ClusterNodeSs, Inform) ->
               [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
+action(force_cluster, Node, ClusterNodeSs, Inform) ->
+    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+    Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
+              [Node, ClusterNodes]),
+    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+
 action(status, Node, [], Inform) ->
     Inform("Status of node ~p", [Node]),
     case call(Node, {rabbit, status, []}) of
