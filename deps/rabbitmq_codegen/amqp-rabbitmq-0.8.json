@@ -95,6 +95,7 @@
 	{"name": "SYNTAX-ERROR", "value": 502, "class": "hard-error"},
 	{"name": "COMMAND-INVALID", "value": 503, "class": "hard-error"},
 	{"name": "CHANNEL-ERROR", "value": 504, "class": "hard-error"},
+	{"name": "UNEXPECTED-FRAME", "value": 505, "class": "hard-error"},
 	{"name": "RESOURCE-ERROR", "value": 506, "class": "hard-error"},
 	{"name": "NOT-ALLOWED", "value": 530, "class": "hard-error"},
 	{"name": "NOT-IMPLEMENTED", "value": 540, "class": "hard-error"},
