@@ -771,10 +771,10 @@ send_to_new_channel(Channel, AnalyzedFrame,
                        frame_max = FrameMax,
                        user = #user{username = Username},
                        vhost = VHost}} = State,
-    WriterPid = rabbit_writer:start(Sock, Channel, FrameMax),
-    ChPid = rabbit_framing_channel:start_link(
-              fun rabbit_channel:start_link/6,
-              [Channel, self(), WriterPid, Username, VHost, Collector]),
+    {ok, WriterPid} = rabbit_writer:start(Sock, Channel, FrameMax),
+    {ok, ChPid} = rabbit_framing_channel:start_link(
+                    fun rabbit_channel:start_link/6,
+                    [Channel, self(), WriterPid, Username, VHost, Collector]),
     put({channel, Channel}, {chpid, ChPid}),
     put({chpid, ChPid}, {channel, Channel}),
     ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).
