@@ -76,8 +76,8 @@ def extension_info_merger(key, acc, new, ignore_conflicts):
     return acc + [new]
 
 def domains_merger(key, acc, new, ignore_conflicts):
-    merged = dict((k, v) for [k, v] in new)
-    for [k, v] in acc:
+    merged = dict((k, v) for [k, v] in acc)
+    for [k, v] in new:
         if merged.has_key(k):
             if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(key, acc, new)
@@ -87,10 +87,10 @@ def domains_merger(key, acc, new, ignore_conflicts):
     return [[k, v] for (k, v) in merged.iteritems()]
 
 def merge_dict_lists_by(dict_key, acc, new, ignore_conflicts):
-    new_index = set(v[dict_key] for v in new)
-    result = list(new) # shallow copy
-    for v in acc:
-        if v[dict_key] in new_index:
+    acc_index = set(v[dict_key] for v in acc)
+    result = list(acc) # shallow copy
+    for v in new:
+        if v[dict_key] in acc_index:
             if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(description, acc, new)
         else:
@@ -117,11 +117,11 @@ def class_merger(acc, new, ignore_conflicts):
                                           ignore_conflicts)
 
 def classes_merger(key, acc, new, ignore_conflicts):
-    new_dict = dict((v["name"], v) for v in new)
-    result = list(new) # shallow copy
-    for w in acc:
-        if w["name"] in new_dict:
-            class_merger(new_dict[w["name"]], w, ignore_conflicts)
+    acc_dict = dict((v["name"], v) for v in acc)
+    result = list(acc) # shallow copy
+    for w in new:
+        if w["name"] in acc_dict:
+            class_merger(acc_dict[w["name"]], w, ignore_conflicts)
         else:
             result.append(w)
     return result
