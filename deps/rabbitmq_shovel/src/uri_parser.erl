@@ -47,8 +47,8 @@ parse(AbsURI, Defaults) ->
             case (catch parse_uri_rest(Rest, true)) of
                 [_|_] = List ->
                     merge_keylists([{scheme, Scheme} | List], Defaults);
-                _ ->
-                    {error, {malformed_uri, AbsURI}}
+                E ->
+                    {error, {malformed_uri, AbsURI, E}}
             end
     end.
 
@@ -73,9 +73,9 @@ parse_uri_rest(PathQueryFrag, _Bool) ->
 
 parse_authority(Authority) ->
     {UserInfo, HostPort} = split_uri(Authority, "@", {"", Authority}),
-    UserInfoSplit = case regexp:split(UserInfo, ":") of
-                        {ok, [""]} -> [];
-                        {ok, UIS } -> UIS
+    UserInfoSplit = case re:split(UserInfo, ":", [{return, list}]) of
+                        [""] -> [];
+                        UIS  -> UIS
                     end,
     [{userinfo, UserInfoSplit} | parse_host_port(HostPort)].
 
@@ -94,19 +94,19 @@ parse_host_port(HostPort) ->
                     end].
 
 split_query(Query) ->
-    case regexp:split(Query, "&") of
-        {ok, [""]}    -> [];
-        {ok, QParams} -> [split_uri(Param, "=", Param) || Param <- QParams]
+    case re:split(Query, "&", [{return, list}]) of
+        [""]    -> [];
+        QParams -> [split_uri(Param, "=", Param) || Param <- QParams]
     end.
 
 split_uri(UriPart, SplitChar, NoMatchResult) ->
     split_uri(UriPart, SplitChar, NoMatchResult, 1, 1).
 
 split_uri(UriPart, SplitChar, NoMatchResult, SkipLeft, SkipRight) ->
-    case regexp:first_match(UriPart, SplitChar) of
-	{match, Match, _} ->
-	    {string:substr(UriPart, 1, Match - SkipLeft),
-	     string:substr(UriPart, Match + SkipRight, length(UriPart))};
+    case re:run(UriPart, SplitChar) of
+	{match, [{Match, _}]} ->
+	    {string:substr(UriPart, 1, Match + 1 - SkipLeft),
+	     string:substr(UriPart, Match + 1 + SkipRight, length(UriPart))};
 	nomatch ->
 	    NoMatchResult
     end.
