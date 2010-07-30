@@ -67,22 +67,25 @@
         fun((rabbit_types:exchange(), queue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 
--spec(recover/0 :: () -> 'ok').
+-spec(recover/0 :: () -> 'ok' | rabbit_types:connection_exit()).
 -spec(declare/5 ::
         (name(), type(), boolean(), boolean(), rabbit_framing:amqp_table())
-        -> rabbit_types:exchange()).
--spec(check_type/1 :: (binary()) -> atom()).
+        -> rabbit_types:exchange() | rabbit_types:connection_exit()).
+-spec(check_type/1 ::
+        (binary()) -> atom() | rabbit_types:connection_exit()).
 -spec(assert_equivalence/5 ::
         (rabbit_types:exchange(), atom(), boolean(), boolean(),
          rabbit_framing:amqp_table())
-        -> 'ok' | no_return()).
+        -> 'ok' | rabbit_types:connection_exit()).
 -spec(assert_args_equivalence/2 ::
-        (rabbit_types:exchange(), rabbit_framing:amqp_table()) ->
-                                        'ok' | no_return()).
+        (rabbit_types:exchange(), rabbit_framing:amqp_table())
+        -> 'ok' | rabbit_types:connection_exit()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
                     rabbit_types:error('not_found')).
--spec(lookup_or_die/1 :: (name()) -> rabbit_types:exchange()).
+-spec(lookup_or_die/1 ::
+        (name()) -> rabbit_types:exchange() |
+                    rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (rabbit_types:exchange()) -> [rabbit_types:info()]).
@@ -93,27 +96,32 @@
 -spec(info_all/2 ::(rabbit_types:vhost(), [rabbit_types:info_key()])
                     -> [[rabbit_types:info()]]).
 -spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                   -> {rabbit_router:routing_result(), [pid()]}).
+                   -> {rabbit_router:routing_result(), [pid()]} |
+                      rabbit_types:connection_exit()).
 -spec(add_binding/5 ::
         (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
          rabbit_framing:amqp_table(), inner_fun())
-        -> bind_res()).
+        -> bind_res() | rabbit_types:connection_exit()).
 -spec(delete_binding/5 ::
         (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
          rabbit_framing:amqp_table(), inner_fun())
-        -> bind_res() | rabbit_types:error('binding_not_found')).
+        -> bind_res() | rabbit_types:error('binding_not_found') |
+           rabbit_types:connection_exit()).
 -spec(list_bindings/1 ::
         (rabbit_types:vhost())
         -> [{name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
              rabbit_framing:amqp_table()}]).
 -spec(delete_queue_bindings/1 ::
-        (rabbit_amqqueue:name()) -> fun (() -> none())).
+        (rabbit_amqqueue:name())
+        -> fun (() -> none()) | rabbit_types:connection_exit()).
 -spec(delete_transient_queue_bindings/1 ::
-        (rabbit_amqqueue:name()) -> fun (() -> none())).
+        (rabbit_amqqueue:name())
+        -> fun (() -> none()) | rabbit_types:connection_exit()).
 -spec(delete/2 ::
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
-                              rabbit_types:error('in_use')).
+                              rabbit_types:error('in_use') |
+                              rabbit_types:connection_exit()).
 -spec(list_queue_bindings/1 ::
         (rabbit_amqqueue:name())
         -> [{name(), rabbit_router:routing_key(),

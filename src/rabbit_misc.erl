@@ -84,25 +84,29 @@
                               -> rabbit_framing:amqp_method_name()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
--spec(die/1 :: (rabbit_framing:amqp_exception()) -> no_return()).
+-spec(die/1 ::
+        (rabbit_framing:amqp_exception())
+        -> rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
-                       -> no_return()).
+                       -> rabbit_types:connection_exit()).
 -spec(amqp_error/4 ::
         (rabbit_framing:amqp_exception(), string(), [any()],
          rabbit_framing:amqp_method_name())
         -> rabbit_types:amqp_error()).
 -spec(protocol_error/3 :: (rabbit_framing:amqp_exception(), string(), [any()])
-                          -> no_return()).
+                          -> rabbit_types:channel_exit() |
+                             rabbit_types:connection_exit()).
 -spec(protocol_error/4 ::
         (rabbit_framing:amqp_exception(), string(), [any()],
          rabbit_framing:amqp_method_name())
-        -> no_return()).
+        -> rabbit_types:channel_exit() |
+           rabbit_types:connection_exit()).
 -spec(protocol_error/1 :: (rabbit_types:amqp_error()) -> no_return()).
--spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
+-spec(not_found/1 :: (rabbit_types:r(atom())) -> rabbit_types:channel_exit()).
 -spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
                                     rabbit_framing:amqp_table(),
                                     rabbit_types:r(any()), [binary()]) ->
-                                        'ok' | no_return()).
+                                        'ok' | rabbit_types:connection_exit()).
 -spec(get_config/1 ::
         (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(get_config/2 :: (atom(), A) -> A).

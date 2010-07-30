@@ -48,7 +48,9 @@
         ({ok, rabbit_router:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
 
--spec(publish/1 :: (rabbit_types:delivery()) -> publish_result()).
+-spec(publish/1 ::
+        (rabbit_types:delivery()) -> publish_result() |
+                                     rabbit_types:connection_exit()).
 -spec(delivery/4 ::
         (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
          rabbit_types:message())
@@ -62,12 +64,12 @@
 -spec(publish/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          properties_input(), binary())
-        -> publish_result()).
+        -> publish_result() | rabbit_types:connection_exit()).
 -spec(publish/7 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
          properties_input(), binary())
-        -> publish_result()).
+        -> publish_result() | rabbit_types:connection_exit()).
 -spec(build_content/2 ::
         (rabbit_framing:amqp_property_record(), binary())
         -> rabbit_types:content()).
