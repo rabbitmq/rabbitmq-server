@@ -1,14 +1,13 @@
-SVN_ROOT=http://mochiweb.googlecode.com/svn/trunk
-REVISION=102
+UPSTREAM_GIT=http://github.com/mochi/mochiweb.git
+REVISION=9a53dbd7b2c52eb5b9d4
 
 EBIN_DIR=ebin
-INCLUDE_DIR=include
 
 LIB_PACKAGE=mochiweb
 LIB_PACKAGE_DIR=$(LIB_PACKAGE)
 LIB_PACKAGE_NAME=$(LIB_PACKAGE).ez
 
-CHECKOUT_DIR=$(LIB_PACKAGE_DIR)-svn
+CHECKOUT_DIR=$(LIB_PACKAGE_DIR)-git
 
 TARGETS=$(LIB_PACKAGE_NAME)
 
@@ -26,13 +25,13 @@ $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 	cp -r $< $@
 
 $(CHECKOUT_DIR):
-	svn co -r $(REVISION) $(SVN_ROOT) $@
+	git clone $(UPSTREAM_GIT) $@
+	(cd $@ && git checkout $(REVISION)) || rm -rf $@
 
 %.ez: $(LIB_PACKAGE_DIR)
 	$(MAKE) -C $(LIB_PACKAGE_DIR) clean all
 	rm -rf ebin include
 	cp -r $(LIB_PACKAGE_DIR)/ebin $(EBIN_DIR)
-	cp -r $(LIB_PACKAGE_DIR)/include $(INCLUDE_DIR)
 	zip $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/
 	zip -r $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/$(EBIN_DIR)/
 
