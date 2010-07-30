@@ -34,6 +34,7 @@
 -include("rabbit.hrl").
 
 -export([init_stats_timer/0, ensure_stats_timer/3, stop_stats_timer/2]).
+-export([ensure_stats_timer_after/2, reset_stats_timer_after/1]).
 -export([stats_level/1]).
 -export([notify/2]).
 
@@ -43,6 +44,8 @@
 -spec(ensure_stats_timer/3 ::
         (state(), fun (() -> 'ok'), fun (() -> 'ok')) -> state()).
 -spec(stop_stats_timer/2 :: (state(), fun (() -> 'ok')) -> state()).
+-spec(ensure_stats_timer_after/2 :: (state(), fun (() -> 'ok')) -> state()).
+-spec(reset_stats_timer_after/1 :: (state()) -> 'ok').
 -spec(stats_level/1 :: (state()) -> atom()).
 -spec(notify/2 :: (atom(), term()) -> 'ok').
 
@@ -72,6 +75,18 @@ stop_stats_timer(State = #state{timer = undefined}, _NowFun) ->
 stop_stats_timer(State = #state{timer = TRef}, NowFun) ->
     {ok, cancel} = timer:cancel(TRef),
     NowFun(),
+    State#state{timer = undefined}.
+
+ensure_stats_timer_after(State = #state{level = none}, _TimerFun) ->
+    State;
+ensure_stats_timer_after(State = #state{timer = undefined}, TimerFun) ->
+    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
+                                   erlang, apply, [TimerFun, []]),
+    State#state{timer = TRef};
+ensure_stats_timer_after(State, _TimerFun) ->
+    State.
+
+reset_stats_timer_after(State) ->
     State#state{timer = undefined}.
 
 stats_level(#state{level = Level}) ->
