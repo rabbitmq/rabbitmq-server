@@ -185,7 +185,7 @@ parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
 
 parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
-    FieldNames = try rabbit_framing:method_fieldnames(Method)
+    FieldNames = try rabbit_framing_amqp_0_8:method_fieldnames(Method)
                  catch exit:Reason -> fail(Reason)
                  end,
     case proplists:get_keys(Props) -- FieldNames of
@@ -199,7 +199,8 @@ parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
                                        V         -> setelement(Idx, R, V)
                                    end,
                             {NewR, Idx + 1}
-                    end, {rabbit_framing:method_record(Method), 2}, FieldNames),
+                    end, {rabbit_framing_amqp_0_8:method_record(Method), 2},
+                    FieldNames),
     return({Rest, [Res | Acc]});
 parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
     fail({expected_method_field_list, Method, Props});
