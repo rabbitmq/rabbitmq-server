@@ -60,6 +60,7 @@ all_tests() ->
     passed = test_bpqueue(),
     passed = test_pg_local(),
     passed = test_unfold(),
+    passed = test_supervisor_delayed_restart(),
     passed = test_parsing(),
     passed = test_content_framing(),
     passed = test_topic_matching(),
@@ -503,8 +504,10 @@ test_content_framing(FrameMax, BodyBin) ->
         rabbit_binary_generator:build_simple_content_frames(
           1,
           rabbit_binary_generator:ensure_content_encoded(
-            rabbit_basic:build_content(#'P_basic'{}, BodyBin)),
-          FrameMax),
+            rabbit_basic:build_content(#'P_basic'{}, BodyBin),
+            rabbit_framing_amqp_0_9_1),
+          FrameMax,
+          rabbit_framing_amqp_0_9_1),
     %% header is formatted correctly and the size is the total of the
     %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
@@ -937,8 +940,8 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                   self()),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
+                                         <<"user">>, <<"/">>, self()),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1067,8 +1070,8 @@ test_memory_pressure_sync(Ch, Writer) ->
 test_memory_pressure_spawn() ->
     Me = self(),
     Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                   self()),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
+                                         <<"user">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     MRef = erlang:monitor(process, Ch),
     receive #'channel.open_ok'{} -> ok
@@ -1141,8 +1144,8 @@ test_memory_pressure() ->
     alarm_handler:set_alarm({vm_memory_high_watermark, []}),
     Me = self(),
     Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch4 = rabbit_channel:start_link(1, self(), Writer4, <<"user">>, <<"/">>,
-                                    self()),
+    {ok, Ch4} = rabbit_channel:start_link(1, self(), Writer4,
+                                          <<"user">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch4, #'channel.open'{}),
     MRef4 = erlang:monitor(process, Ch4),
     Writer4 ! sync,
@@ -1339,6 +1342,9 @@ bad_handle_hook(_, _, _) ->
     exit(bad_handle_hook_called).
 extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
     handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
+
+test_supervisor_delayed_restart() ->
+    test_sup:test_supervisor_delayed_restart().
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of

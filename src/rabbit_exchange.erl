@@ -378,7 +378,6 @@ cleanup_deleted_queue_bindings1(ExchangeName, Bindings) ->
     [X] = mnesia:read({rabbit_exchange, ExchangeName}),
     {maybe_auto_delete(X), Bindings}.
 
-
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
     ok = mnesia:delete_object(rabbit_durable_route, Route, write).
