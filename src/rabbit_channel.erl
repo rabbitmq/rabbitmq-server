@@ -637,6 +637,17 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
     ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
     {noreply, State2};
 
+handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
+                              requeue = Requeue},
+              _, State = #ch{ unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
+    ok = fold_per_queue(
+           fun (QPid, MsgIds, ok) ->
+                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+           end, ok, Acked),
+    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    {noreply, State#ch{unacked_message_q = Remaining}};
+
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
