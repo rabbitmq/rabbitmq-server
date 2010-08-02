@@ -32,15 +32,16 @@
 -module(rabbit_framing_channel).
 -include("rabbit.hrl").
 
--export([start_link/1, process/2, shutdown/1]).
+-export([start_link/2, process/2, shutdown/1]).
 
 %% internal
--export([mainloop/1]).
+-export([mainloop/2]).
 
 %%--------------------------------------------------------------------
 
-start_link(GetChannelPid) ->
-    {ok, proc_lib:spawn_link(fun () -> mainloop(GetChannelPid()) end)}.
+start_link(GetChannelPid, Protocol) ->
+    {ok, proc_lib:spawn_link(
+           fun () -> mainloop(GetChannelPid(), Protocol) end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},
@@ -60,37 +61,42 @@ read_frame(ChannelPid) ->
         Msg                    -> exit({unexpected_message, Msg})
     end.
 
-mainloop(ChannelPid) ->
-    {method, MethodName, FieldsBin} = read_frame(ChannelPid),
-    Method = rabbit_framing:decode_method_fields(MethodName, FieldsBin),
-    case rabbit_framing:method_has_content(MethodName) of
-        true  -> {ClassId, _MethodId} = rabbit_framing:method_id(MethodName),
-                 rabbit_channel:do(ChannelPid, Method,
-                                   collect_content(ChannelPid, ClassId));
-        false -> rabbit_channel:do(ChannelPid, Method)
-    end,
-    ?MODULE:mainloop(ChannelPid).
+mainloop(ChannelPid, Protocol) ->
+    case read_frame(ChannelPid) of
+        {method, MethodName, FieldsBin} ->
+            Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+            case Protocol:method_has_content(MethodName) of
+                true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
+                         rabbit_channel:do(ChannelPid, Method,
+                                           collect_content(ChannelPid,
+                                                           ClassId,
+                                                           Protocol));
+                false -> rabbit_channel:do(ChannelPid, Method)
+            end,
+            ?MODULE:mainloop(ChannelPid, Protocol);
+        _ ->
+            unexpected_frame("expected method frame, "
+                             "got non method frame instead",
+                             [])
+    end.
 
-collect_content(ChannelPid, ClassId) ->
+collect_content(ChannelPid, ClassId, Protocol) ->
     case read_frame(ChannelPid) of
         {content_header, ClassId, 0, BodySize, PropertiesBin} ->
             Payload = collect_content_payload(ChannelPid, BodySize, []),
             #content{class_id = ClassId,
                      properties = none,
                      properties_bin = PropertiesBin,
+                     protocol = Protocol,
                      payload_fragments_rev = Payload};
         {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
-            rabbit_misc:protocol_error(
-              command_invalid,
-              "expected content header for class ~w, "
-              "got one for class ~w instead",
-              [ClassId, HeaderClassId]);
+            unexpected_frame("expected content header for class ~w, "
+                             "got one for class ~w instead",
+                             [ClassId, HeaderClassId]);
         _ ->
-            rabbit_misc:protocol_error(
-              command_invalid,
-              "expected content header for class ~w, "
-              "got non content header frame instead",
-              [ClassId])
+            unexpected_frame("expected content header for class ~w, "
+                             "got non content header frame instead",
+                             [ClassId])
     end.
 
 collect_content_payload(_ChannelPid, 0, Acc) ->
@@ -102,8 +108,10 @@ collect_content_payload(ChannelPid, RemainingByteCount, Acc) ->
                                     RemainingByteCount - size(FragmentBin),
                                     [FragmentBin | Acc]);
         _ ->
-            rabbit_misc:protocol_error(
-              command_invalid,
-              "expected content body, got non content body frame instead",
-              [])
+            unexpected_frame("expected content body, "
+                             "got non content body frame instead",
+                             [])
     end.
+
+unexpected_frame(ExplanationFormat, Params) ->
+    rabbit_misc:protocol_error(unexpected_frame, ExplanationFormat, Params).

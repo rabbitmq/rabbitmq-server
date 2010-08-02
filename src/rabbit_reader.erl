@@ -41,7 +41,7 @@
 
 -export([server_properties/0]).
 
--export([analyze_frame/2]).
+-export([analyze_frame/3]).
 
 -import(gen_tcp).
 -import(fprof).
@@ -62,8 +62,8 @@
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
-         recv_oct, recv_cnt, send_oct, send_cnt, send_pend,
-         state, channels, user, vhost, timeout, frame_max, client_properties]).
+         recv_oct, recv_cnt, send_oct, send_cnt, send_pend, state, channels,
+         protocol, user, vhost, timeout, frame_max, client_properties]).
 
 %% connection lifecycle
 %%
@@ -248,14 +248,13 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    [Collector] =
-        [Pid || {collector, Pid, worker, [rabbit_queue_collector]}
-                    <- supervisor:which_children(Parent)],
+    [Collector] = supervisor2:find_child(Parent, collector),
     try
         mainloop(Deb, switch_callback(
                         #v1{parent           = Parent,
                             sock             = ClientSock,
                             connection       = #connection{
+                              protocol          = none,
                               user              = none,
                               timeout_sec       = ?HANDSHAKE_TIMEOUT,
                               frame_max         = ?FRAME_MIN_SIZE,
@@ -444,7 +443,9 @@ wait_for_channel_termination(N, TimerRef) ->
     end.
 
 maybe_close(State = #v1{connection_state = closing,
-                        queue_collector = Collector}) ->
+                        queue_collector = Collector,
+                        connection = #connection{protocol = Protocol},
+                        sock = Sock}) ->
     case all_channels() of
         [] ->
             %% Spec says "Exclusive queues may only be accessed by the current
@@ -452,16 +453,18 @@ maybe_close(State = #v1{connection_state = closing,
             %% This does not strictly imply synchrony, but in practice it seems
             %% to be what people assume.
             rabbit_queue_collector:delete_all(Collector),
-            ok = send_on_channel0(State#v1.sock, #'connection.close_ok'{}),
+            ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
             close_connection(State);
         _  -> State
     end;
 maybe_close(State) ->
     State.
 
-handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
+handle_frame(Type, 0, Payload,
+             State = #v1{connection_state = CS,
+                         connection = #connection{protocol = Protocol}})
   when CS =:= closing; CS =:= closed ->
-    case analyze_frame(Type, Payload) of
+    case analyze_frame(Type, Payload, Protocol) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
@@ -469,20 +472,20 @@ handle_frame(Type, 0, Payload, State = #v1{connection_state = CS})
 handle_frame(_Type, _Channel, _Payload, State = #v1{connection_state = CS})
   when CS =:= closing; CS =:= closed ->
     State;
-handle_frame(Type, 0, Payload, State) ->
-    case analyze_frame(Type, Payload) of
+handle_frame(Type, 0, Payload,
+             State = #v1{connection = #connection{protocol = Protocol}}) ->
+    case analyze_frame(Type, Payload, Protocol) of
         error     -> throw({unknown_frame, 0, Type, Payload});
         heartbeat -> State;
-        trace     -> State;
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         Other -> throw({unexpected_frame_on_channel0, Other})
     end;
-handle_frame(Type, Channel, Payload, State) ->
-    case analyze_frame(Type, Payload) of
+handle_frame(Type, Channel, Payload,
+             State = #v1{connection = #connection{protocol = Protocol}}) ->
+    case analyze_frame(Type, Payload, Protocol) of
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
-        trace         -> throw({unexpected_trace_frame, Channel});
         AnalyzedFrame ->
             %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
@@ -523,17 +526,20 @@ handle_frame(Type, Channel, Payload, State) ->
             end
     end.
 
-analyze_frame(?FRAME_METHOD, <<ClassId:16, MethodId:16, MethodFields/binary>>) ->
-    {method, rabbit_framing:lookup_method_name({ClassId, MethodId}), MethodFields};
-analyze_frame(?FRAME_HEADER, <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>) ->
+analyze_frame(?FRAME_METHOD,
+              <<ClassId:16, MethodId:16, MethodFields/binary>>,
+              Protocol) ->
+    MethodName = Protocol:lookup_method_name({ClassId, MethodId}),
+    {method, MethodName, MethodFields};
+analyze_frame(?FRAME_HEADER,
+              <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
+              _Protocol) ->
     {content_header, ClassId, Weight, BodySize, Properties};
-analyze_frame(?FRAME_BODY, Body) ->
+analyze_frame(?FRAME_BODY, Body, _Protocol) ->
     {content_body, Body};
-analyze_frame(?FRAME_TRACE, _Body) ->
-    trace;
-analyze_frame(?FRAME_HEARTBEAT, <<>>) ->
+analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
     heartbeat;
-analyze_frame(_Type, _Body) ->
+analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
@@ -550,54 +556,75 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
             throw({bad_payload, PayloadAndMarker})
     end;
 
-handle_input(handshake, <<"AMQP",1,1,ProtocolMajor,ProtocolMinor>>,
-             State = #v1{sock = Sock, connection = Connection}) ->
-    case check_version({ProtocolMajor, ProtocolMinor},
-                       {?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR}) of
-        true ->
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.start'{
-                     version_major = ?PROTOCOL_VERSION_MAJOR,
-                     version_minor = ?PROTOCOL_VERSION_MINOR,
-                     server_properties = server_properties(),
-                     mechanisms = <<"PLAIN AMQPLAIN">>,
-                     locales = <<"en_US">> }),
-            {State#v1{connection = Connection#connection{
-                                     timeout_sec = ?NORMAL_TIMEOUT},
-                      connection_state = starting},
-             frame_header, 7};
-        false ->
-            throw({bad_version, ProtocolMajor, ProtocolMinor})
-    end;
+%% The two rules pertaining to version negotiation:
+%%
+%% * If the server cannot support the protocol specified in the
+%% protocol header, it MUST respond with a valid protocol header and
+%% then close the socket connection.
+%%
+%% * The server MUST provide a protocol version that is lower than or
+%% equal to that requested by the client in the protocol header.
+handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
+    start_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
+
+%% This is the protocol header for 0-9, which we can safely treat as
+%% though it were 0-9-1.
+handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
+    start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
+
+%% This is what most clients send for 0-8.  The 0-8 spec, confusingly,
+%% defines the version as 8-0.
+handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
+    start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
+
+%% The 0-8 spec as on the AMQP web site actually has this as the
+%% protocol header; some libraries e.g., py-amqplib, send it when they
+%% want 0-8.
+handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
+    start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
+
+handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
+    refuse_connection(Sock, {bad_version, A, B, C, D});
 
 handle_input(handshake, Other, #v1{sock = Sock}) ->
-    ok = inet_op(fun () -> rabbit_net:send(
-                             Sock, <<"AMQP",1,1,
-                                    ?PROTOCOL_VERSION_MAJOR,
-                                    ?PROTOCOL_VERSION_MINOR>>) end),
-    throw({bad_header, Other});
+    refuse_connection(Sock, {bad_header, Other});
 
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
-%% the 0-8 spec, confusingly, defines the version as 8-0
-adjust_version({8,0})   -> {0,8};
-adjust_version(Version) -> Version.
-check_version(ClientVersion, ServerVersion) ->
-    {ClientMajor, ClientMinor} = adjust_version(ClientVersion),
-    {ServerMajor, ServerMinor} = adjust_version(ServerVersion),
-    ClientMajor > ServerMajor
-        orelse
-          (ClientMajor == ServerMajor andalso
-           ClientMinor >= ServerMinor).
+%% Offer a protocol version to the client.  Connection.start only
+%% includes a major and minor version number, Luckily 0-9 and 0-9-1
+%% are similar enough that clients will be happy with either.
+start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
+                 Protocol, State = #v1{parent = Parent, sock = Sock,
+                                       connection = Connection}) ->
+    {ok, _Pid} =
+        supervisor:start_child(
+          Parent, {channel_sup_sup,
+                   {rabbit_channel_sup_sup, start_link, [Protocol]},
+                   permanent, infinity, supervisor, [rabbit_channel_sup_sup]}),
+    Start = #'connection.start'{ version_major = ProtocolMajor,
+                                 version_minor = ProtocolMinor,
+                                 server_properties = server_properties(),
+                                 mechanisms = <<"PLAIN AMQPLAIN">>,
+                                 locales = <<"en_US">> },
+    ok = send_on_channel0(Sock, Start, Protocol),
+    {State#v1{connection = Connection#connection{
+                             timeout_sec = ?NORMAL_TIMEOUT,
+                             protocol = Protocol},
+              connection_state = starting},
+     frame_header, 7}.
+
+refuse_connection(Sock, Exception) ->
+    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
+    throw(Exception).
 
 %%--------------------------------------------------------------------------
 
-handle_method0(MethodName, FieldsBin, State) ->
+handle_method0(MethodName, FieldsBin,
+               State = #v1{connection = #connection{protocol = Protocol}}) ->
     try
-        handle_method0(rabbit_framing:decode_method_fields(
-                         MethodName, FieldsBin),
+        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
     catch exit:Reason ->
             CompleteReason = case Reason of
@@ -619,14 +646,14 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response,
                                       client_properties = ClientProperties},
                State = #v1{connection_state = starting,
-                           connection = Connection,
+                           connection = Connection =
+                               #connection{protocol = Protocol},
                            sock = Sock}) ->
     User = rabbit_access_control:check_login(Mechanism, Response),
-    ok = send_on_channel0(
-           Sock,
-           #'connection.tune'{channel_max = 0,
+    Tune = #'connection.tune'{channel_max = 0,
                               frame_max = ?FRAME_MAX,
-                              heartbeat = 0}),
+                              heartbeat = 0},
+    ok = send_on_channel0(Sock, Tune, Protocol),
     State#v1{connection_state = tuning,
              connection = Connection#connection{
                             user = User,
@@ -653,46 +680,30 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                     frame_max = FrameMax}}
     end;
 
-handle_method0(#'connection.open'{virtual_host = VHostPath,
-                                  insist = Insist},
+handle_method0(#'connection.open'{virtual_host = VHostPath},
+
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
-                                          user = User},
+                                          user = User,
+                                          protocol = Protocol},
                            sock = Sock}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
-    KnownHosts = format_listeners(rabbit_networking:active_listeners()),
-    Redirects = compute_redirects(Insist),
-    if Redirects == [] ->
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.open_ok'{known_hosts = KnownHosts}),
-            State#v1{connection_state = running,
-                     connection = NewConnection};
-       true ->
-            %% FIXME: 'host' is supposed to only contain one
-            %% address; but which one do we pick? This is
-            %% really a problem with the spec.
-            Host = format_listeners(Redirects),
-            rabbit_log:info("connection ~p redirecting to ~p~n",
-                            [self(), Host]),
-            ok = send_on_channel0(
-                   Sock,
-                   #'connection.redirect'{host = Host,
-                                          known_hosts = KnownHosts}),
-            close_connection(State#v1{connection = NewConnection})
-    end;
+    ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
+    State#v1{connection_state = running,
+             connection = NewConnection};
 handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
 handle_method0(#'connection.close'{},
                State = #v1{connection_state = CS,
+                           connection = #connection{protocol = Protocol},
                            sock = Sock})
   when CS =:= closing; CS =:= closed ->
     %% We're already closed or closing, so we don't need to cleanup
     %% anything.
-    ok = send_on_channel0(Sock, #'connection.close_ok'{}),
+    ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
     State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
@@ -705,23 +716,8 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-send_on_channel0(Sock, Method) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method).
-
-format_listeners(Listeners) ->
-    list_to_binary(
-      rabbit_misc:intersperse(
-        $,,
-        [io_lib:format("~s:~w", [Host, Port]) ||
-            #listener{host = Host, port = Port} <- Listeners])).
-
-compute_redirects(true) -> [];
-compute_redirects(false) ->
-    Node = node(),
-    LNode = rabbit_load:pick(),
-    if Node == LNode -> [];
-       true -> rabbit_networking:node_listeners(LNode)
-    end.
+send_on_channel0(Sock, Method, Protocol) ->
+    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
 %%--------------------------------------------------------------------------
 
@@ -755,6 +751,10 @@ i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
     length(all_channels());
+i(protocol, #v1{connection = #connection{protocol = none}}) ->
+    none;
+i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
+    Protocol:version();
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
     Username;
 i(user, #v1{connection = #connection{user = none}}) ->
@@ -801,25 +801,27 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
     log_channel_error(CS, Channel, Reason),
     send_exception(State, Channel, Reason).
 
-send_exception(State, Channel, Reason) ->
-    {ShouldClose, CloseChannel, CloseMethod} = map_exception(Channel, Reason),
+send_exception(State = #v1{connection = #connection{protocol = Protocol}},
+               Channel, Reason) ->
+    {ShouldClose, CloseChannel, CloseMethod} =
+        map_exception(Channel, Reason, Protocol),
     NewState = case ShouldClose of
                    true  -> terminate_channels(),
                             close_connection(State);
                    false -> close_channel(Channel, State)
                end,
     ok = rabbit_writer:internal_send_command(
-           NewState#v1.sock, CloseChannel, CloseMethod),
+           NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
     NewState.
 
-map_exception(Channel, Reason) ->
+map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason),
+        lookup_amqp_exception(Reason, Protocol),
     ShouldClose = SuggestedClose or (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none   -> {0, 0};
-                              _      -> rabbit_framing:method_id(FailedMethod)
+                              _      -> Protocol:method_id(FailedMethod)
                           end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of
@@ -834,22 +836,16 @@ map_exception(Channel, Reason) ->
         end,
     {ShouldClose, CloseChannel, CloseMethod}.
 
-%% FIXME: this clause can go when we move to AMQP spec >=8.1
-lookup_amqp_exception(#amqp_error{name        = precondition_failed,
-                                  explanation = Expl,
-                                  method      = Method}) ->
-    ExplBin = amqp_exception_explanation(<<"PRECONDITION_FAILED">>, Expl),
-    {false, 406, ExplBin, Method};
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
-                                  method      = Method}) ->
-    {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
+                                  method      = Method},
+                      Protocol) ->
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other) ->
+lookup_amqp_exception(Other, Protocol) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} =
-        rabbit_framing:lookup_amqp_exception(internal_error),
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->

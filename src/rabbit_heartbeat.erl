@@ -31,83 +31,94 @@
 
 -module(rabbit_heartbeat).
 
--include("rabbit.hrl").
-
 -export([start_heartbeat/3,
          start_heartbeat_sender/2,
          start_heartbeat_receiver/2]).
 
+-include("rabbit.hrl").
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_heartbeat/3 :: (pid(), rabbit_net:socket(), non_neg_integer()) ->
+                                rabbit_types:maybe({pid(), pid()})).
+-spec(start_heartbeat_sender/2 :: (rabbit_net:socket(), non_neg_integer()) ->
+                                       rabbit_types:ok(pid())).
+-spec(start_heartbeat_receiver/2 :: (rabbit_net:socket(), non_neg_integer()) ->
+                                         rabbit_types:ok(pid())).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_heartbeat(_Sup, _Sock, 0) ->
     none;
 start_heartbeat(Sup, Sock, TimeoutSec) ->
-    {ok, _Sender} =
+    {ok, Sender} =
         supervisor:start_child(
           Sup, {heartbeat_sender,
                 {?MODULE, start_heartbeat_sender, [Sock, TimeoutSec]},
                 transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-    {ok, _Receiver} =
+    {ok, Receiver} =
         supervisor:start_child(
           Sup, {heartbeat_receiver,
                 {?MODULE, start_heartbeat_receiver, [Sock, TimeoutSec]},
                 transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-    ok.
+    {Sender, Receiver}.
 
 start_heartbeat_sender(Sock, TimeoutSec) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
     %% 2 * TimeoutSec before sending a heartbeat in the boundary case
     %% where the last message was sent just after a heartbeat.
+    Parent = self(),
     {ok, proc_lib:spawn_link(
-           fun () -> heartbeater(Sock, TimeoutSec * 1000 div 2,
+           fun () -> heartbeater({Sock, TimeoutSec * 1000 div 2,
                                  send_oct, 0,
                                  fun () ->
                                          catch rabbit_net:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
                                          continue
-                                 end)
+                                 end}, Parent)
            end)}.
 
 start_heartbeat_receiver(Sock, TimeoutSec) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
+    Parent = self(),
     {ok, proc_lib:spawn_link(
-           fun () -> heartbeater(Sock, TimeoutSec * 1000,
+           fun () -> heartbeater({Sock, TimeoutSec * 1000,
                                  recv_oct, 1,
-                                 fun () -> exit(timeout) end)
-           end)}.
+                                 fun () -> exit(timeout) end}, Parent) end)}.
 
-%% Y-combinator, posted by Vladimir Sekissov to the Erlang mailing list
-%% http://www.erlang.org/ml-archive/erlang-questions/200301/msg00053.html
-y(X) ->
-    F = fun (P) -> X(fun (A) -> (P(P))(A) end) end,
-    F(F).
+heartbeater(Params, Parent) ->
+    heartbeater(Params, erlang:monitor(process, Parent), {0, 0}).
 
-heartbeater(Sock, TimeoutMillisec, StatName, Threshold, Handler) ->
-    Heartbeat =
-        fun (F) ->
-                fun ({StatVal, SameCount}) ->
-                        receive
-                            Other -> exit({unexpected_message, Other})
-                        after TimeoutMillisec ->
-                                case rabbit_net:getstat(Sock, [StatName]) of
-                                    {ok, [{StatName, NewStatVal}]} ->
-                                        if NewStatVal =/= StatVal ->
-                                                F({NewStatVal, 0});
-                                           SameCount < Threshold ->
-                                                F({NewStatVal, SameCount + 1});
-                                           true ->
-                                                continue = Handler(),
-                                                F({NewStatVal, 0})
-                                        end;
-                                    {error, einval} ->
-                                        %% the socket is dead, most
-                                        %% likely because the
-                                        %% connection is being shut
-                                        %% down -> terminate
-                                        ok;
-                                    {error, Reason} ->
-                                        exit({cannot_get_socket_stats, Reason})
-                                end
-                        end
-                end
-        end,
-    (y(Heartbeat))({0, 0}).
+heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
+            MonitorRef, {StatVal, SameCount}) ->
+    receive
+        {'DOWN', MonitorRef, process, _Object, _Info} ->
+            ok;
+        Other ->
+            exit({unexpected_message, Other})
+    after TimeoutMillisec ->
+            case rabbit_net:getstat(Sock, [StatName]) of
+                {ok, [{StatName, NewStatVal}]} ->
+                    Recurse = fun (V) -> heartbeater(Params, MonitorRef, V) end,
+                    if NewStatVal =/= StatVal ->
+                            Recurse({NewStatVal, 0});
+                       SameCount < Threshold ->
+                            Recurse({NewStatVal, SameCount + 1});
+                       true ->
+                            case Handler() of
+                                continue -> Recurse({NewStatVal, 0})
+                            end
+                    end;
+                {error, einval} ->
+                    %% the socket is dead, most likely because the
+                    %% connection is being shut down -> terminate
+                    ok;
+                {error, Reason} ->
+                    exit({cannot_get_socket_stats, Reason})
+            end
+    end.

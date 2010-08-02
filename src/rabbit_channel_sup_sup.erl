@@ -33,16 +33,16 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_channel/2]).
+-export([start_link/1, start_channel/2]).
 
 -export([init/1]).
 
-start_link() ->
-    supervisor2:start_link(?MODULE, []).
+start_link(Protocol) ->
+    supervisor2:start_link(?MODULE, [Protocol]).
 
-init([]) ->
+init([Protocol]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
-          [{channel_sup, {rabbit_channel_sup, start_link, []},
+          [{channel_sup, {rabbit_channel_sup, start_link, [Protocol]},
             temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
 
 start_channel(Pid, Args) ->

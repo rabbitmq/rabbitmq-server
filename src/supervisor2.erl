@@ -62,7 +62,7 @@
 -export([start_link/2,start_link/3,
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
-	 which_children/1, find_child/4,
+	 which_children/1, find_child/2,
 	 check_childspecs/1]).
 
 -export([behaviour_info/1]).
@@ -137,9 +137,9 @@ terminate_child(Supervisor, Name) ->
 which_children(Supervisor) ->
     call(Supervisor, which_children).
 
-find_child(Supervisor, Name, Type, Modules) ->
+find_child(Supervisor, Name) ->
     [Pid || {Name1, Pid, Type1, Modules1} <- which_children(Supervisor),
-            Name1 =:= Name, Type1 =:= Type, Modules1 =:= Modules].
+            Name1 =:= Name].
 
 call(Supervisor, Req) ->
     gen_server:call(Supervisor, Req, infinity).

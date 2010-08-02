@@ -504,8 +504,10 @@ test_content_framing(FrameMax, BodyBin) ->
         rabbit_binary_generator:build_simple_content_frames(
           1,
           rabbit_binary_generator:ensure_content_encoded(
-            rabbit_basic:build_content(#'P_basic'{}, BodyBin)),
-          FrameMax),
+            rabbit_basic:build_content(#'P_basic'{}, BodyBin),
+            rabbit_framing_amqp_0_9_1),
+          FrameMax,
+          rabbit_framing_amqp_0_9_1),
     %% header is formatted correctly and the size is the total of the
     %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
@@ -935,11 +937,14 @@ test_user_management() ->
 
     passed.
 
+make_fun(Result) ->
+    fun () -> Result end.
+
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                         self()),
+    {ok, Ch} = rabbit_channel:start_link(1, make_fun(self()), make_fun(Writer),
+                                         <<"user">>, <<"/">>, self()),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1074,8 +1079,8 @@ test_memory_pressure_flush(Writer) ->
 test_memory_pressure_spawn() ->
     Me = self(),
     Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                         self()),
+    {ok, Ch} = rabbit_channel:start_link(1, make_fun(Me), make_fun(Writer),
+                                         <<"user">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
@@ -1148,8 +1153,8 @@ test_memory_pressure() ->
     alarm_handler:set_alarm({vm_memory_high_watermark, []}),
     Me = self(),
     Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch4} = rabbit_channel:start_link(1, self(), Writer4, <<"user">>,
-                                          <<"/">>, self()),
+    {ok, Ch4} = rabbit_channel:start_link(1, make_fun(Me), make_fun(Writer4),
+                                          <<"user">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch4, #'channel.open'{}),
     ok = test_memory_pressure_flush(Writer4),
     receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)

@@ -47,15 +47,12 @@ init([]) ->
           [{reader, {rabbit_reader, start_link, []},
             permanent, ?MAX_WAIT, worker, [rabbit_reader]},
            {collector, {rabbit_queue_collector, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]},
-           {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-            permanent, infinity, supervisor, [rabbit_channel_sup_sup]}
+            permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}
           ]}}.
 
 reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader, worker, [rabbit_reader])).
+    hd(supervisor2:find_child(Pid, reader)).
 
 channel_sup_sup(Pid) ->
-    hd(supervisor2:find_child(Pid, channel_sup_sup, supervisor,
-                              [rabbit_channel_sup_sup])).
+    hd(supervisor2:find_child(Pid, channel_sup_sup)).
 
