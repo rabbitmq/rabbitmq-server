@@ -436,16 +436,16 @@ handle_regular_method(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(ChannelNumber, Driver) ->
-    gen_server:start_link(?MODULE, [self(), ChannelNumber, Driver], []).
+start_link(Driver, ChannelNumber) ->
+    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber], []).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Sup, ChannelNumber, Driver]) ->
-    {ok, #state{sup = Sup, number = ChannelNumber, driver = Driver}}.
+init([Sup, Driver, ChannelNumber]) ->
+    {ok, #state{sup = Sup, driver = Driver, number = ChannelNumber}}.
 
 %% Standard implementation of the call/{2,3} command
 %% @private
@@ -634,4 +634,3 @@ terminate(_Reason, #state{sup = Sup, driver = Driver}) ->
 %% @private
 code_change(_OldVsn, State, _Extra) ->
     State.
-

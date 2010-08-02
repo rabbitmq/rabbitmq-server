@@ -27,41 +27,26 @@
 
 -include("amqp_client.hrl").
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
--export([start_link/0, start_channel_sup/4]).
+-export([start_link/2, start_channel_sup/2]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link() ->
-    supervisor:start_link(?MODULE, none).
+start_link(Driver, InfraArgs) ->
+    supervisor2:start_link(?MODULE, [Driver, InfraArgs]).
 
-start_channel_sup(Sup, ChannelNumber, Driver, InfraArgs) ->
-    ChildSpec =
-        {name(ChannelNumber),
-         {amqp_channel_sup, start_link, [ChannelNumber, Driver, InfraArgs]},
-         temporary, infinity, supervisor, [amqp_infra_sup]},
-    supervisor:start_child(Sup, ChildSpec).
+start_channel_sup(Sup, ChannelNumber) ->
+    supervisor2:start_child(Sup, [ChannelNumber]).
 
 %%---------------------------------------------------------------------------
-%% supervisor callbacks
+%% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init(_Args) ->
-    {ok, {{one_for_one, 0, 1}, []}}.
-
-%%---------------------------------------------------------------------------
-%% Internal plumbing
-%%---------------------------------------------------------------------------
-
-name(ChannelNumber) ->
-    list_to_atom("ch" ++ integer_to_list(ChannelNumber) ++ "_sup_" ++ uuid()).
-
-uuid() ->
-    {A, B, C} = now(),
-    erlang:integer_to_list(A, 16) ++ "-" ++
-        erlang:integer_to_list(B, 16) ++ "-" ++
-        erlang:integer_to_list(C, 16).
+init([Driver, InfraArgs]) ->
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{channel_sup, {amqp_channel_sup, start_link, [Driver, InfraArgs]},
+           temporary, infinity, supervisor, [amqp_channel_sup]}]}}.

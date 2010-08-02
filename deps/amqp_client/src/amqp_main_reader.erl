@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, register_framing_channel/3]).
+-export([start_link/1, register_framing_channel/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -42,8 +42,13 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Sock, Framing0Pid) ->
-    gen_server:start_link(?MODULE, [self(), Sock, Framing0Pid], []).
+start_link(Sock) ->
+    Parent = self(),
+    {ok, proc_lib:spawn_link(
+             fun() ->
+                Framing0 = supervisor2:find_child(Parent, framing),
+                init_and_go([Parent, Sock, Framing0])
+             end)}.
 
 register_framing_channel(MainReaderPid, Number, FramingPid) ->
     gen_server:call(MainReaderPid,
@@ -58,6 +63,9 @@ init([Sup, Sock, Framing0Pid]) ->
     State1 = internal_register_framing_channel(0, Framing0Pid, State0),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     {ok, State1}.
+
+init_and_go(InitArgs) ->
+    gen_server:enter_loop(?MODULE, [], init(InitArgs)).
 
 terminate(Reason, #state{sock = Sock}) ->
     Nice = case Reason of normal        -> true;

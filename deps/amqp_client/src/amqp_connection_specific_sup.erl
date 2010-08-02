@@ -20,43 +20,40 @@
 %%
 %%   All Rights Reserved.
 %%
-%%   Contributor(s): ____________________.
+%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @private
--module(amqp_connection_sup).
+-module(amqp_connection_specific_sup).
 
 -include("amqp_client.hrl").
 
 -behaviour(supervisor2).
 
--export([start_link/2]).
+-export([start_link_direct/0, start_link_network/1]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, AmqpParams) ->
-    Module = case Type of direct  -> amqp_direct_connection;
-                          network -> amqp_network_connection
-             end,
-    {ok, Sup} = supervisor2:start_link([Module, AmqpParams]),
-    [Connection] = supervisor2:find_child(Sup, connection),
-    unlink(Sup),
-    try Module:do_post_init(Connection) of
-        ok -> link(Sup),
-              {ok, Sup}
-    catch
-        exit:Reason -> {error, {auth_failure_likely, Reason}}
-    end.
+start_link_direct() ->
+    supervisor2:start_link(?MODULE, [direct, []]).
+
+start_link_network(Sock) ->
+    supervisor2:start_link(?MODULE, [network, [Sock]]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Module, AmqpParams]) ->
+init([network, [Sock]]) ->
+    Channel0InfraChildren = amqp_channel_util:channel_infrastructure_children(
+                                network, [Sock, none], 0),
     {ok, {{one_for_all, 0, 1},
-          [connection, {Module, start_link, [AmqpParams]},
-           permanent, ?MAX_WAIT, worker, [Module]],
-          [channel_sup_sup, {amqp_channel_sup_sup, start_link, []},
-           permanent, infinity, supervisor, [amqp_channel_sup_sup]]}}.
+          Channel0InfraChildren ++
+          [{main_reader, {amqp_main_reader, start_link, [Sock]},
+           permanent, ?MAX_WAIT, worker, [amqp_main_reader]}]}};
+init([direct, []]) ->
+    {ok, {{one_for_all, 0, 1},
+          [collector, {rabbit_queue_collector, start_link, []},
+           permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]]}}.

@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, do_post_init/1]).
+-export([start_link/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -52,17 +52,18 @@
 %%---------------------------------------------------------------------------
 
 start_link(AmqpParams) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams], []).
-
-do_post_init(Connection) ->
-    gen_server:call(Connection, post_init, infinity).
+    Parent = self(),
+    {ok, proc_lib:spawn_link(fun() -> init_and_go([Parent, AmqpParams]) end)}.
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams]) ->
-    {ok, #state{sup = Sup, params = AmqpParams}}.
+    {ok, connect(#state{sup = Sup, params = AmqpParams})}.
+
+init_and_go(InitArgs) ->
+    gen_server:enter_loop(?MODULE, [], init(InitArgs)).
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -72,9 +73,7 @@ handle_call({command, Command}, From, #state{closing = Closing} = State) ->
 handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State) ->
-    {reply, ?INFO_KEYS, State};
-handle_call(post_init, _From, State) ->
-    {reply, ok, post_init(State)}.
+    {reply, ?INFO_KEYS, State}.
 
 handle_cast(Message, State) ->
     ?LOG_WARN("Connection (~p) closing: received unexpected cast ~p~n",
@@ -104,7 +103,8 @@ handle_command({open_channel, ProposedNumber}, _From,
                               params = #amqp_params{username = User,
                                                     virtual_host = VHost},
                               channels = Channels}) ->
-    Collector = amqp_infra_sup:child(Sup, collector),
+    [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
+    [Collector] = supervisor2:find_child(SSup, collector),
     try amqp_channel_util:open_channel(Sup, ProposedNumber, ?MAX_CHANNEL_NUMBER,
                                        direct, [User, VHost, Collector],
                                        Channels) of
@@ -182,7 +182,8 @@ set_closing_state(ChannelCloseType, NewClosing,
 %% The all_channels_closed_event is called when all channels have been closed
 %% after the connection broadcasts a connection_closing message to all channels
 all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
-    Collector = amqp_infra_sup:child(Sup, collector),
+    [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
+    [Collector] = supervisor2:find_child(SSup, collector),
     rabbit_queue_collector:delete_all(Collector),
     rabbit_queue_collector:shutdown(Collector),
     rabbit_misc:unlink_and_capture_exit(Collector),
@@ -240,10 +241,10 @@ handle_channel_exit(Pid, Reason,
 %% Connecting to the broker
 %%---------------------------------------------------------------------------
 
-post_init(State = #state{sup = Sup,
-                         params = #amqp_params{username = User,
-                                               password = Pass,
-                                               virtual_host = VHost}}) ->
+connect(State = #state{sup = Sup,
+                       params = #amqp_params{username = User,
+                                             password = Pass,
+                                             virtual_host = VHost}}) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  -> ok;
         false -> exit(broker_not_found_in_vm)
@@ -251,8 +252,9 @@ post_init(State = #state{sup = Sup,
     rabbit_access_control:user_pass_login(User, Pass),
     rabbit_access_control:check_vhost_access(
             #user{username = User, password = Pass}, VHost),
-    CollectorChild =
-        {worker, collector, {rabbit_queue_collector, start_link, []}},
-    {ok, _} = amqp_infra_sup:start_child(Sup, CollectorChild),
+    {ok, _} = supervisor2:start_child(Sup,
+        {connection_specific_sup, {amqp_connection_specific_sup,
+                                   start_link_direct, []},
+         permanent, infinity, supervisor, [amqp_connection_specific_sup]}),
     ServerProperties = rabbit_reader:server_properties(),
     State#state{server_properties = ServerProperties}.

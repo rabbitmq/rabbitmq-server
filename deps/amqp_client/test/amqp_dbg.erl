@@ -87,9 +87,7 @@ sup_args() ->
     [{amqp_connection_sup, start_link, return_ms()},
      {amqp_channel_sup_sup, start_link, return_ms()},
      {amqp_channel_sup_sup, start_channel_sup, return_ms()},
-     {amqp_channel_sup, start_link, return_ms()},
-     {amqp_infra_sup, start_link, return_ms()},
-     {amqp_infra_sup, start_child, return_ms()}].
+     {amqp_channel_sup, start_link, return_ms()}].
 
 ncl_args() ->
     [{amqp_main_reader, start_link, return_ms()},

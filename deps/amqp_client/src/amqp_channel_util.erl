@@ -47,36 +47,32 @@
 %% Channels dict
 open_channel(Sup, ProposedNumber, MaxChannel, Driver, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    ChannelSupSup = amqp_infra_sup:child(Sup, channel_sup_sup),
+    ChannelSupSup = amqp_connection_sup:child(Sup, channel_sup_sup),
     {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(
                                ChannelSupSup, ChannelNumber, Driver, InfraArgs),
-    ChannelPid = amqp_infra_sup:child(ChannelSup, channel),
+    ChannelPid = amqp_channel_sup:child(ChannelSup, channel),
     erlang:monitor(process, ChannelPid),
     NewChannels = register_channel(ChannelNumber, ChannelPid, Channels),
     {ChannelPid, NewChannels}.
 
-channel_infrastructure_children(network, ChannelPid, ChannelNumber,
-                                [Sock, _MainReader]) ->
-    FramingChild =
-        {worker, framing, {rabbit_framing_channel, start_link, [ChannelPid]}},
-    WriterChild =
-        {worker, writer,
-         {rabbit_writer, start_link, [Sock, ChannelNumber, ?FRAME_MIN_SIZE]}},
-    [FramingChild, WriterChild];
-channel_infrastructure_children(direct, ChannelPid, ChannelNumber,
-                                [User, VHost, Collector]) ->
-    RabbitChannelChild =
-        {worker, rabbit_channel,
-         {rabbit_channel, start_link,
-          [ChannelNumber, ChannelPid, ChannelPid, User, VHost, Collector]}},
-    [RabbitChannelChild].
+channel_infrastructure_children(network, [Sock, _], GetChPid, ChNumber) ->
+    [{framing, {rabbit_framing_channel, start_link, [GetChPid]},
+      permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]},
+     {writer, {rabbit_writer, start_link, [Sock, ChNumber, ?FRAME_MIN_SIZE]},
+      permanent, ?MAX_WAIT, worker, [rabbit_writer]}];
+channel_infrastructure_children(direct, [User, VHost, Collector], GetChPid,
+                                ChNumber) ->
+    [{rabbit_channel,
+      {rabbit_channel, start_link,
+       [ChNumber, GetChPid, GetChPid, User, VHost, Collector]},
+      permanent, ?MAX_WAIT, worker, [rabbit_channel]}].
 
 terminate_channel_infrastructure(network, Sup) ->
-    Writer = amqp_infra_sup:child(Sup, writer),
+    [Writer] = supervisor2:find_child(Sup, writer),
     rabbit_writer:flush(Writer),
     ok;
 terminate_channel_infrastructure(direct, Sup) ->
-    RChannel = amqp_infra_sup:child(Sup, rabbit_channel),
+    [RChannel] = supervisor2:find_child(Sup, rabbit_channel),
     rabbit_channel:shutdown(RChannel),
     ok.
 
@@ -85,7 +81,7 @@ terminate_channel_infrastructure(direct, Sup) ->
 %%---------------------------------------------------------------------------
 
 do(network, Sup, Method, Content) ->
-    Writer = amqp_infra_sup:child(Sup, writer),
+    [Writer] = supervisor2:find_child(Sup, writer),
     case Content of
         none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
                                                            self());
@@ -96,10 +92,10 @@ do(network, Sup, Method, Content) ->
         rabbit_writer_send_command_signal -> ok
     end;
 do(direct, Sup, Method, Content) ->
-    RabbitChannel = amqp_infra_sup:child(Sup, rabbit_channel),
+    [RChannel] = supervisor2:find_child(Sup, rabbit_channel),
     case Content of
-        none -> rabbit_channel:do(RabbitChannel, Method);
-        _    -> rabbit_channel:do(RabbitChannel, Method, Content)
+        none -> rabbit_channel:do(RChannel, Method);
+        _    -> rabbit_channel:do(RChannel, Method, Content)
     end.
 
 %%---------------------------------------------------------------------------

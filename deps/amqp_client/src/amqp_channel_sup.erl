@@ -27,24 +27,37 @@
 
 -include("amqp_client.hrl").
 
+-behaviour(supervisor2).
+
 -export([start_link/3]).
+-export([init/1]).
 
 %%---------------------------------------------------------------------------
+%% Interface
+%%---------------------------------------------------------------------------
 
-start_link(ChannelNumber, Driver, InfraArgs) ->
-    ChChild =
-        {worker, channel, {amqp_channel, start_link, [ChannelNumber, Driver]}},
-    {ok, Sup} = amqp_infra_sup:start_link([ChChild]),
-    ChannelPid = amqp_infra_sup:child(Sup, channel),
-    InfraChildren = amqp_channel_util:channel_infrastructure_children(
-                            Driver, ChannelPid, ChannelNumber, InfraArgs),
-    {all_ok, _} = amqp_infra_sup:start_children(Sup, InfraChildren),
+start_link(Driver, InfraArgs, ChNumber) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, [Driver, InfraArgs, ChNumber]),
     case Driver of
         direct  -> ok;
-        network -> [_Sock, MainReader] = InfraArgs,
-                   FramingPid = amqp_infra_sup:child(Sup, framing),
+        network -> [_, MainReader] = InfraArgs,
+                   FramingPid = supervisor2:find_child(Sup, framing),
                    amqp_main_reader:register_framing_channel(
-                           MainReader, ChannelNumber, FramingPid)
+                           MainReader, ChNumber, FramingPid)
     end,
-    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
+    [Channel] = supervisor2:find_child(Sup, channel),
+    #'channel.open_ok'{} = amqp_channel:call(Channel, #'channel.open'{}),
     {ok, Sup}.
+
+%%---------------------------------------------------------------------------
+%% supervisor2 callbacks
+%%---------------------------------------------------------------------------
+
+init([Driver, InfraArgs, ChNumber]) ->
+    Me = self(),
+    GetChPid = fun() -> supervisor2:find_child(Me, channel) end,
+    InfraChildren = amqp_channel_util:channel_infrastructure_children(
+                        Driver, InfraArgs, GetChPid, ChNumber),
+    {ok, {{one_for_all, 0, 1},
+          [channel, {amqp_channel, start_link, [Driver, ChNumber]},
+           permanent, ?MAX_WAIT, worker, [amqp_channel]] ++ InfraChildren}}.
