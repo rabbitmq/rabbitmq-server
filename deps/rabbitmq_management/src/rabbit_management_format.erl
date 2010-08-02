@@ -20,7 +20,7 @@
 %%
 -module(rabbit_management_format).
 
--export([encode/1, format/2, print/2, pid/1, ip/1, table/1]).
+-export([encode/1, format/2, print/2, pid/1, ip/1, table/1, protocol/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -77,3 +77,10 @@ tuple(Tuple) when is_tuple(Tuple) ->
     tuple_to_list(Tuple);
 tuple(Term) ->
     Term.
+
+protocol(unknown) ->
+    unknown;
+protocol({Major, Minor, 0}) ->
+    print("~p-~p", [Major, Minor]);
+protocol({Major, Minor, Revision}) ->
+    print("~p-~p-~p", [Major, Minor, Revision]).

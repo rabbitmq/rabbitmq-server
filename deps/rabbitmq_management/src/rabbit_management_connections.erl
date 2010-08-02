@@ -65,9 +65,10 @@ to_json(ReqData, Context) ->
 format(Conn) ->
     rabbit_management_format:format(
       Conn,
-      [{fun rabbit_management_format:pid/1,   [pid]},
-       {fun rabbit_management_format:ip/1,    [address, peer_address]},
-       {fun rabbit_management_format:table/1, [client_properties]}]).
+      [{fun rabbit_management_format:pid/1,      [pid]},
+       {fun rabbit_management_format:ip/1,       [address, peer_address]},
+       {fun rabbit_management_format:protocol/1, [protocol]},
+       {fun rabbit_management_format:table/1,    [client_properties]}]).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
