@@ -562,14 +562,19 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, Stat
 handle_input(handshake, <<"AMQP", 0, 0, 9, 1>>, State) ->
     start_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
 
+%% This is the protocol header for 0-9, which we can safely treat as
+%% though it were 0-9-1.
 handle_input(handshake, <<"AMQP", 1, 1, 0, 9>>, State) ->
     start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
 
-%% the 0-8 spec, confusingly, defines the version as 8-0
+%% This is what most clients send for 0-8.  The 0-8 spec, confusingly,
+%% defines the version as 8-0.
 handle_input(handshake, <<"AMQP", 1, 1, 8, 0>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
-%% py-amqplib has always sent this broken version. It wants 0-8.
+%% The 0-8 spec as on the AMQP web site actually has this as the
+%% protocol header; some libraries e.g., py-amqplib, send it when they
+%% want 0-8.
 handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
     start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
 
