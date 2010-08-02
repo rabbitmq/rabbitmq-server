@@ -25,7 +25,7 @@
 
 %% @doc This module encapsulates the client's view of an AMQP channel. Each
 %% server side channel is represented by an amqp_channel process on the client
-%% side. Channel processes are created using the {@link amqp_connection} 
+%% side. Channel processes are created using the {@link amqp_connection}
 %% module, but channels are respsonsible for closing themselves. Channel
 %% processes are linked to the connnection process from which they were
 %% created.
@@ -138,7 +138,7 @@ call(Channel, Method, Content) ->
 %% @doc Asynchronous variant of {@link call/2}
 cast(Channel, Method) ->
     gen_server:cast(Channel, {cast, Method, none}).
-    
+
 %% @spec (Channel, amqp_command(), content()) -> ok
 %% @doc Asynchronous variant of {@link call/3}
 cast(Channel, Method, Content) ->
@@ -335,39 +335,31 @@ shutdown_with_reason(Reason, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-%% Close normally
-handle_method(#'channel.close'{reply_code = ReplyCode,
-                               reply_text = ReplyText}, none,
-              #c_state{closing = false} = State) ->
-    do(#'channel.close_ok'{}, none, State),
-    {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
-
-%% We're already closing, so just send back the ok.
-handle_method(#'channel.close'{}, none, State) ->
-    do(#'channel.close_ok'{}, none, State),
-    {noreply, State};
-
-%% Handle 'channel.close_ok': stop channel
-handle_method(CloseOk = #'channel.close_ok'{}, none, State) ->
-    {stop, normal, rpc_bottom_half(CloseOk, State)};
-
-%% Handle all other methods
 handle_method(Method, Content, #c_state{closing = Closing} = State) ->
-    case Closing of
-        %% Drop all incomming traffic if closing
-        just_channel ->
-            ?LOG_INFO("Channel (~p): dropping method ~p from server "
-                      "because channel is closing~n",
-                      [self(), {Method, Content}]),
-            {noreply, State};
-        {connection, Reason} ->
-            ?LOG_INFO("Channel (~p): dropping method ~p from server "
-                      "because connection is closing (~p)~n",
-                      [self(), {Method, Content}, Reason]),
-            {noreply, State};
-        %% Standard handling of incoming method
+    case {Method, Content} of
+        %% Handle 'channel.close': send 'channel.close_ok' and stop channel.
+        %% Do this even if already closing, as per 0-9-1 spec.
+        {#'channel.close'{reply_code = ReplyCode,
+                          reply_text = ReplyText}, none} ->
+            do(#'channel.close_ok'{}, none, State),
+            {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
+        %% Handle 'channel.close_ok': stop channel
+        {CloseOk = #'channel.close_ok'{}, none} ->
+            {stop, normal, rpc_bottom_half(CloseOk, State)};
         _ ->
-            handle_regular_method(Method, amqp_msg(Content), State)
+            case Closing of
+                %% Drop all incomming traffic except 'channel.close' and
+                %% 'channel.close_ok' when channel is closing (has sent
+                %% 'channel.close')
+                just_channel ->
+                    ?LOG_INFO("Channel (~p): dropping method ~p from server "
+                              "because channel is closing~n",
+                              [self(), {Method, Content}]),
+                    {noreply, State};
+                %% Standard handling of incoming method
+                _ ->
+                    handle_regular_method(Method, amqp_msg(Content), State)
+            end
     end.
 
 handle_regular_method(
