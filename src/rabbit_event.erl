@@ -38,16 +38,26 @@
 -export([stats_level/1]).
 -export([notify/2]).
 
--opaque(state() :: {atom(), atom()}).
+-ifdef(use_specs).
+
+-type(level() :: 'none' | 'coarse' | 'fine').
+
+-opaque(state() :: #state {
+               level :: level(),
+               timer :: atom()
+              }).
+
+-type(timer_fun() :: fun (() -> 'ok')).
 
 -spec(init_stats_timer/0 :: () -> state()).
--spec(ensure_stats_timer/3 ::
-        (state(), fun (() -> 'ok'), fun (() -> 'ok')) -> state()).
--spec(stop_stats_timer/2 :: (state(), fun (() -> 'ok')) -> state()).
--spec(ensure_stats_timer_after/2 :: (state(), fun (() -> 'ok')) -> state()).
+-spec(ensure_stats_timer/3 :: (state(), timer_fun(), timer_fun()) -> state()).
+-spec(stop_stats_timer/2 :: (state(), timer_fun()) -> state()).
+-spec(ensure_stats_timer_after/2 :: (state(), timer_fun()) -> state()).
 -spec(reset_stats_timer_after/1 :: (state()) -> 'ok').
--spec(stats_level/1 :: (state()) -> atom()).
+-spec(stats_level/1 :: (state()) -> level()).
 -spec(notify/2 :: (atom(), term()) -> 'ok').
+
+-endif.
 
 -record(state, {level, timer}).
 
