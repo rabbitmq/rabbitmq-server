@@ -138,7 +138,7 @@ which_children(Supervisor) ->
     call(Supervisor, which_children).
 
 find_child(Supervisor, Name) ->
-    [Pid || {Name1, Pid, Type1, Modules1} <- which_children(Supervisor),
+    [Pid || {Name1, Pid, _Type, _Modules} <- which_children(Supervisor),
             Name1 =:= Name].
 
 call(Supervisor, Req) ->
