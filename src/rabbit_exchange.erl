@@ -198,6 +198,9 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                    end
            end) of
         {new, X}      -> TypeModule:create(X),
+                         rabbit_event:notify(
+                           exchange_created,
+                           [{Item, i(Item, Exchange)} || Item <- ?INFO_KEYS]),
                          X;
         {existing, X} -> X;
         Err           -> Err
@@ -434,6 +437,12 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                                      X#exchange.durable andalso
                                                      Q#amqqueue.durable,
                                                      fun mnesia:write/3),
+                                   rabbit_event:notify(
+                                     binding_created,
+                                     [{exchange_name, ExchangeName},
+                                      {queue_name, QueueName},
+                                      {routing_key, RoutingKey},
+                                      {arguments, Arguments}]),
                                    {new, X, B};
                                [_R] ->
                                    {existing, X, B}
@@ -466,6 +475,10 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                                     X#exchange.durable andalso
                                                     Q#amqqueue.durable,
                                                     fun mnesia:delete_object/3),
+                                   rabbit_event:notify(
+                                     binding_deleted,
+                                     [{exchange_name, ExchangeName},
+                                      {queue_name, QueueName}]),
                                    {maybe_auto_delete(X), B};
                                {error, _} = E ->
                                    E
@@ -584,6 +597,7 @@ unconditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     Bindings = delete_exchange_bindings(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}),
+    rabbit_event:notify(exchange_deleted, [{name, ExchangeName}]),
     {deleted, Exchange, Bindings}.
 
 %%----------------------------------------------------------------------------
