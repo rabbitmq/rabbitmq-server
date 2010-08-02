@@ -30,7 +30,8 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-NODENAME=rabbit
+[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
+NODENAME=rabbit@${HOSTNAME%%.*}
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_listen_options [{nodelay,true}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
@@ -80,12 +81,6 @@ fi
 
 [ -f  "${RABBITMQ_LOGS}" ] && cat "${RABBITMQ_LOGS}" >> "${RABBITMQ_LOGS}${RABBITMQ_BACKUP_EXTENSION}"
 [ -f  "${RABBITMQ_SASL_LOGS}" ] && cat "${RABBITMQ_SASL_LOGS}" >> "${RABBITMQ_SASL_LOGS}${RABBITMQ_BACKUP_EXTENSION}"
-
-if [ -f "$RABBITMQ_CLUSTER_CONFIG_FILE" ]; then
-    RABBITMQ_CLUSTER_CONFIG_OPTION="-rabbit cluster_config \"$RABBITMQ_CLUSTER_CONFIG_FILE\""
-else
-    RABBITMQ_CLUSTER_CONFIG_OPTION=""
-fi
 
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput' 
@@ -138,6 +133,5 @@ exec erl \
     -os_mon start_disksup false \
     -os_mon start_memsup false \
     -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
-    ${RABBITMQ_CLUSTER_CONFIG_OPTION} \
     ${RABBITMQ_SERVER_START_ARGS} \
     "$@"

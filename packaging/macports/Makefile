@@ -31,15 +31,22 @@ $(DEST)/Portfile: Portfile.in
 	    -f checksums.sed <$^ >$@
 	rm checksums.sed
 
+# The purpose of the intricate substitution below is to set up similar
+# environment vars to the ones that su will on Linux.  On OS X, we
+# have to use the -m option to su in order to be able to set the shell
+# (which for the rabbitmq user would otherwise be /dev/null).  But the
+# -m option means that *all* environment vars get preserved.  Erlang
+# needs vars such as HOME to be set.  So we have to set them
+# explicitly.
 macports: dirs $(DEST)/Portfile
 	for f in rabbitmq-asroot-script-wrapper rabbitmq-script-wrapper ; do \
 	  cp $(COMMON_DIR)/$$f $(DEST)/files ; \
 	done
-	sed -i -e 's|@SU_RABBITMQ_SH_C@|SHELL=/bin/sh su -m rabbitmq -c|' \
+	sed -i -e 's|@SU_RABBITMQ_SH_C@|SHELL=/bin/sh HOME=/var/lib/rabbitmq USER=rabbitmq LOGNAME=rabbitmq PATH="$$(eval `PATH=MACPORTS_PREFIX/bin /usr/libexec/path_helper -s`; echo $$PATH)" su -m rabbitmq -c|' \
 	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
 	if [ -n "$(MACPORTS_USERHOST)" ] ; then \
-	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) lshift@macrabbit ' \
+	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) $(MACPORTS_USERHOST) ' \
 	    d="/tmp/mkportindex.$$$$" ; \
 	    mkdir $$d \
 	      && cd $$d \
@@ -52,4 +59,4 @@ macports: dirs $(DEST)/Portfile
 	fi
 
 clean:
-	rm -rf $(DEST) checksums.sed
+	rm -rf $(MACPORTS_DIR) checksums.sed

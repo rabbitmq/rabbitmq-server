@@ -41,12 +41,12 @@
 % See definition of check_empty_content_body_frame_size/0, an assertion called at startup.
 -define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
 
--export([build_simple_method_frame/2,
-         build_simple_content_frames/3,
+-export([build_simple_method_frame/3,
+         build_simple_content_frames/4,
          build_heartbeat_frame/0]).
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
--export([ensure_content_encoded/1, clear_encoded_content/1]).
+-export([ensure_content_encoded/2, clear_encoded_content/1]).
 
 -import(lists).
 
@@ -56,44 +56,46 @@
 
 -type(frame() :: [binary()]).
 
--spec(build_simple_method_frame/2 ::
-      (channel_number(), amqp_method()) -> frame()).
--spec(build_simple_content_frames/3 ::
-      (channel_number(), content(), non_neg_integer()) -> [frame()]).
+-spec(build_simple_method_frame/3 ::
+        (rabbit_channel:channel_number(), rabbit_framing:amqp_method_record(),
+         rabbit_types:protocol())
+        -> frame()).
+-spec(build_simple_content_frames/4 ::
+        (rabbit_channel:channel_number(), rabbit_types:content(),
+         non_neg_integer(), rabbit_types:protocol())
+        -> [frame()]).
 -spec(build_heartbeat_frame/0 :: () -> frame()).
--spec(generate_table/1 :: (amqp_table()) -> binary()).
--spec(encode_properties/2 :: ([amqp_property_type()], [any()]) -> binary()).
+-spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
+-spec(encode_properties/2 ::
+        ([rabbit_framing:amqp_property_type()], [any()]) -> binary()).
 -spec(check_empty_content_body_frame_size/0 :: () -> 'ok').
--spec(ensure_content_encoded/1 :: (content()) -> encoded_content()).
--spec(clear_encoded_content/1 :: (content()) -> unencoded_content()).
+-spec(ensure_content_encoded/2 ::
+        (rabbit_types:content(), rabbit_types:protocol()) ->
+                                       rabbit_types:encoded_content()).
+-spec(clear_encoded_content/1 ::
+        (rabbit_types:content()) -> rabbit_types:unencoded_content()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-build_simple_method_frame(ChannelInt, MethodRecord) ->
-    MethodFields = rabbit_framing:encode_method_fields(MethodRecord),
+build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
+    MethodFields = Protocol:encode_method_fields(MethodRecord),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    {ClassId, MethodId} = rabbit_framing:method_id(MethodName),
+    {ClassId, MethodId} = Protocol:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
 
-build_simple_content_frames(ChannelInt,
-                            #content{class_id = ClassId,
-                                     properties = ContentProperties,
-                                     properties_bin = ContentPropertiesBin,
-                                     payload_fragments_rev = PayloadFragmentsRev},
-                            FrameMax) ->
-    {BodySize, ContentFrames} = build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
+build_simple_content_frames(ChannelInt, Content, FrameMax, Protocol) ->
+    #content{class_id = ClassId,
+             properties_bin = ContentPropertiesBin,
+             payload_fragments_rev = PayloadFragmentsRev} =
+        ensure_content_encoded(Content, Protocol),
+    {BodySize, ContentFrames} =
+        build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
     HeaderFrame = create_frame(2, ChannelInt,
                                [<<ClassId:16, 0:16, BodySize:64>>,
-                                maybe_encode_properties(ContentProperties, ContentPropertiesBin)]),
+                                ContentPropertiesBin]),
     [HeaderFrame | ContentFrames].
-
-maybe_encode_properties(_ContentProperties, ContentPropertiesBin)
-  when is_binary(ContentPropertiesBin) ->
-    ContentPropertiesBin;
-maybe_encode_properties(ContentProperties, none) ->
-    rabbit_framing:encode_properties(ContentProperties).
 
 build_content_frames(FragsRev, FrameMax, ChannelInt) ->
     BodyPayloadMax = if FrameMax == 0 ->
@@ -118,10 +120,11 @@ build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
                      [Frag | Frags], BodyPayloadMax, ChannelInt) ->
     Size = size(Frag),
     {NewFragSizeRem, NewFragAcc, NewFrags} =
-        case Size =< FragSizeRem of
-            true  -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
-            false -> <<Head:FragSizeRem/binary, Tail/binary>> = Frag,
-                     {0, [Head | FragAcc], [Tail | Frags]}
+        if Size == 0           -> {FragSizeRem, FragAcc, Frags};
+           Size =< FragSizeRem -> {FragSizeRem - Size, [Frag | FragAcc], Frags};
+           true                -> <<Head:FragSizeRem/binary, Tail/binary>> =
+                                      Frag,
+                                  {0, [Head | FragAcc], [Tail | Frags]}
         end,
     build_content_frames(SizeAcc, FramesAcc, NewFragSizeRem, NewFragAcc,
                          NewFrags, BodyPayloadMax, ChannelInt).
@@ -276,13 +279,16 @@ check_empty_content_body_frame_size() ->
                   ComputedSize, ?EMPTY_CONTENT_BODY_FRAME_SIZE})
     end.
 
-ensure_content_encoded(Content = #content{properties_bin = PropsBin})
+ensure_content_encoded(Content = #content{properties_bin = PropsBin,
+                                          protocol = Protocol}, Protocol)
   when PropsBin =/= 'none' ->
     Content;
-ensure_content_encoded(Content = #content{properties = Props}) ->
-    Content #content{properties_bin = rabbit_framing:encode_properties(Props)}.
+ensure_content_encoded(Content = #content{properties = Props}, Protocol) ->
+    Content#content{properties_bin = Protocol:encode_properties(Props),
+                    protocol = Protocol}.
 
-clear_encoded_content(Content = #content{properties_bin = none}) ->
+clear_encoded_content(Content = #content{properties_bin = none,
+                                         protocol = none}) ->
     Content;
 clear_encoded_content(Content = #content{properties = none}) ->
     %% Only clear when we can rebuild the properties_bin later in
@@ -290,4 +296,4 @@ clear_encoded_content(Content = #content{properties = none}) ->
     %% one of properties and properties_bin can be 'none'
     Content;
 clear_encoded_content(Content = #content{}) ->
-    Content#content{properties_bin = none}.
+    Content#content{properties_bin = none, protocol = none}.

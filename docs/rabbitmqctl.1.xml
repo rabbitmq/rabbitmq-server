@@ -270,8 +270,8 @@
       <title>Cluster management</title>
 
       <variablelist>
-        <varlistentry>
-          <term><cmdsynopsis><command>cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg></cmdsynopsis></term>
+        <varlistentry id="cluster">
+          <term><cmdsynopsis><command>cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -281,7 +281,8 @@
             </variablelist>
             <para>
               Instruct the node to become member of a cluster with the
-              specified nodes.
+              specified nodes.  To cluster with currently offline nodes,
+              use <link linkend="force_cluster"><command>force_cluster</command></link>.
             </para>
             <para>
               Cluster nodes can be of two types: disk or ram. Disk nodes
@@ -331,6 +332,29 @@
               cluster with nodes <command>rabbit@tanto</command> and
               <command>hare@elena</command>. If the node is one of these then
               it becomes a disk node, otherwise a ram node.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry id="force_cluster">
+          <term><cmdsynopsis><command>force_cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>clusternode</term>
+                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instruct the node to become member of a cluster with the
+              specified nodes.  This will succeed even if the specified nodes
+              are offline.  For a more detailed description, see
+              <link linkend="cluster"><command>cluster</command>.</link>
+            </para>
+            <para>
+              Note that this variant of the cluster command just
+              ignores the current status of the specified nodes.
+              Clustering may still fail for a variety of other
+              reasons.
             </para>
           </listitem>
         </varlistentry>
@@ -603,10 +627,12 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_permissions -p /myvhost</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to list all the
-              users which have been granted access to the virtual host
-              called <command>/myvhost</command>, and the permissions they
-              have for operations on resources in that virtual host.
+              This command instructs the RabbitMQ broker to list all
+              the users which have been granted access to the virtual
+              host called <command>/myvhost</command>, and the
+              permissions they have for operations on resources in
+              that virtual host.  Note that an empty string means no
+              permissions granted.
             </para>
           </listitem>
         </varlistentry>
@@ -860,6 +886,10 @@
               <varlistentry>
                 <term>channels</term>
                 <listitem><para>Number of channels using the connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>protocol</term>
+                <listitem><para>Version of the AMQP protocol in use (currently one of <command>{0,9,1}</command> or <command>{0,8,0}</command>). Note that if a client requests an AMQP 0-9 connection, we treat it as AMQP 0-9-1.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>user</term>

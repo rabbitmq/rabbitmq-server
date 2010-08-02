@@ -42,8 +42,12 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
+if "!COMPUTERNAME!"=="" (
+    set COMPUTERNAME=localhost
+)
+
 if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit
+    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
 )
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
@@ -98,14 +102,6 @@ if exist "!SASL_LOGS!" (
 
 rem End of log management
 
-
-if "!RABBITMQ_CLUSTER_CONFIG_FILE!"=="" (
-    set RABBITMQ_CLUSTER_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq_cluster.config
-)
-set CLUSTER_CONFIG=
-if not exist "!RABBITMQ_CLUSTER_CONFIG_FILE!" GOTO L1
-set CLUSTER_CONFIG=-rabbit cluster_config \""!RABBITMQ_CLUSTER_CONFIG_FILE:\=/!"\"
-:L1
 
 if "!RABBITMQ_MNESIA_DIR!"=="" (
     set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia

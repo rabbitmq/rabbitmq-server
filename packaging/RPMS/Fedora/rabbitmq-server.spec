@@ -105,6 +105,12 @@ if [ $1 = 0 ]; then
   # Leave rabbitmq user and group
 fi
 
+# Clean out plugin activation state, both on uninstall and upgrade
+rm -rf %{_rabbit_erllibdir}/priv
+for ext in rel script boot ; do
+    rm -f %{_rabbit_erllibdir}/ebin/rabbit.$ext
+done
+
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
@@ -120,6 +126,12 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Wed Jul 14 2010 Emile Joubert <emile@rabbitmq.com> 1.8.1-1
+- New Upstream Release
+
+* Tue Jun 15 2010 Matthew Sackman <matthew@rabbitmq.com> 1.8.0-1
+- New Upstream Release
+
 * Mon Feb 15 2010 Matthew Sackman <matthew@lshift.net> 1.7.2-1
 - New Upstream Release
 

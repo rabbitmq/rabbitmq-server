@@ -31,31 +31,42 @@
 
 -module(rabbit_net).
 -include("rabbit.hrl").
--include_lib("kernel/include/inet.hrl").
 
 -export([async_recv/3, close/1, controlling_process/2,
         getstat/2, peername/1, port_command/2,
         send/2, sockname/1]).
+
 %%---------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
+-export_type([socket/0]).
+
 -type(stat_option() ::
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
--type(error() :: {'error', any()}).
+-type(error() :: rabbit_types:error(any())).
+-type(socket() :: rabbit_networking:ip_port() | rabbit_types:ssl_socket()).
 
--spec(async_recv/3 :: (socket(), integer(), timeout()) -> {'ok', any()}).
--spec(close/1 :: (socket()) -> 'ok' | error()).
--spec(controlling_process/2 :: (socket(), pid()) -> 'ok' | error()).
+-spec(async_recv/3 ::
+        (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
+-spec(close/1 :: (socket()) -> rabbit_types:ok_or_error(any())).
+-spec(controlling_process/2 ::
+        (socket(), pid()) -> rabbit_types:ok_or_error(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(send/2 :: (socket(), binary() | iolist()) -> 'ok' | error()).
--spec(peername/1 :: (socket()) ->
-        {'ok', {ip_address(), non_neg_integer()}} | error()).
--spec(sockname/1 :: (socket()) ->
-        {'ok', {ip_address(), non_neg_integer()}} | error()).
--spec(getstat/2 :: (socket(), [stat_option()]) ->
-        {'ok', [{stat_option(), integer()}]} | error()).
+-spec(send/2 ::
+        (socket(), binary() | iolist()) -> rabbit_types:ok_or_error(any())).
+-spec(peername/1 ::
+        (socket())
+        -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
+           error()).
+-spec(sockname/1 ::
+        (socket())
+        -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
+           error()).
+-spec(getstat/2 ::
+        (socket(), [stat_option()])
+        -> rabbit_types:ok([{stat_option(), integer()}]) | error()).
 
 -endif.
 
@@ -66,7 +77,7 @@ async_recv(Sock, Length, Timeout) when is_record(Sock, ssl_socket) ->
     Pid = self(),
     Ref = make_ref(),
 
-    spawn(fun() -> Pid ! {inet_async, Sock, Ref,
+    spawn(fun () -> Pid ! {inet_async, Sock, Ref,
                     ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)}
         end),
 

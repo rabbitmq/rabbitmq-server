@@ -186,7 +186,7 @@
 -ifdef(use_specs).
 
 -spec(handle_common_termination/6 ::
-      (any(), any(), any(), atom(), any(), any()) -> no_return()). 
+      (any(), any(), any(), atom(), any(), any()) -> no_return()).
 
 -spec(hibernate/7 ::
       (pid(), any(), any(), atom(), any(), queue(), any()) -> no_return()).
@@ -639,7 +639,7 @@ do_multi_call(Nodes, Name, Req, Timeout) ->
     Caller = self(),
     Receiver =
 	spawn(
-	  fun() ->
+	  fun () ->
 		  %% Middleman process. Should be unsensitive to regular
 		  %% exit signals. The sychronization is needed in case
 		  %% the receiver would exit before the caller started
