@@ -106,7 +106,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
     end;
 handle_info({inet_async, LSock, Ref, {error, closed}},
             State=#state{sock=MaybeSSLSock, ref=Ref}) ->
-    case rabbit_types:get_real_sock(MaybeSSLSock) of
+    case rabbit_misc:get_real_sock(MaybeSSLSock) of
         LSock ->
             %% It would be wrong to attempt to restart the acceptor when we
             %% know this will fail.
