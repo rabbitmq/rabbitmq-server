@@ -101,6 +101,17 @@
 %%   -> log error, mark channel as closing, *running*
 %%   handshake_timeout -> ignore, *running*
 %%   heartbeat timeout -> *throw*
+%%   conserve_memory=true -> *blocking*
+%% blocking:
+%%   conserve_memory=true -> *blocking*
+%%   conserve_memory=false -> *running*
+%%   receive a method frame for a content-bearing method
+%%   -> process, stop receiving, *blocked*
+%%   ...rest same as 'running'
+%% blocked:
+%%   conserve_memory=true -> *blocked*
+%%   conserve_memory=false -> resume receiving, *running*
+%%   ...rest same as 'running'
 %% closing:
 %%   socket close -> *terminate*
 %%   receive connection.close -> send connection.close_ok,
