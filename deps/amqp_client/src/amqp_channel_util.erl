@@ -230,8 +230,8 @@ handle_channel_exit(_Pid, normal, _Closing) ->
     normal;
 handle_channel_exit(Pid, {server_initiated_close, Code, _Text}, false) ->
     %% Channel terminating (server sent 'channel.close')
-    {IsHardError, _, _} = rabbit_framing:lookup_amqp_exception(
-                            rabbit_framing:amqp_exception(Code)),
+    {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
+                            ?PROTOCOL:amqp_exception(Code)),
     case IsHardError of
         true  -> ?LOG_WARN("Connection (~p) closing: channel (~p) "
                            "received hard error from server~n", [self(), Pid]),
