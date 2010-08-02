@@ -58,7 +58,7 @@ start() ->
     PluginDir         = get_env(plugins_dir,        ?DefaultPluginDir),
     UnpackedPluginDir = get_env(plugins_expand_dir, ?DefaultUnpackedPluginDir),
 
-    RootName = UnpackedPluginDir ++ "/ebin/rabbit",
+    RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
     unpack_ez_plugins(PluginDir, UnpackedPluginDir),
