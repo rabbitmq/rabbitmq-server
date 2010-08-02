@@ -58,7 +58,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector, conserving_memory}).
+             queue_collector, heartbeater, conserving_memory}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -259,7 +259,9 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                     callback = uninitialized_callback,
                                     recv_ref = none,
                                     connection_state = pre_init,
-                                    queue_collector = Collector},
+                                    queue_collector = Collector,
+                                    heartbeater = none,
+                                    conserving_memory = false},
                                 handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -355,8 +357,9 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit({unexpected_message, Other})
     end.
 
-switch_callback(State = #v1{conserving_memory = true}, Callback, Length) ->
-    %% TODO: pause heartbeat monitor
+switch_callback(State = #v1{conserving_memory = true,
+                            heartbeater = Heartbeater}, Callback, Length) ->
+    ok = rabbit_heartbeat:pause_monitor(Heartbeater),
     %% TODO: only do this after receiving a content-bearing method
     State#v1{callback = {Callback, Length}, recv_ref = none};
 switch_callback(State, Callback, Length) ->
@@ -372,9 +375,10 @@ terminate(_Explanation, State) ->
     {force, State}.
 
 internal_conserve_memory(false, State = #v1{conserving_memory = true,
+                                            heartbeater = Heartbeater,
                                             callback = {Callback, Length},
                                             recv_ref = none}) ->
-    %% TODO: resume heartbeat monitor
+    ok = rabbit_heartbeat:resume_monitor(Heartbeater),
     switch_callback(State#v1{conserving_memory = false}, Callback, Length);
 internal_conserve_memory(Conserve, State) ->
     State#v1{conserving_memory = Conserve}.
@@ -671,11 +675,13 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            Heartbeater = rabbit_heartbeat:start_heartbeat(
+                            Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,
-                                    frame_max = FrameMax}}
+                                    frame_max = FrameMax},
+                     heartbeater = Heartbeater}
     end;
 
 handle_method0(#'connection.open'{virtual_host = VHostPath},
