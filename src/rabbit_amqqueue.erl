@@ -41,6 +41,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/4, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([emit_stats/1]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
@@ -77,18 +78,24 @@
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
-        -> {'new' | 'existing', rabbit_types:amqqueue()}).
+        -> {'new' | 'existing', rabbit_types:amqqueue()} |
+           rabbit_types:channel_exit()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found')).
 -spec(with/2 :: (name(), qfun(A)) -> A | rabbit_types:error('not_found')).
--spec(with_or_die/2 :: (name(), qfun(A)) -> A).
+-spec(with_or_die/2 ::
+        (name(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(assert_equivalence/5 ::
         (rabbit_types:amqqueue(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
-        -> 'ok' | no_return()).
--spec(check_exclusive_access/2 :: (rabbit_types:amqqueue(), pid()) -> 'ok').
--spec(with_exclusive_access_or_die/3 :: (name(), pid(), qfun(A)) -> A).
+        -> 'ok' | rabbit_types:channel_exit() |
+           rabbit_types:connection_exit()).
+-spec(check_exclusive_access/2 ::
+        (rabbit_types:amqqueue(), pid())
+        -> 'ok' | rabbit_types:channel_exit()).
+-spec(with_exclusive_access_or_die/3 ::
+        (name(), pid(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (rabbit_types:amqqueue()) -> [rabbit_types:info()]).
@@ -107,6 +114,7 @@
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
+-spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
       (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
@@ -142,15 +150,18 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found').
--spec(internal_delete/1 :: (name()) -> rabbit_types:ok_or_error('not_found')).
+        -> rabbit_types:amqqueue() | 'not_found' |
+           rabbit_types:connection_exit()).
+-spec(internal_delete/1 ::
+        (name()) -> rabbit_types:ok_or_error('not_found') |
+                    rabbit_types:connection_exit()).
 -spec(maybe_run_queue_via_backing_queue/2 ::
         (pid(), (fun ((A) -> A))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(maybe_expire/1 :: (pid()) -> 'ok').
--spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (node()) -> 'ok' | rabbit_types:connection_exit()).
 -spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
 
 -endif.
@@ -345,6 +356,9 @@ consumers_all(VHostPath) ->
 
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
+emit_stats(#amqqueue{pid = QPid}) -> 
+    delegate_pcast(QPid, 7, emit_stats).
+
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
@@ -442,7 +456,7 @@ internal_delete(QueueName) ->
     end.
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:pcall(QPid, 7, {maybe_run_queue_via_backing_queue, Fun},
+    gen_server2:pcall(QPid, 6, {maybe_run_queue_via_backing_queue, Fun},
                       infinity).
 
 update_ram_duration(QPid) ->

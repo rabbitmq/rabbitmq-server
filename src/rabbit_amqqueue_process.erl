@@ -59,7 +59,8 @@
             expires,
             sync_timer_ref,
             rate_timer_ref,
-            expiry_timer_ref
+            expiry_timer_ref,
+            stats_timer
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -74,13 +75,8 @@
              txn,
              unsent_message_count}).
 
--define(INFO_KEYS,
-        [name,
-         durable,
-         auto_delete,
-         arguments,
-         pid,
-         owner_pid,
+-define(STATISTICS_KEYS,
+        [pid,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -90,6 +86,17 @@
          memory,
          backing_queue_status
         ]).
+
+-define(CREATION_EVENT_KEYS,
+        [pid,
+         name,
+         durable,
+         auto_delete,
+         arguments,
+         owner_pid
+        ]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
@@ -114,7 +121,8 @@ init(Q) ->
             expires             = undefined,
             sync_timer_ref      = undefined,
             rate_timer_ref      = undefined,
-            expiry_timer_ref    = undefined}, hibernate,
+            expiry_timer_ref    = undefined,
+            stats_timer         = rabbit_event:init_stats_timer()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -155,6 +163,10 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
+                     rabbit_event:notify(
+                       queue_created,
+                       [{Item, i(Item, State)} ||
+                           Item <- ?CREATION_EVENT_KEYS]),
                      noreply(init_expires(State#q{backing_queue_state = BQS}));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -173,6 +185,7 @@ terminate_shutdown(Fun, State) ->
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
+                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
@@ -189,9 +202,10 @@ noreply(NewState) ->
 next_state(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_rate_timer(State),
+    State2 = ensure_stats_timer(State1),
     case BQ:needs_idle_timeout(BQS)of
-        true  -> {ensure_sync_timer(State1), 0};
-        false -> {stop_sync_timer(State1), hibernate}
+        true  -> {ensure_sync_timer(State2), 0};
+        false -> {stop_sync_timer(State2), hibernate}
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
@@ -227,7 +241,7 @@ stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{rate_timer_ref = undefined}.
-
+    
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
@@ -248,6 +262,18 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
         false ->
             State
     end.
+
+ensure_stats_timer(State = #q{stats_timer = StatsTimer,
+                              q = Q}) ->
+    State#q{stats_timer = rabbit_event:ensure_stats_timer(
+                            StatsTimer,
+                            fun() -> emit_stats(State) end,
+                            fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
+
+stop_stats_timer(State = #q{stats_timer = StatsTimer}) ->
+    State#q{stats_timer = rabbit_event:stop_stats_timer(
+                            StatsTimer,
+                            fun() -> emit_stats(State) end)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -560,6 +586,10 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
+emit_stats(State) ->
+    rabbit_event:notify(queue_stats,
+                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
+
 %---------------------------------------------------------------------------
 
 handle_call({init, Recover}, From,
@@ -856,7 +886,11 @@ handle_cast(maybe_expire, State) ->
         true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
                  {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
-    end.
+    end;
+    
+handle_cast(emit_stats, State) ->
+    emit_stats(State),
+    noreply(State).
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -893,4 +927,5 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    {hibernate, stop_rate_timer(State#q{backing_queue_state = BQS2})}.
+    {hibernate, stop_stats_timer(
+                  stop_rate_timer(State#q{backing_queue_state = BQS2}))}.

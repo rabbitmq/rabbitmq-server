@@ -68,6 +68,7 @@ all_tests() ->
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
     passed = test_memory_pressure(),
+    passed = test_statistics(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
@@ -1077,10 +1078,13 @@ test_memory_pressure_flush(Writer) ->
     receive Ref -> ok after 1000 -> throw(failed_to_receive_writer_sync) end.
 
 test_memory_pressure_spawn() ->
+    test_spawn(fun test_memory_pressure_receiver/1).
+
+test_spawn(Receiver) ->
     Me = self(),
-    Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
+    Writer = spawn(fun () -> Receiver(Me) end),
     {ok, Ch} = rabbit_channel:start_link(1, make_fun(Me), make_fun(Writer),
-                                         <<"user">>, <<"/">>, self()),
+                                         <<"guest">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
@@ -1169,6 +1173,96 @@ test_memory_pressure() ->
     expect_shutdown_channel_termination(Ch4),
 
     true = process_flag(trap_exit, OldTrap),
+    passed.
+
+test_statistics_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, Method} ->
+            Pid ! Method,
+            test_statistics_receiver(Pid)
+    end.
+
+test_statistics_event_receiver(Pid) ->
+    receive
+        Foo ->
+            Pid ! Foo,
+            test_statistics_event_receiver(Pid)
+    end.
+
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
+    rabbit_channel:emit_stats(Ch),
+    test_statistics_receive_event1(Ch, Matcher).
+
+test_statistics_receive_event1(Ch, Matcher) ->
+    receive #event{type = channel_stats, props = Props} ->
+            case Matcher(Props) of
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
+            end
+    after 1000 -> throw(failed_to_receive_event)
+    end.
+
+test_statistics() ->
+    application:set_env(rabbit, collect_statistics, fine),
+
+    %% ATM this just tests the queue / exchange stats in channels. That's
+    %% by far the most complex code though.
+
+    %% Set up a channel and queue
+    {_Writer, Ch} = test_spawn(fun test_statistics_receiver/1),
+    rabbit_channel:do(Ch, #'queue.declare'{}),
+    QName = receive #'queue.declare_ok'{queue = Q0} ->
+                    Q0
+            after 1000 -> throw(failed_to_receive_queue_declare_ok)
+            end,
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    QPid = Q#amqqueue.pid,
+    X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
+
+    rabbit_tests_event_receiver:start(self()),
+
+    %% Check stats empty
+    Event = test_statistics_receive_event(Ch, fun (_) -> true end),
+    [] = proplists:get_value(channel_queue_stats, Event),
+    [] = proplists:get_value(channel_exchange_stats, Event),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event),
+
+    %% Publish and get a message
+    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
+                                           routing_key = QName},
+                      rabbit_basic:build_content(#'P_basic'{}, <<"">>)),
+    rabbit_channel:do(Ch, #'basic.get'{queue = QName}),
+
+    %% Check the stats reflect that
+    Event2 = test_statistics_receive_event(
+               Ch,
+               fun (E) ->
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) > 0
+               end),
+    [{QPid,[{get,1}]}] = proplists:get_value(channel_queue_stats, Event2),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
+    [{{QPid,X},[{publish,1}]}] =
+        proplists:get_value(channel_queue_exchange_stats, Event2),
+
+    %% Check the stats remove stuff on queue deletion
+    rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
+    Event3 = test_statistics_receive_event(
+               Ch,
+               fun (E) ->
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) == 0
+               end),
+
+    [] = proplists:get_value(channel_queue_stats, Event3),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event3),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event3),
+
+    rabbit_channel:shutdown(Ch),
+    rabbit_tests_event_receiver:stop(),
     passed.
 
 test_delegates_async(SecondaryNode) ->

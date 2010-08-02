@@ -43,6 +43,8 @@
 
 -export([analyze_frame/3]).
 
+-export([emit_stats/1]).
+
 -import(gen_tcp).
 -import(fprof).
 -import(inet).
@@ -58,12 +60,16 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_ref, connection_state,
-             queue_collector}).
+             queue_collector, stats_timer}).
 
--define(INFO_KEYS,
-        [pid, address, port, peer_address, peer_port,
-         recv_oct, recv_cnt, send_oct, send_cnt, send_pend, state, channels,
-         protocol, user, vhost, timeout, frame_max, client_properties]).
+-define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
+                          send_pend, state, channels]).
+
+-define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
+                              protocol, user, vhost, timeout, frame_max,
+                              client_properties]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %% connection lifecycle
 %%
@@ -141,6 +147,7 @@
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (pid()) -> [rabbit_types:info()]).
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
@@ -188,6 +195,9 @@ info(Pid, Items) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
+
+emit_stats(Pid) ->
+    gen_server:cast(Pid, emit_stats).
 
 setup_profiling() ->
     Value = rabbit_misc:get_config(profiling_enabled, false),
@@ -263,7 +273,9 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                             callback         = uninitialized_callback,
                             recv_ref         = none,
                             connection_state = pre_init,
-                            queue_collector  = Collector},
+                            queue_collector  = Collector,
+                            stats_timer =
+                                rabbit_event:init_stats_timer()},
                         handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -282,6 +294,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %%
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
+        rabbit_event:notify(connection_closed, [{pid, self()}]),
         exit(shutdown)
     end.
 
@@ -345,6 +358,11 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                                    catch Error -> {error, Error}
                                    end),
             mainloop(Deb, State);
+        {'$gen_cast', emit_stats} ->
+            internal_emit_stats(State),
+            mainloop(Deb, State#v1{stats_timer =
+                                       rabbit_event:reset_stats_timer_after(
+                                         State#v1.stats_timer)});
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
@@ -544,7 +562,8 @@ analyze_frame(_Type, _Body, _Protocol) ->
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
-    {State, {frame_payload, Type, Channel, PayloadSize}, PayloadSize + 1};
+    {ensure_stats_timer(State), {frame_payload, Type, Channel, PayloadSize},
+     PayloadSize + 1};
 
 handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, State) ->
     case PayloadAndMarker of
@@ -619,6 +638,12 @@ refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
     throw(Exception).
 
+ensure_stats_timer(State = #v1{stats_timer = StatsTimer}) ->
+    Self = self(),
+    State#v1{stats_timer = rabbit_event:ensure_stats_timer_after(
+                             StatsTimer,
+                             fun() -> emit_stats(Self) end)}.
+
 %%--------------------------------------------------------------------------
 
 handle_method0(MethodName, FieldsBin,
@@ -690,8 +715,12 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    State#v1{connection_state = running,
-             connection = NewConnection};
+    State1 = State#v1{connection_state = running,
+                      connection = NewConnection},
+    rabbit_event:notify(
+      connection_created,
+      [{Item, i(Item, State1)} || Item <- ?CREATION_EVENT_KEYS]),
+    State1;
 handle_method0(#'connection.close'{},
                State = #v1{connection_state = running}) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
@@ -854,3 +883,7 @@ amqp_exception_explanation(Text, Expl) ->
     if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
        true                        -> CompleteTextBin
     end.
+
+internal_emit_stats(State) ->
+    rabbit_event:notify(connection_stats,
+                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
