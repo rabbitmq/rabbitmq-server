@@ -177,14 +177,13 @@ check_resource_access(Username,
                   false;
               [#user_permission{permission = P}] ->
                   PermRegexp = case element(permission_index(Permission), P) of
-                                   <<"">> -> <<$^, $$>>; % <<"^$">> breaks erlang mode
+                                   %% <<"^$">> breaks Emacs' erlang mode
+                                   <<"">> -> <<$^, $$>>;
                                    RE     -> RE
                                end,
-                  case regexp:match(
-                         binary_to_list(Name),
-                         binary_to_list(PermRegexp)) of
-                      {match, _, _} -> true;
-                      nomatch       -> false
+                  case re:run(Name, PermRegexp, [{capture, none}]) of
+                      match    -> true;
+                      nomatch  -> false
                   end
           end,
     if Res  -> ok;
@@ -309,7 +308,7 @@ list_vhosts() ->
 
 validate_regexp(RegexpBin) ->
     Regexp = binary_to_list(RegexpBin),
-    case regexp:parse(Regexp) of
+    case re:compile(Regexp) of
         {ok, _}         -> ok;
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.

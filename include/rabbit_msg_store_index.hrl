@@ -29,51 +29,31 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_sup).
+-include("rabbit_msg_store.hrl").
 
--behaviour(supervisor).
+%%----------------------------------------------------------------------------
 
--export([start_link/0, start_child/1, start_child/2, start_child/3,
-         start_restartable_child/1, start_restartable_child/2, stop_child/1]).
+-ifdef(use_specs).
 
--export([init/1]).
+-type(dir() :: any()).
+-type(index_state() :: any()).
+-type(keyvalue() :: any()).
+-type(fieldpos() :: non_neg_integer()).
+-type(fieldvalue() :: any()).
 
--include("rabbit.hrl").
+-spec(new/1 :: (dir()) -> index_state()).
+-spec(recover/1 :: (dir()) -> rabbit_types:ok_or_error2(index_state(), any())).
+-spec(lookup/2 ::
+        (rabbit_guid:guid(), index_state()) -> ('not_found' | keyvalue())).
+-spec(insert/2 :: (keyvalue(), index_state()) -> 'ok').
+-spec(update/2 :: (keyvalue(), index_state()) -> 'ok').
+-spec(update_fields/3 :: (rabbit_guid:guid(), ({fieldpos(), fieldvalue()} |
+                                               [{fieldpos(), fieldvalue()}]),
+                          index_state()) -> 'ok').
+-spec(delete/2 :: (rabbit_guid:guid(), index_state()) -> 'ok').
+-spec(delete_by_file/2 :: (fieldvalue(), index_state()) -> 'ok').
+-spec(terminate/1 :: (index_state()) -> any()).
 
--define(SERVER, ?MODULE).
+-endif.
 
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-start_child(Mod) ->
-    start_child(Mod, []).
-
-start_child(Mod, Args) ->
-    start_child(Mod, Mod, Args).
-
-start_child(ChildId, Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER,
-                                     {ChildId, {Mod, start_link, Args},
-                                      transient, ?MAX_WAIT, worker, [Mod]}),
-    ok.
-
-start_restartable_child(Mod) ->
-    start_restartable_child(Mod, []).
-
-start_restartable_child(Mod, Args) ->
-    Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),
-    {ok, _} = supervisor:start_child(
-                ?SERVER,
-                {Name, {rabbit_restartable_sup, start_link,
-                        [Name, {Mod, start_link, Args}]},
-                 transient, infinity, supervisor, [rabbit_restartable_sup]}),
-    ok.
-
-stop_child(ChildId) ->
-    case supervisor:terminate_child(?SERVER, ChildId) of
-        ok -> supervisor:delete_child(?SERVER, ChildId);
-        E  -> E
-    end.
-
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+%%----------------------------------------------------------------------------

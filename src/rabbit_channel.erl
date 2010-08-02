@@ -78,7 +78,7 @@
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> pid()).
+       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -102,10 +102,8 @@
 %%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [Channel, ReaderPid, WriterPid,
-                            Username, VHost, CollectorPid], []),
-    Pid.
+    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid,
+                                     Username, VHost, CollectorPid], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -421,7 +419,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
+    DecodedContent = rabbit_binary_parser:ensure_content_decoded(
+                       Content, rabbit_framing_amqp_0_9_1),
     IsPersistent = is_message_persistent(DecodedContent),
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
@@ -637,6 +636,17 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
                       State),
     ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
     {noreply, State2};
+
+handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
+                              requeue = Requeue},
+              _, State = #ch{ unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
+    ok = fold_per_queue(
+           fun (QPid, MsgIds, ok) ->
+                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+           end, ok, Acked),
+    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    {noreply, State#ch{unacked_message_q = Remaining}};
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
@@ -938,7 +948,7 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                             content       = Content},
              WriterPid, Reason) ->
     {_Close, ReplyCode, ReplyText} =
-        rabbit_framing:lookup_amqp_exception(Reason),
+        rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.return'{reply_code  = ReplyCode,
@@ -967,7 +977,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
             end;
         {empty, _} ->
             rabbit_misc:protocol_error(
-              not_found, "unknown delivery tag ~w", [DeliveryTag])
+              precondition_failed, "unknown delivery tag ~w", [DeliveryTag])
     end.
 
 add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->
@@ -1031,7 +1041,7 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
-    LPid = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+    {ok, LPid} = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
 

@@ -36,7 +36,8 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {user, timeout_sec, frame_max, vhost, client_properties}).
+-record(connection, {protocol, user, timeout_sec, frame_max, vhost,
+                     client_properties}).
 
 -record(content,
         {class_id,
@@ -44,6 +45,7 @@
          properties_bin, %% either 'none', or an encoded properties binary
          %% Note: at most one of properties and properties_bin can be
          %% 'none' at once.
+         protocol, %% The protocol under which properties_bin was encoded
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
 
@@ -74,6 +76,7 @@
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
+-define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
 
 -define(MAX_WAIT, 16#ffffffff).
