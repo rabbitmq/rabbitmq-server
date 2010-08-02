@@ -38,7 +38,26 @@
 -export([stats_level/1]).
 -export([notify/2]).
 
+%%----------------------------------------------------------------------------
+
+-record(state, {level, timer}).
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
+
+-export_type([event_type/0, event_props/0, event_timestamp/0, event/0]).
+
+-type(event_type() :: atom()).
+-type(event_props() :: term()).
+-type(event_timestamp() ::
+        {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
+
+-type(event() :: #event {
+             type :: event_type(),
+             props :: event_props(),
+             timestamp :: event_timestamp()
+            }).
 
 -type(level() :: 'none' | 'coarse' | 'fine').
 
@@ -53,13 +72,11 @@
 -spec(ensure_stats_timer/3 :: (state(), timer_fun(), timer_fun()) -> state()).
 -spec(stop_stats_timer/2 :: (state(), timer_fun()) -> state()).
 -spec(ensure_stats_timer_after/2 :: (state(), timer_fun()) -> state()).
--spec(reset_stats_timer_after/1 :: (state()) -> 'ok').
+-spec(reset_stats_timer_after/1 :: (state()) -> state()).
 -spec(stats_level/1 :: (state()) -> level()).
--spec(notify/2 :: (atom(), term()) -> 'ok').
+-spec(notify/2 :: (event_type(), event_props()) -> 'ok').
 
 -endif.
-
--record(state, {level, timer}).
 
 %%----------------------------------------------------------------------------
 
