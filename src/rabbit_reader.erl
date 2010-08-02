@@ -357,10 +357,9 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit({unexpected_message, Other})
     end.
 
-switch_callback(State = #v1{conserving_memory = true,
+switch_callback(State = #v1{conserving_memory = active,
                             heartbeater = Heartbeater}, Callback, Length) ->
     ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-    %% TODO: only do this after receiving a content-bearing method
     State#v1{callback = {Callback, Length}, recv_ref = none};
 switch_callback(State, Callback, Length) ->
     Ref = inet_op(fun () -> rabbit_net:async_recv(
@@ -374,7 +373,7 @@ terminate(Explanation, State = #v1{connection_state = running}) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-internal_conserve_memory(false, State = #v1{conserving_memory = true,
+internal_conserve_memory(false, State = #v1{conserving_memory = active,
                                             heartbeater = Heartbeater,
                                             callback = {Callback, Length},
                                             recv_ref = none}) ->
@@ -507,13 +506,20 @@ handle_frame(Type, Channel, Payload,
             %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {chpid, ChPid} ->
+                    ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
                     case AnalyzedFrame of
                         {method, 'channel.close', _} ->
-                            erase({channel, Channel});
-                        _ -> ok
-                    end,
-                    ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
-                    State;
+                            erase({channel, Channel}),
+                            State;
+                        {method, MethodName, _} ->
+                            case (State#v1.conserving_memory == true andalso
+                                  Protocol:method_has_content(MethodName)) of
+                                true  -> State#v1{conserving_memory = active};
+                                false -> State
+                            end;
+                        _ ->
+                            State
+                    end;
                 closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
