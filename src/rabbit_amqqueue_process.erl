@@ -813,6 +813,21 @@ handle_cast({ack, Txn, AckTags, ChPid},
             noreply(State#q{backing_queue_state = BQS1})
     end;
 
+handle_cast({reject, AckTags, Requeue, ChPid},
+            State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            noreply(State);
+        C = #cr{acktags = ChAckTags} ->
+            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
+            store_ch_record(C#cr{acktags = ChAckTags1}),
+            noreply(case Requeue of
+                        true  -> requeue_and_run(AckTags, State);
+                        false -> BQS1 = BQ:ack(AckTags, BQS),
+                                 State #q { backing_queue_state = BQS1 }
+                    end)
+    end;
+
 handle_cast({rollback, Txn, ChPid}, State) ->
     noreply(rollback_transaction(Txn, ChPid, State));
 

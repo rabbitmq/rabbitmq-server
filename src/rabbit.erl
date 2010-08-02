@@ -433,9 +433,9 @@ print_banner() ->
               "| ~s  +---+   |~n"
               "|                   |~n"
               "+-------------------+~n"
-              "AMQP ~p-~p~n~s~n~s~n~n",
+              "~s~n~s~n~s~n~n",
               [Product, string:right([$v|Version], ProductLen),
-               ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
+               ?PROTOCOL_VERSION,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},

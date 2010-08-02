@@ -45,7 +45,7 @@
 
 -type(maybe_pid() :: pid() | 'undefined').
 
--spec(start_link/2 :: (pid(), non_neg_integer()) -> pid()).
+-spec(start_link/2 :: (pid(), non_neg_integer()) -> rabbit_types:ok(pid())).
 -spec(shutdown/1 :: (maybe_pid()) -> 'ok').
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
@@ -74,8 +74,7 @@
 %%----------------------------------------------------------------------------
 
 start_link(ChPid, UnackedMsgCount) ->
-    {ok, Pid} = gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []),
-    Pid.
+    gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []).
 
 shutdown(undefined) ->
     ok;
