@@ -23,13 +23,13 @@
 %%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @private
--module(amqp_connection_specific_sup).
+-module(amqp_connection_type_sup).
 
 -include("amqp_client.hrl").
 
 -behaviour(supervisor2).
 
--export([start_link_direct/0, start_link_network/1]).
+-export([start_link_direct/0, start_link_network/2]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -39,21 +39,22 @@
 start_link_direct() ->
     supervisor2:start_link(?MODULE, [direct, []]).
 
-start_link_network(Sock) ->
-    supervisor2:start_link(?MODULE, [network, [Sock]]).
+start_link_network(Sock, ConnectionPid) ->
+    supervisor2:start_link(?MODULE, [network, [Sock, ConnectionPid]]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([network, [Sock]]) ->
+init([direct, []]) ->
+    {ok, {{one_for_all, 0, 1},
+          [{collector, {rabbit_queue_collector, start_link, []},
+            permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}]}};
+init([network, [Sock, ConnectionPid]]) ->
+    GetConnectionPid = fun() -> ConnectionPid end,
     Channel0InfraChildren = amqp_channel_util:channel_infrastructure_children(
-                                network, [Sock, none], 0),
+                                network, [Sock, none], GetConnectionPid, 0),
     {ok, {{one_for_all, 0, 1},
           Channel0InfraChildren ++
           [{main_reader, {amqp_main_reader, start_link, [Sock]},
-           permanent, ?MAX_WAIT, worker, [amqp_main_reader]}]}};
-init([direct, []]) ->
-    {ok, {{one_for_all, 0, 1},
-          [collector, {rabbit_queue_collector, start_link, []},
-           permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]]}}.
+           permanent, ?MAX_WAIT, worker, [amqp_main_reader]}]}}.

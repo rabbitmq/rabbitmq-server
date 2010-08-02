@@ -46,7 +46,7 @@ start_link(Sock) ->
     Parent = self(),
     {ok, proc_lib:spawn_link(
              fun() ->
-                Framing0 = supervisor2:find_child(Parent, framing),
+                [Framing0] = supervisor2:find_child(Parent, framing),
                 init_and_go([Parent, Sock, Framing0])
              end)}.
 
@@ -62,7 +62,7 @@ init([Sup, Sock, Framing0Pid]) ->
     State0 = #state{sup = Sup, sock = Sock},
     State1 = internal_register_framing_channel(0, Framing0Pid, State0),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-    {ok, State1}.
+    State1.
 
 init_and_go(InitArgs) ->
     gen_server:enter_loop(?MODULE, [], init(InitArgs)).

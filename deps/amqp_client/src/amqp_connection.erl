@@ -88,7 +88,7 @@ start_link(Type) ->
 %% space.The resulting process's supervisor is linked to the invoking process.
 start_link(Type, AmqpParams) ->
     case amqp_connection_sup:start_link(Type, AmqpParams) of
-        {ok, Sup}          -> {ok, amqp_connection_sup:child(Sup, connection)};
+        {ok, Sup}          -> {ok, hd(supervisor2:find_child(Sup, connection))};
         {error, _} = Error -> Error
     end.
 

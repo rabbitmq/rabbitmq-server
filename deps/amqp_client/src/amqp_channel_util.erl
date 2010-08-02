@@ -27,7 +27,7 @@
 
 -include("amqp_client.hrl").
 
--export([open_channel/6]).
+-export([open_channel/5]).
 -export([channel_infrastructure_children/4,
          terminate_channel_infrastructure/2]).
 -export([do/4]).
@@ -45,20 +45,21 @@
 %% Spawns a new channel supervision tree linked under the given connection
 %% supervisor, starts monitoring the channel and registers it in the given
 %% Channels dict
-open_channel(Sup, ProposedNumber, MaxChannel, Driver, InfraArgs, Channels) ->
+open_channel(Sup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    ChannelSupSup = amqp_connection_sup:child(Sup, channel_sup_sup),
+    [ChannelSupSup] = supervisor2:find_child(Sup, channel_sup_sup),
     {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(
-                               ChannelSupSup, ChannelNumber, Driver, InfraArgs),
-    ChannelPid = amqp_channel_sup:child(ChannelSup, channel),
+                           ChannelSupSup, InfraArgs, ChannelNumber),
+    [ChannelPid] = supervisor2:find_child(ChannelSup, channel),
     erlang:monitor(process, ChannelPid),
     NewChannels = register_channel(ChannelNumber, ChannelPid, Channels),
     {ChannelPid, NewChannels}.
 
 channel_infrastructure_children(network, [Sock, _], GetChPid, ChNumber) ->
-    [{framing, {rabbit_framing_channel, start_link, [GetChPid]},
+    [{framing, {rabbit_framing_channel, start_link, [GetChPid, ?PROTOCOL]},
       permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]},
-     {writer, {rabbit_writer, start_link, [Sock, ChNumber, ?FRAME_MIN_SIZE]},
+     {writer, {rabbit_writer, start_link, [Sock, ChNumber, ?FRAME_MIN_SIZE,
+                                           ?PROTOCOL]},
       permanent, ?MAX_WAIT, worker, [rabbit_writer]}];
 channel_infrastructure_children(direct, [User, VHost, Collector], GetChPid,
                                 ChNumber) ->

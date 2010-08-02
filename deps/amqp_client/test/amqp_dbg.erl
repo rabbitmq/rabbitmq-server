@@ -85,6 +85,7 @@ all_args() ->
 
 sup_args() ->
     [{amqp_connection_sup, start_link, return_ms()},
+     {amqp_connection_type_sup, start_link, return_ms()},
      {amqp_channel_sup_sup, start_link, return_ms()},
      {amqp_channel_sup_sup, start_channel_sup, return_ms()},
      {amqp_channel_sup, start_link, return_ms()}].
@@ -93,13 +94,12 @@ ncl_args() ->
     [{amqp_main_reader, start_link, return_ms()},
      {amqp_network_connection, set_closing_state, []},
      {amqp_network_connection, all_channels_closed_event, []},
-     {amqp_network_connection, post_init, []},
      {amqp_network_connection, terminate, []}].
 
 dcl_args() ->
-    [{amqp_direct_connection, set_closing_state, []},
+    [{amqp_direct_connection, start_link, []},
+     {amqp_direct_connection, set_closing_state, []},
      {amqp_direct_connection, all_channels_closed_event, []},
-     {amqp_direct_connection, post_init, []},
      {amqp_direct_connection, terminate, []}].
 
 cl_args() ->

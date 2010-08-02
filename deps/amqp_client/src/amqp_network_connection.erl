@@ -67,7 +67,8 @@ start_link(AmqpParams) ->
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams]) ->
-    {ok, connect(#state{sup = Sup, params = AmqpParams})}.
+    process_flag(trap_exit, true),
+    connect(#state{sup = Sup, params = AmqpParams}).
 
 init_and_go(InitArgs) ->
     gen_server:enter_loop(?MODULE, [], init(InitArgs)).
@@ -96,13 +97,9 @@ handle_info(timeout_waiting_for_close_ok = Msg,
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
     handle_channel_exit(Pid, Reason, State).
 
-terminate(Reason, #state{sup = Sup}) ->
-    case Reason of
-        normal ->
-            amqp_channel_util:terminate_channel_infrastructure(network, Sup);
-        _ ->
-            ok
-    end.
+terminate(_Reason, #state{sup = Sup}) ->
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    amqp_channel_util:terminate_channel_infrastructure(network, CTSup).
 
 code_change(_OldVsn, State, _Extra) ->
     State.
@@ -116,9 +113,9 @@ handle_command({open_channel, ProposedNumber}, _From,
                               sock = Sock,
                               channels = Channels,
                               max_channel = MaxChannel}) ->
-    [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
-    [MainReader] = supervisor2:find_child(SSup, main_reader),
-    try amqp_channel_util:open_channel(Sup, ProposedNumber, MaxChannel, network,
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    [MainReader] = supervisor2:find_child(CTSup, main_reader),
+    try amqp_channel_util:open_channel(Sup, ProposedNumber, MaxChannel,
                                        [Sock, MainReader], Channels) of
         {ChannelPid, NewChannels} ->
             {reply, ChannelPid, State#state{channels = NewChannels}}
@@ -245,17 +242,18 @@ set_closing_state(ChannelCloseType, NewClosing,
 %% after the connection broadcasts a connection_closing message to all channels
 all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
     #closing{reason = Reason, close = Close} = Closing,
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
     case Reason of
         server_initiated_close ->
-            amqp_channel_util:do(network, Sup, #'connection.close_ok'{}, none),
-            [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
-            [MainReader] = supervisor2:find_child(SSup, main_reader),
+            amqp_channel_util:do(network, CTSup, #'connection.close_ok'{}, none),
+            [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+            [MainReader] = supervisor2:find_child(CTSup, main_reader),
             erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader,
                               socket_closing_timeout),
             State#state{closing =
                 Closing#closing{phase = wait_socket_close}};
         _ ->
-            amqp_channel_util:do(network, Sup, Close, none),
+            amqp_channel_util:do(network, CTSup, Close, none),
             erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
                               timeout_waiting_for_close_ok),
             State#state{closing = Closing#closing{phase = wait_close_ok}}
@@ -336,47 +334,48 @@ connect(State = #state{params = #amqp_params{host = Host,
             exit(Reason)
     end.
 
-handshake(State0 = #state{sock = Sock, sup = Sup}) ->
+handshake(State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    start_specific_sup(State0),
+    start_connection_type_sup(State0),
     State1 = network_handshake(State0),
     start_heartbeat(State1),
     State1.
 
-start_specific_sup(#state{sup = Sup, sock = Sock}) ->
+start_connection_type_sup(#state{sup = Sup, sock = Sock}) ->
     {ok, _} = supervisor2:start_child(Sup,
-        {connection_specific_sup, {amqp_connection_specific_sup,
-                                   start_link_network, [Sock]},
-         permanent, infinity, supervisor, [amqp_connection_specific_sup]}),
+        {connection_type_sup, {amqp_connection_type_sup,
+                                   start_link_network, [Sock, self()]},
+         permanent, infinity, supervisor, [amqp_connection_type_sup]}),
     ok.
 
 network_handshake(State = #state{sup = Sup, params = Params}) ->
     Start = handshake_recv(),
     #'connection.start'{server_properties = ServerProperties} = Start,
     ok = check_version(Start),
-    amqp_channel_util:do(network, Sup, start_ok(State), none),
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    amqp_channel_util:do(network, CTSup, start_ok(State), none),
     Tune = handshake_recv(),
     TuneOk = negotiate_values(Tune, Params),
-    amqp_channel_util:do(network, Sup, TuneOk, none),
+    amqp_channel_util:do(network, CTSup, TuneOk, none),
     ConnectionOpen =
         #'connection.open'{virtual_host = Params#amqp_params.virtual_host,
                            insist = true},
-    amqp_channel_util:do(network, Sup, ConnectionOpen, none),
+    amqp_channel_util:do(network, CTSup, ConnectionOpen, none),
     %% 'connection.redirect' not implemented (we use insist = true to cover)
     #'connection.open_ok'{} = handshake_recv(),
     #'connection.tune_ok'{channel_max = ChannelMax,
                           frame_max   = FrameMax,
                           heartbeat   = Heartbeat} = TuneOk,
-    ?LOG_INFO("Negotiated maximums: (Channel = ~p, "
-              "Frame = ~p, Heartbeat = ~p)~n",
+    ?LOG_INFO("Negotiated maximums: (Channel = ~p, Frame = ~p, "
+              "Heartbeat = ~p)~n",
              [ChannelMax, FrameMax, Heartbeat]),
     State#state{max_channel = ChannelMax,
                 heartbeat = Heartbeat,
                 server_properties = ServerProperties}.
 
 start_heartbeat(#state{sup = Sup, sock = Sock, heartbeat = Heartbeat}) ->
-    [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
-    rabbit_heartbeat:start_heartbeat(SSup, Sock, Heartbeat).
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    rabbit_heartbeat:start_heartbeat(CTSup, Sock, Heartbeat).
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->

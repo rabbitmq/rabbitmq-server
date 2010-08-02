@@ -41,7 +41,7 @@ start_link(Driver, InfraArgs, ChNumber) ->
     case Driver of
         direct  -> ok;
         network -> [_, MainReader] = InfraArgs,
-                   FramingPid = supervisor2:find_child(Sup, framing),
+                   [FramingPid] = supervisor2:find_child(Sup, framing),
                    amqp_main_reader:register_framing_channel(
                            MainReader, ChNumber, FramingPid)
     end,
@@ -55,9 +55,9 @@ start_link(Driver, InfraArgs, ChNumber) ->
 
 init([Driver, InfraArgs, ChNumber]) ->
     Me = self(),
-    GetChPid = fun() -> supervisor2:find_child(Me, channel) end,
+    GetChPid = fun() -> hd(supervisor2:find_child(Me, channel)) end,
     InfraChildren = amqp_channel_util:channel_infrastructure_children(
                         Driver, InfraArgs, GetChPid, ChNumber),
     {ok, {{one_for_all, 0, 1},
-          [channel, {amqp_channel, start_link, [Driver, ChNumber]},
-           permanent, ?MAX_WAIT, worker, [amqp_channel]] ++ InfraChildren}}.
+          [{channel, {amqp_channel, start_link, [Driver, ChNumber]},
+            permanent, ?MAX_WAIT, worker, [amqp_channel]}] ++ InfraChildren}}.

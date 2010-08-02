@@ -60,7 +60,8 @@ start_link(AmqpParams) ->
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams]) ->
-    {ok, connect(#state{sup = Sup, params = AmqpParams})}.
+    process_flag(trap_exit, true),
+    connect(#state{sup = Sup, params = AmqpParams}).
 
 init_and_go(InitArgs) ->
     gen_server:enter_loop(?MODULE, [], init(InitArgs)).
@@ -103,11 +104,10 @@ handle_command({open_channel, ProposedNumber}, _From,
                               params = #amqp_params{username = User,
                                                     virtual_host = VHost},
                               channels = Channels}) ->
-    [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
-    [Collector] = supervisor2:find_child(SSup, collector),
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    [Collector] = supervisor2:find_child(CTSup, collector),
     try amqp_channel_util:open_channel(Sup, ProposedNumber, ?MAX_CHANNEL_NUMBER,
-                                       direct, [User, VHost, Collector],
-                                       Channels) of
+                                       [User, VHost, Collector], Channels) of
         {ChannelPid, NewChannels} ->
             {reply, ChannelPid, State#state{channels = NewChannels}}
     catch
@@ -182,8 +182,8 @@ set_closing_state(ChannelCloseType, NewClosing,
 %% The all_channels_closed_event is called when all channels have been closed
 %% after the connection broadcasts a connection_closing message to all channels
 all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
-    [SSup] = supervisor2:find_child(Sup, connection_specific_sup),
-    [Collector] = supervisor2:find_child(SSup, collector),
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    [Collector] = supervisor2:find_child(CTSup, collector),
     rabbit_queue_collector:delete_all(Collector),
     rabbit_queue_collector:shutdown(Collector),
     rabbit_misc:unlink_and_capture_exit(Collector),
@@ -253,8 +253,8 @@ connect(State = #state{sup = Sup,
     rabbit_access_control:check_vhost_access(
             #user{username = User, password = Pass}, VHost),
     {ok, _} = supervisor2:start_child(Sup,
-        {connection_specific_sup, {amqp_connection_specific_sup,
+        {connection_type_sup, {amqp_connection_type_sup,
                                    start_link_direct, []},
-         permanent, infinity, supervisor, [amqp_connection_specific_sup]}),
+         permanent, infinity, supervisor, [amqp_connection_type_sup]}),
     ServerProperties = rabbit_reader:server_properties(),
     State#state{server_properties = ServerProperties}.

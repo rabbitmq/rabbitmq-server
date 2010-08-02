@@ -37,15 +37,9 @@
 %%---------------------------------------------------------------------------
 
 start_link(Type, AmqpParams) ->
-    Module = case Type of direct  -> amqp_direct_connection;
-                          network -> amqp_network_connection
-             end,
-    {ok, Sup} = supervisor2:start_link([Module, AmqpParams]),
-    [Connection] = supervisor2:find_child(Sup, connection),
-    unlink(Sup),
-    try Module:do_post_init(Connection) of
-        ok -> link(Sup),
-              {ok, Sup}
+    try supervisor2:start_link(?MODULE, [Type, AmqpParams]) of
+        {ok, Sup}          -> {ok, Sup};
+        {error, _} = Error -> Error
     catch
         exit:Reason -> {error, {auth_failure_likely, Reason}}
     end.
@@ -54,9 +48,12 @@ start_link(Type, AmqpParams) ->
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Module, AmqpParams]) ->
+init([Type, AmqpParams]) ->
+    Module = case Type of direct  -> amqp_direct_connection;
+                          network -> amqp_network_connection
+             end,
     {ok, {{one_for_all, 0, 1},
-          [connection, {Module, start_link, [AmqpParams]},
-           permanent, ?MAX_WAIT, worker, [Module]],
-          [channel_sup_sup, {amqp_channel_sup_sup, start_link, []},
-           permanent, infinity, supervisor, [amqp_channel_sup_sup]]}}.
+          [{connection, {Module, start_link, [AmqpParams]},
+            permanent, ?MAX_WAIT, worker, [Module]},
+           {channel_sup_sup, {amqp_channel_sup_sup, start_link, [Type]},
+           permanent, infinity, supervisor, [amqp_channel_sup_sup]}]}}.

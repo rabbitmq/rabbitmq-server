@@ -29,24 +29,24 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2, start_channel_sup/2]).
+-export([start_link/1, start_channel_sup/3]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Driver, InfraArgs) ->
-    supervisor2:start_link(?MODULE, [Driver, InfraArgs]).
+start_link(Driver) ->
+    supervisor2:start_link(?MODULE, [Driver]).
 
-start_channel_sup(Sup, ChannelNumber) ->
-    supervisor2:start_child(Sup, [ChannelNumber]).
+start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
+    supervisor2:start_child(Sup, [InfraArgs, ChannelNumber]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Driver, InfraArgs]) ->
+init([Driver]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
-          [{channel_sup, {amqp_channel_sup, start_link, [Driver, InfraArgs]},
+          [{channel_sup, {amqp_channel_sup, start_link, [Driver]},
            temporary, infinity, supervisor, [amqp_channel_sup]}]}}.
