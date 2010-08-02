@@ -20,10 +20,7 @@ set -e
 
 remove_plugin_traces() {
     # Remove traces of plugins
-    rm -rf @RABBIT_LIB@/priv @RABBIT_LIB@/plugins
-    for ext in rel script boot ; do
-        rm -f @RABBIT_LIB@/ebin/rabbit.$ext
-    done
+    rm -rf /var/lib/rabbitmq/plugins-scratch
 }
 
 case "$1" in

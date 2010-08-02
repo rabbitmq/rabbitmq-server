@@ -42,6 +42,8 @@ done
 
 cd /var/lib/rabbitmq
 
+export RABBITMQ_PLUGINS_EXPAND_DIR=/var/lib/rabbitmq/plugins-scratch
+
 SCRIPT=`basename $0`
 
 if [ `id -u` = 0 ] ; then

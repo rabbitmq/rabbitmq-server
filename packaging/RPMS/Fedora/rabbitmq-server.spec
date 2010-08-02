@@ -31,6 +31,7 @@ scalable implementation of an AMQP broker.
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 %define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
 %define _rabbit_server_ocf %{_builddir}/`basename %{S:5}`
+%define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
@@ -106,7 +107,7 @@ if [ $1 = 0 ]; then
 fi
 
 # Clean out plugin activation state, both on uninstall and upgrade
-rm -rf %{_rabbit_erllibdir}/priv
+rm -rf %{_plugins_state_dir}
 for ext in rel script boot ; do
     rm -f %{_rabbit_erllibdir}/ebin/rabbit.$ext
 done

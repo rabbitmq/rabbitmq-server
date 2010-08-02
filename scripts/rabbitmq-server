@@ -97,7 +97,7 @@ if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
 	-s rabbit_plugin_activator \
 	-extra "$@"
     then
-	RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
+	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
 	RABBITMQ_EBIN_PATH=""
     else
 	exit 1
