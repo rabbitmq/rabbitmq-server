@@ -39,7 +39,7 @@
 
 -export([init/1, mainloop/3]).
 
--export([server_properties/0]).
+-export([conserve_memory/2, server_properties/0]).
 
 -export([analyze_frame/3]).
 
@@ -58,7 +58,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector}).
+             queue_collector, conserving_memory}).
 
 -define(INFO_KEYS,
         [pid, address, port, peer_address, peer_port,
@@ -142,6 +142,7 @@
 -spec(info/1 :: (pid()) -> [rabbit_types:info()]).
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 -endif.
@@ -207,6 +208,10 @@ teardown_profiling(Value) ->
             fprof:profile(),
             fprof:analyse([{dest, []}, {cols, 100}])
     end.
+
+conserve_memory(Pid, Conserve) ->
+    Pid ! {conserve_memory, Conserve},
+    ok.
 
 server_properties() ->
     {ok, Product} = application:get_key(rabbit, id),
@@ -295,6 +300,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         {inet_async, Sock, Ref, {error, Reason}} ->
             throw({inet_error, Reason});
+        {conserve_memory, Conserve} ->
+            mainloop(Parent, Deb, internal_conserve_memory(Conserve, State));
         {'EXIT', Parent, Reason} ->
             terminate(io_lib:format("broker forced connection closure "
                                     "with reason '~w'", [Reason]), State),
@@ -348,11 +355,14 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit({unexpected_message, Other})
     end.
 
-switch_callback(OldState, NewCallback, Length) ->
+switch_callback(State = #v1{conserving_memory = true}, Callback, Length) ->
+    %% TODO: pause heartbeat monitor
+    %% TODO: only do this after receiving a content-bearing method
+    State#v1{callback = {Callback, Length}, recv_ref = none};
+switch_callback(State, Callback, Length) ->
     Ref = inet_op(fun () -> rabbit_net:async_recv(
-                              OldState#v1.sock, Length, infinity) end),
-    OldState#v1{callback = NewCallback,
-                recv_ref = Ref}.
+                              State#v1.sock, Length, infinity) end),
+    State#v1{callback = Callback, recv_ref = Ref}.
 
 terminate(Explanation, State = #v1{connection_state = running}) ->
     {normal, send_exception(State, 0,
@@ -360,6 +370,14 @@ terminate(Explanation, State = #v1{connection_state = running}) ->
                               connection_forced, Explanation, [], none))};
 terminate(_Explanation, State) ->
     {force, State}.
+
+internal_conserve_memory(false, State = #v1{conserving_memory = true,
+                                            callback = {Callback, Length},
+                                            recv_ref = none}) ->
+    %% TODO: resume heartbeat monitor
+    switch_callback(State#v1{conserving_memory = false}, Callback, Length);
+internal_conserve_memory(Conserve, State) ->
+    State#v1{conserving_memory = Conserve}.
 
 close_connection(State = #v1{connection = #connection{
                                timeout_sec = TimeoutSec}}) ->
@@ -670,6 +688,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     State#v1{connection_state = running,
              connection = NewConnection};
 handle_method0(#'connection.close'{},
