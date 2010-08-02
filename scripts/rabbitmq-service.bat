@@ -190,11 +190,11 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
 -extra !STAR!
 
-if not exist "!RABBITMQ_EBIN_ROOT!\rabbit.boot" (
-    echo Custom Boot File "!RABBITMQ_EBIN_ROOT!\rabbit.boot" is missing.
+if not exist "!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit.boot" (
+    echo Custom Boot File "!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit.boot" is missing.
     exit /B 1
 )
-set RABBITMQ_BOOT_FILE=!RABBITMQ_EBIN_ROOT!\rabbit
+set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
 set RABBITMQ_EBIN_PATH=
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
