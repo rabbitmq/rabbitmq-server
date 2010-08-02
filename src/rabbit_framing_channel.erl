@@ -74,8 +74,7 @@ read_frame(ChannelPid) ->
     end.
 
 mainloop(ChannelPid, Protocol) ->
-    Decoded = read_frame(ChannelPid),
-    case Decoded of
+    case read_frame(ChannelPid) of
         {method, MethodName, FieldsBin} ->
             Method = Protocol:decode_method_fields(MethodName, FieldsBin),
             case Protocol:method_has_content(MethodName) of
