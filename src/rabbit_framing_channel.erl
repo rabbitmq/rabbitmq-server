@@ -32,20 +32,15 @@
 -module(rabbit_framing_channel).
 -include("rabbit.hrl").
 
--export([start_link/0, start_link/1, process/2, shutdown/1]).
+-export([start_link/1, process/2, shutdown/1]).
 
 %% internal
 -export([mainloop/1]).
 
 %%--------------------------------------------------------------------
 
-start_link() ->
-    Parent = self(),
-    {ok, proc_lib:spawn_link(
-           fun () -> mainloop(rabbit_channel_sup:channel(Parent)) end)}.
-
-start_link(ChannelPid) ->
-    {ok, proc_lib:spawn_link(fun() -> mainloop(ChannelPid) end)}.
+start_link(GetChannelPid) ->
+    {ok, proc_lib:spawn_link(fun () -> mainloop(GetChannelPid()) end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},

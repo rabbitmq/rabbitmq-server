@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/5, start_link/6, do/2, do/3, shutdown/1]).
+-export([start_link/6, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 
@@ -75,12 +75,10 @@
 
 -type(ref() :: any()).
 -type(channel_number() :: non_neg_integer()).
+-type(pid_fun() :: fun (() -> pid())).
 
--spec(start_link/5 ::
-      (channel_number(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
 -spec(start_link/6 ::
-      (channel_number(), pid(), pid(), rabbit_access_control:username(),
+      (channel_number(), pid_fun(), pid_fun(), rabbit_access_control:username(),
        rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
@@ -104,20 +102,13 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, Username, VHost, CollectorPid) ->
+start_link(Channel, GetReader, GetWriter, Username, VHost, CollectorPid) ->
     Parent = self(),
     {ok, proc_lib:spawn_link(
            fun () ->
-                   WriterPid = rabbit_channel_sup:writer(Parent),
-                   init_and_go([Channel, Parent, ReaderPid, WriterPid,
+                   init_and_go([Channel, Parent, GetReader(), GetWriter(),
                                  Username, VHost, CollectorPid])
            end)}.
-
-start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    Parent = self(),
-    {ok, proc_lib:spawn_link(
-           fun () -> init_and_go([Channel, Parent, ReaderPid, WriterPid,
-                                  Username, VHost, CollectorPid]) end)}.
 
 do(Pid, Method) ->
     do(Pid, Method, none).
