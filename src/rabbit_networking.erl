@@ -46,6 +46,8 @@
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
+-include_lib("ssl/src/ssl_int.hrl").
+-include_lib("ssl/src/ssl_internal.hrl").
 
 -define(RABBIT_TCP_OPTS, [
         binary,
@@ -151,13 +153,15 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
 
 start_tcp_listener(Host, Port) ->
     start_listener(Host, Port, "TCP Listener",
-                   {?MODULE, start_client, []}).
+                   {?MODULE, start_client, []},
+                   tcp).
 
 start_ssl_listener(Host, Port, SslOpts) ->
     start_listener(Host, Port, "SSL Listener",
-                   {?MODULE, start_ssl_client, [SslOpts]}).
+                   {?MODULE, start_ssl_client, []},
+                   {ssl, SslOpts}).
 
-start_listener(Host, Port, Label, OnConnect) ->
+start_listener(Host, Port, Label, OnConnect, Kind) ->
     {IPAddress, Name} =
         check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
@@ -167,7 +171,7 @@ start_listener(Host, Port, Label, OnConnect) ->
                  [IPAddress, Port, ?RABBIT_TCP_OPTS ,
                   {?MODULE, tcp_listener_started, []},
                   {?MODULE, tcp_listener_stopped, []},
-                  OnConnect, Label]},
+                  OnConnect, Label, Kind]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 
@@ -212,20 +216,28 @@ start_client(Sock, SockTransform) ->
 start_client(Sock) ->
     start_client(Sock, fun (S) -> {ok, S} end).
 
-start_ssl_client(SslOpts, Sock) ->
+start_ssl_client(Sock, SSLListenSocket) ->
     start_client(
       Sock,
       fun (Sock1) ->
-              case catch ssl:ssl_accept(Sock1, SslOpts, ?SSL_TIMEOUT * 1000) of
-                  {ok, SslSock} ->
-                      rabbit_log:info("upgraded TCP connection ~p to SSL~n",
-                                      [self()]),
-                      {ok, #ssl_socket{tcp = Sock1, ssl = SslSock}};
+              #sslsocket{pid = {LSock, {config, SslOpts, _, _, _, _}}} = SSLListenSocket,
+              EmOptions = [mode, packet, active, header, packet_size],
+              {ok, SockOptions} = inet:getopts(LSock, EmOptions),
+              case mock_transport_accept(SslOpts, Sock1, SockOptions) of
+                  {ok, NewSSLListenSocket} ->
+                      case catch ssl:ssl_accept(NewSSLListenSocket,
+                                                ?SSL_TIMEOUT * 1000) of
+                          ok ->
+                              rabbit_log:info("upgraded TCP connection ~p to SSL~n",
+                                              [self()]),
+                              {ok, #ssl_socket{tcp = Sock1, ssl = NewSSLListenSocket}};
+                          {'EXIT', Reason} ->
+                              {error, {ssl_handshake_failure, Reason}};
+                          Error ->
+                              {error, {ssl_handshake_error, Error}}
+                      end;
                   {error, Reason} ->
-                      {error, {ssl_upgrade_error, Reason}};
-                  {'EXIT', Reason} ->
-                      {error, {ssl_upgrade_failure, Reason}}
-
+                      {error, {ssl_transport_accept_failure, Reason}}
               end
       end).
 
@@ -263,3 +275,24 @@ tcp_host(IPAddress) ->
     end.
 
 cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
+
+mock_transport_accept(SslOpts, Sock, SockOptions) ->
+    {ok, Port} = inet:port(Sock),
+    ConnArgs = [server, "localhost", Port, Sock,
+                {SslOpts, socket_options(SockOptions)},
+                self(), {gen_tcp, tcp, tcp_closed, tcp_error}],
+    case ssl_connection_sup:start_child(ConnArgs) of
+        {ok, Pid} ->
+            ssl_connection:socket_control(Sock, Pid, gen_tcp);
+        {error, Why} ->
+            {error, Why}
+    end.
+
+socket_options(InetValues) ->
+    #socket_options {
+		mode   = proplists:get_value(mode, InetValues),
+		header = proplists:get_value(header, InetValues),
+		active = proplists:get_value(active, InetValues),
+		packet = proplists:get_value(packet, InetValues),
+		packet_size = proplists:get_value(packet_size, InetValues)
+	       }.

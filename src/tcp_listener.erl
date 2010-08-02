@@ -33,42 +33,54 @@
 
 -behaviour(gen_server).
 
--export([start_link/8]).
+-export([start_link/9]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -record(state, {sock, on_startup, on_shutdown, label}).
 
+-include_lib("ssl/src/ssl_int.hrl").
+
 %%--------------------------------------------------------------------
 
 start_link(IPAddress, Port, SocketOpts,
            ConcurrentAcceptorCount, AcceptorSup,
-           OnStartup, OnShutdown, Label) ->
+           OnStartup, OnShutdown, Label, Kind) ->
     gen_server:start_link(
       ?MODULE, {IPAddress, Port, SocketOpts,
                 ConcurrentAcceptorCount, AcceptorSup,
-                OnStartup, OnShutdown, Label}, []).
+                OnStartup, OnShutdown, Label, Kind}, []).
 
 %%--------------------------------------------------------------------
 
 init({IPAddress, Port, SocketOpts,
       ConcurrentAcceptorCount, AcceptorSup,
-      {M,F,A} = OnStartup, OnShutdown, Label}) ->
+      {M,F,A} = OnStartup, OnShutdown, Label, Kind}) ->
     process_flag(trap_exit, true),
-    case gen_tcp:listen(Port, SocketOpts ++ [{ip, IPAddress},
-                                             {active, false}]) of
+    Listen = case Kind of
+                 tcp -> gen_tcp:listen(Port, SocketOpts ++ [{ip, IPAddress},
+                                                            {active, false}]);
+                 {ssl, SslOpts} ->
+                     ssl:listen(Port,
+                                SocketOpts
+                                ++ [{ip, IPAddress}, {active, false}]
+                                ++ SslOpts);
+                 E -> {stop, {unknown_listen_kind, IPAddress, Port, E}}
+             end,
+    case Listen of
         {ok, LSock} ->
             lists:foreach(fun (_) ->
                                   {ok, _APid} = supervisor:start_child(
                                                   AcceptorSup, [LSock])
                           end,
                           lists:duplicate(ConcurrentAcceptorCount, dummy)),
-            {ok, {LIPAddress, LPort}} = inet:sockname(LSock),
+            LSockReal = rabbit_misc:get_real_sock(LSock),
+            {ok, {LIPAddress, LPort}} = inet:sockname(LSockReal),
             error_logger:info_msg("started ~s on ~s:~p~n",
                                   [Label, inet_parse:ntoa(LIPAddress), LPort]),
             apply(M, F, A ++ [IPAddress, Port]),
-            {ok, #state{sock = LSock,
+            {ok, #state{sock = LSockReal,
                         on_startup = OnStartup, on_shutdown = OnShutdown,
                         label = Label}};
         {error, Reason} ->

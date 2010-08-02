@@ -33,23 +33,23 @@
 
 -behaviour(supervisor).
 
--export([start_link/7, start_link/8]).
+-export([start_link/8, start_link/9]).
 
 -export([init/1]).
 
 start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
-           AcceptCallback, Label) ->
+           AcceptCallback, Label, Kind) ->
     start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
-               AcceptCallback, 1, Label).
+               AcceptCallback, 1, Label, Kind).
 
 start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
-           AcceptCallback, ConcurrentAcceptorCount, Label) ->
+           AcceptCallback, ConcurrentAcceptorCount, Label, Kind) ->
     supervisor:start_link(
       ?MODULE, {IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
-                AcceptCallback, ConcurrentAcceptorCount, Label}).
+                AcceptCallback, ConcurrentAcceptorCount, Label, Kind}).
 
 init({IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
-      AcceptCallback, ConcurrentAcceptorCount, Label}) ->
+      AcceptCallback, ConcurrentAcceptorCount, Label, Kind}) ->
     %% This is gross. The tcp_listener needs to know about the
     %% tcp_acceptor_sup, and the only way I can think of accomplishing
     %% that without jumping through hoops is to register the
@@ -62,5 +62,5 @@ init({IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
            {tcp_listener, {tcp_listener, start_link,
                            [IPAddress, Port, SocketOpts,
                             ConcurrentAcceptorCount, Name,
-                            OnStartup, OnShutdown, Label]},
+                            OnStartup, OnShutdown, Label, Kind]},
             transient, 16#ffffffff, worker, [tcp_listener]}]}}.

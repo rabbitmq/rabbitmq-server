@@ -40,6 +40,8 @@
 
 -record(state, {callback, sock, ref}).
 
+-include_lib("ssl/src/ssl_int.hrl").
+
 %%--------------------------------------------------------------------
 
 start_link(Callback, LSock) ->
@@ -61,42 +63,59 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({inet_async, LSock, Ref, {ok, Sock}},
-            State = #state{callback={M,F,A}, sock=LSock, ref=Ref}) ->
+            State = #state{callback={M,F,A}, sock=MaybeSSLSock, ref=Ref}) ->
+    case rabbit_misc:get_real_sock(MaybeSSLSock) of
+        LSock ->
+            %% patch up the socket so it looks like one we got from
+            %% gen_tcp:accept/1
+            {ok, Mod} = inet_db:lookup_socket(LSock),
+            inet_db:register_socket(Sock, Mod),
 
-    %% patch up the socket so it looks like one we got from
-    %% gen_tcp:accept/1
-    {ok, Mod} = inet_db:lookup_socket(LSock),
-    inet_db:register_socket(Sock, Mod),
+            try
+                %% report
+                {Address, Port}         = inet_op(fun () -> inet:sockname(LSock) end),
+                {PeerAddress, PeerPort} = inet_op(fun () -> inet:peername(Sock) end),
+                error_logger:info_msg("accepted TCP connection on ~s:~p from ~s:~p~n",
+                                      [inet_parse:ntoa(Address), Port,
+                                       inet_parse:ntoa(PeerAddress), PeerPort]),
+                %% In the event that somebody floods us with connections we can spew
+                %% the above message at error_logger faster than it can keep up.
+                %% So error_logger's mailbox grows unbounded until we eat all the
+                %% memory available and crash. So here's a meaningless synchronous call
+                %% to the underlying gen_event mechanism - when it returns the mailbox
+                %% is drained.
+                gen_event:which_handlers(error_logger),
+                %% handle
+                ExtraArgs = [Sock | case MaybeSSLSock of
+                                        #sslsocket{} -> [MaybeSSLSock];
+                                        _            -> []
+                                    end],
+                file_handle_cache:release_on_death(apply(M, F, A ++ ExtraArgs))
+            catch {inet_error, Reason} ->
+                    gen_tcp:close(Sock),
+                    error_logger:error_msg("unable to accept TCP connection: ~p~n",
+                                           [Reason])
+            end,
 
-    try
-        %% report
-        {Address, Port}         = inet_op(fun () -> inet:sockname(LSock) end),
-        {PeerAddress, PeerPort} = inet_op(fun () -> inet:peername(Sock) end),
-        error_logger:info_msg("accepted TCP connection on ~s:~p from ~s:~p~n",
-                              [inet_parse:ntoa(Address), Port,
-                               inet_parse:ntoa(PeerAddress), PeerPort]),
-        %% In the event that somebody floods us with connections we can spew
-        %% the above message at error_logger faster than it can keep up.
-        %% So error_logger's mailbox grows unbounded until we eat all the
-        %% memory available and crash. So here's a meaningless synchronous call
-        %% to the underlying gen_event mechanism - when it returns the mailbox
-        %% is drained.
-        gen_event:which_handlers(error_logger),
-        %% handle
-        file_handle_cache:release_on_death(apply(M, F, A ++ [Sock]))
-    catch {inet_error, Reason} ->
-            gen_tcp:close(Sock),
-            error_logger:error_msg("unable to accept TCP connection: ~p~n",
-                                   [Reason])
-    end,
-
-    %% accept more
-    accept(State);
+            %% accept more
+            accept(State);
+        _S ->
+            %io:format("Got a message for the wrong socket.~n"),
+            %io:format("  Expected ~p, got ~p~n", [_S, LSock]),
+            {noreply, State}
+    end;
 handle_info({inet_async, LSock, Ref, {error, closed}},
-            State=#state{sock=LSock, ref=Ref}) ->
-    %% It would be wrong to attempt to restart the acceptor when we
-    %% know this will fail.
-    {stop, normal, State};
+            State=#state{sock=MaybeSSLSock, ref=Ref}) ->
+    case rabbit_types:get_real_sock(MaybeSSLSock) of
+        LSock ->
+            %% It would be wrong to attempt to restart the acceptor when we
+            %% know this will fail.
+            {stop, normal, State};
+        _S ->
+            %io:format("Got an error for the wrong socket.~n"),
+            %io:format("  Expected ~p, got ~p~n", [_S, LSock]),
+            {noreply, State}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -112,7 +131,8 @@ inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 accept(State = #state{sock=LSock}) ->
     ok = file_handle_cache:obtain(),
-    case prim_inet:async_accept(LSock, -1) of
+    case prim_inet:async_accept(
+           rabbit_misc:get_real_sock(LSock), -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
         Error     -> {stop, {cannot_accept, Error}, State}
     end.

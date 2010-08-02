@@ -64,11 +64,14 @@
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
+-export([get_real_sock/1]).
 
 -import(mnesia).
 -import(lists).
 -import(cover).
 -import(disk_log).
+
+-include_lib("ssl/src/ssl_int.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -186,6 +189,7 @@
 -spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
                              orddict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
+-spec(get_real_sock/1 :: (#sslsocket{}) -> any()).
 
 -endif.
 
@@ -705,3 +709,8 @@ unlink_and_capture_exit(Pid) ->
     receive {'EXIT', Pid, _} -> ok
     after 0 -> ok
     end.
+
+get_real_sock(#sslsocket{pid = {Sock, _}}) ->
+    Sock;
+get_real_sock(Sock) ->
+    Sock.
