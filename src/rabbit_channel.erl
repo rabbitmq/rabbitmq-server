@@ -68,7 +68,6 @@
 
 -export_type([channel_number/0]).
 
--type(ref() :: any()).
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/6 ::
