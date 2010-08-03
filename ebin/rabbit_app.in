@@ -27,4 +27,5 @@
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
          {default_vhost, <<"/">>},
-         {default_permissions, [<<".*">>, <<".*">>, <<".*">>]}]}]}.
+         {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+         {collect_statistics, none}]}]}.

@@ -48,11 +48,11 @@
         ({ok, rabbit_router:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
 
--spec(publish/1 :: (rabbit_types:delivery()) -> publish_result()).
+-spec(publish/1 ::
+        (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/4 ::
         (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         rabbit_types:message())
-        -> rabbit_types:delivery()).
+         rabbit_types:message()) -> rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          properties_input(), binary())

@@ -72,6 +72,8 @@
 -record(delivery, {mandatory, immediate, txn, sender, message}).
 -record(amqp_error, {name, explanation, method = none}).
 
+-record(event, {type, props, timestamp}).
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
@@ -83,6 +85,7 @@
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
+-define(STATS_INTERVAL,             5000).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
