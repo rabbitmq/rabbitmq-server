@@ -216,7 +216,7 @@ check_type(TypeBin) ->
                 {error, not_found} -> rabbit_misc:protocol_error(
                                         command_invalid,
                                         "invalid exchange type '~s'", [T]);
-                {ok, Module}       -> T
+                {ok, _Module}      -> T
             end
     end.
 
