@@ -78,7 +78,7 @@
                      rabbit_types:ok(pid())).
 -spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
--spec(get_vm_limit/0 :: () -> (non_neg_integer() | 'unknown')).
+-spec(get_vm_limit/0 :: () -> non_neg_integer()).
 -spec(get_memory_limit/0 :: () -> (non_neg_integer() | 'undefined')).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
 -spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
