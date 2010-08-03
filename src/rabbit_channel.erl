@@ -220,16 +220,14 @@ handle_cast({method, Method, Content}, State) ->
         {noreply, NewState} ->
             noreply(NewState);
         stop ->
-            {stop, shutdown, State#ch{state = terminating}}
+            {stop, normal, State#ch{state = terminating}}
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            {stop, shutdown, terminating(Reason#amqp_error{method = MethodName},
+            {stop, normal, terminating(Reason#amqp_error{method = MethodName},
                                        State)};
         exit:normal ->
-            {stop, shutdown, State};
-        exit:shutdown ->
-            {stop, shutdown, State};
+            {stop, normal, State};
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
@@ -238,7 +236,7 @@ handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State)};
 
 handle_cast(terminate, State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Msg),
@@ -269,11 +267,11 @@ handle_cast({conserve_memory, _Conserve}, State) ->
 
 handle_cast({flow_timeout, Ref},
             State = #ch{flow = #flow{client = Flow, pending = {Ref, _TRef}}}) ->
-    {stop, shutdown, terminating(
-                       rabbit_misc:amqp_error(
-                         precondition_failed,
-                         "timeout waiting for channel.flow_ok{active=~w}",
-                         [not Flow], none), State)};
+    {stop, normal, terminating(
+                     rabbit_misc:amqp_error(
+                       precondition_failed,
+                       "timeout waiting for channel.flow_ok{active=~w}",
+                       [not Flow], none), State)};
 handle_cast({flow_timeout, _Ref}, State) ->
     {noreply, State};
 
@@ -284,7 +282,7 @@ handle_cast(emit_stats, State) ->
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
     State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
-    {stop, shutdown, State};
+    {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
@@ -301,8 +299,10 @@ terminate(_Reason, State = #ch{state = terminating}) ->
 terminate(Reason, State) ->
     Res = rollback_and_notify(State),
     case Reason of
-        shutdown -> ok = Res;
-        _        -> ok
+        normal            -> ok = Res;
+        shutdown          -> ok = Res;
+        {shutdown, _Term} -> ok = Res;
+        _                 -> ok
     end,
     terminate(State).
 

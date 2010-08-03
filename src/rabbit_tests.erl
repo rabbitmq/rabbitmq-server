@@ -1088,8 +1088,8 @@ test_spawn(Receiver) ->
     end,
     {Writer, Ch}.
 
-expect_shutdown_channel_termination(Ch) ->
-    receive {'EXIT', Ch, shutdown} -> ok
+expect_normal_channel_termination(Ch) ->
+    receive {'EXIT', Ch, normal} -> ok
     after 1000 -> throw({channel_failed_to_shutdown, Ch})
     end.
 
@@ -1120,7 +1120,7 @@ test_memory_pressure() ->
     %% if we publish at this point, the channel should die
     Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
     ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
-    expect_shutdown_channel_termination(Ch0),
+    expect_normal_channel_termination(Ch0),
     gobble_channel_exit(),
 
     {Writer1, Ch1} = test_memory_pressure_spawn(),
@@ -1132,19 +1132,19 @@ test_memory_pressure() ->
     ok = test_memory_pressure_receive_flow(true),
     %% send back the wrong flow_ok. Channel should die.
     ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    expect_shutdown_channel_termination(Ch1),
+    expect_normal_channel_termination(Ch1),
     gobble_channel_exit(),
 
     {_Writer2, Ch2} = test_memory_pressure_spawn(),
     %% just out of the blue, send a flow_ok. Life should end.
     ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
-    expect_shutdown_channel_termination(Ch2),
+    expect_normal_channel_termination(Ch2),
     gobble_channel_exit(),
 
     {_Writer3, Ch3} = test_memory_pressure_spawn(),
     ok = rabbit_channel:conserve_memory(Ch3, true),
     ok = test_memory_pressure_receive_flow(false),
-    receive {'EXIT', Ch3, shutdown} ->
+    receive {'EXIT', Ch3, normal} ->
             ok
     after 12000 ->
             throw(channel_failed_to_exit)
@@ -1167,7 +1167,7 @@ test_memory_pressure() ->
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
     rabbit_channel:shutdown(Ch4),
-    expect_shutdown_channel_termination(Ch4),
+    expect_normal_channel_termination(Ch4),
 
     true = process_flag(trap_exit, OldTrap),
     passed.

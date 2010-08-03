@@ -90,7 +90,7 @@ handle_call(delete_all, _From, State = #state{queues = Queues}) ->
     {reply, ok, State};
 
 handle_call(shutdown, _From, State) ->
-    {stop, shutdown, ok, State}.
+    {stop, normal, ok, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

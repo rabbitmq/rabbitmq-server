@@ -177,8 +177,8 @@ init(Parent, ChannelSupSupPid) ->
             start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform)
     end.
 
-system_continue(_Parent, Deb, State) ->
-    ?MODULE:mainloop(Deb, State).
+system_continue(Parent, Deb, State) ->
+    ?MODULE:mainloop(Deb, State = #v1{parent = Parent}).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
@@ -246,7 +246,7 @@ socket_op(Sock, Fun) ->
                                             [self(), Reason]),
                            rabbit_log:info("closing TCP connection ~p~n",
                                            [self()]),
-                           exit(shutdown)
+                           exit(normal)
     end.
 
 start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform) ->
@@ -297,9 +297,9 @@ start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform) ->
         %%
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
-        rabbit_event:notify(connection_closed, [{pid, self()}]),
-        exit(shutdown)
-    end.
+        rabbit_event:notify(connection_closed, [{pid, self()}])
+    end,
+    done.
 
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
     %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
@@ -406,13 +406,23 @@ close_channel(Channel, State) ->
 handle_channel_exit(Channel, Reason, State) ->
     handle_exception(State, Channel, Reason).
 
-handle_dependent_exit(Pid, shutdown, State) ->
-    erase({chpid, Pid}),
-    maybe_close(State);
 handle_dependent_exit(Pid, Reason, State) ->
-    case channel_cleanup(Pid) of
-        undefined -> exit({abnormal_dependent_exit, Pid, Reason});
-        Channel   -> maybe_close(handle_exception(State, Channel, Reason))
+    case (case Reason of
+                     shutdown          -> controlled;
+                     {shutdown, _Term} -> controlled;
+                     normal            -> controlled;
+                     _                 -> uncontrolled
+          end) of
+        controlled ->
+            erase({chpid, Pid}),
+            maybe_close(State);
+        uncontrolled ->
+            case channel_cleanup(Pid) of
+                undefined ->
+                    exit({abnormal_dependent_exit, Pid, Reason});
+                Channel ->
+                    maybe_close(handle_exception(State, Channel, Reason))
+            end
     end.
 
 channel_cleanup(Pid) ->
@@ -426,7 +436,8 @@ channel_cleanup(Pid) ->
 all_channels() -> [Pid || {{chpid, Pid},_} <- get()].
 
 terminate_channels() ->
-    NChannels = length([exit(Pid, shutdown) || Pid <- all_channels()]),
+    NChannels =
+        length([rabbit_framing_channel:shutdown(Pid) || Pid <- all_channels()]),
     if NChannels > 0 ->
             Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * NChannels,
             TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
@@ -450,7 +461,9 @@ wait_for_channel_termination(N, TimerRef) ->
                     exit({abnormal_dependent_exit, Pid, Reason});
                 Channel ->
                     case Reason of
-                        shutdown -> ok;
+                        normal            -> ok;
+                        shutdown          -> ok;
+                        {shutdown, _Term} -> ok;
                         _ ->
                             rabbit_log:error(
                               "connection ~p, channel ~p - "
@@ -618,8 +631,8 @@ handle_input(Callback, Data, _State) ->
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
-                 Protocol, State = #v1{sock = Sock,
-                                       connection = Connection}) ->
+                 Protocol,
+                 State = #v1{sock = Sock, connection = Connection}) ->
     Start = #'connection.start'{ version_major = ProtocolMajor,
                                  version_minor = ProtocolMinor,
                                  server_properties = server_properties(),
@@ -807,7 +820,7 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  frame_max = FrameMax,
                                  user      = #user{username = Username},
                                  vhost     = VHost}} = State,
-    {ok, {_ChanSup, FrChPid}} =
+    {ok, _ChanSup, FrChPid} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, [Protocol, Sock, Channel, FrameMax,
                        self(), Username, VHost, Collector]),
