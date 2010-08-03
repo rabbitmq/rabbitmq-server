@@ -890,11 +890,12 @@ test_user_management() ->
     {error, {no_such_user, _}} =
         control_action(list_user_permissions, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(list_permissions, ["-p", "/testhost"]),
+        control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
     {error, {invalid_scope, _}} =
-        control_action(set_permissions, ["-s", "cilent", "guest", "foo", ".*", ".*"]),
+        control_action(set_permissions, ["guest", "foo", ".*", ".*"],
+                       [{"-s", "cilent"}]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
@@ -910,23 +911,21 @@ test_user_management() ->
     ok = control_action(list_vhosts, []),
 
     %% user/vhost mapping
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "-s", "client",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "-s", "all",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(list_permissions, ["-p", "/testhost"]),
-    ok = control_action(list_permissions, ["-p", "/testhost"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}, {"-s", "client"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}, {"-s", "all"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_user_permissions, ["foo"]),
 
     %% user/vhost unmapping
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
 
     %% vhost deletion
     ok = control_action(delete_vhost, ["/testhost"]),
@@ -935,8 +934,8 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -1262,11 +1261,16 @@ test_delegates_sync(SecondaryNode) ->
 
 %---------------------------------------------------------------------
 
-control_action(Command, Args) -> control_action(Command, node(), Args).
+control_action(Command, Args) ->
+    control_action(Command, node(), Args, default_options()).
 
-control_action(Command, Node, Args) ->
+control_action(Command, Args, NewOpts) ->
+    control_action(Command, node(), Args,
+                   expand_options(default_options(), NewOpts)).
+
+control_action(Command, Node, Args, Opts) ->
     case catch rabbit_control:action(
-                 Command, Node, Args,
+                 Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
                  end) of
@@ -1280,12 +1284,22 @@ control_action(Command, Node, Args) ->
 
 info_action(Command, Args, CheckVHost) ->
     ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+    if CheckVHost -> ok = control_action(Command, []);
        true       -> ok
     end,
     ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
     {bad_argument, dummy} = control_action(Command, ["dummy"]),
     ok.
+
+default_options() -> [{"-s", "client"}, {"-p", "/"}, {"-q", "false"}].
+
+expand_options(As, Bs) ->
+    lists:foldl(fun({K, _}=A, R) ->
+                        case proplists:is_defined(K, R) of
+                            true -> R;
+                            false -> [A | R]
+                        end
+                end, Bs, As).
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
