@@ -88,9 +88,6 @@
         </listitem>
       </varlistentry>
     </variablelist>
-    <para>
-      Flags must precede all other parameters to <command>rabbitmqctl</command>.
-    </para>
   </refsect1>
 
   <refsect1>
