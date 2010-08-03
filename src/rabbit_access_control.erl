@@ -55,7 +55,9 @@
 -spec(check_login/2 ::
         (binary(), binary()) -> rabbit_types:user() |
                                 rabbit_types:channel_exit()).
--spec(user_pass_login/2 :: (username(), password()) -> rabbit_types:user()).
+-spec(user_pass_login/2 ::
+        (username(), password())
+        -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
@@ -70,9 +72,9 @@
         (username()) -> rabbit_types:ok(rabbit_types:user())
                             | rabbit_types:error('not_found')).
 -spec(add_vhost/1 ::
-        (rabbit_types:vhost()) -> 'ok' | rabbit_types:connection_exit()).
+        (rabbit_types:vhost()) -> 'ok').
 -spec(delete_vhost/1 ::
-        (rabbit_types:vhost()) -> 'ok' | rabbit_types:connection_exit()).
+        (rabbit_types:vhost()) -> 'ok').
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
 -spec(set_permissions/5 ::(username(), rabbit_types:vhost(), regexp(),
                            regexp(), regexp()) -> 'ok').
