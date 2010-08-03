@@ -66,9 +66,8 @@ start() ->
     unpack_ez_plugins(PluginDir, UnpackedPluginDir),
 
     %% Build a list of required apps based on the fixed set, and any plugins
-    RequiredApps = ?BaseApps ++
-        find_plugins(PluginDir) ++
-        find_plugins(UnpackedPluginDir),
+    PluginApps = find_plugins(PluginDir) ++ find_plugins(UnpackedPluginDir),
+    RequiredApps = ?BaseApps ++ PluginApps,
 
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
@@ -132,6 +131,8 @@ start() ->
         ok    -> ok;
         error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
+    io:format("~n~w plugins activated.~n~n", [length(PluginApps)]),
+    [io:format("* ~w~n", [App]) || App <- PluginApps],
     halt(),
     ok.
 
