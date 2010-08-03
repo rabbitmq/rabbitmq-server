@@ -32,7 +32,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, action/5, get_options/2]).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -45,12 +45,16 @@
 
 -ifdef(use_specs).
 
+-type(optdef() :: {flag, string()} | {option, string(), any()}).
+
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
 -spec(action/5 ::
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
+-spec(get_options/2 :: ([optdef()], [string()])
+                       -> {[string()], [{string(), any()}]}).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.

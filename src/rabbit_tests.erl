@@ -68,6 +68,7 @@ all_tests() ->
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
     passed = test_memory_pressure(),
+    passed = test_option_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
@@ -725,6 +726,30 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
+test_option_parser() ->
+    % command and arguments should just pass through
+    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
+                           [], ["mock_command", "arg1", "arg2"]),
+
+    % get flags
+    ok = check_get_options(
+           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
+           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+
+    % get options
+    ok = check_get_options(
+           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
+           [{option, "-foo", "notfoo"}, {option, "-bax", "notbaz"}],
+           ["mock_command", "-foo", "bar"]),
+
+    % shuffled and interleaved arguments and options
+    ok = check_get_options(
+           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
+           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
+           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+
+    passed.
+
 test_cluster_management() ->
 
     %% 'cluster' and 'reset' should only work if the app is stopped
@@ -1300,6 +1325,11 @@ expand_options(As, Bs) ->
                             false -> [A | R]
                         end
                 end, Bs, As).
+
+check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
+    {ExpArgs, ResOpts} = rabbit_control:get_options(Defs, Args),
+    lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
+    ok.
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
