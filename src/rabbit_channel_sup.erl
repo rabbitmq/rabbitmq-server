@@ -33,7 +33,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/8, writer/1, framing_channel/1, channel/1]).
+-export([start_link/8]).
 
 -export([init/1]).
 
@@ -47,7 +47,7 @@
         (rabbit_types:protocol(), rabbit_net:socket(),
          rabbit_channel:channel_number(), non_neg_integer(), pid(),
          rabbit_access_control:username(), rabbit_types:vhost(), pid()) ->
-                           ignore | rabbit_types:ok_or_error2(pid(), any())).
+                           rabbit_types:ok({pid(), pid()})).
 
 -endif.
 
@@ -55,32 +55,29 @@
 
 start_link(Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
            Collector) ->
-    supervisor2:start_link(?MODULE, [Protocol, Sock, Channel, FrameMax,
-                                     ReaderPid, Username, VHost, Collector]).
-
-writer(Pid) ->
-    hd(supervisor2:find_child(Pid, writer)).
-
-channel(Pid) ->
-    hd(supervisor2:find_child(Pid, channel)).
-
-framing_channel(Pid) ->
-    hd(supervisor2:find_child(Pid, framing_channel)).
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, WriterPid} =
+        supervisor2:start_child(
+          SupPid,
+          {writer, {rabbit_writer, start_link,
+                    [Sock, Channel, FrameMax, Protocol]},
+           permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
+    {ok, ChannelPid} =
+        supervisor2:start_child(
+          SupPid,
+          {channel, {rabbit_channel, start_link,
+                     [Channel, ReaderPid, WriterPid, Username, VHost,
+                      Collector]},
+           permanent, ?MAX_WAIT, worker, [rabbit_channel]}),
+    {ok, FramingChannelPid} =
+        supervisor2:start_child(
+          SupPid,
+          {framing_channel, {rabbit_framing_channel, start_link,
+                             [ChannelPid, Protocol]},
+           permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
+    {ok, {SupPid, FramingChannelPid}}.
 
 %%----------------------------------------------------------------------------
 
-init([Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
-      Collector]) ->
-    Me = self(),
-    {ok, {{one_for_all, 0, 1},
-          [{framing_channel, {rabbit_framing_channel, start_link,
-                              [fun () -> channel(Me) end, Protocol]},
-            permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]},
-           {writer, {rabbit_writer, start_link,
-                     [Sock, Channel, FrameMax, Protocol]},
-            permanent, ?MAX_WAIT, worker, [rabbit_writer]},
-           {channel, {rabbit_channel, start_link,
-                      [Channel, fun () -> ReaderPid end,
-                       fun () -> writer(Me) end, Username, VHost, Collector]},
-            permanent, ?MAX_WAIT, worker, [rabbit_channel]}
-          ]}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

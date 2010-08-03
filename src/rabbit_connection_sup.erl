@@ -33,28 +33,31 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, reader/1, channel_sup_sup/1]).
+-export([start_link/0, reader/1]).
 
 -export([init/1]).
 
 -include("rabbit.hrl").
 
 start_link() ->
-    supervisor2:start_link(?MODULE, []).
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, ChannelSupSupPid} =
+        supervisor2:start_child(
+          SupPid,
+          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+            permanent, infinity, supervisor, [rabbit_channel_sup_sup]}),
+    {ok, _ReaderPid} =
+        supervisor2:start_child(
+          SupPid,
+          {reader, {rabbit_reader, start_link, [ChannelSupSupPid]},
+           permanent, ?MAX_WAIT, worker, [rabbit_reader]}),
+    {ok, SupPid}.
 
 init([]) ->
     {ok, {{one_for_all, 0, 1},
-          [{channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-            permanent, infinity, supervisor, [rabbit_channel_sup_sup]},
-           {reader, {rabbit_reader, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_reader]},
-           {collector, {rabbit_queue_collector, start_link, []},
+          [{collector, {rabbit_queue_collector, start_link, []},
             permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}
           ]}}.
 
 reader(Pid) ->
     hd(supervisor2:find_child(Pid, reader)).
-
-channel_sup_sup(Pid) ->
-    hd(supervisor2:find_child(Pid, channel_sup_sup)).
-

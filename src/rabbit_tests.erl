@@ -938,13 +938,10 @@ test_user_management() ->
 
     passed.
 
-make_fun(Result) ->
-    fun () -> Result end.
-
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    {ok, Ch} = rabbit_channel:start_link(1, make_fun(self()), make_fun(Writer),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
                                          <<"user">>, <<"/">>, self()),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
@@ -1083,7 +1080,7 @@ test_memory_pressure_spawn() ->
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, make_fun(Me), make_fun(Writer),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
                                          <<"guest">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
@@ -1157,7 +1154,7 @@ test_memory_pressure() ->
     alarm_handler:set_alarm({vm_memory_high_watermark, []}),
     Me = self(),
     Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch4} = rabbit_channel:start_link(1, make_fun(Me), make_fun(Writer4),
+    {ok, Ch4} = rabbit_channel:start_link(1, Me, Writer4,
                                           <<"user">>, <<"/">>, self()),
     ok = rabbit_channel:do(Ch4, #'channel.open'{}),
     ok = test_memory_pressure_flush(Writer4),

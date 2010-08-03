@@ -39,9 +39,8 @@
 
 %%--------------------------------------------------------------------
 
-start_link(GetChannelPid, Protocol) ->
-    {ok, proc_lib:spawn_link(
-           fun () -> mainloop(GetChannelPid(), Protocol) end)}.
+start_link(ChannelPid, Protocol) ->
+    {ok, proc_lib:spawn_link(fun () -> mainloop(ChannelPid, Protocol) end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},

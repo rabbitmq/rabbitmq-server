@@ -82,11 +82,11 @@
 
 -type(ref() :: any()).
 -type(channel_number() :: non_neg_integer()).
--type(pid_fun() :: fun (() -> pid())).
 
 -spec(start_link/6 ::
-      (channel_number(), pid_fun(), pid_fun(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
+      (channel_number(), pid(), pid(), rabbit_access_control:username(),
+       rabbit_types:vhost(), pid()) ->
+                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -110,13 +110,9 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, GetReader, GetWriter, Username, VHost, CollectorPid) ->
-    Parent = self(),
-    {ok, proc_lib:spawn_link(
-           fun () ->
-                   init_and_go([Channel, Parent, GetReader(), GetWriter(),
-                                 Username, VHost, CollectorPid])
-           end)}.
+start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
+    gen_server2:start_link(?MODULE, [Channel, self(), ReaderPid, WriterPid,
+                                     Username, VHost, CollectorPid], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -175,35 +171,31 @@ init([Channel, ParentPid, ReaderPid, WriterPid, Username, VHost,
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
-    #ch{state                   = starting,
-        channel                 = Channel,
-        parent_pid              = ParentPid,
-        reader_pid              = ReaderPid,
-        writer_pid              = WriterPid,
-        limiter_pid             = undefined,
-        transaction_id          = none,
-        tx_participants         = sets:new(),
-        next_tag                = 1,
-        uncommitted_ack_q       = queue:new(),
-        unacked_message_q       = queue:new(),
-        username                = Username,
-        virtual_host            = VHost,
-        most_recently_declared_queue = <<>>,
-        consumer_mapping        = dict:new(),
-        blocking                = dict:new(),
-        queue_collector_pid     = CollectorPid,
-        flow                    = #flow{server = true, client = true,
-                                        pending = none},
-        stats_timer             = rabbit_event:init_stats_timer()}.
-
-init_and_go(InitArgs) ->
-    State = init(InitArgs),
+    State = #ch{state                   = starting,
+                channel                 = Channel,
+                parent_pid              = ParentPid,
+                reader_pid              = ReaderPid,
+                writer_pid              = WriterPid,
+                limiter_pid             = undefined,
+                transaction_id          = none,
+                tx_participants         = sets:new(),
+                next_tag                = 1,
+                uncommitted_ack_q       = queue:new(),
+                unacked_message_q       = queue:new(),
+                username                = Username,
+                virtual_host            = VHost,
+                most_recently_declared_queue = <<>>,
+                consumer_mapping        = dict:new(),
+                blocking                = dict:new(),
+                queue_collector_pid     = CollectorPid,
+                flow                    = #flow{server = true, client = true,
+                                                pending = none},
+                stats_timer             = rabbit_event:init_stats_timer()},
     rabbit_event:notify(
       channel_created,
       [{Item, i(Item, State)} || Item <- ?CREATION_EVENT_KEYS]),
-    gen_server2:enter_loop(?MODULE, [], State, self(), hibernate,
-                           {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-                            ?DESIRED_HIBERNATE}).
+    {ok, State, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -1112,7 +1104,7 @@ fold_per_queue(F, Acc0, UAQ) ->
 start_limiter(State = #ch{unacked_message_q = UAMQ, parent_pid = ParentPid}) ->
     Me = self(),
     {ok, LPid} =
-        supervisor2:start_child(
+        supervisor:start_child(
           ParentPid,
           {limiter, {rabbit_limiter, start_link, [Me, queue:len(UAMQ)]},
            transient, ?MAX_WAIT, worker, [rabbit_limiter]}),

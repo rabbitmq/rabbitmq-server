@@ -33,11 +33,11 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/0, info_keys/0, info/1, info/2, shutdown/2]).
+-export([start_link/1, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/1, mainloop/2]).
+-export([init/2, mainloop/2]).
 
 -export([server_properties/0]).
 
@@ -60,7 +60,7 @@
 %---------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_ref, connection_state,
-             queue_collector, stats_timer}).
+             queue_collector, stats_timer, channel_sup_sup_pid}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -144,6 +144,7 @@
 
 -ifdef(use_specs).
 
+-spec(start_link/1 :: (pid()) -> rabbit_types:ok(pid())).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (pid()) -> [rabbit_types:info()]).
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
@@ -152,9 +153,9 @@
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/1 :: (pid()) -> no_return()).
--spec(start_connection/4 ::
-        (pid(), any(), rabbit_networking:socket(),
+-spec(init/2 :: (pid(), pid()) -> no_return()).
+-spec(start_connection/5 ::
+        (pid(), pid(), any(), rabbit_networking:socket(),
          fun ((rabbit_networking:socket()) ->
                      rabbit_types:ok_or_error2(
                        rabbit_networking:socket(), any()))) -> no_return()).
@@ -163,17 +164,17 @@
 
 %%--------------------------------------------------------------------------
 
-start_link() ->
-    {ok, proc_lib:spawn_link(?MODULE, init, [self()])}.
+start_link(ChannelSupSupPid) ->
+    {ok, proc_lib:spawn_link(?MODULE, init, [self(), ChannelSupSupPid])}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent) ->
+init(Parent, ChannelSupSupPid) ->
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
-            start_connection(Parent, Deb, Sock, SockTransform)
+            start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform)
     end.
 
 system_continue(_Parent, Deb, State) ->
@@ -248,7 +249,7 @@ socket_op(Sock, Fun) ->
                            exit(shutdown)
     end.
 
-start_connection(Parent, Deb, Sock, SockTransform) ->
+start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform) ->
     process_flag(trap_exit, true),
     {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
     PeerAddressS = inet_parse:ntoa(PeerAddress),
@@ -261,21 +262,23 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     [Collector] = supervisor2:find_child(Parent, collector),
     try
         mainloop(Deb, switch_callback(
-                        #v1{parent           = Parent,
-                            sock             = ClientSock,
-                            connection       = #connection{
-                              protocol          = none,
-                              user              = none,
-                              timeout_sec       = ?HANDSHAKE_TIMEOUT,
-                              frame_max         = ?FRAME_MIN_SIZE,
-                              vhost             = none,
-                              client_properties = none},
-                            callback         = uninitialized_callback,
-                            recv_ref         = none,
-                            connection_state = pre_init,
-                            queue_collector  = Collector,
-                            stats_timer =
-                                rabbit_event:init_stats_timer()},
+                        #v1{parent              = Parent,
+                            sock                = ClientSock,
+                            connection          = #connection{
+                              protocol           = none,
+                              user               = none,
+                              timeout_sec        = ?HANDSHAKE_TIMEOUT,
+                              frame_max          = ?FRAME_MIN_SIZE,
+                              vhost              = none,
+                              client_properties  = none},
+                            callback            = uninitialized_callback,
+                            recv_ref            = none,
+                            connection_state    = pre_init,
+                            queue_collector     = Collector,
+                            stats_timer         =
+                                rabbit_event:init_stats_timer(),
+                            channel_sup_sup_pid = ChannelSupSupPid
+                           },
                         handshake, 8))
     catch
         Ex -> (if Ex == connection_closed_abruptly ->
@@ -797,22 +800,21 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame, State =
-                        #v1{queue_collector = Collector, parent = Parent}) ->
-    #v1{sock = Sock, connection = #connection{
-                       protocol = Protocol,
-                       frame_max = FrameMax,
-                       user = #user{username = Username},
-                       vhost = VHost}} = State,
-    ChanSupSup = rabbit_connection_sup:channel_sup_sup(Parent),
-    {ok, ChanSup} = rabbit_channel_sup_sup:start_channel(
-                      ChanSupSup, [Protocol, Sock, Channel, FrameMax, self(),
-                                   Username, VHost, Collector]),
-    ChPid = rabbit_channel_sup:framing_channel(ChanSup),
-    link(ChPid),
-    put({channel, Channel}, {chpid, ChPid}),
-    put({chpid, ChPid}, {channel, Channel}),
-    ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).
+send_to_new_channel(Channel, AnalyzedFrame, State) ->
+    #v1{sock = Sock, queue_collector = Collector,
+        channel_sup_sup_pid = ChanSupSup,
+        connection = #connection{protocol  = Protocol,
+                                 frame_max = FrameMax,
+                                 user      = #user{username = Username},
+                                 vhost     = VHost}} = State,
+    {ok, {_ChanSup, FrChPid}} =
+        rabbit_channel_sup_sup:start_channel(
+          ChanSupSup, [Protocol, Sock, Channel, FrameMax,
+                       self(), Username, VHost, Collector]),
+    link(FrChPid),
+    put({channel, Channel}, {chpid, FrChPid}),
+    put({chpid, FrChPid}, {channel, Channel}),
+    ok = rabbit_framing_channel:process(FrChPid, AnalyzedFrame).
 
 log_channel_error(ConnectionState, Channel, Reason) ->
     rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",
