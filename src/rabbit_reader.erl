@@ -582,7 +582,7 @@ handle_frame(Type, Channel, Payload,
                     case ?IS_RUNNING(State) of
                         true  -> ok = send_to_new_channel(
                                         Channel, AnalyzedFrame, State),
-                                State;
+                                 State;
                         false -> throw({channel_frame_while_starting,
                                         Channel, State#v1.connection_state,
                                         AnalyzedFrame})
