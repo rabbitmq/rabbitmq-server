@@ -1,3 +1,6 @@
+WARNING: this is experimental, unstable, unfinished. Do not rely on any
+APIs exposed. Do not rely on it not to crash your server.
+
 This is a normal RabbitMQ plugin. For detailed installation instructions
 go to:
         http://www.rabbitmq.com/admin-guide.html#installing-plugins
@@ -7,21 +10,20 @@ A summary:
     hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella/
     cd rabbitmq-public-umbrella
     make co
-    make 
+    make
     hg clone http://hg.rabbitmq.com/rabbitmq-management/
     cd rabbitmq-management
     make
 
-After that in the directory 'rabbitmq-public-umbrella/rabbitmq-status' you 
-should be able to see ready plugins:
+After that in the directory 'rabbitmq-public-umbrella/rabbitmq-management' you
+should be able to see plugins:
 
     $ ls  dist/
     amqp_client.ez  mochiweb.ez  rabbit_common.ez      rabbitmq-mochiweb.ez
     mochiweb.ez                  rabbit_management     webmachine.ez
     mochiweb-for-management.ez   rabbit_management.ez
 
-
-To install them to a local RabbitMQ instance you need to copy some of *.ez 
+To install them to a local RabbitMQ instance you need to copy some of *.ez
 files into your rabbit plugins directory and activate them, for example:
 
     mkdir /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
@@ -29,8 +31,3 @@ files into your rabbit plugins directory and activate them, for example:
        webmachine.ez rabbit_management.ez \
         /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
     rabbitmq-activate-plugins
-
-**********************************************************************
-** For the time being you need rabbitmq-server from branch bug21387 **
-**********************************************************************
-
