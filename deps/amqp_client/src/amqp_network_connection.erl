@@ -403,10 +403,8 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
     TuneOk = negotiate_values(Tune, Params),
     amqp_channel_util:do(network, Writer0, TuneOk, none),
     ConnectionOpen =
-        #'connection.open'{virtual_host = Params#amqp_params.virtual_host,
-                           insist = true},
+        #'connection.open'{virtual_host = Params#amqp_params.virtual_host},
     amqp_channel_util:do(network, Writer0, ConnectionOpen, none),
-    %% 'connection.redirect' not implemented (we use insist = true to cover)
     #'connection.open_ok'{} = handshake_recv(State),
     #'connection.tune_ok'{channel_max = ChannelMax,
                           frame_max   = FrameMax,
@@ -421,6 +419,9 @@ network_handshake(State = #nc_state{channel0_writer_pid = Writer0,
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->
     ok;
+check_version(#'connection.start'{version_major = 8,
+                                  version_minor = 0}) ->
+    exit({protocol_version_mismatch, 0, 8});
 check_version(#'connection.start'{version_major = Major,
                                   version_minor = Minor}) ->
     exit({protocol_version_mismatch, Major, Minor}).
