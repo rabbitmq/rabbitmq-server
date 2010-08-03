@@ -49,6 +49,7 @@
 -spec(start_link/0 :: () -> rabbit_types:ok(pid())).
 -spec(register/2 :: (pid(), rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
+-spec(shutdown/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -64,7 +65,7 @@ delete_all(CollectorPid) ->
     gen_server:call(CollectorPid, delete_all, infinity).
 
 shutdown(CollectorPid) ->
-    gen_server:call(CollectorPid, shutdown, infinity).
+    gen_server:cast(CollectorPid, shutdown).
 
 %%----------------------------------------------------------------------------
 
@@ -87,13 +88,10 @@ handle_call(delete_all, _From, State = #state{queues = Queues}) ->
                rabbit_amqqueue:delete(Q, false, false)
        end)
      || {MonitorRef, Q} <- dict:to_list(Queues)],
-    {reply, ok, State};
+    {reply, ok, State}.
 
-handle_call(shutdown, _From, State) ->
-    {stop, normal, ok, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(shutdown, State) ->
+    {stop, normal, State}.
 
 handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
             State = #state{queues = Queues}) ->

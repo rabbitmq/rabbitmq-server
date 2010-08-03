@@ -285,8 +285,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %%
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
-        rabbit_queue_collector:shutdown(Collector),
         rabbit_misc:unlink_and_capture_exit(Collector),
+        rabbit_queue_collector:shutdown(Collector),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
