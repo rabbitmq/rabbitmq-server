@@ -60,6 +60,10 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     FullCommand = init:get_plain_arguments(),
+    case FullCommand of
+        [] -> usage();
+        _ -> ok
+    end,
     {[Command0 | Args], Opts} =
         get_options([{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
                      {option, ?VHOST_OPT, "/"}, {option, ?SCOPE_OPT, "client"}],
@@ -70,9 +74,7 @@ start() ->
                                   _    -> {K, V}
                               end
                       end, Opts),
-    io:format("~p~n", [Opts1]),
     Command = list_to_atom(Command0),
-    io:format("~p~n", [[Command | Args]]),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     Inform = case Quiet of
@@ -388,16 +390,16 @@ prettify_typed_amqp_value(Type, Value) ->
 %              "-q",".*",".*",".*"])
 % == {["set_permissions","guest",".*",".*",".*"],
 %     [{"-q",true},{"-p","/"}]}
-get_options([{flag, Key} | Defs], As) ->
-    {As1, Value} = get_flag(Key, As),
-    {As2, Rest} = get_options(Defs, As1),
-    {As2, [{Key, Value} | Rest]};
-get_options([{option, Key, Default} | Defs], As) ->
-    {As1, Value} = get_option(Key, Default, As),
-    {As2, Rest} = get_options(Defs, As1),
-    {As2, [{Key, Value} | Rest]};
-get_options([], As) ->
-    {As, []}.
+get_options(Defs, As) ->
+    lists:foldl(fun(Def, {AsIn, RsIn}) ->
+                        {AsOut, Value} = case Def of
+                                             {flag, Key} ->
+                                                 get_flag(Key, AsIn);
+                                             {option, Key, Default} ->
+                                                 get_option(Key, Default, AsIn)
+                                         end,
+                        {AsOut, [{Key, Value} | RsIn]}
+                end, {As, []}, Defs).
 
 get_option(K, _Default, [K, V | As]) ->
     {As, V};

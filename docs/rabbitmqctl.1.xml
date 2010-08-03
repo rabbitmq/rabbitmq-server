@@ -271,7 +271,7 @@
 
       <variablelist>
         <varlistentry id="cluster">
-          <term><cmdsynopsis><command>cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -336,7 +336,7 @@
           </listitem>
         </varlistentry>
         <varlistentry id="force_cluster">
-          <term><cmdsynopsis><command>force_cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>force_cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
