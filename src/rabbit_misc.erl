@@ -64,6 +64,7 @@
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
+-export([get_options/2]).
 
 -import(mnesia).
 -import(lists).
@@ -79,6 +80,7 @@
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
+-type(optdef() :: {flag, string()} | {option, string(), any()}).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -182,6 +184,8 @@
 -spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
                              orddict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
+-spec(get_options/2 :: ([optdef()], [string()])
+                       -> {[string()], [{string(), any()}]}).
 
 -endif.
 
@@ -701,3 +705,36 @@ unlink_and_capture_exit(Pid) ->
     receive {'EXIT', Pid, _} -> ok
     after 0 -> ok
     end.
+
+% Separate flags and options from arguments.
+% get_options([{flag, "-q"}, {option, "-p", "/"}],
+%             ["set_permissions","-p","/","guest",
+%              "-q",".*",".*",".*"])
+% == {["set_permissions","guest",".*",".*",".*"],
+%     [{"-q",true},{"-p","/"}]}
+get_options(Defs, As) ->
+    lists:foldl(fun(Def, {AsIn, RsIn}) ->
+                        {AsOut, Value} = case Def of
+                                             {flag, Key} ->
+                                                 get_flag(Key, AsIn);
+                                             {option, Key, Default} ->
+                                                 get_option(Key, Default, AsIn)
+                                         end,
+                        {AsOut, [{Key, Value} | RsIn]}
+                end, {As, []}, Defs).
+
+get_option(K, _Default, [K, V | As]) ->
+    {As, V};
+get_option(K, Default, [Nk | As]) ->
+    {As1, V} = get_option(K, Default, As),
+    {[Nk | As1], V};
+get_option(_, Default, As) ->
+    {As, Default}.
+
+get_flag(K, [K | As]) ->
+    {As, true};
+get_flag(K, [Nk | As]) ->
+    {As1, V} = get_flag(K, As),
+    {[Nk | As1], V};
+get_flag(_, []) ->
+    {[], false}.

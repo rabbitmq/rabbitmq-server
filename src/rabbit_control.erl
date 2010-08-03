@@ -32,7 +32,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, get_options/2]).
+-export([start/0, stop/0, action/5]).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -45,16 +45,12 @@
 
 -ifdef(use_specs).
 
--type(optdef() :: {flag, string()} | {option, string(), any()}).
-
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
 -spec(action/5 ::
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
--spec(get_options/2 :: ([optdef()], [string()])
-                       -> {[string()], [{string(), any()}]}).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -69,9 +65,10 @@ start() ->
         _ -> ok
     end,
     {[Command0 | Args], Opts} =
-        get_options([{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
-                     {option, ?VHOST_OPT, "/"}, {option, ?SCOPE_OPT, "client"}],
-                    FullCommand),
+        rabbit_misc:get_options(
+          [{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
+           {option, ?VHOST_OPT, "/"}, {option, ?SCOPE_OPT, "client"}],
+          FullCommand),
     Opts1 = lists:map(fun({K, V}) ->
                               case K of
                                   ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
@@ -386,38 +383,3 @@ prettify_typed_amqp_value(Type, Value) ->
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
     end.
-
-
-% Separate flags and options from arguments.
-% get_options([{flag, "-q"}, {option, "-p", "/"}],
-%             ["set_permissions","-p","/","guest",
-%              "-q",".*",".*",".*"])
-% == {["set_permissions","guest",".*",".*",".*"],
-%     [{"-q",true},{"-p","/"}]}
-get_options(Defs, As) ->
-    lists:foldl(fun(Def, {AsIn, RsIn}) ->
-                        {AsOut, Value} = case Def of
-                                             {flag, Key} ->
-                                                 get_flag(Key, AsIn);
-                                             {option, Key, Default} ->
-                                                 get_option(Key, Default, AsIn)
-                                         end,
-                        {AsOut, [{Key, Value} | RsIn]}
-                end, {As, []}, Defs).
-
-get_option(K, _Default, [K, V | As]) ->
-    {As, V};
-get_option(K, Default, [Nk | As]) ->
-    {As1, V} = get_option(K, Default, As),
-    {[Nk | As1], V};
-get_option(_, Default, As) ->
-    {As, Default}.
-
-get_flag(K, [K | As]) ->
-    {As, true};
-get_flag(K, [Nk | As]) ->
-    {As1, V} = get_flag(K, As),
-    {[Nk | As1], V};
-get_flag(_, []) ->
-    {[], false}.
-

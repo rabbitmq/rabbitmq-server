@@ -739,7 +739,7 @@ test_option_parser() ->
     % get options
     ok = check_get_options(
            {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
-           [{option, "-foo", "notfoo"}, {option, "-bax", "notbaz"}],
+           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
            ["mock_command", "-foo", "bar"]),
 
     % shuffled and interleaved arguments and options
@@ -1327,8 +1327,8 @@ expand_options(As, Bs) ->
                 end, Bs, As).
 
 check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
-    {ExpArgs, ResOpts} = rabbit_control:get_options(Defs, Args),
-    lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
+    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
+    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
     ok.
 
 empty_files(Files) ->
