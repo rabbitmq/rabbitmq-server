@@ -44,7 +44,9 @@ start_link() ->
 
 init([]) ->
     {ok, {{one_for_all, 0, 1},
-          [{reader, {rabbit_reader, start_link, []},
+          [{channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+            permanent, infinity, supervisor, [rabbit_channel_sup_sup]},
+           {reader, {rabbit_reader, start_link, []},
             permanent, ?MAX_WAIT, worker, [rabbit_reader]},
            {collector, {rabbit_queue_collector, start_link, []},
             permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}

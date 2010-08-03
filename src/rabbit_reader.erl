@@ -615,13 +615,8 @@ handle_input(Callback, Data, _State) ->
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
-                 Protocol, State = #v1{parent = Parent, sock = Sock,
+                 Protocol, State = #v1{sock = Sock,
                                        connection = Connection}) ->
-    {ok, _Pid} =
-        supervisor:start_child(
-          Parent, {channel_sup_sup,
-                   {rabbit_channel_sup_sup, start_link, [Protocol]},
-                   permanent, infinity, supervisor, [rabbit_channel_sup_sup]}),
     Start = #'connection.start'{ version_major = ProtocolMajor,
                                  version_minor = ProtocolMinor,
                                  server_properties = server_properties(),
@@ -802,17 +797,17 @@ i(Item, #v1{}) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame,
-                    State = #v1{queue_collector = Collector, parent = Parent}) ->
+send_to_new_channel(Channel, AnalyzedFrame, State =
+                        #v1{queue_collector = Collector, parent = Parent}) ->
     #v1{sock = Sock, connection = #connection{
+                       protocol = Protocol,
                        frame_max = FrameMax,
                        user = #user{username = Username},
                        vhost = VHost}} = State,
     ChanSupSup = rabbit_connection_sup:channel_sup_sup(Parent),
     {ok, ChanSup} = rabbit_channel_sup_sup:start_channel(
-                      ChanSupSup,
-                      [Sock, Channel, FrameMax, self(),
-                       Username, VHost, Collector]),
+                      ChanSupSup, [Protocol, Sock, Channel, FrameMax, self(),
+                                   Username, VHost, Collector]),
     ChPid = rabbit_channel_sup:framing_channel(ChanSup),
     link(ChPid),
     put({channel, Channel}, {chpid, ChPid}),
