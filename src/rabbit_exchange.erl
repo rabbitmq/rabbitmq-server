@@ -109,9 +109,9 @@
         -> [{name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
              rabbit_framing:amqp_table()}]).
 -spec(delete_queue_bindings/1 ::
-        (rabbit_amqqueue:name()) -> fun (() -> none())).
+        (rabbit_amqqueue:name()) -> fun (() -> any())).
 -spec(delete_transient_queue_bindings/1 ::
-        (rabbit_amqqueue:name()) -> fun (() -> none())).
+        (rabbit_amqqueue:name()) -> fun (() -> any())).
 -spec(delete/2 ::
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
