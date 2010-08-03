@@ -208,12 +208,8 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    case rabbit_exchange_type_registry:lookup_module(T) of
-        {ok, Module}       -> Module;
-        {error, not_found} -> rabbit_misc:protocol_error(
-                                command_invalid,
-                                "invalid exchange type '~s'", [T])
-    end.
+    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
+    Module.
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
@@ -222,8 +218,12 @@ check_type(TypeBin) ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
         T ->
-            _Module = type_to_module(T),
-            T
+            case rabbit_exchange_type_registry:lookup_module(T) of
+                {error, not_found} -> rabbit_misc:protocol_error(
+                                        command_invalid,
+                                        "invalid exchange type '~s'", [T]);
+                {ok, Module}       -> T
+            end
     end.
 
 assert_equivalence(X = #exchange{ durable = Durable,
