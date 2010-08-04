@@ -33,6 +33,7 @@
 
 -include("rabbit.hrl").
 
+-export([start_link/0]).
 -export([init_stats_timer/0, ensure_stats_timer/3, stop_stats_timer/2]).
 -export([ensure_stats_timer_after/2, reset_stats_timer_after/1]).
 -export([stats_level/1]).
@@ -68,6 +69,7 @@
 
 -type(timer_fun() :: fun (() -> 'ok')).
 
+-spec(start_link/0 :: () -> rabbit_types:ok_or_error2(pid(), any())).
 -spec(init_stats_timer/0 :: () -> state()).
 -spec(ensure_stats_timer/3 :: (state(), timer_fun(), timer_fun()) -> state()).
 -spec(stop_stats_timer/2 :: (state(), timer_fun()) -> state()).
@@ -79,6 +81,9 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+start_link() ->
+    gen_event:start_link({local, ?MODULE}).
 
 init_stats_timer() ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
