@@ -28,23 +28,39 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--ifdef(use_specs).
 
--spec(description/0 :: () -> [{atom(), any()}]).
--spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                   -> {rabbit_router:routing_result(), [pid()]}).
--spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(create/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(recover/2 :: (rabbit_types:exchange(),
-                    [rabbit_types:binding()]) -> 'ok').
--spec(delete/2 :: (rabbit_types:exchange(),
-                   [rabbit_types:binding()]) -> 'ok').
--spec(add_binding/2 :: (rabbit_types:exchange(),
-                        rabbit_types:binding()) -> 'ok').
--spec(remove_bindings/2 :: (rabbit_types:exchange(),
-                            [rabbit_types:binding()]) -> 'ok').
--spec(assert_args_equivalence/2 ::
-        (rabbit_types:exchange(), rabbit_framing:amqp_table())
-        -> 'ok' | rabbit_types:connection_exit()).
+-module(rabbit_tests_event_receiver).
 
--endif.
+-export([start/1, stop/0]).
+
+-export([init/1, handle_call/2, handle_event/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+start(Pid) ->
+    gen_event:add_handler(rabbit_event, ?MODULE, [Pid]).
+
+stop() ->
+    gen_event:delete_handler(rabbit_event, ?MODULE, []).
+
+%%----------------------------------------------------------------------------
+
+init([Pid]) ->
+    {ok, Pid}.
+
+handle_call(_Request, Pid) ->
+    {ok, not_understood, Pid}.
+
+handle_event(Event, Pid) ->
+    Pid ! Event,
+    {ok, Pid}.
+
+handle_info(_Info, Pid) ->
+    {ok, Pid}.
+
+terminate(_Arg, _Pid) ->
+    ok.
+
+code_change(_OldVsn, Pid, _Extra) ->
+    {ok, Pid}.
+
+%%----------------------------------------------------------------------------
