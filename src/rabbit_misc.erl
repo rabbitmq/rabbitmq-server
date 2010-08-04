@@ -81,14 +81,15 @@
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
+-type(channel_or_connection_exit()
+      :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 ::
-        (rabbit_framing:amqp_exception())
-        -> rabbit_types:channel_exit() | rabbit_types:connection_exit()).
+        (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
                        -> rabbit_types:connection_exit()).
 -spec(amqp_error/4 ::
@@ -96,14 +97,12 @@
          rabbit_framing:amqp_method_name())
         -> rabbit_types:amqp_error()).
 -spec(protocol_error/3 :: (rabbit_framing:amqp_exception(), string(), [any()])
-                          -> rabbit_types:channel_exit() |
-                             rabbit_types:connection_exit()).
+                          -> channel_or_connection_exit()).
 -spec(protocol_error/4 ::
         (rabbit_framing:amqp_exception(), string(), [any()],
-         rabbit_framing:amqp_method_name())
-        -> rabbit_types:channel_exit() |
-           rabbit_types:connection_exit()).
--spec(protocol_error/1 :: (rabbit_types:amqp_error()) -> no_return()).
+         rabbit_framing:amqp_method_name()) -> channel_or_connection_exit()).
+-spec(protocol_error/1 ::
+        (rabbit_types:amqp_error()) -> channel_or_connection_exit()).
 -spec(not_found/1 :: (rabbit_types:r(atom())) -> rabbit_types:channel_exit()).
 -spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
                                     rabbit_framing:amqp_table(),
