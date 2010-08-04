@@ -173,7 +173,7 @@ check_resource_access(Username,
                           Permission);
 check_resource_access(_Username,
                       #resource{name = <<"amq.gen",_/binary>>},
-                      #permission{scope = 'client'}) ->
+                      #permission{scope = client}) ->
     ok;
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
