@@ -88,9 +88,6 @@
         </listitem>
       </varlistentry>
     </variablelist>
-    <para>
-      Flags must precede all other parameters to <command>rabbitmqctl</command>.
-    </para>
   </refsect1>
 
   <refsect1>
@@ -271,7 +268,7 @@
 
       <variablelist>
         <varlistentry id="cluster">
-          <term><cmdsynopsis><command>cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -336,7 +333,7 @@
           </listitem>
         </varlistentry>
         <varlistentry id="force_cluster">
-          <term><cmdsynopsis><command>force_cluster</command><arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>force_cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -547,7 +544,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>configure</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">-s <replaceable>scope</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -555,11 +552,21 @@
                 <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>username</term>
+                <term>scope</term>
+                <listitem><para>Scope of the permissions: either
+                <command>client</command> (the default) or
+                <command>all</command>.  This determines whether
+                permissions are checked for server-generated resource
+                names (<command>all</command>) or only for
+                client-specified resource names
+                (<command>client</command>).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>user</term>
                 <listitem><para>The name of the user to grant access to the specified virtual host.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>configure</term>
+                <term>conf</term>
                 <listitem><para>A regular expression matching resource names for which the user is granted configure permissions.</para></listitem>
               </varlistentry>
               <varlistentry>
