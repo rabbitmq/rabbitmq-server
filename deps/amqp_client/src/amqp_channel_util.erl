@@ -27,36 +27,12 @@
 
 -include("amqp_client.hrl").
 
--export([open_channel/5]).
 -export([terminate_channel_infrastructure/2]).
 -export([do/4]).
 
 %%---------------------------------------------------------------------------
 %% Starting and terminating channels
 %%---------------------------------------------------------------------------
-
-%% Spawns a new channel supervision tree linked under the given connection
-%% supervisor, starts monitoring the channel and registers it with the channel
-%% manager
-open_channel(ChMgr, ChSupSup, ProposedNumber, Driver, InfraArgs) ->
-    case amqp_channels_manager:new_number(ChMgr, ProposedNumber) of
-        {ok, ChNumber} ->
-            {ok, ChSup} = amqp_channel_sup_sup:start_channel_sup(
-                                  ChSupSup, ChNumber, Driver, InfraArgs),
-            [Ch] = supervisor2:find_child(ChSup, channel),
-            Framing = case supervisor2:find_child(ChSup, framing) of
-                          [F] -> F;
-                          []  -> undefined
-                      end,
-            case amqp_channels_manager:register(ChMgr, ChNumber, Ch, Framing) of
-                ok     -> #'channel.open_ok'{} =
-                              amqp_channel:call(Ch, #'channel.open'{}),
-                          {ok, Ch};
-                noproc -> {error, channel_died}
-            end;
-        {error, _} = Error ->
-            Error
-    end.
 
 terminate_channel_infrastructure(network, Sup) ->
     [Writer] = supervisor2:find_child(Sup, writer),

@@ -29,31 +29,35 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, register/4, new_number/2, is_empty/1,
-         num_channels/1, get_pid/2, get_framing/2,
+-export([start_link/1, open_channel/3, set_channel_max/2, register_connection/2,
+         is_empty/1, num_channels/1, get_pid/2, get_framing/2,
          signal_connection_closing/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
--record(state, {sup,
+-record(state, {connection = undefined,
+                channel_sup_sup,
                 map_num_pid = gb_trees:empty(), %% Number -> {Pid, Framing}
                 map_pid_num = dict:new(),       %% Pid -> Number
-                max_channel,
+                channel_max = ?MAX_CHANNEL_NUMBER,
                 closing = false}).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(MaxChannel) ->
-    gen_server:start_link(?MODULE, [self(), MaxChannel], []).
+start_link(ChSupSup) ->
+    gen_server:start_link(?MODULE, [ChSupSup], []).
 
-%% FramingPid is 'undefined' in the direct case
-register(Manager, ChannelNumber, ChannelPid, FramingPid) ->
-    gen_server:call(Manager, {register, ChannelNumber, ChannelPid, FramingPid}).
+open_channel(Manager, ProposedNumber, InfraArgs) ->
+    gen_server:call(Manager, {open_channel, ProposedNumber, InfraArgs},
+                    infinity).
 
-new_number(Manager, ProposedNumber) ->
-    gen_server:call(Manager, {new_number, ProposedNumber}, infinity).
+set_channel_max(Manager, ChannelMax) ->
+    gen_server:cast(Manager, {set_channel_max, ChannelMax}).
+
+register_connection(Manager, Connection) ->
+    gen_server:cast(Manager, {register_connection, Connection}).
 
 is_empty(Manager) ->
     gen_server:call(Manager, is_empty, infinity).
@@ -74,11 +78,8 @@ signal_connection_closing(Manager, ChannelCloseType, Reason) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, MaxChannel]) ->
-    MaxChannel2 = if MaxChannel =:= 0 -> ?MAX_CHANNEL_NUMBER;
-                     true             -> MaxChannel
-                  end,
-    {ok, #state{sup = Sup, max_channel = MaxChannel2}}.
+init([ChSupSup]) ->
+    {ok, #state{channel_sup_sup = ChSupSup}}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -86,11 +87,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     State.
 
-handle_call({register, Number, Pid, Framing}, _From,
+handle_call({open_channel, ProposedNumber, InfraArgs}, _From,
             State = #state{closing = false}) ->
-    handle_register(Number, Pid, Framing, State);
-handle_call({new_number, Proposed}, _From, State = #state{closing = false}) ->
-    handle_new_number(Proposed, State);
+    handle_open_channel(ProposedNumber, InfraArgs, State);
 handle_call(is_empty, _From, State) ->
     {reply, internal_is_empty(State), State};
 handle_call(num_channels, _From, State) ->
@@ -106,6 +105,10 @@ handle_call({get_framing, Number}, _, State = #state{map_num_pid = MapNP}) ->
                 none                  -> undefined
             end, State}.
 
+handle_cast({set_channel_max, ChannelMax}, State) ->
+    {noreply, State#state{channel_max = ChannelMax}};
+handle_cast({register_connection, Connection}, State) ->
+    {noreply, State#state{connection = Connection}};
 handle_cast({connection_closing, ChannelCloseType, Reason}, State) ->
     handle_connection_closing(ChannelCloseType, Reason, State).
 
@@ -116,28 +119,43 @@ handle_info({'DOWN', _, process, Pid, Reason}, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-handle_new_number(none, State = #state{max_channel = MaxChannel,
-                                       map_num_pid = MapNP}) ->
-    Reply =
-        case gb_trees:is_empty(MapNP) of
-            true  -> {ok, 1};
-            false -> {Smallest, _} = gb_trees:smallest(MapNP),
-                     if Smallest > 1 ->
-                            {ok, Smallest - 1};
-                        true ->
-                            {Largest, _} = gb_trees:largest(MapNP),
-                            if Largest < MaxChannel -> {ok, Largest + 1};
-                               true                 -> find_free(MapNP)
-                            end
-                     end
-        end,
-    {reply, Reply, State};
-handle_new_number(Proposed, State = #state{max_channel = MaxChannel,
-                                           map_num_pid = MapNP}) ->
-    IsValid = Proposed > 0 andalso Proposed =< MaxChannel andalso
+handle_open_channel(ProposedNumber, InfraArgs,
+                    State = #state{channel_sup_sup = ChSupSup}) ->
+    case new_number(ProposedNumber, State) of
+        {ok, Number} ->
+            {ok, ChSup} = amqp_channel_sup_sup:start_channel_sup(
+                              ChSupSup, InfraArgs, Number),
+            [Ch] = supervisor2:find_child(ChSup, channel),
+            Framing = case supervisor2:find_child(ChSup, framing) of
+                          [F] -> F;
+                          []  -> undefined
+                      end,
+            NewState = register(Number, Ch, Framing, State),
+            erlang:monitor(process, Ch),
+            {reply, {ok, Ch}, NewState};
+        {error, _} = Error ->
+            {reply, Error, State}
+    end.
+
+new_number(none, #state{channel_max = ChannelMax, map_num_pid = MapNP}) ->
+    case gb_trees:is_empty(MapNP) of
+        true  -> {ok, 1};
+        false -> {Smallest, _} = gb_trees:smallest(MapNP),
+                 if Smallest > 1 ->
+                        {ok, Smallest - 1};
+                    true ->
+                        {Largest, _} = gb_trees:largest(MapNP),
+                        if Largest < ChannelMax -> {ok, Largest + 1};
+                           true                 -> find_free(MapNP)
+                        end
+                 end
+    end;
+new_number(Proposed, State = #state{channel_max = ChannelMax,
+                                    map_num_pid = MapNP}) ->
+    IsValid = Proposed > 0 andalso Proposed =< ChannelMax andalso
         not gb_trees:is_defined(Proposed, MapNP),
-    if IsValid -> {reply, {ok, Proposed}, State};
-       true    -> handle_new_number(none, State)
+    if IsValid -> {ok, Proposed};
+       true    -> new_number(none, State)
     end.
 
 find_free(MapNP) ->
@@ -153,21 +171,11 @@ find_free(It, Candidate) ->
         none             -> {error, out_of_channel_numbers}
     end.
 
-handle_register(Number, Pid, Framing, State = #state{map_num_pid = MapNP,
-                                                     map_pid_num = MapPN}) ->
-    IsValid = not gb_trees:is_defined(Number, MapNP) andalso
-                  not dict:is_key(Pid, MapPN),
-    if IsValid -> Ref = erlang:monitor(process, Pid),
-                  receive {'DOWN', Ref, process, Pid, noproc} ->
-                      {reply, {error, noproc}, State}
-                  after 0 ->
-                      MapNP1 = gb_trees:enter(Number, {Pid, Framing}, MapNP),
-                      MapPN1 = dict:store(Pid, Number, MapPN),
-                      {reply, ok, State#state{map_num_pid = MapNP1,
-                                              map_pid_num = MapPN1}}
-                  end;
-       true    -> {stop, {error, {already_exists, Number, Pid, Framing}}, State}
-    end.
+register(Number, Pid, Framing, State = #state{map_num_pid = MapNP,
+                                              map_pid_num = MapPN}) ->
+    MapNP1 = gb_trees:enter(Number, {Pid, Framing}, MapNP),
+    MapPN1 = dict:store(Pid, Number, MapPN),
+    State#state{map_num_pid = MapNP1, map_pid_num = MapPN1}.
 
 handle_down(Pid, Reason, State = #state{map_pid_num = MapPN}) ->
     case dict:fetch(Pid, MapPN) of
@@ -229,6 +237,8 @@ signal_channels(Msg, #state{map_pid_num = MapPN}) ->
     dict:map(fun(Pid, _) -> Pid ! Msg, ok end, MapPN),
     ok.
 
-signal_connection(Msg, #state{sup = Sup}) ->
-    amqp_infra_sup:child(Sup, connection) ! Msg,
+signal_connection(_, #state{connection = undefined}) ->
+    ?LOG_WARN("No connection registered in channels manager (~p).~n", self());
+signal_connection(Msg, #state{connection = Connection}) ->
+    Connection ! Msg,
     ok.

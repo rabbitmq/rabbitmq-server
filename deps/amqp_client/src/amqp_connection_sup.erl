@@ -37,15 +37,24 @@
 %%---------------------------------------------------------------------------
 
 start_link(Type, Module, AmqpParams) ->
-    supervisor2:start_link(?MODULE, [Type, Module, AmqpParams]).
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, ChSupSup} = supervisor2:start_child(Sup,
+                         {channel_sup_sup, {amqp_channel_sup_sup, start_link,
+                                            [Type]},
+                          permanent, infinity, supervisor,
+                          [amqp_channel_sup_sup]}),
+    {ok, ChMgr} = supervisor2:start_child(Sup,
+                      {channels_manager, {amqp_channels_manager, start_link,
+                                          [ChSupSup]},
+                       permanent, ?MAX_WAIT, worker, [amqp_channels_manager]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {connection, {Module, start_link, [AmqpParams, ChMgr]},
+                   permanent, ?MAX_WAIT, worker, [Module]}),
+    {ok, Sup}.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Type, Module, AmqpParams]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{connection, {Module, start_link, [AmqpParams]},
-            permanent, ?MAX_WAIT, worker, [Module]},
-           {channel_sup_sup, {amqp_channel_sup_sup, start_link, [Type]},
-           permanent, infinity, supervisor, [amqp_channel_sup_sup]}]}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

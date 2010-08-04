@@ -29,7 +29,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link_direct/0, start_link_network/2]).
+-export([start_link_direct/0, start_link_network/3]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -43,19 +43,20 @@ start_link_direct() ->
                    permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
     {ok, Sup}.
 
-start_link_network(Sock, ConnectionPid) ->
+start_link_network(Sock, Connection, ChMgr) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     {ok, Framing0} = supervisor2:start_child(Sup,
-                        {framing, {rabbit_framing_channel, start_link,
-                                   [ConnectionPid, ?PROTOCOL]},
-                   permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
+                         {framing, {rabbit_framing_channel, start_link,
+                                    [Connection, ?PROTOCOL]},
+                          permanent, ?MAX_WAIT, worker,
+                          [rabbit_framing_channel]}),
     {ok, _} = supervisor2:start_child(Sup,
                   {writer, {rabbit_writer, start_link,
                             [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL]},
                    permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
     {ok, _} = supervisor2:start_child(Sup,
                   {main_reader, {amqp_main_reader, start_link,
-                                 [Sock, Framing0, ConnectionPid]},
+                                 [Sock, Connection, ChMgr, Framing0]},
                    permanent, ?MAX_WAIT, worker, [amqp_main_reader]}),
     {ok, Sup}.
 

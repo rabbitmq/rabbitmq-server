@@ -121,7 +121,14 @@ open_channel(ConnectionPid) ->
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
 open_channel(ConnectionPid, ChannelNumber) ->
-    command(ConnectionPid, {open_channel, ChannelNumber}).
+    case command(ConnectionPid, {open_channel, ChannelNumber}) of
+        {ok, ChannelPid} ->
+            #'channel.open_ok'{} =
+                amqp_channel:call(ChannelPid, #'channel.open'{}),
+            {ok, ChannelPid};
+        Error ->
+            Error
+    end.
 
 %% @spec (ConnectionPid) -> ok | Error
 %% where
@@ -166,7 +173,7 @@ close(ConnectionPid, Code, Text) ->
 %%      supervisor - returns the pid of the supervisor of the connection
 %%      num_channels - returns the number of channels currently open under the
 %%          connection (excluding channel 0)
-%%      max_channel - returns the max_channel value negotiated with the server
+%%      channel_max - returns the channel_max value negotiated with the server
 %%          (only for the network connection)
 %%      heartbeat - returns the heartbeat value negotiated with the server
 %%          (only for the network connection)

@@ -29,13 +29,14 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, connect/1]).
+-export([start_link/2, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
 -record(state, {sup,
                 params = #amqp_params{},
-                collector,
+                collector = undefined,
+                channels_manager,
                 closing = false,
                 server_properties}).
 
@@ -51,8 +52,8 @@
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams], []).
+start_link(AmqpParams, ChMgr) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -61,8 +62,8 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams]) ->
-    {ok, #state{sup = Sup, params = AmqpParams}}.
+init([Sup, AmqpParams, ChMgr]) ->
+    {ok, #state{sup = Sup, params = AmqpParams, channels_manager = ChMgr}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -88,7 +89,7 @@ handle_info({hard_error_in_channel, Pid, Reason}, State) ->
 handle_info({channel_internal_error, _Pid, _Reason}, State) ->
     {noreply, set_closing_state(abrupt, internal_error_closing(), State)};
 handle_info(all_channels_terminated, State) ->
-    {noreply, all_channels_terminated(State)}.
+    handle_all_channels_terminated(State).
 
 terminate(_Reason, _State) ->
     ok.
@@ -101,13 +102,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{sup = Sup,
-                              collector = Collector,
+               State = #state{collector = Collector,
+                              channels_manager = ChMgr,
                               params = #amqp_params{username = User,
                                                     virtual_host = VHost}}) ->
-    Reply = amqp_channel_util:open_channel(ChMgr, ChSupSup, ProposedNumber, direct,
-                                           [User, VHost, Collector]),
-    {reply, Reply, State};
+    {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber,
+                                               [User, VHost, Collector]),
+     State};
 handle_command({close, Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
                                                 close = Close,
@@ -166,24 +167,21 @@ set_closing_state(ChannelCloseType, NewClosing,
     end,
     NewState.
 
-signal_connection_closing(ChannelCloseType, #state{sup = Sup,
+signal_connection_closing(ChannelCloseType, #state{channels_manager = ChMgr,
                                                    closing = Closing}) ->
-    ChMgr = amqp_infra_sup:child(Sup, channels_manager),
     amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
                                                     closing_to_reason(Closing)).
 
-%% This is triggered by the channels manager after all channels have exited
-%% due to the connection being closed
-all_channels_terminated(State = #state{sup = Sup, closing = Closing}) ->
+handle_all_channels_terminated(State = #state{closing = Closing,
+                                              collector = Collector}) ->
     #state{closing = #closing{}} = State, % assertion
-    Collector = amqp_infra_sup:child(Sup, collector),
     rabbit_queue_collector:delete_all(Collector),
     rabbit_queue_collector:shutdown(Collector),
     rabbit_misc:unlink_and_capture_exit(Collector),
     case Closing#closing.from of none -> ok;
                                  From -> gen_server:reply(From, ok)
     end,
-    exit(closing_to_reason(Closing)).
+    {stop, closing_to_reason(Closing), State}.
 
 closing_to_reason(#closing{close = #'connection.close'{reply_code = 200},
                            reply = none}) ->
@@ -222,10 +220,11 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     ServerProperties = rabbit_reader:server_properties(),
     State1#state{server_properties = ServerProperties}.
 
-start_infrastructure(State = #state{sup = Sup}) ->
+start_infrastructure(State = #state{sup = Sup, channels_manager = ChMgr}) ->
     {ok, CTSup} = supervisor2:start_child(Sup,
         {connection_type_sup, {amqp_connection_type_sup,
                                    start_link_direct, []},
          permanent, infinity, supervisor, [amqp_connection_type_sup]}),
     [Collector] = supervisor2:find_child(CTSup, collector),
+    amqp_channels_manager:register_connection(ChMgr, self()),
     State#state{collector = Collector}.

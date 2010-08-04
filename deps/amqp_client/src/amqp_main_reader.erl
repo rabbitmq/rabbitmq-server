@@ -45,14 +45,13 @@
 %%---------------------------------------------------------------------------
 
 start_link(Sock, Connection, ChMgr, Framing0) ->
-    gen_server:start_link(
-        ?MODULE, [Sock, Connection, ChMgr, Framing0], []).
+    gen_server:start_link(?MODULE, [Sock, Connection, ChMgr, Framing0], []).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, Sock, Connection, ChMgr, Framing0]) ->
+init([Sock, Connection, ChMgr, Framing0]) ->
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     {ok, #state{sock = Sock, connection = Connection,
                 channels_manager = ChMgr, framing0 = Framing0}}.

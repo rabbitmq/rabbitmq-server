@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, connect/1]).
+-export([start_link/2, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -41,12 +41,12 @@
 -record(state, {sup,
                 params,
                 sock,
-                max_channel,
+                channel_max,
                 heartbeat,
-                framing0,
-                writer0,
-                main_reader,
-                channel_sup_sup,
+                framing0 = undefined,
+                writer0 = undefined,
+                main_reader = undefined,
+                channels_manager,
                 closing = false,
                 server_properties}).
 
@@ -55,14 +55,14 @@
                   from = none,
                   phase = terminate_channels}).
 
--define(INFO_KEYS, (amqp_connection:info_keys() ++ [max_channel, heartbeat])).
+-define(INFO_KEYS, (amqp_connection:info_keys() ++ [channel_max, heartbeat])).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams], []).
+start_link(AmqpParams, ChMgr) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -71,8 +71,8 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams]) ->
-    {ok, #state{sup = Sup, params = AmqpParams}}.
+init([Sup, AmqpParams, ChMgr]) ->
+    {ok, #state{sup = Sup, params = AmqpParams, channels_manager = ChMgr}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -106,7 +106,7 @@ handle_info({hard_error_in_channel, Pid, Reason}, State) ->
 handle_info({channel_internal_error, _Pid, _Reason}, State) ->
     {noreply, set_closing_state(abrupt, internal_error_closing(), State)};
 handle_info(all_channels_terminated, State) ->
-    {noreply, all_channels_terminated(State)}.
+    handle_all_channels_terminated(State).
 
 terminate(_Reason, #state{sup = Sup}) ->
     [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
@@ -120,11 +120,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{sup = Sup, sock = Sock}) ->
-    MainReader = amqp_infra_sup:child(Sup, main_reader),
-    Reply = amqp_channel_util:open_channel(Sup, ProposedNumber, network,
-                                           [Sock, MainReader]),
-    {reply, Reply, State};
+               State = #state{sock = Sock, channels_manager = ChMgr}) ->
+    {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber, [Sock]),
+     State};
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
                                                 close = Close,
@@ -160,7 +158,7 @@ i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
 i(supervisor,        State) -> State#state.sup;
-i(max_channel,       State) -> State#state.max_channel;
+i(channel_max,       State) -> State#state.channel_max;
 i(heartbeat,         State) -> State#state.heartbeat;
 i(num_channels,      State) ->
     amqp_channels_manager:num_channels(State#state.channels_manager);
@@ -229,22 +227,26 @@ signal_connection_closing(ChannelCloseType, #state{channels_manager = ChMgr,
     amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
                                                     closing_to_reason(Closing)).
 
-all_channels_terminated(#state{writer = Writer, closing = Closing} = State) ->
+handle_all_channels_terminated(State = #state{writer0 = Writer,
+                                              closing = Closing}) ->
     #state{closing = #closing{}} = State, % assertion
     #closing{reason = Reason, close = Close} = Closing,
-    case Reason of
-        server_initiated_close ->
-            amqp_channel_util:do(network, Writer, #'connection.close_ok'{},
-                                 none),
-            erlang:send_after(?SOCKET_CLOSING_TIMEOUT, self(),
-                              socket_closing_timeout),
-            State#state{closing = Closing#closing{phase = wait_socket_close}};
-        _ ->
-            amqp_channel_util:do(network, Writer, Close, none),
-            erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
-                              timeout_waiting_for_close_ok),
-            State#state{closing = Closing#closing{phase = wait_close_ok}}
-    end.
+    NewState =
+        case Reason of
+            server_initiated_close ->
+                amqp_channel_util:do(network, Writer, #'connection.close_ok'{},
+                                     none),
+                erlang:send_after(?SOCKET_CLOSING_TIMEOUT, self(),
+                                  socket_closing_timeout),
+                State#state{closing =
+                    Closing#closing{phase = wait_socket_close}};
+            _ ->
+                amqp_channel_util:do(network, Writer, Close, none),
+                erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
+                                  timeout_waiting_for_close_ok),
+                State#state{closing = Closing#closing{phase = wait_close_ok}}
+        end,
+    {noreply, NewState}.
 
 closing_to_reason(#closing{reason = Reason,
                            close = #'connection.close'{reply_code = Code,
@@ -320,32 +322,36 @@ network_handshake(State = #state{writer0 = Writer, params = Params}) ->
     ?LOG_INFO("Negotiated maximums: (Channel = ~p, Frame = ~p, "
               "Heartbeat = ~p)~n",
              [ChannelMax, FrameMax, Heartbeat]),
-    State#state{max_channel = ChannelMax,
+    State#state{channel_max = ChannelMax,
                 heartbeat = Heartbeat,
                 server_properties = ServerProperties}.
 
-start_infrastructure_pre_hs(State = #state{sup = Sup, sock = Sock}) ->
+start_infrastructure_pre_hs(State = #state{sup = Sup,
+                                           sock = Sock,
+                                           channels_manager = ChMgr}) ->
     {ok, CTSup} = supervisor2:start_child(Sup,
         {connection_type_sup, {amqp_connection_type_sup,
-                               start_link_network, [Sock, self()]},
+                               start_link_network, [Sock, self(), ChMgr]},
          permanent, infinity, supervisor, [amqp_connection_type_sup]}),
     [MainReader, Framing0, Writer0] =
         [hd(supervisor2:find_child(CTSup, Child)) ||
             Child <- [main_reader, framing, writer]],
-    [ChannelSupSup] = supervisor2:find_child(Sup, channel_sup_sup),
     State#state{main_reader = MainReader,
                 framing0 = Framing0,
-                writer0 = Writer0,
-                channel_sup_sup = ChannelSupSup}.
+                writer0 = Writer0}.
 
 start_infrastructure_post_hs(State = #state{sup = Sup,
                              sock = Sock,
                              heartbeat = Heartbeat,
-                             max_channel = MaxChannel}) ->
-    rabbit_heartbeat:start_heartbeat(Sup, Sock, Heartbeat),
-    ChannelsManagerChild = {worker, channels_manager,
-                            {amqp_channels_manager, start_link, [MaxChannel]}},
-    amqp_infra_sup:start_child(Sup, ChannelsManagerChild),
+                             channel_max = ChannelMax,
+                             channels_manager = ChMgr}) ->
+    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
+    rabbit_heartbeat:start_heartbeat(CTSup, Sock, Heartbeat),
+    case ChannelMax of
+        0 -> ok;
+        _ -> amqp_channels_manager:set_channel_max(ChMgr, ChannelMax)
+    end,
+    amqp_channels_manager:register_connection(ChMgr, self()),
     State.
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
