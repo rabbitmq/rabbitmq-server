@@ -28,8 +28,7 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/5]).
--export([channel_infrastructure_children/4,
-         terminate_channel_infrastructure/2]).
+-export([terminate_channel_infrastructure/2]).
 -export([do/4]).
 -export([new_channel_dict/0, is_channel_dict_empty/1, num_channels/1,
          register_channel/3, unregister_channel_number/2,
@@ -50,23 +49,11 @@ open_channel(Sup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     [ChannelSupSup] = supervisor2:find_child(Sup, channel_sup_sup),
     {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(
                            ChannelSupSup, InfraArgs, ChannelNumber),
-    [ChannelPid] = supervisor2:find_child(ChannelSup, channel),
-    erlang:monitor(process, ChannelPid),
-    NewChannels = register_channel(ChannelNumber, ChannelPid, Channels),
-    {ChannelPid, NewChannels}.
-
-channel_infrastructure_children(network, [Sock, _], GetChPid, ChNumber) ->
-    [{framing, {rabbit_framing_channel, start_link, [GetChPid, ?PROTOCOL]},
-      permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]},
-     {writer, {rabbit_writer, start_link, [Sock, ChNumber, ?FRAME_MIN_SIZE,
-                                           ?PROTOCOL]},
-      permanent, ?MAX_WAIT, worker, [rabbit_writer]}];
-channel_infrastructure_children(direct, [User, VHost, Collector], GetChPid,
-                                ChNumber) ->
-    [{rabbit_channel,
-      {rabbit_channel, start_link,
-       [ChNumber, GetChPid, GetChPid, User, VHost, Collector]},
-      permanent, ?MAX_WAIT, worker, [rabbit_channel]}].
+    [ChPid] = supervisor2:find_child(ChannelSup, channel),
+    #'channel.open_ok'{} = amqp_channel:call(ChPid, #'channel.open'{}),
+    erlang:monitor(process, ChPid),
+    NewChannels = register_channel(ChannelNumber, ChPid, Channels),
+    {ChPid, NewChannels}.
 
 terminate_channel_infrastructure(network, Sup) ->
     [Writer] = supervisor2:find_child(Sup, writer),
@@ -81,8 +68,7 @@ terminate_channel_infrastructure(direct, Sup) ->
 %% Do
 %%---------------------------------------------------------------------------
 
-do(network, Sup, Method, Content) ->
-    [Writer] = supervisor2:find_child(Sup, writer),
+do(network, Writer, Method, Content) ->
     case Content of
         none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
                                                            self());
@@ -92,11 +78,10 @@ do(network, Sup, Method, Content) ->
     receive
         rabbit_writer_send_command_signal -> ok
     end;
-do(direct, Sup, Method, Content) ->
-    [RChannel] = supervisor2:find_child(Sup, rabbit_channel),
+do(direct, RabbitChannel, Method, Content) ->
     case Content of
-        none -> rabbit_channel:do(RChannel, Method);
-        _    -> rabbit_channel:do(RChannel, Method, Content)
+        none -> rabbit_channel:do(RabbitChannel, Method);
+        _    -> rabbit_channel:do(RabbitChannel, Method, Content)
     end.
 
 %%---------------------------------------------------------------------------

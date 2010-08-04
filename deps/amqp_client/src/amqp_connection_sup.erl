@@ -29,29 +29,21 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, AmqpParams) ->
-    try supervisor2:start_link(?MODULE, [Type, AmqpParams]) of
-        {ok, Sup}          -> {ok, Sup};
-        {error, _} = Error -> Error
-    catch
-        exit:Reason -> {error, {auth_failure_likely, Reason}}
-    end.
+start_link(Type, Module, AmqpParams) ->
+    supervisor2:start_link(?MODULE, [Type, Module, AmqpParams]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Type, AmqpParams]) ->
-    Module = case Type of direct  -> amqp_direct_connection;
-                          network -> amqp_network_connection
-             end,
+init([Type, Module, AmqpParams]) ->
     {ok, {{one_for_all, 0, 1},
           [{connection, {Module, start_link, [AmqpParams]},
             permanent, ?MAX_WAIT, worker, [Module]},

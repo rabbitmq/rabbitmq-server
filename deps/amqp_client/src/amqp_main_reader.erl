@@ -29,12 +29,13 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, register_framing_channel/3]).
+-export([start_link/3, register_framing_channel/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
 -record(state, {sup,
                 sock,
+                connection,
                 message = none, %% none | {Type, Channel, Length}
                 framing_channels = amqp_channel_util:new_channel_dict()}).
 
@@ -42,13 +43,8 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Sock) ->
-    Parent = self(),
-    {ok, proc_lib:spawn_link(
-             fun() ->
-                [Framing0] = supervisor2:find_child(Parent, framing),
-                init_and_go([Parent, Sock, Framing0])
-             end)}.
+start_link(Sock, Framing0, Connection) ->
+    gen_server:start_link(?MODULE, [self(), Sock, Framing0, Connection], []).
 
 register_framing_channel(MainReaderPid, Number, FramingPid) ->
     gen_server:call(MainReaderPid,
@@ -58,14 +54,11 @@ register_framing_channel(MainReaderPid, Number, FramingPid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, Sock, Framing0Pid]) ->
-    State0 = #state{sup = Sup, sock = Sock},
-    State1 = internal_register_framing_channel(0, Framing0Pid, State0),
+init([Sup, Sock, Framing0, Connection]) ->
+    State0 = #state{sup = Sup, sock = Sock, connection = Connection},
+    State1 = internal_register_framing_channel(0, Framing0, State0),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-    State1.
-
-init_and_go(InitArgs) ->
-    gen_server:enter_loop(?MODULE, [], init(InitArgs)).
+    {ok, State1}.
 
 terminate(Reason, #state{sock = Sock}) ->
     Nice = case Reason of normal        -> true;
@@ -89,9 +82,7 @@ handle_cast(Cast, State) ->
 handle_info({inet_async, _, _, _} = InetAsync, State) ->
     handle_inet_async(InetAsync, State);
 handle_info({'DOWN', _, _, _, _} = Down, State) ->
-    handle_down(Down, State);
-handle_info(socket_closing_timeout, State) ->
-    {stop, socket_closing_timeout, State}.
+    handle_down(Down, State).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -114,7 +105,8 @@ handle_inet_async({inet_async, Sock, _, Msg},
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
             {noreply, State#state{message={NewType, NewChannel, NewLength}}};
         {error, closed} ->
-            {stop, socket_closed, State};
+            State#state.connection ! socket_closed,
+            {noreply, State};
         {error, Reason} ->
             {stop, {socket_error, Reason}, State}
     end.

@@ -55,6 +55,7 @@
                 anon_sub_requests = queue:new(),
                 tagged_sub_requests = dict:new(),
                 closing = false,
+                writer = undefined,
                 return_handler_pid = none,
                 flow_control = false,
                 flow_handler_pid = none,
@@ -253,29 +254,38 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
             do_rpc(State#state{rpc_requests = NewRequestQueue})
     end.
 
-do_rpc(State = #state{rpc_requests = RequestQueue,
+do_rpc(State0 = #state{rpc_requests = RequestQueue,
                       closing = Closing}) ->
+    State1 = check_writer(State0),
     case queue:peek(RequestQueue) of
         {value, {_From, Method = #'channel.close'{}, Content}} ->
-            do(Method, Content, State),
-            State#state{closing = just_channel};
+            do(Method, Content, State1),
+            State1#state{closing = just_channel};
         {value, {_From, Method, Content}} ->
-            do(Method, Content, State),
-            State;
+            do(Method, Content, State1),
+            State1;
         empty ->
             case Closing of
                 {connection, Reason} -> self() ! {shutdown, Reason};
                 _                    -> ok
             end,
-            State
+            State1
     end.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-do(Method, Content, #state{driver = Driver, sup = Sup}) ->
-    amqp_channel_util:do(Driver, Sup, Method, Content).
+do(Method, Content, #state{driver = Driver, writer = Writer}) ->
+    ok = amqp_channel_util:do(Driver, Writer, Method, Content).
+
+check_writer(State = #state{writer = undefined, driver = Driver, sup = Sup}) ->
+    State#state{writer = hd(supervisor2:find_child(Sup,
+                                case Driver of network -> writer;
+                                               direct  -> rabbit_channel
+                                end))};
+check_writer(State) ->
+    State.
 
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
     exit(no_consumers_registered);
@@ -405,9 +415,8 @@ handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
     Consumer ! {Deliver, AmqpMsg},
     {noreply, State};
 
-handle_regular_method(
-        #'basic.return'{} = BasicReturn, AmqpMsg,
-        #state{return_handler_pid = ReturnHandler} = State) ->
+handle_regular_method(#'basic.return'{} = BasicReturn, AmqpMsg,
+                      #state{return_handler_pid = ReturnHandler} = State) ->
     case ReturnHandler of
         none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
                           "return handler registered~n",

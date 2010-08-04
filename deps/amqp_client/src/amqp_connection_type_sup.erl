@@ -37,24 +37,31 @@
 %%---------------------------------------------------------------------------
 
 start_link_direct() ->
-    supervisor2:start_link(?MODULE, [direct, []]).
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {collector, {rabbit_queue_collector, start_link, []},
+                   permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
+    {ok, Sup}.
 
 start_link_network(Sock, ConnectionPid) ->
-    supervisor2:start_link(?MODULE, [network, [Sock, ConnectionPid]]).
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, Framing0} = supervisor2:start_child(Sup,
+                        {framing, {rabbit_framing_channel, start_link,
+                                   [ConnectionPid, ?PROTOCOL]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {writer, {rabbit_writer, start_link,
+                            [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {main_reader, {amqp_main_reader, start_link,
+                                 [Sock, Framing0, ConnectionPid]},
+                   permanent, ?MAX_WAIT, worker, [amqp_main_reader]}),
+    {ok, Sup}.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([direct, []]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{collector, {rabbit_queue_collector, start_link, []},
-            permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}]}};
-init([network, [Sock, ConnectionPid]]) ->
-    GetConnectionPid = fun() -> ConnectionPid end,
-    Channel0InfraChildren = amqp_channel_util:channel_infrastructure_children(
-                                network, [Sock, none], GetConnectionPid, 0),
-    {ok, {{one_for_all, 0, 1},
-          Channel0InfraChildren ++
-          [{main_reader, {amqp_main_reader, start_link, [Sock]},
-           permanent, ?MAX_WAIT, worker, [amqp_main_reader]}]}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

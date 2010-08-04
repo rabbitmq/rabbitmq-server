@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1]).
+-export([start_link/1, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -43,6 +43,10 @@
                 sock,
                 max_channel,
                 heartbeat,
+                framing0,
+                writer0,
+                main_reader,
+                channel_sup_sup,
                 closing = false,
                 server_properties,
                 channels = amqp_channel_util:new_channel_dict()}).
@@ -59,19 +63,17 @@
 %%---------------------------------------------------------------------------
 
 start_link(AmqpParams) ->
-    Parent = self(),
-    {ok, proc_lib:spawn_link(fun() -> init_and_go([Parent, AmqpParams]) end)}.
+    gen_server:start_link(?MODULE, [self(), AmqpParams], []).
+
+connect(Pid) ->
+    gen_server:call(Pid, connect, infinity).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams]) ->
-    process_flag(trap_exit, true),
-    connect(#state{sup = Sup, params = AmqpParams}).
-
-init_and_go(InitArgs) ->
-    gen_server:enter_loop(?MODULE, [], init(InitArgs)).
+    {ok, #state{sup = Sup, params = AmqpParams}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -81,7 +83,9 @@ handle_call({command, Command}, From, #state{closing = Closing} = State) ->
 handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State) ->
-    {reply, ?INFO_KEYS, State}.
+    {reply, ?INFO_KEYS, State};
+handle_call(connect, _From, State) ->
+    {reply, ok, do_connect(State)}.
 
 %% Standard handling of a method sent by the broker (this is received from
 %% framing0)
@@ -90,9 +94,16 @@ handle_cast({method, Method, Content}, State) ->
 
 %% This is received after we have sent 'connection.close' to the server
 %% but timed out waiting for 'connection.close_ok' back
-handle_info(timeout_waiting_for_close_ok = Msg,
-            State = #state{closing = Closing}) ->
-    {stop, {Msg, closing_to_reason(Closing)}, State};
+handle_info(timeout_waiting_for_close_ok, State = #state{closing = Closing}) ->
+    #closing{phase = wait_close_ok} = Closing, % assertion
+    {stop, {timeout_waiting_for_close_ok, closing_to_reason(Closing)}, State};
+%% This is received when the main reader has not sent socket_closed in time
+handle_info(socket_closing_timeout, State = #state{closing = Closing}) ->
+    #closing{phase = wait_socket_close} = Closing, % assertion
+    {stop, {socket_closing_timeout, closing_to_reason(Closing)}, State};
+%% Received from main reader
+handle_info(socket_closed, State) ->
+    handle_socket_closed(State);
 %% DOWN signals from channels
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
     handle_channel_exit(Pid, Reason, State).
@@ -240,20 +251,18 @@ set_closing_state(ChannelCloseType, NewClosing,
 
 %% The all_channels_closed_event is called when all channels have been closed
 %% after the connection broadcasts a connection_closing message to all channels
-all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
+all_channels_closed_event(#state{writer0 = Writer,
+                                 closing = Closing} = State) ->
     #closing{reason = Reason, close = Close} = Closing,
-    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
     case Reason of
         server_initiated_close ->
-            amqp_channel_util:do(network, CTSup, #'connection.close_ok'{}, none),
-            [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
-            [MainReader] = supervisor2:find_child(CTSup, main_reader),
-            erlang:send_after(?SOCKET_CLOSING_TIMEOUT, MainReader,
+            amqp_channel_util:do(network, Writer, #'connection.close_ok'{},
+                                 none),
+            erlang:send_after(?SOCKET_CLOSING_TIMEOUT, self(),
                               socket_closing_timeout),
-            State#state{closing =
-                Closing#closing{phase = wait_socket_close}};
+            State#state{closing = Closing#closing{phase = wait_socket_close}};
         _ ->
-            amqp_channel_util:do(network, CTSup, Close, none),
+            amqp_channel_util:do(network, Writer, Close, none),
             erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
                               timeout_waiting_for_close_ok),
             State#state{closing = Closing#closing{phase = wait_close_ok}}
@@ -270,6 +279,12 @@ internal_error_closing() ->
                                          reply_code = ?INTERNAL_ERROR,
                                          class_id = 0,
                                          method_id = 0}}.
+
+handle_socket_closed(State = #state{closing =
+                         Closing = #closing{phase = wait_socket_close}}) ->
+    {stop, closing_to_reason(Closing), State};
+handle_socket_closed(State) ->
+    {stop, socket_closed_unexpectedly, State}.
 
 %%---------------------------------------------------------------------------
 %% Channel utilities
@@ -305,18 +320,18 @@ handle_channel_exit(Pid, Reason,
 %% Handshake
 %%---------------------------------------------------------------------------
 
-connect(State = #state{params = #amqp_params{host = Host,
-                                             port = Port,
-                                             ssl_options = none}}) ->
+do_connect(State = #state{params = #amqp_params{host = Host,
+                                                port = Port,
+                                                ssl_options = none}}) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock}      -> handshake(State#state{sock = Sock});
         {error, Reason} -> ?LOG_WARN("Could not start the network driver: ~p~n",
                                      [Reason]),
                            exit(Reason)
     end;
-connect(State = #state{params = #amqp_params{host = Host,
-                                             port = Port,
-                                             ssl_options = SslOpts}}) ->
+do_connect(State = #state{params = #amqp_params{host = Host,
+                                                port = Port,
+                                                ssl_options = SslOpts}}) ->
     rabbit_misc:start_applications([crypto, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
@@ -336,30 +351,36 @@ connect(State = #state{params = #amqp_params{host = Host,
 
 handshake(State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    start_connection_type_sup(State0),
-    State1 = network_handshake(State0),
-    start_heartbeat(State1),
-    State1.
+    State1 = start_infrastructure(State0),
+    State2 = network_handshake(State1),
+    start_heartbeat(State2),
+    State2.
 
-start_connection_type_sup(#state{sup = Sup, sock = Sock}) ->
-    {ok, _} = supervisor2:start_child(Sup,
+start_infrastructure(State = #state{sup = Sup, sock = Sock}) ->
+    {ok, CTSup} = supervisor2:start_child(Sup,
         {connection_type_sup, {amqp_connection_type_sup,
-                                   start_link_network, [Sock, self()]},
+                               start_link_network, [Sock, self()]},
          permanent, infinity, supervisor, [amqp_connection_type_sup]}),
-    ok.
+    [MainReader, Framing0, Writer0] =
+        [hd(supervisor2:find_child(CTSup, Child)) ||
+            Child <- [main_reader, framing, writer]],
+    [ChannelSupSup] = supervisor2:find_child(Sup, channel_sup_sup),
+    State#state{main_reader = MainReader,
+                framing0 = Framing0,
+                writer0 = Writer0,
+                channel_sup_sup = ChannelSupSup}.
 
-network_handshake(State = #state{sup = Sup, params = Params}) ->
+network_handshake(State = #state{writer0 = Writer, params = Params}) ->
     Start = handshake_recv(),
     #'connection.start'{server_properties = ServerProperties} = Start,
     ok = check_version(Start),
-    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
-    amqp_channel_util:do(network, CTSup, start_ok(State), none),
+    amqp_channel_util:do(network, Writer, start_ok(State), none),
     Tune = handshake_recv(),
     TuneOk = negotiate_values(Tune, Params),
-    amqp_channel_util:do(network, CTSup, TuneOk, none),
+    amqp_channel_util:do(network, Writer, TuneOk, none),
     ConnectionOpen =
         #'connection.open'{virtual_host = Params#amqp_params.virtual_host},
-    amqp_channel_util:do(network, CTSup, ConnectionOpen, none),
+    amqp_channel_util:do(network, Writer, ConnectionOpen, none),
     #'connection.open_ok'{} = handshake_recv(),
     #'connection.tune_ok'{channel_max = ChannelMax,
                           frame_max   = FrameMax,
@@ -433,7 +454,10 @@ client_properties(UserProperties) ->
 
 handshake_recv() ->
     receive
-        {'$gen_cast', {method, Method, _Content}} -> Method
+        {'$gen_cast', {method, Method, _Content}} ->
+            Method;
+        socket_closed ->
+            exit(socket_closed_unexpectedly)
     after ?HANDSHAKE_RECEIVE_TIMEOUT ->
         exit(handshake_receive_timed_out)
     end.

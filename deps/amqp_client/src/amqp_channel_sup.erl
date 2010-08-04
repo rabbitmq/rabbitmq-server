@@ -37,27 +37,41 @@
 %%---------------------------------------------------------------------------
 
 start_link(Driver, InfraArgs, ChNumber) ->
-    {ok, Sup} = supervisor2:start_link(?MODULE, [Driver, InfraArgs, ChNumber]),
-    case Driver of
-        direct  -> ok;
-        network -> [_, MainReader] = InfraArgs,
-                   [FramingPid] = supervisor2:find_child(Sup, framing),
-                   amqp_main_reader:register_framing_channel(
-                           MainReader, ChNumber, FramingPid)
-    end,
-    [Channel] = supervisor2:find_child(Sup, channel),
-    #'channel.open_ok'{} = amqp_channel:call(Channel, #'channel.open'{}),
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, ChPid} = supervisor2:start_child(Sup,
+                      {channel, {amqp_channel, start_link, [Driver, ChNumber]},
+                       permanent, ?MAX_WAIT, worker, [amqp_channel]}),
+    start_infrastructure(Sup, Driver, InfraArgs, ChPid, ChNumber),
     {ok, Sup}.
+
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
+
+start_infrastructure(Sup, direct, [User, VHost, Collector], ChPid, ChNumber) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {rabbit_channel, {rabbit_channel, start_link,
+                                    [ChNumber, ChPid, ChPid, User, VHost,
+                                     Collector]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_channel]}),
+    ok;
+start_infrastructure(Sup, network, [Sock, MainReader], ChPid, ChNumber) ->
+    {ok, Framing} = supervisor2:start_child(Sup,
+                        {framing, {rabbit_framing_channel, start_link,
+                                   [ChPid, ?PROTOCOL]},
+                         permanent, ?MAX_WAIT, worker,
+                         [rabbit_framing_channel]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {writer, {rabbit_writer, start_link,
+                            [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
+    %% This call will disapear as part of bug 23024
+    amqp_main_reader:register_framing_channel(MainReader, ChNumber, Framing),
+    ok.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Driver, InfraArgs, ChNumber]) ->
-    Me = self(),
-    GetChPid = fun() -> hd(supervisor2:find_child(Me, channel)) end,
-    InfraChildren = amqp_channel_util:channel_infrastructure_children(
-                        Driver, InfraArgs, GetChPid, ChNumber),
-    {ok, {{one_for_all, 0, 1},
-          [{channel, {amqp_channel, start_link, [Driver, ChNumber]},
-            permanent, ?MAX_WAIT, worker, [amqp_channel]}] ++ InfraChildren}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

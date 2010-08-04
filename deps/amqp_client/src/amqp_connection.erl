@@ -87,9 +87,20 @@ start_link(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.The resulting process's supervisor is linked to the invoking process.
 start_link(Type, AmqpParams) ->
-    case amqp_connection_sup:start_link(Type, AmqpParams) of
-        {ok, Sup}          -> {ok, hd(supervisor2:find_child(Sup, connection))};
-        {error, _} = Error -> Error
+    Module = case Type of direct  -> amqp_direct_connection;
+                          network -> amqp_network_connection
+             end,
+    {ok, Sup} = amqp_connection_sup:start_link(Type, Module, AmqpParams),
+    [Connection] = supervisor2:find_child(Sup, connection),
+    %% The unlink-link calls will disapear as part of bug 23003
+    unlink(Sup),
+    try Module:connect(Connection) of
+        ok -> link(Sup), {ok, Connection}
+    catch
+        exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
+            {error, Reason};
+        exit:Reason ->
+            {error, {auth_failure_likely, Reason}}
     end.
 
 %%---------------------------------------------------------------------------
