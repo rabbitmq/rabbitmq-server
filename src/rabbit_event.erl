@@ -120,7 +120,8 @@ stats_level(#state{level = Level}) ->
 
 notify(Type, Props) ->
     try
-        %% TODO: when we no longer support 12B3, switch to os:timestamp()
+        %% TODO: switch to os:timestamp() when we drop support for
+        %% Erlang/OTP < R13B01
         gen_event:notify(rabbit_event, #event{type = Type,
                                               props = Props,
                                               timestamp = now()})
