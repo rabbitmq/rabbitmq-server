@@ -29,12 +29,13 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, do_post_init/1]).
+-export([start_link/1, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
 -record(state, {sup,
                 params = #amqp_params{},
+                collector,
                 closing = false,
                 server_properties}).
 
@@ -53,8 +54,8 @@
 start_link(AmqpParams) ->
     gen_server:start_link(?MODULE, [self(), AmqpParams], []).
 
-do_post_init(Connection) ->
-    gen_server:call(Connection, post_init, infinity).
+connect(Pid) ->
+    gen_server:call(Pid, connect, infinity).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -72,8 +73,8 @@ handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State) ->
     {reply, ?INFO_KEYS, State};
-handle_call(post_init, _From, State) ->
-    {reply, ok, post_init(State)}.
+handle_call(connect, _From, State) ->
+    {reply, ok, do_connect(State)}.
 
 handle_cast(Message, State) ->
     ?LOG_WARN("Connection (~p) closing: received unexpected cast ~p~n",
@@ -101,10 +102,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 handle_command({open_channel, ProposedNumber}, _From,
                State = #state{sup = Sup,
+                              collector = Collector,
                               params = #amqp_params{username = User,
                                                     virtual_host = VHost}}) ->
-    Collector = amqp_infra_sup:child(Sup, collector),
-    Reply = amqp_channel_util:open_channel(Sup, ProposedNumber, direct,
+    Reply = amqp_channel_util:open_channel(ChMgr, ChSupSup, ProposedNumber, direct,
                                            [User, VHost, Collector]),
     {reply, Reply, State};
 handle_command({close, Close}, From, State) ->
@@ -121,9 +122,8 @@ i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
 i(supervisor,        State) -> State#state.sup;
-i(num_channels, #state{sup = Sup}) ->
-    ChMgr = amqp_infra_sup:child(Sup, channels_manager),
-    amqp_channels_manager:num_channels(ChMgr);
+i(num_channels,      State) ->
+    amqp_channels_manager:num_channels(State#state.channels_manager);
 i(Item, _State) ->
     throw({bad_argument, Item}).
 
@@ -208,10 +208,9 @@ internal_error_closing() ->
 %% Connecting to the broker
 %%---------------------------------------------------------------------------
 
-post_init(State = #state{sup = Sup,
-                         params = #amqp_params{username = User,
-                                               password = Pass,
-                                               virtual_host = VHost}}) ->
+do_connect(State0 = #state{params = #amqp_params{username = User,
+                                                 password = Pass,
+                                                 virtual_host = VHost}}) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  -> ok;
         false -> exit(broker_not_found_in_vm)
@@ -219,11 +218,14 @@ post_init(State = #state{sup = Sup,
     rabbit_access_control:user_pass_login(User, Pass),
     rabbit_access_control:check_vhost_access(
             #user{username = User, password = Pass}, VHost),
-    CollectorChild = {worker, collector,
-                      {rabbit_queue_collector, start_link, []}},
-    ChMgrChild = {worker, channels_manager,
-                  {amqp_channels_manager, start_link, [0]}},
-    {all_ok, _} =
-        amqp_infra_sup:start_children(Sup, [CollectorChild, ChMgrChild]),
+    State1 = start_infrastructure(State0),
     ServerProperties = rabbit_reader:server_properties(),
-    State#state{server_properties = ServerProperties}.
+    State1#state{server_properties = ServerProperties}.
+
+start_infrastructure(State = #state{sup = Sup}) ->
+    {ok, CTSup} = supervisor2:start_child(Sup,
+        {connection_type_sup, {amqp_connection_type_sup,
+                                   start_link_direct, []},
+         permanent, infinity, supervisor, [amqp_connection_type_sup]}),
+    [Collector] = supervisor2:find_child(CTSup, collector),
+    State#state{collector = Collector}.

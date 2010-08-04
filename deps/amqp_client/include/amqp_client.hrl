@@ -26,8 +26,10 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(PROTOCOL_HEADER,
-        <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
+-define(PROTOCOL_VERSION_MAJOR, 0).
+-define(PROTOCOL_VERSION_MINOR, 9).
+-define(PROTOCOL_HEADER, <<"AMQP", 0, 0, 9, 1>>).
+-define(PROTOCOL, rabbit_framing_amqp_0_9_1).
 
 -define(MAX_CHANNEL_NUMBER, 65535).
 

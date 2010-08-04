@@ -20,32 +20,48 @@
 %%
 %%   All Rights Reserved.
 %%
-%%   Contributor(s): ____________________.
+%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @private
--module(amqp_connection_sup).
+-module(amqp_connection_type_sup).
 
 -include("amqp_client.hrl").
 
 -behaviour(supervisor2).
 
--export([start_link/3]).
+-export([start_link_direct/0, start_link_network/2]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Module, AmqpParams) ->
-    supervisor2:start_link(?MODULE, [Type, Module, AmqpParams]).
+start_link_direct() ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {collector, {rabbit_queue_collector, start_link, []},
+                   permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
+    {ok, Sup}.
+
+start_link_network(Sock, ConnectionPid) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, Framing0} = supervisor2:start_child(Sup,
+                        {framing, {rabbit_framing_channel, start_link,
+                                   [ConnectionPid, ?PROTOCOL]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {writer, {rabbit_writer, start_link,
+                            [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {main_reader, {amqp_main_reader, start_link,
+                                 [Sock, Framing0, ConnectionPid]},
+                   permanent, ?MAX_WAIT, worker, [amqp_main_reader]}),
+    {ok, Sup}.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Type, Module, AmqpParams]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{connection, {Module, start_link, [AmqpParams]},
-            permanent, ?MAX_WAIT, worker, [Module]},
-           {channel_sup_sup, {amqp_channel_sup_sup, start_link, [Type]},
-           permanent, infinity, supervisor, [amqp_channel_sup_sup]}]}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

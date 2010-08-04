@@ -27,16 +27,49 @@
 
 -include("amqp_client.hrl").
 
+-behaviour(supervisor2).
+
 -export([start_link/3]).
+-export([init/1]).
 
 %%---------------------------------------------------------------------------
+%% Interface
+%%---------------------------------------------------------------------------
 
-start_link(ChannelNumber, Driver, InfraArgs) ->
-    ChChild =
-        {worker, channel, {amqp_channel, start_link, [ChannelNumber, Driver]}},
-    {ok, Sup} = amqp_infra_sup:start_link([ChChild]),
-    ChannelPid = amqp_infra_sup:child(Sup, channel),
-    InfraChildren = amqp_channel_util:channel_infrastructure_children(
-                            Driver, ChannelPid, ChannelNumber, InfraArgs),
-    {all_ok, _} = amqp_infra_sup:start_children(Sup, InfraChildren),
+start_link(Driver, InfraArgs, ChNumber) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, ChPid} = supervisor2:start_child(Sup,
+                      {channel, {amqp_channel, start_link, [Driver, ChNumber]},
+                       permanent, ?MAX_WAIT, worker, [amqp_channel]}),
+    start_infrastructure(Sup, Driver, InfraArgs, ChPid, ChNumber),
     {ok, Sup}.
+
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
+
+start_infrastructure(Sup, direct, [User, VHost, Collector], ChPid, ChNumber) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {rabbit_channel, {rabbit_channel, start_link,
+                                    [ChNumber, ChPid, ChPid, User, VHost,
+                                     Collector]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_channel]}),
+    ok;
+start_infrastructure(Sup, network, [Sock, MainReader], ChPid, ChNumber) ->
+    {ok, Framing} = supervisor2:start_child(Sup,
+                        {framing, {rabbit_framing_channel, start_link,
+                                   [ChPid, ?PROTOCOL]},
+                         permanent, ?MAX_WAIT, worker,
+                         [rabbit_framing_channel]}),
+    {ok, _} = supervisor2:start_child(Sup,
+                  {writer, {rabbit_writer, start_link,
+                            [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL]},
+                   permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
+    ok.
+
+%%---------------------------------------------------------------------------
+%% supervisor2 callbacks
+%%---------------------------------------------------------------------------
+
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.
