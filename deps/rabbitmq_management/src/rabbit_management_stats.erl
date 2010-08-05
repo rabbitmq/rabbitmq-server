@@ -146,6 +146,37 @@ gs_update(Cur, New) ->
 
 %%----------------------------------------------------------------------------
 
+augment_items(Items, #state{tables = Tables}) ->
+    [augment_item(I, Tables) || I <- Items].
+
+augment_item({Ids, Stats}, Tables) ->
+    {augment(Ids, [{channel, fun augment_channel_pid/2},
+                   {queue,   fun augment_queue_pid/2}], Tables), Stats}.
+
+augment(Ids, Funs, Tables) ->
+    lists:flatten([augment(K, Ids, Fun, Tables) || {K, Fun} <- Funs] ++ Ids).
+
+augment(K, Ids, Fun, Tables) ->
+    Id = pget(K, Ids),
+    case Id of
+        unknown -> [];
+        _       -> Fun(Id, Tables)
+    end.
+
+augment_channel_pid(Pid, Tables) ->
+    Table = orddict:fetch(channel_stats, Tables),
+    Ch = lookup_element(Table, {Pid, create}),
+    Conn = lookup_element(orddict:fetch(connection_stats, Tables), {id(pget(connection, Ch)), create}),
+    [{channel_number, pget(number, Ch)},
+     {channel_connection, pget(pid, Conn)},
+     {channel_peer_address, pget(peer_address, Conn)},
+     {channel_peer_port, pget(peer_port, Conn)}].
+
+augment_queue_pid(_Pid, _Tables) ->
+    [].
+
+%%----------------------------------------------------------------------------
+
 %% TODO some sort of generalised query mechanism for the coarse stats?
 
 init([]) ->
@@ -192,7 +223,7 @@ handle_call({get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
               true  -> group_sum(list_to_atom(GroupBy), All);
               _     -> bad_request
           end,
-    {ok, Res, State};
+    {ok, augment_items(Res, State), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.

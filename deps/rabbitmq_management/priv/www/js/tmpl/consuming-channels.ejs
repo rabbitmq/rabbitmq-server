@@ -19,7 +19,9 @@
  <tbody>
   <% for (var i = 0; i < stats.length; i++) { %>
   <tr<%= alt_rows(i)%>>
-    <td><%= stats[i].channel %></td>
+    <td>
+      <%= link_to(stats[i].channel_peer_address + ":" + stats[i].channel_peer_port, '#connection/' + stats[i].channel_connection) %> (<%= stats[i].channel_number %>)
+    </td>
     <td><%= fmt_rate(stats[i].stats, 'deliver') %></td>
     <td><%= fmt_rate(stats[i].stats, 'get') %></td>
     <td><%= fmt_rate(stats[i].stats, 'ack') %></td>
