@@ -234,25 +234,16 @@ ensure_mnesia_not_running() ->
 
 check_schema_integrity() ->
     try
-        % Check that all tables are present
-        case catch [mnesia:table_info(Tab, version) || Tab <- table_names()] of
-            {'EXIT', Reason} -> throw({missing_table, Reason});
-            _ -> ok
-        end,
-        % Check that tables are defined correctly
         TabDefs = table_definitions(),
-        lists:foreach(fun(Tab) ->
-                              {_, TabDef} = proplists:lookup(Tab, TabDefs),
-                              {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                              Attrs = mnesia:table_info(Tab, attributes),
-                              case lists:usort(ExpAttrs) /= lists:usort(Attrs) of
-                                  true ->
-                                      throw({table_not_defined_correctly, Tab});
-                                  _ ->
-                                      ok
-                              end
-                      end, table_names()),
-        ok
+        case lists:all(fun(Tab) ->
+                               {_, TabDef} = proplists:lookup(Tab, TabDefs),
+                               {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+                               Attrs = mnesia:table_info(Tab, attributes),
+                               sets:is_subset(sets:from_list(ExpAttrs), sets:from_list(Attrs))
+                       end, table_names()) of
+            true  -> ok;
+            false -> {error, database_tables_incompatible}
+        end
     catch
         throw:Why ->
             {error, Why}
