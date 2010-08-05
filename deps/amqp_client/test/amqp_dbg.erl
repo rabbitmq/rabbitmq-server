@@ -112,7 +112,7 @@ dcl_args() ->
      {amqp_direct_connection, terminate, []}].
 
  cml_args() ->
-     [{amqp_channels_manager, register, return_ms()},
+     [{amqp_channels_manager, open_channel, return_ms()},
       {amqp_channels_manager, handle_channel_down, []},
       {amqp_channels_manager, signal_channels, []},
       {amqp_channels_manager, signal_connection, []}].
