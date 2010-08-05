@@ -553,7 +553,7 @@ handle_frame(Type, Channel, Payload,
                             erase({channel, Channel}),
                             State;
                         {method, MethodName, _} ->
-                            case (State#v1.connection_state == blocking andalso
+                            case (State#v1.connection_state =:= blocking andalso
                                   Protocol:method_has_content(MethodName)) of
                                 true  -> State#v1{connection_state = blocked};
                                 false -> State
