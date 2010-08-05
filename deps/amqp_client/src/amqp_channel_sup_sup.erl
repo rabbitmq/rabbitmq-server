@@ -47,6 +47,6 @@ start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
 %%---------------------------------------------------------------------------
 
 init([Driver]) ->
-    {ok, {{simple_one_for_one_terminate, 0, 1},
+    {ok, {{simple_one_for_one, 0, 1},
           [{channel_sup, {amqp_channel_sup, start_link, [Driver]},
-           temporary, infinity, supervisor, [amqp_channel_sup]}]}}.
+           temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.

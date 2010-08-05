@@ -163,8 +163,11 @@ close(Channel, Code, Text) ->
                              reply_code = Code,
                              class_id   = 0,
                              method_id  = 0},
-    #'channel.close_ok'{} = call(Channel, Close),
-    ok.
+    case call(Channel, Close) of
+        #'channel.close_ok'{} -> ok;
+        Error                 -> Error
+    end.
+
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
 %%---------------------------------------------------------------------------
@@ -255,7 +258,7 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     end.
 
 do_rpc(State0 = #state{rpc_requests = RequestQueue,
-                      closing = Closing}) ->
+                       closing = Closing}) ->
     State1 = check_writer(State0),
     case queue:peek(RequestQueue) of
         {value, {_From, Method = #'channel.close'{}, Content}} ->

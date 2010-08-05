@@ -192,8 +192,8 @@ handle_channel_down(Pid, Number, Reason, State) ->
 down_side_effect(_Pid, normal, _State) ->
     ok;
 down_side_effect(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
-    {IsHardError, _, _} = rabbit_framing:lookup_amqp_exception(
-                            rabbit_framing:amqp_exception(Code)),
+    {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
+                            ?PROTOCOL:amqp_exception(Code)),
     case IsHardError of
         true  -> signal_connection({hard_error_in_channel, Pid, Reason}, State);
         false -> ok

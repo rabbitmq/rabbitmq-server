@@ -123,9 +123,10 @@ open_channel(ConnectionPid) ->
 open_channel(ConnectionPid, ChannelNumber) ->
     case command(ConnectionPid, {open_channel, ChannelNumber}) of
         {ok, ChannelPid} ->
-            #'channel.open_ok'{} =
-                amqp_channel:call(ChannelPid, #'channel.open'{}),
-            {ok, ChannelPid};
+            case amqp_channel:call(ChannelPid, #'channel.open'{}) of
+                #'channel.open_ok'{} -> {ok, ChannelPid};
+                Error                -> Error
+            end;
         Error ->
             Error
     end.

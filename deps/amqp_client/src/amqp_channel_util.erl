@@ -31,8 +31,6 @@
 -export([do/4]).
 
 %%---------------------------------------------------------------------------
-%% Starting and terminating channels
-%%---------------------------------------------------------------------------
 
 terminate_channel_infrastructure(network, Sup) ->
     [Writer] = supervisor2:find_child(Sup, writer),
@@ -42,10 +40,6 @@ terminate_channel_infrastructure(direct, Sup) ->
     [RChannel] = supervisor2:find_child(Sup, rabbit_channel),
     rabbit_channel:shutdown(RChannel),
     ok.
-
-%%---------------------------------------------------------------------------
-%% Do
-%%---------------------------------------------------------------------------
 
 do(network, Writer, Method, Content) ->
     case Content of

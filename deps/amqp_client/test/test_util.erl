@@ -224,18 +224,18 @@ channel_multi_open_close_test(Connection) ->
     [spawn_link(
         fun() ->
             try amqp_connection:open_channel(Connection) of
-                {ok, Ch} -> try amqp_channel:close(Ch) of
-                                ok      -> ok;
-                                closing -> ok
-                            catch
-                                exit:{normal, _} -> ok;
-                                exit:{noproc, _} -> ok
-                            end;
-                closing  -> ok
+                {ok, Ch}           -> try amqp_channel:close(Ch) of
+                                          ok                 -> ok;
+                                          connection_closing -> ok
+                                      catch
+                                          exit:{normal, _} -> ok;
+                                          exit:{noproc, _} -> ok
+                                      end;
+                closing            -> ok;
+                connection_closing -> ok
             catch
                 exit:{normal, _} -> ok;
                 exit:{noproc, _} -> ok
-
             end
         end) || _ <- lists:seq(1, 50)],
     erlang:yield(),
