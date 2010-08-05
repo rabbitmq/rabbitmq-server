@@ -39,7 +39,7 @@
 
 -export([init/1, mainloop/3]).
 
--export([server_properties/0]).
+-export([conserve_memory/2, server_properties/0]).
 
 -export([analyze_frame/3]).
 
@@ -59,8 +59,8 @@
 
 %---------------------------------------------------------------------------
 
--record(v1, {sock, connection, callback, recv_ref, connection_state,
-             queue_collector, stats_timer}).
+-record(v1, {sock, connection, callback, recv_length, recv_ref,
+             connection_state, queue_collector, heartbeater, stats_timer}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -107,6 +107,17 @@
 %%   -> log error, mark channel as closing, *running*
 %%   handshake_timeout -> ignore, *running*
 %%   heartbeat timeout -> *throw*
+%%   conserve_memory=true -> *blocking*
+%% blocking:
+%%   conserve_memory=true -> *blocking*
+%%   conserve_memory=false -> *running*
+%%   receive a method frame for a content-bearing method
+%%   -> process, stop receiving, *blocked*
+%%   ...rest same as 'running'
+%% blocked:
+%%   conserve_memory=true -> *blocked*
+%%   conserve_memory=false -> resume receiving, *running*
+%%   ...rest same as 'running'
 %% closing:
 %%   socket close -> *terminate*
 %%   receive connection.close -> send connection.close_ok,
@@ -140,6 +151,11 @@
 %%
 %% TODO: refactor the code so that the above is obvious
 
+-define(IS_RUNNING(State),
+        (State#v1.connection_state =:= running orelse
+         State#v1.connection_state =:= blocking orelse
+         State#v1.connection_state =:= blocked)).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -149,6 +165,7 @@
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 -endif.
@@ -218,6 +235,10 @@ teardown_profiling(Value) ->
             fprof:analyse([{dest, []}, {cols, 100}])
     end.
 
+conserve_memory(Pid, Conserve) ->
+    Pid ! {conserve_memory, Conserve},
+    ok.
+
 server_properties() ->
     {ok, Product} = application:get_key(rabbit, id),
     {ok, Version} = application:get_key(rabbit, vsn),
@@ -262,9 +283,11 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
                                       client_properties = none,
                                       protocol = none},
                                     callback = uninitialized_callback,
+                                    recv_length = 0,
                                     recv_ref = none,
                                     connection_state = pre_init,
                                     queue_collector = Collector,
+                                    heartbeater = none,
                                     stats_timer =
                                         rabbit_event:init_stats_timer()},
                                 handshake, 8))
@@ -308,6 +331,8 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             end;
         {inet_async, Sock, Ref, {error, Reason}} ->
             throw({inet_error, Reason});
+        {conserve_memory, Conserve} ->
+            mainloop(Parent, Deb, internal_conserve_memory(Conserve, State));
         {'EXIT', Parent, Reason} ->
             terminate(io_lib:format("broker forced connection closure "
                                     "with reason '~w'", [Reason]), State),
@@ -329,7 +354,7 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
         terminate_connection ->
             State;
         handshake_timeout ->
-            if State#v1.connection_state =:= running orelse
+            if ?IS_RUNNING(State) orelse
                State#v1.connection_state =:= closing orelse
                State#v1.connection_state =:= closed ->
                     mainloop(Parent, Deb, State);
@@ -367,18 +392,35 @@ mainloop(Parent, Deb, State = #v1{sock= Sock, recv_ref = Ref}) ->
             exit({unexpected_message, Other})
     end.
 
-switch_callback(OldState, NewCallback, Length) ->
+switch_callback(State = #v1{connection_state = blocked,
+                            heartbeater = Heartbeater}, Callback, Length) ->
+    ok = rabbit_heartbeat:pause_monitor(Heartbeater),
+    State#v1{callback = Callback, recv_length = Length, recv_ref = none};
+switch_callback(State, Callback, Length) ->
     Ref = inet_op(fun () -> rabbit_net:async_recv(
-                              OldState#v1.sock, Length, infinity) end),
-    OldState#v1{callback = NewCallback,
-                recv_ref = Ref}.
+                              State#v1.sock, Length, infinity) end),
+    State#v1{callback = Callback, recv_length = Length, recv_ref = Ref}.
 
-terminate(Explanation, State = #v1{connection_state = running}) ->
+terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, send_exception(State, 0,
                             rabbit_misc:amqp_error(
                               connection_forced, Explanation, [], none))};
 terminate(_Explanation, State) ->
     {force, State}.
+
+internal_conserve_memory(true,  State = #v1{connection_state = running}) ->
+    State#v1{connection_state = blocking};
+internal_conserve_memory(false, State = #v1{connection_state = blocking}) ->
+    State#v1{connection_state = running};
+internal_conserve_memory(false, State = #v1{connection_state = blocked,
+                                            heartbeater      = Heartbeater,
+                                            callback         = Callback,
+                                            recv_length      = Length,
+                                            recv_ref         = none}) ->
+    ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+    switch_callback(State#v1{connection_state = running}, Callback, Length);
+internal_conserve_memory(_Conserve, State) ->
+    State.
 
 close_connection(State = #v1{queue_collector = Collector,
                              connection = #connection{
@@ -505,13 +547,20 @@ handle_frame(Type, Channel, Payload,
             %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {chpid, ChPid} ->
+                    ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
                     case AnalyzedFrame of
                         {method, 'channel.close', _} ->
-                            erase({channel, Channel});
-                        _ -> ok
-                    end,
-                    ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame),
-                    State;
+                            erase({channel, Channel}),
+                            State;
+                        {method, MethodName, _} ->
+                            case (State#v1.connection_state =:= blocking andalso
+                                  Protocol:method_has_content(MethodName)) of
+                                true  -> State#v1{connection_state = blocked};
+                                false -> State
+                            end;
+                        _ ->
+                            State
+                    end;
                 closing ->
                     %% According to the spec, after sending a
                     %% channel.close we must ignore all frames except
@@ -531,12 +580,13 @@ handle_frame(Type, Channel, Payload,
                     end,
                     State;
                 undefined ->
-                    case State#v1.connection_state of
-                        running -> ok = send_to_new_channel(
-                                          Channel, AnalyzedFrame, State),
-                                   State;
-                        Other   -> throw({channel_frame_while_starting,
-                                          Channel, Other, AnalyzedFrame})
+                    case ?IS_RUNNING(State) of
+                        true  -> ok = send_to_new_channel(
+                                        Channel, AnalyzedFrame, State),
+                                 State;
+                        false -> throw({channel_frame_while_starting,
+                                        Channel, State#v1.connection_state,
+                                        AnalyzedFrame})
                     end
             end
     end.
@@ -649,13 +699,14 @@ handle_method0(MethodName, FieldsBin,
                                      Reason#amqp_error{method = MethodName};
                                  OtherReason -> OtherReason
                              end,
-            case State#v1.connection_state of
-                running -> send_exception(State, 0, CompleteReason);
+            case ?IS_RUNNING(State) of
+                true  -> send_exception(State, 0, CompleteReason);
                 %% We don't trust the client at this point - force
                 %% them to wait for a bit so they can't DOS us with
                 %% repeated failed logins etc.
-                Other   -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-                           throw({channel0_error, Other, CompleteReason})
+                false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+                         throw({channel0_error, State#v1.connection_state,
+                                CompleteReason})
             end
     end.
 
@@ -689,11 +740,13 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            rabbit_heartbeat:start_heartbeat(Sock, ClientHeartbeat),
+            Heartbeater = rabbit_heartbeat:start_heartbeat(
+                            Sock, ClientHeartbeat),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,
-                                    frame_max = FrameMax}}
+                                    frame_max = FrameMax},
+                     heartbeater = Heartbeater}
     end;
 
 handle_method0(#'connection.open'{virtual_host = VHostPath},
@@ -706,14 +759,14 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
     State1 = State#v1{connection_state = running,
                       connection = NewConnection},
     rabbit_event:notify(
       connection_created,
       [{Item, i(Item, State1)} || Item <- ?CREATION_EVENT_KEYS]),
     State1;
-handle_method0(#'connection.close'{},
-               State = #v1{connection_state = running}) ->
+handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
 handle_method0(#'connection.close'{},

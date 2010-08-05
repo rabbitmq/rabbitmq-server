@@ -31,14 +31,17 @@
 
 -module(rabbit_heartbeat).
 
--export([start_heartbeat/2]).
+-export([start_heartbeat/2, pause_monitor/1, resume_monitor/1]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(start_heartbeat/2 :: (rabbit_net:socket(), non_neg_integer()) ->
-                                rabbit_types:maybe({pid(), pid()})).
+-type(pids() :: rabbit_types:maybe({pid(), pid()})).
+
+-spec(start_heartbeat/2 :: (rabbit_net:socket(), non_neg_integer()) -> pids()).
+-spec(pause_monitor/1 :: (pids()) -> 'ok').
+-spec(resume_monitor/1 :: (pids()) -> 'ok').
 
 -endif.
 
@@ -70,20 +73,43 @@ start_heartbeat(Sock, TimeoutSec) ->
                                           end}, Parent) end),
     {Sender, Receiver}.
 
+pause_monitor(none) ->
+    ok;
+pause_monitor({_Sender, Receiver}) ->
+    Receiver ! pause,
+    ok.
+
+resume_monitor(none) ->
+    ok;
+resume_monitor({_Sender, Receiver}) ->
+    Receiver ! resume,
+    ok.
+
+%%----------------------------------------------------------------------------
+
 heartbeater(Params, Parent) ->
     heartbeater(Params, erlang:monitor(process, Parent), {0, 0}).
 
 heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
             MonitorRef, {StatVal, SameCount}) ->
+    Recurse = fun (V) -> heartbeater(Params, MonitorRef, V) end,
     receive
         {'DOWN', MonitorRef, process, _Object, _Info} ->
             ok;
+        pause ->
+            receive
+                {'DOWN', MonitorRef, process, _Object, _Info} ->
+                    ok;
+                resume ->
+                    Recurse({0, 0});
+                Other ->
+                    exit({unexpected_message, Other})
+            end;
         Other ->
             exit({unexpected_message, Other})
     after TimeoutMillisec ->
             case rabbit_net:getstat(Sock, [StatName]) of
                 {ok, [{StatName, NewStatVal}]} ->
-                    Recurse = fun (V) -> heartbeater(Params, MonitorRef, V) end,
                     if NewStatVal =/= StatVal ->
                             Recurse({NewStatVal, 0});
                        SameCount < Threshold ->

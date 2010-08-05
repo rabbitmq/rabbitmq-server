@@ -67,7 +67,6 @@ all_tests() ->
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
-    passed = test_memory_pressure(),
     passed = test_statistics(),
     passed = test_option_parser(),
     passed = test_cluster_management(),
@@ -1066,44 +1065,6 @@ test_hooks() ->
     end,
     passed.
 
-test_memory_pressure_receiver(Pid) ->
-    receive
-        shutdown ->
-            ok;
-        {send_command, Method} ->
-            ok = case Method of
-                     #'channel.flow'{}    -> ok;
-                     #'basic.qos_ok'{}    -> ok;
-                     #'channel.open_ok'{} -> ok
-                 end,
-            Pid ! Method,
-            test_memory_pressure_receiver(Pid);
-        sync ->
-            Pid ! sync,
-            test_memory_pressure_receiver(Pid)
-    end.
-
-test_memory_pressure_receive_flow(Active) ->
-    receive #'channel.flow'{active = Active} -> ok
-    after 1000 -> throw(failed_to_receive_channel_flow)
-    end,
-    receive #'channel.flow'{} ->
-            throw(pipelining_sync_commands_detected)
-    after 0 ->
-            ok
-    end.
-
-test_memory_pressure_sync(Ch, Writer) ->
-    ok = rabbit_channel:do(Ch, #'basic.qos'{}),
-    Writer ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'basic.qos_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_basic_qos_ok)
-    end.
-
-test_memory_pressure_spawn() ->
-    test_spawn(fun test_memory_pressure_receiver/1).
-
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
@@ -1115,91 +1076,6 @@ test_spawn(Receiver) ->
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch, MRef}.
-
-expect_normal_channel_termination(MRef, Ch) ->
-    receive {'DOWN', MRef, process, Ch, normal} -> ok
-    after 1000 -> throw(channel_failed_to_exit)
-    end.
-
-gobble_channel_exit() ->
-    receive {channel_exit, _, _} -> ok
-    after 1000 -> throw(channel_exit_not_received)
-    end.
-
-test_memory_pressure() ->
-    {Writer0, Ch0, MRef0} = test_memory_pressure_spawn(),
-    [ok = rabbit_channel:conserve_memory(Ch0, Conserve) ||
-        Conserve <- [false, false, true, false, true, true, false]],
-    ok = test_memory_pressure_sync(Ch0, Writer0),
-    receive {'DOWN', MRef0, process, Ch0, Info0} ->
-            throw({channel_died_early, Info0})
-    after 0 -> ok
-    end,
-
-    %% we should have just 1 active=false waiting for us
-    ok = test_memory_pressure_receive_flow(false),
-
-    %% if we reply with flow_ok, we should immediately get an
-    %% active=true back
-    ok = rabbit_channel:do(Ch0, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_receive_flow(true),
-
-    %% if we publish at this point, the channel should die
-    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
-    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
-    expect_normal_channel_termination(MRef0, Ch0),
-    gobble_channel_exit(),
-
-    {Writer1, Ch1, MRef1} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch1, true),
-    ok = test_memory_pressure_receive_flow(false),
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_sync(Ch1, Writer1),
-    ok = rabbit_channel:conserve_memory(Ch1, false),
-    ok = test_memory_pressure_receive_flow(true),
-    %% send back the wrong flow_ok. Channel should die.
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    expect_normal_channel_termination(MRef1, Ch1),
-    gobble_channel_exit(),
-
-    {_Writer2, Ch2, MRef2} = test_memory_pressure_spawn(),
-    %% just out of the blue, send a flow_ok. Life should end.
-    ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
-    expect_normal_channel_termination(MRef2, Ch2),
-    gobble_channel_exit(),
-
-    {_Writer3, Ch3, MRef3} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch3, true),
-    ok = test_memory_pressure_receive_flow(false),
-    receive {'DOWN', MRef3, process, Ch3, _} ->
-            ok
-    after 12000 ->
-            throw(channel_failed_to_exit)
-    end,
-    gobble_channel_exit(),
-
-    alarm_handler:set_alarm({vm_memory_high_watermark, []}),
-    Me = self(),
-    Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch4} = rabbit_channel:start_link(1, self(), Writer4,
-                                          <<"user">>, <<"/">>, self()),
-    ok = rabbit_channel:do(Ch4, #'channel.open'{}),
-    MRef4 = erlang:monitor(process, Ch4),
-    Writer4 ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)
-    after 0 -> ok
-    end,
-    alarm_handler:clear_alarm(vm_memory_high_watermark),
-    Writer4 ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'channel.open_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_channel_open_ok)
-    end,
-    rabbit_channel:shutdown(Ch4),
-    expect_normal_channel_termination(MRef4, Ch4),
-
-    passed.
 
 test_statistics_receiver(Pid) ->
     receive
