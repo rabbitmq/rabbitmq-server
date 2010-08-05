@@ -6,6 +6,9 @@ for multiple RabbitMQ plugins to co-exist under a single web-app root. Applicati
 can register static docroots along with dynamic handlers to be executed based on
 various incoming request properties.
 
+Note that the version of mochiweb built by rabbit-mochiweb depends on
+features introduced in Erlang R13A.
+
 Environment Variables
 ---------------------
 
