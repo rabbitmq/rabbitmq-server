@@ -1912,7 +1912,7 @@ with_fresh_variable_queue(Fun) ->
                       {len, 0}]),
     _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
     passed.
-    
+
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,

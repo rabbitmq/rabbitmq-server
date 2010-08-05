@@ -355,7 +355,7 @@ consumers_all(VHostPath) ->
 
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
-emit_stats(#amqqueue{pid = QPid}) -> 
+emit_stats(#amqqueue{pid = QPid}) ->
     delegate_pcast(QPid, 7, emit_stats).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->

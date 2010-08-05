@@ -241,7 +241,7 @@ stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{rate_timer_ref = undefined}.
-    
+
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
@@ -887,7 +887,7 @@ handle_cast(maybe_expire, State) ->
                  {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
-    
+
 handle_cast(emit_stats, State) ->
     emit_stats(State),
     noreply(State).

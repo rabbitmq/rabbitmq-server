@@ -69,8 +69,8 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
 deliver(QPids, Delivery) ->
     {Success, _} =
         delegate:invoke(QPids,
-                        fun (Pid) -> 
-                                rabbit_amqqueue:deliver(Pid, Delivery) 
+                        fun (Pid) ->
+                                rabbit_amqqueue:deliver(Pid, Delivery)
                         end),
     {Routed, Handled} =
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
