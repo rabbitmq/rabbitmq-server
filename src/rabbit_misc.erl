@@ -235,9 +235,9 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
                            not_allowed,
-                           "cannot redeclare ~s with inequivalent args for ~s: "
+                           "inequivalent arg '~s' for ~s:  "
                            "required ~w, received ~w",
-                           [rabbit_misc:rs(Name), Key, New1, Orig1])
+                           [Key, rabbit_misc:rs(Name), New1, Orig1])
     end.
 
 get_config(Key) ->

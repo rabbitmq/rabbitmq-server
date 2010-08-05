@@ -305,9 +305,8 @@ check_declare_arguments(QueueName, Args) ->
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
-                             "Invalid arguments in declaration of queue ~s: "
-                             "~w (on argument: ~w)",
-                             [rabbit_misc:rs(QueueName), Error, Key])
+                             "invalid arg '~s' for ~s: ~w",
+                             [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
     ok.
 
