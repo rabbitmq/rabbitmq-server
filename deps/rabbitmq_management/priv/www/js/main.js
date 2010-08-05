@@ -33,6 +33,9 @@ function dispatch(page) {
         return [['/stats/channel_queue_stats/?group_by=channel'],
                 'consuming-channels'];
     }
+    if (page == 'connection') {
+        return [['/connection/'], 'connections'];
+    }
     else {
         return [['/' + page], current_page.split('/', 1)];
     }

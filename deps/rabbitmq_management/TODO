@@ -1,4 +1,3 @@
-Make /connection/foo and /connection both work in webmachine.
 Figure out something sensible to do with time series.
   Cope with e.g. channel going away, want to view exchange / queue stats in the
   past.
@@ -22,6 +21,9 @@ Write some basic documentation.
 Figure out supervision.
 Add more OS-y things to overview.
 Support Windows.
+Write demo app.
+Do something sensible with non-amqp channels.
+Client side sorting and pagination.
 
 Less urgent:
 Add more stats (bug 22996).
@@ -30,3 +32,4 @@ Make at least a cursory attempt to support IE6/7.
 Alarms(?).
 Clustering management.
 Sampling.
+Command-line / REPL client.
