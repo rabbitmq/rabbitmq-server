@@ -164,9 +164,12 @@ augment(K, Ids, Fun, Tables) ->
     end.
 
 augment_channel_pid(Pid, Tables) ->
-    Table = orddict:fetch(channel_stats, Tables),
-    Ch = lookup_element(Table, {Pid, create}),
-    Conn = lookup_element(orddict:fetch(connection_stats, Tables), {id(pget(connection, Ch)), create}),
+    Ch = lookup_element(
+           orddict:fetch(channel_stats, Tables),
+           {Pid, create}),
+    Conn = lookup_element(
+             orddict:fetch(connection_stats, Tables),
+             {id(pget(connection, Ch)), create}),
     [{channel_number, pget(number, Ch)},
      {channel_connection, pget(pid, Conn)},
      {channel_peer_address, pget(peer_address, Conn)},
