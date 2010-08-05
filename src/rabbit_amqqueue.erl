@@ -355,7 +355,7 @@ consumers_all(VHostPath) ->
 
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
-emit_stats(#amqqueue{pid = QPid}) -> 
+emit_stats(#amqqueue{pid = QPid}) ->
     delegate_pcast(QPid, 7, emit_stats).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
@@ -386,7 +386,6 @@ reject(QPid, MsgIds, Requeue, ChPid) ->
 
 commit_all(QPids, Txn, ChPid) ->
     safe_delegate_call_ok(
-      fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
@@ -396,9 +395,6 @@ rollback_all(QPids, Txn, ChPid) ->
 
 notify_down_all(QPids, ChPid) ->
     safe_delegate_call_ok(
-      %% we don't care if the queue process has terminated in the
-      %% meantime
-      fun (_)    -> ok end,
       fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
       QPids).
 
@@ -493,11 +489,11 @@ pseudo_queue(QueueName, Pid) ->
               arguments = [],
               pid = Pid}.
 
-safe_delegate_call_ok(H, F, Pids) ->
+safe_delegate_call_ok(F, Pids) ->
     {_, Bad} = delegate:invoke(Pids,
                                fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
-                                         fun () -> H(Pid) end,
+                                         fun () -> ok end,
                                          fun () -> F(Pid) end)
                                end),
     case Bad of

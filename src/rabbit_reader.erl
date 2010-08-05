@@ -308,8 +308,8 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %%
         %% gen_tcp:close(ClientSock),
         teardown_profiling(ProfilingValue),
-        rabbit_queue_collector:shutdown(Collector),
         rabbit_misc:unlink_and_capture_exit(Collector),
+        rabbit_queue_collector:shutdown(Collector),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
@@ -422,8 +422,14 @@ internal_conserve_memory(false, State = #v1{connection_state = blocked,
 internal_conserve_memory(_Conserve, State) ->
     State.
 
-close_connection(State = #v1{connection = #connection{
+close_connection(State = #v1{queue_collector = Collector,
+                             connection = #connection{
                                timeout_sec = TimeoutSec}}) ->
+    %% The spec says "Exclusive queues may only be accessed by the
+    %% current connection, and are deleted when that connection
+    %% closes."  This does not strictly imply synchrony, but in
+    %% practice it seems to be what people assume.
+    rabbit_queue_collector:delete_all(Collector),
     %% We terminate the connection after the specified interval, but
     %% no later than ?CLOSING_TIMEOUT seconds.
     TimeoutMillisec =
@@ -499,18 +505,13 @@ wait_for_channel_termination(N, TimerRef) ->
     end.
 
 maybe_close(State = #v1{connection_state = closing,
-                        queue_collector = Collector,
                         connection = #connection{protocol = Protocol},
                         sock = Sock}) ->
     case all_channels() of
         [] ->
-            %% Spec says "Exclusive queues may only be accessed by the current
-            %% connection, and are deleted when that connection closes."
-            %% This does not strictly imply synchrony, but in practice it seems
-            %% to be what people assume.
-            rabbit_queue_collector:delete_all(Collector),
+            NewState = close_connection(State),
             ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
-            close_connection(State);
+            NewState;
         _  -> State
     end;
 maybe_close(State) ->
