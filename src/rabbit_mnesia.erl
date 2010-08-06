@@ -239,14 +239,15 @@ check_schema_integrity() ->
                                {_, TabDef} = proplists:lookup(Tab, TabDefs),
                                {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
                                Attrs = mnesia:table_info(Tab, attributes),
-                               sets:is_subset(sets:from_list(ExpAttrs), sets:from_list(Attrs))
+                               sets:is_subset(sets:from_list(ExpAttrs),
+                                              sets:from_list(Attrs))
                        end, table_names()) of
             true  -> ok;
             false -> {error, database_tables_incompatible}
         end
     catch
-        throw:Why ->
-            {error, Why}
+        _:Reason ->
+            {error, Reason}
     end.
 
 %% The cluster node config file contains some or all of the disk nodes
