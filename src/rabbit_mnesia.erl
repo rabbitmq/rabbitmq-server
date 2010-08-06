@@ -236,18 +236,17 @@ check_schema_integrity() ->
     TabDefs = table_definitions(),
     Tables = mnesia:system_info(tables),
     case [Failure || Tab <- table_names(),
-                     begin
-                         {_, TabDef} = proplists:lookup(Tab, TabDefs),
-                         {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                         case lists:member(Tab, Tables) of
-                             false -> Failure = {table_missing, Tab},
-                                      true;
-                             true  -> Attrs = mnesia:table_info(
-                                                Tab, attributes),
-                                      Failure = {table_attributes_mismatch, Tab,
-                                                 ExpAttrs, Attrs},
-                                      Attrs /= ExpAttrs
-                         end
+                     case lists:member(Tab, Tables) of
+                         false ->
+                             Failure = {table_missing, Tab},
+                             true;
+                         true  ->
+                             {_, TabDef} = proplists:lookup(Tab, TabDefs),
+                             {_, EAttrs} = proplists:lookup(attributes, TabDef),
+                             Attrs = mnesia:table_info(Tab, attributes),
+                             Failure = {table_attributes_mismatch, Tab,
+                                        EAttrs, Attrs},
+                             Attrs /= EAttrs
                      end] of
         [] -> ok;
         Ps -> {error, Ps}
