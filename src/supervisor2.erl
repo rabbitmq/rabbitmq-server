@@ -31,10 +31,6 @@
 %%    the MaxT and MaxR parameters to permit the child to be
 %%    restarted. This may require waiting for longer than Delay.
 %%
-%% 4) When the MaxR (intensity) == 0, errors that would otherwise be
-%%    reported concerning child death, or the reaching of max restart
-%%    intensity are elided.
-%%
 %% All modifications are (C) 2010 Rabbit Technologies Ltd.
 %%
 %% %CopyrightBegin%
@@ -349,6 +345,7 @@ handle_call(which_children, _From, State) ->
 		  State#state.children),
     {reply, Resp, State}.
 
+
 handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
     {ok, NState} = do_restart(RestartType, Reason, Child, State),
@@ -539,7 +536,7 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
             {ok, NState}
     end;
 do_restart(permanent, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State),
+    report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(_, normal, Child, State) ->
     NState = state_del_child(Child, State),
@@ -548,10 +545,10 @@ do_restart(_, shutdown, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
 do_restart(transient, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State),
+    report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(temporary, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State),
+    report_error(child_terminated, Reason, Child, State#state.name),
     NState = state_del_child(Child, State),
     {ok, NState}.
 
@@ -560,8 +557,8 @@ restart(Child, State) ->
 	{ok, NState} ->
 	    restart(NState#state.strategy, Child, NState, fun restart/2);
 	{terminate, NState} ->
-            report_error(shutdown, reached_max_restart_intensity,
-                         Child, State),
+	    report_error(shutdown, reached_max_restart_intensity,
+			 Child, State#state.name),
 	    {shutdown, remove_child(Child, NState)}
     end.
 
@@ -680,8 +677,6 @@ shutdown(Pid, brutal_kill) ->
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
 		    {error, OtherReason}
 	    end;
-        normal_shutdown ->
-            ok;
 	{error, Reason} ->      
 	    {error, Reason}
     end;
@@ -703,8 +698,6 @@ shutdown(Pid, Time) ->
 			    {error, OtherReason}
 		    end
 	    end;
-        normal_shutdown ->
-            ok;
 	{error, Reason} ->      
 	    {error, Reason}
     end.
@@ -725,12 +718,7 @@ monitor_child(Pid) ->
 	{'EXIT', Pid, Reason} -> 
 	    receive 
 		{'DOWN', _, process, Pid, _} ->
-                    case Reason of
-                        normal             -> normal_shutdown;
-                        shutdown           -> normal_shutdown;
-                        {shutdown, _Terms} -> normal_shutdown;
-                        _                  -> {error, Reason}
-                    end
+		    {error, Reason}
 	    end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
@@ -984,10 +972,6 @@ difference({_, TimeS, _}, {_, CurS, _}) ->
 %%% Error and progress reporting.
 %%% ------------------------------------------------------
 
-report_error(_Error, _Reason, _Child, #state{intensity = 0}) ->
-    ok;
-report_error(Error, Reason, Child, #state{name=Name}) ->
-    report_error(Error, Reason, Child, Name);
 report_error(Error, Reason, Child, SupName) ->
     ErrorMsg = [{supervisor, SupName},
 		{errorContext, Error},
