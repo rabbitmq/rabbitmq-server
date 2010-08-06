@@ -167,6 +167,3 @@ $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE
 
 $(DEPS_DIR):
 	mkdir -p $@
-
-$(DIST_DIR):
-	mkdir -p $@
