@@ -62,10 +62,7 @@ to_json(ReqData, Context) ->
                                      ]), ReqData, Context}.
 
 format({Ids, Stats}) ->
-    [{stats, {struct, Stats}}|
-     rabbit_management_format:format(
-       Ids, [{fun rabbit_management_format:ip/1, [channel_peer_address]},
-             {fun rabbit_management_format:pid/1, [channel_connection]}])].
+    [{msg_stats, {struct, Stats}}|Ids].
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).

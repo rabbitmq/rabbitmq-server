@@ -146,21 +146,16 @@ gs_update(Cur, New) ->
 
 %%----------------------------------------------------------------------------
 
-augment_items(Items, #state{tables = Tables}) ->
-    [augment_item(I, Tables) || I <- Items].
+augment(Items, Funs, Tables) ->
+    Augmentations = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs],
+    [A || A <- Augmentations, A =/= unknown] ++ Items.
 
-augment_item({Ids, Stats}, Tables) ->
-    {augment(Ids, [{channel, fun augment_channel_pid/2},
-                   {queue,   fun augment_queue_pid/2}], Tables), Stats}.
-
-augment(Ids, Funs, Tables) ->
-    lists:flatten([augment(K, Ids, Fun, Tables) || {K, Fun} <- Funs] ++ Ids).
-
-augment(K, Ids, Fun, Tables) ->
-    Id = pget(K, Ids),
+augment(K, Items, Fun, Tables) ->
+    Id = pget(K, Items),
     case Id of
-        unknown -> [];
-        _       -> Fun(Id, Tables)
+        unknown -> unknown;
+        _       -> {list_to_atom(atom_to_list(K) ++ "_details"),
+                    Fun(Id, Tables)}
     end.
 
 augment_channel_pid(Pid, Tables) ->
@@ -169,14 +164,33 @@ augment_channel_pid(Pid, Tables) ->
            {Pid, create}),
     Conn = lookup_element(
              orddict:fetch(connection_stats, Tables),
-             {id(pget(connection, Ch)), create}),
-    [{channel_number, pget(number, Ch)},
-     {channel_connection, pget(pid, Conn)},
-     {channel_peer_address, pget(peer_address, Conn)},
-     {channel_peer_port, pget(peer_port, Conn)}].
+             {pget(connection, Ch), create}),
+    [{number, pget(number, Ch)},
+     {connection, pget(pid, Conn)},
+     {peer_address, pget(peer_address, Conn)},
+     {peer_port, pget(peer_port, Conn)}].
 
-augment_queue_pid(_Pid, _Tables) ->
-    [].
+augment_connection_pid(Pid, Tables) ->
+    Conn = lookup_element(
+             orddict:fetch(connection_stats, Tables),
+             {Pid, create}),
+    [{peer_address, pget(peer_address, Conn)},
+     {peer_port, pget(peer_port, Conn)}].
+
+augment_queue_pid(Pid, Tables) ->
+    Q = lookup_element(
+          orddict:fetch(queue_stats, Tables),
+          {Pid, create}),
+    [{name, pget(name, Q)},
+     {vhost, pget(vhost, Q)}].
+
+augment_msg_stats(ItemStats, #state{tables = Tables}) ->
+    [{augment_msg_stats_items(Items, Tables), Stats} ||
+        {Items, Stats} <- ItemStats].
+
+augment_msg_stats_items(Items, Tables) ->
+    augment(Items, [{channel, fun augment_channel_pid/2},
+                    {queue,   fun augment_queue_pid/2}], Tables).
 
 %%----------------------------------------------------------------------------
 
@@ -189,7 +203,9 @@ init([]) ->
 
 handle_call(get_queues, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    {ok, merge_created_stats(Table), State};
+    {ok, [augment(Q,
+                  [{owner_pid, fun augment_connection_pid/2}],
+                  Tables) || Q <- merge_created_stats(Table)], State};
 
 handle_call(get_connections, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
@@ -225,35 +241,48 @@ handle_call({get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
               true  -> group_sum(list_to_atom(GroupBy), All);
               _     -> bad_request
           end,
-    {ok, augment_items(Res, State), State};
+    {ok, augment_msg_stats(Res, State), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event(Event = #event{type = queue_created}, State) ->
-    handle_created(queue_stats, Event, State);
+    handle_created(
+      queue_stats, Event,
+      [{fun rabbit_management_format:pid/1,      [pid, owner_pid]},
+       {fun rabbit_management_format:resource/1, [name]}], State);
 
 handle_event(Event = #event{type = queue_stats}, State) ->
-    handle_stats(queue_stats, Event, [], State);
+    handle_stats(
+      queue_stats, Event,
+      [{fun rabbit_management_format:table/1,[backing_queue_status]}],
+      [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
 
 handle_event(Event = #event{type = connection_created}, State) ->
-    handle_created(connection_stats, Event, State);
+    handle_created(
+      connection_stats, Event,
+      [{fun rabbit_management_format:ip/1,       [address, peer_address]},
+       {fun rabbit_management_format:pid/1,      [pid]},
+       {fun rabbit_management_format:protocol/1, [protocol]},
+       {fun rabbit_management_format:table/1,    [client_properties]}], State);
 
 handle_event(Event = #event{type = connection_stats}, State) ->
-    handle_stats(connection_stats, Event, [recv_oct, send_oct], State);
+    handle_stats(connection_stats, Event, [], [recv_oct, send_oct], State);
 
 handle_event(Event = #event{type = connection_closed}, State) ->
     handle_deleted(connection_stats, Event, State);
 
 handle_event(Event = #event{type = channel_created}, State) ->
-    handle_created(channel_stats, Event, State);
+    handle_created(
+      channel_stats, Event,
+      [{fun rabbit_management_format:pid/1, [pid, connection]}], State);
 
 handle_event(Event = #event{type = channel_stats, props = Stats,
                             timestamp = Timestamp}, State) ->
-    handle_stats(channel_stats, Event, [], State),
+    handle_stats(channel_stats, Event, [], [], State),
     [[handle_fine_stats(Type, id(Stats), S, Timestamp, State) ||
          S <- pget(Type, Stats)] ||
         Type <- [channel_queue_stats, channel_exchange_stats,
@@ -283,17 +312,21 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-handle_created(TName, #event{props = Stats}, State = #state{tables = Tables}) ->
-    ets:insert(orddict:fetch(TName, Tables), {{id(Stats), create}, Stats}),
+handle_created(TName, #event{props = Stats}, Funs,
+               State = #state{tables = Tables}) ->
+    Formatted = rabbit_management_format:format(Stats, Funs),
+    ets:insert(orddict:fetch(TName, Tables), {{id(Stats), create}, Formatted}),
     {ok, State}.
 
-handle_stats(TName, #event{props = Stats, timestamp = Timestamp},
+handle_stats(TName, #event{props = Stats, timestamp = Timestamp}, Funs,
              RatesKeys, State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
     Id = {id(Stats), stats},
+    Stats1 = rates(Table, Id, Stats, Timestamp, RatesKeys),
     ets:insert(Table,
                {Id,
-                rates(Table, Id, Stats, Timestamp, RatesKeys),
+                proplists:delete(pid,
+                                 rabbit_management_format:format(Stats1, Funs)),
                 Timestamp}),
     {ok, State}.
 

@@ -41,12 +41,7 @@ to_json(ReqData, Context) ->
 format(Q) ->
     MsgsReady = rabbit_management_stats:pget(messages_ready, Q),
     MsgsUnacked = rabbit_management_stats:pget(messages_unacknowledged, Q),
-    rabbit_management_format:format(
-      [{messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}] ++ Q,
-      [{fun rabbit_management_format:resource/1, [name]},
-       {fun rabbit_management_format:pid/1,
-        [pid, owner_pid, exclusive_consumer_pid]},
-       {fun rabbit_management_format:table/1, [backing_queue_status]}]).
+    [{messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}|Q].
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).

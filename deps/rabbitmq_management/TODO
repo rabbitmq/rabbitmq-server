@@ -23,7 +23,7 @@ Add more OS-y things to overview.
 Support Windows.
 Write demo app.
 Do something sensible with non-amqp channels.
-Client side sorting and pagination.
+Client side sorting / pagination / filtering.
 
 Less urgent:
 Add more stats (bug 22996).

@@ -33,8 +33,11 @@ function dispatch(page) {
         return [['/stats/channel_queue_stats/?group_by=channel'],
                 'consuming-channels'];
     }
-    if (page == 'connection') {
+    else if (page == 'connection') {
         return [['/connection/'], 'connections'];
+    }
+    else if (page == 'queue') {
+        return [['/queue/'], 'queues'];
     }
     else {
         return [['/' + page], current_page.split('/', 1)];
