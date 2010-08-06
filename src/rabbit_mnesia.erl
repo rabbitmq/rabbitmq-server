@@ -238,8 +238,7 @@ check_schema_integrity() ->
         case lists:all(fun(Tab) ->
                                {_, TabDef} = proplists:lookup(Tab, TabDefs),
                                {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                               Attrs = mnesia:table_info(Tab, attributes),
-                               lists:usort(ExpAttrs) == lists:usort(Attrs)
+                               ExpAttrs == mnesia:table_info(Tab, attributes)
                        end, table_names()) of
             true  -> ok;
             false -> {error, database_tables_incompatible}
