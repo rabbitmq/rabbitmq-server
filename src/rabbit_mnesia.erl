@@ -235,21 +235,21 @@ ensure_mnesia_not_running() ->
 check_schema_integrity() ->
     TabDefs = table_definitions(),
     Tables = mnesia:system_info(tables),
-    case [Failure || Tab <- table_names(),
-                     case lists:member(Tab, Tables) of
-                         false ->
-                             Failure = {table_missing, Tab},
-                             true;
-                         true  ->
-                             {_, TabDef} = proplists:lookup(Tab, TabDefs),
-                             {_, EAttrs} = proplists:lookup(attributes, TabDef),
-                             Attrs = mnesia:table_info(Tab, attributes),
-                             Failure = {table_attributes_mismatch, Tab,
-                                        EAttrs, Attrs},
-                             Attrs /= EAttrs
-                     end] of
-        [] -> ok;
-        Ps -> {error, Ps}
+    case [Error || Tab <- table_names(),
+                   case lists:member(Tab, Tables) of
+                       false ->
+                           Error = {table_missing, Tab},
+                           true;
+                       true  ->
+                           {_, TabDef} = proplists:lookup(Tab, TabDefs),
+                           {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+                           Attrs = mnesia:table_info(Tab, attributes),
+                           Error = {table_attributes_mismatch, Tab,
+                                    ExpAttrs, Attrs},
+                           Attrs /= ExpAttrs
+                   end] of
+        []     -> ok;
+        Errors -> {error, Errors}
     end.
 
 %% The cluster node config file contains some or all of the disk nodes
