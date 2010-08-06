@@ -20,7 +20,8 @@
 %%
 -module(rabbit_management_format).
 
--export([encode/1, format/2, print/2, pid/1, ip/1, table/1, protocol/1]).
+-export([encode/1, format/2, print/2, pid/1, ip/1, table/1, protocol/1,
+         resource/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -34,19 +35,24 @@ encode(Facts) ->
                                      rabbit_management_util:http_date())}
                        ] ++ Facts}).
 
-format(Stats, Fs) ->
-    [format_item({Name, Value}, Fs) ||
-        {Name, Value} <- Stats, Value =/= unknown].
+format([], Fs) ->
+    [];
+format([{Name, unknown}|Stats], Fs) ->
+    format(Stats, Fs);
+format([Stat|Stats], Fs) ->
+    format_item(Stat, Fs) ++ format(Stats, Fs).
 
 format_item(Stat, []) ->
-    Stat;
-format_item(Stat, [F|Fs]) ->
-    format_item(format_item0(Stat, F), Fs).
-
-format_item0({Name, Value}, {Fun, Names}) ->
+    [Stat];
+format_item({Name, Value}, [{Fun, Names}|Fs]) ->
     case lists:member(Name, Names) of
-        true -> {Name, Fun(Value)};
-        _    -> {Name, Value}
+        true ->
+            case Fun(Value) of
+                List when is_list(List) -> List;
+                Formatted               -> [{Name, Formatted}]
+            end;
+        _    ->
+            format_item({Name, Value}, Fs)
     end.
 
 print(Fmt, Val) when is_list(Val) ->
@@ -84,3 +90,8 @@ protocol({Major, Minor, 0}) ->
     print("~p-~p", [Major, Minor]);
 protocol({Major, Minor, Revision}) ->
     print("~p-~p-~p", [Major, Minor, Revision]).
+
+resource(unknown) ->
+    unknown;
+resource(#resource{name = Name, virtual_host = VHost}) ->
+    [{name, Name}, {vhost, VHost}].

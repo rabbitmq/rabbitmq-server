@@ -28,8 +28,8 @@
    <td class="c"><%= fmt_boolean(queues[i].durable) %></td>
    <td class="c"><%= fmt_boolean(queues[i].auto_delete) %></td>
    <td class="c">
-     <% if (queues[i].exclusive_owner.length > 0) { %>
-     <%= link_to('View', '#connection/' + queues[i].exclusive_owner) %>
+     <% if (queues[i].owner_pid.length > 0) { %>
+     <%= link_to('View', '#connection/' + queues[i].owner_pid) %>
      <% } %>
    </td>
    <td>

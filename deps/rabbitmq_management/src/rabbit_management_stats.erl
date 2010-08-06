@@ -26,7 +26,7 @@
 
 -export([start/0]).
 
--export([get_queue_stats/1, get_connections/0, get_connection/1,
+-export([get_queues/0, get_connections/0, get_connection/1,
          get_overview/0, get_msg_stats/4]).
 
 -export([group_sum/2]).
@@ -47,8 +47,8 @@
 start() ->
     gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
 
-get_queue_stats(QPids) ->
-    gen_event:call(rabbit_event, ?MODULE, {get_queue_stats, QPids}, infinity).
+get_queues() ->
+    gen_event:call(rabbit_event, ?MODULE, get_queues, infinity).
 
 get_connections() ->
     gen_event:call(rabbit_event, ?MODULE, get_connections, infinity).
@@ -187,14 +187,13 @@ init([]) ->
                     orddict:from_list(
                       [{Key, ets:new(anon, [private])} || Key <- ?TABLES])}}.
 
-handle_call({get_queue_stats, QPids}, State = #state{tables = Tables}) ->
+handle_call(get_queues, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    {ok, [lookup_element(Table, {id(QPid), stats}) || QPid <- QPids], State};
+    {ok, merge_created_stats(Table), State};
 
 handle_call(get_connections, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
-    {ok, [Stats ++ lookup_element(Table, {Pid, stats}) ||
-             {{Pid, create}, Stats} <- ets:tab2list(Table)], State};
+    {ok, merge_created_stats(Table), State};
 
 handle_call({get_connection, Id}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
@@ -231,11 +230,14 @@ handle_call({get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
+handle_event(Event = #event{type = queue_created}, State) ->
+    handle_created(queue_stats, Event, State);
+
 handle_event(Event = #event{type = queue_stats}, State) ->
     handle_stats(queue_stats, Event, [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
-    handle_deleted(connection_stats, Event, State);
+    handle_deleted(queue_stats, Event, State);
 
 handle_event(Event = #event{type = connection_created}, State) ->
     handle_created(connection_stats, Event, State);
@@ -318,3 +320,7 @@ delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
 fine_stats_key(ChPid, {QPid, X})              -> {ChPid, id(QPid), X};
 fine_stats_key(ChPid, QPid) when is_pid(QPid) -> {ChPid, id(QPid)};
 fine_stats_key(ChPid, X)                      -> {ChPid, X}.
+
+merge_created_stats(Table) ->
+    [Stats ++ lookup_element(Table, {Pid, stats}) ||
+        {{Pid, create}, Stats} <- ets:tab2list(Table)].

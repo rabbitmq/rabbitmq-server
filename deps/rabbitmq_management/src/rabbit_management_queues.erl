@@ -34,33 +34,19 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Qs = mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}),
-    QStats = lists:zip(Qs,rabbit_management_stats:get_queue_stats(
-                            [Q#amqqueue.pid || Q <- Qs])),
+    Qs = rabbit_management_stats:get_queues(),
     {rabbit_management_format:encode(
-       [{queues, [{struct, format(Q, Stats)} ||
-                     {Q, Stats} <- QStats]}]), ReqData, Context}.
+       [{queues, [{struct, format(Q)} || Q <- Qs]}]), ReqData, Context}.
 
-format(#amqqueue{name = Name,
-                 durable = Durable,
-                 auto_delete = AutoDelete,
-                 exclusive_owner = ExclusiveOwner,
-                 arguments = Arguments,
-                 pid = QPid}, Stats) ->
-    MsgsReady = rabbit_management_stats:pget(messages_ready, Stats),
-    MsgsUnacked = rabbit_management_stats:pget(messages_unacknowledged, Stats),
+format(Q) ->
+    MsgsReady = rabbit_management_stats:pget(messages_ready, Q),
+    MsgsUnacked = rabbit_management_stats:pget(messages_unacknowledged, Q),
     rabbit_management_format:format(
-    [{vhost,            Name#resource.virtual_host},
-     {name,             Name#resource.name},
-     {durable,          Durable},
-     {auto_delete,      AutoDelete},
-     {exclusive_owner,  ExclusiveOwner},
-     {arguments,        Arguments},
-     {pid,              QPid},
-     {messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}] ++ Stats,
-     [{fun rabbit_management_format:pid/1,
-       [pid, exclusive_owner, exclusive_consumer_pid]},
-      {fun rabbit_management_format:table/1, [backing_queue_status]}]).
+      [{messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}] ++ Q,
+      [{fun rabbit_management_format:resource/1, [name]},
+       {fun rabbit_management_format:pid/1,
+        [pid, owner_pid, exclusive_consumer_pid]},
+       {fun rabbit_management_format:table/1, [backing_queue_status]}]).
 
 is_authorized(ReqData, Context) ->
     rabbit_management_util:is_authorized(ReqData, Context).
