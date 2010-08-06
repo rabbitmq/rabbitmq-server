@@ -61,23 +61,23 @@ start_link(Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
           SupPid,
           {writer, {rabbit_writer, start_link,
                     [Sock, Channel, FrameMax, Protocol]},
-           permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
+           intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, Username, VHost,
                       Collector]},
-           permanent, ?MAX_WAIT, worker, [rabbit_channel]}),
+           intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, FramingChannelPid} =
         supervisor2:start_child(
           SupPid,
           {framing_channel, {rabbit_framing_channel, start_link,
                              [ChannelPid, Protocol]},
-           permanent, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
+           intrinsic, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
     {ok, SupPid, FramingChannelPid}.
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    {ok, {{one_for_all, 10, 10}, []}}.

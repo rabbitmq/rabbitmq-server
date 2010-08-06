@@ -33,11 +33,11 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/1, info_keys/0, info/1, info/2, shutdown/2]).
+-export([start_link/2, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/2, mainloop/2]).
+-export([init/3, mainloop/2]).
 
 -export([conserve_memory/2, server_properties/0]).
 
@@ -161,7 +161,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (pid()) -> rabbit_types:ok(pid())).
+-spec(start_link/2 :: (pid(), pid()) -> rabbit_types:ok(pid())).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (pid()) -> [rabbit_types:info()]).
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
@@ -171,9 +171,9 @@
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/2 :: (pid(), pid()) -> no_return()).
--spec(start_connection/5 ::
-        (pid(), pid(), any(), rabbit_networking:socket(),
+-spec(init/3 :: (pid(), pid(), pid()) -> no_return()).
+-spec(start_connection/6 ::
+        (pid(), pid(), pid(), any(), rabbit_networking:socket(),
          fun ((rabbit_networking:socket()) ->
                      rabbit_types:ok_or_error2(
                        rabbit_networking:socket(), any()))) -> no_return()).
@@ -182,17 +182,18 @@
 
 %%--------------------------------------------------------------------------
 
-start_link(ChannelSupSupPid) ->
-    {ok, proc_lib:spawn_link(?MODULE, init, [self(), ChannelSupSupPid])}.
+start_link(ChannelSupSupPid, Collector) ->
+    {ok, proc_lib:spawn_link(?MODULE, init, [self(), ChannelSupSupPid, Collector])}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, ChannelSupSupPid) ->
+init(Parent, ChannelSupSupPid, Collector) ->
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
-            start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform)
+            start_connection(
+              Parent, ChannelSupSupPid, Collector, Deb, Sock, SockTransform)
     end.
 
 system_continue(Parent, Deb, State) ->
@@ -271,7 +272,8 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
-start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform) ->
+start_connection(Parent, ChannelSupSupPid, Collector, Deb, Sock,
+                 SockTransform) ->
     process_flag(trap_exit, true),
     {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
     PeerAddressS = inet_parse:ntoa(PeerAddress),
@@ -281,7 +283,6 @@ start_connection(Parent, ChannelSupSupPid, Deb, Sock, SockTransform) ->
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     ProfilingValue = setup_profiling(),
-    [Collector] = supervisor2:find_child(Parent, collector),
     try
         mainloop(Deb, switch_callback(
                         #v1{parent              = Parent,
