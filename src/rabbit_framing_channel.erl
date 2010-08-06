@@ -47,7 +47,7 @@ start_link(StartFun, StartArgs, Protocol) ->
                    %% the channel or reader process terminates us too.
                    process_flag(trap_exit, true),
                    {ok, ChannelPid} = apply(StartFun, StartArgs),
-                   mainloop(Parent, ChannelPid, Protocol),
+                   mainloop(Parent, ChannelPid, Protocol)
            end)}.
 
 process(Pid, Frame) ->
