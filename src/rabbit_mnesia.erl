@@ -233,20 +233,18 @@ ensure_mnesia_not_running() ->
     end.
 
 check_schema_integrity() ->
-    try TabDefs = table_definitions(),
-        TAs = lists:map(fun(Tab) ->
-                                {_, TabDef} = proplists:lookup(Tab, TabDefs),
-                                {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                                Attrs = mnesia:table_info(Tab, attributes),
-                                case ExpAttrs == Attrs of
-                                    true -> ok;
-                                    false -> {table_attributes_mismatch, Tab,
-                                              ExpAttrs, Attrs}
-                                end
-                        end, table_names()),
-         lists:filter(fun(X) -> X /= ok end, TAs)
+    TabDefs = table_definitions(),
+    try
+        [Failure || Tab <- table_names(),
+                    begin
+                        {_, TabDef} = proplists:lookup(Tab, TabDefs),
+                        {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+                        Attrs = mnesia:table_info(Tab, attributes),
+                        Failure = {table_attributes_mismatch, Tab, ExpAttrs, Attrs},
+                        Attrs /= ExpAttrs
+                    end]
     of
-        []  -> ok;
+        [] -> ok;
         Ps -> {error, Ps}
     catch
         exit:Reason ->
