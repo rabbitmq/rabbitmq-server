@@ -108,8 +108,11 @@ if "!RABBITMQ_MNESIA_DIR!"=="" (
 )
 
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
-set RABBITMQ_PLUGINS_EXPAND_DIR=!TDP0!..\priv\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
+
+if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
+    set RABBITMQ_MNESIA_DIR=!RABBITMQ_BASE!\priv\plugins
+)
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
