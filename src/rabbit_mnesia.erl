@@ -233,18 +233,23 @@ ensure_mnesia_not_running() ->
     end.
 
 check_schema_integrity() ->
-    try
-        TabDefs = table_definitions(),
-        case lists:all(fun(Tab) ->
-                               {_, TabDef} = proplists:lookup(Tab, TabDefs),
-                               {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                               ExpAttrs == mnesia:table_info(Tab, attributes)
-                       end, table_names()) of
-            true  -> ok;
-            false -> {error, database_tables_incompatible}
-        end
+    try TabDefs = table_definitions(),
+        TAs = lists:map(fun(Tab) ->
+                                {_, TabDef} = proplists:lookup(Tab, TabDefs),
+                                {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+                                Attrs = mnesia:table_info(Tab, attributes),
+                                case ExpAttrs == Attrs of
+                                    true -> ok;
+                                    false -> {table_attributes_mismatch, Tab,
+                                              ExpAttrs, Attrs}
+                                end
+                        end, table_names()),
+         lists:filter(fun(X) -> X /= ok end, TAs)
+    of
+        []  -> ok;
+        Ps -> {error, Ps}
     catch
-        _:Reason ->
+        exit:Reason ->
             {error, Reason}
     end.
 
