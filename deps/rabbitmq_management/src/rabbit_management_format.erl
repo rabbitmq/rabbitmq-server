@@ -30,7 +30,6 @@
 encode(Facts) ->
     mochijson2:encode({struct,
                        [{node, node()},
-                        {pid, list_to_binary(os:getpid())},
                         {datetime, list_to_binary(
                                      rabbit_management_util:http_date())}
                        ] ++ Facts}).

@@ -12,7 +12,7 @@
 
 <table class="facts">
  <tr><th>node</th><td><%= node %></td></tr>
- <tr><th>pid</th><td><%= pid %></td></tr>
+ <tr><th>pid</th><td><%= os_pid %></td></tr>
  <tr><th>bound to</th><td><%= bound_to %></td></tr>
  <tr><th>file descriptors</th><td class="<%= fmt_color(fd_used / fd_total) %>"><%= fd_used %> / <%= fd_total %> <sub>(used/available)</span></td></tr>
  <tr><th>erlang processes</th><td class="<%= fmt_color(proc_used / proc_total) %>"><%= proc_used %> / <%= proc_total %> <sub>(used/available)</td></tr>
