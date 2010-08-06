@@ -30,6 +30,8 @@
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(ITERATIONS, 100).
+
 basic_get_test() ->
     test_util:basic_get_test(new_connection()).
 
@@ -69,8 +71,11 @@ queue_unbind_test() ->
 command_serialization_test() ->
     test_util:command_serialization_test(new_connection()).
 
+recover_after_cancel_test() ->
+    test_util:recover_after_cancel_test(new_connection()).
+
 teardown_test() ->
-    test_util:teardown_test(new_connection()).
+    repeat(fun test_util:teardown_test/1, ?ITERATIONS).
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
@@ -81,17 +86,21 @@ pub_and_close_test_() ->
             test_util:pub_and_close_test(new_connection(), new_connection())
         end}.
 
+channel_tune_negotiation_test() ->
+    amqp_connection:close(amqp_connection:start_network(
+                            #amqp_params{ channel_max = 10 })).
+
 %%---------------------------------------------------------------------------
 %% Negative Tests
 
 non_existent_exchange_test() -> 
-  negative_test_util:non_existent_exchange_test(new_connection()).
+    negative_test_util:non_existent_exchange_test(new_connection()).
 
 bogus_rpc_test() ->
-  negative_test_util:bogus_rpc_test(new_connection()).
+    repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS).
 
 hard_error_test() ->
-    negative_test_util:hard_error_test(new_connection()).
+    repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS).
 
 non_existent_user_test() ->
     negative_test_util:non_existent_user_test().
@@ -105,8 +114,24 @@ non_existent_vhost_test() ->
 no_permission_test() ->
     negative_test_util:no_permission_test().
 
+channel_writer_death_test() ->
+    negative_test_util:channel_writer_death_test(new_connection()).
+
+channel_death_test() ->
+    negative_test_util:channel_death_test(new_connection()).
+
+shortstr_overflow_property_test() ->
+    negative_test_util:shortstr_overflow_property_test(new_connection()).
+
+shortstr_overflow_field_test() ->
+    negative_test_util:shortstr_overflow_field_test(new_connection()).
+    
 %%---------------------------------------------------------------------------
 %% Common Functions
+
+repeat(Fun, Times) ->
+    [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
+
 
 new_connection() ->
     amqp_connection:start_network().

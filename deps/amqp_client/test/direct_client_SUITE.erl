@@ -67,8 +67,14 @@ basic_ack_call_test() ->
 command_serialization_test() ->
     test_util:command_serialization_test(new_connection()).
 
+recover_after_cancel_test() ->
+    test_util:recover_after_cancel_test(new_connection()).
+
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
+
+rpc_test() ->
+    test_util:rpc_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% This must be kicked off manually because it can only be run after Rabbit
@@ -88,6 +94,9 @@ hard_error_test() ->
 
 bogus_rpc_test() ->
   negative_test_util:bogus_rpc_test(new_connection()).
+
+channel_death_test() ->
+    negative_test_util:channel_death_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Common Functions

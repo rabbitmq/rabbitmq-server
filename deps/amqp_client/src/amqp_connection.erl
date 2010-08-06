@@ -32,14 +32,14 @@
 
 -include("amqp_client.hrl").
 
--behaviour(gen_server).
-
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2]).
--export([open_channel/1, open_channel/3]).
+-export([open_channel/1, open_channel/2]).
 -export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
 -export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
+-export([info/2, info_keys/1, info_keys/0]).
+
+-define(COMMON_INFO_KEYS,
+        [server_properties, is_closing, amqp_params, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -71,14 +71,16 @@
 %% the server is running in the same process space, and with a default
 %% set of amqp_params. If a different vhost or credential set is required,
 %% start_direct/1 should be used.
-start_direct() -> start_direct(#amqp_params{}).
+start_direct() ->
+    start_direct(#amqp_params{}).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a direct connection to a RabbitMQ server, assuming that
 %% the server is running in the same process space.
-start_direct(Params) -> start_direct_internal(Params, false).
+start_direct(Params) ->
+    start_direct_internal(Params, false).
 
 %% @spec () -> [Connection]
 %% where
@@ -88,7 +90,8 @@ start_direct(Params) -> start_direct_internal(Params, false).
 %% set of amqp_params. If a different vhost or credential set is required,
 %% start_direct_link/1 should be used. The resulting
 %% process is linked to the invoking process.
-start_direct_link() -> start_direct_link(#amqp_params{}).
+start_direct_link() ->
+    start_direct_link(#amqp_params{}).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
@@ -96,16 +99,11 @@ start_direct_link() -> start_direct_link(#amqp_params{}).
 %% @doc Starts a direct connection to a RabbitMQ server, assuming that
 %% the server is running in the same process space. The resulting process
 %% is linked to the invoking process.
-start_direct_link(Params) -> start_direct_internal(Params, true).
+start_direct_link(Params) ->
+    start_direct_internal(Params, true).
 
-start_direct_internal(#amqp_params{username     = User,
-                                   password     = Password,
-                                   virtual_host = VHost},
-                      ProcLink) ->
-    InitialState = #connection_state{username  = User,
-                                     password  = Password,
-                                     vhostpath = VHost},
-    {ok, Pid} = start_internal(InitialState, amqp_direct_driver, ProcLink),
+start_direct_internal(#amqp_params{} = Params, ProcLink) ->
+    {ok, Pid} = start_internal(Params, amqp_direct_connection, ProcLink),
     Pid.
 
 %% @spec () -> [Connection]
@@ -115,13 +113,15 @@ start_direct_internal(#amqp_params{username     = User,
 %% connection settings are used, meaning that the server is expected
 %% to be at localhost:5672, with a vhost of "/" authorising a user
 %% guest/guest.
-start_network() -> start_network(#amqp_params{}).
+start_network() ->
+    start_network(#amqp_params{}).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a networked conection to a remote AMQP server.
-start_network(Params) -> start_network_internal(Params, false).
+start_network(Params) ->
+    start_network_internal(Params, false).
 
 %% @spec () -> [Connection]
 %% where
@@ -130,66 +130,60 @@ start_network(Params) -> start_network_internal(Params, false).
 %% connection settings are used, meaning that the server is expected
 %% to be at localhost:5672, with a vhost of "/" authorising a user
 %% guest/guest. The resulting process is linked to the invoking process.
-start_network_link() -> start_network_link(#amqp_params{}).
+start_network_link() ->
+    start_network_link(#amqp_params{}).
 
 %% @spec (amqp_params()) -> [Connection]
 %% where
 %%      Connection = pid()
 %% @doc Starts a networked connection to a remote AMQP server. The resulting 
 %% process is linked to the invoking process.
-start_network_link(Params) -> start_network_internal(Params, true).
+start_network_link(Params) ->
+    start_network_internal(Params, true).
 
-start_network_internal(#amqp_params{username     = User,
-                                    password     = Password,
-                                    virtual_host = VHost,
-                                    host         = Host,
-                                    port         = Port,
-                                    ssl_options  = SSLOpts},
-                       ProcLink) ->
-    InitialState = #connection_state{username    = User,
-                                     password    = Password,
-                                     serverhost  = Host,
-                                     vhostpath   = VHost,
-                                     port        = Port,
-                                     ssl_options = SSLOpts},
-    {ok, Pid} = start_internal(InitialState, amqp_network_driver, ProcLink),
-    Pid.
+start_network_internal(#amqp_params{} = AmqpParams, ProcLink) ->
+    case start_internal(AmqpParams, amqp_network_connection, ProcLink) of
+        {ok, Pid} ->
+            Pid;
+        {error, {protocol_version_mismatch, _, _}} = Err ->
+            throw(Err);
+        Bad ->
+            throw({error, {auth_failure_likely, Bad}})
+    end.
 
-start_internal(InitialState, Driver, _Link = true) when is_atom(Driver) ->
-    gen_server:start_link(?MODULE, [InitialState, Driver], []);
-start_internal(InitialState, Driver, _Link = false) when is_atom(Driver) ->
-    gen_server:start(?MODULE, [InitialState, Driver], []).
+start_internal(Params, Module, _Link = true) when is_atom(Module) ->
+    gen_server:start_link(Module, Params, []);
+start_internal(Params, Module, _Link = false) when is_atom(Module) ->
+    gen_server:start(Module, Params, []).
 
 %%---------------------------------------------------------------------------
-%% Open and close channels API Methods
+%% Commands
 %%---------------------------------------------------------------------------
 
 %% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none, <<>>).
+    open_channel(ConnectionPid, none).
 
-%% @spec (ConnectionPid, ChannelNumber, OutOfBand) -> ChannelPid
+%% @spec (ConnectionPid, ChannelNumber) -> ChannelPid
 %% where
 %%      ChannelNumber = integer()
-%%      OutOfBand = binary()
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.
-open_channel(ConnectionPid, ChannelNumber, OutOfBand) ->
-    gen_server:call(ConnectionPid,
-                    {open_channel, ChannelNumber, OutOfBand}, infinity).
+open_channel(ConnectionPid, ChannelNumber) ->
+    command(ConnectionPid, {open_channel, ChannelNumber}).
 
-%% @spec (ConnectionPid) -> ok
+%% @spec (ConnectionPid) -> ok | Error
 %% where
 %%      ConnectionPid = pid()
 %% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
-%% @spec (ConnectionPid, Code, Text) -> ok
+%% @spec (ConnectionPid, Code, Text) -> ok | closing
 %% where
 %%      ConnectionPid = pid()
 %%      Code = integer()
@@ -201,192 +195,63 @@ close(ConnectionPid, Code, Text) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    #'connection.close_ok'{} = gen_server:call(ConnectionPid, Close, infinity),
-    ok.
+    command(ConnectionPid, {close, Close}).
+
+%%---------------------------------------------------------------------------
+%% Other functions
+%%---------------------------------------------------------------------------
+
+%% @spec (ConnectionPid, Items) -> ResultList
+%% where
+%%      ConnectionPid = pid()
+%%      Items = [Item]
+%%      ResultList = [{Item, Result}]
+%%      Item = atom()
+%%      Result = term()
+%% @doc Returns information about the connection, as specified by the Items
+%% list. Item may be any atom returned by info_keys/1:
+%%      server_properties - returns the server_properties fiels sent by the
+%%          server while establishing the connection
+%%      is_closing - returns true if the connection is in the process of closing
+%%          and false otherwise
+%%      amqp_params - returns the #amqp_params{} structure used to start the
+%%          connection
+%%      num_channels - returns the number of channels currently open under the
+%%          connection (excluding channel 0)
+%%      max_channel - returns the max_channel value negotiated with the server
+%%          (only for the network connection)
+%%      heartbeat - returns the heartbeat value negotiated with the server
+%%          (only for the network connection)
+%%      any other value - throws an exception
+info(ConnectionPid, Items) ->
+    gen_server:call(ConnectionPid, {info, Items}, infinity).
+
+%% @spec (ConnectionPid) -> Items
+%% where
+%%      ConnectionPid = pid()
+%%      Items = [Item]
+%%      Item = atom()
+%% @doc Returns a list of atoms that can be used in conjunction with info/2.
+%% Note that the list differs from a type of connection to another (network vs.
+%% direct). Use info_keys/0 to get a list of info keys that can be used for
+%% any connection.
+info_keys(ConnectionPid) ->
+    gen_server:call(ConnectionPid, info_keys, infinity).
+
+%% @spec () -> Items
+%% where
+%%      Items = [Item]
+%%      Item = atom()
+%% @doc Returns a list of atoms that can be used in conjunction with info/2.
+%% These are general info keys, which can be used in any type of connection.
+%% Other info keys may exist for a specific type. To get the full list of
+%% atoms that can be used for a certain connection, use info_keys/1.
+info_keys() ->
+    ?COMMON_INFO_KEYS.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-%% Starts a new channel process, invokes the correct driver
-%% (network or direct) to perform any environment specific channel setup and
-%% starts the AMQP ChannelOpen handshake.
-handle_open_channel({ChannelNumber, OutOfBand},
-                    #connection_state{driver = Driver} = State) ->
-    {ChannelPid, Number, NewState} = start_channel(ChannelNumber, State),
-    Driver:open_channel({Number, OutOfBand}, ChannelPid, NewState),
-    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
-    {reply, ChannelPid, NewState}.
-
-%% Creates a new channel process
-start_channel(ChannelNumber,
-              State = #connection_state{driver = Driver,
-                                        reader_pid = ReaderPid,
-                                        channel0_writer_pid = WriterPid}) ->
-    ChannelState =
-        #channel_state{
-            parent_connection = self(),
-            number = Number   = assign_channel_number(ChannelNumber, State),
-            close_fun         = fun(X)       -> Driver:close_channel(X) end,
-            do2               = fun(X, Y)    -> Driver:do(X, Y) end,
-            do3               = fun(X, Y, Z) -> Driver:do(X, Y, Z) end,
-            reader_pid        = ReaderPid,
-            writer_pid        = WriterPid},
-    {ok, ChannelPid} = gen_server:start_link(amqp_channel,
-                                             [ChannelState], []),
-    NewState = register_channel(Number, ChannelPid, State),
-    {ChannelPid, Number, NewState}.
-
-assign_channel_number(none, #connection_state{channels = Channels,
-                                              channel_max = Max}) ->
-    allocate_channel_number(dict:fetch_keys(Channels), Max);
-
-assign_channel_number(ChannelNumber, _State) ->
-    %% TODO bug: check whether this is already taken
-    ChannelNumber.
-
-register_channel(ChannelNumber, ChannelPid,
-                 State = #connection_state{channels = Channels0}) ->
-    Channels1 =
-    case dict:is_key(ChannelNumber, Channels0) of
-        true ->
-            exit({channel_already_registered, ChannelNumber});
-        false ->
-            dict:store(ChannelNumber, ChannelPid, Channels0)
-    end,
-    State#connection_state{channels = Channels1}.
-
-%% This will be called when a channel process exits and needs to be
-%% deregistered
-%% This peforms the reverse mapping so that you can lookup a channel pid
-unregister_channel(ChannelPid,
-                   State = #connection_state{channels = Channels0} )
-        when is_pid(ChannelPid)->
-    ReverseMapping = fun(_Number, Pid) -> Pid == ChannelPid end,
-    Projection = dict:filter(ReverseMapping, Channels0),
-    %% TODO This differentiation is only necessary for the direct channel,
-    %% look into preventing the invocation of this method
-    Channels1 = case dict:fetch_keys(Projection) of
-                    [] ->
-                        Channels0;
-                    [ChannelNumber|_] ->
-                        dict:erase(ChannelNumber, Channels0)
-                end,
-    State#connection_state{channels = Channels1};
-
-%% This will be called when a channel process exits and needs to be
-%% deregistered
-unregister_channel(ChannelNumber,
-                   State = #connection_state{channels = Channels0}) ->
-    Channels1 = dict:erase(ChannelNumber, Channels0),
-    State#connection_state{channels = Channels1}.
-
-allocate_channel_number([], _Max)-> 1;
-
-allocate_channel_number(Channels, _Max) ->
-    MaxChannel = lists:max(Channels),
-    %% TODO check channel max and reallocate appropriately
-    MaxChannel + 1.
-
-close_connection(Close, From, State = #connection_state{driver = Driver}) ->
-    Driver:close_connection(Close, From, State).
-
-%%---------------------------------------------------------------------------
-%% gen_server callbacks
-%%---------------------------------------------------------------------------
-
-%% @private
-init([InitialState, Driver]) when is_atom(Driver) ->
-    process_flag(trap_exit, true),
-    State = Driver:handshake(InitialState),
-    {ok, State#connection_state{driver = Driver} }.
-
-%% @private
-%% Starts a new channel
-handle_call({open_channel, ChannelNumber, OutOfBand}, _From, State) ->
-    handle_open_channel({ChannelNumber, OutOfBand}, State);
-
-%% @private
-%% Shuts the AMQP connection down
-handle_call(Close = #'connection.close'{}, From, State) ->
-    close_connection(Close, From, State),
-    {stop, normal, State}.
-
-%%---------------------------------------------------------------------------
-%% Handle forced close from the broker
-%%---------------------------------------------------------------------------
-
-%% @private
-handle_cast({method, #'connection.close'{reply_code = Code,
-                                         reply_text = Text}, _Content},
-            State = #connection_state{driver = Driver}) ->
-    ?LOG_WARN("Broker forced connection: ~p -> ~p~n", [Code, Text]),
-    Driver:handle_broker_close(State),
-    {stop, {server_initiated_close, Code, Text}, State}.
-
-%% This can be sent by the channel process in the direct case
-%% when it receives an amqp exception from it's corresponding channel process
-handle_info({connection_level_error, Code, Text}, State) ->
-    {stop, {server_initiated_close, Code, Text}, State};
-
-%%---------------------------------------------------------------------------
-%% Trap exits
-%%---------------------------------------------------------------------------
-%% @private
-handle_info( {'EXIT', Pid, {amqp, Reason, Msg, Context}}, State) ->
-    ?LOG_WARN("Channel Peer ~p sent this message: ~p -> ~p~n",
-              [Pid, Msg, Context]),
-    {HardError, Code, Text} = rabbit_framing:lookup_amqp_exception(Reason),
-    case HardError of
-        false ->
-            ?LOG_DEBUG("Just trapping this exit and proceding to trap an "
-                       "exit from the client channel process~n"),
-            {noreply, State};
-        true ->
-            ?LOG_WARN("Hard error: (Code = ~p, Text = ~p)~n", [Code, Text]),
-            {stop, {hard_error, {Code, Text}}, State}
-    end;
-
-%% @private
-%% Just the amqp channel shutting down, so unregister this channel
-handle_info( {'EXIT', Pid, normal}, State) ->
-    {noreply, unregister_channel(Pid, State) };
-
-%% @private
-handle_info( {'EXIT', Pid, {server_initiated_close, _, _}}, State) ->
-    {noreply, unregister_channel(Pid, State) };
-
-%% @private
-%% This is a special case for abruptly closed socket connections
-handle_info( {'EXIT', _Pid, {socket_error, Reason}}, State) ->
-    {stop, {socket_error, Reason}, State};
-
-%% @private
-handle_info( {'EXIT', _Pid, Reason = {unknown_message_type, _}}, State) ->
-    {stop, Reason, State};
-
-%% @private
-handle_info( {'EXIT', _Pid, Reason = connection_socket_closed_unexpectedly},
-             State) ->
-    {stop, Reason, State};
-
-%% @private
-handle_info( {'EXIT', _Pid, Reason = connection_timeout}, State) ->
-    {stop, Reason, State};
-
-%% @private
-handle_info( {'EXIT', Pid, Reason}, State) ->
-    ?LOG_WARN("Connection: Handling exit from ~p --> ~p~n", [Pid, Reason]),
-    {noreply, unregister_channel(Pid, State) }.
-
-%%---------------------------------------------------------------------------
-%% Rest of the gen_server callbacks
-%%---------------------------------------------------------------------------
-
-%% @private
-terminate(_Reason, _State) ->
-    ok.
-    
-%% @private
-code_change(_OldVsn, State, _Extra) ->
-    State.
+command(ConnectionPid, Command) ->
+    gen_server:call(ConnectionPid, {command, Command}, infinity).

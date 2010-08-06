@@ -46,13 +46,11 @@
 %%
 %% This is an example of how the client interaction should work
 %%
-%%   Connection = amqp_connection:start(#amqp_params{}),
+%%   Connection = amqp_connection:start_network(),
 %%   Channel = amqp_connection:open_channel(Connection),
 %%   %%...do something useful
-%%   ChannelClose = #'channel.close'{ %% set the appropriate fields },
-%%   amqp_channel:call(Channel, ChannelClose),
-%%   ConnectionClose = #'connection.close'{ %% set the appropriate fields },
-%%   amqp_connection:close(Connection, ConnectionClose).
+%%   amqp_channel:close(Channel),
+%%   amqp_connection:close(Connection).
 %%
 
 lifecycle_test(Connection) ->
@@ -79,7 +77,8 @@ nowait_exchange_declare_test(Connection) ->
       amqp_channel:call(Channel,
                         #'exchange.declare'{exchange = X,
                                             type = <<"topic">>,
-                                            nowait = true })).
+                                            nowait = true })),
+    teardown(Connection, Channel).
 
 queue_exchange_binding(Channel, X, Parent, Tag) ->
     receive
@@ -119,6 +118,31 @@ command_serialization_test(Connection) ->
                 Parent ! finished
            end) || _ <- lists:seq(1, ?Latch)],
     latch_loop(?Latch),
+    teardown(Connection, Channel).
+
+recover_after_cancel_test(Connection) ->
+    Channel = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
+    amqp_channel:register_default_consumer(Channel, self()),
+    Tag = receive
+              #'basic.consume_ok'{consumer_tag = T} -> T
+          after 2000 ->
+                  exit(did_not_receive_subscription_message)
+          end,
+    Expect = fun() ->
+                     receive
+                         {#'basic.deliver'{}, _} ->
+                             %% don't send ack
+                             ok
+                     after 2000 ->
+                             exit(did_not_receive_first_message)
+                     end
+             end,
+    Expect(),
+    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
+    amqp_channel:call(Channel, #'basic.recover'{requeue = false}),
+    Expect(),
     teardown(Connection, Channel).
 
 queue_unbind_test(Connection) ->
@@ -174,9 +198,9 @@ basic_return_test(Connection) ->
     timer:sleep(200),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
-            #'basic.return'{reply_text = ReplyText,
+            #'basic.return'{reply_code = ReplyCode,
                             exchange = X} = BasicReturn,
-            ?assertMatch(<<"unroutable">>, ReplyText),
+            ?assertMatch(?NO_ROUTE, ReplyCode),
             #amqp_msg{payload = Payload2} = Content,
             ?assertMatch(Payload, Payload2);
         WhatsThis ->
@@ -243,10 +267,10 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
 
 basic_recover_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
-    #'basic.consume_ok'{consumer_tag = Tag} 
-        = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Channel, #'queue.declare'{}),
+    #'basic.consume_ok'{consumer_tag = Tag} =
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
                                  self()),
     receive
         #'basic.consume_ok'{consumer_tag = Tag} -> ok
@@ -277,7 +301,9 @@ basic_qos_test(Con) ->
     [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
     ExpectedRatio = (1+1) / (1+50/5),
     FudgeFactor = 2, %% account for timing variations
-    ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor).
+    ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor),
+    amqp_connection:close(Con),
+    test_util:wait_for_death(Con).
 
 basic_qos_test(Connection, Prefetch) ->
     Messages = 100,
@@ -304,6 +330,7 @@ basic_qos_test(Connection, Prefetch) ->
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
     amqp_channel:close(Chan),
+    test_util:wait_for_death(Chan),
     Res.
 
 sleeping_consumer(Channel, Sleep, Parent) ->
@@ -327,10 +354,12 @@ sleeping_consumer(Channel, Sleep, Parent) ->
 do_stop(Channel, Parent) ->
     Parent ! finished,
     amqp_channel:close(Channel),
+    test_util:wait_for_death(Channel),
     exit(normal).
 
 producer_loop(Channel, _RoutingKey, 0) ->
     amqp_channel:close(Channel),
+    test_util:wait_for_death(Channel),
     ok;
 
 producer_loop(Channel, RoutingKey, N) ->
@@ -557,6 +586,8 @@ rpc_test(Connection) ->
     ?assertMatch(Expected, DecodedReply),
     amqp_rpc_client:stop(Client),
     amqp_rpc_server:stop(Server),
+    amqp_connection:close(Connection),
+    test_util:wait_for_death(Connection),
     ok.
 
 %%---------------------------------------------------------------------------
@@ -566,8 +597,7 @@ setup_publish(Channel) ->
                        q = <<"a.b.c">>,
                        x = <<"x">>,
                        bind_key = <<"a.b.c.*">>,
-                       payload = <<"foobar">>
-                       },
+                       payload = <<"foobar">>},
     setup_publish(Channel, Publish).
 
 setup_publish(Channel, #publish{routing_key = RoutingKey,
@@ -581,7 +611,9 @@ setup_publish(Channel, #publish{routing_key = RoutingKey,
 
 teardown(Connection, Channel) ->
     amqp_channel:close(Channel),
-    amqp_connection:close(Connection).
+    wait_for_death(Channel),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
 
 teardown_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
@@ -600,6 +632,12 @@ setup_exchange(Channel, Q, X, Binding) ->
                           routing_key = Binding},
     amqp_channel:call(Channel, Route),
     ok.
+
+wait_for_death(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    receive {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
+    end.
 
 latch_loop(0) ->
     ok;

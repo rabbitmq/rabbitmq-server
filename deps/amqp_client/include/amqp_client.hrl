@@ -26,58 +26,26 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(PROTOCOL_HEADER,
-        <<"AMQP", 1, 1, ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR>>).
+-define(PROTOCOL_VERSION_MAJOR, 0).
+-define(PROTOCOL_VERSION_MINOR, 9).
+-define(PROTOCOL_HEADER, <<"AMQP", 0, 0, 9, 1>>).
+-define(PROTOCOL, rabbit_framing_amqp_0_9_1).
+
+-define(MAX_CHANNEL_NUMBER, 65535).
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
--record(amqp_params, {username     = <<"guest">>,
-                      password     = <<"guest">>,
-                      virtual_host = <<"/">>,
-                      host         = "localhost",
-                      port         = ?PROTOCOL_PORT,
-                      ssl_options  = undefined}).
-
--record(connection_state, {username,
-                           password,
-                           serverhost,
-                           sock,
-                           vhostpath,
-                           reader_pid,
-                           channel0_writer_pid,
-                           channel_max,
-                           heartbeat,
-                           driver,
-                           port,
-                           channels = dict:new(),
-                           ssl_options}).
-
--record(channel_state, {number,
-                        parent_connection,
-                        reader_pid,
-                        writer_pid,
-                        do2, do3,
-                        close_fun,
-                        rpc_requests = queue:new(),
-                        anon_sub_requests = queue:new(),
-                        tagged_sub_requests = dict:new(),
-                        closing = false,
-                        return_handler_pid,
-                        flow_control = false,
-                        flow_handler_pid,
-                        consumers = dict:new()}).
-
--record(rpc_client_state, {channel,
-                           reply_queue,
-                           exchange,
-                           routing_key,
-                           continuations = dict:new(),
-                           correlation_id = 0}).
-
--record(rpc_server_state, {channel,
-                           handler}).
+-record(amqp_params, {username          = <<"guest">>,
+                      password          = <<"guest">>,
+                      virtual_host      = <<"/">>,
+                      host              = "localhost",
+                      port              = ?PROTOCOL_PORT,
+                      channel_max       = 0,
+                      frame_max         = 0,
+                      heartbeat         = 0,
+                      ssl_options       = none,
+                      client_properties = []}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
 -define(LOG_WARN(Format, Args), error_logger:warning_msg(Format, Args)).
-
