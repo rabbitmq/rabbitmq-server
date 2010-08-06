@@ -67,8 +67,8 @@ all_tests() ->
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
-    passed = test_memory_pressure(),
     passed = test_statistics(),
+    passed = test_option_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
@@ -726,6 +726,30 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
+test_option_parser() ->
+    % command and arguments should just pass through
+    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
+                           [], ["mock_command", "arg1", "arg2"]),
+
+    % get flags
+    ok = check_get_options(
+           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
+           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+
+    % get options
+    ok = check_get_options(
+           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
+           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
+           ["mock_command", "-foo", "bar"]),
+
+    % shuffled and interleaved arguments and options
+    ok = check_get_options(
+           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
+           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
+           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+
+    passed.
+
 test_cluster_management() ->
 
     %% 'cluster' and 'reset' should only work if the app is stopped
@@ -861,7 +885,7 @@ test_cluster_management2(SecondaryNode) ->
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
-    ok = control_action(stop_app, SecondaryNode, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
@@ -869,9 +893,9 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, []),
-    ok = control_action(cluster, SecondaryNode, [NodeS]),
-    ok = control_action(start_app, SecondaryNode, []),
+    ok = control_action(force_reset, SecondaryNode, [], []),
+    ok = control_action(cluster, SecondaryNode, [NodeS], []),
+    ok = control_action(start_app, SecondaryNode, [], []),
 
     passed.
 
@@ -891,9 +915,12 @@ test_user_management() ->
     {error, {no_such_user, _}} =
         control_action(list_user_permissions, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(list_permissions, ["-p", "/testhost"]),
+        control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+    {error, {invalid_scope, _}} =
+        control_action(set_permissions, ["guest", "foo", ".*", ".*"],
+                       [{"-s", "cilent"}]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
@@ -909,16 +936,21 @@ test_user_management() ->
     ok = control_action(list_vhosts, []),
 
     %% user/vhost mapping
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(list_permissions, ["-p", "/testhost"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}, {"-s", "client"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}, {"-s", "all"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_user_permissions, ["foo"]),
 
     %% user/vhost unmapping
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
 
     %% vhost deletion
     ok = control_action(delete_vhost, ["/testhost"]),
@@ -927,8 +959,8 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -1035,48 +1067,6 @@ test_hooks() ->
     end,
     passed.
 
-test_memory_pressure_receiver(Pid) ->
-    receive
-        shutdown ->
-            ok;
-        {send_command, Method} ->
-            ok = case Method of
-                     #'channel.flow'{}    -> ok;
-                     #'basic.qos_ok'{}    -> ok;
-                     #'channel.open_ok'{} -> ok
-                 end,
-            Pid ! Method,
-            test_memory_pressure_receiver(Pid);
-        {flush, Pid1, Ref} ->
-            Pid1 ! Ref,
-            test_memory_pressure_receiver(Pid)
-    end.
-
-test_memory_pressure_receive_flow(Active) ->
-    receive #'channel.flow'{active = Active} -> ok
-    after 1000 -> throw(failed_to_receive_channel_flow)
-    end,
-    receive #'channel.flow'{} ->
-            throw(pipelining_sync_commands_detected)
-    after 0 ->
-            ok
-    end.
-
-test_memory_pressure_sync(Ch, Writer) ->
-    ok = rabbit_channel:do(Ch, #'basic.qos'{}),
-    ok = test_memory_pressure_flush(Writer),
-    receive #'basic.qos_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_basic_qos_ok)
-    end.
-
-test_memory_pressure_flush(Writer) ->
-    Ref = make_ref(),
-    Writer ! {flush, self(), Ref},
-    receive Ref -> ok after 1000 -> throw(failed_to_receive_writer_sync) end.
-
-test_memory_pressure_spawn() ->
-    test_spawn(fun test_memory_pressure_receiver/1).
-
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
@@ -1097,80 +1087,6 @@ gobble_channel_exit() ->
     receive {channel_exit, _, _} -> ok
     after 1000 -> throw(channel_exit_not_received)
     end.
-
-test_memory_pressure() ->
-    OldTrap = process_flag(trap_exit, true),
-    {Writer0, Ch0} = test_memory_pressure_spawn(),
-    [ok = rabbit_channel:conserve_memory(Ch0, Conserve) ||
-        Conserve <- [false, false, true, false, true, true, false]],
-    ok = test_memory_pressure_sync(Ch0, Writer0),
-    receive {'EXIT', Ch0, Info0} ->
-            throw({channel_died_early, Info0})
-    after 0 -> ok
-    end,
-
-    %% we should have just 1 active=false waiting for us
-    ok = test_memory_pressure_receive_flow(false),
-
-    %% if we reply with flow_ok, we should immediately get an
-    %% active=true back
-    ok = rabbit_channel:do(Ch0, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_receive_flow(true),
-
-    %% if we publish at this point, the channel should die
-    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
-    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
-    expect_normal_channel_termination(Ch0),
-    gobble_channel_exit(),
-
-    {Writer1, Ch1} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch1, true),
-    ok = test_memory_pressure_receive_flow(false),
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_sync(Ch1, Writer1),
-    ok = rabbit_channel:conserve_memory(Ch1, false),
-    ok = test_memory_pressure_receive_flow(true),
-    %% send back the wrong flow_ok. Channel should die.
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    expect_normal_channel_termination(Ch1),
-    gobble_channel_exit(),
-
-    {_Writer2, Ch2} = test_memory_pressure_spawn(),
-    %% just out of the blue, send a flow_ok. Life should end.
-    ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
-    expect_normal_channel_termination(Ch2),
-    gobble_channel_exit(),
-
-    {_Writer3, Ch3} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch3, true),
-    ok = test_memory_pressure_receive_flow(false),
-    receive {'EXIT', Ch3, normal} ->
-            ok
-    after 12000 ->
-            throw(channel_failed_to_exit)
-    end,
-    gobble_channel_exit(),
-
-    alarm_handler:set_alarm({vm_memory_high_watermark, []}),
-    Me = self(),
-    Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch4} = rabbit_channel:start_link(1, Me, Writer4,
-                                          <<"user">>, <<"/">>, self()),
-    ok = rabbit_channel:do(Ch4, #'channel.open'{}),
-    ok = test_memory_pressure_flush(Writer4),
-    receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)
-    after 0 -> ok
-    end,
-    alarm_handler:clear_alarm(vm_memory_high_watermark),
-    ok = test_memory_pressure_flush(Writer4),
-    receive #'channel.open_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_channel_open_ok)
-    end,
-    rabbit_channel:shutdown(Ch4),
-    expect_normal_channel_termination(Ch4),
-
-    true = process_flag(trap_exit, OldTrap),
-    passed.
 
 test_statistics_receiver(Pid) ->
     receive
@@ -1351,11 +1267,16 @@ test_delegates_sync(SecondaryNode) ->
 
 %---------------------------------------------------------------------
 
-control_action(Command, Args) -> control_action(Command, node(), Args).
+control_action(Command, Args) ->
+    control_action(Command, node(), Args, default_options()).
 
-control_action(Command, Node, Args) ->
+control_action(Command, Args, NewOpts) ->
+    control_action(Command, node(), Args,
+                   expand_options(default_options(), NewOpts)).
+
+control_action(Command, Node, Args, Opts) ->
     case catch rabbit_control:action(
-                 Command, Node, Args,
+                 Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
                  end) of
@@ -1369,11 +1290,26 @@ control_action(Command, Node, Args) ->
 
 info_action(Command, Args, CheckVHost) ->
     ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+    if CheckVHost -> ok = control_action(Command, []);
        true       -> ok
     end,
     ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
     {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
+
+default_options() -> [{"-s", "client"}, {"-p", "/"}, {"-q", "false"}].
+
+expand_options(As, Bs) ->
+    lists:foldl(fun({K, _}=A, R) ->
+                        case proplists:is_defined(K, R) of
+                            true -> R;
+                            false -> [A | R]
+                        end
+                end, Bs, As).
+
+check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
+    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
+    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
     ok.
 
 empty_files(Files) ->
@@ -1863,7 +1799,7 @@ with_fresh_variable_queue(Fun) ->
                       {len, 0}]),
     _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
     passed.
-    
+
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,

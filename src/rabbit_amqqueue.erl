@@ -150,8 +150,7 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found' |
-           rabbit_types:connection_exit()).
+        -> rabbit_types:amqqueue() | 'not_found').
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
@@ -161,7 +160,7 @@
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(maybe_expire/1 :: (pid()) -> 'ok').
--spec(on_node_down/1 :: (node()) -> 'ok' | rabbit_types:connection_exit()).
+-spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
 
 -endif.
@@ -306,9 +305,8 @@ check_declare_arguments(QueueName, Args) ->
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
-                             "Invalid arguments in declaration of queue ~s: "
-                             "~w (on argument: ~w)",
-                             [rabbit_misc:rs(QueueName), Error, Key])
+                             "invalid arg '~s' for ~s: ~w",
+                             [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
     ok.
 
@@ -356,7 +354,7 @@ consumers_all(VHostPath) ->
 
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
-emit_stats(#amqqueue{pid = QPid}) -> 
+emit_stats(#amqqueue{pid = QPid}) ->
     delegate_pcast(QPid, 7, emit_stats).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
@@ -387,7 +385,6 @@ reject(QPid, MsgIds, Requeue, ChPid) ->
 
 commit_all(QPids, Txn, ChPid) ->
     safe_delegate_call_ok(
-      fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
@@ -397,9 +394,6 @@ rollback_all(QPids, Txn, ChPid) ->
 
 notify_down_all(QPids, ChPid) ->
     safe_delegate_call_ok(
-      %% we don't care if the queue process has terminated in the
-      %% meantime
-      fun (_)    -> ok end,
       fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
       QPids).
 
@@ -494,11 +488,11 @@ pseudo_queue(QueueName, Pid) ->
               arguments = [],
               pid = Pid}.
 
-safe_delegate_call_ok(H, F, Pids) ->
+safe_delegate_call_ok(F, Pids) ->
     {_, Bad} = delegate:invoke(Pids,
                                fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
-                                         fun () -> H(Pid) end,
+                                         fun () -> ok end,
                                          fun () -> F(Pid) end)
                                end),
     case Bad of

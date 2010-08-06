@@ -167,7 +167,8 @@ table_definitions() ->
        {attributes, record_info(fields, vhost)},
        {disc_copies, [node()]}]},
      {rabbit_config,
-      [{disc_copies, [node()]}]},
+      [{attributes, [key, val]},                % same mnesia's default
+       {disc_copies, [node()]}]},
      {rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
@@ -232,10 +233,23 @@ ensure_mnesia_not_running() ->
     end.
 
 check_schema_integrity() ->
-    %%TODO: more thorough checks
-    case catch [mnesia:table_info(Tab, version) || Tab <- table_names()] of
-        {'EXIT', Reason} -> {error, Reason};
-        _ -> ok
+    TabDefs = table_definitions(),
+    Tables = mnesia:system_info(tables),
+    case [Error || Tab <- table_names(),
+                   case lists:member(Tab, Tables) of
+                       false ->
+                           Error = {table_missing, Tab},
+                           true;
+                       true  ->
+                           {_, TabDef} = proplists:lookup(Tab, TabDefs),
+                           {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+                           Attrs = mnesia:table_info(Tab, attributes),
+                           Error = {table_attributes_mismatch, Tab,
+                                    ExpAttrs, Attrs},
+                           Attrs /= ExpAttrs
+                   end] of
+        []     -> ok;
+        Errors -> {error, Errors}
     end.
 
 %% The cluster node config file contains some or all of the disk nodes

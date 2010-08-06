@@ -179,6 +179,14 @@ stop-rabbit-on-node: all
 force-snapshot: all
 	echo "rabbit_persister:force_snapshot()." | $(ERL_CALL)
 
+set-memory-alarm: all
+	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \
+	$(ERL_CALL)
+
+clear-memory-alarm: all
+	echo "alarm_handler:clear_alarm(vm_memory_high_watermark)." | \
+	$(ERL_CALL)
+
 stop-node:
 	-$(ERL_CALL) -q
 
@@ -271,6 +279,8 @@ install: all docs_all install_dirs
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
+	mkdir -p $(TARGET_DIR)/plugins
+	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
 
 install_dirs:
 	@ OK=true && \
