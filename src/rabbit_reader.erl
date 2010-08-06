@@ -444,6 +444,9 @@ close_channel(Channel, State) ->
     put({channel, Channel}, closing),
     State.
 
+handle_channel_exit(ChPid, Reason, State) when is_pid(ChPid) ->
+    {channel, Channel} = get({chpid, ChPid}),
+    handle_exception(State, Channel, Reason);
 handle_channel_exit(Channel, Reason, State) ->
     handle_exception(State, Channel, Reason).
 
