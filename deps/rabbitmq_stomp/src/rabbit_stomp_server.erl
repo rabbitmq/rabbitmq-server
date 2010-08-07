@@ -223,26 +223,22 @@ maybe_header(Key, Value) when is_integer(Value) ->
 maybe_header(_Key, _Value) ->
     [].
 
-send_reply(Method = #'basic.deliver'{},
-           Content = #content{properties = none},
-           State) ->
-    send_reply(Method,
-               rabbit_binary_parser:ensure_content_decoded(Content),
-               State);
 send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
                             delivery_tag = DeliveryTag,
                             exchange = Exchange,
                             routing_key = RoutingKey},
-           #content{properties = #'P_basic'{headers          = Headers,
-                                            content_type     = ContentType,
-                                            content_encoding = ContentEncoding,
-                                            delivery_mode    = DeliveryMode,
-                                            priority         = Priority,
-                                            correlation_id   = CorrelationId,
-                                            reply_to         = ReplyTo,
-                                            message_id       = MessageId},
-                    payload_fragments_rev = BodyFragmentsRev},
+           Content,
            State = #state{session_id = SessionId}) ->
+    #content{properties = #'P_basic'{headers          = Headers,
+                                     content_type     = ContentType,
+                                     content_encoding = ContentEncoding,
+                                     delivery_mode    = DeliveryMode,
+                                     priority         = Priority,
+                                     correlation_id   = CorrelationId,
+                                     reply_to         = ReplyTo,
+                                     message_id       = MessageId},
+             payload_fragments_rev = BodyFragmentsRev} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
     send_frame(
       "MESSAGE",
       [{"destination", binary_to_list(RoutingKey)},
