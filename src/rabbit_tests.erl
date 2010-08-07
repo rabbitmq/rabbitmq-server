@@ -63,6 +63,7 @@ all_tests() ->
     passed = test_supervisor_delayed_restart(),
     passed = test_parsing(),
     passed = test_content_framing(),
+    passed = test_content_transcoding(),
     passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
@@ -534,6 +535,33 @@ test_content_framing() ->
     passed = test_content_framing(11, <<"One">>),
     %% more than one frame
     passed = test_content_framing(11, <<"More than one frame">>),
+    passed.
+
+test_content_transcoding() ->
+    EnsureDecoded =
+        fun (C0) ->
+                C1 = rabbit_binary_parser:ensure_content_decoded(C0),
+                true = C1#content.properties =/= none,
+                C1
+        end,
+    EnsureEncoded =
+        fun (Protocol) ->
+                fun (C0) ->
+                        C1 = rabbit_binary_generator:ensure_content_encoded(
+                               C0, Protocol),
+                        true = C1#content.properties_bin =/= none,
+                        C1
+                end
+        end,
+    EnsureEncoded1 = EnsureEncoded(rabbit_framing_amqp_0_9_1),
+    EnsureEncoded2 = EnsureEncoded(rabbit_framing_amqp_0_8),
+    ClearEncoded = fun rabbit_binary_generator:clear_encoded_content/1,
+    ClearDecoded = fun rabbit_binary_parser:clear_decoded_content/1,
+    lists:foldl(fun (F, V) -> F(F(V)) end,
+                rabbit_basic:build_content(#'P_basic'{}, <<>>),
+                [EnsureDecoded, ClearEncoded, ClearDecoded,
+                 EnsureEncoded1, ClearDecoded, ClearEncoded,
+                 EnsureEncoded2, EnsureDecoded, ClearEncoded, EnsureEncoded1]),
     passed.
 
 test_topic_match(P, R) ->
