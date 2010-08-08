@@ -63,6 +63,7 @@ all_tests() ->
     passed = test_supervisor_delayed_restart(),
     passed = test_parsing(),
     passed = test_content_framing(),
+    passed = test_content_transcoding(),
     passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
@@ -535,6 +536,51 @@ test_content_framing() ->
     %% more than one frame
     passed = test_content_framing(11, <<"More than one frame">>),
     passed.
+
+test_content_transcoding() ->
+    %% there are no guarantees provided by 'clear' - it's just a hint
+    ClearDecoded = fun rabbit_binary_parser:clear_decoded_content/1,
+    ClearEncoded = fun rabbit_binary_generator:clear_encoded_content/1,
+    EnsureDecoded =
+        fun (C0) ->
+                C1 = rabbit_binary_parser:ensure_content_decoded(C0),
+                true = C1#content.properties =/= none,
+                C1
+        end,
+    EnsureEncoded =
+        fun (Protocol) ->
+                fun (C0) ->
+                        C1 = rabbit_binary_generator:ensure_content_encoded(
+                               C0, Protocol),
+                        true = C1#content.properties_bin =/= none,
+                        C1
+                end
+        end,
+    %% Beyond the assertions in Ensure*, the only testable guarantee
+    %% is that the operations should never fail.
+    %%
+    %% If we were using quickcheck we'd simply stuff all the above
+    %% into a generator for sequences of operations. In the absence of
+    %% quickcheck we pick particularly interesting sequences that:
+    %%
+    %% - execute every op twice since they are idempotent
+    %% - invoke clear_decoded, clear_encoded, decode and transcode
+    %%   with one or both of decoded and encoded content present
+    [begin
+         sequence_with_content([Op]),
+         sequence_with_content([ClearEncoded, Op]),
+         sequence_with_content([ClearDecoded, Op])
+     end || Op <- [ClearDecoded, ClearEncoded, EnsureDecoded,
+                   EnsureEncoded(rabbit_framing_amqp_0_9_1),
+                   EnsureEncoded(rabbit_framing_amqp_0_8)]],
+    passed.
+
+sequence_with_content(Sequence) ->
+    lists:foldl(fun (F, V) -> F(F(V)) end,
+                rabbit_binary_generator:ensure_content_encoded(
+                  rabbit_basic:build_content(#'P_basic'{}, <<>>),
+                  rabbit_framing_amqp_0_9_1),
+                Sequence).
 
 test_topic_match(P, R) ->
     test_topic_match(P, R, true).
