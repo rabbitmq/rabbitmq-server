@@ -380,10 +380,9 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             mainloop(Deb, State);
         {'$gen_cast', emit_stats} ->
             internal_emit_stats(State),
-            mainloop(Deb,
-                     State#v1{stats_timer =
-                                  rabbit_event:reset_stats_timer_after(
-                                    State#v1.stats_timer)});
+            mainloop(Deb, State#v1{stats_timer =
+                                       rabbit_event:reset_stats_timer_after(
+                                         State#v1.stats_timer)});
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
