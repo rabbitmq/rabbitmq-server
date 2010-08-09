@@ -197,7 +197,7 @@ init(Parent, ChannelSupSupPid, Collector) ->
     end.
 
 system_continue(Parent, Deb, State) ->
-    ?MODULE:mainloop(Deb, State = #v1{parent = Parent}).
+    ?MODULE:mainloop(Deb, State#v1{parent = Parent}).
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
@@ -333,8 +333,7 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             {State1, Callback1, Length1} =
                 handle_input(State#v1.callback, Data,
                              State#v1{recv_ref = none}),
-            mainloop(Deb,
-                     switch_callback(State1, Callback1, Length1));
+            mainloop(Deb, switch_callback(State1, Callback1, Length1));
         {inet_async, Sock, Ref, {error, closed}} ->
             if State#v1.connection_state =:= closed ->
                     State;
