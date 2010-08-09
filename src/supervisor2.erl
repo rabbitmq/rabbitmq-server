@@ -695,10 +695,13 @@ shutdown(Pid, Time) ->
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
 	    receive 
-		{'DOWN', _MRef, process, Pid, shutdown} ->
-		    ok;
-		{'DOWN', _MRef, process, Pid, OtherReason} ->
-		    {error, OtherReason}
+		{'DOWN', _MRef, process, Pid, Reason} ->
+                    case Reason of
+                        normal   -> ok;
+                        shutdown -> ok;
+                        noproc   -> ok;
+                        _        -> {error, Reason}
+                    end
 	    after Time ->
 		    exit(Pid, kill),  %% Force termination.
 		    receive
@@ -726,7 +729,12 @@ monitor_child(Pid) ->
 	{'EXIT', Pid, Reason} -> 
 	    receive 
 		{'DOWN', _, process, Pid, _} ->
-		    {error, Reason}
+                    case Reason of
+                        normal   -> ok;
+                        shutdown -> ok;
+                        noproc   -> ok;
+                        _        -> {error, Reason}
+                    end
 	    end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
