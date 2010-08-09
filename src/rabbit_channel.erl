@@ -202,7 +202,8 @@ handle_cast({method, Method, Content}, State) ->
             noreply(NewState);
         {noreply, NewState} ->
             noreply(NewState);
-        stop ->
+        flush_and_stop ->
+            rabbit_writer:flush(State#ch.writer_pid),
             {stop, normal, State#ch{state = terminating}}
     catch
         exit:Reason = #amqp_error{} ->
@@ -409,7 +410,7 @@ handle_method(_Method, _, #ch{state = starting}) ->
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rollback_and_notify(State),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
-    stop;
+    flush_and_stop;
 
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
@@ -1099,10 +1100,9 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
 
-terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
+terminate(#ch{limiter_pid = LimiterPid}) ->
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]),
-    rabbit_writer:flush(WriterPid),
     rabbit_limiter:shutdown(LimiterPid).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
