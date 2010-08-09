@@ -567,7 +567,7 @@ restart(Child, State) ->
 	{terminate, NState} ->
 	    report_error(shutdown, reached_max_restart_intensity,
 			 Child, State#state.name),
-	    {shutdown, remove_child(Child, NState)}
+	    {shutdown, state_del_child(Child, NState)}
     end.
 
 restart1(Child, State) ->
