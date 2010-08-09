@@ -5,6 +5,7 @@ RABBITMQ_NODENAME ?= rabbit
 RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
+RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 
 DEPS_FILE=deps.mk
 SOURCE_DIR=src
@@ -146,7 +147,8 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
+	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)"
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
@@ -269,7 +271,7 @@ install: all docs_all install_dirs
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi rabbitmq-activate-plugins rabbitmq-deactivate-plugins; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
