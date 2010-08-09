@@ -28,6 +28,9 @@ DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
 VERSION=0.0.0
+
+WEB_URL=http://www.rabbitmq.com/
+
 SOURCE_PACKAGE_DIR=$(PACKAGE)-$(VERSION)-src
 SOURCE_PACKAGE_TAR_GZ=$(SOURCE_PACKAGE_DIR).tar.gz
 
@@ -128,7 +131,8 @@ $(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE_DIR).app | $(
 source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)
 	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)/
-	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
+	$(COPY) README.in $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/README
+	elinks -dump -no-references -no-numbering $(WEB_URL)build-erlang-client.html >> $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/README
 	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
 	$(COPY) Makefile.in $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/Makefile
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(SOURCE_DIR)

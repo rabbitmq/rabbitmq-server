@@ -166,7 +166,7 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
     From = dict:fetch(Id, Conts),
     gen_server:reply(From, Payload),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
-    {noreply, State#rpc_c_state{continuations = dict:erase(Id, Conts) }}.
+    {noreply, State#rpc_c_state{continuations = dict:erase(Id, Conts)}}.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

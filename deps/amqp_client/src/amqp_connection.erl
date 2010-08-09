@@ -74,7 +74,7 @@
 %% </ul>
 
 %%---------------------------------------------------------------------------
-%% AMQP Connection API Methods
+%% Starting a connection
 %%---------------------------------------------------------------------------
 
 %% @spec () -> [Connection]
@@ -173,26 +173,28 @@ start_internal(Params, Module, _Link = false) when is_atom(Module) ->
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
+%% @doc Invokes open_channel(ConnectionPid, none). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
 
-%% @spec (ConnectionPid, ChannelNumber) -> ChannelPid
+%% @spec (ConnectionPid, ChannelNumber) -> Result
 %% where
-%%      ChannelNumber = integer()
+%%      ChannelNumber = pos_integer()
 %%      ConnectionPid = pid()
+%%      Result = {ok, ChannelPid} | {error, term()}
 %%      ChannelPid = pid()
-%% @doc Opens an AMQP channel.
+%% @doc Opens an AMQP channel.<br/>
 %% This function assumes that an AMQP connection (networked or direct)
-%% has already been successfully established.
+%% has already been successfully established.<br/>
+%% ChannelNumber must be less than or equal to the negotiated max_channel value,
+%% or less than or equal to ?MAX_CHANNEL_NUMBER if the negotiated max_channel
+%% value is 0.<br/>
+%% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber) ->
     command(ConnectionPid, {open_channel, ChannelNumber}).
 
-%% @spec (ConnectionPid) -> ok | Error
-%% where
-%%      ConnectionPid = pid()
-%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+%% @doc Invokes close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
