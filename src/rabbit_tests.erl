@@ -67,7 +67,8 @@ all_tests() ->
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
-    passed = test_memory_pressure(),
+    passed = test_statistics(),
+    passed = test_option_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
@@ -504,8 +505,10 @@ test_content_framing(FrameMax, BodyBin) ->
         rabbit_binary_generator:build_simple_content_frames(
           1,
           rabbit_binary_generator:ensure_content_encoded(
-            rabbit_basic:build_content(#'P_basic'{}, BodyBin)),
-          FrameMax),
+            rabbit_basic:build_content(#'P_basic'{}, BodyBin),
+            rabbit_framing_amqp_0_9_1),
+          FrameMax,
+          rabbit_framing_amqp_0_9_1),
     %% header is formatted correctly and the size is the total of the
     %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
@@ -723,6 +726,30 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
+test_option_parser() ->
+    % command and arguments should just pass through
+    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
+                           [], ["mock_command", "arg1", "arg2"]),
+
+    % get flags
+    ok = check_get_options(
+           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
+           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+
+    % get options
+    ok = check_get_options(
+           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
+           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
+           ["mock_command", "-foo", "bar"]),
+
+    % shuffled and interleaved arguments and options
+    ok = check_get_options(
+           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
+           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
+           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+
+    passed.
+
 test_cluster_management() ->
 
     %% 'cluster' and 'reset' should only work if the app is stopped
@@ -858,7 +885,7 @@ test_cluster_management2(SecondaryNode) ->
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
-    ok = control_action(stop_app, SecondaryNode, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
@@ -866,9 +893,9 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, []),
-    ok = control_action(cluster, SecondaryNode, [NodeS]),
-    ok = control_action(start_app, SecondaryNode, []),
+    ok = control_action(force_reset, SecondaryNode, [], []),
+    ok = control_action(cluster, SecondaryNode, [NodeS], []),
+    ok = control_action(start_app, SecondaryNode, [], []),
 
     passed.
 
@@ -888,9 +915,12 @@ test_user_management() ->
     {error, {no_such_user, _}} =
         control_action(list_user_permissions, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(list_permissions, ["-p", "/testhost"]),
+        control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+    {error, {invalid_scope, _}} =
+        control_action(set_permissions, ["guest", "foo", ".*", ".*"],
+                       [{"-s", "cilent"}]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
@@ -906,16 +936,21 @@ test_user_management() ->
     ok = control_action(list_vhosts, []),
 
     %% user/vhost mapping
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(list_permissions, ["-p", "/testhost"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}, {"-s", "client"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}, {"-s", "all"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_user_permissions, ["foo"]),
 
     %% user/vhost unmapping
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
 
     %% vhost deletion
     ok = control_action(delete_vhost, ["/testhost"]),
@@ -924,8 +959,8 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -938,8 +973,8 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                   self()),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
+                                         <<"user">>, <<"/">>, self()),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1030,46 +1065,11 @@ test_hooks() ->
     end,
     passed.
 
-test_memory_pressure_receiver(Pid) ->
-    receive
-        shutdown ->
-            ok;
-        {send_command, Method} ->
-            ok = case Method of
-                     #'channel.flow'{}    -> ok;
-                     #'basic.qos_ok'{}    -> ok;
-                     #'channel.open_ok'{} -> ok
-                 end,
-            Pid ! Method,
-            test_memory_pressure_receiver(Pid);
-        sync ->
-            Pid ! sync,
-            test_memory_pressure_receiver(Pid)
-    end.
-
-test_memory_pressure_receive_flow(Active) ->
-    receive #'channel.flow'{active = Active} -> ok
-    after 1000 -> throw(failed_to_receive_channel_flow)
-    end,
-    receive #'channel.flow'{} ->
-            throw(pipelining_sync_commands_detected)
-    after 0 ->
-            ok
-    end.
-
-test_memory_pressure_sync(Ch, Writer) ->
-    ok = rabbit_channel:do(Ch, #'basic.qos'{}),
-    Writer ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'basic.qos_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_basic_qos_ok)
-    end.
-
-test_memory_pressure_spawn() ->
+test_spawn(Receiver) ->
     Me = self(),
-    Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch = rabbit_channel:start_link(1, self(), Writer, <<"user">>, <<"/">>,
-                                   self()),
+    Writer = spawn(fun () -> Receiver(Me) end),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"guest">>,
+                                         <<"/">>, self()),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     MRef = erlang:monitor(process, Ch),
     receive #'channel.open_ok'{} -> ok
@@ -1077,89 +1077,94 @@ test_memory_pressure_spawn() ->
     end,
     {Writer, Ch, MRef}.
 
-expect_normal_channel_termination(MRef, Ch) ->
-    receive {'DOWN', MRef, process, Ch, normal} -> ok
-    after 1000 -> throw(channel_failed_to_exit)
+test_statistics_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, Method} ->
+            Pid ! Method,
+            test_statistics_receiver(Pid)
     end.
 
-gobble_channel_exit() ->
-    receive {channel_exit, _, _} -> ok
-    after 1000 -> throw(channel_exit_not_received)
+test_statistics_event_receiver(Pid) ->
+    receive
+        Foo ->
+            Pid ! Foo,
+            test_statistics_event_receiver(Pid)
     end.
 
-test_memory_pressure() ->
-    {Writer0, Ch0, MRef0} = test_memory_pressure_spawn(),
-    [ok = rabbit_channel:conserve_memory(Ch0, Conserve) ||
-        Conserve <- [false, false, true, false, true, true, false]],
-    ok = test_memory_pressure_sync(Ch0, Writer0),
-    receive {'DOWN', MRef0, process, Ch0, Info0} ->
-            throw({channel_died_early, Info0})
-    after 0 -> ok
-    end,
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
+    rabbit_channel:emit_stats(Ch),
+    test_statistics_receive_event1(Ch, Matcher).
 
-    %% we should have just 1 active=false waiting for us
-    ok = test_memory_pressure_receive_flow(false),
+test_statistics_receive_event1(Ch, Matcher) ->
+    receive #event{type = channel_stats, props = Props} ->
+            case Matcher(Props) of
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
+            end
+    after 1000 -> throw(failed_to_receive_event)
+    end.
 
-    %% if we reply with flow_ok, we should immediately get an
-    %% active=true back
-    ok = rabbit_channel:do(Ch0, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_receive_flow(true),
+test_statistics() ->
+    application:set_env(rabbit, collect_statistics, fine),
 
-    %% if we publish at this point, the channel should die
-    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
-    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
-    expect_normal_channel_termination(MRef0, Ch0),
-    gobble_channel_exit(),
+    %% ATM this just tests the queue / exchange stats in channels. That's
+    %% by far the most complex code though.
 
-    {Writer1, Ch1, MRef1} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch1, true),
-    ok = test_memory_pressure_receive_flow(false),
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_sync(Ch1, Writer1),
-    ok = rabbit_channel:conserve_memory(Ch1, false),
-    ok = test_memory_pressure_receive_flow(true),
-    %% send back the wrong flow_ok. Channel should die.
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    expect_normal_channel_termination(MRef1, Ch1),
-    gobble_channel_exit(),
+    %% Set up a channel and queue
+    {_Writer, Ch, _MRef} = test_spawn(fun test_statistics_receiver/1),
+    rabbit_channel:do(Ch, #'queue.declare'{}),
+    QName = receive #'queue.declare_ok'{queue = Q0} ->
+                    Q0
+            after 1000 -> throw(failed_to_receive_queue_declare_ok)
+            end,
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    QPid = Q#amqqueue.pid,
+    X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
-    {_Writer2, Ch2, MRef2} = test_memory_pressure_spawn(),
-    %% just out of the blue, send a flow_ok. Life should end.
-    ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
-    expect_normal_channel_termination(MRef2, Ch2),
-    gobble_channel_exit(),
+    rabbit_tests_event_receiver:start(self()),
 
-    {_Writer3, Ch3, MRef3} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch3, true),
-    ok = test_memory_pressure_receive_flow(false),
-    receive {'DOWN', MRef3, process, Ch3, _} ->
-            ok
-    after 12000 ->
-            throw(channel_failed_to_exit)
-    end,
-    gobble_channel_exit(),
+    %% Check stats empty
+    Event = test_statistics_receive_event(Ch, fun (_) -> true end),
+    [] = proplists:get_value(channel_queue_stats, Event),
+    [] = proplists:get_value(channel_exchange_stats, Event),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event),
 
-    alarm_handler:set_alarm({vm_memory_high_watermark, []}),
-    Me = self(),
-    Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    Ch4 = rabbit_channel:start_link(1, self(), Writer4, <<"user">>, <<"/">>,
-                                    self()),
-    ok = rabbit_channel:do(Ch4, #'channel.open'{}),
-    MRef4 = erlang:monitor(process, Ch4),
-    Writer4 ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)
-    after 0 -> ok
-    end,
-    alarm_handler:clear_alarm(vm_memory_high_watermark),
-    Writer4 ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'channel.open_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_channel_open_ok)
-    end,
-    rabbit_channel:shutdown(Ch4),
-    expect_normal_channel_termination(MRef4, Ch4),
+    %% Publish and get a message
+    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
+                                           routing_key = QName},
+                      rabbit_basic:build_content(#'P_basic'{}, <<"">>)),
+    rabbit_channel:do(Ch, #'basic.get'{queue = QName}),
 
+    %% Check the stats reflect that
+    Event2 = test_statistics_receive_event(
+               Ch,
+               fun (E) ->
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) > 0
+               end),
+    [{QPid,[{get,1}]}] = proplists:get_value(channel_queue_stats, Event2),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
+    [{{QPid,X},[{publish,1}]}] =
+        proplists:get_value(channel_queue_exchange_stats, Event2),
+
+    %% Check the stats remove stuff on queue deletion
+    rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
+    Event3 = test_statistics_receive_event(
+               Ch,
+               fun (E) ->
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) == 0
+               end),
+
+    [] = proplists:get_value(channel_queue_stats, Event3),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event3),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event3),
+
+    rabbit_channel:shutdown(Ch),
+    rabbit_tests_event_receiver:stop(),
     passed.
 
 test_delegates_async(SecondaryNode) ->
@@ -1251,11 +1256,16 @@ test_delegates_sync(SecondaryNode) ->
 
 %---------------------------------------------------------------------
 
-control_action(Command, Args) -> control_action(Command, node(), Args).
+control_action(Command, Args) ->
+    control_action(Command, node(), Args, default_options()).
 
-control_action(Command, Node, Args) ->
+control_action(Command, Args, NewOpts) ->
+    control_action(Command, node(), Args,
+                   expand_options(default_options(), NewOpts)).
+
+control_action(Command, Node, Args, Opts) ->
     case catch rabbit_control:action(
-                 Command, Node, Args,
+                 Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
                  end) of
@@ -1269,11 +1279,26 @@ control_action(Command, Node, Args) ->
 
 info_action(Command, Args, CheckVHost) ->
     ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+    if CheckVHost -> ok = control_action(Command, []);
        true       -> ok
     end,
     ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
     {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
+
+default_options() -> [{"-s", "client"}, {"-p", "/"}, {"-q", "false"}].
+
+expand_options(As, Bs) ->
+    lists:foldl(fun({K, _}=A, R) ->
+                        case proplists:is_defined(K, R) of
+                            true -> R;
+                            false -> [A | R]
+                        end
+                end, Bs, As).
+
+check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
+    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
+    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
     ok.
 
 empty_files(Files) ->
@@ -1763,7 +1788,7 @@ with_fresh_variable_queue(Fun) ->
                       {len, 0}]),
     _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
     passed.
-    
+
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,

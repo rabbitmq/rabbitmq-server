@@ -39,8 +39,9 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, requeue/3, ack/4]).
+         stat/1, deliver/2, requeue/3, ack/4, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([emit_stats/1]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
@@ -78,7 +79,7 @@
         (name(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
         -> {'new' | 'existing', rabbit_types:amqqueue()} |
-           rabbit_types:channel_error()).
+           rabbit_types:channel_exit()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found')).
@@ -113,6 +114,7 @@
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
+-spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
       (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
@@ -130,6 +132,7 @@
 -spec(ack/4 ::
         (pid(), rabbit_types:maybe(rabbit_types:txn()), [msg_id()], pid())
         -> 'ok').
+-spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
 -spec(commit_all/3 :: ([pid()], rabbit_types:txn(), pid()) -> ok_or_errors()).
 -spec(rollback_all/3 :: ([pid()], rabbit_types:txn(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
@@ -147,8 +150,7 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found' |
-           rabbit_types:connection_exit()).
+        -> rabbit_types:amqqueue() | 'not_found').
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
@@ -158,7 +160,7 @@
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(maybe_expire/1 :: (pid()) -> 'ok').
--spec(on_node_down/1 :: (node()) -> 'ok' | rabbit_types:connection_exit()).
+-spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
 
 -endif.
@@ -303,9 +305,8 @@ check_declare_arguments(QueueName, Args) ->
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
-                             "Invalid arguments in declaration of queue ~s: "
-                             "~w (on argument: ~w)",
-                             [rabbit_misc:rs(QueueName), Error, Key])
+                             "invalid arg '~s' for ~s: ~w",
+                             [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
     ok.
 
@@ -353,6 +354,9 @@ consumers_all(VHostPath) ->
 
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
+emit_stats(#amqqueue{pid = QPid}) ->
+    delegate_pcast(QPid, 7, emit_stats).
+
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
 
@@ -376,9 +380,11 @@ requeue(QPid, MsgIds, ChPid) ->
 ack(QPid, Txn, MsgIds, ChPid) ->
     delegate_pcast(QPid, 7, {ack, Txn, MsgIds, ChPid}).
 
+reject(QPid, MsgIds, Requeue, ChPid) ->
+    delegate_pcast(QPid, 7, {reject, MsgIds, Requeue, ChPid}).
+
 commit_all(QPids, Txn, ChPid) ->
     safe_delegate_call_ok(
-      fun (QPid) -> exit({queue_disappeared, QPid}) end,
       fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
       QPids).
 
@@ -388,9 +394,6 @@ rollback_all(QPids, Txn, ChPid) ->
 
 notify_down_all(QPids, ChPid) ->
     safe_delegate_call_ok(
-      %% we don't care if the queue process has terminated in the
-      %% meantime
-      fun (_)    -> ok end,
       fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
       QPids).
 
@@ -447,7 +450,7 @@ internal_delete(QueueName) ->
     end.
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:pcall(QPid, 7, {maybe_run_queue_via_backing_queue, Fun},
+    gen_server2:pcall(QPid, 6, {maybe_run_queue_via_backing_queue, Fun},
                       infinity).
 
 update_ram_duration(QPid) ->
@@ -485,11 +488,11 @@ pseudo_queue(QueueName, Pid) ->
               arguments = [],
               pid = Pid}.
 
-safe_delegate_call_ok(H, F, Pids) ->
+safe_delegate_call_ok(F, Pids) ->
     {_, Bad} = delegate:invoke(Pids,
                                fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
-                                         fun () -> H(Pid) end,
+                                         fun () -> ok end,
                                          fun () -> F(Pid) end)
                                end),
     case Bad of

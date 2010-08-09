@@ -36,10 +36,9 @@
 -behaviour(gen_server2).
 
 -export([start_link/6, do/2, do/3, shutdown/1]).
--export([send_command/2, deliver/4, conserve_memory/2, flushed/2]).
+-export([send_command/2, deliver/4, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
-
--export([flow_timeout/2]).
+-export([emit_stats/1, flush/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1]).
@@ -48,24 +47,26 @@
              transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
-             consumer_mapping, blocking, queue_collector_pid, flow}).
-
--record(flow, {server, client, pending}).
+             consumer_mapping, blocking, queue_collector_pid, stats_timer}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
--define(FLOW_OK_TIMEOUT, 10000). %% 10 seconds
 
--define(INFO_KEYS,
+-define(STATISTICS_KEYS,
         [pid,
-         connection,
-         number,
-         user,
-         vhost,
          transactional,
          consumer_count,
          messages_unacknowledged,
          acks_uncommitted,
          prefetch_count]).
+
+-define(CREATION_EVENT_KEYS,
+        [pid,
+         connection,
+         number,
+         user,
+         vhost]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
@@ -73,12 +74,11 @@
 
 -export_type([channel_number/0]).
 
--type(ref() :: any()).
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/6 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> pid()).
+       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -87,25 +87,22 @@
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
--spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
--spec(flow_timeout/2 :: (pid(), ref()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (pid()) -> [rabbit_types:info()]).
 -spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
 -spec(info_all/0 :: () -> [[rabbit_types:info()]]).
 -spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
+-spec(emit_stats/1 :: (pid()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [Channel, ReaderPid, WriterPid,
-                            Username, VHost, CollectorPid], []),
-    Pid.
+    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid,
+                                     Username, VHost, CollectorPid], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -122,14 +119,8 @@ send_command(Pid, Msg) ->
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
-conserve_memory(Pid, Conserve) ->
-    gen_server2:pcast(Pid, 8, {conserve_memory, Conserve}).
-
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
-
-flow_timeout(Pid, Ref) ->
-    gen_server2:pcast(Pid, 7, {flow_timeout, Ref}).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -151,31 +142,39 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
+emit_stats(Pid) ->
+    gen_server2:pcast(Pid, 7, emit_stats).
+
+flush(Pid) ->
+    gen_server2:call(Pid, flush).
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     process_flag(trap_exit, true),
     link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
-    {ok, #ch{state                   = starting,
-             channel                 = Channel,
-             reader_pid              = ReaderPid,
-             writer_pid              = WriterPid,
-             limiter_pid             = undefined,
-             transaction_id          = none,
-             tx_participants         = sets:new(),
-             next_tag                = 1,
-             uncommitted_ack_q       = queue:new(),
-             unacked_message_q       = queue:new(),
-             username                = Username,
-             virtual_host            = VHost,
-             most_recently_declared_queue = <<>>,
-             consumer_mapping        = dict:new(),
-             blocking                = dict:new(),
-             queue_collector_pid     = CollectorPid,
-             flow                    = #flow{server = true, client = true,
-                                             pending = none}},
-     hibernate,
+    State = #ch{state                   = starting,
+                channel                 = Channel,
+                reader_pid              = ReaderPid,
+                writer_pid              = WriterPid,
+                limiter_pid             = undefined,
+                transaction_id          = none,
+                tx_participants         = sets:new(),
+                next_tag                = 1,
+                uncommitted_ack_q       = queue:new(),
+                unacked_message_q       = queue:new(),
+                username                = Username,
+                virtual_host            = VHost,
+                most_recently_declared_queue = <<>>,
+                consumer_mapping        = dict:new(),
+                blocking                = dict:new(),
+                queue_collector_pid     = CollectorPid,
+                stats_timer             = rabbit_event:init_stats_timer()},
+    rabbit_event:notify(
+      channel_created,
+      [{Item, i(Item, State)} || Item <- ?CREATION_EVENT_KEYS]),
+    {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(info, _From, State) ->
@@ -186,6 +185,9 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
+
+handle_call(flush, _From, State) ->
+    reply(ok, State);
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -225,26 +227,16 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired, {DeliveryTag, ConsumerTag, Msg}, State),
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
+    {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
+    maybe_incr_stats([{QPid, 1}],
+                     case AckRequired of
+                         true  -> deliver;
+                         false -> deliver_no_ack
+                     end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast({conserve_memory, true}, State = #ch{state = starting}) ->
-    noreply(State);
-handle_cast({conserve_memory, false}, State = #ch{state = starting}) ->
-    ok = rabbit_writer:send_command(State#ch.writer_pid, #'channel.open_ok'{}),
-    noreply(State#ch{state = running});
-handle_cast({conserve_memory, Conserve}, State = #ch{state = running}) ->
-    flow_control(not Conserve, State);
-handle_cast({conserve_memory, _Conserve}, State) ->
-    noreply(State);
-
-handle_cast({flow_timeout, Ref},
-            State = #ch{flow = #flow{client = Flow, pending = {Ref, _TRef}}}) ->
-    {stop, normal, terminating(
-                     rabbit_misc:amqp_error(
-                       precondition_failed,
-                       "timeout waiting for channel.flow_ok{active=~w}",
-                       [not Flow], none), State)};
-handle_cast({flow_timeout, _Ref}, State) ->
+handle_cast(emit_stats, State) ->
+    internal_emit_stats(State),
     {noreply, State}.
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -254,11 +246,12 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State)}.
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
-    {hibernate, State}.
+    {hibernate, stop_stats_timer(State)}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -276,9 +269,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
+reply(Reply, NewState) ->
+    {reply, Reply, ensure_stats_timer(NewState), hibernate}.
 
-noreply(NewState) -> {noreply, NewState, hibernate}.
+noreply(NewState) ->
+    {noreply, ensure_stats_timer(NewState), hibernate}.
+
+ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
+    ChPid = self(),
+    State#ch{stats_timer = rabbit_event:ensure_stats_timer(
+                             StatsTimer,
+                             fun() -> internal_emit_stats(State) end,
+                             fun() -> emit_stats(ChPid) end)}.
+
+stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
+    State#ch{stats_timer = rabbit_event:stop_stats_timer(
+                             StatsTimer,
+                             fun() -> internal_emit_stats(State) end)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -385,10 +392,7 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
-    case rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}) of
-        true  -> {noreply, State};
-        false -> {reply, #'channel.open_ok'{}, State#ch{state = running}}
-    end;
+    {reply, #'channel.open_ok'{}, State#ch{state = running}};
 
 handle_method(#'channel.open'{}, _, _State) ->
     rabbit_misc:protocol_error(
@@ -405,10 +409,6 @@ handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
 
-handle_method(#'basic.publish'{}, _, #ch{flow = #flow{client = false}}) ->
-    rabbit_misc:protocol_error(
-      command_invalid,
-      "basic.publish received after channel.flow_ok{active=false}", []);
 handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                routing_key = RoutingKey,
                                mandatory   = Mandatory,
@@ -421,7 +421,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
+    DecodedContent = rabbit_binary_parser:ensure_content_decoded(
+                       Content, rabbit_framing_amqp_0_9_1),
     IsPersistent = is_message_persistent(DecodedContent),
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
@@ -437,6 +438,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         unroutable    -> ok = basic_return(Message, WriterPid, no_route);
         not_delivered -> ok = basic_return(Message, WriterPid, no_consumers)
     end,
+    maybe_incr_stats([{ExchangeName, 1} |
+                      [{{QPid, ExchangeName}, 1} ||
+                          QPid <- DeliveredQPids]], publish, State),
     {noreply, case TxnKey of
                   none -> State;
                   _    -> add_tx_participants(DeliveredQPids, State)
@@ -447,7 +451,9 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
               _, State = #ch{transaction_id = TxnKey,
                              unacked_message_q = UAMQ}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    Participants = ack(TxnKey, Acked),
+    QIncs = ack(TxnKey, Acked),
+    Participants = [QPid || {QPid, _} <- QIncs],
+    maybe_incr_stats(QIncs, ack, State),
     {noreply, case TxnKey of
                   none -> ok = notify_limiter(State#ch.limiter_pid, Acked),
                           State#ch{unacked_message_q = Remaining};
@@ -470,11 +476,16 @@ handle_method(#'basic.get'{queue = QueueNameBin,
            QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
-         Msg = {_QName, _QPid, _MsgId, Redelivered,
+         Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
                                routing_key = RoutingKey,
                                content = Content}}} ->
             State1 = lock_message(not(NoAck), {DeliveryTag, none, Msg}, State),
+            maybe_incr_stats([{QPid, 1}],
+                             case NoAck of
+                                 true  -> get_no_ack;
+                                 false -> get
+                             end, State),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,
@@ -638,6 +649,17 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
     ok = rabbit_writer:send_command(WriterPid, #'basic.recover_ok'{}),
     {noreply, State2};
 
+handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
+                              requeue = Requeue},
+              _, State = #ch{ unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
+    ok = fold_per_queue(
+           fun (QPid, MsgIds, ok) ->
+                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+           end, ok, Acked),
+    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    {noreply, State#ch{unacked_message_q = Remaining}};
+
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
@@ -735,7 +757,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% the connection shuts down.
                     ok = case Owner of
                              none -> ok;
-                             _    -> rabbit_queue_collector:register(CollectorPid, Q)
+                             _    -> rabbit_queue_collector:register(
+                                       CollectorPid, Q)
                          end,
                     return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
                 {existing, _Q} ->
@@ -853,47 +876,11 @@ handle_method(#'channel.flow'{active = false}, _,
                                  blocking = dict:from_list(Queues)}}
     end;
 
-handle_method(#'channel.flow_ok'{active = Active}, _,
-              State = #ch{flow = #flow{server = Active, client = Flow,
-                                       pending = {_Ref, TRef}} = F})
-  when Flow =:= not Active ->
-    {ok, cancel} = timer:cancel(TRef),
-    {noreply, State#ch{flow = F#flow{client = Active, pending = none}}};
-handle_method(#'channel.flow_ok'{active = Active}, _,
-              State = #ch{flow = #flow{server = Flow, client = Flow,
-                                       pending = {_Ref, TRef}}})
-  when Flow =:= not Active ->
-    {ok, cancel} = timer:cancel(TRef),
-    {noreply, issue_flow(Flow, State)};
-handle_method(#'channel.flow_ok'{}, _, #ch{flow = #flow{pending = none}}) ->
-    rabbit_misc:protocol_error(
-      command_invalid, "unsolicited channel.flow_ok", []);
-handle_method(#'channel.flow_ok'{active = Active}, _, _State) ->
-    rabbit_misc:protocol_error(
-      command_invalid,
-      "received channel.flow_ok{active=~w} has incorrect polarity", [Active]);
-
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
 
 %%----------------------------------------------------------------------------
-
-flow_control(Active, State = #ch{flow = #flow{server = Flow, pending = none}})
-  when Flow =:= not Active ->
-    ok = clear_permission_cache(),
-    noreply(issue_flow(Active, State));
-flow_control(Active, State = #ch{flow = F}) ->
-    noreply(State#ch{flow = F#flow{server = Active}}).
-
-issue_flow(Active, State) ->
-    ok = rabbit_writer:send_command(
-           State#ch.writer_pid, #'channel.flow'{active = Active}),
-    Ref = make_ref(),
-    {ok, TRef} = timer:apply_after(?FLOW_OK_TIMEOUT, ?MODULE, flow_timeout,
-                                   [self(), Ref]),
-    State#ch{flow = #flow{server = Active, client = not Active,
-                          pending = {Ref, TRef}}}.
 
 binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                ReturnMethod, NoWait,
@@ -938,7 +925,7 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                             content       = Content},
              WriterPid, Reason) ->
     {_Close, ReplyCode, ReplyText} =
-        rabbit_framing:lookup_amqp_exception(Reason),
+        rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.return'{reply_code  = ReplyCode,
@@ -978,7 +965,7 @@ ack(TxnKey, UAQ) ->
     fold_per_queue(
       fun (QPid, MsgIds, L) ->
               ok = rabbit_amqqueue:ack(QPid, TxnKey, MsgIds, self()),
-              [QPid | L]
+              [{QPid, length(MsgIds)} | L]
       end, [], UAQ).
 
 make_tx_id() -> rabbit_guid:guid().
@@ -1031,7 +1018,7 @@ fold_per_queue(F, Acc0, UAQ) ->
               Acc0, D).
 
 start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
-    LPid = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+    {ok, LPid} = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
 
@@ -1105,6 +1092,7 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
 
 terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
     pg_local:leave(rabbit_channels, self()),
+    rabbit_event:notify(channel_closed, [{pid, self()}]),
     rabbit_writer:shutdown(WriterPid),
     rabbit_limiter:shutdown(LimiterPid).
 
@@ -1127,3 +1115,60 @@ i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
+
+maybe_incr_stats(QXIncs, Measure, #ch{stats_timer = StatsTimer}) ->
+    case rabbit_event:stats_level(StatsTimer) of
+        fine -> [incr_stats(QX, Inc, Measure) || {QX, Inc} <- QXIncs];
+        _    -> ok
+    end.
+
+incr_stats({QPid, _} = QX, Inc, Measure) ->
+    maybe_monitor(QPid),
+    update_measures(queue_exchange_stats, QX, Inc, Measure);
+incr_stats(QPid, Inc, Measure) when is_pid(QPid) ->
+    maybe_monitor(QPid),
+    update_measures(queue_stats, QPid, Inc, Measure);
+incr_stats(X, Inc, Measure) ->
+    update_measures(exchange_stats, X, Inc, Measure).
+
+maybe_monitor(QPid) ->
+    case get({monitoring, QPid}) of
+        undefined -> erlang:monitor(process, QPid),
+                     put({monitoring, QPid}, true);
+        _         -> ok
+    end.
+
+update_measures(Type, QX, Inc, Measure) ->
+    Measures = case get({Type, QX}) of
+                   undefined -> [];
+                   D         -> D
+               end,
+    Cur = case orddict:find(Measure, Measures) of
+              error   -> 0;
+              {ok, C} -> C
+          end,
+    put({Type, QX},
+        orddict:store(Measure, Cur + Inc, Measures)).
+
+internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
+    CoarseStats = [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS],
+    case rabbit_event:stats_level(StatsTimer) of
+        coarse ->
+            rabbit_event:notify(channel_stats, CoarseStats);
+        fine ->
+            FineStats =
+                [{channel_queue_stats,
+                  [{QPid, Stats} || {{queue_stats, QPid}, Stats} <- get()]},
+                 {channel_exchange_stats,
+                  [{X, Stats} || {{exchange_stats, X}, Stats} <- get()]},
+                 {channel_queue_exchange_stats,
+                  [{QX, Stats} ||
+                      {{queue_exchange_stats, QX}, Stats} <- get()]}],
+            rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
+    end.
+
+erase_queue_stats(QPid) ->
+    erase({monitoring, QPid}),
+    erase({queue_stats, QPid}),
+    [erase({queue_exchange_stats, QX}) ||
+        {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
