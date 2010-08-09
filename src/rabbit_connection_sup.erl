@@ -41,16 +41,16 @@
 
 start_link() ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, Collector} =
-        supervisor2:start_child(
-          SupPid,
-          {collector, {rabbit_queue_collector, start_link, []},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
     {ok, ChannelSupSupPid} =
         supervisor2:start_child(
           SupPid,
           {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
            intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
+    {ok, Collector} =
+        supervisor2:start_child(
+          SupPid,
+          {collector, {rabbit_queue_collector, start_link, []},
+           intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
     {ok, _ReaderPid} =
         supervisor2:start_child(
           SupPid,
