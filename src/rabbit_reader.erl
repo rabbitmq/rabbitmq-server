@@ -276,7 +276,7 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         mainloop(Deb, switch_callback(
                                 #v1{parent           = Parent,
                                     sock             = ClientSock,
-                                    connection          = #connection{
+                                    connection       = #connection{
                                       user              = none,
                                       timeout_sec       = ?HANDSHAKE_TIMEOUT,
                                       frame_max         = ?FRAME_MIN_SIZE,
