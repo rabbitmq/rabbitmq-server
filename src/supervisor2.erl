@@ -31,6 +31,14 @@
 %%    the MaxT and MaxR parameters to permit the child to be
 %%    restarted. This may require waiting for longer than Delay.
 %%
+%% 4) Added an 'intrinsic' restart type. This type means that the
+%%    child should never be restarted (same as temporary) but whenever
+%%    such a child exits, it will cause the entire supervisor to exit
+%%    (i.e. the child's existence is intrinsic to the supervisor's
+%%    existence). Because such children are never restarted, the
+%%    supervisor's restart strategy, MaxT and MaxR have no bearing on
+%%    such children.
+%%
 %% All modifications are (C) 2010 Rabbit Technologies Ltd.
 %%
 %% %CopyrightBegin%
@@ -521,6 +529,12 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
+do_restart(intrinsic, Reason, Child, State = #state{name = Name}) ->
+    case Reason of
+        normal -> ok;
+        _      -> report_error(child_terminated, Reason, Child, Name)
+    end,
+    {shutdown, remove_child(Child, State)};
 do_restart({RestartType, Delay}, Reason, Child, State) ->
     case restart1(Child, State) of
         {ok, NState} ->
@@ -834,7 +848,7 @@ supname(N,_)      -> N.
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
 %%%       RestartType is permanent | temporary | transient |
-%%%                      {permanent, Delay} |
+%%%                      intrinsic | {permanent, Delay} |
 %%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
@@ -881,6 +895,7 @@ validFunc({M, F, A}) when is_atom(M),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
+validRestartType(intrinsic)          -> true;
 validRestartType(permanent)          -> true;
 validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
