@@ -35,18 +35,19 @@
 -export([start_link/3, process/2, shutdown/1]).
 
 %% internal
--export([mainloop/2]).
+-export([mainloop/3]).
 
 %%--------------------------------------------------------------------
 
 start_link(StartFun, StartArgs, Protocol) ->
+    Parent = self(),
     {ok, spawn_link(
            fun () ->
                    %% we trap exits so that a normal termination of
                    %% the channel or reader process terminates us too.
                    process_flag(trap_exit, true),
                    {ok, ChannelPid} = apply(StartFun, StartArgs),
-                   mainloop(ChannelPid, Protocol)
+                   mainloop(Parent, ChannelPid, Protocol)
            end)}.
 
 process(Pid, Frame) ->
@@ -73,46 +74,55 @@ read_frame(ChannelPid) ->
         Msg                    -> exit({unexpected_message, Msg})
     end.
 
-mainloop(ChannelPid, Protocol) ->
+mainloop(Parent, ChannelPid, Protocol) ->
     case read_frame(ChannelPid) of
         {method, MethodName, FieldsBin} ->
             Method = Protocol:decode_method_fields(MethodName, FieldsBin),
             case Protocol:method_has_content(MethodName) of
                 true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
-                         rabbit_channel:do(ChannelPid, Method,
-                                           collect_content(ChannelPid,
-                                                           ClassId,
-                                                           Protocol));
-                false -> rabbit_channel:do(ChannelPid, Method)
-            end,
-            ?MODULE:mainloop(ChannelPid, Protocol);
+                         case collect_content(ChannelPid, ClassId, Protocol) of
+                             {ok, Content} ->
+                                 rabbit_channel:do(ChannelPid, Method, Content),
+                                 ?MODULE:mainloop(Parent, ChannelPid, Protocol);
+                             {error, Reason} ->
+                                 channel_exit(Parent, Reason, MethodName)
+                         end;
+                false -> rabbit_channel:do(ChannelPid, Method),
+                         ?MODULE:mainloop(Parent, ChannelPid, Protocol)
+            end;
         _ ->
-            unexpected_frame("expected method frame, "
-                             "got non method frame instead",
-                             [])
+            channel_exit(Parent, {unexpected_frame,
+                                  "expected method frame, "
+                                  "got non method frame instead",
+                                  []}, none)
     end.
 
 collect_content(ChannelPid, ClassId, Protocol) ->
     case read_frame(ChannelPid) of
         {content_header, ClassId, 0, BodySize, PropertiesBin} ->
-            Payload = collect_content_payload(ChannelPid, BodySize, []),
-            #content{class_id = ClassId,
-                     properties = none,
-                     properties_bin = PropertiesBin,
-                     protocol = Protocol,
-                     payload_fragments_rev = Payload};
+            case collect_content_payload(ChannelPid, BodySize, []) of
+                {ok, Payload} -> {ok, #content{
+                                    class_id = ClassId,
+                                    properties = none,
+                                    properties_bin = PropertiesBin,
+                                    protocol = Protocol,
+                                    payload_fragments_rev = Payload}};
+                Error         -> Error
+            end;
         {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
-            unexpected_frame("expected content header for class ~w, "
-                             "got one for class ~w instead",
-                             [ClassId, HeaderClassId]);
+            {error, {unexpected_frame,
+                     "expected content header for class ~w, "
+                     "got one for class ~w instead",
+                     [ClassId, HeaderClassId]}};
         _ ->
-            unexpected_frame("expected content header for class ~w, "
-                             "got non content header frame instead",
-                             [ClassId])
+            {error, {unexpected_frame,
+                     "expected content header for class ~w, "
+                     "got non content header frame instead",
+                     [ClassId]}}
     end.
 
 collect_content_payload(_ChannelPid, 0, Acc) ->
-    Acc;
+    {ok, Acc};
 collect_content_payload(ChannelPid, RemainingByteCount, Acc) ->
     case read_frame(ChannelPid) of
         {content_body, FragmentBin} ->
@@ -120,10 +130,13 @@ collect_content_payload(ChannelPid, RemainingByteCount, Acc) ->
                                     RemainingByteCount - size(FragmentBin),
                                     [FragmentBin | Acc]);
         _ ->
-            unexpected_frame("expected content body, "
-                             "got non content body frame instead",
-                             [])
+            {error, {unexpected_frame,
+                     "expected content body, "
+                     "got non content body frame instead",
+                     []}}
     end.
 
-unexpected_frame(ExplanationFormat, Params) ->
-    rabbit_misc:protocol_error(unexpected_frame, ExplanationFormat, Params).
+channel_exit(Parent, {ErrorName, ExplanationFormat, Params}, MethodName) ->
+    Reason = rabbit_misc:amqp_error(ErrorName, ExplanationFormat, Params,
+                                    MethodName),
+    Parent ! {channel_exit, self(), Reason}.
