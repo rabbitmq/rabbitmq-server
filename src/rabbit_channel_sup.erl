@@ -80,4 +80,4 @@ start_link(Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_all, 10, 10}, []}}.
+    {ok, {{one_for_all, 0, 1}, []}}.

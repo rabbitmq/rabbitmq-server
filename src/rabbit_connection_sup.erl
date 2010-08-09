@@ -59,7 +59,7 @@ start_link() ->
     {ok, SupPid}.
 
 init([]) ->
-    {ok, {{one_for_all, 10, 10}, []}}.
+    {ok, {{one_for_all, 0, 1}, []}}.
 
 reader(Pid) ->
     hd(supervisor2:find_child(Pid, reader)).
