@@ -529,12 +529,6 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart(intrinsic, Reason, Child, State = #state{name = Name}) ->
-    case Reason of
-        normal -> ok;
-        _      -> report_error(child_terminated, Reason, Child, Name)
-    end,
-    {shutdown, remove_child(Child, State)};
 do_restart({RestartType, Delay}, Reason, Child, State) ->
     case restart1(Child, State) of
         {ok, NState} ->
@@ -545,6 +539,11 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
                             [self(), {{RestartType, Delay}, Reason, Child}]),
             {ok, NState}
     end;
+do_restart(intrinsic, normal, Child, State) ->
+    {shutdown, remove_child(Child, State)};
+do_restart(intrinsic, Reason, Child, State) ->
+    report_error(child_terminated, Reason, Child, State#state.name),
+    {shutdown, remove_child(Child, State)};
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
@@ -847,8 +846,8 @@ supname(N,_)      -> N.
 %%%    {Name, Func, RestartType, Shutdown, ChildType, Modules}
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
-%%%       RestartType is permanent | temporary | transient |
-%%%                      intrinsic | {permanent, Delay} |
+%%%       RestartType is intrinsic | permanent | temporary |
+%%%                      transient | {permanent, Delay} |
 %%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
