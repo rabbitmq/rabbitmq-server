@@ -35,7 +35,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
--export([start_link/2, shutdown/1]).
+-export([start_link/2]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1]).
 
@@ -46,7 +46,6 @@
 -type(maybe_pid() :: pid() | 'undefined').
 
 -spec(start_link/2 :: (pid(), non_neg_integer()) -> rabbit_types:ok(pid())).
--spec(shutdown/1 :: (maybe_pid()) -> 'ok').
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
@@ -75,12 +74,6 @@
 
 start_link(ChPid, UnackedMsgCount) ->
     gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []).
-
-shutdown(undefined) ->
-    ok;
-shutdown(LimiterPid) ->
-    true = unlink(LimiterPid),
-    gen_server2:cast(LimiterPid, shutdown).
 
 limit(undefined, 0) ->
     ok;

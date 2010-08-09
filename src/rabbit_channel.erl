@@ -153,8 +153,6 @@ flush(Pid) ->
 
 init([Channel, ParentPid, ReaderPid, WriterPid, Username, VHost,
       CollectorPid]) ->
-    process_flag(trap_exit, true),
-    link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
                 channel                 = Channel,
@@ -243,12 +241,6 @@ handle_cast(emit_stats, State) ->
     internal_emit_stats(State),
     {noreply, State}.
 
-handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
-            State = #ch{writer_pid = WriterPid}) ->
-    State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
-    {stop, normal, State};
-handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State)}.
@@ -1025,7 +1017,7 @@ fold_per_queue(F, Acc0, UAQ) ->
 start_limiter(State = #ch{unacked_message_q = UAMQ, parent_pid = ParentPid}) ->
     Me = self(),
     {ok, LPid} =
-        supervisor:start_child(
+        supervisor2:start_child(
           ParentPid,
           {limiter, {rabbit_limiter, start_link, [Me, queue:len(UAMQ)]},
            transient, ?MAX_WAIT, worker, [rabbit_limiter]}),
@@ -1100,10 +1092,9 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
 
-terminate(#ch{limiter_pid = LimiterPid}) ->
+terminate(_State) ->
     pg_local:leave(rabbit_channels, self()),
-    rabbit_event:notify(channel_closed, [{pid, self()}]),
-    rabbit_limiter:shutdown(LimiterPid).
+    rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 

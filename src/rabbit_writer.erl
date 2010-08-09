@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/4, start_link/4, flush/1, mainloop/1]).
+-export([start/5, start_link/5, flush/1, mainloop/2, mainloop1/2]).
 -export([send_command/2, send_command/3, send_command_and_signal_back/3,
          send_command_and_signal_back/4, send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
@@ -48,13 +48,13 @@
 
 -ifdef(use_specs).
 
--spec(start/4 ::
+-spec(start/5 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol())
+         non_neg_integer(), rabbit_types:protocol(), pid())
         -> rabbit_types:ok(pid())).
--spec(start_link/4 ::
+-spec(start_link/5 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol())
+         non_neg_integer(), rabbit_types:protocol(), pid())
         -> rabbit_types:ok(pid())).
 -spec(send_command/2 ::
         (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -85,25 +85,35 @@
 
 %%----------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax, Protocol) ->
+start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
     {ok,
-     proc_lib:spawn(?MODULE, mainloop, [#wstate{sock = Sock,
+     proc_lib:spawn(?MODULE, mainloop, [ReaderPid,
+                                        #wstate{sock = Sock,
                                                 channel = Channel,
                                                 frame_max = FrameMax,
                                                 protocol = Protocol}])}.
 
-start_link(Sock, Channel, FrameMax, Protocol) ->
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
     {ok,
-     proc_lib:spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
+     proc_lib:spawn_link(?MODULE, mainloop, [ReaderPid,
+                                             #wstate{sock = Sock,
                                                      channel = Channel,
                                                      frame_max = FrameMax,
                                                      protocol = Protocol}])}.
 
-mainloop(State) ->
+mainloop(ReaderPid, State) ->
+    try
+        mainloop1(ReaderPid, State)
+    catch
+        exit:Error -> ReaderPid ! {channel_exit, #wstate.channel, Error}
+    end,
+    done.
+
+mainloop1(ReaderPid, State) ->
     receive
-        Message -> ?MODULE:mainloop(handle_message(Message, State))
+        Message -> ?MODULE:mainloop1(ReaderPid, handle_message(Message, State))
     after ?HIBERNATE_AFTER ->
-            erlang:hibernate(?MODULE, mainloop, [State])
+            erlang:hibernate(?MODULE, mainloop, [ReaderPid, State])
     end.
 
 handle_message({send_command, MethodRecord},

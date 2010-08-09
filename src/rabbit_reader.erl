@@ -372,6 +372,8 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                true ->
                     throw({handshake_timeout, State#v1.callback})
             end;
+        timeout ->
+            throw({timeout, State#v1.connection_state});
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
             gen_server:reply(From, ok),
@@ -460,9 +462,9 @@ handle_channel_exit(Channel, Reason, State) ->
 
 handle_dependent_exit(Pid, Reason, State) ->
     case (case Reason of
+                     normal            -> controlled;
                      shutdown          -> controlled;
                      {shutdown, _Term} -> controlled;
-                     normal            -> controlled;
                      _                 -> uncontrolled
           end) of
         controlled ->
@@ -878,14 +880,14 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  frame_max = FrameMax,
                                  user      = #user{username = Username},
                                  vhost     = VHost}} = State,
-    {ok, _ChanSup, FrChPid} =
+    {ok, _ChanSup, ChPid} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, [Protocol, Sock, Channel, FrameMax,
                        self(), Username, VHost, Collector]),
-    link(FrChPid),
-    put({channel, Channel}, {chpid, FrChPid}),
-    put({chpid, FrChPid}, {channel, Channel}),
-    ok = rabbit_framing_channel:process(FrChPid, AnalyzedFrame).
+    link(ChPid),
+    put({channel, Channel}, {chpid, ChPid}),
+    put({chpid, ChPid}, {channel, Channel}),
+    ok = rabbit_framing_channel:process(ChPid, AnalyzedFrame).
 
 log_channel_error(ConnectionState, Channel, Reason) ->
     rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",

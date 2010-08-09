@@ -32,8 +32,8 @@
 -module(rabbit_heartbeat).
 
 -export([start_heartbeat/3, pause_monitor/1, resume_monitor/1,
-         start_heartbeat_sender/2,
-         start_heartbeat_receiver/2]).
+         start_heartbeat_sender/3,
+         start_heartbeat_receiver/3]).
 
 -include("rabbit.hrl").
 
@@ -45,9 +45,11 @@
 
 -spec(start_heartbeat/3 :: (pid(), rabbit_net:socket(), non_neg_integer()) ->
                                 pids()).
--spec(start_heartbeat_sender/2 :: (rabbit_net:socket(), non_neg_integer()) ->
+-spec(start_heartbeat_sender/3 ::
+        (pid(), rabbit_net:socket(), non_neg_integer()) ->
                                        rabbit_types:ok(pid())).
--spec(start_heartbeat_receiver/2 :: (rabbit_net:socket(), non_neg_integer()) ->
+-spec(start_heartbeat_receiver/3 ::
+        (pid(), rabbit_net:socket(), non_neg_integer()) ->
                                          rabbit_types:ok(pid())).
 
 -spec(pause_monitor/1 :: (pids()) -> 'ok').
@@ -60,41 +62,41 @@
 start_heartbeat(_Sup, _Sock, 0) ->
     none;
 start_heartbeat(Sup, Sock, TimeoutSec) ->
+    Parent = self(),
     {ok, Sender} =
-        supervisor:start_child(
+        supervisor2:start_child(
           Sup, {heartbeat_sender,
-                {?MODULE, start_heartbeat_sender, [Sock, TimeoutSec]},
-                permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                {?MODULE, start_heartbeat_sender, [Parent, Sock, TimeoutSec]},
+                intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
     {ok, Receiver} =
-        supervisor:start_child(
+        supervisor2:start_child(
           Sup, {heartbeat_receiver,
-                {?MODULE, start_heartbeat_receiver, [Sock, TimeoutSec]},
-                permanent, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                {?MODULE, start_heartbeat_receiver, [Parent, Sock, TimeoutSec]},
+                intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
     {Sender, Receiver}.
 
-start_heartbeat_sender(Sock, TimeoutSec) ->
+start_heartbeat_sender(_Parent, Sock, TimeoutSec) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
     %% 2 * TimeoutSec before sending a heartbeat in the boundary case
     %% where the last message was sent just after a heartbeat.
-    Parent = self(),
     {ok, proc_lib:spawn_link(
-           fun () -> heartbeater({Sock, TimeoutSec * 1000 div 2,
-                                 send_oct, 0,
+           fun () -> heartbeater({Sock, TimeoutSec * 1000 div 2, send_oct, 0,
                                  fun () ->
                                          catch rabbit_net:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
                                          continue
-                                 end}, Parent)
+                                 end}, {0, 0})
            end)}.
 
-start_heartbeat_receiver(Sock, TimeoutSec) ->
+start_heartbeat_receiver(Parent, Sock, TimeoutSec) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
-    Parent = self(),
     {ok, proc_lib:spawn_link(
-           fun () -> heartbeater({Sock, TimeoutSec * 1000,
-                                 recv_oct, 1,
-                                 fun () -> exit(timeout) end}, Parent) end)}.
+           fun () -> heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1,
+                                 fun () ->
+                                         Parent ! timeout,
+                                         stop
+                                 end}, {0, 0}) end)}.
 
 pause_monitor(none) ->
     ok;
@@ -110,19 +112,12 @@ resume_monitor({_Sender, Receiver}) ->
 
 %%----------------------------------------------------------------------------
 
-heartbeater(Params, Parent) ->
-    heartbeater(Params, erlang:monitor(process, Parent), {0, 0}).
-
 heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
-            MonitorRef, {StatVal, SameCount}) ->
-    Recurse = fun (V) -> heartbeater(Params, MonitorRef, V) end,
+            {StatVal, SameCount}) ->
+    Recurse = fun (V) -> heartbeater(Params, V) end,
     receive
-        {'DOWN', MonitorRef, process, _Object, _Info} ->
-            ok;
         pause ->
             receive
-                {'DOWN', MonitorRef, process, _Object, _Info} ->
-                    ok;
                 resume ->
                     Recurse({0, 0});
                 Other ->
@@ -139,6 +134,7 @@ heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
                             Recurse({NewStatVal, SameCount + 1});
                        true ->
                             case Handler() of
+                                stop     -> ok;
                                 continue -> Recurse({NewStatVal, 0})
                             end
                     end;
