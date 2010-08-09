@@ -533,12 +533,10 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart(intrinsic, Reason, Child, State) ->
+do_restart(intrinsic, Reason, Child, State = #state{name = Name}) ->
     case Reason of
-        normal            -> ok;
-        shutdown          -> ok;
-        {shutdown, _Term} -> ok;
-        _ -> report_error(child_terminated, Reason, Child, State#state.name)
+        normal -> ok;
+        _      -> report_error(child_terminated, Reason, Child, Name)
     end,
     {shutdown, remove_child(Child, State)};
 do_restart({RestartType, Delay}, Reason, Child, State) ->
