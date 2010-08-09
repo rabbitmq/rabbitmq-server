@@ -31,13 +31,10 @@
 %%    the MaxT and MaxR parameters to permit the child to be
 %%    restarted. This may require waiting for longer than Delay.
 %%
-%% 4) Added an 'intrinsic' restart type. This type means that the
-%%    child should never be restarted (same as temporary) but whenever
-%%    such a child exits, it will cause the entire supervisor to exit
-%%    (i.e. the child's existence is intrinsic to the supervisor's
-%%    existence). Because such children are never restarted, the
-%%    supervisor's restart strategy, MaxT and MaxR have no bearing on
-%%    such children.
+%% 4) Added an 'intrinsic' restart type. Like the transient type, this
+%%    type means the child should only be restarted if the child exits
+%%    abnormally. Unlike the transient type, if the child exits
+%%    normally, the supervisor itself also exits normally.
 %%
 %% All modifications are (C) 2010 Rabbit Technologies Ltd.
 %%
@@ -533,12 +530,6 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart(intrinsic, Reason, Child, State = #state{name = Name}) ->
-    case Reason of
-        normal -> ok;
-        _      -> report_error(child_terminated, Reason, Child, Name)
-    end,
-    {shutdown, remove_child(Child, State)};
 do_restart({RestartType, Delay}, Reason, Child, State) ->
     case restart1(Child, State) of
         {ok, NState} ->
@@ -549,6 +540,8 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
                             [self(), {{RestartType, Delay}, Reason, Child}]),
             {ok, NState}
     end;
+do_restart(intrinsic, normal, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
@@ -558,7 +551,8 @@ do_restart(_, normal, Child, State) ->
 do_restart(_, shutdown, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
-do_restart(transient, Reason, Child, State) ->
+do_restart(Type, Reason, Child, State) when Type =:= transient orelse
+                                            Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(temporary, Reason, Child, State) ->
@@ -851,8 +845,8 @@ supname(N,_)      -> N.
 %%%    {Name, Func, RestartType, Shutdown, ChildType, Modules}
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
-%%%       RestartType is permanent | temporary | transient |
-%%%                      intrinsic | {permanent, Delay} |
+%%%       RestartType is intrinsic | permanent | temporary |
+%%%                      transient | {permanent, Delay} |
 %%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
