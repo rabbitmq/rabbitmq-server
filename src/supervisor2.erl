@@ -540,10 +540,10 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
             {ok, NState}
     end;
 do_restart(intrinsic, normal, Child, State) ->
-    {shutdown, remove_child(Child, State)};
+    {shutdown, state_del_child(Child, State)};
 do_restart(intrinsic, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
-    {shutdown, remove_child(Child, State)};
+    {shutdown, state_del_child(Child, State)};
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
