@@ -676,10 +676,13 @@ shutdown(Pid, brutal_kill) ->
 	ok ->
 	    exit(Pid, kill),
 	    receive
-		{'DOWN', _MRef, process, Pid, killed} ->
-		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
-		    {error, OtherReason}
+                    case OtherReason of
+                        killed -> ok;
+                        normal -> ok;
+                        noproc -> ok;
+                        _      -> {error, OtherReason}
+                    end
 	    end;
 	{error, Reason} ->      
 	    {error, Reason}
@@ -691,10 +694,13 @@ shutdown(Pid, Time) ->
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
 	    receive 
-		{'DOWN', _MRef, process, Pid, shutdown} ->
-		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
-		    {error, OtherReason}
+                    case OtherReason of
+                        shutdown -> ok;
+                        normal   -> ok;
+                        noproc   -> ok;
+                        _        -> {error, OtherReason}
+                    end
 	    after Time ->
 		    exit(Pid, kill),  %% Force termination.
 		    receive
@@ -720,10 +726,13 @@ monitor_child(Pid) ->
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
 	{'EXIT', Pid, Reason} -> 
-	    receive 
-		{'DOWN', _, process, Pid, _} ->
-		    {error, Reason}
-	    end
+            case Reason of
+                normal -> ok;
+                _      -> receive
+                              {'DOWN', _, process, Pid, _} ->
+                                  {error, Reason}
+                          end
+            end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
 	    %% monitor the result will be that shutdown/2 receives a 
