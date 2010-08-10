@@ -21,6 +21,10 @@
               "id": 20,
               "arguments": [],
               "synchronous": true
+             },
+             {"name": "deselect-ok",
+              "id": 21,
+              "arguments": []
              }
 	 ]}
     ]
