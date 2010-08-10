@@ -1,0 +1,27 @@
+{
+    "extension": {
+        "name": "puback",
+	"version": "0.1",
+	"copyright": "Copyright (C) 2010 SpringSource"
+    },
+    "domains": [
+    ],
+    "constants": [
+    ],
+    "classes": [
+    	{"name": "puback",
+	 "id": 85,
+	 "methods": [
+	     {"name": "select",
+              "id": 10,
+              "arguments": [
+	      	  {"type": "bit", "name": "many", "default-value": false}
+	      ]},
+             {"name": "deselect",
+              "id": 20,
+              "arguments": [],
+              "synchronous": true
+             }
+	 ]}
+    ]
+}
