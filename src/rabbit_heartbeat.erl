@@ -31,9 +31,8 @@
 
 -module(rabbit_heartbeat).
 
--export([start_heartbeat/3, pause_monitor/1, resume_monitor/1,
-         start_heartbeat_sender/3,
-         start_heartbeat_receiver/3]).
+-export([start_heartbeat_sender/3, start_heartbeat_receiver/3,
+         pause_monitor/1, resume_monitor/1]).
 
 -include("rabbit.hrl").
 
@@ -41,10 +40,10 @@
 
 -ifdef(use_specs).
 
--type(pids() :: rabbit_types:maybe({pid(), pid()})).
+-export_type([heartbeaters/0]).
 
--spec(start_heartbeat/3 :: (pid(), rabbit_net:socket(), non_neg_integer()) ->
-                                pids()).
+-type(heartbeaters() :: rabbit_types:maybe({pid(), pid()})).
+
 -spec(start_heartbeat_sender/3 ::
         (pid(), rabbit_net:socket(), non_neg_integer()) ->
                                        rabbit_types:ok(pid())).
@@ -52,28 +51,12 @@
         (pid(), rabbit_net:socket(), non_neg_integer()) ->
                                          rabbit_types:ok(pid())).
 
--spec(pause_monitor/1 :: (pids()) -> 'ok').
--spec(resume_monitor/1 :: (pids()) -> 'ok').
+-spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
+-spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
-
-start_heartbeat(_Sup, _Sock, 0) ->
-    none;
-start_heartbeat(Sup, Sock, TimeoutSec) ->
-    Parent = self(),
-    {ok, Sender} =
-        supervisor2:start_child(
-          Sup, {heartbeat_sender,
-                {?MODULE, start_heartbeat_sender, [Parent, Sock, TimeoutSec]},
-                intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-    {ok, Receiver} =
-        supervisor2:start_child(
-          Sup, {heartbeat_receiver,
-                {?MODULE, start_heartbeat_receiver, [Parent, Sock, TimeoutSec]},
-                intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-    {Sender, Receiver}.
 
 start_heartbeat_sender(_Parent, Sock, TimeoutSec) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly

@@ -54,7 +54,8 @@ start_link() ->
     {ok, _ReaderPid} =
         supervisor2:start_child(
           SupPid,
-          {reader, {rabbit_reader, start_link, [ChannelSupSupPid, Collector]},
+          {reader, {rabbit_reader, start_link,
+                    [ChannelSupSupPid, Collector, start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid}.
 
@@ -63,3 +64,23 @@ init([]) ->
 
 reader(Pid) ->
     hd(supervisor2:find_child(Pid, reader)).
+
+start_heartbeat_fun(SupPid) ->
+    fun (_Sock, 0) ->
+            none;
+        (Sock, TimeoutSec) ->
+            Parent = self(),
+            {ok, Sender} =
+                supervisor2:start_child(
+                  SupPid, {heartbeat_sender,
+                           {rabbit_heartbeat, start_heartbeat_sender,
+                            [Parent, Sock, TimeoutSec]},
+                           intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+            {ok, Receiver} =
+                supervisor2:start_child(
+                  SupPid, {heartbeat_receiver,
+                           {rabbit_heartbeat, start_heartbeat_receiver,
+                            [Parent, Sock, TimeoutSec]},
+                           intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+            {Sender, Receiver}
+    end.
