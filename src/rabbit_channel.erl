@@ -155,6 +155,7 @@ flush(Pid) ->
 
 init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
       StartLimiterFun]) ->
+    process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
                 channel                 = Channel,
