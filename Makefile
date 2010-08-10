@@ -1,4 +1,3 @@
-
 TMPDIR ?= /tmp
 
 RABBITMQ_NODENAME ?= rabbit
@@ -59,6 +58,7 @@ SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
 AMQP_SPEC_JSON_FILES_0_9_1=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json
 AMQP_SPEC_JSON_FILES_0_8=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.8.json
+RABBIT_SPEC_EXTENSIONS=$(AMQP_CODEGEN_DIR)/puback-extension.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
@@ -101,14 +101,14 @@ $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 $(EBIN_DIR)/%.beam:
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
-$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8)
-	$(PYTHON) codegen.py --ignore-conflicts header $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8) $@
+$(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8) $(RABBIT_SPEC_EXTENSIONS)
+	$(PYTHON) codegen.py --ignore-conflicts header $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8) $(RABBIT_SPEC_EXTENSIONS) $@
 
-$(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1)
-	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_9_1) $@
+$(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1) $(RABBIT_SPEC_EXTENSIONS)
+	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_9_1) $(RABBIT_SPEC_EXTENSIONS) $@
 
-$(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_8)
-	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_8) $@
+$(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_8) $(RABBIT_SPEC_EXTENSIONS)
+	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_8) $(RABBIT_SPEC_EXTENSIONS) $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
