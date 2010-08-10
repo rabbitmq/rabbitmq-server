@@ -1,6 +1,6 @@
 {
     "extension": {
-        "name": "puback",
+        "name": "pubAck",
 	"version": "0.1",
 	"copyright": "Copyright (C) 2010 SpringSource"
     },
@@ -9,7 +9,7 @@
     "constants": [
     ],
     "classes": [
-    	{"name": "puback",
+    	{"name": "pubAck",
 	 "id": 85,
 	 "methods": [
 	     {"name": "select",
