@@ -157,26 +157,45 @@ table_definitions() ->
     [{rabbit_user,
       [{record_name, user},
        {attributes, record_info(fields, user)},
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {test, fun (#user{}) -> true;
+                  (_)       -> false
+              end}]},
      {rabbit_user_permission,
       [{record_name, user_permission},
        {attributes, record_info(fields, user_permission)},
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {test, fun (#user_permission{user_vhost = #user_vhost{},
+                                    permission = #permission{}}) -> true;
+                  (_)                                            -> false
+              end}]},
      {rabbit_vhost,
       [{record_name, vhost},
        {attributes, record_info(fields, vhost)},
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {test, fun (#vhost{}) -> true;
+                  (_)        -> false
+              end}]},
      {rabbit_config,
       [{attributes, [key, val]},                % same mnesia's default
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {test, fun ({rabbit_config, _Key, _Value}) -> true;
+                  (_)                             -> false
+              end}]},
      {rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
-       {type, bag}]},
+       {type, bag},
+       {test, fun (#listener{}) -> true;
+                  (_)           -> false
+              end}]},
      {rabbit_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {test, fun (#route{binding = #binding{}}) -> true;
+                  (_)                            -> false
+              end}]},
      {rabbit_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
@@ -246,10 +265,24 @@ check_schema_integrity() ->
                            Attrs = mnesia:table_info(Tab, attributes),
                            Error = {table_attributes_mismatch, Tab,
                                     ExpAttrs, Attrs},
-                           Attrs /= ExpAttrs
+                           case Attrs of
+                               ExpAttrs ->
+                                   {_, Fun} = proplists:lookup(test, TabDef),
+                                   not read_test_table(Tab, Fun,
+                                                       mnesia:dirty_first(Tab));
+                               _ -> true
+                           end
                    end] of
         []     -> ok;
         Errors -> {error, Errors}
+    end.
+
+read_test_table(_Tab, _Fun, '$end_of_table') ->
+    true;
+read_test_table(Tab, Fun, Key) ->
+    case lists:all(Fun, mnesia:dirty_read(Tab, Key)) of
+        true  -> read_test_table(Tab, Fun, mnesia:dirty_next(Tab, Key));
+        false -> false
     end.
 
 %% The cluster node config file contains some or all of the disk nodes
@@ -389,11 +422,12 @@ move_db() ->
 
 create_tables() ->
     lists:foreach(fun ({Tab, TabArgs}) ->
-                          case mnesia:create_table(Tab, TabArgs) of
+                          TabArgs1 = proplists:delete(test, TabArgs),
+                          case mnesia:create_table(Tab, TabArgs1) of
                               {atomic, ok} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
-                                                 Tab, TabArgs, Reason}})
+                                                 Tab, TabArgs1, Reason}})
                           end
                   end,
                   table_definitions()),
