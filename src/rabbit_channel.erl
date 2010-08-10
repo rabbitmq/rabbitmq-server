@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/6, do/2, do/3, shutdown/1]).
+-export([start_link/7, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([emit_stats/1, flush/1]).
@@ -43,8 +43,8 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1]).
 
--record(ch, {state, channel, parent_pid, reader_pid, writer_pid, limiter_pid,
-             transaction_id, tx_participants, next_tag,
+-record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
+             start_limiter_fun, transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer}).
@@ -76,9 +76,10 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/6 ::
+-spec(start_link/7 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) ->
+       rabbit_types:vhost(), pid(),
+       fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            'ignore' | rabbit_types:ok_or_error2(pid(), any())).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
@@ -101,9 +102,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    gen_server2:start_link(?MODULE, [Channel, self(), ReaderPid, WriterPid,
-                                     Username, VHost, CollectorPid], []).
+start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
+           StartLimiterFun) ->
+    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid, Username,
+                                     VHost, CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -151,15 +153,15 @@ flush(Pid) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ParentPid, ReaderPid, WriterPid, Username, VHost,
-      CollectorPid]) ->
+init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
+      StartLimiterFun]) ->
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
                 channel                 = Channel,
-                parent_pid              = ParentPid,
                 reader_pid              = ReaderPid,
                 writer_pid              = WriterPid,
                 limiter_pid             = undefined,
+                start_limiter_fun       = StartLimiterFun,
                 transaction_id          = none,
                 tx_participants         = sets:new(),
                 next_tag                = 1,
@@ -1014,13 +1016,8 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
-start_limiter(State = #ch{unacked_message_q = UAMQ, parent_pid = ParentPid}) ->
-    Me = self(),
-    {ok, LPid} =
-        supervisor2:start_child(
-          ParentPid,
-          {limiter, {rabbit_limiter, start_link, [Me, queue:len(UAMQ)]},
-           transient, ?MAX_WAIT, worker, [rabbit_limiter]}),
+start_limiter(State = #ch{unacked_message_q = UAMQ, start_limiter_fun = SLF}) ->
+    {ok, LPid} = SLF(queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
 

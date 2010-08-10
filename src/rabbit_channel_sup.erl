@@ -67,7 +67,7 @@ start_link(Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, Username, VHost,
-                      Collector]},
+                      Collector, start_limiter_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, FramingChannelPid} =
         supervisor2:start_child(
@@ -81,3 +81,13 @@ start_link(Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
 
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
+
+start_limiter_fun(SupPid) ->
+    fun (UnackedCount) ->
+            Me = self(),
+            {ok, _Pid} =
+                supervisor2:start_child(
+                  SupPid,
+                  {limiter, {rabbit_limiter, start_link, [Me, UnackedCount]},
+                   transient, ?MAX_WAIT, worker, [rabbit_limiter]})
+    end.
