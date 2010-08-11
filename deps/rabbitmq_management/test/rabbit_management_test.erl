@@ -25,18 +25,19 @@
 
 -compile([export_all]).
 
--define(TESTS, [test_queues, test_fine_types]).
+-define(TESTS, [test_queues, test_fine_types, test_aggregation]).
 
 test() ->
     SecondHalves = [first_half(Test) || Test <- ?TESTS],
     io:format("Waiting for statistics...~n", []),
     timer:sleep(?STATS_INTERVAL + 1000),
-    [second_half(Half) || Half <- SecondHalves].
+    [second_half(Half) || Half <- SecondHalves],
+    io:format("Tests passed.~n", []).
 
 first_half(Test) ->
     Conn = amqp_connection:start_network(),
     Chan = amqp_connection:open_channel(Conn),
-    Continuation = apply(rabbit_management_test, Test, [Chan]),
+    Continuation = apply(rabbit_management_test, Test, [Conn, Chan]),
     {Continuation, Conn, Chan}.
 
 second_half({Continuation, Conn, Chan}) ->
@@ -46,57 +47,113 @@ second_half({Continuation, Conn, Chan}) ->
 
 %%---------------------------------------------------------------------------
 
-test_queues(Chan) ->
-    Queue1 = declare_queue(Chan),
-    Queue2 = declare_queue(Chan),
-    publish(Chan, Queue1, 4),
-    basic_get(Chan, Queue1, true, false),
-    basic_get(Chan, Queue1, false, false),
+test_queues(_Conn, Chan) ->
+    Q1 = declare_queue(Chan),
+    Q2 = declare_queue(Chan),
+    publish(Chan, Q1, 4),
+    basic_get(Chan, Q1, true, false),
+    basic_get(Chan, Q1, false, false),
 
     fun() ->
-            Queues = rabbit_management_stats:get_queues(),
-            Queue1Info = find_by_name(Queue1, Queues),
-            Queue2Info = find_by_name(Queue2, Queues),
+            Qs = rabbit_management_stats:get_queues(),
+            Q1Info = find_by_name(Q1, Qs),
+            Q2Info = find_by_name(Q2, Qs),
 
-            3 = pget(messages, Queue1Info),
-            2 = pget(messages_ready, Queue1Info),
-            1 = pget(messages_unacknowledged, Queue1Info),
+            3 = pget(messages, Q1Info),
+            2 = pget(messages_ready, Q1Info),
+            1 = pget(messages_unacknowledged, Q1Info),
 
-            0 = pget(messages, Queue2Info),
-            0 = pget(messages_ready, Queue2Info),
-            0 = pget(messages_unacknowledged, Queue2Info)
+            0 = pget(messages, Q2Info),
+            0 = pget(messages_ready, Q2Info),
+            0 = pget(messages_unacknowledged, Q2Info)
     end.
 
-test_fine_types(Chan) ->
-    Queue = declare_queue(Chan),
-    publish(Chan, Queue, 10),
-    basic_get(Chan, Queue, true, false),
-    basic_get(Chan, Queue, false, true),
-    consume(Chan, Queue, 1, true, false),
-    consume(Chan, Queue, 1, false, true),
+test_fine_types(_Conn, Chan) ->
+    Q = declare_queue(Chan),
+    publish(Chan, Q, 10),
+    basic_get(Chan, Q, true, false),
+    basic_get(Chan, Q, false, true),
+    consume(Chan, Q, 1, true, false),
+    consume(Chan, Q, 1, false, true),
 
     fun() ->
-            QStats = rabbit_management_stats:get_msg_stats(channel_queue_stats,
-                                                           undefined,
-                                                           ignored,
-                                                           ignored),
-            {_, MsgQStats} = find_by_sub_name(queue_details, Queue, QStats),
-            1 = pget(get, MsgQStats),
-            1 = pget(get_no_ack, MsgQStats),
-            2 = pget(ack, MsgQStats),
-            1 = pget(deliver, MsgQStats),
-            7 = pget(deliver_no_ack, MsgQStats), % Since 2nd consume ate
-                                                 % everything
-
-            QXStats = rabbit_management_stats:get_msg_stats(
-                        channel_queue_exchange_stats,
-                        undefined,
-                        ignored,
-                        ignored),
-            {_, MsgQXStats} =
-                find_by_sub_name(queue_details, Queue, QXStats),
-            10 = pget(publish, MsgQXStats)
+            AllQStats =
+                rabbit_management_stats:get_msg_stats(
+                  channel_queue_stats, undefined, ignored, ignored),
+            QStats = find_by_queue(Q, AllQStats),
+            1 = pget(get, QStats),
+            1 = pget(get_no_ack, QStats),
+            2 = pget(ack, QStats),
+            1 = pget(deliver, QStats),
+            7 = pget(deliver_no_ack, QStats), % Since 2nd consume ate
+                                              % everything
+            AllQXStats =
+                rabbit_management_stats:get_msg_stats(
+                  channel_queue_exchange_stats, undefined, ignored, ignored),
+            QXStats = find_by_queue(Q, AllQXStats),
+            10 = pget(publish, QXStats)
     end.
+
+test_aggregation(Conn, Chan) ->
+    Conn2 = amqp_connection:start_network(),
+    Chan2 = amqp_connection:open_channel(Conn2),
+
+    Qs = [declare_queue(Chan) || _ <- lists:seq(1, 10)],
+    [publish(Chan, Q, 1) || Q <- Qs],
+    [publish(Chan2, Q, 10) || Q <- Qs],
+    [consume(Chan, Q, 5, true, false) || Q <- Qs],
+
+    fun() ->
+            Get = fun(Type, GroupBy) ->
+                          rabbit_management_stats:get_msg_stats(
+                            Type, GroupBy, ignored, ignored)
+                  end,
+
+            Port = local_port(Conn),
+            Port2 = local_port(Conn2),
+
+            QByC = Get(channel_queue_stats, "channel"),
+            QByCStats = find_by_local_port(Port, QByC),
+            50 = pget(deliver, QByCStats),
+            50 = pget(ack, QByCStats),
+
+            QByQ = Get(channel_queue_stats, "queue"),
+            [begin
+                 QStats = find_by_queue(Q, QByQ),
+                 5 = pget(deliver, QStats),
+                 5 = pget(ack, QStats)
+             end || Q <- Qs],
+
+            XByC = Get(channel_exchange_stats, "channel"),
+            XByCStats = find_by_local_port(Port, XByC),
+            XByCStats2 = find_by_local_port(Port2, XByC),
+            10 = pget(publish, XByCStats),
+            100 = pget(publish, XByCStats2),
+
+            XByX = Get(channel_exchange_stats, "exchange"),
+            %% TODO how to test?
+            %%io:format("XbyX: ~p~n", [XByX]),
+
+            QXByC = Get(channel_queue_exchange_stats, "channel"),
+            QXByCStats = find_by_local_port(Port, QXByC),
+            QXByCStats2 = find_by_local_port(Port2, QXByC),
+            10 = pget(publish, QXByCStats),
+            100 = pget(publish, QXByCStats2),
+
+            QXByQ = Get(channel_queue_exchange_stats, "queue"),
+            [begin
+                 QStats = find_by_queue(Q, QXByQ),
+                 11 = pget(publish, QStats)
+             end || Q <- Qs],
+
+            QXByX = Get(channel_queue_exchange_stats, "exchange"),
+            %% TODO: how to test?
+            %%io:format("QXbyX: ~p~n", [QXByX]),
+
+            amqp_channel:close(Chan2),
+            amqp_connection:close(Conn2)
+    end.
+
 
 %%---------------------------------------------------------------------------
 
@@ -104,28 +161,38 @@ find_by_name(Name, Items) ->
     [Thing] = lists:filter(fun(Item) -> pget(name, Item) == Name end, Items),
     Thing.
 
-find_by_sub_name(Key, Name, Items) ->
-    [Thing] = lists:filter(fun({Ids, _Stats}) ->
-                                   pget(name, pget(Key, Ids)) == Name
-                           end, Items),
-    Thing.
+find_by_queue(Q, Items) ->
+    [{_Ids, Stats}] = lists:filter(
+                        fun({Ids, _Stats}) ->
+                                pget(name, pget(queue_details, Ids)) == Q
+                        end, Items),
+    Stats.
+
+find_by_local_port(Port, Items) ->
+    [{_Ids, Stats}] = lists:filter(
+                        fun({Ids, _Stats}) ->
+                                Ch = pget(channel_details, Ids),
+                                pget(peer_port, Ch) == Port andalso
+                                    pget(peer_address, Ch) == <<"127.0.0.1">>
+                        end, Items),
+    Stats.
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =
         amqp_channel:call(Chan, #'queue.declare'{ exclusive = true }),
     Q.
 
-publish(Chan, Queue) ->
+publish(Chan, Q) ->
     amqp_channel:call(Chan, #'basic.publish' { exchange    = <<"">>,
-                                               routing_key = Queue },
+                                               routing_key = Q },
                       #amqp_msg { payload = <<"">> }).
 
-publish(Chan, Queue, Count) ->
-    [publish(Chan, Queue) || _ <- lists:seq(1, Count)].
+publish(Chan, Q, Count) ->
+    [publish(Chan, Q) || _ <- lists:seq(1, Count)].
 
-basic_get(Chan, Queue, ExplicitAck, AutoAck) ->
+basic_get(Chan, Q, ExplicitAck, AutoAck) ->
     {#'basic.get_ok'{delivery_tag = Tag}, _} =
-        amqp_channel:call(Chan, #'basic.get' { queue = Queue,
+        amqp_channel:call(Chan, #'basic.get' { queue = Q,
                                                no_ack = AutoAck }),
     case ExplicitAck of
         true  -> amqp_channel:call(Chan, #'basic.ack' { delivery_tag = Tag });
@@ -133,27 +200,28 @@ basic_get(Chan, Queue, ExplicitAck, AutoAck) ->
     end.
 
 %% NB: Using AutoAck will actually consume everything.
-consume(Chan, Queue, Count, ExplicitAck, AutoAck) ->
-    amqp_channel:call(Chan, #'basic.qos' { prefetch_count = 1 }),
-    amqp_channel:subscribe(Chan, #'basic.consume' { queue = Queue,
+consume(Chan, Q, Count, ExplicitAck, AutoAck) ->
+    amqp_channel:call(Chan, #'basic.qos' { prefetch_count = Count }),
+    amqp_channel:subscribe(Chan, #'basic.consume' { queue = Q,
                                                     no_ack = AutoAck },
                            self()),
     receive
         #'basic.consume_ok'{consumer_tag = CTag} -> ok
     end,
-    DTags = [receive
-                 {#'basic.deliver'{delivery_tag = DTag}, _Msg} -> DTag
-             end || _ <- lists:seq(1, Count)],
+    [receive {#'basic.deliver'{}, _} -> ok end || _ <- lists:seq(1, Count)],
     amqp_channel:call(Chan, #'basic.cancel' { consumer_tag = CTag }),
     receive
         #'basic.cancel_ok'{consumer_tag = CTag} -> ok
     end,
     case ExplicitAck of
-         true  -> [amqp_channel:call(
-                     Chan,
-                     #'basic.ack' { delivery_tag = DTag }) || DTag <- DTags];
-         false -> ok
+        true  -> amqp_channel:call(Chan, #'basic.ack' { multiple = true });
+        false -> ok
     end.
 
 pget(K, L) ->
      proplists:get_value(K, L).
+
+local_port(Conn) ->
+    [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
+    {ok, Port} = inet:port(Sock),
+    Port.

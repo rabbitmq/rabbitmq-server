@@ -220,7 +220,7 @@ handle_call(get_overview, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
     {ok, sum(Table, [recv_oct, send_oct, recv_oct_rate, send_oct_rate]), State};
 
-handle_call({get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
+handle_call({get_msg_stats, Type, GroupBy, _MatchKey, _MatchValue},
             State = #state{tables = Tables}) ->
     Table = orddict:fetch(Type, Tables),
     All = [{format_id(Id), Stats} ||
@@ -283,10 +283,11 @@ handle_event(Event = #event{type = channel_created}, State) ->
 handle_event(Event = #event{type = channel_stats, props = Stats,
                             timestamp = Timestamp}, State) ->
     handle_stats(channel_stats, Event, [], [], State),
+    Types = [channel_queue_stats, channel_exchange_stats,
+             channel_queue_exchange_stats],
+    [delete_fine_stats(Type, id(Stats), State) || Type <- Types],
     [[handle_fine_stats(Type, id(Stats), S, Timestamp, State) ||
-         S <- pget(Type, Stats)] ||
-        Type <- [channel_queue_stats, channel_exchange_stats,
-                 channel_queue_exchange_stats]],
+         S <- pget(Type, Stats)] || Type <- Types],
     {ok, State};
 
 handle_event(Event = #event{type = channel_closed,
@@ -338,11 +339,10 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     {ok, State}.
 
 handle_fine_stats(Type, ChPid, {Ids, Stats}, Timestamp,
-                  State = #state{tables = Tables}) ->
+                  #state{tables = Tables}) ->
     Table = orddict:fetch(Type, Tables),
     Id = fine_stats_key(ChPid, Ids),
     Res = rates(Table, Id, Stats, Timestamp, ?FINE_STATS),
-    delete_fine_stats(Type, ChPid, State),
     ets:insert(Table, {Id, Res, Timestamp}).
 
 delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
