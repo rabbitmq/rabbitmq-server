@@ -206,8 +206,8 @@ table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
 
 replicated_table_names() ->
-    [Tab || {Tab, Attrs} <- table_definitions(),
-            not lists:member({local_content, true}, Attrs)
+    [Tab || {Tab, TabDef} <- table_definitions(),
+            not lists:member({local_content, true}, TabDef)
     ].
 
 dir() -> mnesia:system_info(directory).
@@ -388,12 +388,12 @@ move_db() ->
     ok.
 
 create_tables() ->
-    lists:foreach(fun ({Tab, TabArgs}) ->
-                          case mnesia:create_table(Tab, TabArgs) of
+    lists:foreach(fun ({Tab, TabDef}) ->
+                          case mnesia:create_table(Tab, TabDef) of
                               {atomic, ok} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
-                                                 Tab, TabArgs, Reason}})
+                                                 Tab, TabDef, Reason}})
                           end
                   end,
                   table_definitions()),
