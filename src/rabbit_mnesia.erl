@@ -43,7 +43,6 @@
 -export([create_tables/0]).
 
 -include("rabbit.hrl").
--include_lib("stdlib/include/qlc.hrl").
 
 %%----------------------------------------------------------------------------
 
