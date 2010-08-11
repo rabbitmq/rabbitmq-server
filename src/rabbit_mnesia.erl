@@ -281,9 +281,7 @@ check_schema_integrity() ->
                            Attrs /= ExpAttrs
                    end] of
         []     -> ok;
-        Errors -> io:format("~p~n", [Errors]),
-                  rabbit_log:info("~p~n",Errors),
-                  {error, Errors}
+        Errors -> {error, Errors}
     end.
 
 check_table_content() ->
