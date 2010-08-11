@@ -58,7 +58,7 @@ SIBLING_CODEGEN_DIR=../rabbitmq-codegen/
 AMQP_CODEGEN_DIR=$(shell [ -d $(SIBLING_CODEGEN_DIR) ] && echo $(SIBLING_CODEGEN_DIR) || echo codegen)
 AMQP_SPEC_JSON_FILES_0_9_1=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json
 AMQP_SPEC_JSON_FILES_0_8=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.8.json
-RABBIT_SPEC_EXTENSIONS=$(AMQP_CODEGEN_DIR)/puback-extension.json
+RABBIT_SPEC_EXTENSIONS=$(AMQP_CODEGEN_DIR)/confirm-extension.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
