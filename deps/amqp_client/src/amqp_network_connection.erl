@@ -54,7 +54,7 @@
                      phase = terminate_channels}).
 
 -define(INFO_KEYS,
-        (amqp_connection:info_keys() ++ [max_channel, heartbeat])).
+        (amqp_connection:info_keys() ++ [max_channel, heartbeat, sock])).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -164,6 +164,7 @@ i(is_closing,        State) -> State#nc_state.closing =/= false;
 i(amqp_params,       State) -> State#nc_state.params;
 i(max_channel,       State) -> State#nc_state.max_channel;
 i(heartbeat,         State) -> State#nc_state.heartbeat;
+i(sock,              State) -> State#nc_state.sock;
 i(num_channels,      State) -> amqp_channel_util:num_channels(
                                    State#nc_state.channels);
 i(Item,             _State) -> throw({bad_argument, Item}).
