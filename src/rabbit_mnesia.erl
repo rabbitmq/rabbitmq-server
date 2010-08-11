@@ -92,6 +92,7 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
+    ok = check_table_content(),
     ok = wait_for_tables(),
     ok.
 
@@ -277,15 +278,27 @@ check_schema_integrity() ->
                            Attrs = mnesia:table_info(Tab, attributes),
                            Error = {table_attributes_mismatch, Tab,
                                     ExpAttrs, Attrs},
-                           case Attrs of
-                               ExpAttrs ->
-                                   {_, Match} = proplists:lookup(match, TabDef),
-                                   not read_test_table(Tab, Match);
-                               _ -> true
-                           end
+                           Attrs /= ExpAttrs
                    end] of
         []     -> ok;
-        Errors -> {error, Errors}
+        Errors -> io:format("~p~n", [Errors]),
+                  rabbit_log:info("~p~n",Errors),
+                  {error, Errors}
+    end.
+
+check_table_content() ->
+    ok = wait_for_tables(),
+    case lists:all(fun ({Tab, TabDef}) ->
+                           {_, Match} = proplists:lookup(match, TabDef),
+                           read_test_table(Tab, Match)
+                   end, table_definitions()) of
+        true  -> ok;
+        false -> error_logger:warning_msg(
+                   "table content integrity check failed.~n"
+                   "moving database to backup location "
+                   "and recreating schema from scratch~n", []),
+                 ok = move_db(),
+                 ok = create_schema()
     end.
 
 read_test_table(Tab, Match) ->
