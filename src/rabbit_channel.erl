@@ -395,14 +395,14 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-handle_pubAck(PA = #pubAck{ enabled = false }, _) ->
+handle_pubAck(PA = #pubAck{ enabled = false }, _, _) ->
     PA;
-handle_pubAck(PA = #pubAck{ count = Count, many = false }, WriterPid) ->
+handle_pubAck(PA = #pubAck{ count = Count, many = false }, false, WriterPid) ->
     rabbit_log:info("handling pubAck in single mode (#~p)~n", [Count]),
     ok = rabbit_writer:send_command(WriterPid, #'basic.ack'{ delivery_tag = Count }),
     PA#pubAck{ count = Count+1 };
-handle_pubAck(PA = #pubAck{ count = Count }, _WriterPid) ->
-    rabbit_log:info("handling pubAck in many mode (#~p)~n", [Count]),
+handle_pubAck(PA = #pubAck{ count = Count }, IsPersistent, _WriterPid) ->
+    rabbit_log:info("handling pubAck (#~p, persistent = ~p)~n", [Count, IsPersistent]),
     PA#pubAck{ count = Count+1 }.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
@@ -434,11 +434,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
-    PubAck1 = handle_pubAck(PubAck, WriterPid),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
+    PubAck1 = handle_pubAck(PubAck, IsPersistent, WriterPid),
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
                              content        = DecodedContent,
