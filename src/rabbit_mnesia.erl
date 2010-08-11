@@ -43,6 +43,7 @@
 -export([create_tables/0]).
 
 -include("rabbit.hrl").
+-include_lib("stdlib/include/qlc.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -158,68 +159,63 @@ table_definitions() ->
       [{record_name, user},
        {attributes, record_info(fields, user)},
        {disc_copies, [node()]},
-       {test, fun (#user{}) -> true;
-                  (_)       -> false
-              end}]},
+       {match, #user{_ = '_'}}]},
      {rabbit_user_permission,
       [{record_name, user_permission},
        {attributes, record_info(fields, user_permission)},
        {disc_copies, [node()]},
-       {test, fun (#user_permission{user_vhost = #user_vhost{},
-                                    permission = #permission{}}) -> true;
-                  (_)                                            -> false
-              end}]},
+       {match, #user_permission{user_vhost = #user_vhost{_ = '_'},
+                               permission = #permission{_ = '_'},
+                               _ = '_'}}]},
      {rabbit_vhost,
       [{record_name, vhost},
        {attributes, record_info(fields, vhost)},
        {disc_copies, [node()]},
-       {test, fun (#vhost{}) -> true;
-                  (_)        -> false
-              end}]},
+       {match, #vhost{_ = '_'}}]},
      {rabbit_config,
       [{attributes, [key, val]},                % same mnesia's default
        {disc_copies, [node()]},
-       {test, fun ({rabbit_config, _Key, _Value}) -> true;
-                  (_)                             -> false
-              end}]},
+       {match, {rabbit_config, '_', '_'}}]},
      {rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
        {type, bag},
-       {test, fun (#listener{}) -> true;
-                  (_)           -> false
-              end}]},
+       {match, #listener{_ = '_'}}]},
      {rabbit_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
        {disc_copies, [node()]},
-       {test, fun (#route{binding = #binding{}}) -> true;
-                  (_)                            -> false
-              end}]},
+       {match, #route{binding = #binding{_ = '_'}, _ = '_'}}]},
      {rabbit_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
-       {type, ordered_set}]},
+       {type, ordered_set},
+       {match, #route{binding = #binding{_ = '_'}, _ = '_'}}]},
      {rabbit_reverse_route,
       [{record_name, reverse_route},
        {attributes, record_info(fields, reverse_route)},
-       {type, ordered_set}]},
+       {type, ordered_set},
+       {match, #reverse_route{reverse_binding = #reverse_binding{_ = '_'}}}]},
      %% Consider the implications to nodes_of_type/1 before altering
      %% the next entry.
      {rabbit_durable_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {match, #exchange{_ = '_'}}]},
      {rabbit_exchange,
       [{record_name, exchange},
-       {attributes, record_info(fields, exchange)}]},
+       {attributes, record_info(fields, exchange)},
+       {match, #exchange{_ = '_'}}]},
      {rabbit_durable_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
-       {disc_copies, [node()]}]},
+       {disc_copies, [node()]},
+       {match, #amqqueue{_ = '_'}}]},
      {rabbit_queue,
       [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)}]}].
+       {attributes, record_info(fields, amqqueue)},
+       {match, #amqqueue{_ = '_'}}]}].
 
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
@@ -267,9 +263,8 @@ check_schema_integrity() ->
                                     ExpAttrs, Attrs},
                            case Attrs of
                                ExpAttrs ->
-                                   {_, Fun} = proplists:lookup(test, TabDef),
-                                   not read_test_table(Tab, Fun,
-                                                       mnesia:dirty_first(Tab));
+                                   {_, Match} = proplists:lookup(match, TabDef),
+                                   not read_test_table(Tab, Match);
                                _ -> true
                            end
                    end] of
@@ -277,12 +272,17 @@ check_schema_integrity() ->
         Errors -> {error, Errors}
     end.
 
-read_test_table(_Tab, _Fun, '$end_of_table') ->
-    true;
-read_test_table(Tab, Fun, Key) ->
-    case lists:all(Fun, mnesia:dirty_read(Tab, Key)) of
-        true  -> read_test_table(Tab, Fun, mnesia:dirty_next(Tab, Key));
-        false -> false
+read_test_table(Tab, Match) ->
+    case mnesia:dirty_first(Tab) of
+        '$end_of_table' ->
+            true;
+        Key ->
+            ObjList = mnesia:dirty_read(Tab, Key),
+            MatchComp = ets:match_spec_compile([{Match, [], ['$_']}]),
+            case ets:match_spec_run(ObjList, MatchComp) of
+                ObjList -> true;
+                _       -> false
+            end
     end.
 
 %% The cluster node config file contains some or all of the disk nodes
@@ -422,7 +422,7 @@ move_db() ->
 
 create_tables() ->
     lists:foreach(fun ({Tab, TabArgs}) ->
-                          TabArgs1 = proplists:delete(test, TabArgs),
+                          TabArgs1 = proplists:delete(match, TabArgs),
                           case mnesia:create_table(Tab, TabArgs1) of
                               {atomic, ok} -> ok;
                               {aborted, Reason} ->
