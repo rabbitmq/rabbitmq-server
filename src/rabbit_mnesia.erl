@@ -405,9 +405,8 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ok = ensure_schema_integrity(),
-                    ok = wait_for_tables()
-                end;
+                    ok = ensure_schema_integrity()
+            end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
