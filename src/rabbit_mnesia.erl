@@ -91,8 +91,6 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
-    ok = check_table_content(),
-    ok = wait_for_tables(),
     ok.
 
 is_db_empty() ->
@@ -115,7 +113,6 @@ cluster(ClusterNodes, Force) ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
         ok = init_db(ClusterNodes, Force),
-        ok = wait_for_tables(),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         mnesia:stop()
@@ -263,6 +260,14 @@ ensure_mnesia_not_running() ->
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
+ensure_schema_integrity() ->
+    case check_schema_integrity() of
+        ok ->
+            ok;
+        {error, Reason} ->
+            throw({error, {schema_integrity_check_failed, Reason}})
+    end.
+
 check_schema_integrity() ->
     TabDefs = table_definitions(),
     Tables = mnesia:system_info(tables),
@@ -279,23 +284,18 @@ check_schema_integrity() ->
                                     ExpAttrs, Attrs},
                            Attrs /= ExpAttrs
                    end] of
-        []     -> ok;
+        []     -> check_table_integrity();
         Errors -> {error, Errors}
     end.
 
-check_table_content() ->
+check_table_integrity() ->
     ok = wait_for_tables(),
     case lists:all(fun ({Tab, TabDef}) ->
                            {_, Match} = proplists:lookup(match, TabDef),
                            read_test_table(Tab, Match)
                    end, table_definitions()) of
         true  -> ok;
-        false -> error_logger:warning_msg(
-                   "table content integrity check failed.~n"
-                   "moving database to backup location "
-                   "and recreating schema from scratch~n", []),
-                 ok = move_db(),
-                 ok = create_schema()
+        false -> {error, invalid_table_content}
     end.
 
 read_test_table(Tab, Match) ->
@@ -406,7 +406,9 @@ init_db(ClusterNodes, Force) ->
                     ok = create_local_table_copies(case IsDiskNode of
                                                        true  -> disc;
                                                        false -> ram
-                                                   end)
+                                                   end),
+                    ok = ensure_schema_integrity(),
+                    ok = wait_for_tables()
                 end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -422,7 +424,9 @@ create_schema() ->
                           cannot_create_schema),
     rabbit_misc:ensure_ok(mnesia:start(),
                           cannot_start_mnesia),
-    create_tables().
+    ok = create_tables(),
+    ok = ensure_schema_integrity(),
+    ok = wait_for_tables().
 
 move_db() ->
     mnesia:stop(),
@@ -508,17 +512,12 @@ wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 wait_for_tables() -> wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    case check_schema_integrity() of
-        ok ->
-            case mnesia:wait_for_tables(TableNames, 30000) of
-                ok -> ok;
-                {timeout, BadTabs} ->
-                    throw({error, {timeout_waiting_for_tables, BadTabs}});
-                {error, Reason} ->
-                    throw({error, {failed_waiting_for_tables, Reason}})
-            end;
+    case mnesia:wait_for_tables(TableNames, 30000) of
+        ok -> ok;
+        {timeout, BadTabs} ->
+            throw({error, {timeout_waiting_for_tables, BadTabs}});
         {error, Reason} ->
-            throw({error, {schema_integrity_check_failed, Reason}})
+            throw({error, {failed_waiting_for_tables, Reason}})
     end.
 
 reset(Force) ->
