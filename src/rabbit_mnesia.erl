@@ -165,13 +165,13 @@ table_definitions() ->
        {attributes, record_info(fields, user_permission)},
        {disc_copies, [node()]},
        {match, #user_permission{user_vhost = #user_vhost{_ = '_'},
-                               permission = #permission{_ = '_'},
-                               _ = '_'}}]},
+                                permission = #permission{_ = '_'},
+                                _='_'}}]},
      {rabbit_vhost,
       [{record_name, vhost},
        {attributes, record_info(fields, vhost)},
        {disc_copies, [node()]},
-       {match, #vhost{_ = '_'}}]},
+       {match, #vhost{_='_'}}]},
      {rabbit_config,
       [{attributes, [key, val]},                % same mnesia's default
        {disc_copies, [node()]},
@@ -180,42 +180,58 @@ table_definitions() ->
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
        {type, bag},
-       {match, #listener{_ = '_'}}]},
+       {match, #listener{_='_'}}]},
      {rabbit_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
        {disc_copies, [node()]},
-       {match, #route{binding = #binding{_ = '_'}, _ = '_'}}]},
+       {match, #route{binding = binding_match(), _='_'}}]},
      {rabbit_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
        {type, ordered_set},
-       {match, #route{binding = #binding{_ = '_'}, _ = '_'}}]},
+       {match, #route{binding = binding_match(), _='_'}}]},
      {rabbit_reverse_route,
       [{record_name, reverse_route},
        {attributes, record_info(fields, reverse_route)},
        {type, ordered_set},
-       {match, #reverse_route{reverse_binding = #reverse_binding{_ = '_'}}}]},
+       {match, #reverse_route{reverse_binding = reverse_binding_match(),
+                              _='_'}}]},
      %% Consider the implications to nodes_of_type/1 before altering
      %% the next entry.
      {rabbit_durable_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
        {disc_copies, [node()]},
-       {match, #exchange{_ = '_'}}]},
+       {match, #exchange{name = exchange_name_match(), _='_'}}]},
      {rabbit_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
-       {match, #exchange{_ = '_'}}]},
+       {match, #exchange{name = exchange_name_match(), _='_'}}]},
      {rabbit_durable_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
        {disc_copies, [node()]},
-       {match, #amqqueue{_ = '_'}}]},
+       {match, #amqqueue{name = queue_name_match(), _='_'}}]},
      {rabbit_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
-       {match, #amqqueue{_ = '_'}}]}].
+       {match, #amqqueue{name = queue_name_match(), _='_'}}]}].
+
+binding_match() ->
+    #binding{queue_name = queue_name_match(),
+             exchange_name = exchange_name_match(),
+             _='_'}.
+reverse_binding_match() ->
+    #reverse_binding{queue_name = queue_name_match(),
+                     exchange_name = exchange_name_match(),
+                     _='_'}.
+exchange_name_match() ->
+    resource_match(exchange).
+queue_name_match() ->
+    resource_match(queue).
+resource_match(Kind) ->
+    #resource{kind = Kind, _='_'}.
 
 table_names() ->
     [Tab || {Tab, _} <- table_definitions()].
