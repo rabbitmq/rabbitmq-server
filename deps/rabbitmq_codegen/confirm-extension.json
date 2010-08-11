@@ -1,0 +1,26 @@
+{
+    "extension": {
+        "name": "confirm",
+        "version": "0.1",
+        "copyright": "Copyright (C) 2010 SpringSource"
+    },
+    "domains": [
+    ],
+    "constants": [
+    ],
+    "classes": [
+    	{"name": "confirm",
+         "id": 85,
+         "methods": [
+             {"name": "select",
+              "id": 10,
+              "arguments": [
+                  {"type": "bit", "name": "multiple", "default-value": false},
+                  {"type": "bit", "name": "nowait", "default-value": false}],
+              "synchronous": true},
+             {"name": "select-ok",
+              "id": 11,
+              "arguments": []}
+	 ]}
+    ]
+}
