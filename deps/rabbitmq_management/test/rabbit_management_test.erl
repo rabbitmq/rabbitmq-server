@@ -25,6 +25,7 @@
 
 -compile([export_all]).
 
+%%-define(TESTS, [test_aggregation]).
 -define(TESTS, [test_queues, test_fine_types, test_aggregation]).
 
 test() ->
@@ -48,9 +49,10 @@ second_half({Continuation, Conn, Chan}) ->
 %%---------------------------------------------------------------------------
 
 test_queues(_Conn, Chan) ->
+    X = <<"">>,
     Q1 = declare_queue(Chan),
     Q2 = declare_queue(Chan),
-    publish(Chan, Q1, 4),
+    publish(Chan, X, Q1, 4),
     basic_get(Chan, Q1, true, false),
     basic_get(Chan, Q1, false, false),
 
@@ -69,8 +71,9 @@ test_queues(_Conn, Chan) ->
     end.
 
 test_fine_types(_Conn, Chan) ->
+    X = <<"">>,
     Q = declare_queue(Chan),
-    publish(Chan, Q, 10),
+    publish(Chan, X, Q, 10),
     basic_get(Chan, Q, true, false),
     basic_get(Chan, Q, false, true),
     consume(Chan, Q, 1, true, false),
@@ -98,9 +101,13 @@ test_aggregation(Conn, Chan) ->
     Conn2 = amqp_connection:start_network(),
     Chan2 = amqp_connection:open_channel(Conn2),
 
+    X = <<"aggregation">>,
+    declare_exchange(Chan, X),
     Qs = [declare_queue(Chan) || _ <- lists:seq(1, 10)],
-    [publish(Chan, Q, 1) || Q <- Qs],
-    [publish(Chan2, Q, 10) || Q <- Qs],
+    [bind_queue(Chan, X, Q) || Q <- Qs],
+
+    [publish(Chan, X, Q, 1) || Q <- Qs],
+    [publish(Chan2, X, Q, 10) || Q <- Qs],
     [consume(Chan, Q, 5, true, false) || Q <- Qs],
 
     fun() ->
@@ -131,8 +138,8 @@ test_aggregation(Conn, Chan) ->
             100 = pget(publish, XByCStats2),
 
             XByX = Get(channel_exchange_stats, "exchange"),
-            %% TODO how to test?
-            %%io:format("XbyX: ~p~n", [XByX]),
+            %% XByXStats = find_by_exchange(X, XByX),
+            %% 110 = pget(publish, XByXStats),
 
             QXByC = Get(channel_queue_exchange_stats, "channel"),
             QXByCStats = find_by_local_port(Port, QXByC),
@@ -147,8 +154,8 @@ test_aggregation(Conn, Chan) ->
              end || Q <- Qs],
 
             QXByX = Get(channel_queue_exchange_stats, "exchange"),
-            %% TODO: how to test?
-            %%io:format("QXbyX: ~p~n", [QXByX]),
+            %% QXByXStats = find_by_exchange(X, QXByX),
+            %% 110 = pget(publish, QXByXStats),
 
             amqp_channel:close(Chan2),
             amqp_connection:close(Conn2)
@@ -168,6 +175,13 @@ find_by_queue(Q, Items) ->
                         end, Items),
     Stats.
 
+find_by_exchange(X, Items) ->
+    [{_Ids, Stats}] = lists:filter(
+                        fun({Ids, _Stats}) ->
+                                pget(exchange, Ids) == X
+                        end, Items),
+    Stats.
+
 find_by_local_port(Port, Items) ->
     [{_Ids, Stats}] = lists:filter(
                         fun({Ids, _Stats}) ->
@@ -182,13 +196,22 @@ declare_queue(Chan) ->
         amqp_channel:call(Chan, #'queue.declare'{ exclusive = true }),
     Q.
 
-publish(Chan, Q) ->
-    amqp_channel:call(Chan, #'basic.publish' { exchange    = <<"">>,
+declare_exchange(Chan, X) ->
+    amqp_channel:call(Chan, #'exchange.declare'{ exchange = X,
+                                                 type = <<"direct">>,
+                                                 auto_delete = true}).
+bind_queue(Chan, X, Q) ->
+    amqp_channel:call(Chan, #'queue.bind'{ queue = Q,
+                                           exchange = X,
+                                           routing_key = Q}).
+
+publish(Chan, X, Q) ->
+    amqp_channel:call(Chan, #'basic.publish' { exchange    = X,
                                                routing_key = Q },
                       #amqp_msg { payload = <<"">> }).
 
-publish(Chan, Q, Count) ->
-    [publish(Chan, Q) || _ <- lists:seq(1, Count)].
+publish(Chan, X, Q, Count) ->
+    [publish(Chan, X, Q) || _ <- lists:seq(1, Count)].
 
 basic_get(Chan, Q, ExplicitAck, AutoAck) ->
     {#'basic.get_ok'{delivery_tag = Tag}, _} =
