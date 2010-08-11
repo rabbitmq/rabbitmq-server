@@ -49,7 +49,7 @@
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
              confirm}).
--record(confirm, {enabled, count, multiple}).
+-record(confirm, {enabled, count, multiple, tref}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -174,7 +174,9 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = rabbit_event:init_stats_timer(),
                 confirm                 = #confirm{ enabled = false,
-                                                    count = 0 }},
+                                                    count = 0,
+                                                    multiple = false,
+                                                    tref = not_started }},
     rabbit_event:notify(
       channel_created,
       [{Item, i(Item, State)} || Item <- ?CREATION_EVENT_KEYS]),
@@ -874,9 +876,11 @@ handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
 
-handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait}, _,
+handle_method(#'confirm.select'{multiple = Multiple,
+                                nowait = NoWait},
+              _,
               State = #ch{ transaction_id = none,
-                           confirm = C}) ->
+                           confirm = C = #confirm{enabled = false}}) ->
     rabbit_log:info("got confirm.select{multiple = ~p, nowait = ~p}~n",
                     [Multiple, NoWait]),
     State1 = State#ch{confirm = C#confirm{ enabled = true,
@@ -885,6 +889,22 @@ handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait}, _,
         true  -> {noreply, State1};
         false -> {reply, #'confirm.select_ok'{}, State1}
     end;
+
+handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
+              _,
+              State = #ch{confirm = #confirm{enabled = true,
+                                             multiple = Multiple}}) ->
+    rabbit_log:info("got a confirm.select with same options~n"),
+    case NoWait of
+        true  -> {noreply, State};
+        false -> {reply, #'confirm.select_ok'{}, State}
+    end;
+
+handle_method(#'confirm.select'{},
+              _,
+              #ch{confirm = #confirm{enabled = true}}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "cannot change confirm channel multiple setting", []);
 handle_method(#'confirm.select'{}, _, _State) ->
     rabbit_misc:protocol_error(
       precondition_failed, "transactional channel cannot be made confirm", []);
