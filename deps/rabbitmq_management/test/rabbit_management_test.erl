@@ -29,20 +29,25 @@
 -define(TESTS, [test_queues, test_fine_types, test_aggregation]).
 
 test() ->
+    io:nl(),
     SecondHalves = [first_half(Test) || Test <- ?TESTS],
     io:format("Waiting for statistics...~n", []),
     timer:sleep(?STATS_INTERVAL + 1000),
     [second_half(Half) || Half <- SecondHalves],
-    io:format("Tests passed.~n", []).
+    io:format("All tests passed.~n", []).
 
 first_half(Test) ->
+    io:format("Set up ~p... ", [Test]),
     Conn = amqp_connection:start_network(),
     Chan = amqp_connection:open_channel(Conn),
     Continuation = apply(rabbit_management_test, Test, [Conn, Chan]),
-    {Continuation, Conn, Chan}.
+    io:format("done.~n", []),
+    {Test, Continuation, Conn, Chan}.
 
-second_half({Continuation, Conn, Chan}) ->
+second_half({Test, Continuation, Conn, Chan}) ->
+    io:format("Run ~p... ", [Test]),
     Continuation(),
+    io:format("passed.~n", []),
     amqp_channel:close(Chan),
     amqp_connection:close(Conn).
 
