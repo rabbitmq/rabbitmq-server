@@ -875,7 +875,7 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
 
 
-handle_method(#'tx.select'{}, _, #ch{confirm = #confirm{enabled = false}}) ->
+handle_method(#'tx.select'{}, _, #ch{confirm = #confirm{enabled = true}}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "a confirm channel cannot be made transactional", []);
 
