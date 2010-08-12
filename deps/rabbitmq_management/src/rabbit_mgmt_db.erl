@@ -37,10 +37,14 @@
          terminate/2, code_change/3]).
 
 -record(state, {tables}).
--define(TABLES, [queue_stats, connection_stats, channel_stats,
-                 channel_exchange_stats, channel_queue_stats,
-                 channel_queue_exchange_stats]).
+-define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
+                           channel_queue_exchange_stats]).
+-define(TABLES, [queue_stats, connection_stats, channel_stats] ++
+            ?FINE_STATS_TYPES).
+
+%% TODO can this be got rid of?
 -define(FINE_STATS, [ack, deliver, deliver_no_ack, get, get_no_ack, publish]).
+
 
 %%----------------------------------------------------------------------------
 
@@ -96,23 +100,22 @@ result_or_error(S)  -> S.
 %% we have the problem that an object which stops emitting events will look
 %% like its rate has stayed up. This might make time series more important.
 
-rates(Table, Id, Stats, Timestamp, Keys) ->
+rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
     Stats ++ lists:filter(
                fun (unknown) -> false;
                    (_)       -> true
                end,
-               [rate(Table, Id, Stats, Timestamp, Key) || Key <- Keys]).
+               [rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ||
+                   Key <- Keys]).
 
-rate(Table, Id, Stats, Timestamp, Key) ->
-    Old = lookup_element(Table, Id),
-    OldTS = lookup_element(Table, Id, 3),
-    case OldTS == [] orelse not proplists:is_defined(Key, Old) of
+rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
+    case OldTimestamp == [] orelse not proplists:is_defined(Key, OldStats) of
         true ->
             unknown;
         _ ->
-            Diff = pget(Key, Stats) - pget(Key, Old),
+            Diff = pget(Key, Stats) - pget(Key, OldStats),
             {list_to_atom(atom_to_list(Key) ++ "_rate"),
-             Diff / (timer:now_diff(Timestamp, OldTS) / 1000000)}
+             Diff / (timer:now_diff(Timestamp, OldTimestamp) / 1000000)}
     end.
 
 sum(Table, Keys) ->
@@ -283,19 +286,15 @@ handle_event(Event = #event{type = channel_created}, State) ->
 handle_event(Event = #event{type = channel_stats, props = Stats,
                             timestamp = Timestamp}, State) ->
     handle_stats(channel_stats, Event, [], [], State),
-    Types = [channel_queue_stats, channel_exchange_stats,
-             channel_queue_exchange_stats],
-    [delete_fine_stats(Type, id(Stats), State) || Type <- Types],
-    [[handle_fine_stats(Type, id(Stats), S, Timestamp, State) ||
-         S <- pget(Type, Stats)] || Type <- Types],
+    [handle_fine_stats(Type, Stats, Timestamp, State) ||
+        Type <- ?FINE_STATS_TYPES],
     {ok, State};
 
 handle_event(Event = #event{type = channel_closed,
                             props = [{pid, Pid}]}, State) ->
     handle_deleted(channel_stats, Event, State),
     [delete_fine_stats(Type, id(Pid), State) ||
-        Type <- [channel_queue_stats, channel_exchange_stats,
-                 channel_queue_exchange_stats]],
+        Type <- ?FINE_STATS_TYPES],
     {ok, State};
 
 handle_event(_Event, State) ->
@@ -323,7 +322,9 @@ handle_stats(TName, #event{props = Stats, timestamp = Timestamp}, Funs,
              RatesKeys, State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
     Id = {id(Stats), stats},
-    Stats1 = rates(Table, Id, Stats, Timestamp, RatesKeys),
+    OldStats = lookup_element(Table, Id),
+    OldTimestamp = lookup_element(Table, Id, 3),
+    Stats1 = rates(Stats, Timestamp, OldStats, OldTimestamp, RatesKeys),
     ets:insert(Table,
                {Id,
                 proplists:delete(pid,
@@ -338,11 +339,24 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     ets:delete(Table, {id(Pid), stats}),
     {ok, State}.
 
-handle_fine_stats(Type, ChPid, {Ids, Stats}, Timestamp,
-                  #state{tables = Tables}) ->
+handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
+    ChPid = id(Props),
     Table = orddict:fetch(Type, Tables),
+    IdsStatsTS = [{Ids,
+                   Stats,
+                   lookup_element(Table, fine_stats_key(ChPid, Ids)),
+                   lookup_element(Table, fine_stats_key(ChPid, Ids), 3)} ||
+                     {Ids, Stats} <- pget(Type, Props)],
+    delete_fine_stats(Type, ChPid, State),
+    [handle_fine_stat(ChPid, Ids, Stats, Timestamp,
+                      OldStats, OldTimestamp, Table) ||
+        {Ids, Stats, OldStats, OldTimestamp} <- IdsStatsTS].
+
+handle_fine_stat(ChPid, Ids, Stats, Timestamp,
+                 OldStats, OldTimestamp,
+                 Table) ->
     Id = fine_stats_key(ChPid, Ids),
-    Res = rates(Table, Id, Stats, Timestamp, ?FINE_STATS),
+    Res = rates(Stats, Timestamp, OldStats, OldTimestamp, ?FINE_STATS),
     ets:insert(Table, {Id, Res, Timestamp}).
 
 delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->
