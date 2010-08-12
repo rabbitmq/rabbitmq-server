@@ -26,7 +26,10 @@
 -compile([export_all]).
 
 %%-define(TESTS, [test_aggregation]).
--define(TESTS, [test_queues, test_fine_types, test_aggregation]).
+-define(TESTS, [test_queues, test_connections, test_fine_types,
+                test_aggregation]).
+
+-define(X, <<"">>).
 
 test() ->
     io:nl(),
@@ -54,10 +57,9 @@ second_half({Test, Continuation, Conn, Chan}) ->
 %%---------------------------------------------------------------------------
 
 test_queues(_Conn, Chan) ->
-    X = <<"">>,
     Q1 = declare_queue(Chan),
     Q2 = declare_queue(Chan),
-    publish(Chan, X, Q1, 4),
+    publish(Chan, ?X, Q1, 4),
     basic_get(Chan, Q1, true, false),
     basic_get(Chan, Q1, false, false),
 
@@ -75,10 +77,25 @@ test_queues(_Conn, Chan) ->
             0 = pget(messages_unacknowledged, Q2Info)
     end.
 
-test_fine_types(_Conn, Chan) ->
-    X = <<"">>,
+test_connections(Conn, Chan) ->
     Q = declare_queue(Chan),
-    publish(Chan, X, Q, 10),
+    publish(Chan, ?X, Q, 10),
+
+    fun() ->
+            Port = local_port(Conn),
+            Conns = rabbit_management_stats:get_connections(),
+            ConnInfo = find_conn_by_local_port(Port, Conns),
+            %% There's little we can actually test - just retrieve and check
+            %% equality.
+            Pid = pget(pid, ConnInfo),
+            ConnInfo2 = rabbit_management_stats:get_connection(Pid),
+            [assert_equal(Item, ConnInfo, ConnInfo2) ||
+                Item <- rabbit_reader:info_keys()]
+    end.
+
+test_fine_types(_Conn, Chan) ->
+    Q = declare_queue(Chan),
+    publish(Chan, ?X, Q, 10),
     basic_get(Chan, Q, true, false),
     basic_get(Chan, Q, false, true),
     consume(Chan, Q, 1, true, false),
@@ -125,7 +142,7 @@ test_aggregation(Conn, Chan) ->
             Port2 = local_port(Conn2),
 
             QByC = Get(channel_queue_stats, "channel"),
-            QByCStats = find_by_local_port(Port, QByC),
+            QByCStats = find_stats_by_local_port(Port, QByC),
             50 = pget(deliver, QByCStats),
             50 = pget(ack, QByCStats),
 
@@ -137,8 +154,8 @@ test_aggregation(Conn, Chan) ->
              end || Q <- Qs],
 
             XByC = Get(channel_exchange_stats, "channel"),
-            XByCStats = find_by_local_port(Port, XByC),
-            XByCStats2 = find_by_local_port(Port2, XByC),
+            XByCStats = find_stats_by_local_port(Port, XByC),
+            XByCStats2 = find_stats_by_local_port(Port2, XByC),
             10 = pget(publish, XByCStats),
             100 = pget(publish, XByCStats2),
 
@@ -147,8 +164,8 @@ test_aggregation(Conn, Chan) ->
             110 = pget(publish, XByXStats),
 
             QXByC = Get(channel_queue_exchange_stats, "channel"),
-            QXByCStats = find_by_local_port(Port, QXByC),
-            QXByCStats2 = find_by_local_port(Port2, QXByC),
+            QXByCStats = find_stats_by_local_port(Port, QXByC),
+            QXByCStats2 = find_stats_by_local_port(Port2, QXByC),
             10 = pget(publish, QXByCStats),
             100 = pget(publish, QXByCStats2),
 
@@ -187,7 +204,15 @@ find_by_exchange(X, Items) ->
                         end, Items),
     Stats.
 
-find_by_local_port(Port, Items) ->
+find_conn_by_local_port(Port, Items) ->
+    [Conn] = lists:filter(
+               fun(Conn) ->
+                       pget(peer_port, Conn) == Port andalso
+                           pget(peer_address, Conn) == <<"127.0.0.1">>
+               end, Items),
+    Conn.
+
+find_stats_by_local_port(Port, Items) ->
     [{_Ids, Stats}] = lists:filter(
                         fun({Ids, _Stats}) ->
                                 Ch = pget(channel_details, Ids),
@@ -253,3 +278,7 @@ local_port(Conn) ->
     [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
     {ok, Port} = inet:port(Sock),
     Port.
+
+assert_equal(Item, PList1, PList2) ->
+    Expected = pget(Item, PList1),
+    Expected = pget(Item, PList2).
