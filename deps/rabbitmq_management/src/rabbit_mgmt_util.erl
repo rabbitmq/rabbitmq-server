@@ -10,9 +10,9 @@
 %%
 %%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.
+%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
 %%
-%%   Copyright (C) 2009 LShift Ltd.
+%%   Copyright (C) 2010 Rabbit Technologies Ltd.
 %%
 %%   All Rights Reserved.
 %%
