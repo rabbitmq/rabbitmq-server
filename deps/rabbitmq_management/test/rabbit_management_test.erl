@@ -138,8 +138,8 @@ test_aggregation(Conn, Chan) ->
             100 = pget(publish, XByCStats2),
 
             XByX = Get(channel_exchange_stats, "exchange"),
-            %% XByXStats = find_by_exchange(X, XByX),
-            %% 110 = pget(publish, XByXStats),
+            XByXStats = find_by_exchange(X, XByX),
+            110 = pget(publish, XByXStats),
 
             QXByC = Get(channel_queue_exchange_stats, "channel"),
             QXByCStats = find_by_local_port(Port, QXByC),
@@ -154,8 +154,8 @@ test_aggregation(Conn, Chan) ->
              end || Q <- Qs],
 
             QXByX = Get(channel_queue_exchange_stats, "exchange"),
-            %% QXByXStats = find_by_exchange(X, QXByX),
-            %% 110 = pget(publish, QXByXStats),
+            QXByXStats = find_by_exchange(X, QXByX),
+            110 = pget(publish, QXByXStats),
 
             amqp_channel:close(Chan2),
             amqp_connection:close(Conn2)
@@ -178,7 +178,7 @@ find_by_queue(Q, Items) ->
 find_by_exchange(X, Items) ->
     [{_Ids, Stats}] = lists:filter(
                         fun({Ids, _Stats}) ->
-                                pget(exchange, Ids) == X
+                                pget(name, pget(exchange, Ids)) == X
                         end, Items),
     Stats.
 

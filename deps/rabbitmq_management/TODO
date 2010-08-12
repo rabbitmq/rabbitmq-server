@@ -24,6 +24,8 @@ Support Windows.
 Write demo app.
 Do something sensible with non-amqp channels.
 Client side sorting / pagination / filtering.
+Investigate Sammy.
+Merge foo / foo_details in fine stats.
 
 Less urgent:
 Add more stats (bug 22996).

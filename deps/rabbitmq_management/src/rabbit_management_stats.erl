@@ -123,12 +123,12 @@ sum(Table, Keys) ->
                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
 format_id({ChPid, #resource{name=XName, virtual_host=XVhost}}) ->
-    [{channel, ChPid}, {exchange_name, XName}, {exchange_vhost, XVhost}];
+    [{channel, ChPid}, {exchange, [{name, XName}, {vhost, XVhost}]}];
 format_id({ChPid, QPid}) ->
     [{channel, ChPid}, {queue, QPid}];
 format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
     [{channel, ChPid}, {queue, QPid},
-     {exchange_name, XName}, {exchange_vhost, XVhost}].
+     {exchange, [{name, XName}, {vhost, XVhost}]}].
 
 group_sum(GroupBy, List) ->
     Res =
