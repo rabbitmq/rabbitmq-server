@@ -39,6 +39,7 @@ CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
 CONFIG_FILE=/etc/rabbitmq/rabbitmq
 LOG_BASE=/var/log/rabbitmq
 MNESIA_BASE=/var/lib/rabbitmq/mnesia
+PLUGINS_EXPAND_DIR=/var/lib/rabbitmq/plugins-scratch
 SERVER_START_ARGS=
 
 . `dirname $0`/rabbitmq-env
@@ -68,6 +69,9 @@ fi
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
 
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="${PLUGINS_EXPAND_DIR}"
+
 ## Log rotation
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
@@ -83,13 +87,25 @@ RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput' 
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if [ -f "${RABBITMQ_EBIN_ROOT}/rabbit.boot" ] && [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
-    RABBITMQ_BOOT_FILE="${RABBITMQ_EBIN_ROOT}/rabbit"
-    RABBITMQ_EBIN_PATH=""
+if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
+    if erl \
+	-pa "$RABBITMQ_EBIN_ROOT" \
+	-rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+	-rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
+	-rabbit rabbit_ebin "\"$RABBITMQ_EBIN_ROOT\"" \
+	-noinput \
+	-hidden \
+	-s rabbit_plugin_activator \
+	-extra "$@"
+    then
+	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
+	RABBITMQ_EBIN_PATH=""
+    else
+	exit 1
+    fi
 else
     RABBITMQ_BOOT_FILE=start_sasl
     RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
-    [ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="${RABBITMQ_START_RABBIT} -s rabbit"
 fi
 RABBITMQ_CONFIG_ARG=
 [ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"

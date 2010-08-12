@@ -35,7 +35,6 @@
 
 -define(DefaultPluginDir, "plugins").
 -define(DefaultUnpackedPluginDir, "priv/plugins").
--define(DefaultRabbitEBin, "ebin").
 -define(BaseApps, [rabbit]).
 
 %%----------------------------------------------------------------------------
@@ -52,15 +51,15 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    io:format("Activating RabbitMQ plugins ..."),
     %% Ensure Rabbit is loaded so we can access it's environment
     application:load(rabbit),
 
     %% Determine our various directories
     PluginDir         = get_env(plugins_dir,        ?DefaultPluginDir),
     UnpackedPluginDir = get_env(plugins_expand_dir, ?DefaultUnpackedPluginDir),
-    RabbitEBin        = get_env(rabbit_ebin,        ?DefaultRabbitEBin),
 
-    RootName = RabbitEBin ++ "/rabbit",
+    RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
     unpack_ez_plugins(PluginDir, UnpackedPluginDir),
@@ -86,7 +85,7 @@ start() ->
              {erts, erlang:system_info(version)},
              AppVersions},
 
-    %% Write it out to ebin/rabbit.rel
+    %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
     file:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% Compile the script
@@ -131,8 +130,9 @@ start() ->
         ok    -> ok;
         error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
-    io:format("~n~w plugins activated.~n~n", [length(PluginApps)]),
+    io:format("~n~w plugins activated:~n", [length(PluginApps)]),
     [io:format("* ~w~n", [App]) || App <- PluginApps],
+    io:nl(),
     halt(),
     ok.
 
