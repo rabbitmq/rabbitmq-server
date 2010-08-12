@@ -536,11 +536,11 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
                             [self(), {{RestartType, Delay}, Reason, Child}]),
             {ok, NState}
     end;
-do_restart(intrinsic, normal, Child, State) ->
-    {shutdown, state_del_child(Child, State)};
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
+do_restart(intrinsic, normal, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
 do_restart(_, normal, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
@@ -676,13 +676,8 @@ shutdown(Pid, brutal_kill) ->
 	ok ->
 	    exit(Pid, kill),
 	    receive
-		{'DOWN', _MRef, process, Pid, OtherReason} ->
-                    case OtherReason of
-                        killed -> ok;
-                        normal -> ok;
-                        noproc -> ok;
-                        _      -> {error, OtherReason}
-                    end
+		{'DOWN', _MRef, process, Pid, Reason} ->
+                    check_shutdown_reason(killed, Reason)
 	    end;
 	{error, Reason} ->      
 	    {error, Reason}
@@ -694,13 +689,8 @@ shutdown(Pid, Time) ->
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
 	    receive 
-		{'DOWN', _MRef, process, Pid, OtherReason} ->
-                    case OtherReason of
-                        shutdown -> ok;
-                        normal   -> ok;
-                        noproc   -> ok;
-                        _        -> {error, OtherReason}
-                    end
+		{'DOWN', _MRef, process, Pid, Reason} ->
+                    check_shutdown_reason(shutdown, Reason)
 	    after Time ->
 		    exit(Pid, kill),  %% Force termination.
 		    receive
@@ -742,8 +732,12 @@ monitor_child(Pid) ->
 	    %% that will be handled in shutdown/2. 
 	    ok   
     end.
-    
-   
+
+check_shutdown_reason(Reason, Reason) -> ok;
+check_shutdown_reason(_     , normal) -> ok;
+check_shutdown_reason(_     , noproc) -> ok;
+check_shutdown_reason(Reason,      _) -> {error, Reason}.
+
 %%-----------------------------------------------------------------
 %% Child/State manipulating functions.
 %%-----------------------------------------------------------------
@@ -850,8 +844,8 @@ supname(N,_)      -> N.
 %%%    {Name, Func, RestartType, Shutdown, ChildType, Modules}
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
-%%%       RestartType is intrinsic | permanent | temporary |
-%%%                      transient | {permanent, Delay} |
+%%%       RestartType is permanent | temporary | transient |
+%%%                      intrinsic | {permanent, Delay} |
 %%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
@@ -898,10 +892,10 @@ validFunc({M, F, A}) when is_atom(M),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
-validRestartType(intrinsic)          -> true;
 validRestartType(permanent)          -> true;
 validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
+validRestartType(intrinsic)          -> true;
 validRestartType({permanent, Delay}) -> validDelay(Delay);
 validRestartType({transient, Delay}) -> validDelay(Delay);
 validRestartType(RestartType)        -> throw({invalid_restart_type,
