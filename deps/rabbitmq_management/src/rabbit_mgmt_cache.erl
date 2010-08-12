@@ -79,6 +79,14 @@ get_total_fd({unix, Os}) when Os =:= linux
                        orelse Os =:= sunos ->
     get_total_fd_ulimit();
 
+%% According to
+%% http://stackoverflow.com/questions/870173/is-there-a-limit-on-number-of-open-files-in-windows
+%% the limit using the POSIX API is 2048, or 512 using libc. It's unlimited
+%% using the win32 API ironically. I did a test with MM and ran out just after
+%% 500 connections, so I guess Erlang uses libc.
+get_total_fd({win32, _}) ->
+    512;
+
 get_total_fd(_) ->
     unknown.
 
