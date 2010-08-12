@@ -257,7 +257,7 @@ handle_cast(multiple_ack_flush,
     rabbit_log:info("channel got a multiple_ack_flush message~n"
                     "held acks: ~p~n", [gb_sets:to_list(As)]),
     case gb_sets:is_empty(As) of
-        true -> ok;
+        true -> ok;                   % this should never be the case
         false -> flush_multiple(As, WriterPid)
     end,
     {noreply, State#ch{confirm = C#confirm{held_acks = gb_sets:new(),
