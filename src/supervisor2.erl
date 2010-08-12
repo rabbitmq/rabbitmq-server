@@ -649,14 +649,22 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
-    case shutdown(Child#child.pid,
-		  Child#child.shutdown) of
-	ok ->
-	    Child#child{pid = undefined};
-	{error, OtherReason} ->
-	    report_error(shutdown_error, OtherReason, Child, SupName),
-	    Child#child{pid = undefined}
-    end;
+    ReportError = fun (Reason) ->
+                          report_error(shutdown_error, Reason, Child, SupName)
+                  end,
+    case shutdown(Child#child.pid, Child#child.shutdown) of
+        ok ->
+            ok;
+        {error, normal} ->
+            case Child#child.restart_type of
+                permanent           -> ReportError(normal);
+                {permanent, _Delay} -> ReportError(normal);
+                _                   -> ok
+            end;
+        {error, OtherReason} ->
+            ReportError(OtherReason)
+    end,
+    Child#child{pid = undefined};
 do_terminate(Child, _SupName) ->
     Child.
 
@@ -676,8 +684,10 @@ shutdown(Pid, brutal_kill) ->
 	ok ->
 	    exit(Pid, kill),
 	    receive
-		{'DOWN', _MRef, process, Pid, Reason} ->
-                    check_shutdown_reason(killed, Reason)
+		{'DOWN', _MRef, process, Pid, killed} ->
+		    ok;
+		{'DOWN', _MRef, process, Pid, OtherReason} ->
+		    {error, OtherReason}
 	    end;
 	{error, Reason} ->      
 	    {error, Reason}
@@ -689,8 +699,10 @@ shutdown(Pid, Time) ->
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
 	    receive 
-		{'DOWN', _MRef, process, Pid, Reason} ->
-                    check_shutdown_reason(shutdown, Reason)
+		{'DOWN', _MRef, process, Pid, shutdown} ->
+		    ok;
+		{'DOWN', _MRef, process, Pid, OtherReason} ->
+		    {error, OtherReason}
 	    after Time ->
 		    exit(Pid, kill),  %% Force termination.
 		    receive
@@ -715,14 +727,11 @@ monitor_child(Pid) ->
     receive
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
-	{'EXIT', Pid, Reason} ->
-            receive
-                {'DOWN', _, process, Pid, _} ->
-                    case Reason of
-                        normal -> ok;
-                        _      -> {error, Reason}
-                    end
-            end
+	{'EXIT', Pid, Reason} -> 
+	    receive 
+		{'DOWN', _, process, Pid, _} ->
+		    {error, Reason}
+	    end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
 	    %% monitor the result will be that shutdown/2 receives a 
@@ -732,11 +741,8 @@ monitor_child(Pid) ->
 	    %% that will be handled in shutdown/2. 
 	    ok   
     end.
-
-check_shutdown_reason(Reason, Reason) -> ok;
-check_shutdown_reason(_     , normal) -> ok;
-check_shutdown_reason(Reason,      _) -> {error, Reason}.
-
+    
+   
 %%-----------------------------------------------------------------
 %% Child/State manipulating functions.
 %%-----------------------------------------------------------------
