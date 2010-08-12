@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_test).
+-module(rabbit_mgmt_test_db).
 -export([test/0]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -43,7 +43,7 @@ first_half(Test) ->
     io:format("Set up ~p... ", [Test]),
     Conn = amqp_connection:start_network(),
     Chan = amqp_connection:open_channel(Conn),
-    Continuation = apply(rabbit_management_test, Test, [Conn, Chan]),
+    Continuation = apply(rabbit_mgmt_test_db, Test, [Conn, Chan]),
     io:format("done.~n", []),
     {Test, Continuation, Conn, Chan}.
 
@@ -64,7 +64,7 @@ test_queues(_Conn, Chan) ->
     basic_get(Chan, Q1, false, false),
 
     fun() ->
-            Qs = rabbit_management_stats:get_queues(),
+            Qs = rabbit_mgmt_db:get_queues(),
             Q1Info = find_by_name(Q1, Qs),
             Q2Info = find_by_name(Q2, Qs),
 
@@ -83,12 +83,12 @@ test_connections(Conn, Chan) ->
 
     fun() ->
             Port = local_port(Conn),
-            Conns = rabbit_management_stats:get_connections(),
+            Conns = rabbit_mgmt_db:get_connections(),
             ConnInfo = find_conn_by_local_port(Port, Conns),
             %% There's little we can actually test - just retrieve and check
             %% equality.
             Pid = pget(pid, ConnInfo),
-            ConnInfo2 = rabbit_management_stats:get_connection(Pid),
+            ConnInfo2 = rabbit_mgmt_db:get_connection(Pid),
             [assert_equal(Item, ConnInfo, ConnInfo2) ||
                 Item <- rabbit_reader:info_keys()]
     end.
@@ -103,7 +103,7 @@ test_fine_types(_Conn, Chan) ->
 
     fun() ->
             AllQStats =
-                rabbit_management_stats:get_msg_stats(
+                rabbit_mgmt_db:get_msg_stats(
                   channel_queue_stats, undefined, ignored, ignored),
             QStats = find_by_queue(Q, AllQStats),
             1 = pget(get, QStats),
@@ -113,7 +113,7 @@ test_fine_types(_Conn, Chan) ->
             7 = pget(deliver_no_ack, QStats), % Since 2nd consume ate
                                               % everything
             AllQXStats =
-                rabbit_management_stats:get_msg_stats(
+                rabbit_mgmt_db:get_msg_stats(
                   channel_queue_exchange_stats, undefined, ignored, ignored),
             QXStats = find_by_queue(Q, AllQXStats),
             10 = pget(publish, QXStats)
@@ -134,7 +134,7 @@ test_aggregation(Conn, Chan) ->
 
     fun() ->
             Get = fun(Type, GroupBy) ->
-                          rabbit_management_stats:get_msg_stats(
+                          rabbit_mgmt_db:get_msg_stats(
                             Type, GroupBy, ignored, ignored)
                   end,
 

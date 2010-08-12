@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_util).
+-module(rabbit_mgmt_util).
 
 -export([is_authorized/2, now_ms/0, http_date/0]).
 

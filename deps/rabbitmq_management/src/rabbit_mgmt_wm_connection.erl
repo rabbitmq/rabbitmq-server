@@ -18,9 +18,10 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_overview).
+-module(rabbit_mgmt_wm_connection).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
+         is_authorized/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -33,15 +34,33 @@ init(_Config) -> {ok, undefined}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
+id(ReqData) ->
+    case dict:find(connection, wrq:path_info(ReqData)) of
+        error    -> error;
+        {ok, Id} -> list_to_binary(mochiweb_util:unquote(Id))
+    end.
+
+resource_exists(ReqData, Context) ->
+    case id(ReqData) of
+        error ->
+            {true, ReqData, Context};
+        Id ->
+            case rabbit_mgmt_db:get_connection(Id) of
+                error -> {false, ReqData, Context};
+                _Conn -> {true, ReqData, Context}
+            end
+    end.
+
 to_json(ReqData, Context) ->
-    OSStats = rabbit_management_cache:info(),
-    Overview = rabbit_management_stats:get_overview(),
-    {rabbit_management_format:encode(
-       OSStats ++ Overview ++
-           [{os_pid, list_to_binary(os:getpid())},
-            {mem_ets, erlang:memory(ets)},
-            {mem_binary, erlang:memory(binary)}]),
-       ReqData, Context}.
+    Res = case id(ReqData) of
+              error ->
+                  Conns = rabbit_mgmt_db:get_connections(),
+                  {connections, [{struct, C} || C <- Conns]};
+              Id ->
+                  Conn = rabbit_mgmt_db:get_connection(Id),
+                  {connection, {struct, Conn}}
+          end,
+    {rabbit_mgmt_format:encode([Res]), ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_management_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized(ReqData, Context).

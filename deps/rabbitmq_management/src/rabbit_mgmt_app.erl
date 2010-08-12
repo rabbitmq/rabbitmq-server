@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_app).
+-module(rabbit_mgmt_app).
 
 -behaviour(application).
 
@@ -34,9 +34,9 @@ start(_Type, _StartArgs) ->
             io:format("starting ~-60s ...", [S])
     end,
     application:set_env(rabbit, collect_statistics, fine),
-    Res = rabbit_management_sup:start_link(),
+    Res = rabbit_mgmt_sup:start_link(),
     %% TODO is this supervised correctly?
-    rabbit_management_stats:start(),
+    rabbit_mgmt_db:start(),
     application:set_env(webmachine, dispatch_list, dispatcher()),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     %% This would do access.log type stuff. Needs configuring though.
@@ -50,11 +50,11 @@ start(_Type, _StartArgs) ->
     Res.
 
 dispatcher() ->
-    [{["json","overview"],               rabbit_management_overview, []},
-     {["json","connection"],             rabbit_management_connections, []},
-     {["json","connection", connection], rabbit_management_connections, []},
-     {["json","queue"],                  rabbit_management_queues, []},
-     {["json","stats", type],            rabbit_management_rest_stats, []}
+    [{["json","overview"],               rabbit_mgmt_wm_overview, []},
+     {["json","connection"],             rabbit_mgmt_wm_connection, []},
+     {["json","connection", connection], rabbit_mgmt_wm_connection, []},
+     {["json","queue"],                  rabbit_mgmt_wm_queue, []},
+     {["json","stats", type],            rabbit_mgmt_wm_stats, []}
     ].
 
 stop(_State) ->

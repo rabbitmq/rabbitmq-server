@@ -18,12 +18,12 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management).
+-module(rabbit_mgmt).
 
 -export([start/0, stop/0]).
 
 start() ->
-    application:start(rabbit_management).
+    application:start(rabbit_mgmt).
 
 stop() ->
-    application:stop(rabbit_management).
+    application:stop(rabbit_mgmt).

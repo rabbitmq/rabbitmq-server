@@ -2,12 +2,12 @@
  [{description, "RabbitMQ Management Console"},
   {vsn, "0.01"},
   {modules, [
-    rabbit_management,
-    rabbit_management_app,
-    rabbit_management_sup,
-    rabbit_management_cache
+    rabbit_mgmt,
+    rabbit_mgmt_app,
+    rabbit_mgmt_sup,
+    rabbit_mgmt_cache
   ]},
   {registered, []},
-  {mod, {rabbit_management_app, []}},
+  {mod, {rabbit_mgmt_app, []}},
   {env, []},
   {applications, [kernel, stdlib, rabbit, rabbit_mochiweb]}]}.

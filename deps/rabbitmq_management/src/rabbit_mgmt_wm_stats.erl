@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_rest_stats).
+-module(rabbit_mgmt_wm_stats).
 
 -export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
          is_authorized/2]).
@@ -53,16 +53,16 @@ to_json(ReqData, Context) ->
     GroupBy = wrq:get_qs_value("group_by", ReqData),
     MatchKey = wrq:get_qs_value("match_key", ReqData),
     MatchValue = wrq:get_qs_value("match_value", ReqData),
-    Stats = rabbit_management_stats:get_msg_stats(Type, GroupBy,
+    Stats = rabbit_mgmt_db:get_msg_stats(Type, GroupBy,
                                                   MatchKey, MatchValue),
     Res = {stats, [{struct, format(S)} || S <- Stats]},
-    {rabbit_management_format:encode([{match_key_todo, MatchKey},
-                                      {match_value_todo, MatchValue},
-                                      Res
-                                     ]), ReqData, Context}.
+    {rabbit_mgmt_format:encode([{match_key_todo, MatchKey},
+                                {match_value_todo, MatchValue},
+                                Res
+                               ]), ReqData, Context}.
 
 format({Ids, Stats}) ->
     [{msg_stats, {struct, Stats}}|Ids].
 
 is_authorized(ReqData, Context) ->
-    rabbit_management_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized(ReqData, Context).

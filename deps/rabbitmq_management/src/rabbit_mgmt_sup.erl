@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_sup).
+-module(rabbit_mgmt_sup).
 
 -behaviour(supervisor).
 
@@ -26,8 +26,8 @@
 -export([start_link/0]).
 
 init([]) ->
-    Status = {rabbit_management_cache,
-             {rabbit_management_cache, start_link, []},
+    Status = {rabbit_mgmt_cache,
+             {rabbit_mgmt_cache, start_link, []},
               permanent, 5000, worker, dynamic},
 
     {ok, {{one_for_one, 10, 10}, [Status]}}.

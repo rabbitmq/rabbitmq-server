@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_queues).
+-module(rabbit_mgmt_wm_queue).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
@@ -34,14 +34,14 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Qs = rabbit_management_stats:get_queues(),
-    {rabbit_management_format:encode(
+    Qs = rabbit_mgmt_db:get_queues(),
+    {rabbit_mgmt_format:encode(
        [{queues, [{struct, format(Q)} || Q <- Qs]}]), ReqData, Context}.
 
 format(Q) ->
-    MsgsReady = rabbit_management_stats:pget(messages_ready, Q),
-    MsgsUnacked = rabbit_management_stats:pget(messages_unacknowledged, Q),
-    [{messages, rabbit_management_stats:add(MsgsReady, MsgsUnacked)}|Q].
+    MsgsReady = rabbit_mgmt_db:pget(messages_ready, Q),
+    MsgsUnacked = rabbit_mgmt_db:pget(messages_unacknowledged, Q),
+    [{messages, rabbit_mgmt_db:add(MsgsReady, MsgsUnacked)}|Q].
 
 is_authorized(ReqData, Context) ->
-    rabbit_management_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized(ReqData, Context).

@@ -22,7 +22,7 @@
 %% TODO this is vestigal from the status plugin. Do we need a caching
 %% mechanism for the os-level info this returns?
 
--module(rabbit_management_cache).
+-module(rabbit_mgmt_cache).
 
 -behaviour(gen_server).
 
@@ -122,7 +122,7 @@ i(proc_total,  #state{proc_total = ProcTotal})    -> ProcTotal.
 init([]) ->
     {ok, Binds} = application:get_env(rabbit, tcp_listeners),
     BoundTo = lists:flatten(
-                [ rabbit_management_format:print("~s:~p ", [Addr,Port])
+                [ rabbit_mgmt_format:print("~s:~p ", [Addr,Port])
                   || {Addr, Port} <- Binds ] ),
     State = #state{
       fd_total = get_total_fd(),
@@ -134,7 +134,7 @@ init([]) ->
 
 
 handle_call({info, Items}, _From, State0) ->
-    State = case rabbit_management_util:now_ms() - State0#state.time_ms >
+    State = case rabbit_mgmt_util:now_ms() - State0#state.time_ms >
                 ?REFRESH_RATIO of
         true  -> internal_update(State0);
         false -> State0
@@ -164,7 +164,7 @@ code_change(_, State, _) -> {ok, State}.
 
 internal_update(State) ->
     State#state{
-        time_ms = rabbit_management_util:now_ms(),
+        time_ms = rabbit_mgmt_util:now_ms(),
         fd_used = get_used_fd(),
         mem_used = erlang:memory(total),
         proc_used = erlang:system_info(process_count)

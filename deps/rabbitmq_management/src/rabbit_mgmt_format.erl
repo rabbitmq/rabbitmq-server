@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_format).
+-module(rabbit_mgmt_format).
 
 -export([encode/1, format/2, print/2, pid/1, ip/1, table/1, protocol/1,
          resource/1]).
@@ -31,7 +31,7 @@ encode(Facts) ->
     mochijson2:encode({struct,
                        [{node, node()},
                         {datetime, list_to_binary(
-                                     rabbit_management_util:http_date())}
+                                     rabbit_mgmt_util:http_date())}
                        ] ++ Facts}).
 
 format([], Fs) ->

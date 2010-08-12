@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_management_stats).
+-module(rabbit_mgmt_db).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -73,7 +73,7 @@ pget(Key, List, Default) ->
     proplists:get_value(Key, List, Default).
 
 id(Pid) when is_pid(Pid) -> list_to_binary(pid_to_list(Pid));
-id(List) -> rabbit_management_format:pid(pget(pid, List)).
+id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
 
 add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
@@ -249,13 +249,13 @@ handle_call(_Request, State) ->
 handle_event(Event = #event{type = queue_created}, State) ->
     handle_created(
       queue_stats, Event,
-      [{fun rabbit_management_format:pid/1,      [pid, owner_pid]},
-       {fun rabbit_management_format:resource/1, [name]}], State);
+      [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
+       {fun rabbit_mgmt_format:resource/1, [name]}], State);
 
 handle_event(Event = #event{type = queue_stats}, State) ->
     handle_stats(
       queue_stats, Event,
-      [{fun rabbit_management_format:table/1,[backing_queue_status]}],
+      [{fun rabbit_mgmt_format:table/1,[backing_queue_status]}],
       [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
@@ -264,10 +264,10 @@ handle_event(Event = #event{type = queue_deleted}, State) ->
 handle_event(Event = #event{type = connection_created}, State) ->
     handle_created(
       connection_stats, Event,
-      [{fun rabbit_management_format:ip/1,       [address, peer_address]},
-       {fun rabbit_management_format:pid/1,      [pid]},
-       {fun rabbit_management_format:protocol/1, [protocol]},
-       {fun rabbit_management_format:table/1,    [client_properties]}], State);
+      [{fun rabbit_mgmt_format:ip/1,       [address, peer_address]},
+       {fun rabbit_mgmt_format:pid/1,      [pid]},
+       {fun rabbit_mgmt_format:protocol/1, [protocol]},
+       {fun rabbit_mgmt_format:table/1,    [client_properties]}], State);
 
 handle_event(Event = #event{type = connection_stats}, State) ->
     handle_stats(connection_stats, Event, [], [recv_oct, send_oct], State);
@@ -278,7 +278,7 @@ handle_event(Event = #event{type = connection_closed}, State) ->
 handle_event(Event = #event{type = channel_created}, State) ->
     handle_created(
       channel_stats, Event,
-      [{fun rabbit_management_format:pid/1, [pid, connection]}], State);
+      [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
 
 handle_event(Event = #event{type = channel_stats, props = Stats,
                             timestamp = Timestamp}, State) ->
@@ -315,7 +315,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 handle_created(TName, #event{props = Stats}, Funs,
                State = #state{tables = Tables}) ->
-    Formatted = rabbit_management_format:format(Stats, Funs),
+    Formatted = rabbit_mgmt_format:format(Stats, Funs),
     ets:insert(orddict:fetch(TName, Tables), {{id(Stats), create}, Formatted}),
     {ok, State}.
 
@@ -327,7 +327,7 @@ handle_stats(TName, #event{props = Stats, timestamp = Timestamp}, Funs,
     ets:insert(Table,
                {Id,
                 proplists:delete(pid,
-                                 rabbit_management_format:format(Stats1, Funs)),
+                                 rabbit_mgmt_format:format(Stats1, Funs)),
                 Timestamp}),
     {ok, State}.
 
