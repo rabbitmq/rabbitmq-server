@@ -540,11 +540,11 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
                             [self(), {{RestartType, Delay}, Reason, Child}]),
             {ok, NState}
     end;
-do_restart(intrinsic, normal, Child, State) ->
-    {shutdown, state_del_child(Child, State)};
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
+do_restart(intrinsic, normal, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
 do_restart(_, normal, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
@@ -653,14 +653,22 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
-    case shutdown(Child#child.pid,
-		  Child#child.shutdown) of
-	ok ->
-	    Child#child{pid = undefined};
-	{error, OtherReason} ->
-	    report_error(shutdown_error, OtherReason, Child, SupName),
-	    Child#child{pid = undefined}
-    end;
+    ReportError = fun (Reason) ->
+                          report_error(shutdown_error, Reason, Child, SupName)
+                  end,
+    case shutdown(Child#child.pid, Child#child.shutdown) of
+        ok ->
+            ok;
+        {error, normal} ->
+            case Child#child.restart_type of
+                permanent           -> ReportError(normal);
+                {permanent, _Delay} -> ReportError(normal);
+                _                   -> ok
+            end;
+        {error, OtherReason} ->
+            ReportError(OtherReason)
+    end,
+    Child#child{pid = undefined};
 do_terminate(Child, _SupName) ->
     Child.
 
@@ -680,13 +688,10 @@ shutdown(Pid, brutal_kill) ->
 	ok ->
 	    exit(Pid, kill),
 	    receive
+		{'DOWN', _MRef, process, Pid, killed} ->
+		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
-                    case OtherReason of
-                        killed -> ok;
-                        normal -> ok;
-                        noproc -> ok;
-                        _      -> {error, OtherReason}
-                    end
+		    {error, OtherReason}
 	    end;
 	{error, Reason} ->      
 	    {error, Reason}
@@ -698,13 +703,10 @@ shutdown(Pid, Time) ->
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
 	    receive 
+		{'DOWN', _MRef, process, Pid, shutdown} ->
+		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
-                    case OtherReason of
-                        shutdown -> ok;
-                        normal   -> ok;
-                        noproc   -> ok;
-                        _        -> {error, OtherReason}
-                    end
+		    {error, OtherReason}
 	    after Time ->
 		    exit(Pid, kill),  %% Force termination.
 		    receive
@@ -730,13 +732,10 @@ monitor_child(Pid) ->
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
 	{'EXIT', Pid, Reason} -> 
-            case Reason of
-                normal -> ok;
-                _      -> receive
-                              {'DOWN', _, process, Pid, _} ->
-                                  {error, Reason}
-                          end
-            end
+	    receive 
+		{'DOWN', _, process, Pid, _} ->
+		    {error, Reason}
+	    end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
 	    %% monitor the result will be that shutdown/2 receives a 
@@ -854,8 +853,8 @@ supname(N,_)      -> N.
 %%%    {Name, Func, RestartType, Shutdown, ChildType, Modules}
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
-%%%       RestartType is intrinsic | permanent | temporary |
-%%%                      transient | {permanent, Delay} |
+%%%       RestartType is permanent | temporary | transient |
+%%%                      intrinsic | {permanent, Delay} |
 %%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
@@ -902,10 +901,10 @@ validFunc({M, F, A}) when is_atom(M),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
-validRestartType(intrinsic)          -> true;
 validRestartType(permanent)          -> true;
 validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
+validRestartType(intrinsic)          -> true;
 validRestartType({permanent, Delay}) -> validDelay(Delay);
 validRestartType({transient, Delay}) -> validDelay(Delay);
 validRestartType(RestartType)        -> throw({invalid_restart_type,

@@ -51,6 +51,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    io:format("Activating RabbitMQ plugins ..."),
     %% Ensure Rabbit is loaded so we can access it's environment
     application:load(rabbit),
 
@@ -129,8 +130,9 @@ start() ->
         ok    -> ok;
         error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
-    io:format("~n~w plugins activated.~n~n", [length(PluginApps)]),
+    io:format("~n~w plugins activated:~n", [length(PluginApps)]),
     [io:format("* ~w~n", [App]) || App <- PluginApps],
+    io:nl(),
     halt(),
     ok.
 
