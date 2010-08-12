@@ -259,14 +259,14 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     {noreply, queue_blocked(QPid, State)};
 handle_info(multiple_ack_flush,
             State = #ch{ writer_pid = WriterPid,
-                         confirm = #confirm{held_acks = As} } ) ->
+                         confirm = C = #confirm{held_acks = As} } ) ->
     rabbit_log:info("channel got a multiple_ack_flush message~n"
                     "held acks: ~p~n", [gb_sets:to_list(As)]),
     case gb_sets:is_empty(As) of
         true -> ok;
         false -> flush_multiple(As, WriterPid)
     end,
-    {noreply, State#ch{confirm = #confirm{ held_acks = gb_sets:new()}}}.
+    {noreply, State#ch{confirm = C#confirm{ held_acks = gb_sets:new()}}}.
 
 flush_multiple(Acks, WriterPid) ->
     [First | Rest] = gb_sets:to_list(Acks),
@@ -501,10 +501,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     maybe_incr_stats([{ExchangeName, 1} |
                       [{{QPid, ExchangeName}, 1} ||
                           QPid <- DeliveredQPids]], publish, State),
-    State1 = State#ch{ confirm = Confirm1 },
     {noreply, case TxnKey of
-                  none -> State1;
-                  _    -> add_tx_participants(DeliveredQPids, State1)
+                  none -> State#ch{confirm = Confirm1};
+                  _    -> add_tx_participants(DeliveredQPids, State)
               end};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
@@ -892,18 +891,16 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
     return_ok(State, NoWait,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
 
-handle_method(#'tx.select'{}, _,
-              State = #ch{transaction_id = none,
-                          confirm = #confirm{enabled = false}}) ->
-    {reply, #'tx.select_ok'{}, new_tx(State)};
 
-handle_method(#'tx.select'{}, _,
-              State = #ch{confirm = #confirm{enabled = false}}) ->
-    {reply, #'tx.select_ok'{}, State};
-
-handle_method(#'tx.select'{}, _, _State) ->
+handle_method(#'tx.select'{}, _, #ch{confirm = #confirm{enabled = false}}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "a confirm channel cannot be made transactional", []);
+
+handle_method(#'tx.select'{}, _, State = #ch{transaction_id = none}) ->
+    {reply, #'tx.select_ok'{}, new_tx(State)};
+
+handle_method(#'tx.select'{}, _, State) ->
+    {reply, #'tx.select_ok'{}, State};
 
 handle_method(#'tx.commit'{}, _, #ch{transaction_id = none}) ->
     rabbit_misc:protocol_error(
@@ -919,18 +916,21 @@ handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
 
-handle_method(#'confirm.select'{multiple = Multiple,
-                                nowait = NoWait},
+handle_method(#'confirm.select'{}, _, #ch{transaction_id = TxId})
+  when TxId =/= none ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "transactional channel cannot be made confirm", []);
+
+handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
               _,
-              State = #ch{ transaction_id = none,
-                           confirm = C = #confirm{enabled = false}}) ->
+              State = #ch{confirm = C = #confirm{enabled = false}}) ->
     rabbit_log:info("got confirm.select{multiple = ~p, nowait = ~p}~n",
                     [Multiple, NoWait]),
-    TRef = case Multiple of
-               false -> not_started;
-               true  -> timer:send_interval(?MULTIPLE_ACK_FLUSH_INTERVAL,
-                                            multiple_ack_flush)
-           end,
+    {ok, TRef} = case Multiple of
+                     false -> {ok, not_started};
+                     true  -> timer:send_interval(?MULTIPLE_ACK_FLUSH_INTERVAL,
+                                                  multiple_ack_flush)
+                 end,
     State1 = State#ch{confirm = C#confirm{ enabled = true,
                                            multiple = Multiple,
                                            tref = TRef }},
@@ -954,9 +954,6 @@ handle_method(#'confirm.select'{},
               #ch{confirm = #confirm{enabled = true}}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "cannot change confirm channel multiple setting", []);
-handle_method(#'confirm.select'{}, _, _State) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "transactional channel cannot be made confirm", []);
 
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter_pid = LimiterPid}) ->
@@ -1198,7 +1195,14 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
 
-terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
+terminate(#ch{writer_pid = WriterPid, limiter_pid = LimiterPid,
+              confirm = #confirm {tref = TRef}}) ->
+    case TRef of
+        not_started -> ok;
+        _           ->
+            rabbit_log:info("Canceling multiple ack timer: ~p~n", [TRef]),
+            {ok, cancel} = timer:cancel(TRef)
+    end,
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]),
     rabbit_writer:shutdown(WriterPid),
