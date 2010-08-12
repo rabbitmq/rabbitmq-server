@@ -122,7 +122,7 @@ i(proc_total,  #state{proc_total = ProcTotal})    -> ProcTotal.
 init([]) ->
     {ok, Binds} = application:get_env(rabbit, tcp_listeners),
     BoundTo = lists:flatten(
-                [ rabbit_mgmt_format:print("~s:~p ", [Addr,Port])
+                [ rabbit_mgmt_format:print("~s:~p", [Addr,Port])
                   || {Addr, Port} <- Binds ] ),
     State = #state{
       fd_total = get_total_fd(),

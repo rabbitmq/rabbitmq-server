@@ -36,6 +36,24 @@ rates_test() ->
     undefined = pget(bash_rate, WithRates),
     undefined = pget(baz_rate, WithRates).
 
+http_overview_test() ->
+    {struct, Props} = request("/json/overview"),
+    %% Rather crude, but this req doesn't say much and at least this means it
+    %% didn't blow up.
+    [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, Props).
+
+%%---------------------------------------------------------------------------
+
+request(Path) ->
+    {ok, {{_HTTP, 200, _OK}, _Headers, Body}} =
+        httpc:request(
+          get,
+          {"http://localhost:55672" ++ Path,
+           [{"Authorization",
+             "Basic " ++ binary_to_list(base64:encode("guest:guest"))}]},
+          [], []),
+    mochijson2:decode(Body).
+
 %%---------------------------------------------------------------------------
 
 pget(K, L) ->
