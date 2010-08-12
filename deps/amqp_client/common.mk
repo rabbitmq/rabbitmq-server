@@ -63,14 +63,16 @@ endif
 
 ERL_PATH ?=
 
-DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
-                                 file:consult("rabbit_common.app"), \
-                                 [io:format("~p ",[M]) || M <- Mods], halt().')
-
 PACKAGE=amqp_client
-PACKAGE_NAME=$(PACKAGE).ez
-export COMMON_PACKAGE_DIR=rabbit_common
+PACKAGE_DIR=$(PACKAGE)-$(VERSION)
+PACKAGE_NAME_EZ=$(PACKAGE_DIR).ez
+COMMON_PACKAGE=rabbit_common
+export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)-$(VERSION)
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
+
+DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
+                                 file:consult("$(COMMON_PACKAGE).app"), \
+                                 [io:format("~p ",[M]) || M <- Mods], halt().')
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -137,18 +139,19 @@ run: compile $(EBIN_DIR)/$(PACKAGE).app
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME): $(DIST_DIR)/$(PACKAGE) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(DIST_DIR)/$(PACKAGE_DIR) | $(DIST_DIR)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
-$(DIST_DIR)/$(PACKAGE): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
-	rm -rf $(DIST_DIR)/$(PACKAGE)
-	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
-	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
-	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
-	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
-	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
+$(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+	rm -rf $(DIST_DIR)/$(PACKAGE_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
+	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 
-package: $(DIST_DIR)/$(PACKAGE_NAME)
+package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 
 ###############################################################################
 ##  Internal targets
