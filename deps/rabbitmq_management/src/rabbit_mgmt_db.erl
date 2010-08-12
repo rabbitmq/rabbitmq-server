@@ -31,7 +31,7 @@
 
 -export([group_sum/2]).
 
--export([pget/2, add/2]).
+-export([pget/2, add/2, rates/5]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -93,8 +93,6 @@ lookup_element(Table, Key, Pos) ->
 
 result_or_error([]) -> error;
 result_or_error(S)  -> S.
-
-%% TODO To say these need unit tests is an understatement
 
 %% TODO until we do rates properly (i.e. looking at a time series)
 %% we have the problem that an object which stops emitting events will look

@@ -6,7 +6,7 @@ RUNTIME_DEPS=webmachine
 TEST_APPS=crypto inets mochiweb rabbit_mochiweb rabbit_management amqp_client
 TEST_ARGS=-rabbit_mochiweb port 55672
 START_RABBIT_IN_TESTS=true
-TEST_COMMANDS=rabbit_mgmt_test_db:test()
+TEST_COMMANDS=eunit:test(rabbit_mgmt_test_unit,[verbose]) rabbit_mgmt_test_db:test()
 
 EXTRA_PACKAGE_DIRS=priv
 

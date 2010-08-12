@@ -25,14 +25,13 @@
 
 -compile([export_all]).
 
-%%-define(TESTS, [test_aggregation]).
 -define(TESTS, [test_queues, test_connections, test_fine_types,
-                test_aggregation]).
+                test_aggregation, test_overview]).
 
 -define(X, <<"">>).
 
 test() ->
-    io:nl(),
+    io:format("~n*** Statistics DB tests ***~n", []),
     SecondHalves = [first_half(Test) || Test <- ?TESTS],
     io:format("Waiting for statistics...~n", []),
     timer:sleep(?STATS_INTERVAL + 1000),
@@ -91,6 +90,17 @@ test_connections(Conn, Chan) ->
             ConnInfo2 = rabbit_mgmt_db:get_connection(Pid),
             [assert_equal(Item, ConnInfo, ConnInfo2) ||
                 Item <- rabbit_reader:info_keys()]
+    end.
+
+test_overview(_Conn, Chan) ->
+    Q = declare_queue(Chan),
+    publish(Chan, ?X, Q, 10),
+
+    fun() ->
+            %% Very noddy, but at least we test we can get it
+            Overview = rabbit_mgmt_db:get_overview(),
+            0 < pget(recv_oct, Overview),
+            0 < pget(send_oct, Overview)
     end.
 
 test_fine_types(_Conn, Chan) ->
