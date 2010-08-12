@@ -735,7 +735,6 @@ monitor_child(Pid) ->
 
 check_shutdown_reason(Reason, Reason) -> ok;
 check_shutdown_reason(_     , normal) -> ok;
-check_shutdown_reason(_     , noproc) -> ok;
 check_shutdown_reason(Reason,      _) -> {error, Reason}.
 
 %%-----------------------------------------------------------------
