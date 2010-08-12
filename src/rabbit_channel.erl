@@ -423,11 +423,10 @@ handle_confirm(State = #ch{writer_pid = WriterPid,
     rabbit_log:info("handling confirm in single transient mode (#~p)~n", [Count]),
     ok = rabbit_writer:send_command(WriterPid, #'basic.ack'{ delivery_tag = Count }),
     State#ch{confirm = C#confirm{ count = Count+1 }};
-handle_confirm(State = #ch{confirm = C = #confirm{count = Count,
-                                                  multiple = true,
-                                                  held_acks = As}}, false) ->
+handle_confirm(State = #ch{confirm = #confirm{multiple = true}}, false) ->
+    State1 = #ch{confirm = C = #confirm{count = Count,
+                                        held_acks = As}} = start_ack_timer(State),
     rabbit_log:info("handling confirm in multiple transient mode (#~p)~n", [Count]),
-    State1 = start_ack_timer(State),
     State1#ch{confirm = C#confirm{count = Count+1,
                                   held_acks = gb_sets:add(Count, As)}};
 handle_confirm(State = #ch{confirm = C = #confirm{count = Count}}, IsPersistent) ->
