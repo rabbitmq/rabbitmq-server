@@ -9,4 +9,5 @@ syntax: regexp
 ^deps/mochiweb-for-management/mochiweb-for-management
 ^deps/mochiweb-for-management/ebin
 ^deps/mochiweb-for-management/include
+^cover/
 ^tmp/

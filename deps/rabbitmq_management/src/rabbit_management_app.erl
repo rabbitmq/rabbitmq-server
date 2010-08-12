@@ -37,10 +37,7 @@ start(_Type, _StartArgs) ->
     Res = rabbit_management_sup:start_link(),
     %% TODO is this supervised correctly?
     rabbit_management_stats:start(),
-    {ok, Dispatch} = file:consult(filename:join(
-                                    [filename:dirname(code:which(?MODULE)),
-                                     "..", "priv", "dispatch.conf"])),
-    application:set_env(webmachine, dispatch_list, Dispatch),
+    application:set_env(webmachine, dispatch_list, dispatcher()),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     %% This would do access.log type stuff. Needs configuring though.
     %% application:set_env(webmachine, webmachine_logger_module,
@@ -51,6 +48,14 @@ start(_Type, _StartArgs) ->
       rabbit_mochiweb:static_context_handler("", ?MODULE, "priv/www")),
     io:format("done~n"),
     Res.
+
+dispatcher() ->
+    [{["json","overview"],               rabbit_management_overview, []},
+     {["json","connection"],             rabbit_management_connections, []},
+     {["json","connection", connection], rabbit_management_connections, []},
+     {["json","queue"],                  rabbit_management_queues, []},
+     {["json","stats", type],            rabbit_management_rest_stats, []}
+    ].
 
 stop(_State) ->
     ok.

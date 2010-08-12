@@ -18,6 +18,5 @@ EXTRA_TARGETS=$(wildcard $(TEMPLATES_DIR)/*.ejs) \
     $(wildcard $(WEB_DIR)/*.html) \
     $(wildcard $(WEB_DIR)/css/*.css) \
     $(wildcard $(WEB_DIR)/img/*.png) \
-    priv/dispatch.conf \
 
 include ../include.mk
