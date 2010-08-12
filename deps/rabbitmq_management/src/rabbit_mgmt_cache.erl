@@ -64,8 +64,6 @@ update() ->
 
 %%--------------------------------------------------------------------
 
-%% TODO Windows?
-
 get_total_fd_ulimit() ->
     {MaxFds, _} = string:to_integer(os:cmd("ulimit -n")),
     MaxFds.
@@ -103,6 +101,10 @@ get_used_fd({unix, Os}) when Os =:= linux
                       orelse Os =:= freebsd ->
     get_used_fd_lsof();
 
+%% TODO Windows
+%% http://technet.microsoft.com/en-us/sysinternals/bb896655.aspx may be the
+%% right answer; it doesn't seem like there's anything built in. As long as we
+%% fall back if it's not there...
 
 get_used_fd(_) ->
     unknown.
