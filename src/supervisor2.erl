@@ -715,13 +715,13 @@ monitor_child(Pid) ->
     receive
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
-	{'EXIT', Pid, Reason} -> 
-            case Reason of
-                normal -> ok;
-                _      -> receive
-                              {'DOWN', _, process, Pid, _} ->
-                                  {error, Reason}
-                          end
+	{'EXIT', Pid, Reason} ->
+            receive
+                {'DOWN', _, process, Pid, _} ->
+                    case Reason of
+                        normal -> ok;
+                        _      -> {error, Reason}
+                    end
             end
     after 0 -> 
 	    %% If a naughty child did unlink and the child dies before
