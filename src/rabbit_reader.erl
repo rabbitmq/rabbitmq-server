@@ -470,12 +470,7 @@ handle_channel_exit(Channel, Reason, State) ->
     handle_exception(State, Channel, Reason).
 
 handle_dependent_exit(ChSupPid, Reason, State) ->
-    case (case Reason of
-                     normal            -> controlled;
-                     shutdown          -> controlled;
-                     {shutdown, _Term} -> controlled;
-                     _                 -> uncontrolled
-          end) of
+    case termination_kind(Reason) of
         controlled ->
             case erase({ch_sup_pid, ChSupPid}) of
                 undefined                                -> ok;
@@ -529,11 +524,10 @@ wait_for_channel_termination(N, TimerRef) ->
                 undefined ->
                     exit({abnormal_dependent_exit, ChSupPid, Reason});
                 Channel ->
-                    case Reason of
-                        normal            -> ok;
-                        shutdown          -> ok;
-                        {shutdown, _Term} -> ok;
-                        _ ->
+                    case termination_kind(Reason) of
+                        controlled ->
+                            ok;
+                        uncontrolled ->
                             rabbit_log:error(
                               "connection ~p, channel ~p - "
                               "error while terminating:~n~p~n",
@@ -557,6 +551,11 @@ maybe_close(State = #v1{connection_state = closing,
     end;
 maybe_close(State) ->
     State.
+
+termination_kind(normal)            -> controlled;
+termination_kind(shutdown)          -> controlled;
+termination_kind({shutdown, _Term}) -> controlled;
+termination_kind(_)                 -> uncontrolled.
 
 handle_frame(Type, 0, Payload,
              State = #v1{connection_state = CS,
