@@ -127,13 +127,13 @@ handle_message({send_command, MethodRecord, Content},
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
                                      Content, FrameMax, Protocol),
     State;
-handle_message({'$writer_call', From, MethodRecord},
+handle_message({send_command_sync, From, MethodRecord},
                State = #wstate{sock = Sock, channel = Channel,
                                protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
     gen_server:reply(From, ok),
     State;
-handle_message({'$writer_call', From, {MethodRecord, Content}},
+handle_message({send_command_sync, From, {MethodRecord, Content}},
                State = #wstate{sock = Sock,
                                channel = Channel,
                                frame_max = FrameMax,
@@ -169,10 +169,10 @@ send_command(W, MethodRecord, Content) ->
     ok.
 
 send_command_sync(W, MethodRecord) ->
-    call(W, MethodRecord).
+    call(W, send_command_sync, MethodRecord).
 
 send_command_sync(W, MethodRecord, Content) ->
-    call(W, {MethodRecord, Content}).
+    call(W, send_command_sync, {MethodRecord, Content}).
 
 send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
@@ -180,8 +180,8 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
 
 %---------------------------------------------------------------------------
 
-call(Pid, Msg) ->
-    {ok, Res} = gen:call(Pid, '$writer_call', Msg, infinity),
+call(Pid, Label, Msg) ->
+    {ok, Res} = gen:call(Pid, Label, Msg, infinity),
     Res.
 
 %---------------------------------------------------------------------------
