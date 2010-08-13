@@ -64,10 +64,18 @@ endif
 ERL_PATH ?=
 
 PACKAGE=amqp_client
-PACKAGE_DIR=$(PACKAGE)-$(VERSION)
+ifeq ("$(APPEND_VERSION)", "")
+	PACKAGE_DIR=$(PACKAGE)
+else
+	PACKAGE_DIR=$(PACKAGE)-$(VERSION)
+endif
 PACKAGE_NAME_EZ=$(PACKAGE_DIR).ez
 COMMON_PACKAGE=rabbit_common
-export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)-$(VERSION)
+ifeq ("$(APPEND_VERSION)", "")
+	export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)
+else
+	export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)-$(VERSION)
+endif
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
