@@ -137,7 +137,7 @@
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
--define(FILE_HANDLES_LIMIT_WINDOWS, 10000000).
+-define(FILE_HANDLES_LIMIT_WINDOWS, 512).
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
@@ -829,7 +829,7 @@ maybe_reduce(State) ->
 ulimit() ->
     case os:type() of
         {win32, _OsName} ->
-            ?FILE_HANDLES_LIMIT_WINDOWS;
+            ?FILE_HANDLES_LIMIT_WINDOWS - ?RESERVED_FOR_OTHERS;
         {unix, _OsName} ->
             %% Under Linux, Solaris and FreeBSD, ulimit is a shell
             %% builtin, not a command. In OS X, it's a command.
