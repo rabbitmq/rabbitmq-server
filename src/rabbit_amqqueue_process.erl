@@ -344,6 +344,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun }, FunAcc,
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), AckTag, IsDelivered, Message}),
+                    % PubAck after message delivered to consumer (disregard consumer acks)
                     confirm_message(Message),
                     ChAckTags1 = case AckRequired of
                                      true  -> sets:add_element(AckTag, ChAckTags);
@@ -399,10 +400,7 @@ deliver_from_queue_deliver(AckRequired, false,
      State #q { backing_queue_state = BQS1 }}.
 
 confirm_message(#basic_message{msg_seq_no = MsgSeqNo, origin = ChPid}) ->
-    case MsgSeqNo of
-        undefined -> ok;
-        _         -> rabbit_channel:confirm(ChPid, MsgSeqNo)
-    end.
+    rabbit_channel:confirm(ChPid, MsgSeqNo).
 
 run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -413,7 +411,6 @@ run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
 
 attempt_delivery(none, _ChPid, Message = #basic_message{msg_seq_no = MsgSeqNo},
                  State = #q{backing_queue = BQ}) ->
-    rabbit_log:info("Attempting delivery of message #~p~n", [MsgSeqNo]),
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
@@ -429,7 +426,6 @@ attempt_delivery(Txn, ChPid, Message,
     {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
-    rabbit_log:info("deliver_or_enqueue called for message~n"),
     case attempt_delivery(Txn, ChPid, Message, State) of
         {true, NewState} ->
             {true, NewState};
@@ -686,6 +682,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     case BQ:fetch(AckRequired, BQS) of
         {empty, BQS1} -> reply(empty, State1#q{backing_queue_state = BQS1});
         {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
+            % PubAck after message got
             confirm_message(Message),
             case AckRequired of
                 true ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),

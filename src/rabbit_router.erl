@@ -66,7 +66,6 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     case {QPids, Msg#basic_message.msg_seq_no} of
-        {[], undefined} -> ok;
         {[], MsgSeqNo}  -> rabbit_channel:confirm(Msg#basic_message.origin, MsgSeqNo);
         _               -> ok
     end,

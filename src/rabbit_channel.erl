@@ -268,7 +268,6 @@ handle_cast(multiple_ack_flush,
     {noreply, State#ch{confirm = C#confirm{held_acks = gb_sets:new(),
                                            tref = undefined}}};
 handle_cast({confirm, MsgSeqNo}, State) ->
-    rabbit_log:info("got confirm for #~p~n", [MsgSeqNo]),
     {noreply, send_or_enqueue_ack(MsgSeqNo, State)}.
 
 
@@ -424,6 +423,8 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
+send_or_enqueue_ack(undefined, State) ->
+    State;
 send_or_enqueue_ack(_, State = #ch{confirm = #confirm{enabled = false}}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo,
@@ -469,6 +470,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
+    % PubAck transient messages immediately
     {MsgSeqNo, State1}
         = case State#ch.confirm#confirm.enabled of
               false ->
@@ -497,6 +499,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         rabbit_exchange:publish(
           Exchange,
           rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
+    % PubAck after basic.returns
     State2 = case RoutingRes of
                  routed        -> State1;
                  unroutable    ->
@@ -1282,19 +1285,15 @@ erase_queue_stats(QPid) ->
         {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
 
 start_ack_timer(State = #ch{confirm = C = #confirm{tref = undefined}}) ->
-    rabbit_log:info("starting ack timer...~n"),
     {ok, TRef} = timer:apply_after(?MULTIPLE_ACK_FLUSH_INTERVAL,
                                    ?MODULE, flush_multiple_acks, [self()]),
     State#ch{confirm = C#confirm{tref = TRef}};
 start_ack_timer(State) ->
-    rabbit_log:info("timer already started.. nop~n"),
     State.
 
 stop_ack_timer(State = #ch{confirm = #confirm{tref = undefined}}) ->
-    rabbit_log:info("stopping a stopped ack timer.. nop~n"),
     State;
 stop_ack_timer(State = #ch{confirm = C = #confirm{tref = TRef}}) ->
-    rabbit_log:info("canceling ack timer: ~p~n", [TRef]),
     {ok, cancel} = timer:cancel(TRef),
     State#ch{confirm = C#confirm{tref = undefined}}.
 
