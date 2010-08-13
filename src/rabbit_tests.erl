@@ -1126,16 +1126,6 @@ test_spawn(Receiver) ->
     end,
     {Writer, Ch}.
 
-expect_normal_channel_termination(Ch) ->
-    receive {'EXIT', Ch, normal} -> ok
-    after 1000 -> throw({channel_failed_to_shutdown, Ch})
-    end.
-
-gobble_channel_exit() ->
-    receive {channel_exit, _, _} -> ok
-    after 1000 -> throw(channel_exit_not_received)
-    end.
-
 test_statistics_receiver(Pid) ->
     receive
         shutdown ->
