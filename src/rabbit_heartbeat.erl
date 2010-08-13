@@ -37,11 +37,12 @@
 
 -ifdef(use_specs).
 
--type(pids() :: rabbit_types:maybe({pid(), pid()})).
+-type(heartbeaters() :: rabbit_types:maybe({pid(), pid()})).
 
--spec(start_heartbeat/2 :: (rabbit_net:socket(), non_neg_integer()) -> pids()).
--spec(pause_monitor/1 :: (pids()) -> 'ok').
--spec(resume_monitor/1 :: (pids()) -> 'ok').
+-spec(start_heartbeat/2 :: (rabbit_net:socket(), non_neg_integer()) ->
+                                heartbeaters()).
+-spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
+-spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
 
 -endif.
 
