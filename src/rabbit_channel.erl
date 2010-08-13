@@ -80,7 +80,7 @@
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
        rabbit_types:vhost(), pid(),
        fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
-                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
+                           rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').

@@ -45,7 +45,8 @@
 
 -type(maybe_pid() :: pid() | 'undefined').
 
--spec(start_link/2 :: (pid(), non_neg_integer()) -> rabbit_types:ok(pid())).
+-spec(start_link/2 :: (pid(), non_neg_integer()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').

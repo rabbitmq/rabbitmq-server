@@ -72,10 +72,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 ::
-        (float()) -> 'ignore' |
-                     rabbit_types:error(any()) |
-                     rabbit_types:ok(pid())).
+-spec(start_link/1 :: (float()) -> {'ok', pid()} | {'error', any()}).
 -spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_vm_limit/0 :: () -> non_neg_integer()).

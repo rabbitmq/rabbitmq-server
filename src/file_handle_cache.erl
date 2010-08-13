@@ -182,8 +182,8 @@
 -ifdef(use_specs).
 
 -type(ref() :: any()).
--type(ok_or_error() :: rabbit_types:ok_or_error(any())).
--type(val_or_error(T) :: rabbit_types:ok_or_error2(T, any())).
+-type(ok_or_error() :: 'ok' | {'error', any()}).
+-type(val_or_error(T) :: {'ok', T} | {'error', any()}).
 -type(position() :: ('bof' | 'eof' | non_neg_integer() |
                      {('bof' |'eof'), non_neg_integer()} |
                      {'cur', integer()})).
