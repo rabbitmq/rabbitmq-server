@@ -56,6 +56,7 @@
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          non_neg_integer(), rabbit_types:protocol(), pid())
         -> rabbit_types:ok(pid())).
+-spec(flush/1 :: (pid()) -> 'ok').
 -spec(send_command/2 ::
         (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(send_command/3 ::
@@ -79,7 +80,6 @@
          rabbit_framing:amqp_method_record(), rabbit_types:content(),
          non_neg_integer(), rabbit_types:protocol())
         -> 'ok').
--spec(flush/1 :: (pid()) -> 'ok').
 
 -endif.
 
