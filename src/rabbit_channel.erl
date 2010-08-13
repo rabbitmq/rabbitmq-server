@@ -157,8 +157,8 @@ flush(Pid) ->
 flush_multiple_acks(Pid) ->
     gen_server2:cast(Pid, multiple_ack_flush).
 
-confirm(Pid, MessageSequenceNumber) ->
-    gen_server2:cast(Pid, {confirm, MessageSequenceNumber}).
+confirm(Pid, MsgSeqNo) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNo}).
 
 
 %%---------------------------------------------------------------------------
@@ -469,15 +469,21 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
-    {_MsgSeqNo, State1}
+    {MsgSeqNo, State1}
         = case State#ch.confirm#confirm.enabled of
               false ->
                   {undefined, State};
               true  ->
                   Count = State#ch.confirm#confirm.count,
-                  NewState = send_or_enqueue_ack(Count, State),
+                  {CountOrUndefined, NewState} =
+                      case IsPersistent of
+                          true  -> {Count, State};
+                          false -> {undefined,
+                                    send_or_enqueue_ack(
+                                      Count, State)}
+                      end,
                   Confirm = NewState#ch.confirm,
-                  {Count,
+                  {CountOrUndefined,
                    NewState#ch{confirm = Confirm#confirm{count = Count+1}}}
           end,
     Message = #basic_message{exchange_name  = ExchangeName,
@@ -488,7 +494,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message, MsgSeqNo)),
     case RoutingRes of
         routed        -> ok;
         unroutable    -> ok = basic_return(Message, WriterPid, no_route);

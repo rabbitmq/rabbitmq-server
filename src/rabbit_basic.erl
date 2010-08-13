@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, properties/1, delivery/4]).
+-export([publish/1, message/4, properties/1, delivery/4, delivery/5]).
 -export([publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
 -export([is_message_persistent/1]).
@@ -51,8 +51,12 @@
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/4 ::
+        (boolean(), boolean(), rabbit_types:maybe(rabbit_type:txn()),
+         rabbit_types:message()) -> rabiit_types:delivery()).
+-spec(delivery/5 ::
         (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         rabbit_types:message()) -> rabbit_types:delivery()).
+         rabbit_types:message(), integer() | undefined)
+        -> rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          properties_input(), binary())
@@ -93,8 +97,10 @@ publish(Delivery = #delivery{
     end.
 
 delivery(Mandatory, Immediate, Txn, Message) ->
+    delivery(Mandatory, Immediate, Txn, Message, undefined).
+delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
-              sender = self(), message = Message}.
+              sender = self(), message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) ->
     %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
