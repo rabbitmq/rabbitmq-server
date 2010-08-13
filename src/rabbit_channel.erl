@@ -490,11 +490,13 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                              routing_key    = RoutingKey,
                              content        = DecodedContent,
                              guid           = rabbit_guid:guid(),
-                             is_persistent  = IsPersistent},
+                             is_persistent  = IsPersistent,
+                             msg_seq_no     = MsgSeqNo,
+                             origin         = self()},
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message, MsgSeqNo)),
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
     case RoutingRes of
         routed        -> ok;
         unroutable    -> ok = basic_return(Message, WriterPid, no_route);
@@ -512,7 +514,6 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
               _, State = #ch{transaction_id = TxnKey,
                              unacked_message_q = UAMQ}) ->
-    rabbit_log:info("channel received a basic.ack~n"),
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     QIncs = ack(TxnKey, Acked),
     Participants = [QPid || {QPid, _} <- QIncs],

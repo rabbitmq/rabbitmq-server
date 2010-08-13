@@ -66,10 +66,10 @@
 -record(listener, {node, protocol, host, port}).
 
 -record(basic_message, {exchange_name, routing_key, content, guid,
-                        is_persistent}).
+                        is_persistent, msg_seq_no, origin}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, immediate, txn, sender, message, msg_seq_no}).
+-record(delivery, {mandatory, immediate, txn, sender, message}).
 -record(amqp_error, {name, explanation, method = none}).
 
 -record(event, {type, props, timestamp}).
