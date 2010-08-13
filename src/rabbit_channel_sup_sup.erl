@@ -37,13 +37,27 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
+                                   {'ok', pid(), pid()} | {'error', any()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link() ->
     supervisor2:start_link(?MODULE, []).
+
+start_channel(Pid, Args) ->
+    supervisor2:start_child(Pid, [Args]).
+
+%%----------------------------------------------------------------------------
 
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
           [{channel_sup, {rabbit_channel_sup, start_link, []},
             temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
-
-start_channel(Pid, Args) ->
-    supervisor2:start_child(Pid, Args).

@@ -33,7 +33,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/8]).
+-export([start_link/1]).
 
 -export([init/1]).
 
@@ -43,18 +43,21 @@
 
 -ifdef(use_specs).
 
--spec(start_link/8 ::
-        (rabbit_types:protocol(), rabbit_net:socket(),
+-export_type([start_link_args/0]).
+
+-type(start_link_args() ::
+        {rabbit_types:protocol(), rabbit_net:socket(),
          rabbit_channel:channel_number(), non_neg_integer(), pid(),
-         rabbit_access_control:username(), rabbit_types:vhost(), pid()) ->
-                           {'ok', pid(), pid()}).
+         rabbit_access_control:username(), rabbit_types:vhost(), pid()}).
+
+-spec(start_link/1 :: (start_link_args()) -> {'ok', pid(), pid()}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link(Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
-           Collector) ->
+start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
+            Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(

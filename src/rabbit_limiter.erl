@@ -79,8 +79,7 @@ start_link(ChPid, UnackedMsgCount) ->
 limit(undefined, 0) ->
     ok;
 limit(LimiterPid, PrefetchCount) ->
-    unlink_on_stopped(LimiterPid,
-                      gen_server2:call(LimiterPid, {limit, PrefetchCount})).
+    gen_server2:call(LimiterPid, {limit, PrefetchCount}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -118,8 +117,7 @@ block(LimiterPid) ->
 unblock(undefined) ->
     ok;
 unblock(LimiterPid) ->
-    unlink_on_stopped(LimiterPid,
-                      gen_server2:call(LimiterPid, unblock, infinity)).
+    gen_server2:call(LimiterPid, unblock, infinity).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -237,9 +235,3 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             ok
     end,
     State#lim{queues = NewQueues}.
-
-unlink_on_stopped(LimiterPid, stopped) ->
-    ok = rabbit_misc:unlink_and_capture_exit(LimiterPid),
-    stopped;
-unlink_on_stopped(_LimiterPid, Result) ->
-    Result.

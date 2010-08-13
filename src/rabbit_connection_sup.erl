@@ -39,6 +39,17 @@
 
 -include("rabbit.hrl").
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> rabbit_types:ok(pid())).
+-spec(reader/1 :: (pid()) -> pid()).
+
+-endif.
+
+%%--------------------------------------------------------------------------
+
 start_link() ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, ChannelSupSupPid} =
@@ -59,11 +70,13 @@ start_link() ->
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid}.
 
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
-
 reader(Pid) ->
     hd(supervisor2:find_child(Pid, reader)).
+
+%%--------------------------------------------------------------------------
+
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.
 
 start_heartbeat_fun(SupPid) ->
     fun (_Sock, 0) ->

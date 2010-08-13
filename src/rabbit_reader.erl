@@ -895,8 +895,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  vhost     = VHost}} = State,
     {ok, ChSupPid, ChFrPid} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, [Protocol, Sock, Channel, FrameMax,
-                       self(), Username, VHost, Collector]),
+          ChanSupSup, {Protocol, Sock, Channel, FrameMax,
+                       self(), Username, VHost, Collector}),
     link(ChSupPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
