@@ -52,7 +52,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> 'ignore' | rabbit_types:ok_or_error2(pid(), any())).
+-spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 -spec(submit_async/1 ::
       (fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
