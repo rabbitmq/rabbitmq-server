@@ -403,8 +403,7 @@ handle_method(_Method, _, #ch{state = starting}) ->
 
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rollback_and_notify(State),
-    ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
-    ok = rabbit_writer:flush(WriterPid),
+    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
     stop;
 
 handle_method(#'access.request'{},_, State) ->
