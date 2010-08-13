@@ -51,7 +51,7 @@
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/4 ::
-        (boolean(), boolean(), rabbit_types:maybe(rabbit_type:txn()),
+        (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
          rabbit_types:message()) -> rabiit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),

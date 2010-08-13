@@ -409,8 +409,7 @@ run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
     State1.
 
-attempt_delivery(none, _ChPid, Message = #basic_message{msg_seq_no = MsgSeqNo},
-                 State = #q{backing_queue = BQ}) ->
+attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
@@ -420,8 +419,8 @@ attempt_delivery(none, _ChPid, Message = #basic_message{msg_seq_no = MsgSeqNo},
                  State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message,
-                 State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
+                                                 backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
     {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
