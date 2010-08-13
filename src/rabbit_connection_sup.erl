@@ -43,7 +43,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> rabbit_types:ok(pid())).
+-spec(start_link/0 :: () -> {'ok', pid(), pid()}).
 -spec(reader/1 :: (pid()) -> pid()).
 
 -endif.
@@ -62,13 +62,13 @@ start_link() ->
           SupPid,
           {collector, {rabbit_queue_collector, start_link, []},
            intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
-    {ok, _ReaderPid} =
+    {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
                     [ChannelSupSupPid, Collector, start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
-    {ok, SupPid}.
+    {ok, SupPid, ReaderPid}.
 
 reader(Pid) ->
     hd(supervisor2:find_child(Pid, reader)).

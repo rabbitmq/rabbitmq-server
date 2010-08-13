@@ -204,8 +204,7 @@ on_node_down(Node) ->
     ok = mnesia:dirty_delete(rabbit_listener, Node).
 
 start_client(Sock, SockTransform) ->
-    {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
-    Reader = rabbit_connection_sup:reader(Child),
+    {ok, _Child, Reader} = supervisor:start_child(rabbit_tcp_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Reader),
     Reader ! {go, Sock, SockTransform},
     Reader.
