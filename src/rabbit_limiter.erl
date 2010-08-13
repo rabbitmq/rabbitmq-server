@@ -157,9 +157,6 @@ handle_call(unblock, _From, State) ->
         {stop, State1} -> {stop, normal, stopped, State1}
     end.
 
-handle_cast(shutdown, State) ->
-    {stop, normal, State};
-
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
                    true        -> Volume - Count
