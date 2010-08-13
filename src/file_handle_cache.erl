@@ -137,7 +137,14 @@
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
--define(FILE_HANDLES_LIMIT_WINDOWS, 10000000).
+
+%% Googling around suggests that Windows has a limit somewhere around
+%% 16M, eg
+%% http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
+%% however, it turns out that's only available through the win32
+%% API. Via the C Runtime, we have just 512:
+%% http://msdn.microsoft.com/en-us/library/6e3b887c%28VS.80%29.aspx
+-define(FILE_HANDLES_LIMIT_WINDOWS, 512).
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
@@ -820,16 +827,13 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count, elders = Elders,
 maybe_reduce(State) ->
     State.
 
-%% Googling around suggests that Windows has a limit somewhere around
-%% 16M, eg
-%% http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
-%% For everything else, assume ulimit exists. Further googling
-%% suggests that BSDs (incl OS X), solaris and linux all agree that
-%% ulimit -n is file handles
+%% For all unices, assume ulimit exists. Further googling suggests
+%% that BSDs (incl OS X), solaris and linux all agree that ulimit -n
+%% is file handles
 ulimit() ->
     case os:type() of
         {win32, _OsName} ->
-            ?FILE_HANDLES_LIMIT_WINDOWS;
+            ?FILE_HANDLES_LIMIT_WINDOWS - ?RESERVED_FOR_OTHERS;
         {unix, _OsName} ->
             %% Under Linux, Solaris and FreeBSD, ulimit is a shell
             %% builtin, not a command. In OS X, it's a command.
