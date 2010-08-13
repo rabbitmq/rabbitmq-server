@@ -1004,6 +1004,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
                            persistent_count = PCount,
                            durable          = IsDurable,
                            ram_msg_count    = RamMsgCount }) ->
+    rabbit_log:info("message ~p got to variable_queue:publish~n", [Msg#basic_message.guid]),
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk },

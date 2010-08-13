@@ -38,7 +38,7 @@
 -export([start_link/6, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1, flush/1, flush_multiple_acks/1]).
+-export([emit_stats/1, flush/1, flush_multiple_acks/1, confirm/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1]).
@@ -99,6 +99,8 @@
 -spec(info_all/0 :: () -> [[rabbit_types:info()]]).
 -spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
+-spec(flush_multiple_acks/1 :: (pid()) -> 'ok').
+-spec(confirm/2 ::(pid(), integer()) -> 'ok').
 
 -endif.
 
@@ -154,6 +156,9 @@ flush(Pid) ->
 
 flush_multiple_acks(Pid) ->
     gen_server2:cast(Pid, multiple_ack_flush).
+
+confirm(Pid, MessageSequenceNumber) ->
+    gen_server2:cast(Pid, {confirm, MessageSequenceNumber}).
 
 
 %%---------------------------------------------------------------------------
@@ -262,6 +267,10 @@ handle_cast(multiple_ack_flush,
     end,
     {noreply, State#ch{confirm = C#confirm{held_acks = gb_sets:new(),
                                            tref = undefined}}}.
+%handle_cast({confirm, MsgSeqNo}, State) ->
+%    rabbit_log:info("got confirm for #~p~n", [MsgSeqNo]),
+%    {noreply, SOMETHING MAGIC
+
 
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #ch{writer_pid = WriterPid}) ->
@@ -492,6 +501,7 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
               _, State = #ch{transaction_id = TxnKey,
                              unacked_message_q = UAMQ}) ->
+    rabbit_log:info("channel received a basic.ack~n"),
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     QIncs = ack(TxnKey, Acked),
     Participants = [QPid || {QPid, _} <- QIncs],

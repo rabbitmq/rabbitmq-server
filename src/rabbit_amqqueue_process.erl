@@ -345,9 +345,12 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), AckTag, IsDelivered, Message}),
                     ChAckTags1 = case AckRequired of
-                                     true  -> sets:add_element(
-                                                AckTag, ChAckTags);
-                                     false -> ChAckTags
+                                     true  ->
+                                         rabbit_log:info("Delivered message but waiting for ack~n"),
+                                         sets:add_element(AckTag, ChAckTags);
+                                     false ->
+                                         rabbit_log:info("Delivered message and not waiting for ack~n"),
+                                         ChAckTags
                                  end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
@@ -384,6 +387,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     {FunAcc, State}
             end;
         {empty, _} ->
+            rabbit_log:info("Message on a queue without consumers~n"),
             {FunAcc, State}
     end.
 
@@ -405,7 +409,8 @@ run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
     State1.
 
-attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
+attempt_delivery(none, ChPid, Message, State = #q{backing_queue = BQ}) ->
+    rabbit_log:info("Attempting delivery of message~n"),
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
@@ -414,6 +419,7 @@ attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
+    ConfirmFun = fun() -> rabbit_channel:confirm(ChPid, -1) end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
 attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
                                                  backing_queue_state = BQS}) ->
@@ -421,6 +427,7 @@ attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
     {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
+    rabbit_log:info("deliver_or_enqueue called for message~n"),
     case attempt_delivery(Txn, ChPid, Message, State) of
         {true, NewState} ->
             {true, NewState};
@@ -799,6 +806,7 @@ handle_cast({deliver, Txn, Message, ChPid}, State) ->
 
 handle_cast({ack, Txn, AckTags, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    rabbit_log:info("Queue process got an ack~n"),
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
