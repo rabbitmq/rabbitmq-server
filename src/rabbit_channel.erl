@@ -497,17 +497,21 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         rabbit_exchange:publish(
           Exchange,
           rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
-    case RoutingRes of
-        routed        -> ok;
-        unroutable    -> ok = basic_return(Message, WriterPid, no_route);
-        not_delivered -> ok = basic_return(Message, WriterPid, no_consumers)
-    end,
+    State2 = case RoutingRes of
+                 routed        -> State1;
+                 unroutable    ->
+                     ok = basic_return(Message, WriterPid, no_route),
+                     send_or_enqueue_ack(MsgSeqNo, State1);
+                 not_delivered ->
+                     ok = basic_return(Message, WriterPid, no_consumers),
+                     send_or_enqueue_ack(MsgSeqNo, State1)
+             end,
     maybe_incr_stats([{ExchangeName, 1} |
                       [{{QPid, ExchangeName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State1),
+                          QPid <- DeliveredQPids]], publish, State2),
     {noreply, case TxnKey of
-                  none -> State1;
-                  _    -> add_tx_participants(DeliveredQPids, State1)
+                  none -> State2;
+                  _    -> add_tx_participants(DeliveredQPids, State2)
               end};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
