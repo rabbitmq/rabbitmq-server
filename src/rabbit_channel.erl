@@ -203,8 +203,7 @@ handle_cast({method, Method, Content}, State) ->
             noreply(NewState);
         {noreply, NewState} ->
             noreply(NewState);
-        flush_and_stop ->
-            rabbit_writer:flush(State#ch.writer_pid),
+        stop ->
             {stop, normal, State#ch{state = terminating}}
     catch
         exit:Reason = #amqp_error{} ->
@@ -405,7 +404,8 @@ handle_method(_Method, _, #ch{state = starting}) ->
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rollback_and_notify(State),
     ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
-    flush_and_stop;
+    ok = rabbit_writer:flush(WriterPid),
+    stop;
 
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
