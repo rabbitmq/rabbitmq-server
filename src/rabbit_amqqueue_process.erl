@@ -688,6 +688,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     case BQ:fetch(AckRequired, BQS) of
         {empty, BQS1} -> reply(empty, State1#q{backing_queue_state = BQS1});
         {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
+            confirm_function(Message),
             case AckRequired of
                 true ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
                          store_ch_record(
