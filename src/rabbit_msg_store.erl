@@ -123,8 +123,7 @@
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
-         startup_fun_state()) ->
-                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
+         startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
 -spec(write/4 :: (server(), rabbit_guid:guid(), msg(), client_msstate()) ->
                       rabbit_types:ok(client_msstate())).
 -spec(read/3 :: (server(), rabbit_guid:guid(), client_msstate()) ->

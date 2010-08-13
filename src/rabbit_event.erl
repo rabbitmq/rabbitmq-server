@@ -69,7 +69,7 @@
 
 -type(timer_fun() :: fun (() -> 'ok')).
 
--spec(start_link/0 :: () -> rabbit_types:ok_or_error2(pid(), any())).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(init_stats_timer/0 :: () -> state()).
 -spec(ensure_stats_timer/3 :: (state(), timer_fun(), timer_fun()) -> state()).
 -spec(stop_stats_timer/2 :: (state(), timer_fun()) -> state()).
