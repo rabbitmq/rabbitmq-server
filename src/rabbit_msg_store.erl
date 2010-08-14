@@ -1671,9 +1671,10 @@ find_unremoved_messages_in_file(File,
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
-    lists:foldl(fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
+    lists:foldl(fun ({Guid, TotalSize, Offset}, Acc = {List, Size}) ->
                         case Index:lookup(Guid, IndexState) of
-                            #msg_location { file = File } = Entry ->
+                            #msg_location { file = File, total_size = TotalSize,
+                                            offset = Offset } = Entry ->
                                 {[ Entry | List ], TotalSize + Size};
                             _ ->
                                 Acc
