@@ -1199,6 +1199,7 @@ count_msg_refs(Gen, Seed, State) ->
             ok = case index_lookup(Guid, State) of
                      not_found ->
                          index_insert(#msg_location { guid = Guid,
+                                                      file = undefined,
                                                       ref_count = Delta },
                                       State);
                      #msg_location { ref_count = RefCount } = StoreEntry ->
@@ -1409,14 +1410,14 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
         lists:foldl(
           fun (Obj = {Guid, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
                   case index_lookup(Guid, State) of
-                      not_found ->
-                          {VMAcc, VTSAcc};
-                      StoreEntry ->
+                      StoreEntry = #msg_location { file = undefined } ->
                           ok = index_update(StoreEntry #msg_location {
                                               file = File, offset = Offset,
                                               total_size = TotalSize },
                                             State),
-                          {[Obj | VMAcc], VTSAcc + TotalSize}
+                          {[Obj | VMAcc], VTSAcc + TotalSize};
+                      _ ->
+                          {VMAcc, VTSAcc}
                   end
           end, {[], 0}, Messages),
     %% foldl reverses lists, find_contiguous_block_prefix needs
