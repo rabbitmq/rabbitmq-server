@@ -506,17 +506,11 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
 
-    FoundCrashedCompactions =
-        case ClientRefs of
-            undefined -> %% we're going to wipe everything anyway
-                false;
-            _ ->
-                FileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-                TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
-                recover_crashed_compactions(Dir, FileNames, TmpFileNames)
-        end,
-
-    FoundCrashedCompactions = recover_crashed_compactions(Dir),
+    FoundCrashedCompactions = case ClientRefs of
+                                  %% we're going to wipe everything anyway
+                                  undefined -> false;
+                                  _         -> recover_crashed_compactions(Dir)
+                              end,
 
     %% if we found crashed compactions we trust neither the
     %% file_summary nor the location index. Note the file_summary is
@@ -1316,7 +1310,7 @@ build_index(true, State = #msstate { file_summary_ets = FileSummaryEts }) ->
                            sum_file_size  = SumFileSize + FileSize,
                            current_file   = File }}
       end, {0, State}, FileSummaryEts);
-build_index(false, State = #mssstate { dir = Dir }) ->
+build_index(false, State = #msstate { dir = Dir }) ->
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
              FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)] of
