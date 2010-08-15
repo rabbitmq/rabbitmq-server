@@ -519,7 +519,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     %% file_summary nor the location index. Note the file_summary is
     %% left empty here if it can't be recovered.
     {FileSummaryRecovered, FileSummaryEts} =
-        recover_file_summary(AttemptFileSummaryRecovery, Dir, Server),
+        recover_file_summary(AttemptFileSummaryRecovery, Dir),
 
     {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
@@ -1181,7 +1181,7 @@ store_file_summary(Tid, Dir) ->
     ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
                       [{extended_info, [object_count]}]).
 
-recover_file_summary(false, _Dir, _Server) ->
+recover_file_summary(false, _Dir) ->
     %% TODO: the only reason for this to be an *ordered*_set is so
     %% that a) maybe_compact can start a traversal from the eldest
     %% file, and b) build_index in fast recovery mode can easily
@@ -1191,15 +1191,12 @@ recover_file_summary(false, _Dir, _Server) ->
     %% ditching the latter would be neater.
     {false, ets:new(rabbit_msg_store_file_summary,
                     [ordered_set, public, {keypos, #file_summary.file}])};
-recover_file_summary(true, Dir, Server) ->
+recover_file_summary(true, Dir) ->
     Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
     case ets:file2tab(Path) of
-        {ok, Tid}      -> file:delete(Path),
+        {ok, Tid}       -> file:delete(Path),
                           {true, Tid};
-        {error, Error} -> rabbit_log:warning(
-                            "~w: failed to recover file summary: ~p~n",
-                            [Server, Error]),
-                          recover_file_summary(false, Dir, Server)
+        {error, _Error} -> recover_file_summary(false, Dir)
     end.
 
 count_msg_refs(Gen, Seed, State) ->
