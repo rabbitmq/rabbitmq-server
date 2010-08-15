@@ -533,7 +533,7 @@ age_tree_insert(Now, Ref) ->
       fun (Tree) ->
               Tree1 = gb_trees:insert(Now, Ref, Tree),
               {Oldest, _Ref} = gb_trees:smallest(Tree1),
-              gen_server:cast(?SERVER, {open, self(), Oldest}),
+              gen_server:call(?SERVER, {open, self(), Oldest}, infinity),
               Tree1
       end).
 
@@ -574,6 +574,8 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
                 new    -> Mode;
                 reopen -> [read | Mode]
             end,
+    Now = now(),
+    age_tree_insert(Now, Ref),
     case file:open(Path, Mode1) of
         {ok, Hdl} ->
             WriteBufferSize =
@@ -582,7 +584,6 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
                     infinity             -> infinity;
                     N when is_integer(N) -> N
                 end,
-            Now = now(),
             Handle = #handle { hdl                     = Hdl,
                                offset                  = 0,
                                trusted_offset          = 0,
@@ -600,9 +601,9 @@ open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
             {{ok, Offset1}, Handle1} = maybe_seek(Offset, Handle),
             Handle2 = Handle1 #handle { trusted_offset = Offset1 },
             put({Ref, fhc_handle}, Handle2),
-            age_tree_insert(Now, Ref),
             {ok, Handle2};
         {error, Reason} ->
+            age_tree_delete(Now),
             {error, Reason}
     end.
 
@@ -713,27 +714,19 @@ init([]) ->
                       obtains = [], callbacks = dict:new(),
                       client_mrefs = dict:new(), timer_ref = undefined }}.
 
-handle_call(obtain, From, State = #fhc_state { count = Count }) ->
-    State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
-        maybe_reduce(State #fhc_state { count = Count + 1 }),
-    case Limit /= infinity andalso Count1 >= Limit of
-        true  -> {noreply, State1 #fhc_state { obtains = [From | Obtains],
-                                               count = Count1 - 1 }};
-        false -> {reply, ok, State1}
-    end.
+handle_call(obtain, From, State) ->
+    add_obtains(From, State);
+
+handle_call({open, Pid, EldestUnusedSince}, From, State =
+            #fhc_state { elders = Elders }) ->
+    Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
+    add_obtains(From, ensure_mref(Pid, State #fhc_state { elders = Elders1 })).
 
 handle_cast({register_callback, Pid, MFA},
             State = #fhc_state { callbacks = Callbacks }) ->
     {noreply, ensure_mref(
                 Pid, State #fhc_state {
                        callbacks = dict:store(Pid, MFA, Callbacks) })};
-
-handle_cast({open, Pid, EldestUnusedSince}, State =
-            #fhc_state { elders = Elders, count = Count }) ->
-    Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
-    {noreply, maybe_reduce(
-                ensure_mref(Pid, State #fhc_state { elders = Elders1,
-                                                    count = Count + 1 }))};
 
 handle_cast({update, Pid, EldestUnusedSince}, State =
             #fhc_state { elders = Elders }) ->
@@ -780,6 +773,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% server helpers
 %%----------------------------------------------------------------------------
+
+add_obtains(From, State = #fhc_state { count = Count }) ->
+    State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
+        maybe_reduce(State #fhc_state { count = Count + 1 }),
+    case Limit /= infinity andalso Count1 >= Limit of
+        true  -> {noreply, State1 #fhc_state { obtains = [From | Obtains],
+                                               count = Count1 - 1 }};
+        false -> {reply, ok, State1}
+    end.
 
 process_obtains(State = #fhc_state { obtains = [] }) ->
     State;
