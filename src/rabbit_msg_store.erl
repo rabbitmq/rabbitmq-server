@@ -516,6 +516,8 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                 recover_crashed_compactions(Dir, FileNames, TmpFileNames)
         end,
 
+    FoundCrashedCompactions = recover_crashed_compactions(Dir),
+
     %% if we found crashed compactions we trust neither the
     %% file_summary nor the location index. Note the file_summary is
     %% left empty here if it can't be recovered.
@@ -1248,7 +1250,9 @@ count_msg_refs(Gen, Seed, State) ->
             count_msg_refs(Gen, Next, State)
     end.
 
-recover_crashed_compactions(Dir, FileNames, TmpFileNames) ->
+recover_crashed_compactions(Dir) ->
+    FileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+    TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
     lists:foreach(
       fun (TmpFileName) ->
               NonTmpRelatedFileName =
