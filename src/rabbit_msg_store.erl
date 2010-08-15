@@ -506,11 +506,14 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
 
-    FoundCrashedCompactions = case ClientRefs of
-                                  %% we're going to wipe everything anyway
-                                  undefined -> false;
-                                  _         -> recover_crashed_compactions(Dir)
-                              end,
+    FoundCrashedCompactions =
+        case ClientRefs of
+            undefined -> ok = rabbit_misc:recursive_delete([Dir]),
+                         ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+                         false;
+            _         -> ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+                         recover_crashed_compactions(Dir)
+        end,
 
     %% if we found crashed compactions we trust neither the
     %% file_summary nor the location index. Note the file_summary is
@@ -1138,43 +1141,35 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %% shutdown and recovery
 %%----------------------------------------------------------------------------
 
-recover_index_and_client_refs(IndexModule, _AttemptRecovery, undefined, Dir,
-                              _Server) ->
-    ok = rabbit_misc:recursive_delete([Dir]),
-    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Server) ->
     {false, IndexModule:new(Dir), sets:new()};
-recover_index_and_client_refs(IndexModule, AttemptRecovery, ClientRefs, Dir,
-                              Server) ->
-    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
+    rabbit_log:warning("~w: rebuilding indices from scratch~n", [Server]),
+    {false, IndexModule:new(Dir), sets:new()};
+recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("~w: " ++ ErrorMsg ++
                                        "~nrebuilding indices from scratch~n",
                                        [Server | ErrorArgs]),
                     {false, IndexModule:new(Dir), sets:new()}
             end,
-    case AttemptRecovery of
-        true ->
-            case read_recovery_terms(Dir) of
-                {false, Error} ->
-                    Fresh("failed to read recovery terms: ~p", [Error]);
-                {true, Terms} ->
-                    RecClientRefs = proplists:get_value(client_refs, Terms, []),
-                    RecIndexModule = proplists:get_value(index_module, Terms),
-                    case (lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
-                          andalso IndexModule =:= RecIndexModule) of
-                        true  -> case IndexModule:recover(Dir) of
-                                     {ok, IndexState1} ->
-                                         {true, IndexState1,
-                                          sets:from_list(ClientRefs)};
-                                     {error, Error} ->
-                                         Fresh("failed to recover index: ~p",
-                                               [Error])
-                                 end;
-                        false -> Fresh("recovery terms differ from present", [])
-                    end
-            end;
-        false ->
-            Fresh("", [])
+    case read_recovery_terms(Dir) of
+        {false, Error} ->
+            Fresh("failed to read recovery terms: ~p", [Error]);
+        {true, Terms} ->
+            RecClientRefs = proplists:get_value(client_refs, Terms, []),
+            RecIndexModule = proplists:get_value(index_module, Terms),
+            case (lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
+                  andalso IndexModule =:= RecIndexModule) of
+                true  -> case IndexModule:recover(Dir) of
+                             {ok, IndexState1} ->
+                                 {true, IndexState1,
+                                  sets:from_list(ClientRefs)};
+                             {error, Error} ->
+                                 Fresh("failed to recover index: ~p", [Error])
+                         end;
+                false -> Fresh("recovery terms differ from present", [])
+            end
     end.
 
 store_recovery_terms(Terms, Dir) ->
