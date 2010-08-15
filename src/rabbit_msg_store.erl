@@ -1257,7 +1257,7 @@ recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
     %% with duplicates appearing. Thus the simplest and safest thing
     %% to do is to append the contents of the tmp file to its main
     %% file.
-    {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_AHEAD_MODE),
+    {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_MODE),
     {ok, MainHdl} = open_file(Dir, NonTmpRelatedFileName,
                               ?READ_MODE ++ ?WRITE_MODE),
     {ok, _End} = file_handle_cache:position(MainHdl, eof),
