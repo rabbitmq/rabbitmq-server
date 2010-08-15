@@ -506,7 +506,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
 
-    FoundCrashedCompactions =
+    AttemptFileSummaryRecovery =
         case ClientRefs of
             undefined -> ok = rabbit_misc:recursive_delete([Dir]),
                          ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
@@ -519,8 +519,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     %% file_summary nor the location index. Note the file_summary is
     %% left empty here if it can't be recovered.
     {FileSummaryRecovered, FileSummaryEts} =
-        recover_file_summary(not FoundCrashedCompactions, Dir, Server),
-    %% FileSummaryRecovered => not FoundCrashedCompactions
+        recover_file_summary(AttemptFileSummaryRecovery, Dir, Server),
 
     {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
@@ -1239,7 +1238,7 @@ recover_crashed_compactions(Dir) ->
               ok = recover_crashed_compaction(
                      Dir, TmpFileName, NonTmpRelatedFileName)
       end, TmpFileNames),
-    [] =/= TmpFileNames.
+    TmpFileNames == [].
 
 recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
     %% Because a msg can legitimately appear multiple times in the
