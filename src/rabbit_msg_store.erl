@@ -1251,7 +1251,7 @@ count_msg_refs(Gen, Seed, State) ->
     end.
 
 recover_crashed_compactions(Dir) ->
-    FileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+    FileNames =    list_sorted_file_names(Dir, ?FILE_EXTENSION),
     TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
     lists:foreach(
       fun (TmpFileName) ->
