@@ -1141,8 +1141,8 @@ recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
     {false, IndexModule:new(Dir), sets:new()};
 recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
-                    rabbit_log:warning("~w: " ++ ErrorMsg ++
-                                       "~nrebuilding indices from scratch~n",
+                    rabbit_log:warning("~w: " ++ ErrorMsg ++ "~n"
+                                       "rebuilding indices from scratch~n",
                                        [Server | ErrorArgs]),
                     {false, IndexModule:new(Dir), sets:new()}
             end,
@@ -1198,8 +1198,8 @@ recover_file_summary(true, Dir, Server) ->
         {ok, Tid}      -> file:delete(Path),
                           {true, Tid};
         {error, Error} -> rabbit_log:warning(
-                            "~w: failed to recover file summary: ~p~n"
-                            "rebuilding~n", [Server, Error]),
+                            "~w: failed to recover file summary: ~p~n",
+                            [Server, Error]),
                           recover_file_summary(false, Dir, Server)
     end.
 
