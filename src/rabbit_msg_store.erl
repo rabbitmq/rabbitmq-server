@@ -575,12 +575,8 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
              false -> count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State)
          end,
 
-    %% recover_index_and_client_refs could have wiped out all files,
-    %% so need to look again at what files we have to scan
-    Files = [filename_to_num(FileName) ||
-                FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)],
     {Offset, State1 = #msstate { current_file = CurFile }} =
-        build_index(AllCleanShutdown, Files, State),
+        build_index(AllCleanShutdown, State),
 
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
@@ -1308,8 +1304,7 @@ find_contiguous_block_prefix([{Guid, TotalSize, ExpectedOffset} | Tail],
 find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, Guids) ->
     {ExpectedOffset, Guids}.
 
-build_index(true, _Files, State = #msstate {
-                            file_summary_ets = FileSummaryEts }) ->
+build_index(true, State = #msstate { file_summary_ets = FileSummaryEts }) ->
     ets:foldl(
       fun (#file_summary { valid_total_size = ValidTotalSize,
                            file_size        = FileSize,
@@ -1321,12 +1316,15 @@ build_index(true, _Files, State = #msstate {
                            sum_file_size  = SumFileSize + FileSize,
                            current_file   = File }}
       end, {0, State}, FileSummaryEts);
-build_index(false, Files, State) ->
+build_index(false, State = #mssstate { dir = Dir }) ->
     {ok, Pid} = gatherer:start_link(),
-    case Files of
-        [] -> build_index(Pid, undefined, [State #msstate.current_file], State);
-        _  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
-              {Offset, lists:foldl(fun delete_file_if_empty/2, State1, Files)}
+    case [filename_to_num(FileName) ||
+             FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)] of
+        []     -> build_index(Pid, undefined, [State #msstate.current_file],
+                              State);
+        Files  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
+                  {Offset, lists:foldl(fun delete_file_if_empty/2,
+                                       State1, Files)}
     end.
 
 build_index(Gatherer, Left, [],
