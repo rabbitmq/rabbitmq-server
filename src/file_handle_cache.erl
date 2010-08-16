@@ -382,7 +382,8 @@ copy(Src, Dest, Count) ->
                   {ok, Count1} = Result1 ->
                       {Result1,
                        [SHandle #handle { offset = SOffset + Count1 },
-                        DHandle #handle { offset = DOffset + Count1 }]};
+                        DHandle #handle { offset = DOffset + Count1,
+                                          is_dirty = true }]};
                   Error ->
                       {Error, [SHandle, DHandle]}
               end;
