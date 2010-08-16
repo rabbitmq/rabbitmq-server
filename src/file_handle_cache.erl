@@ -884,8 +884,8 @@ maybe_reduce(State = #fhc_state { limit          = Limit,
                                   timer_ref      = TRef })
   when Limit =/= infinity andalso
        (((OpenCount + ObtainCount) > Limit) orelse
-        ([] =/= OpenPending) orelse
-        (ObtainCount < ObtainLimit andalso [] =/= ObtainPending)) ->
+        (OpenPending =/= []) orelse
+        (ObtainCount < ObtainLimit andalso ObtainPending =/= [])) ->
     Now = now(),
     {Pids, Sum, ClientCount} =
         dict:fold(fun (_Pid, undefined, Accs) ->
