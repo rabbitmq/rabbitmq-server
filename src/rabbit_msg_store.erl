@@ -963,7 +963,6 @@ safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
 %% file helper functions
 %%----------------------------------------------------------------------------
 
-
 open_file(Dir, FileName, Mode) ->
     file_handle_cache:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
                            [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE}]).
@@ -1149,7 +1148,7 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
         {false, Error} ->
             Fresh("failed to read recovery terms: ~p", [Error]);
         {true, Terms} ->
-            RecClientRefs = proplists:get_value(client_refs, Terms, []),
+            RecClientRefs  = proplists:get_value(client_refs, Terms, []),
             RecIndexModule = proplists:get_value(index_module, Terms),
             case (lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
                   andalso IndexModule =:= RecIndexModule) of
@@ -1245,7 +1244,7 @@ recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
     %% with duplicates appearing. Thus the simplest and safest thing
     %% to do is to append the contents of the tmp file to its main
     %% file.
-    {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_MODE),
+    {ok, TmpHdl}  = open_file(Dir, TmpFileName, ?READ_MODE),
     {ok, MainHdl} = open_file(Dir, NonTmpRelatedFileName,
                               ?READ_MODE ++ ?WRITE_MODE),
     {ok, _End} = file_handle_cache:position(MainHdl, eof),
@@ -1346,7 +1345,7 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
         lists:foldl(
           fun (Obj = {Guid, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
                   case index_lookup(Guid, State) of
-                      StoreEntry = #msg_location { file = undefined } ->
+                      #msg_location { file = undefined } = StoreEntry ->
                           ok = index_update(StoreEntry #msg_location {
                                               file = File, offset = Offset,
                                               total_size = TotalSize },
