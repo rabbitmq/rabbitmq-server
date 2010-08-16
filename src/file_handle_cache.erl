@@ -316,7 +316,7 @@ append(Ref, Data) ->
                       Size1 = Size + iolist_size(Data),
                       Handle2 = Handle1 #handle { write_buffer = WriteBuffer1,
                                                   write_buffer_size = Size1 },
-                      case Limit /= infinity andalso Size1 > Limit of
+                      case Limit =/= infinity andalso Size1 > Limit of
                           true  -> {Result, Handle3} = write_buffer(Handle2),
                                    {Result, [Handle3]};
                           false -> {ok, [Handle2]}
