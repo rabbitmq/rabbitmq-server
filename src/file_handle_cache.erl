@@ -452,7 +452,7 @@ release_on_death(Pid) when is_pid(Pid) ->
     gen_server:cast(?SERVER, {release_on_death, Pid}).
 
 obtain() ->
-    gen_server:call(?SERVER, obtain, infinity).
+    gen_server:call(?SERVER, {obtain, self()}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -740,21 +740,23 @@ init([]) ->
                       callbacks = dict:new(), client_mrefs = dict:new(),
                       timer_ref = undefined }}.
 
-handle_call(obtain, From, State = #fhc_state { obtains_count = Count,
-                                               obtains_limit = Limit,
-                                               obtains_pending = Pending })
+handle_call({obtain, Pid}, From, State =
+                #fhc_state { elders = Elders, obtains_count = Count,
+                             obtains_limit = Limit, obtains_pending = Pending })
   when Count >= Limit ->
-    {noreply, State #fhc_state { obtains_pending = [From | Pending] }};
-handle_call(obtain, From, State = #fhc_state { obtains_count = ObtainsCount,
-                                               obtains_pending = Pending,
-                                               limit = Limit }) ->
+    {noreply, State #fhc_state { obtains_pending = [From | Pending],
+                                 elders = dict:erase(Pid, Elders) }};
+handle_call({obtain, Pid}, From, State =
+                #fhc_state { elders = Elders, obtains_count = ObtainsCount,
+                             obtains_pending = Pending, limit = Limit }) ->
     State1 = #fhc_state { opens_count = OpensCount1,
                           obtains_count = ObtainsCount1 } =
         maybe_reduce(State #fhc_state { obtains_count = ObtainsCount + 1 }),
-    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 >= Limit of
+    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 > Limit of
         true ->
             {noreply, State1 #fhc_state { obtains_count = ObtainsCount1 - 1,
-                                          obtains_pending = [From | Pending] }};
+                                          obtains_pending = [From | Pending],
+                                          elders = dict:erase(Pid, Elders) }};
         false ->
             {reply, ok, State1}
     end;
@@ -765,15 +767,17 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From, State =
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     State1 = #fhc_state { opens_count = OpensCount1,
                           obtains_count = ObtainsCount1 } =
-        maybe_reduce(State #fhc_state { opens_count = OpensCount + 1,
-                                        elders = Elders1 }),
-    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 >= Limit of
+        maybe_reduce(
+          ensure_mref(Pid, State #fhc_state { opens_count = OpensCount + 1,
+                                              elders = Elders1 })),
+    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 > Limit of
         true ->
             State2 = State1 #fhc_state { opens_count = OpensCount1 - 1 },
             case CanClose of
                 true  -> {reply, close, State2};
-                false -> {noreply, State2 #fhc_state { opens_pending =
-                                                           [From | Pending] }}
+                false -> {noreply,
+                          State2 #fhc_state { opens_pending = [From | Pending],
+                                              elders = Elders }}
             end;
         false ->
             {reply, ok, State1}
@@ -868,19 +872,21 @@ process_pending(Pending, Quota) ->
     {PendingNew, SatisfiableLen}.
 
 maybe_reduce(State = #fhc_state { limit = Limit, opens_count = OpensCount,
+                                  opens_pending = OpensPending,
                                   obtains_count = ObtainsCount,
                                   obtains_limit = ObtainsLimit,
                                   obtains_pending = ObtainsPending,
                                   elders = Elders, callbacks = Callbacks,
                                   timer_ref = TRef })
-  when Limit /= infinity andalso
-       (((OpensCount + ObtainsCount) >= Limit) orelse
+  when Limit =/= infinity andalso
+       (((OpensCount + ObtainsCount) > Limit) orelse
+        ([] =/= OpensPending) orelse
         (ObtainsCount < ObtainsLimit andalso [] =/= ObtainsPending)) ->
     Now = now(),
     {Pids, Sum, ClientCount} =
         dict:fold(fun (_Pid, undefined, Accs) ->
                           Accs;
-                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc}) ->
+                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc} = Accs) ->
                           {[Pid|PidsAcc], SumAcc + timer:now_diff(Now, Eldest),
                            CountAcc + 1}
                   end, {[], 0, 0}, Elders),
