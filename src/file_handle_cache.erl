@@ -734,15 +734,21 @@ init([]) ->
     ObtainLimit = ?OBTAIN_LIMIT(Limit),
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
                           [Limit, ObtainLimit]),
-    {ok, #fhc_state { elders = dict:new(), limit = Limit, open_count = 0,
-                      open_pending = [], obtain_limit = ObtainLimit,
-                      obtain_count = 0, obtain_pending = [],
-                      callbacks = dict:new(), client_mrefs = dict:new(),
-                      timer_ref = undefined }}.
+    {ok, #fhc_state { elders         = dict:new(),
+                      limit          = Limit,
+                      open_count     = 0,
+                      open_pending   = [],
+                      obtain_limit   = ObtainLimit,
+                      obtain_count   = 0,
+                      obtain_pending = [],
+                      callbacks      = dict:new(),
+                      client_mrefs   = dict:new(),
+                      timer_ref      = undefined }}.
 
-handle_call({obtain, Pid}, From, State =
-                #fhc_state { elders = Elders, obtain_count = Count,
-                             obtain_limit = Limit, obtain_pending = Pending })
+handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
+                                                      obtain_count   = Count,
+                                                      obtain_pending = Pending,
+                                                      elders = Elders })
   when Count >= Limit ->
     {noreply, State #fhc_state { obtain_pending = [From | Pending],
                                  elders = dict:erase(Pid, Elders) }};
@@ -775,9 +781,9 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From, State =
             State2 = State1 #fhc_state { open_count = OpenCount1 - 1 },
             case CanClose of
                 true  -> {reply, close, State2};
-                false -> {noreply,
-                          State2 #fhc_state { open_pending = [From | Pending],
-                                              elders = Elders }}
+                false -> {noreply, State2 #fhc_state {
+                                     open_pending = [From | Pending],
+                                     elders = Elders }}
             end;
         false ->
             {reply, ok, State1}
@@ -840,19 +846,20 @@ process_pending(State = #fhc_state { limit = infinity }) ->
 process_pending(State) ->
     process_obtain(process_open(State)).
 
-process_open(State = #fhc_state { open_pending = Pending, limit = Limit,
-                                  open_count = OpenCount,
+process_open(State = #fhc_state { limit        = Limit,
+                                  open_pending = Pending,
+                                  open_count   = OpenCount,
                                   obtain_count = ObtainCount }) ->
     {Pending1, Inc} =
         process_pending(Pending, Limit - (ObtainCount + OpenCount)),
     State #fhc_state { open_pending = Pending1,
-                       open_count = OpenCount + Inc }.
+                       open_count   = OpenCount + Inc }.
 
-process_obtain(State = #fhc_state { obtain_pending = Pending,
-                                    obtain_limit = ObtainLimit,
-                                    obtain_count = ObtainCount,
-                                    open_count = OpenCount,
-                                    limit = Limit }) ->
+process_obtain(State = #fhc_state { limit          = Limit,
+                                    obtain_pending = Pending,
+                                    obtain_limit   = ObtainLimit,
+                                    obtain_count   = ObtainCount,
+                                    open_count     = OpenCount }) ->
     Quota = lists:min([ObtainLimit - ObtainCount,
                        Limit - (ObtainCount + OpenCount)]),
     {Pending1, Inc} = process_pending(Pending, Quota),
@@ -871,13 +878,15 @@ process_pending(Pending, Quota) ->
     [gen_server:reply(From, ok) || From <- SatisfiableRev],
     {PendingNew, SatisfiableLen}.
 
-maybe_reduce(State = #fhc_state { limit = Limit, open_count = OpenCount,
-                                  open_pending = OpenPending,
-                                  obtain_count = ObtainCount,
-                                  obtain_limit = ObtainLimit,
+maybe_reduce(State = #fhc_state { limit          = Limit,
+                                  open_count     = OpenCount,
+                                  open_pending   = OpenPending,
+                                  obtain_count   = ObtainCount,
+                                  obtain_limit   = ObtainLimit,
                                   obtain_pending = ObtainPending,
-                                  elders = Elders, callbacks = Callbacks,
-                                  timer_ref = TRef })
+                                  elders         = Elders,
+                                  callbacks      = Callbacks,
+                                  timer_ref      = TRef })
   when Limit =/= infinity andalso
        (((OpenCount + ObtainCount) > Limit) orelse
         ([] =/= OpenPending) orelse
