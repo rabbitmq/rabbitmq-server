@@ -1048,11 +1048,8 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
 list_sorted_file_names(Dir, Ext) ->
-    sort_file_names(filelib:wildcard("*" ++ Ext, Dir)).
-
-sort_file_names(FileNames) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
-               FileNames).
+               filelib:wildcard("*" ++ Ext, Dir)).
 
 %%----------------------------------------------------------------------------
 %% message cache helper functions
