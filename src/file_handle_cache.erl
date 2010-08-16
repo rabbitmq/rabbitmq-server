@@ -730,7 +730,7 @@ init([]) ->
                 _ ->
                     ulimit()
             end,
-    ObtainsLimit = ?OBTAINS_LIMIT(Limit)
+    ObtainsLimit = ?OBTAINS_LIMIT(Limit),
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
                           [Limit, ObtainsLimit]),
     {ok, #fhc_state { elders = dict:new(), count = 0, limit = Limit, opens = [],
