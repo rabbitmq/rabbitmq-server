@@ -540,7 +540,7 @@ age_tree_insert(Now, Ref) ->
     Tree1 = gb_trees:insert(Now, Ref, Tree),
     {Oldest, _Ref} = gb_trees:smallest(Tree1),
     case gen_server:call(?SERVER, {open, self(), Oldest,
-                                   0 < gb_trees:size(Tree)}, infinity) of
+                                   not gb_trees:is_empty(Tree)}, infinity) of
         ok ->
             put_age_tree(Tree1);
         close ->
