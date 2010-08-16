@@ -434,7 +434,6 @@ send_or_enqueue_ack(MsgSeqNo,
     rabbit_log:info("handling confirm in single mode (#~p)~n", [MsgSeqNo]),
     do_if_not_dup(MsgSeqNo, State,
                   fun(MSN, S = #ch{writer_pid = WriterPid}) ->
-                          rabbit_log:info("confirm #~p is not a dup!~n", [MSN]),
                           ok = rabbit_writer:send_command(
                                  WriterPid, #'basic.ack'{delivery_tag = MSN}),
                           S
@@ -443,7 +442,6 @@ send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm = #confirm{multiple = true}}) 
     rabbit_log:info("handling confirm in multiple mode (#~p)~n", [MsgSeqNo]),
     do_if_not_dup(MsgSeqNo, State,
                   fun(MSN, S) ->
-                          rabbit_log:info("confirm #~p is not a dup!~n", [MSN]),
                           State1
                               = #ch{confirm = C = #confirm{held_acks = As}}
                               = start_ack_timer(S),
@@ -500,23 +498,24 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
               false ->
                   {undefined, State};
               true  ->
-                  Count = State#ch.confirm#confirm.count,
-
                   Confirm = State#ch.confirm,
-                  Confirm1 = Confirm#confirm{
-                               need_acking = gb_sets:add(Count,
-                                                         Confirm#confirm.need_acking)},
-
-                  {CountOrUndefined, NewState} =
+                  Count = Confirm#confirm.count,
+                  % Add the current message to the need_acking list
+                  State01 = State#ch{confirm = Confirm#confirm{
+                                                 need_acking = gb_sets:add(Count,
+                                                                           Confirm#confirm.need_acking)}},
+                  % Ack transient messages now
+                  {CountOrUndefined, State02} =
                       case IsPersistent of
-                          true  -> {Count, State#ch{confirm = Confirm1}};
+                          true  -> {Count, State01};
                           false -> {undefined,
                                     send_or_enqueue_ack(
-                                      Count, State#ch{confirm = Confirm1})}
+                                      Count, State01)}
                       end,
-                  Confirm2 = NewState#ch.confirm,
+                  % Increase the PubAck counter
+                  Confirm02 = State02#ch.confirm,
                   {CountOrUndefined,
-                   NewState#ch{confirm = Confirm2#confirm{count = Count+1}}}
+                   State02#ch{confirm = Confirm02#confirm{count = Count+1}}}
           end,
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
