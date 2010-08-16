@@ -148,7 +148,7 @@
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
--define(OBTAINS_LIMIT(LIMIT), case LIMIT of
+-define(OBTAIN_LIMIT(LIMIT), case LIMIT of
                                   infinity -> infinity;
                                   _        -> trunc((LIMIT * 0.9) - 1)
                               end).
@@ -180,11 +180,11 @@
 -record(fhc_state,
         { elders,
           limit,
-          opens_count,
-          opens_pending,
-          obtains_limit,
-          obtains_count,
-          obtains_pending,
+          open_count,
+          open_pending,
+          obtain_limit,
+          obtain_count,
+          obtain_pending,
           callbacks,
           client_mrefs,
           timer_ref
@@ -731,52 +731,52 @@ init([]) ->
                 _ ->
                     ulimit()
             end,
-    ObtainsLimit = ?OBTAINS_LIMIT(Limit),
+    ObtainLimit = ?OBTAIN_LIMIT(Limit),
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
-                          [Limit, ObtainsLimit]),
-    {ok, #fhc_state { elders = dict:new(), limit = Limit, opens_count = 0,
-                      opens_pending = [], obtains_limit = ObtainsLimit,
-                      obtains_count = 0, obtains_pending = [],
+                          [Limit, ObtainLimit]),
+    {ok, #fhc_state { elders = dict:new(), limit = Limit, open_count = 0,
+                      open_pending = [], obtain_limit = ObtainLimit,
+                      obtain_count = 0, obtain_pending = [],
                       callbacks = dict:new(), client_mrefs = dict:new(),
                       timer_ref = undefined }}.
 
 handle_call({obtain, Pid}, From, State =
-                #fhc_state { elders = Elders, obtains_count = Count,
-                             obtains_limit = Limit, obtains_pending = Pending })
+                #fhc_state { elders = Elders, obtain_count = Count,
+                             obtain_limit = Limit, obtain_pending = Pending })
   when Count >= Limit ->
-    {noreply, State #fhc_state { obtains_pending = [From | Pending],
+    {noreply, State #fhc_state { obtain_pending = [From | Pending],
                                  elders = dict:erase(Pid, Elders) }};
 handle_call({obtain, Pid}, From, State =
-                #fhc_state { elders = Elders, obtains_count = ObtainsCount,
-                             obtains_pending = Pending, limit = Limit }) ->
-    State1 = #fhc_state { opens_count = OpensCount1,
-                          obtains_count = ObtainsCount1 } =
-        maybe_reduce(State #fhc_state { obtains_count = ObtainsCount + 1 }),
-    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 > Limit of
+                #fhc_state { elders = Elders, obtain_count = ObtainCount,
+                             obtain_pending = Pending, limit = Limit }) ->
+    State1 = #fhc_state { open_count = OpenCount1,
+                          obtain_count = ObtainCount1 } =
+        maybe_reduce(State #fhc_state { obtain_count = ObtainCount + 1 }),
+    case Limit =/= infinity andalso OpenCount1 + ObtainCount1 > Limit of
         true ->
-            {noreply, State1 #fhc_state { obtains_count = ObtainsCount1 - 1,
-                                          obtains_pending = [From | Pending],
+            {noreply, State1 #fhc_state { obtain_count = ObtainCount1 - 1,
+                                          obtain_pending = [From | Pending],
                                           elders = dict:erase(Pid, Elders) }};
         false ->
             {reply, ok, State1}
     end;
 
 handle_call({open, Pid, EldestUnusedSince, CanClose}, From, State =
-                #fhc_state { limit = Limit, opens_count = OpensCount,
-                             opens_pending = Pending, elders = Elders }) ->
+                #fhc_state { limit = Limit, open_count = OpenCount,
+                             open_pending = Pending, elders = Elders }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
-    State1 = #fhc_state { opens_count = OpensCount1,
-                          obtains_count = ObtainsCount1 } =
+    State1 = #fhc_state { open_count = OpenCount1,
+                          obtain_count = ObtainCount1 } =
         maybe_reduce(
-          ensure_mref(Pid, State #fhc_state { opens_count = OpensCount + 1,
+          ensure_mref(Pid, State #fhc_state { open_count = OpenCount + 1,
                                               elders = Elders1 })),
-    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 > Limit of
+    case Limit =/= infinity andalso OpenCount1 + ObtainCount1 > Limit of
         true ->
-            State2 = State1 #fhc_state { opens_count = OpensCount1 - 1 },
+            State2 = State1 #fhc_state { open_count = OpenCount1 - 1 },
             case CanClose of
                 true  -> {reply, close, State2};
                 false -> {noreply,
-                          State2 #fhc_state { opens_pending = [From | Pending],
+                          State2 #fhc_state { open_pending = [From | Pending],
                                               elders = Elders }}
             end;
         false ->
@@ -790,20 +790,20 @@ handle_cast({register_callback, Pid, MFA},
                        callbacks = dict:store(Pid, MFA, Callbacks) })};
 
 handle_cast({update, Pid, EldestUnusedSince}, State =
-            #fhc_state { elders = Elders }) ->
+                #fhc_state { elders = Elders }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     %% don't call maybe_reduce from here otherwise we can create a
     %% storm of messages
     {noreply, ensure_mref(Pid, State #fhc_state { elders = Elders1 })};
 
 handle_cast({close, Pid, EldestUnusedSince}, State =
-            #fhc_state { elders = Elders, opens_count = Count }) ->
+                #fhc_state { elders = Elders, open_count = Count }) ->
     Elders1 = case EldestUnusedSince of
                   undefined -> dict:erase(Pid, Elders);
                   _         -> dict:store(Pid, EldestUnusedSince, Elders)
               end,
     {noreply, process_pending(
-                ensure_mref(Pid, State #fhc_state { opens_count = Count - 1,
+                ensure_mref(Pid, State #fhc_state { open_count = Count - 1,
                                                     elders = Elders1 }))};
 
 handle_cast(check_counts, State) ->
@@ -814,7 +814,7 @@ handle_cast({release_on_death, Pid}, State) ->
     {noreply, State}.
 
 handle_info({'DOWN', MRef, process, Pid, _Reason}, State =
-                #fhc_state { obtains_count = Count, callbacks = Callbacks,
+                #fhc_state { obtain_count = Count, callbacks = Callbacks,
                              client_mrefs = ClientMRefs, elders = Elders }) ->
     {noreply, process_pending(
                 case dict:find(Pid, ClientMRefs) of
@@ -822,7 +822,7 @@ handle_info({'DOWN', MRef, process, Pid, _Reason}, State =
                                     elders       = dict:erase(Pid, Elders),
                                     client_mrefs = dict:erase(Pid, ClientMRefs),
                                     callbacks    = dict:erase(Pid, Callbacks) };
-                    _          -> State #fhc_state { obtains_count = Count - 1 }
+                    _          -> State #fhc_state { obtain_count = Count - 1 }
                 end)}.
 
 terminate(_Reason, State) ->
@@ -838,26 +838,26 @@ code_change(_OldVsn, State, _Extra) ->
 process_pending(State = #fhc_state { limit = infinity }) ->
     State;
 process_pending(State) ->
-    process_obtains(process_opens(State)).
+    process_obtain(process_open(State)).
 
-process_opens(State = #fhc_state { opens_pending = Pending, limit = Limit,
-                                   opens_count = OpensCount,
-                                   obtains_count = ObtainsCount }) ->
+process_open(State = #fhc_state { open_pending = Pending, limit = Limit,
+                                  open_count = OpenCount,
+                                  obtain_count = ObtainCount }) ->
     {Pending1, Inc} =
-        process_pending(Pending, Limit - (ObtainsCount + OpensCount)),
-    State #fhc_state { opens_pending = Pending1,
-                       opens_count = OpensCount + Inc }.
+        process_pending(Pending, Limit - (ObtainCount + OpenCount)),
+    State #fhc_state { open_pending = Pending1,
+                       open_count = OpenCount + Inc }.
 
-process_obtains(State = #fhc_state { obtains_pending = Pending,
-                                     obtains_limit = ObtainsLimit,
-                                     obtains_count = ObtainsCount,
-                                     opens_count = OpensCount,
-                                     limit = Limit }) ->
-    Quota = lists:min([ObtainsLimit - ObtainsCount,
-                       Limit - (ObtainsCount + OpensCount)]),
+process_obtain(State = #fhc_state { obtain_pending = Pending,
+                                    obtain_limit = ObtainLimit,
+                                    obtain_count = ObtainCount,
+                                    open_count = OpenCount,
+                                    limit = Limit }) ->
+    Quota = lists:min([ObtainLimit - ObtainCount,
+                       Limit - (ObtainCount + OpenCount)]),
     {Pending1, Inc} = process_pending(Pending, Quota),
-    State #fhc_state { obtains_pending = Pending1,
-                       obtains_count = ObtainsCount + Inc }.
+    State #fhc_state { obtain_pending = Pending1,
+                       obtain_count = ObtainCount + Inc }.
 
 process_pending([], _Quota) ->
     {[], 0};
@@ -871,22 +871,22 @@ process_pending(Pending, Quota) ->
     [gen_server:reply(From, ok) || From <- SatisfiableRev],
     {PendingNew, SatisfiableLen}.
 
-maybe_reduce(State = #fhc_state { limit = Limit, opens_count = OpensCount,
-                                  opens_pending = OpensPending,
-                                  obtains_count = ObtainsCount,
-                                  obtains_limit = ObtainsLimit,
-                                  obtains_pending = ObtainsPending,
+maybe_reduce(State = #fhc_state { limit = Limit, open_count = OpenCount,
+                                  open_pending = OpenPending,
+                                  obtain_count = ObtainCount,
+                                  obtain_limit = ObtainLimit,
+                                  obtain_pending = ObtainPending,
                                   elders = Elders, callbacks = Callbacks,
                                   timer_ref = TRef })
   when Limit =/= infinity andalso
-       (((OpensCount + ObtainsCount) > Limit) orelse
-        ([] =/= OpensPending) orelse
-        (ObtainsCount < ObtainsLimit andalso [] =/= ObtainsPending)) ->
+       (((OpenCount + ObtainCount) > Limit) orelse
+        ([] =/= OpenPending) orelse
+        (ObtainCount < ObtainLimit andalso [] =/= ObtainPending)) ->
     Now = now(),
     {Pids, Sum, ClientCount} =
         dict:fold(fun (_Pid, undefined, Accs) ->
                           Accs;
-                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc} = Accs) ->
+                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc}) ->
                           {[Pid|PidsAcc], SumAcc + timer:now_diff(Now, Eldest),
                            CountAcc + 1}
                   end, {[], 0, 0}, Elders),
