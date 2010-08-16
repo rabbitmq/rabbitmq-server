@@ -752,40 +752,34 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
   when Count >= Limit ->
     {noreply, State #fhc_state { obtain_pending = [From | Pending],
                                  elders = dict:erase(Pid, Elders) }};
-handle_call({obtain, Pid}, From, State =
-                #fhc_state { elders = Elders, obtain_count = ObtainCount,
-                             obtain_pending = Pending, limit = Limit }) ->
-    State1 = #fhc_state { open_count = OpenCount1,
-                          obtain_count = ObtainCount1 } =
-        maybe_reduce(State #fhc_state { obtain_count = ObtainCount + 1 }),
-    case Limit =/= infinity andalso OpenCount1 + ObtainCount1 > Limit of
-        true ->
-            {noreply, State1 #fhc_state { obtain_count = ObtainCount1 - 1,
+handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
+                                                      obtain_pending = Pending,
+                                                      elders = Elders }) ->
+    case maybe_reduce(State #fhc_state { obtain_count = Count + 1 }) of
+        {true, State1} ->
+            {noreply, State1 #fhc_state { obtain_count   = Count,
                                           obtain_pending = [From | Pending],
                                           elders = dict:erase(Pid, Elders) }};
-        false ->
+        {false, State1} ->
             {reply, ok, State1}
     end;
 
-handle_call({open, Pid, EldestUnusedSince, CanClose}, From, State =
-                #fhc_state { limit = Limit, open_count = OpenCount,
-                             open_pending = Pending, elders = Elders }) ->
+handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
+            State = #fhc_state { open_count   = Count,
+                                 open_pending = Pending,
+                                 elders = Elders }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
-    State1 = #fhc_state { open_count = OpenCount1,
-                          obtain_count = ObtainCount1 } =
-        maybe_reduce(
-          ensure_mref(Pid, State #fhc_state { open_count = OpenCount + 1,
-                                              elders = Elders1 })),
-    case Limit =/= infinity andalso OpenCount1 + ObtainCount1 > Limit of
-        true ->
-            State2 = State1 #fhc_state { open_count = OpenCount1 - 1 },
+    case maybe_reduce(State #fhc_state { open_count = Count + 1,
+                                         elders = Elders1 }) of
+        {true, State1} ->
+            State2 = State1 #fhc_state { open_count = Count },
             case CanClose of
                 true  -> {reply, close, State2};
                 false -> {noreply, State2 #fhc_state {
                                      open_pending = [From | Pending],
                                      elders = Elders }}
             end;
-        false ->
+        {false, State1} ->
             {reply, ok, State1}
     end.
 
@@ -813,7 +807,8 @@ handle_cast({close, Pid, EldestUnusedSince}, State =
                                                     elders = Elders1 }))};
 
 handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })};
+    {_, State1} = maybe_reduce(State #fhc_state { timer_ref = undefined }),
+    {noreply, State1};
 
 handle_cast({release_on_death, Pid}, State) ->
     _MRef = erlang:monitor(process, Pid),
@@ -910,15 +905,16 @@ maybe_reduce(State = #fhc_state { limit          = Limit,
                         end
                 end, Pids)
     end,
+    AboveLimit = Limit =/= infinity andalso OpenCount + ObtainCount > Limit,
     case TRef of
         undefined -> {ok, TRef1} = timer:apply_after(
                                      ?FILE_HANDLES_CHECK_INTERVAL,
                                      gen_server, cast, [?SERVER, check_counts]),
-                     State #fhc_state { timer_ref = TRef1 };
-        _         -> State
+                     {AboveLimit, State #fhc_state { timer_ref = TRef1 }};
+        _         -> {AboveLimit, State}
     end;
 maybe_reduce(State) ->
-    State.
+    {false, State}.
 
 %% For all unices, assume ulimit exists. Further googling suggests
 %% that BSDs (incl OS X), solaris and linux all agree that ulimit -n
