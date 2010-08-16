@@ -148,10 +148,7 @@
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
--define(OBTAIN_LIMIT(LIMIT), case LIMIT of
-                                  infinity -> infinity;
-                                  _        -> trunc((LIMIT * 0.9) - 1)
-                              end).
+-define(OBTAIN_LIMIT(LIMIT), trunc((LIMIT * 0.9) - 1)).
 
 %%----------------------------------------------------------------------------
 
@@ -731,7 +728,10 @@ init([]) ->
                 _ ->
                     ulimit()
             end,
-    ObtainLimit = ?OBTAIN_LIMIT(Limit),
+    ObtainLimit = case Limit of
+                      infinity -> infinity;
+                      _        -> ?OBTAIN_LIMIT(Limit)
+                  end,
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
                           [Limit, ObtainLimit]),
     {ok, #fhc_state { elders         = dict:new(),
