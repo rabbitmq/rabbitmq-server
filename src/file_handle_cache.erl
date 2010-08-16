@@ -758,6 +758,7 @@ handle_call(obtain, From, State = #fhc_state { obtains_count = ObtainsCount,
         false ->
             {reply, ok, State1}
     end;
+
 handle_call({open, Pid, EldestUnusedSince, CanClose}, From, State =
                 #fhc_state { limit = Limit, opens_count = OpensCount,
                              opens_pending = Pending, elders = Elders }) ->
@@ -766,7 +767,7 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From, State =
                           obtains_count = ObtainsCount1 } =
         maybe_reduce(State #fhc_state { opens_count = OpensCount + 1,
                                         elders = Elders1 }),
-    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 > Limit of
+    case Limit =/= infinity andalso OpensCount1 + ObtainsCount1 >= Limit of
         true ->
             State2 = State1 #fhc_state { opens_count = OpensCount1 - 1 },
             case CanClose of
