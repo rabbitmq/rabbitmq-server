@@ -863,7 +863,7 @@ process_obtain(State = #fhc_state { limit          = Limit,
 
 process_pending([], _Quota) ->
     {[], 0};
-process_pending(Pending, Quota) when 0 >= Quota ->
+process_pending(Pending, Quota) when Quota =< 0 ->
     {Pending, 0};
 process_pending(Pending, Quota) ->
     PendingLen = length(Pending),
