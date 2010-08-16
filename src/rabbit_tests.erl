@@ -54,7 +54,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
-    application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    application:set_env(rabbit, file_handles_high_watermark, 20, infinity),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
     passed = test_bpqueue(),
