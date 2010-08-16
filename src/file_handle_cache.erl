@@ -749,7 +749,7 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
                                                       obtain_count   = Count,
                                                       obtain_pending = Pending,
                                                       elders = Elders })
-  when Count >= Limit ->
+  when Limit =/= infinity andalso Count >= Limit ->
     {noreply, State #fhc_state { obtain_pending = [From | Pending],
                                  elders = dict:erase(Pid, Elders) }};
 handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
