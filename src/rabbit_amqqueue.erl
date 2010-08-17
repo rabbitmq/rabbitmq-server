@@ -66,7 +66,7 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(declare/5 :: (queue_name(), boolean(), boolean(), amqp_table(),
-                    maybe(pid())) -> amqqueue()).
+                    maybe(pid())) -> {'new' | 'existing', amqqueue()}).
 -spec(lookup/1 :: (queue_name()) -> {'ok', amqqueue()} | not_found()).
 -spec(with/2 :: (queue_name(), qfun(A)) -> A | not_found()).
 -spec(with_or_die/2 :: (queue_name(), qfun(A)) -> A).
@@ -395,7 +395,7 @@ delegate_call(Pid, Msg, Timeout) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, Timeout) end).
 
 delegate_pcall(Pid, Pri, Msg, Timeout) ->
-    delegate:invoke(Pid, 
+    delegate:invoke(Pid,
                     fun (P) -> gen_server2:pcall(P, Pri, Msg, Timeout) end).
 
 delegate_pcast(Pid, Pri, Msg) ->

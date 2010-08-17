@@ -284,20 +284,15 @@ terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
     Reader ! {channel_exit, Channel, Reason},
     State#ch{state = terminating}.
 
-return_queue_declare_ok(State, NoWait, Q) ->
-    NewState = State#ch{most_recently_declared_queue =
-                        (Q#amqqueue.name)#resource.name},
+return_queue_declare_ok(#resource{name = ActualName},
+                        NoWait, MessageCount, ConsumerCount, State) ->
+    NewState = State#ch{most_recently_declared_queue = ActualName},
     case NoWait of
         true  -> {noreply, NewState};
-        false ->
-            {ok, ActualName, MessageCount, ConsumerCount} =
-                rabbit_misc:with_exit_handler(
-                  fun () -> {ok, Q#amqqueue.name, 0, 0} end,
-                  fun () -> rabbit_amqqueue:stat(Q) end),
-            Reply = #'queue.declare_ok'{queue = ActualName#resource.name,
-                                        message_count = MessageCount,
-                                        consumer_count = ConsumerCount},
-            {reply, Reply, NewState}
+        false -> Reply = #'queue.declare_ok'{queue = ActualName,
+                                             message_count = MessageCount,
+                                             consumer_count = ConsumerCount},
+                 {reply, Reply, NewState}
     end.
 
 check_resource_access(Username, Resource, Perm) ->
@@ -716,7 +711,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                exclusive   = ExclusiveDeclare,
                                auto_delete = AutoDelete,
                                nowait      = NoWait,
-                               arguments   = Args},
+                               arguments   = Args} = Declare,
               _, State = #ch{virtual_host        = VHostPath,
                              reader_pid          = ReaderPid,
                              queue_collector_pid = CollectorPid}) ->
@@ -724,6 +719,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 true  -> ReaderPid;
                 false -> none
             end,
+<<<<<<< local
     %% We use this in both branches, because queue_declare may yet return an
     %% existing queue.
     Finish = fun (#amqqueue{name = QueueName, 
@@ -754,9 +750,13 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             {error, not_found} ->
                 ActualNameBin =
                     case QueueNameBin of
+=======
+    ActualNameBin = case QueueNameBin of
+>>>>>>> other
                         <<>>  -> rabbit_guid:binstring_guid("amq.gen");
                         Other -> check_name('queue', Other)
                     end,
+<<<<<<< local
                 QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
                 Finish(rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                                Args, Owner));
@@ -764,6 +764,41 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 Other
         end,
     return_queue_declare_ok(State, NoWait, Q);
+=======
+    QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
+    check_configure_permitted(QueueName, State),
+    case rabbit_amqqueue:with(QueueName,
+                              fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end) of
+        {{ok, QueueName, MessageCount, ConsumerCount},
+         #amqqueue{durable = Durable1, auto_delete = AutoDelete1} = Q}
+          when Durable =:= Durable1, AutoDelete =:= AutoDelete1 ->
+            check_exclusive_access(Q, Owner, strict),
+            return_queue_declare_ok(QueueName, NoWait, MessageCount,
+                                    ConsumerCount, State);
+        {{ok, QueueName, _MessageCount, _ConsumerCount}, #amqqueue{}} ->
+            rabbit_misc:protocol_error(
+              precondition_failed, "parameters for ~s not equivalent",
+              [rabbit_misc:rs(QueueName)]);
+        {error, not_found} ->
+            case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
+                                         Args, Owner) of
+                {new, Q = #amqqueue{}} ->
+                    %% We need to notify the reader within the channel
+                    %% process so that we can be sure there are no
+                    %% outstanding exclusive queues being declared as
+                    %% the connection shuts down.
+                    ok = case Owner of
+                             none -> ok;
+                             _ -> rabbit_reader_queue_collector:register_exclusive_queue(CollectorPid, Q)
+                         end,
+                    return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
+                {existing, _Q} ->
+                    %% must have been created between the stat and the
+                    %% declare. Loop around again.
+                    handle_method(Declare, none, State)
+            end
+    end;
+>>>>>>> other
 
 handle_method(#'queue.declare'{queue   = QueueNameBin,
                                passive = true,
@@ -772,8 +807,12 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
                              reader_pid   = ReaderPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     check_configure_permitted(QueueName, State),
-    Q = with_exclusive_access_or_die(QueueName, ReaderPid, fun (Q) -> Q end),
-    return_queue_declare_ok(State, NoWait, Q);
+    {{ok, QueueName, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
+        rabbit_amqqueue:with_or_die(
+          QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),
+    check_exclusive_access(Q, ReaderPid, lax),
+    return_queue_declare_ok(QueueName, NoWait, MessageCount, ConsumerCount,
+                            State);
 
 handle_method(#'queue.delete'{queue = QueueNameBin,
                               if_unused = IfUnused,

@@ -4,6 +4,7 @@
 PortSystem 1.0
 name		rabbitmq-server
 version		@VERSION@
+revision	2
 categories	net 
 maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
 platforms	darwin
@@ -21,6 +22,7 @@ checksums \
     md5 @md5@ \
     sha1 @sha1@ \
     rmd160 @rmd160@
+patchfiles      erlang-r14a-build-fix.diff
 
 depends_lib	port:erlang
 depends_build	port:xmlto port:libxslt

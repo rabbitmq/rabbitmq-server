@@ -1,0 +1,15 @@
+fix syntax error that prevented compilation under Erlang/OTP R14A
+
+diff --git src/rabbit_exchange.erl.orig src/rabbit_exchange.erl
+--- src/rabbit_exchange.erl.orig
++++ src/rabbit_exchange.erl
+@@ -100,7 +100,7 @@
+ 
+ %%----------------------------------------------------------------------------
+ 
+--define(INFO_KEYS, [name, type, durable, auto_delete, arguments].
++-define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
+ 
+ recover() ->
+     Exs = rabbit_misc:table_fold(
+

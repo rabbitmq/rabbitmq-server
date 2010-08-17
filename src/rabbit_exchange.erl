@@ -330,7 +330,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                       Module = type_to_module(Type),
                       case IsDeleted of
                           auto_deleted -> Module:delete(X, Bs);
-                          no_delete    -> Module:remove_bindings(X, Bs)
+                          not_deleted  -> Module:remove_bindings(X, Bs)
                       end
               end, Cleanup)
     end.
@@ -432,11 +432,11 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
            end) of
         Err = {error, _}  ->
             Err;
-        {{Action, X = #exchange{ type = Type }}, B} ->
+        {{IsDeleted, X = #exchange{ type = Type }}, B} ->
             Module = type_to_module(Type),
-            case Action of
-                auto_delete -> Module:delete(X, [B]);
-                no_delete   -> Module:remove_bindings(X, [B])
+            case IsDeleted of
+                auto_deleted -> Module:delete(X, [B]);
+                not_deleted  -> Module:remove_bindings(X, [B])
             end
     end.
 
@@ -519,9 +519,19 @@ delete(ExchangeName, IfUnused) ->
             Error
     end.
 
+<<<<<<< local
 %% TODO: remove this autodelete machinery altogether.
 maybe_auto_delete(Exchange) ->
     {no_delete, Exchange}.
+=======
+maybe_auto_delete(Exchange = #exchange{auto_delete = false}) ->
+    {not_deleted, Exchange};
+maybe_auto_delete(Exchange = #exchange{auto_delete = true}) ->
+    case conditional_delete(Exchange) of
+        {error, in_use}         -> {not_deleted, Exchange};
+        {deleted, Exchange, []} -> {auto_deleted, Exchange}
+    end.
+>>>>>>> other
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},

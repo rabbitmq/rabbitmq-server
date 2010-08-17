@@ -90,13 +90,13 @@ match_routing_key(Name, RoutingKey) ->
     lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
 
 lookup_qpids(Queues) ->
-    sets:fold(
+    lists:foldl(
       fun (Key, Acc) ->
               case mnesia:dirty_read({rabbit_queue, Key}) of
                   [#amqqueue{pid = QPid}] -> [QPid | Acc];
                   []                      -> Acc
               end
-      end, [], sets:from_list(Queues)).
+      end, [], lists:usort(Queues)).
 
 %%--------------------------------------------------------------------
 
