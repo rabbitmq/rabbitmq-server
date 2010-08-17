@@ -130,7 +130,7 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([release_on_death/1, obtain/0]).
+-export([obtain/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -222,8 +222,7 @@
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
--spec(release_on_death/1 :: (pid()) -> 'ok').
--spec(obtain/0 :: () -> 'ok').
+-spec(obtain/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -445,11 +444,8 @@ set_maximum_since_use(MaximumAge) ->
         true  -> ok
     end.
 
-release_on_death(Pid) when is_pid(Pid) ->
-    gen_server:cast(?SERVER, {release_on_death, Pid}).
-
-obtain() ->
-    gen_server:call(?SERVER, {obtain, self()}, infinity).
+obtain(Pid) ->
+    gen_server:call(?SERVER, {obtain, Pid}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -750,17 +746,20 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
                                                       obtain_pending = Pending,
                                                       elders = Elders })
   when Limit =/= infinity andalso Count >= Limit ->
-    {noreply, State #fhc_state { obtain_pending = [From | Pending],
-                                 elders = dict:erase(Pid, Elders) }};
+    {noreply,
+     State #fhc_state { obtain_pending = [{obtain, Pid, From} | Pending],
+                        elders = dict:erase(Pid, Elders) }};
 handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
                                                       obtain_pending = Pending,
                                                       elders = Elders }) ->
     case maybe_reduce(State #fhc_state { obtain_count = Count + 1 }) of
         {true, State1} ->
-            {noreply, State1 #fhc_state { obtain_count   = Count,
-                                          obtain_pending = [From | Pending],
-                                          elders = dict:erase(Pid, Elders) }};
+            {noreply, State1 #fhc_state {
+                        obtain_count   = Count,
+                        obtain_pending = [{obtain, Pid, From} | Pending],
+                        elders = dict:erase(Pid, Elders) }};
         {false, State1} ->
+            _MRef = erlang:monitor(process, Pid),
             {reply, ok, State1}
     end;
 
@@ -777,7 +776,7 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
             case CanClose of
                 true  -> {reply, close, State2};
                 false -> {noreply, State2 #fhc_state {
-                                     open_pending = [From | Pending],
+                                     open_pending = [{open, From} | Pending],
                                      elders = dict:erase(Pid, Elders1) }}
             end;
         {false, State1} ->
@@ -809,11 +808,7 @@ handle_cast({close, Pid, EldestUnusedSince}, State =
 
 handle_cast(check_counts, State) ->
     {_, State1} = maybe_reduce(State #fhc_state { timer_ref = undefined }),
-    {noreply, State1};
-
-handle_cast({release_on_death, Pid}, State) ->
-    _MRef = erlang:monitor(process, Pid),
-    {noreply, State}.
+    {noreply, State1}.
 
 handle_info({'DOWN', MRef, process, Pid, _Reason}, State =
                 #fhc_state { obtain_count = Count, callbacks = Callbacks,
@@ -871,8 +866,14 @@ process_pending(Pending, Quota) ->
     SatisfiableLen = lists:min([PendingLen, Quota]),
     Take = PendingLen - SatisfiableLen,
     {PendingNew, SatisfiableRev} = lists:split(Take, Pending),
-    [gen_server:reply(From, ok) || From <- SatisfiableRev],
+    [run_pending_item(Item) || Item <- SatisfiableRev],
     {PendingNew, SatisfiableLen}.
+
+run_pending_item({open, From}) ->
+    gen_server:reply(From, ok);
+run_pending_item({obtain, Pid, From}) ->
+    _MRef = erlang:monitor(process, Pid),
+    gen_server:reply(From, ok).
 
 maybe_reduce(State = #fhc_state { limit          = Limit,
                                   open_count     = OpenCount,
