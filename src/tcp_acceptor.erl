@@ -43,11 +43,12 @@
 %%--------------------------------------------------------------------
 
 start_link(Callback, LSock) ->
-    gen_server:start_link(?MODULE, {Callback, LSock}, []).
+    gen_server:start_link(?MODULE, {Callback, LSock}, [{timeout, infinity}]).
 
 %%--------------------------------------------------------------------
 
 init({Callback, LSock}) ->
+    ok = file_handle_cache:obtain_and_release_on_death(self()),
     gen_server:cast(self(), accept),
     {ok, #state{callback=Callback, sock=LSock}}.
 
@@ -83,7 +84,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
         %% is drained.
         gen_event:which_handlers(error_logger),
         %% handle
-        file_handle_cache:release_on_death(apply(M, F, A ++ [Sock]))
+        file_handle_cache:obtain_and_release_on_death(apply(M, F, A ++ [Sock]))
     catch {inet_error, Reason} ->
             gen_tcp:close(Sock),
             error_logger:error_msg("unable to accept TCP connection: ~p~n",
@@ -111,7 +112,6 @@ code_change(_OldVsn, State, _Extra) ->
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 accept(State = #state{sock=LSock}) ->
-    ok = file_handle_cache:obtain(),
     case prim_inet:async_accept(LSock, -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
         Error     -> {stop, {cannot_accept, Error}, State}
