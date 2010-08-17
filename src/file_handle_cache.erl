@@ -767,17 +767,18 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
 handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
             State = #fhc_state { open_count   = Count,
                                  open_pending = Pending,
-                                 elders = Elders }) ->
+                                 elders       = Elders }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
-    case maybe_reduce(State #fhc_state { open_count = Count + 1,
-                                         elders = Elders1 }) of
+    case maybe_reduce(
+           ensure_mref(Pid, State #fhc_state { open_count = Count + 1,
+                                               elders = Elders1 })) of
         {true, State1} ->
             State2 = State1 #fhc_state { open_count = Count },
             case CanClose of
                 true  -> {reply, close, State2};
                 false -> {noreply, State2 #fhc_state {
                                      open_pending = [From | Pending],
-                                     elders = Elders }}
+                                     elders = dict:erase(Pid, Elders1) }}
             end;
         {false, State1} ->
             {reply, ok, State1}
