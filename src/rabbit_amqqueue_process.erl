@@ -430,7 +430,6 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            rabbit_log:info("No consumers on unblocked channels; enqueueing...~n"),
             BQS = BQ:publish(Message, State #q.backing_queue_state),
             {false, NewState#q{backing_queue_state = BQS}}
     end.

@@ -398,6 +398,7 @@ init(QueueName, IsDurable, Recover) ->
             true  -> rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, PRef);
             false -> undefined
         end,
+    register_puback_callback(?PERSISTENT_MSG_STORE),
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
       q1                   = queue:new(),
@@ -1004,7 +1005,6 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
                            persistent_count = PCount,
                            durable          = IsDurable,
                            ram_msg_count    = RamMsgCount }) ->
-    rabbit_log:info("message ~p got to variable_queue:publish~n", [Msg#basic_message.guid]),
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk },
@@ -1067,6 +1067,27 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
                                   ForceIndex, MsgStatus1, IndexState),
     {MsgStatus2, State #vqstate { index_state       = IndexState1,
                                   msg_store_clients = MSCState1 }}.
+
+%%----------------------------------------------------------------------------
+%% Internal gubbins for pubacks
+%%----------------------------------------------------------------------------
+
+register_puback_callback(MessageStore) ->
+    rabbit_msg_store:register_callback(
+      MessageStore,
+      fun (Guids) ->
+              spawn(fun () -> ok = rabbit_misc:with_exit_handler(
+                                     fun () ->
+                                             rabbit_log:info("something bad happened while sending pubacks back to channel"),
+                                               ok
+                                     end,
+                                     fun () ->
+                                             lists:foreach(fun(G) ->
+                                                                   rabbit_log:info("send puback back to channel for ~p~n", [G]) end, Guids),
+                                             ok
+                                     end)
+                    end)
+      end).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
