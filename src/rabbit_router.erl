@@ -55,7 +55,8 @@
 
 deliver(QPids, Delivery = #delivery{mandatory = false,
                                     immediate = false,
-                                    message = Msg}) ->
+                                    message = Msg,
+                                    msg_seq_no = MsgSeqNo}) ->
     %% optimisation: when Mandatory = false and Immediate = false,
     %% rabbit_amqqueue:deliver will deliver the message to the queue
     %% process asynchronously, and return true, which means all the
@@ -65,9 +66,9 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% case below.
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
-    case {QPids, Msg#basic_message.msg_seq_no} of
-        {[], MsgSeqNo}  -> rabbit_channel:confirm(Msg#basic_message.origin, MsgSeqNo);
-        _               -> ok
+    case {QPids, MsgSeqNo} of
+        {[], _}  -> rabbit_channel:confirm(self(), MsgSeqNo);
+        _        -> ok
     end,
     {routed, QPids};
 

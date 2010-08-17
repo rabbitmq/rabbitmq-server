@@ -521,13 +521,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                              routing_key    = RoutingKey,
                              content        = DecodedContent,
                              guid           = rabbit_guid:guid(),
-                             is_persistent  = IsPersistent,
-                             msg_seq_no     = MsgSeqNo,
-                             origin         = self()},
+                             is_persistent  = IsPersistent},
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message, MsgSeqNo)),
     % PubAck after basic.returns
     State2 = case RoutingRes of
                  routed        -> State1;
