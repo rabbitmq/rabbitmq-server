@@ -43,12 +43,11 @@
 %%--------------------------------------------------------------------
 
 start_link(Callback, LSock) ->
-    gen_server:start_link(?MODULE, {Callback, LSock}, [{timeout, infinity}]).
+    gen_server:start_link(?MODULE, {Callback, LSock}, []).
 
 %%--------------------------------------------------------------------
 
 init({Callback, LSock}) ->
-    ok = file_handle_cache:obtain_and_release_on_death(self()),
     gen_server:cast(self(), accept),
     {ok, #state{callback=Callback, sock=LSock}}.
 
@@ -56,6 +55,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(accept, State) ->
+    ok = file_handle_cache:obtain(self()),
     accept(State);
 
 handle_cast(_Msg, State) ->
@@ -84,7 +84,7 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
         %% is drained.
         gen_event:which_handlers(error_logger),
         %% handle
-        file_handle_cache:obtain_and_release_on_death(apply(M, F, A ++ [Sock]))
+        file_handle_cache:obtain(apply(M, F, A ++ [Sock]))
     catch {inet_error, Reason} ->
             gen_tcp:close(Sock),
             error_logger:error_msg("unable to accept TCP connection: ~p~n",

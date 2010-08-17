@@ -130,7 +130,7 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([obtain_and_release_on_death/1]).
+-export([obtain/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -222,7 +222,7 @@
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
--spec(obtain_and_release_on_death/1 :: (pid()) -> 'ok').
+-spec(obtain/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -444,8 +444,8 @@ set_maximum_since_use(MaximumAge) ->
         true  -> ok
     end.
 
-obtain_and_release_on_death(Pid) ->
-    gen_server:call(?SERVER, {obtain_and_release_on_death, Pid}, infinity).
+obtain(Pid) ->
+    gen_server:call(?SERVER, {obtain, Pid}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -741,19 +741,17 @@ init([]) ->
                       client_mrefs   = dict:new(),
                       timer_ref      = undefined }}.
 
-handle_call({obtain_and_release_on_death, Pid}, From,
-            State = #fhc_state { obtain_limit   = Limit,
-                                 obtain_count   = Count,
-                                 obtain_pending = Pending,
-                                 elders = Elders })
+handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
+                                                      obtain_count   = Count,
+                                                      obtain_pending = Pending,
+                                                      elders = Elders })
   when Limit =/= infinity andalso Count >= Limit ->
     {noreply,
      State #fhc_state { obtain_pending = [{obtain, Pid, From} | Pending],
                         elders = dict:erase(Pid, Elders) }};
-handle_call({obtain_and_release_on_death, Pid}, From,
-            State = #fhc_state { obtain_count   = Count,
-                                 obtain_pending = Pending,
-                                 elders = Elders }) ->
+handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
+                                                      obtain_pending = Pending,
+                                                      elders = Elders }) ->
     case maybe_reduce(State #fhc_state { obtain_count = Count + 1 }) of
         {true, State1} ->
             {noreply, State1 #fhc_state {
