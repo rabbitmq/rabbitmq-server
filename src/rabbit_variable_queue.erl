@@ -375,6 +375,9 @@ init(QueueName, IsDurable, Recover) ->
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (Guid) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
+          end,
+          fun (Guids) ->
+                  rabbit_log:info("message indices ~p commited to disk~n", [Guids])
           end),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
