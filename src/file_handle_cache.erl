@@ -954,7 +954,9 @@ maybe_reduce(State = #fhc_state { limit          = Limit,
                   end, {[], 0, 0}, Elders),
     case Pids of
         [] -> ok;
-        _  -> AverageAge = Sum / ClientCount,
+        _  -> AverageAge =
+                  lists:max([0, ((Sum - (?FILE_HANDLES_CHECK_INTERVAL * 1000))
+                                 / ClientCount)]),
               lists:foreach(
                 fun (Pid) ->
                         case dict:find(Pid, Callbacks) of
