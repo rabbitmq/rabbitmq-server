@@ -1137,6 +1137,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
+                              gen_server2:cast(self(), {confirm_messages, Guids}),
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
