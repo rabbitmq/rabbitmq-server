@@ -634,7 +634,6 @@ handle_cast({write, Pid, Guid, Msg},
             %% New message, lots to do
             {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
             {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
-            rabbit_log:info("message ~p written to disk~n", [Guid]),
             ok = index_insert(#msg_location {
                                 guid = Guid, ref_count = 1, file = CurFile,
                                 offset = CurOffset, total_size = TotalSize },
@@ -826,7 +825,6 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                                  on_sync = Syncs,
                                  pid_to_fun = PTF,
                                  pid_to_guids = PTG }) ->
-    rabbit_log:info("msg_store syncing~ncallbacks: ~p~nguids: ~p~n", [dict:to_list(PTF), dict:to_list(PTG)]),
     State1 = stop_sync_timer(State),
     State2 = case Syncs of
                  [] -> State1;

@@ -369,6 +369,7 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
 init(QueueName, IsDurable, Recover) ->
+    Self = self(),
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(
           QueueName, Recover,
@@ -377,7 +378,7 @@ init(QueueName, IsDurable, Recover) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
           end,
           fun (Guids) ->
-                  rabbit_log:info("message indices ~p commited to disk~n", [Guids])
+                  gen_server2:cast(Self, {msg_indices_written_to_disk, Guids})
           end),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
@@ -401,7 +402,7 @@ init(QueueName, IsDurable, Recover) ->
             true  -> rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, PRef);
             false -> undefined
         end,
-    register_puback_callback(?PERSISTENT_MSG_STORE),
+    register_confirm_callback(?PERSISTENT_MSG_STORE),
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
       q1                   = queue:new(),
@@ -1072,24 +1073,15 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
                                   msg_store_clients = MSCState1 }}.
 
 %%----------------------------------------------------------------------------
-%% Internal gubbins for pubacks
+%% Internal gubbins for confirms
 %%----------------------------------------------------------------------------
 
-register_puback_callback(MessageStore) ->
+register_confirm_callback(MessageStore) ->
+    Self = self(),
     rabbit_msg_store:register_callback(
       MessageStore,
       fun (Guids) ->
-              spawn(fun () -> ok = rabbit_misc:with_exit_handler(
-                                     fun () ->
-                                             rabbit_log:info("something bad happened while sending pubacks back to channel"),
-                                               ok
-                                     end,
-                                     fun () ->
-                                             lists:foreach(fun(G) ->
-                                                                   rabbit_log:info("send puback back to channel for ~p~n", [G]) end, Guids),
-                                             ok
-                                     end)
-                    end)
+              gen_server2:cast(Self, {msgs_written_to_disk, Guids})
       end).
 
 %%----------------------------------------------------------------------------

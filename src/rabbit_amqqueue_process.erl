@@ -61,7 +61,9 @@
             rate_timer_ref,
             expiry_timer_ref,
             stats_timer,
-            guid_to_channel
+            guid_to_channel,
+            msgs_on_disk,
+            msg_indices_on_disk
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -124,7 +126,9 @@ init(Q) ->
             rate_timer_ref      = undefined,
             expiry_timer_ref    = undefined,
             stats_timer         = rabbit_event:init_stats_timer(),
-            guid_to_channel     = dict:new()}, hibernate,
+            guid_to_channel     = dict:new(),
+            msgs_on_disk        = gb_sets:new(),
+            msg_indices_on_disk = gb_sets:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -402,21 +406,26 @@ deliver_from_queue_deliver(AckRequired, false,
     {{Message, IsDelivered, AckTag}, 0 == Remaining,
      State #q { backing_queue_state = BQS1 }}.
 
-confirm_message_internal(Guid, State = #q{guid_to_channel = GTC}) ->
+confirm_message_internal(Guid, State = #q { guid_to_channel     = GTC,
+                                            msgs_on_disk        = MOD,
+                                            msg_indices_on_disk = MIOD }) ->
     case dict:find(Guid, GTC) of
         {ok, {ChPid, MsgSeqNo}} ->
             rabbit_channel:confirm(ChPid, MsgSeqNo),
-            State#q{guid_to_channel = dict:erase(Guid, GTC)};
+            State #q { guid_to_channel     = dict:erase(Guid, GTC),
+                       msgs_on_disk        = gb_sets:delete_any(Guid, MOD),
+                       msg_indices_on_disk = gb_sets:delete_any(Guid, MIOD) };
         _ ->
             State
     end.
 
 maybe_record_confirm_message(undefined, _, _, State) ->
     State;
-maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State) ->
-       State#q{guid_to_channel =
-                   dict:store(Message#basic_message.guid, {ChPid, MsgSeqNo},
-                              State#q.guid_to_channel)}.
+maybe_record_confirm_message(MsgSeqNo,
+                             #basic_message { guid = Guid },
+                             ChPid, State) ->
+       State #q { guid_to_channel =
+                      dict:store(Guid, {ChPid, MsgSeqNo}, State#q.guid_to_channel) }.
 
 run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -846,6 +855,35 @@ handle_cast({confirm_messages, Guids}, State) ->
     noreply(lists:foldl(fun (Guid, State0) ->
                                 confirm_message_internal(Guid, State0)
                         end, State, Guids));
+
+handle_cast({msgs_written_to_disk, Guids},
+            State = #q{msgs_on_disk = MOD,
+                       msg_indices_on_disk = MIOD}) ->
+    GuidSet = gb_sets:from_list(Guids),
+    ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
+    gb_sets:fold(fun (Guid, State0) ->
+                         confirm_message_internal(Guid, State0)
+                 end, State, ToConfirmMsgs),
+    noreply(State#q{msgs_on_disk =
+                        gb_sets:difference(gb_sets:union(MOD, GuidSet),
+                                           ToConfirmMsgs),
+                    msg_indices_on_disk =
+                        gb_sets:difference(MIOD, ToConfirmMsgs)});
+
+handle_cast({msg_indices_written_to_disk, Guids},
+            State = #q{msgs_on_disk = MOD,
+                       msg_indices_on_disk = MIOD}) ->
+    rabbit_log:info("Message indices written to disk: ~p~n", [Guids]),
+    GuidSet = gb_sets:from_list(Guids),
+    ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
+    gb_sets:fold(fun (Guid, State0) ->
+                         confirm_message_internal(Guid, State0)
+                 end, State, ToConfirmMsgs),
+    noreply(State#q{msgs_on_disk =
+                        gb_sets:difference(MOD, ToConfirmMsgs),
+                    msg_indices_on_disk =
+                        gb_sets:difference(gb_sets:union(MIOD, GuidSet),
+                                           ToConfirmMsgs)});
 
 handle_cast({reject, AckTags, Requeue, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
