@@ -899,43 +899,53 @@ contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
             end
     end.
 
-remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
-                                        file_summary_ets = FileSummaryEts,
-                                        dedup_cache_ets  = DedupCacheEts }) ->
-    #msg_location { ref_count = RefCount, file = File,
-                    offset = Offset, total_size = TotalSize } =
-        index_lookup(Guid, State),
-    case RefCount of
-        1 ->
-            %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
-            %% there may be further writes in the mailbox for the same
-            %% msg.
-            ok = remove_cache_entry(DedupCacheEts, Guid),
-            [#file_summary { valid_total_size = ValidTotalSize,
-                             contiguous_top   = ContiguousTop,
-                             locked           = Locked }] =
-                ets:lookup(FileSummaryEts, File),
-            case Locked of
-                true ->
-                    add_to_pending_gc_completion({remove, Guid}, State);
-                false ->
-                    ok = index_delete(Guid, State),
-                    ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-                    ValidTotalSize1 = ValidTotalSize - TotalSize,
-                    true = ets:update_element(
-                             FileSummaryEts, File,
-                             [{#file_summary.valid_total_size, ValidTotalSize1},
-                              {#file_summary.contiguous_top, ContiguousTop1}]),
-                    State1 = delete_file_if_empty(File, State),
-                    State1 #msstate { sum_valid_data = SumValid - TotalSize }
-            end;
-        _ when 1 < RefCount ->
-            ok = decrement_cache(DedupCacheEts, Guid),
-            %% only update field, otherwise bad interaction with concurrent GC
-            ok = index_update_fields(Guid,
-                                     {#msg_location.ref_count, RefCount - 1},
-                                     State),
-            State
+remove_message(Guid, State = #msstate { cur_file_cache_ets = CurFileCacheEts,
+                                        sum_valid_data     = SumValid,
+                                        file_summary_ets   = FileSummaryEts,
+                                        dedup_cache_ets    = DedupCacheEts }) ->
+    case index_lookup(Guid, State) of
+        not_found ->
+            true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
+            State;
+        #msg_location { ref_count = RefCount, file = File,
+                        offset = Offset, total_size = TotalSize } ->
+            case RefCount of
+                1 ->
+                    %% don't remove from CUR_FILE_CACHE_ETS_NAME here
+                    %% because there may be further writes in the
+                    %% mailbox for the same msg.
+                    ok = remove_cache_entry(DedupCacheEts, Guid),
+                    [#file_summary { valid_total_size = ValidTotalSize,
+                                     contiguous_top   = ContiguousTop,
+                                     locked           = Locked }] =
+                        ets:lookup(FileSummaryEts, File),
+                    case Locked of
+                        true ->
+                            add_to_pending_gc_completion({remove, Guid},
+                                                         State);
+                        false ->
+                            ok = index_delete(Guid, State),
+                            ContiguousTop1 = lists:min([ContiguousTop, Offset]),
+                            ValidTotalSize1 = ValidTotalSize - TotalSize,
+                            true = ets:update_element(
+                                     FileSummaryEts, File,
+                                     [{#file_summary.valid_total_size,
+                                       ValidTotalSize1},
+                                      {#file_summary.contiguous_top,
+                                       ContiguousTop1}]),
+                            State1 = delete_file_if_empty(File, State),
+                            State1 #msstate {
+                              sum_valid_data = SumValid - TotalSize }
+                    end;
+                _ when 1 < RefCount ->
+                    ok = decrement_cache(DedupCacheEts, Guid),
+                    %% only update field, otherwise bad interaction
+                    %% with concurrent GC
+                    ok = index_update_fields(
+                           Guid, {#msg_location.ref_count, RefCount - 1},
+                           State),
+                    State
+            end
     end.
 
 add_to_pending_gc_completion(
