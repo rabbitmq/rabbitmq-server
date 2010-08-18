@@ -478,8 +478,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
             %% badarg scenario above, but we don't have a missing file
             %% - we just have the /wrong/ file).
             case index_lookup(Guid, CState) of
-                #msg_location { file = File, ref_count = RefCount } =
-                MsgLocation when RefCount > 0 ->
+                #msg_location { file = File } = MsgLocation ->
                     %% Still the same file.
                     mark_handle_open(FileHandlesEts, File),
 
