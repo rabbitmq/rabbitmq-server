@@ -331,9 +331,8 @@ read(Server, Guid,
                     Defer = fun() -> {gen_server2:pcall(
                                         Server, 2, {read, Guid}, infinity),
                                       CState} end,
-                    case index_lookup(Guid, CState) of
-                        Result when Result =:= not_found orelse
-                                    (Result #msg_location.ref_count =:= 0) ->
+                    case index_lookup_positive_refcount(Guid, CState) of
+                        not_found ->
                             Defer();
                         MsgLocation ->
                             client_read1(Server, MsgLocation, Defer, CState)
@@ -834,9 +833,8 @@ add_to_file_summary(#file_summary { valid_total_size = ValidTotalSize,
 
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->
-    case index_lookup(Guid, State) of
-        Result when Result =:= not_found orelse
-                    (Result #msg_location.ref_count =:= 0) ->
+    case index_lookup_positive_refcount(Guid, State) of
+        not_found ->
             gen_server2:reply(From, not_found),
             State;
         MsgLocation ->
@@ -908,9 +906,8 @@ read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
     {Msg, State1}.
 
 contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
-    case index_lookup(Guid, State) of
-        Result when Result =:= not_found orelse
-                    (Result #msg_location.ref_count =:= 0) ->
+    case index_lookup_positive_refcount(Guid, State) of
+        not_found ->
             gen_server2:reply(From, false),
             State;
         #msg_location { file = File } ->
@@ -1131,6 +1128,13 @@ decrement_cache(DedupCacheEts, Guid) ->
 %%----------------------------------------------------------------------------
 %% index
 %%----------------------------------------------------------------------------
+
+index_lookup_positive_refcount(Key, State) ->
+    case index_lookup(Key, State) of
+        not_found                       -> not_found;
+        #msg_location { ref_count = 0 } -> not_found;
+        #msg_location {} = MsgLocation  -> MsgLocation
+    end.
 
 index_lookup(Key, #client_msstate { index_module = Index,
                                     index_state  = State }) ->
