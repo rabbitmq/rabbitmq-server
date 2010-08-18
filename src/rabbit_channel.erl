@@ -262,11 +262,12 @@ handle_cast(multiple_ack_flush,
             State = #ch{writer_pid      = WriterPid,
                         held_confirms   = As,
                         need_confirming = NA}) ->
-    rabbit_log:info("channel got a multiple_ack_flush message~n"
-                    "held acks: ~p~n", [gb_sets:to_list(As)]),
     case gb_sets:is_empty(As) of
         true -> ok;                   % this should never be the case
-        false -> flush_multiple(As, WriterPid, gb_sets:smallest(NA))
+        false -> flush_multiple(As, WriterPid, case gb_sets:is_empty(NA) of
+                                                   false -> gb_sets:smallest(NA);
+                                                   true  -> gb_sets:largest(As)+1
+                                               end)
     end,
     {noreply, State #ch { held_confirms = gb_sets:new(),
                           confirm_tref  = undefined }};
@@ -447,7 +448,6 @@ send_or_enqueue_ack(_, State = #ch{confirm_enabled = false}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo,
                     State = #ch{confirm_multiple = false}) ->
-    rabbit_log:info("handling confirm in single mode (#~p)~n", [MsgSeqNo]),
     do_if_not_dup(MsgSeqNo, State,
                   fun(MSN, S = #ch{writer_pid = WriterPid,
                                    qpid_to_msgs = QTM}) ->
@@ -459,7 +459,6 @@ send_or_enqueue_ack(MsgSeqNo,
                                                end, QTM) }
                   end);
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
-    rabbit_log:info("handling confirm in multiple mode (#~p)~n", [MsgSeqNo]),
     do_if_not_dup(MsgSeqNo, State,
                   fun(MSN, S = #ch{qpid_to_msgs = QTM}) ->
                           State1 = start_ack_timer(S),
