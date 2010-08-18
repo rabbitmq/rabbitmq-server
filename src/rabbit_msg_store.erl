@@ -316,9 +316,9 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
-    {ok, [Old, _New]} = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {case Old of
-         0 -> gen_server2:cast(Server, {write, Guid, Msg});
+    {ok, New} = update_msg_cache(CurFileCacheEts, Guid, Msg),
+    {case New of
+         1 -> gen_server2:cast(Server, {write, Guid, Msg});
          _ -> ok
      end, CState}.
 
@@ -623,10 +623,10 @@ handle_cast({write, Guid, Msg},
                                cur_file_cache_ets  = CurFileCacheEts }) ->
     [RefCount, 0] =
         ets:update_counter(CurFileCacheEts, Guid, [{3, 0}, {3, 0, 0, 0}]),
+    true = RefCount > 0,
     case index_lookup(Guid, State) of
         not_found ->
             %% New message, lots to do
-            true = RefCount > 0,
             {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
             {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
             ok = index_insert(
@@ -1070,9 +1070,9 @@ maybe_insert_into_cache(_DedupCacheEts, _RefCount, _Guid, _Msg) ->
 
 update_msg_cache(CacheEts, Guid, Msg) ->
     case ets:insert_new(CacheEts, {Guid, Msg, 1}) of
-        true  -> {ok, [0, 1]};
+        true  -> {ok, 1};
         false -> safe_ets_update_counter_ok(
-                   CacheEts, Guid, [{3, 0}, {3, +1}],
+                   CacheEts, Guid, {3, +1},
                    fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
     end.
 
