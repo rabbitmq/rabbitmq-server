@@ -67,17 +67,20 @@ add_to_plt(PltPath, FilesString) ->
 dialyze_files(PltPath, ModifiedFiles) ->
     Files = string:tokens(ModifiedFiles, " "),
     DialyzerWarnings = dialyzer:run([{init_plt, PltPath},
-                                     {files, Files}]),
+                                     {files, Files},
+                                     {warnings, [underspecs, behaviours,
+                                                 race_conditions]}]),
     case DialyzerWarnings of
         [] -> io:format("~nOk~n"),
               ok;
-        _  -> io:format("~nFAILED with the following warnings:~n"),
+        _  -> io:format("~n~nFAILED with the following ~p warnings:~n~n",
+                        [length(DialyzerWarnings)]),
               print_warnings(DialyzerWarnings),
               fail
     end.
 
 print_warnings(Warnings) ->
-    [io:format("~s", [dialyzer:format_warning(W)]) || W <- Warnings],
+    [io:format("~s~n", [dialyzer:format_warning(W)]) || W <- Warnings],
     io:format("~n"),
     ok.
 
