@@ -603,6 +603,7 @@ handle_call({init, Recover}, From,
                 declare(Recover, From, State);
         _    -> #q{q = #amqqueue{name = QName, durable = IsDurable},
                    backing_queue = BQ, backing_queue_state = undefined} = State,
+                gen_server2:reply(From, not_found),
                 case Recover of
                     true -> ok;
                     _    -> rabbit_log:warning(
@@ -610,7 +611,7 @@ handle_call({init, Recover}, From,
                 end,
                 BQS = BQ:init(QName, IsDurable, Recover),
                 %% Rely on terminate to delete the queue.
-                {stop, normal, not_found, State#q{backing_queue_state = BQS}}
+                {stop, normal, State#q{backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
