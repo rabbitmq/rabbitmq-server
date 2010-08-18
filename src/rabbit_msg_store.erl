@@ -829,16 +829,15 @@ add_to_file_summary(#file_summary { valid_total_size = ValidTotalSize,
                     TotalSize, Offset, File, FileSize,
                     #msstate { file_summary_ets = FileSummaryEts }) ->
     ValidTotalSize1 = ValidTotalSize + TotalSize,
-    ContiguousTop1 = case Offset =:= ContiguousTop of
-                         true  -> ContiguousTop + TotalSize;
-                         false -> ContiguousTop
+    ContiguousTop1 = case ContiguousTop of
+                         Offset -> ContiguousTop + TotalSize;
+                         _      -> ContiguousTop
                      end,
-    true =
-        ets:update_element(
-          FileSummaryEts, File,
-          [{#file_summary.valid_total_size, ValidTotalSize1},
-           {#file_summary.contiguous_top,   ContiguousTop1},
-           {#file_summary.file_size,        FileSize}]),
+    true = ets:update_element(
+             FileSummaryEts, File,
+             [{#file_summary.valid_total_size, ValidTotalSize1},
+              {#file_summary.contiguous_top,   ContiguousTop1},
+              {#file_summary.file_size,        FileSize}]),
     ok.
 
 read_message(Guid, From,
