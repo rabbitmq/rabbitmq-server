@@ -74,7 +74,7 @@
 
 -record(event, {type, props, timestamp}).
 
--record(msg_properties, {ttl}).
+-record(msg_properties, {expiry}).
 
 %%----------------------------------------------------------------------------
 
