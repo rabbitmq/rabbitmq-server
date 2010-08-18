@@ -57,6 +57,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 
 -define(EXPIRES_TYPE, long).
+-define(TTL_TYPE, long).
 
 %%----------------------------------------------------------------------------
 
@@ -307,7 +308,8 @@ check_declare_arguments(QueueName, Args) ->
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
+     end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1},
+			   {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
     ok.
 
 check_expires_argument(undefined) ->
@@ -320,6 +322,16 @@ check_expires_argument({?EXPIRES_TYPE, _Expires}) ->
 check_expires_argument(_) ->
     {error, expires_not_of_type_long}.
 
+check_message_ttl_argument(undefined) ->
+    ok;
+check_message_ttl_argument({?TTL_TYPE, TTL}) 
+  when is_integer(TTL) andalso TTL > 0 ->
+    ok;
+check_message_ttl_argument({?TTL_TYPE, _TTL}) ->
+    {error, ttl_zero_or_less};
+check_message_ttl_argument(_) ->
+    {error, ttl_not_of_type_long}.
+  
 list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_queue,
