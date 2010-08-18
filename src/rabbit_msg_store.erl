@@ -618,40 +618,15 @@ handle_call({delete_client, CRef}, _From,
           State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
 handle_cast({write, Guid, Msg},
-            State = #msstate { current_file_handle = CurHdl,
-                               current_file        = CurFile,
-                               sum_valid_data      = SumValid,
-                               sum_file_size       = SumFileSize,
+            State = #msstate { sum_valid_data      = SumValid,
                                file_summary_ets    = FileSummaryEts,
                                cur_file_cache_ets  = CurFileCacheEts }) ->
     [RefCount, 0] =
         ets:update_counter(CurFileCacheEts, Guid, [{3, 0}, {3, 0, 0, 0}]),
     true = RefCount > 0,
-    Write =
-        fun () ->
-                {ok, CurOffset} =
-                    file_handle_cache:current_virtual_offset(CurHdl),
-                {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
-                ok = index_insert(
-                       #msg_location {
-                          guid = Guid, ref_count = RefCount, file = CurFile,
-                          offset = CurOffset, total_size = TotalSize }, State),
-                [#file_summary { right     = undefined,
-                                 locked    = false,
-                                 file_size = FileSize } = Summary] =
-                    ets:lookup(FileSummaryEts, CurFile),
-                ok = add_to_file_summary(Summary, TotalSize, CurOffset, CurFile,
-                                         FileSize + TotalSize, State),
-                NextOffset = CurOffset + TotalSize,
-                noreply(
-                  maybe_roll_to_new_file(
-                    NextOffset, State #msstate {
-                                  sum_valid_data = SumValid + TotalSize,
-                                  sum_file_size  = SumFileSize + TotalSize }))
-        end,
     case index_lookup(Guid, State) of
         not_found ->
-            Write();
+            write_message(Guid, Msg, RefCount, State);
         #msg_location { ref_count = 0, file = File, offset = Offset,
                         total_size = TotalSize } ->
             [#file_summary { locked    = Locked,
@@ -660,7 +635,7 @@ handle_cast({write, Guid, Msg},
             case Locked of
                 true ->
                     ok = index_delete(Guid, State),
-                    Write();
+                    write_message(Guid, Msg, RefCount, State);
                 false ->
                     ok = index_update_fields(
                            Guid, {#msg_location.ref_count, RefCount}, State),
@@ -823,6 +798,29 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
               lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
               State1 #msstate { on_sync = [] }
     end.
+
+write_message(Guid, Msg, RefCount,
+              State = #msstate { current_file_handle = CurHdl,
+                                 current_file        = CurFile,
+                                 sum_valid_data      = SumValid,
+                                 sum_file_size       = SumFileSize,
+                                 file_summary_ets    = FileSummaryEts }) ->
+    {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
+    {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
+    ok = index_insert(
+           #msg_location { guid = Guid, ref_count = RefCount, file = CurFile,
+                           offset = CurOffset, total_size = TotalSize }, State),
+    [#file_summary { right     = undefined,
+                     locked    = false,
+                     file_size = FileSize } = Summary] =
+        ets:lookup(FileSummaryEts, CurFile),
+    ok = add_to_file_summary(Summary, TotalSize, CurOffset, CurFile,
+                             FileSize + TotalSize, State),
+    NextOffset = CurOffset + TotalSize,
+    noreply(maybe_roll_to_new_file(
+              NextOffset, State #msstate {
+                            sum_valid_data = SumValid + TotalSize,
+                            sum_file_size  = SumFileSize + TotalSize })).
 
 add_to_file_summary(#file_summary { valid_total_size = ValidTotalSize,
                                     contiguous_top   = ContiguousTop },
