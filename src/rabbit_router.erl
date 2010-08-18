@@ -55,7 +55,6 @@
 
 deliver(QPids, Delivery = #delivery{mandatory = false,
                                     immediate = false,
-                                    message = Msg,
                                     msg_seq_no = MsgSeqNo}) ->
     %% optimisation: when Mandatory = false and Immediate = false,
     %% rabbit_amqqueue:deliver will deliver the message to the queue
@@ -67,12 +66,16 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     case {QPids, MsgSeqNo} of
-        {[], _}  -> rabbit_channel:confirm(self(), MsgSeqNo);
+        {[], _}  ->
+            %% No queues will get the message.  This is fine, so we
+            %% just confirm it.
+            rabbit_channel:confirm(self(), MsgSeqNo);
         _        -> ok
     end,
+    maybe_inform_channel(MsgSeqNo, QPids),
     {routed, QPids};
 
-deliver(QPids, Delivery) ->
+deliver(QPids, Delivery = #delivery{msg_seq_no = MsgSeqNo}) ->
     {Success, _} =
         delegate:invoke(QPids,
                         fun (Pid) ->
@@ -80,8 +83,14 @@ deliver(QPids, Delivery) ->
                         end),
     {Routed, Handled} =
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   {Routed, Handled}).
+    case check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
+                        {Routed, Handled}) of
+        {routed, Qs} ->
+            maybe_inform_channel(MsgSeqNo, Qs),
+            {routed, Qs};
+        O ->
+            O
+    end.
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
@@ -119,3 +128,8 @@ fold_deliveries({_,  false},{_, Handled}) -> {true, Handled}.
 check_delivery(true, _   , {false, []}) -> {unroutable, []};
 check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
+
+maybe_inform_channel(undefine, _) ->
+    ok;
+maybe_inform_channel(MsgSeqNo, QPids) ->
+    gen_server2:cast(self(), {msg_sent_to_queues, MsgSeqNo, QPids}).

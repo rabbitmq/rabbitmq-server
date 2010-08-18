@@ -873,7 +873,6 @@ handle_cast({msgs_written_to_disk, Guids},
 handle_cast({msg_indices_written_to_disk, Guids},
             State = #q{msgs_on_disk = MOD,
                        msg_indices_on_disk = MIOD}) ->
-    rabbit_log:info("Message indices written to disk: ~p~n", [Guids]),
     GuidSet = gb_sets:from_list(Guids),
     ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
     gb_sets:fold(fun (Guid, State0) ->

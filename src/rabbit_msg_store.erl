@@ -746,7 +746,6 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #msstate { pid_to_fun   = PTF,
                                pid_to_guids = PTG }) ->
     % A queue with a callback has died, so remove it from dicts.
-    rabbit_log:info("Queue ~p has gone down~n", [Pid]),
     {noreply, State #msstate { pid_to_fun   = dict:erase(Pid, PTF),
                                pid_to_guids = dict:erase(Pid, PTG) }};
 
