@@ -825,7 +825,7 @@ add_to_file_summary(#file_summary { valid_total_size = ValidTotalSize,
                     #msstate { file_summary_ets = FileSummaryEts }) ->
     ValidTotalSize1 = ValidTotalSize + TotalSize,
     ContiguousTop1 = case Offset =:= ContiguousTop of
-                         true  -> ValidTotalSize1;
+                         true  -> ContiguousTop + TotalSize;
                          false -> ContiguousTop
                      end,
     true =
