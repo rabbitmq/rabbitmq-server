@@ -316,8 +316,11 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
-    ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {gen_server2:cast(Server, {write, Guid, Msg}), CState}.
+    {ok, New} = update_msg_cache(CurFileCacheEts, Guid, Msg),
+    {case New of
+         1 -> gen_server2:cast(Server, {write, Guid, Msg});
+         _ -> ok
+     end, CState}.
 
 read(Server, Guid,
      CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
@@ -621,7 +624,9 @@ handle_cast({write, Guid, Msg},
                                sum_file_size       = SumFileSize,
                                file_summary_ets    = FileSummaryEts,
                                cur_file_cache_ets  = CurFileCacheEts }) ->
-    true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
+    [RefCount, 0] =
+        ets:update_counter(CurFileCacheEts, Guid, [{3, 0}, {3, 0, 0, 0}]),
+    true = RefCount > 0,
     Write =
         fun () ->
                 {ok, CurOffset} =
@@ -629,7 +634,7 @@ handle_cast({write, Guid, Msg},
                 {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
                 ok = index_insert(
                        #msg_location {
-                          guid = Guid, ref_count = 1, file = CurFile,
+                          guid = Guid, ref_count = RefCount, file = CurFile,
                           offset = CurOffset, total_size = TotalSize }, State),
                 [#file_summary { right     = undefined,
                                  locked    = false,
@@ -658,18 +663,18 @@ handle_cast({write, Guid, Msg},
                     Write();
                 false ->
                     ok = index_update_fields(
-                           Guid, {#msg_location.ref_count, 1}, State),
+                           Guid, {#msg_location.ref_count, RefCount}, State),
                     ok = add_to_file_summary(Summary, TotalSize, Offset, File,
                                              FileSize, State),
                     noreply(State #msstate {
                               sum_valid_data = SumValid + TotalSize })
             end;
-        #msg_location { ref_count = RefCount } ->
+        #msg_location { ref_count = RefCountN } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
-            ok = index_update_fields(Guid,
-                                     {#msg_location.ref_count, RefCount + 1},
-                                     State),
+            ok =
+                index_update_fields(
+                  Guid, {#msg_location.ref_count, RefCountN + RefCount}, State),
             noreply(State)
     end;
 
@@ -992,7 +997,8 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
     end.
 
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
-    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+    safe_ets_update_counter(Tab, Key, UpdateOp,
+                            fun (Result) -> {ok, Result} end, FailThunk).
 
 %%----------------------------------------------------------------------------
 %% file helper functions
@@ -1092,13 +1098,14 @@ list_sorted_file_names(Dir, Ext) ->
 
 maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg)
   when RefCount > 1 ->
-    update_msg_cache(DedupCacheEts, Guid, Msg);
+    {ok, _} = update_msg_cache(DedupCacheEts, Guid, Msg),
+    ok;
 maybe_insert_into_cache(_DedupCacheEts, _RefCount, _Guid, _Msg) ->
     ok.
 
 update_msg_cache(CacheEts, Guid, Msg) ->
     case ets:insert_new(CacheEts, {Guid, Msg, 1}) of
-        true  -> ok;
+        true  -> {ok, 1};
         false -> safe_ets_update_counter_ok(
                    CacheEts, Guid, {3, +1},
                    fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
@@ -1116,7 +1123,9 @@ fetch_and_increment_cache(DedupCacheEts, Guid) ->
             safe_ets_update_counter_ok(
               DedupCacheEts, Guid, {3, +1},
               %% someone has deleted us in the meantime, insert us
-              fun () -> ok = update_msg_cache(DedupCacheEts, Guid, Msg) end),
+              fun () ->
+                      {ok, _} = update_msg_cache(DedupCacheEts, Guid, Msg)
+              end),
             Msg
     end.
 
