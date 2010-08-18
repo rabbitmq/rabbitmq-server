@@ -74,6 +74,8 @@
 
 -record(event, {type, props, timestamp}).
 
+-record(msg_properties, {ttl}).
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
