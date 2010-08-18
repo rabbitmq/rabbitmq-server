@@ -939,7 +939,7 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
             %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
             %% there may be further writes in the mailbox for the same
             %% msg.
-            ok = decrement_cache(DedupCacheEts, Guid),
+            ok = remove_cache_entry(DedupCacheEts, Guid),
             [#file_summary { valid_total_size = ValidTotalSize,
                              contiguous_top   = ContiguousTop,
                              locked           = Locked }] =
@@ -1104,6 +1104,10 @@ update_msg_cache(CacheEts, Guid, Msg) ->
                    fun () -> update_msg_cache(CacheEts, Guid, Msg) end)
     end.
 
+remove_cache_entry(DedupCacheEts, Guid) ->
+    true = ets:delete(DedupCacheEts, Guid),
+    ok.
+
 fetch_and_increment_cache(DedupCacheEts, Guid) ->
     case ets:lookup(DedupCacheEts, Guid) of
         [] ->
@@ -1119,8 +1123,8 @@ fetch_and_increment_cache(DedupCacheEts, Guid) ->
 decrement_cache(DedupCacheEts, Guid) ->
     true = safe_ets_update_counter(
              DedupCacheEts, Guid, {3, -1},
-             fun (N) when N < 0 -> true = ets:delete(DedupCacheEts, Guid);
-                 (_N)           -> true
+             fun (N) when N =< 0 -> true = ets:delete(DedupCacheEts, Guid);
+                 (_N)            -> true
              end,
              %% Guid is not in there because although it's been
              %% delivered, it's never actually been read (think:
@@ -1421,7 +1425,6 @@ maybe_roll_to_new_file(
                      current_file        = CurFile,
                      file_summary_ets    = FileSummaryEts,
                      cur_file_cache_ets  = CurFileCacheEts,
-                     dedup_cache_ets     = DedupCacheEts,
                      file_size_limit     = FileSizeLimit })
   when Offset >= FileSizeLimit ->
     State1 = internal_sync(State),
@@ -1440,7 +1443,6 @@ maybe_roll_to_new_file(
     true = ets:update_element(FileSummaryEts, CurFile,
                               {#file_summary.right, NextFile}),
     true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
-    true = ets:match_delete(DedupCacheEts, {'_', '_', 0}),
     maybe_compact(State1 #msstate { current_file_handle = NextHdl,
                                     current_file        = NextFile });
 maybe_roll_to_new_file(_, State) ->
