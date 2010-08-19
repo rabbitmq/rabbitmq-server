@@ -950,7 +950,7 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
                   end, {[], 0, 0}, Elders),
     case Pids of
         [] -> ok;
-        _  -> case (Sum / ClientCount) - (2000 * ?FILE_HANDLES_CHECK_INTERVAL) of
+        _  -> case (Sum / ClientCount) - (1000 * ?FILE_HANDLES_CHECK_INTERVAL) of
                   AverageAge when AverageAge > 0 ->
                       lists:foreach(
                         fun (Pid) ->
