@@ -797,8 +797,8 @@ handle_cast({register_callback, Pid, MFA},
                 Pid, State #fhc_state {
                        callbacks = dict:store(Pid, MFA, Callbacks) })};
 
-handle_cast({update, Pid, EldestUnusedSince}, State =
-                #fhc_state { elders = Elders })
+handle_cast({update, Pid, EldestUnusedSince},
+            State = #fhc_state { elders = Elders })
   when EldestUnusedSince =/= undefined ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     %% don't call maybe_reduce from here otherwise we can create a
@@ -827,15 +827,15 @@ handle_cast(check_counts, State) ->
                   false -> State
               end}.
 
-handle_info({'DOWN', _MRef, process, Pid, _Reason}, State =
-                #fhc_state { open_count     = OpenCount,
-                             open_pending   = OpenPending,
-                             obtain_count   = ObtainCount,
-                             obtain_pending = ObtainPending,
-                             callbacks      = Callbacks,
-                             counts         = Counts,
-                             elders         = Elders,
-                             blocked        = Blocked }) ->
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
+            State = #fhc_state { open_count     = OpenCount,
+                                 open_pending   = OpenPending,
+                                 obtain_count   = ObtainCount,
+                                 obtain_pending = ObtainPending,
+                                 callbacks      = Callbacks,
+                                 counts         = Counts,
+                                 elders         = Elders,
+                                 blocked        = Blocked }) ->
     FilterFun = fun ({_Kind, Pid1, _From}) -> Pid1 =/= Pid end,
     OpenPending1   = lists:filter(FilterFun, OpenPending),
     ObtainPending1 = lists:filter(FilterFun, ObtainPending),
