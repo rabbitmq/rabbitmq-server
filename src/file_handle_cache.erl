@@ -1017,10 +1017,10 @@ close(_Callbacks, _Required, []) ->
     ok;
 close(_Callbacks, Required, _List) when Required =< 0 ->
     ok;
-close(Callbacks, Required, [{Pid, Sum} | List]) ->
+close(Callbacks, Required, [{Pid, Open} | List]) ->
     {M, F, A} = dict:fetch(Pid, Callbacks),
     apply(M, F, A ++ [0]),
-    close(Callbacks, Required - Sum, List).
+    close(Callbacks, Required - Open, List).
 
 ensure_mref(Pid, State = #fhc_state { counts = Counts }) ->
     case dict:find(Pid, Counts) of
