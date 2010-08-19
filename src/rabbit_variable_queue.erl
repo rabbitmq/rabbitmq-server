@@ -249,7 +249,7 @@
           is_delivered,
           msg_on_disk,
           index_on_disk,
-	  msg_properties
+          msg_properties
          }).
 
 -record(delta,
@@ -533,7 +533,8 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
         {{value, MsgStatus = #msg_status {
                    msg = Msg, guid = Guid, seq_id = SeqId,
                    is_persistent = IsPersistent, is_delivered = IsDelivered,
-                   msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk }},
+                   msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk,
+                   msg_properties = MsgProperties }},
          Q4a} ->
 
             %% 1. Mark it delivered if necessary
@@ -564,7 +565,7 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
 
             PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
             Len1 = Len - 1,
-            {{Msg, IsDelivered, AckTag, Len1},
+            {{Msg, MsgProperties, IsDelivered, AckTag, Len1},
              a(State #vqstate { q4               = Q4a,
                                 ram_msg_count    = RamMsgCount - 1,
                                 out_counter      = OutCount + 1,
@@ -580,7 +581,7 @@ ack(AckTags, State) ->
           AckTags, State)).
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent },
-	   MsgProperties,
+           MsgProperties,
            State = #vqstate { durable           = IsDurable,
                               msg_store_clients = MSCState }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
