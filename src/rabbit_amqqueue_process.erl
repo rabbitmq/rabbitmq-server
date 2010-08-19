@@ -410,16 +410,13 @@ confirm_message_internal(Guid, State = #q { guid_to_channel     = GTC,
                                             msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD }) ->
     case dict:find(Guid, GTC) of
-        {ok, {_, undefined}} ->
-            State;
-        {ok, {ChPid, MsgSeqNo}} ->
-            rabbit_channel:confirm(ChPid, MsgSeqNo),
-            State #q { guid_to_channel     = dict:erase(Guid, GTC),
-                       msgs_on_disk        = gb_sets:delete_any(Guid, MOD),
-                       msg_indices_on_disk = gb_sets:delete_any(Guid, MIOD) };
-        _ ->
-            State
-    end.
+        {ok, {ChPid, undefined}} -> ok;
+        {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
+        _                        -> ok
+    end,
+    State #q { guid_to_channel     = dict:erase(Guid, GTC),
+               msgs_on_disk        = gb_sets:delete_any(Guid, MOD),
+               msg_indices_on_disk = gb_sets:delete_any(Guid, MIOD) }.
 
 maybe_record_confirm_message(undefined, _, _, State) ->
     State;
