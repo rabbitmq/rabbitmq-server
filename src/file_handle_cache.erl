@@ -751,7 +751,8 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
             State = #fhc_state { open_count   = Count,
                                  open_pending = Pending,
                                  elders       = Elders,
-                                 blocked      = Blocked }) ->
+                                 blocked      = Blocked })
+  when EldestUnusedSince =/= undefined ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     Item = {open, Pid, From},
     State1 = ensure_mref(Pid, State #fhc_state { elders = Elders1 }),
@@ -797,7 +798,8 @@ handle_cast({register_callback, Pid, MFA},
                        callbacks = dict:store(Pid, MFA, Callbacks) })};
 
 handle_cast({update, Pid, EldestUnusedSince}, State =
-                #fhc_state { elders = Elders }) ->
+                #fhc_state { elders = Elders })
+  when EldestUnusedSince =/= undefined ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     %% don't call maybe_reduce from here otherwise we can create a
     %% storm of messages
@@ -938,9 +940,7 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
                             timer_ref      = TRef }) ->
     Now = now(),
     {Pids, Sum, ClientCount} =
-        dict:fold(fun (_Pid, undefined, Accs) ->
-                          Accs;
-                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc} = Accs) ->
+        dict:fold(fun (Pid, Eldest, {PidsAcc, SumAcc, CountAcc} = Accs) ->
                           case sets:is_element(Pid, Blocked) of
                               true  -> Accs;
                               false -> {[Pid|PidsAcc],
