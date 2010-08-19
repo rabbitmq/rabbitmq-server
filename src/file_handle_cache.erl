@@ -902,14 +902,10 @@ run_pending_item1({Kind, Pid, From}, Counts) ->
     update_counts(Kind, Pid, +1, Counts).
 
 update_counts(open, Pid, Delta, Counts) ->
-    dict:update(Pid, fun ({Opened, Obtained})
-                           when Opened >= 0 andalso Obtained >= 0 ->
-                             {Opened + Delta, Obtained} end,
+    dict:update(Pid, fun ({Opened, Obtained}) -> {Opened + Delta, Obtained} end,
                 Counts);
 update_counts(obtain, Pid, Delta, Counts) ->
-    dict:update(Pid, fun ({Opened, Obtained})
-                           when Opened >= 0 andalso Obtained >= 0 ->
-                             {Opened, Obtained + Delta} end,
+    dict:update(Pid, fun ({Opened, Obtained}) -> {Opened, Obtained + Delta} end,
                 Counts).
 
 maybe_reduce(State = #fhc_state { limit          = Limit,
