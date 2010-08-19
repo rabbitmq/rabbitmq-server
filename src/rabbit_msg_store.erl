@@ -317,7 +317,7 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
     ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {gen_server2:cast(Server, {write, Guid, Msg}), CState}.
+    {gen_server2:cast(Server, {write, Guid}), CState}.
 
 read(Server, Guid,
      CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
@@ -611,7 +611,7 @@ handle_call({delete_client, CRef}, _From,
     reply(ok,
           State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
-handle_cast({write, Guid, Msg},
+handle_cast({write, Guid},
             State = #msstate { current_file_handle = CurHdl,
                                current_file        = CurFile,
                                sum_valid_data      = SumValid,
@@ -619,6 +619,7 @@ handle_cast({write, Guid, Msg},
                                file_summary_ets    = FileSummaryEts,
                                cur_file_cache_ets  = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
+    [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case index_lookup(Guid, State) of
         not_found ->
             %% New message, lots to do
