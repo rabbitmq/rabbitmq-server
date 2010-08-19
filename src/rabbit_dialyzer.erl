@@ -32,7 +32,7 @@
 -module(rabbit_dialyzer).
 
 -export([create_basic_plt/1, add_to_plt/2, dialyze_files/2,
-         halt_with_code/1]).
+         halt_with_code/1, xref_dir/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,6 +41,7 @@
 -spec(create_basic_plt/1 :: (file:filename()) -> 'ok').
 -spec(add_to_plt/2 :: (file:filename(), string()) -> 'ok').
 -spec(dialyze_files/2 :: (file:filename(), string()) -> 'ok').
+-spec(xref_dir/1 :: (file:filename()) -> 'ok').
 -spec(halt_with_code/1 :: (atom()) -> no_return()).
 
 -endif.
@@ -61,7 +62,7 @@ add_to_plt(PltPath, FilesString) ->
                                      {init_plt, PltPath},
                                      {output_plt, PltPath},
                                      {files, Files}]),
-    print_warnings(DialyzerWarnings),
+    print_warnings(DialyzerWarnings, fun dialyzer:format_warning/1),
     ok.
 
 dialyze_files(PltPath, ModifiedFiles) ->
@@ -71,18 +72,29 @@ dialyze_files(PltPath, ModifiedFiles) ->
                                      {warnings, [underspecs, behaviours,
                                                  race_conditions]}]),
     case DialyzerWarnings of
-        [] -> io:format("~nOk~n"),
-              ok;
+        [] -> io:format("~nOk~n");
         _  -> io:format("~n~nFAILED with the following ~p warnings:~n~n",
                         [length(DialyzerWarnings)]),
-              print_warnings(DialyzerWarnings),
-              fail
-    end.
-
-print_warnings(Warnings) ->
-    [io:format("~s~n", [dialyzer:format_warning(W)]) || W <- Warnings],
-    io:format("~n"),
+              print_warnings(DialyzerWarnings, fun dialyzer:format_warning/1)
+    end,
     ok.
+
+xref_dir(EbinDir) ->
+    XrefErrors = xref:d(EbinDir),
+    [case proplists:get_value(W, XrefErrors, []) of
+         []       -> ok;
+         Problems -> io:format("~p functions:~n", [W]),
+                     print_warnings(Problems, fun show_function/1)
+     end
+     || W <- [deprecated, undefined, unused]],
+    ok.
+
+show_function({{Mod,Fun,Ar},{PMod,PFun,PAr}}) ->
+    io_lib:format("~s:~s/~p called by ~s:~s/~p", [PMod, PFun, PAr,
+                                                  Mod, Fun, Ar]).
+print_warnings(Warnings, FormatFun) ->
+    [io:format("~s~n", [FormatFun(W)]) || W <- Warnings],
+    io:format("~n").
 
 otp_apps_dependencies_paths() ->
     [code:lib_dir(App, ebin) ||
