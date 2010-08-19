@@ -402,7 +402,14 @@ init(QueueName, IsDurable, Recover) ->
             true  -> rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, PRef);
             false -> undefined
         end,
-    register_confirm_callback(?PERSISTENT_MSG_STORE),
+
+    Self = self(),
+    rabbit_msg_store:register_sync_callback(
+      ?PERSISTENT_MSG_STORE,
+      fun (Guids) ->
+              gen_server2:cast(Self, {msgs_written_to_disk, Guids})
+      end),
+
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
       q1                   = queue:new(),
@@ -1071,18 +1078,6 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
                                   ForceIndex, MsgStatus1, IndexState),
     {MsgStatus2, State #vqstate { index_state       = IndexState1,
                                   msg_store_clients = MSCState1 }}.
-
-%%----------------------------------------------------------------------------
-%% Internal gubbins for confirms
-%%----------------------------------------------------------------------------
-
-register_confirm_callback(MessageStore) ->
-    Self = self(),
-    rabbit_msg_store:register_callback(
-      MessageStore,
-      fun (Guids) ->
-              gen_server2:cast(Self, {msgs_written_to_disk, Guids})
-      end).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks

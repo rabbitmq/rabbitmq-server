@@ -330,7 +330,7 @@ record_current_channel_tx(ChPid, Txn) ->
     %% that wasn't happening already)
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
 
-deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun }, FunAcc,
+deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                           State = #q{q = #amqqueue{name = QName},
                                      active_consumers = ActiveConsumers,
                                      blocked_consumers = BlockedConsumers}) ->
@@ -353,9 +353,9 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun }, FunAcc,
                     {State2, ChAckTags1} =
                         case AckRequired of
                             true  -> {State1, sets:add_element(AckTag, ChAckTags)};
-                            false ->
-                                {confirm_message_internal(Message#basic_message.guid,
-                                                          State1), ChAckTags}
+                            false -> {confirm_message_internal(
+                                        Message#basic_message.guid,
+                                        State1), ChAckTags}
                         end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
@@ -410,6 +410,8 @@ confirm_message_internal(Guid, State = #q { guid_to_channel     = GTC,
                                             msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD }) ->
     case dict:find(Guid, GTC) of
+        {ok, {_, undefined}} ->
+            State;
         {ok, {ChPid, MsgSeqNo}} ->
             rabbit_channel:confirm(ChPid, MsgSeqNo),
             State #q { guid_to_channel     = dict:erase(Guid, GTC),
@@ -851,6 +853,7 @@ handle_cast({ack, Txn, AckTags, ChPid},
             noreply(State#q{backing_queue_state = BQS1})
     end;
 
+%% Called when variable queue gets ack from a consumer.
 handle_cast({confirm_messages, Guids}, State) ->
     noreply(lists:foldl(fun (Guid, State0) ->
                                 confirm_message_internal(Guid, State0)

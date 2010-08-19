@@ -36,7 +36,7 @@
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
          sync/3, client_init/2, client_terminate/1,
          client_delete_and_terminate/3, successfully_recovered_state/1,
-         register_callback/2]).
+         register_sync_callback/2]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
@@ -388,8 +388,8 @@ client_delete_and_terminate(CState, Server, Ref) ->
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
-register_callback(Server, Fun) ->
-    gen_server2:call(Server, {register_callback, Fun}, infinity).
+register_sync_callback(Server, Fun) ->
+    gen_server2:call(Server, {register_sync_callback, Fun}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -611,9 +611,8 @@ handle_call({delete_client, CRef}, _From,
     reply(ok,
           State #msstate { client_refs = sets:del_element(CRef, ClientRefs) });
 
-handle_call({register_callback, Fun}, {Pid, _},
+handle_call({register_sync_callback, Fun}, {Pid, _},
             State = #msstate { pid_to_fun = PTF }) ->
-    rabbit_log:info("Registering callback ~p~n", [{Pid, Fun}]),
     erlang:monitor(process, Pid),
     reply(ok,
           State #msstate { pid_to_fun = dict:store(Pid, Fun, PTF) }).
