@@ -962,17 +962,8 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
                                 end
                         end, Pids);
                   _ ->
-                      Required = length(OpenPending) + length(ObtainPending),
-                      PidsCounts = [{Pid, OpCount}
-                                    || Pid <- Pids,
-                                       dict:is_key(Pid, Callbacks),
-                                       begin
-                                           {OpCount, _} = dict:fetch(Pid, Counts),
-                                           OpCount > 0
-                                       end],
-                      {L1, L2} = lists:split(random:uniform(length(PidsCounts)),
-                                             PidsCounts),
-                      close(Callbacks, Required, L2 ++ L1)
+                      notify(Pids, Callbacks, Counts,
+                             length(OpenPending) + length(ObtainPending))
               end
     end,
     case TRef of
@@ -1013,14 +1004,30 @@ ulimit() ->
             ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
     end.
 
-close(_Callbacks, _Required, []) ->
+notify(Pids, Callbacks, Counts, Required) ->
+    Notifications = [{Callback, OpenCount} ||
+                        Pid <- Pids,
+                        case dict:find(Pid, Callbacks) of
+                            error    -> Callback = undefined,
+                                        false;
+                            {ok, CB} -> Callback = CB,
+                                        true
+                        end,
+                        begin
+                            {OpenCount, _} = dict:fetch(Pid, Counts),
+                            OpenCount > 0
+                        end],
+    {L1, L2} = lists:split(random:uniform(length(Notifications)),
+                           Notifications),
+    notify(Required, L2 ++ L1).
+
+notify(_Required, []) ->
     ok;
-close(_Callbacks, Required, _List) when Required =< 0 ->
+notify(Required, _Notifications) when Required =< 0 ->
     ok;
-close(Callbacks, Required, [{Pid, Open} | List]) ->
-    {M, F, A} = dict:fetch(Pid, Callbacks),
+notify(Required, [{{M, F, A}, Open} | Notifications]) ->
     apply(M, F, A ++ [0]),
-    close(Callbacks, Required - Open, List).
+    notify(Required - Open, Notifications).
 
 ensure_mref(Pid, State = #fhc_state { counts = Counts }) ->
     case dict:find(Pid, Counts) of
