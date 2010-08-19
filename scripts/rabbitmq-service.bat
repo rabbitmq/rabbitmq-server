@@ -180,24 +180,21 @@ if errorlevel 1 (
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
-if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
-    set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_BASE!\plugins-scratch
-)
-
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_plugin_activator ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
--rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
+-rabbit plugins_expand_dir \""!RABBITMQ_MNESIA_DIR:\=/!/plugins-scratch"\" ^
 -rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
 -extra !STAR!
 
-if not exist "!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit.boot" (
-    echo Custom Boot File "!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit.boot" is missing.
+set RABBITMQ_BOOT_FILE=!RABBITMQ_MNESIA_DIR!\plugins-scratch\rabbit
+if not exist "!RABBITMQ_BOOT_FILE!.boot" (
+    echo Custom Boot File "!RABBITMQ_BOOT_FILE!.boot" is missing.
     exit /B 1
 )
-set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
+
 set RABBITMQ_EBIN_PATH=
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
