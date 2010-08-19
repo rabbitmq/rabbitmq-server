@@ -450,6 +450,19 @@ requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
     maybe_run_queue_via_backing_queue(
       fun (BQS) -> BQ:requeue(AckTags, MsgPropsFun, BQS) end, State).
 
+fetch(AckRequired, State = #q{backing_queue_state = BQS, 
+				  backing_queue = BQ}) ->
+    case BQ:fetch(AckRequired, BQS) of
+        {empty, BQS1} -> {empty, State#q{backing_queue_state = BQS1}};
+        {{Message, MsgProperties, IsDelivered, AckTag, Remaining}, BQS1} ->
+	    case msg_expired(MsgProperties) of
+		true -> 
+		    fetch(AckRequired, State#q{backing_queue_state = BQS1});
+		false ->
+		    {{Message, IsDelivered, AckTag, Remaining}, State#q{backing_queue_state = BQS1}}
+	    end
+    end.
+
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
 remove_consumer(ChPid, ConsumerTag, Queue) ->
@@ -565,6 +578,12 @@ rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
 subtract_acks(A, B) when is_list(B) ->
     lists:foldl(fun sets:del_element/2, A, B).
 
+msg_expired(_MsgProperties = #msg_properties{expiry = undefined}) ->
+    false;
+msg_expired(_MsgProperties = #msg_properties{expiry=Expiry}) ->
+    Now = timer:now_diff(now(), {0,0,0}),
+    Now > Expiry.
+
 reset_msg_expiry_fun(State) ->
     fun(MsgProps) ->
 	    MsgProps#msg_properties{expiry=calculate_msg_expiry(State)}
@@ -621,24 +640,6 @@ emit_stats(State) ->
                         [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
 
 %---------------------------------------------------------------------------
-fetch(AckRequired, State = #q{backing_queue_state = BQS, 
-				  backing_queue = BQ}) ->
-    case BQ:fetch(AckRequired, BQS) of
-        {empty, BQS1} = Result -> {empty, State#q{backing_queue_state = BQS1}};
-        {{Message, MsgProperties, IsDelivered, AckTag, Remaining}, BQS1} ->
-	    case msg_expired(MsgProperties) of
-		true -> 
-		    fetch(AckRequired, State#q{backing_queue_state = BQS1});
-		false ->
-		    {{Message, IsDelivered, AckTag, Remaining}, State#q{backing_queue_state = BQS1}}
-	    end
-    end.
-
-msg_expired(MsgProperties = #msg_properties{expiry = undefined}) ->
-    false;
-msg_expired(MsgProperties = #msg_properties{expiry=Expiry}) ->
-    Now = timer:now_diff(now(), {0,0,0}),
-    Now > Expiry.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->

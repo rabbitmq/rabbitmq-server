@@ -612,7 +612,11 @@ tx_rollback(Txn, State = #vqstate { durable = IsDurable }) ->
 tx_commit(Txn, Fun, MsgPropsFun, State = #vqstate { durable = IsDurable }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
-    PubsOrdered = lists:reverse(Pubs),
+    F = fun({Msg, MsgProperties}) ->
+		{Msg, MsgPropsFun(MsgProperties)}
+	end,
+    PubsProcessed = lists:map(F, Pubs),
+    PubsOrdered = lists:reverse(PubsProcessed),
     AckTags1 = lists:append(AckTags),
     PersistentGuids = persistent_guids(PubsOrdered),
     HasPersistentPubs = PersistentGuids =/= [],
@@ -956,8 +960,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
           fun ({Msg = #basic_message { is_persistent = IsPersistent }, MsgProperties},
                {SeqIdsAcc, State2}) ->
                   IsPersistent1 = IsDurable andalso IsPersistent,
-		  MsgProperties1 = MsgProperties,
-                  {SeqId, State3} = publish(Msg, MsgProperties1, false, IsPersistent1, State2),
+                  {SeqId, State3} = publish(Msg, MsgProperties, false, IsPersistent1, State2),
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
           end, {PAcks, ack(Acks, State)}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
