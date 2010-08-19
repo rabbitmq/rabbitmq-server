@@ -751,8 +751,9 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
                                  elders       = Elders }) ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     Item = {open, Pid, From},
-    case maybe_reduce(State #fhc_state { open_count = Count + 1,
-                                         elders = Elders1 }) of
+    case maybe_reduce(ensure_mref(Pid, State #fhc_state {
+                                         open_count = Count + 1,
+                                         elders = Elders1 })) of
         {true, State1} ->
             State2 = State1 #fhc_state { open_count = Count },
             case CanClose of
@@ -933,8 +934,10 @@ maybe_reduce(State = #fhc_state { limit          = Limit,
         _  -> AverageAge = Sum / ClientCount,
               lists:foreach(
                 fun (Pid) ->
-                        {M, F, A} = dict:fetch(Pid, Callbacks),
-                        apply(M, F, A ++ [AverageAge])
+                        case dict:find(Pid, Callbacks) of
+                            error           -> ok;
+                            {ok, {M, F, A}} -> apply(M, F, A ++ [AverageAge])
+                        end
                 end, Pids)
     end,
     AboveLimit = Limit =/= infinity andalso OpenCount + ObtainCount > Limit,
