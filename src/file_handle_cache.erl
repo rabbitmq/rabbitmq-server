@@ -826,9 +826,10 @@ handle_cast({transfer, FromPid, ToPid}, State) ->
                                             ensure_mref(ToPid, State))))};
 
 handle_cast(check_counts, State) ->
-    {noreply, case needs_reduce(State) of
-                  true  -> reduce(State #fhc_state { timer_ref = undefined });
-                  false -> State
+    State1 = State #fhc_state { timer_ref = undefined },
+    {noreply, case needs_reduce(State1) of
+                  true  -> reduce(State1);
+                  false -> State1
               end}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
