@@ -720,7 +720,6 @@ handle_call({notify_down, ChPid}, _From, State) ->
 
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName}}) ->
-	io:format("Basic Get~n"),
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
     case fetch(AckRequired, State1) of
