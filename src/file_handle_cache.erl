@@ -994,14 +994,12 @@ notify(_Clients, _Required, []) ->
     ok;
 notify(_Clients, Required, _Notifications) when Required =< 0 ->
     ok;
-notify(Clients, Required, [#cstate{ callback = {M, F, A}, opened = Opened,
-                                    pid = Pid, pending_closes = PendingCloses }
-                           | Notifications]) ->
-    Closable = Opened - PendingCloses,
+notify(Clients, Required, [#cstate{ pid      = Pid,
+                                    callback = {M, F, A},
+                                    opened   = Opened } | Notifications]) ->
     apply(M, F, A ++ [0]),
-    ets:update_element(Clients, Pid,
-                       {#cstate.pending_closes, PendingCloses + Closable}),
-    notify(Clients, Required - Closable, Notifications).
+    ets:update_element(Clients, Pid, {#cstate.pending_closes, Opened}),
+    notify(Clients, Required - Opened, Notifications).
 
 ensure_mref(Pid, Clients) ->
     case ets:insert_new(Clients, #cstate { pid = Pid,
