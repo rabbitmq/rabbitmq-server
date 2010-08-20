@@ -67,7 +67,7 @@ publish(#exchange{name = Name}, Delivery =
                           Delivery).
 
 split_topic_key(Key) ->
-    re:split(Key, "\\.", [{return, list}]).
+    string:tokens(binary_to_list(Key), ".").
 
 topic_matches(PatternKey, RoutingKey) ->
     P = split_topic_key(PatternKey),
