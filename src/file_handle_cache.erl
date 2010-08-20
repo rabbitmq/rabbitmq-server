@@ -761,7 +761,7 @@ handle_call({open, Pid, EldestUnusedSince}, From,
   when EldestUnusedSince =/= undefined ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     Item = {open, Pid, From},
-    ok = ensure_mref(Pid, Clients),
+    ok = track_client(Pid, Clients),
     State1 = State #fhc_state { elders = Elders1 },
     case needs_reduce(State1 #fhc_state { open_count = Count + 1 }) of
         true  -> case ets:lookup(Clients, Pid) of
@@ -784,7 +784,7 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
                                                       obtain_pending = Pending,
                                                       clients = Clients })
   when Limit =/= infinity andalso Count >= Limit ->
-    ok = ensure_mref(Pid, Clients),
+    ok = track_client(Pid, Clients),
     true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
     Item = {obtain, Pid, From},
     {noreply, State #fhc_state { obtain_pending = [Item | Pending] }};
@@ -792,7 +792,7 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
                                                       obtain_pending = Pending,
                                                       clients = Clients }) ->
     Item = {obtain, Pid, From},
-    ok = ensure_mref(Pid, Clients),
+    ok = track_client(Pid, Clients),
     case needs_reduce(State #fhc_state { obtain_count = Count + 1 }) of
         true ->
             true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
@@ -804,7 +804,7 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
 
 handle_cast({register_callback, Pid, MFA},
             State = #fhc_state { clients = Clients }) ->
-    ok = ensure_mref(Pid, Clients),
+    ok = track_client(Pid, Clients),
     true = ets:update_element(Clients, Pid, {#cstate.callback, MFA}),
     {noreply, State};
 
@@ -828,7 +828,7 @@ handle_cast({close, Pid, EldestUnusedSince},
                               State #fhc_state { elders = Elders1 }))};
 
 handle_cast({transfer, FromPid, ToPid}, State) ->
-    ok = ensure_mref(ToPid, State#fhc_state.clients),
+    ok = track_client(ToPid, State#fhc_state.clients),
     {noreply, process_pending(
                 update_counts(obtain, ToPid, +1,
                               update_counts(obtain, FromPid, -1, State)))};
@@ -1003,12 +1003,12 @@ notify(Clients, Required, [#cstate{ callback = {M, F, A}, opened = Opened,
                        {#cstate.pending_closes, PendingCloses + Closable}),
     notify(Clients, Required - Closable, Notifications).
 
-ensure_mref(Pid, Clients) ->
-    case ets:insert_new(Clients, #cstate { pid = Pid,
-                                           callback = undefined,
-                                           opened = 0,
-                                           obtained = 0,
-                                           blocked = false,
+track_client(Pid, Clients) ->
+    case ets:insert_new(Clients, #cstate { pid            = Pid,
+                                           callback       = undefined,
+                                           opened         = 0,
+                                           obtained       = 0,
+                                           blocked        = false,
                                            pending_closes = 0 }) of
         true  -> _MRef = erlang:monitor(process, Pid),
                  ok;
