@@ -406,10 +406,9 @@ deliver_from_queue_pred(IsEmpty, _State) ->
 deliver_from_queue_deliver(AckRequired, false,
                            State = #q{backing_queue = BQ,
                                       backing_queue_state = BQS}) ->
-    {{Message, _MsgProperties, IsDelivered, AckTag, Remaining}, BQS1} =
-        BQ:fetch(AckRequired, BQS),
-    {{Message, IsDelivered, AckTag}, 0 == Remaining,
-     State #q { backing_queue_state = BQS1 }}.
+    {{Message, IsDelivered, AckTag, Remaining}, State1} =
+        fetch(AckRequired, State),
+    {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
 run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Funs = {fun deliver_from_queue_pred/2,
