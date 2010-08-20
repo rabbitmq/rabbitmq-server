@@ -410,7 +410,7 @@ confirm_message_internal(Guid, State = #q { guid_to_channel     = GTC,
                                             msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD }) ->
     case dict:find(Guid, GTC) of
-        {ok, {ChPid, undefined}} -> ok;
+        {ok, {_    , undefined}} -> ok;
         {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
         _                        -> ok
     end,
@@ -857,9 +857,13 @@ handle_cast({confirm_messages, Guids}, State) ->
                         end, State, Guids));
 
 handle_cast({msgs_written_to_disk, Guids},
-            State = #q{msgs_on_disk = MOD,
+            State = #q{guid_to_channel = GTC,
+                       msgs_on_disk = MOD,
                        msg_indices_on_disk = MIOD}) ->
-    GuidSet = gb_sets:from_list(Guids),
+    GuidSet = gb_sets:from_list(
+                lists:filter(fun(Guid) ->
+                                     dict:is_key(Guid, GTC)
+                             end, Guids)),
     ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
     gb_sets:fold(fun (Guid, State0) ->
                          confirm_message_internal(Guid, State0)
@@ -871,9 +875,13 @@ handle_cast({msgs_written_to_disk, Guids},
                         gb_sets:difference(MIOD, ToConfirmMsgs)});
 
 handle_cast({msg_indices_written_to_disk, Guids},
-            State = #q{msgs_on_disk = MOD,
+            State = #q{guid_to_channel = GTC,
+                       msgs_on_disk = MOD,
                        msg_indices_on_disk = MIOD}) ->
-    GuidSet = gb_sets:from_list(Guids),
+    GuidSet = gb_sets:from_list(
+                lists:filter(fun(Guid) ->
+                                     dict:is_key(Guid, GTC)
+                             end, Guids)),
     ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
     gb_sets:fold(fun (Guid, State0) ->
                          confirm_message_internal(Guid, State0)
