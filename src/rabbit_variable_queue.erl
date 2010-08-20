@@ -1057,12 +1057,14 @@ maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
     {MsgStatus, IndexState};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
-                                   guid = Guid, seq_id = SeqId,
+                                   seq_id = SeqId,
                                    is_persistent = IsPersistent,
-                                   is_delivered = IsDelivered }, IndexState)
+                                   is_delivered = IsDelivered },
+			  IndexState)
   when Force orelse IsPersistent ->
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
-    IndexState1 = rabbit_queue_index:publish(Guid, SeqId, IsPersistent,
+    IndexEntry = queue_index_entry(MsgStatus),
+    IndexState1 = rabbit_queue_index:publish(IndexEntry, IsPersistent,
                                              IndexState),
     {MsgStatus #msg_status { index_on_disk = true },
      maybe_write_delivered(IsDelivered, SeqId, IndexState1)};
@@ -1078,6 +1080,12 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
                                   ForceIndex, MsgStatus1, IndexState),
     {MsgStatus2, State #vqstate { index_state       = IndexState1,
                                   msg_store_clients = MSCState1 }}.
+
+queue_index_entry(#msg_status {guid = Guid, 
+			       seq_id = SeqId, 
+			       msg_properties = 
+				   #msg_properties{expiry = Expiry}}) ->  
+    #qientry{guid = Guid, seq_id = SeqId, expiry = Expiry}.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
@@ -1300,6 +1308,7 @@ maybe_deltas_to_betas(State = #vqstate {
             DeltaSeqId1 =
                 lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
                            DeltaSeqIdEnd]),
+	    io:format("Reading~n"),
             {List, IndexState1} =
                 rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
             {Q3a, IndexState2} = betas_from_index_entries(

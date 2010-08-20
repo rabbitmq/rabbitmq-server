@@ -76,6 +76,8 @@
 
 -record(msg_properties, {expiry}).
 
+-record(qientry, {guid, seq_id, expiry}).
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
