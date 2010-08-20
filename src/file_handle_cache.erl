@@ -947,10 +947,10 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
     Now = now(),
     {CStates, Sum, ClientCount} =
         dict:fold(fun (Pid, Eldest, {CStatesAcc, SumAcc, CountAcc} = Accs) ->
-                          [#cstate { opened         = Opened,
-                                     blocked        = Blocked,
-                                     pending_closes = PendingCloses }] =
-                              CState = ets:lookup(Clients, Pid),
+                          [#cstate { pending_closes = PendingCloses,
+                                     opened         = Opened,
+                                     blocked        = Blocked } = CState] =
+                              ets:lookup(Clients, Pid),
                           case Blocked orelse PendingCloses =:= Opened of
                               true  -> Accs;
                               false -> {[CState | CStatesAcc],
