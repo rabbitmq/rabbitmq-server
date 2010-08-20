@@ -538,8 +538,7 @@ age_tree_insert(Now, Ref) ->
     Tree = get_age_tree(),
     Tree1 = gb_trees:insert(Now, Ref, Tree),
     {Oldest, _Ref} = gb_trees:smallest(Tree1),
-    case gen_server:call(?SERVER, {open, self(), Oldest,
-                                   not gb_trees:is_empty(Tree)}, infinity) of
+    case gen_server:call(?SERVER, {open, self(), Oldest}, infinity) of
         ok ->
             put_age_tree(Tree1);
         close ->
@@ -749,7 +748,7 @@ init([]) ->
                       due_no_open    = sets:new(),
                       timer_ref      = undefined }}.
 
-handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
+handle_call({open, Pid, EldestUnusedSince}, From,
             State = #fhc_state { open_count   = Count,
                                  open_pending = Pending,
                                  elders       = Elders,
@@ -760,16 +759,16 @@ handle_call({open, Pid, EldestUnusedSince, CanClose}, From,
     Item = {open, Pid, From},
     State1 = ensure_mref(Pid, State #fhc_state { elders = Elders1 }),
     case needs_reduce(State1 #fhc_state { open_count = Count + 1 }) of
-        true  -> case CanClose of
-                     true ->
-                         {reply, close,
-                          State1 #fhc_state {
-                            due_no_open = sets:add_element(Pid, DueNoOpen) }};
-                     false ->
+        true  -> case dict:fetch(Pid, State1#fhc_state.counts) of
+                     {0, _} ->
                          {noreply,
                           reduce(State1 #fhc_state {
                                    open_pending = [Item | Pending],
-                                   blocked = sets:add_element(Pid, Blocked) })}
+                                   blocked = sets:add_element(Pid, Blocked) })};
+                     _ ->
+                         {reply, close,
+                          State1 #fhc_state {
+                            due_no_open = sets:add_element(Pid, DueNoOpen) }}
                  end;
         false -> {noreply, run_pending_item(Item, State1)}
     end;
