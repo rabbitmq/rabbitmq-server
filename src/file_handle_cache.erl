@@ -909,20 +909,20 @@ run_pending_item({Kind, Pid, From}, State = #fhc_state { blocked = Blocked }) ->
                                    blocked = sets:del_element(Pid, Blocked) }).
 
 update_counts(Kind, Pid, Delta,
-              State = #fhc_state { counts = Counts,
-                                   open_count = OpenCount,
+              State = #fhc_state { counts       = Counts,
+                                   open_count   = OpenCount,
                                    obtain_count = ObtainCount,
-                                   due_no_open = DueNoOpen }) ->
+                                   due_no_open  = DueNoOpen }) ->
     {Counts1, OpenDelta, ObtainDelta} =
         update_counts1(Kind, Pid, Delta, Counts),
     State #fhc_state {
-      counts = Counts1,
-      open_count = OpenCount + OpenDelta,
+      counts       = Counts1,
+      open_count   = OpenCount + OpenDelta,
       obtain_count = ObtainCount + ObtainDelta,
-      due_no_open = case dict:fetch(Pid, Counts1) of
-                        {0, _} -> sets:del_element(Pid, DueNoOpen);
-                        _      -> DueNoOpen
-                    end }.
+      due_no_open  = case dict:fetch(Pid, Counts1) of
+                         {0, _} -> sets:del_element(Pid, DueNoOpen);
+                         _      -> DueNoOpen
+                     end }.
 
 update_counts1(open, Pid, Delta, Counts) ->
     {dict:update(Pid, fun ({Opened, Obtained}) -> {Opened + Delta, Obtained} end,
@@ -965,23 +965,15 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
     State1 =
         case Pids of
             [] -> State;
-            _  -> case (Sum / ClientCount)
-                      - (1000 * ?FILE_HANDLES_CHECK_INTERVAL) of
+            _  -> case ((Sum / ClientCount) -
+                            (1000 * ?FILE_HANDLES_CHECK_INTERVAL)) of
                       AverageAge when AverageAge > 0 ->
-                          lists:foreach(
-                            fun (Pid) ->
-                                    case dict:find(Pid, Callbacks) of
-                                        error ->
-                                            ok;
-                                        {ok, {M, F, A}} ->
-                                            apply(M, F, A ++ [AverageAge])
-                                    end
-                            end, Pids),
+                          notify_age(Pids, Callbacks, AverageAge),
                           State;
                       _ ->
-                          DueNoOpen1 = notify(Pids, Callbacks, Counts,
-                                              DueNoOpen, length(OpenPending) +
-                                                  length(ObtainPending)),
+                          ToClose = length(OpenPending) + length(ObtainPending),
+                          DueNoOpen1 = notify_age0(Pids, Callbacks, Counts,
+                                                   DueNoOpen, ToClose),
                           State #fhc_state { due_no_open = DueNoOpen1 }
                   end
         end,
@@ -1023,7 +1015,15 @@ ulimit() ->
             ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
     end.
 
-notify(Pids, Callbacks, Counts, DueNoOpen, Required) ->
+notify_age(Pids, Callbacks, AverageAge) ->
+    lists:foreach(fun (Pid) ->
+                          case dict:find(Pid, Callbacks) of
+                              error           -> ok;
+                              {ok, {M, F, A}} -> apply(M, F, A ++ [AverageAge])
+                          end
+                  end, Pids).
+
+notify_age0(Pids, Callbacks, Counts, DueNoOpen, Required) ->
     Notifications = [{Callback, Pid, OpenCount} ||
                         Pid <- Pids,
                         case dict:find(Pid, Callbacks) of
@@ -1040,13 +1040,13 @@ notify(Pids, Callbacks, Counts, DueNoOpen, Required) ->
                            Notifications),
     notify(Required, DueNoOpen, L2 ++ L1).
 
-notify(_Required, Acc, []) ->
-    Acc;
-notify(Required, Acc, _Notifications) when Required =< 0 ->
-    Acc;
-notify(Required, Acc, [{{M, F, A}, Pid, Open} | Notifications]) ->
+notify(_Required, DueNoOpen, []) ->
+    DueNoOpen;
+notify(Required, DueNoOpen, _Notifications) when Required =< 0 ->
+    DueNoOpen;
+notify(Required, DueNoOpen, [{{M, F, A}, Pid, Open} | Notifications]) ->
     apply(M, F, A ++ [0]),
-    notify(Required - Open, sets:add_element(Pid, Acc), Notifications).
+    notify(Required - Open, sets:add_element(Pid, DueNoOpen), Notifications).
 
 ensure_mref(Pid, State = #fhc_state { counts = Counts }) ->
     case dict:find(Pid, Counts) of
