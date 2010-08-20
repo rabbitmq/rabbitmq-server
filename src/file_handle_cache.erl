@@ -947,9 +947,10 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
     Now = now(),
     {CStates, Sum, ClientCount} =
         dict:fold(fun (Pid, Eldest, {CStatesAcc, SumAcc, CountAcc} = Accs) ->
-                          [#cstate { pending_closes = PendingCloses,
-                                     opened = Opened, blocked = Blocked } =
-                               CState] = ets:lookup(Clients, Pid),
+                          [#cstate { opened         = Opened,
+                                     blocked        = Blocked,
+                                     pending_closes = PendingCloses }] =
+                              CState = ets:lookup(Clients, Pid),
                           case Blocked orelse PendingCloses =:= Opened of
                               true  -> Accs;
                               false -> {[CState | CStatesAcc],
@@ -977,11 +978,10 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
     end.
 
 notify_age(CStates, AverageAge) ->
-    lists:foreach(fun (#cstate { callback = undefined }) ->
-                          ok;
-                      (#cstate { callback = {M, F, A} }) ->
-                          apply(M, F, A ++ [AverageAge])
-                  end, CStates).
+    lists:foreach(
+      fun (#cstate { callback = undefined }) -> ok;
+          (#cstate { callback = {M, F, A} }) -> apply(M, F, A ++ [AverageAge])
+      end, CStates).
 
 notify_age0(Clients, CStates, Required) ->
     Notifications =
