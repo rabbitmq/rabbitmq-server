@@ -1420,11 +1420,17 @@ test_supervisor_delayed_restart() ->
 test_file_handle_cache() ->
     %% test copying when there is just one spare handle
     Limit = file_handle_cache:get_limit(),
-    ok = file_handle_cache:set_limit(4), %% 2 reserved, 1 in use, 1 spare
-    TmpDir = rabbit_mnesia:dir() ++ "/tmp/",
-    ok = filelib:ensure_dir(TmpDir),
-    Src = TmpDir ++ "file1",
-    Dst = TmpDir ++ "file2",
+    ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
+    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
+    Pid = spawn(fun () -> {ok, Hdl} = file_handle_cache:open(
+                                        filename:join(TmpDir, "file3"),
+                                        [write], []),
+                          receive close -> ok end,
+                          file_handle_cache:delete(Hdl)
+                end),
+    Src = filename:join(TmpDir, "file1"),
+    Dst = filename:join(TmpDir, "file2"),
     Content = <<"foo">>,
     ok = file:write_file(Src, Content),
     {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
@@ -1433,6 +1439,7 @@ test_file_handle_cache() ->
     {ok, Size} = file_handle_cache:copy(SrcHdl, DstHdl, Size),
     ok = file_handle_cache:delete(SrcHdl),
     file_handle_cache:delete(DstHdl),
+    Pid ! close,
     ok = file_handle_cache:set_limit(Limit),
     passed.
 
