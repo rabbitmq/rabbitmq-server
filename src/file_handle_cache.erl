@@ -564,7 +564,7 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl    = closed,
                                               path   = Path,
                                               mode   = Mode,
                                               offset = Offset }} |
-        RefNewOrReopenHdls], Tree, RefHdls) ->
+        RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
     case file:open(Path, case NewOrReopen of
                              new    -> Mode;
                              reopen -> [read | Mode]
@@ -582,8 +582,7 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl    = closed,
         {error, Reason} ->
             put_age_tree(Tree),
             [age_tree_delete(Handle1 #handle.last_used_at) ||
-                {_Ref1, _NewOrReopen1, Handle1} <-
-                    [{Ref, NewOrReopen, Handle} | RefNewOrReopenHdls]],
+                {_Ref1, _NewOrReopen1, Handle1} <- ToOpen],
             {error, Reason}
     end.
 
