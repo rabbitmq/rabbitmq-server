@@ -148,7 +148,7 @@
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
--define(OBTAIN_LIMIT(LIMIT), trunc((LIMIT * 0.9) - 1)).
+-define(OBTAIN_LIMIT(LIMIT), trunc((LIMIT * 0.9) - 2)).
 -define(CLIENT_ETS_TABLE, ?MODULE).
 
 %%----------------------------------------------------------------------------
@@ -953,7 +953,10 @@ pending_is_empty({_N, _Queue}) ->
 %%----------------------------------------------------------------------------
 
 obtain_limit(infinity) -> infinity;
-obtain_limit(Limit)    -> ?OBTAIN_LIMIT(Limit).
+obtain_limit(Limit)    -> case ?OBTAIN_LIMIT(Limit) of
+                              OLimit when OLimit < 0 -> 0;
+                              OLimit                 -> OLimit
+                          end.
 
 requested({_Kind, _Pid, Requested, _From}) ->
     Requested.
