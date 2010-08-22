@@ -55,6 +55,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    ok = file_handle_cache:set_limit(10),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
     passed = test_bpqueue(),
