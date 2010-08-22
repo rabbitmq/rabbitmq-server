@@ -565,17 +565,15 @@ reopen([{Ref, NewOrReopen, Handle} | RefNewOrReopenHdls], Tree, RefHdls) ->
     end.
 
 partition_handles(RefNewOrReopens) ->
-    {OpenHdls, ClosedHdls} =
-        lists:foldl(
-          fun ({Ref, NewOrReopen}, {Open, Closed}) ->
-                  case get({Ref, fhc_handle}) of
-                      #handle { hdl = closed } = Handle ->
-                          {Open, [{Ref, NewOrReopen, Handle} | Closed]};
-                      #handle {} = Handle ->
-                          {[{Ref, Handle} | Open], Closed}
-                  end
-          end, {[], []}, RefNewOrReopens),
-    {lists:reverse(OpenHdls), lists:reverse(ClosedHdls)}.
+    lists:foldr(
+      fun ({Ref, NewOrReopen}, {Open, Closed}) ->
+              case get({Ref, fhc_handle}) of
+                  #handle { hdl = closed } = Handle ->
+                      {Open, [{Ref, NewOrReopen, Handle} | Closed]};
+                  #handle {} = Handle ->
+                      {[{Ref, Handle} | Open], Closed}
+              end
+      end, {[], []}, RefNewOrReopens).
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     Now = now(),
