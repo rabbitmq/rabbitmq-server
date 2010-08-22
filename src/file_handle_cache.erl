@@ -452,8 +452,8 @@ set_maximum_since_use(MaximumAge) ->
     case lists:foldl(
            fun ({{Ref, fhc_handle},
                  Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
-                   Age = timer:now_diff(Now, Then),
-                   case Hdl =/= closed andalso Age >= MaximumAge of
+                   case Hdl =/= closed andalso
+                       timer:now_diff(Now, Then) >= MaximumAge of
                        true  -> soft_close(Ref, Handle) orelse Rep;
                        false -> Rep
                    end;
