@@ -130,7 +130,7 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([obtain/0, transfer/1]).
+-export([obtain/0, transfer/1, set_limit/1, get_limit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -233,6 +233,8 @@
 -spec(clear/1 :: (ref()) -> ok_or_error()).
 -spec(obtain/0 :: () -> 'ok').
 -spec(transfer/1 :: (pid()) -> 'ok').
+-spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
+-spec(get_limit/0 :: () -> non_neg_integer()).
 
 -endif.
 
@@ -459,6 +461,12 @@ obtain() ->
 
 transfer(Pid) ->
     gen_server:cast(?SERVER, {transfer, self(), Pid}).
+
+set_limit(Limit) ->
+    gen_server:call(?SERVER, {set_limit, Limit}, infinity).
+
+get_limit() ->
+    gen_server:call(?SERVER, get_limit, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -736,10 +744,7 @@ init([]) ->
                 _ ->
                     ulimit()
             end,
-    ObtainLimit = case Limit of
-                      infinity -> infinity;
-                      _        -> ?OBTAIN_LIMIT(Limit)
-                  end,
+    ObtainLimit = obtain_limit(Limit),
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
                           [Limit, ObtainLimit]),
     Clients = ets:new(?CLIENT_ETS_TABLE, [set, private, {keypos, #cstate.pid}]),
@@ -800,7 +805,14 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
              reduce(State #fhc_state {obtain_pending = [Item | Pending] })};
         false ->
             {noreply, run_pending_item(Item, State)}
-    end.
+    end;
+handle_call({set_limit, Limit}, _From, State) ->
+    {reply, ok, maybe_reduce(
+                  process_pending(State #fhc_state {
+                                    limit        = Limit,
+                                    obtain_limit = obtain_limit(Limit) }))};
+handle_call(get_limit, _From, State = #fhc_state { limit = Limit }) ->
+    {reply, Limit, State}.
 
 handle_cast({register_callback, Pid, MFA},
             State = #fhc_state { clients = Clients }) ->
@@ -834,11 +846,7 @@ handle_cast({transfer, FromPid, ToPid}, State) ->
                               update_counts(obtain, FromPid, -1, State)))};
 
 handle_cast(check_counts, State) ->
-    State1 = State #fhc_state { timer_ref = undefined },
-    {noreply, case needs_reduce(State1) of
-                  true  -> reduce(State1);
-                  false -> State1
-              end}.
+    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #fhc_state { elders         = Elders,
@@ -871,6 +879,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% server helpers
 %%----------------------------------------------------------------------------
+
+obtain_limit(infinity) -> infinity;
+obtain_limit(Limit)    -> ?OBTAIN_LIMIT(Limit).
 
 process_pending(State = #fhc_state { limit = infinity }) ->
     State;
@@ -926,6 +937,12 @@ update_counts1(open, Pid, Delta, Clients) ->
 update_counts1(obtain, Pid, Delta, Clients) ->
     ets:update_counter(Clients, Pid, {#cstate.obtained, Delta}),
     {0, Delta}.
+
+maybe_reduce(State) ->
+    case needs_reduce(State) of
+        true  -> reduce(State);
+        false -> State
+    end.
 
 needs_reduce(#fhc_state { limit          = Limit,
                           open_count     = OpenCount,
