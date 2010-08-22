@@ -538,10 +538,10 @@ get_opened_rev(RefNewOrReopens) ->
                             {error, Error}
                     end;
                 close ->
-                    [soft_close(Ref1, Handle1) ||
-                        {{Ref1, fhc_handle},
-                         Handle1 = #handle { hdl = Hdl1 }} <- get(),
-                        Hdl1 =/= closed],
+                    [soft_close(Ref, Handle) ||
+                        {{Ref, fhc_handle}, Handle = #handle { hdl = Hdl }} <-
+                            get(),
+                        Hdl =/= closed],
                     get_opened_rev(RefNewOrReopens)
             end
     end.
@@ -810,9 +810,9 @@ handle_call({open, Pid, Requested, EldestUnusedSince}, From,
                           reduce(State1 #fhc_state {
                                    open_pending = pending_in(Item, Pending) })};
                      [#cstate { opened = Opened }] ->
-                         true =
-                             ets:update_element(
-                               Clients, Pid, {#cstate.pending_closes, Opened}),
+                         true = ets:update_element(
+                                  Clients, Pid,
+                                  {#cstate.pending_closes, Opened}),
                          {reply, close, State1}
                  end;
         false -> {noreply, run_pending_item(Item, State1)}
