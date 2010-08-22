@@ -527,12 +527,11 @@ get_or_reopen(RefNewOrReopens) ->
         {OpenHdls, []} ->
             {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
         {OpenHdls, ClosedHdls} ->
-            Tree = get_age_tree(),
-            Oldest = oldest(Tree, fun () -> now() end),
+            Oldest = oldest(get_age_tree(), fun () -> now() end),
             case gen_server:call(?SERVER, {open, self(), length(ClosedHdls),
                                            Oldest}, infinity) of
                 ok ->
-                    case reopen(ClosedHdls, Tree, []) of
+                    case reopen(ClosedHdls) of
                         {ok, RefHdls}  -> sort_handles(RefNewOrReopens,
                                                        OpenHdls, RefHdls, []);
                         {error, Error} -> {error, Error}
@@ -546,12 +545,7 @@ get_or_reopen(RefNewOrReopens) ->
             end
     end.
 
-sort_handles([], [], [], Acc) ->
-    {ok, lists:reverse(Acc)};
-sort_handles([{Ref, _} | RefHdls], [{Ref, Handle} | RefHdlsA], RefHdlsB, Acc) ->
-    sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]);
-sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
-    sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]).
+reopen(ClosedHdls) -> reopen(ClosedHdls, get_age_tree(), []).
 
 reopen([], Tree, RefHdls) ->
     put_age_tree(Tree),
@@ -593,6 +587,13 @@ partition_handles(RefNewOrReopens) ->
                       {[{Ref, Handle} | Open], Closed}
               end
       end, {[], []}, RefNewOrReopens).
+
+sort_handles([], [], [], Acc) ->
+    {ok, lists:reverse(Acc)};
+sort_handles([{Ref, _} | RefHdls], [{Ref, Handle} | RefHdlsA], RefHdlsB, Acc) ->
+    sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]);
+sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
+    sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]).
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     Now = now(),
