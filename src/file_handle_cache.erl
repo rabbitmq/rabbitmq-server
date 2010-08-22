@@ -262,7 +262,7 @@ open(Path, Mode, Options) ->
     case IsWriter andalso HasWriter of
         true  -> {error, writer_exists};
         false -> {ok, Ref} = new_closed_handle(Path1, Mode1, Options),
-                 case get_opened_rev([{Ref, new}]) of
+                 case get_or_reopen([{Ref, new}]) of
                      {ok, [_Handle1]} ->
                          RCount1 = case is_reader(Mode1) of
                                        true  -> RCount + 1;
@@ -484,9 +484,9 @@ append_to_write(Mode) ->
     end.
 
 with_handles(Refs, Fun) ->
-    case get_opened_rev([{Ref, reopen} || Ref <- Refs]) of
+    case get_or_reopen([{Ref, reopen} || Ref <- Refs]) of
         {ok, Handles} ->
-            case Fun(lists:reverse(Handles)) of
+            case Fun(Handles) of
                 {Result, Handles1} when is_list(Handles1) ->
                     lists:zipwith(fun put_handle/2, Refs, Handles1),
                     Result;
@@ -515,39 +515,36 @@ with_flushed_handles(Refs, Fun) ->
               end
       end).
 
-get_opened_rev(RefNewOrReopens) ->
-    case partition_handles_rev(RefNewOrReopens) of
-        {OpenHdlsRev, []} ->
-            {ok, [Handle || {_Ref, Handle} <- OpenHdlsRev]};
-        {OpenHdlsRev, ClosedHdlsRev} ->
+get_or_reopen(RefNewOrReopens) ->
+    case partition_handles(RefNewOrReopens) of
+        {OpenHdls, []} ->
+            {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
+        {OpenHdls, ClosedHdls} ->
             Tree = get_age_tree(),
             Oldest = case gb_trees:is_empty(Tree) of
                          true  -> now();
                          false -> {Then, _Ref} = gb_trees:smallest(Tree),
                                   Then
                      end,
-            case gen_server:call(?SERVER, {open, self(), length(ClosedHdlsRev),
+            case gen_server:call(?SERVER, {open, self(), length(ClosedHdls),
                                            Oldest}, infinity) of
                 ok ->
-                    case reopen(ClosedHdlsRev, Tree, []) of
-                        {ok, RefHdls} ->
-                            sort_handles(RefNewOrReopens,
-                                         lists:reverse(OpenHdlsRev),
-                                         RefHdls, []);
-                        {error, Error} ->
-                            {error, Error}
+                    case reopen(ClosedHdls, Tree, []) of
+                        {ok, RefHdls}  -> sort_handles(RefNewOrReopens,
+                                                       OpenHdls, RefHdls, []);
+                        {error, Error} -> {error, Error}
                     end;
                 close ->
                     [soft_close(Ref, Handle) ||
                         {{Ref, fhc_handle}, Handle = #handle { hdl = Hdl }} <-
                             get(),
                         Hdl =/= closed],
-                    get_opened_rev(RefNewOrReopens)
+                    get_or_reopen(RefNewOrReopens)
             end
     end.
 
 sort_handles([], [], [], Acc) ->
-    {ok, Acc};
+    {ok, lists:reverse(Acc)};
 sort_handles([{Ref, _} | RefHdls], [{Ref, Handle} | RefHdlsA], RefHdlsB, Acc) ->
     sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]);
 sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
@@ -555,28 +552,30 @@ sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
 
 reopen([], Tree, RefHdls) ->
     put_age_tree(Tree),
-    {ok, RefHdls};
-reopen([{Ref, NewOrReopen, Handle} | RefNewOrReopenHdlsRev], Tree, RefHdls) ->
+    {ok, lists:reverse(RefHdls)};
+reopen([{Ref, NewOrReopen, Handle} | RefNewOrReopenHdls], Tree, RefHdls) ->
     Now = now(),
     case open1(Ref, Handle #handle { last_used_at = Now }, NewOrReopen) of
         {ok, #handle {} = Handle1} ->
-            reopen(RefNewOrReopenHdlsRev, gb_trees:insert(Now, Ref, Tree),
+            reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
                    [{Ref, Handle1} | RefHdls]);
         {error, Reason} ->
             age_tree_delete(Handle #handle.last_used_at),
             {error, Reason}
     end.
 
-partition_handles_rev(RefNewOrReopens) ->
-    lists:foldl(
-      fun ({Ref, NewOrReopen}, {Open, Closed}) ->
-              case get({Ref, fhc_handle}) of
-                  #handle { hdl = closed } = Handle ->
-                      {Open, [{Ref, NewOrReopen, Handle} | Closed]};
-                  #handle {} = Handle ->
-                      {[{Ref, Handle} | Open], Closed}
-              end
-      end, {[], []}, RefNewOrReopens).
+partition_handles(RefNewOrReopens) ->
+    {OpenHdls, ClosedHdls} =
+        lists:foldl(
+          fun ({Ref, NewOrReopen}, {Open, Closed}) ->
+                  case get({Ref, fhc_handle}) of
+                      #handle { hdl = closed } = Handle ->
+                          {Open, [{Ref, NewOrReopen, Handle} | Closed]};
+                      #handle {} = Handle ->
+                          {[{Ref, Handle} | Open], Closed}
+                  end
+          end, {[], []}, RefNewOrReopens),
+    {lists:reverse(OpenHdls), lists:reverse(ClosedHdls)}.
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     Now = now(),
