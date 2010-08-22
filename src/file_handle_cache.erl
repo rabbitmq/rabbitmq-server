@@ -567,7 +567,10 @@ reopen([{Ref, NewOrReopen, Handle} | RefNewOrReopenHdls], Tree, RefHdls) ->
             reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
                    [{Ref, Handle1} | RefHdls]);
         {error, Reason} ->
-            age_tree_delete(Handle #handle.last_used_at),
+            put_age_tree(Tree),
+            [age_tree_delete(Handle1 #handle.last_used_at) ||
+                {_Ref1, _NewOrReopen1, Handle1} <-
+                    [{Ref, NewOrReopen, Handle} | RefNewOrReopenHdls]],
             {error, Reason}
     end.
 
