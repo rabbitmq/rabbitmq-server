@@ -261,8 +261,7 @@ open(Path, Mode, Options) ->
     IsWriter = is_writer(Mode1),
     case IsWriter andalso HasWriter of
         true  -> {error, writer_exists};
-        false -> Ref = make_ref(),
-                 {ok, _Handle} = new_closed_handle(Path1, Mode1, Options, Ref),
+        false -> {ok, Ref} = new_closed_handle(Path1, Mode1, Options),
                  case get_opened_rev([{Ref, new}]) of
                      {ok, [_Handle1]} ->
                          RCount1 = case is_reader(Mode1) of
@@ -626,29 +625,29 @@ age_tree_change() ->
               Tree
       end).
 
-new_closed_handle(Path, Mode, Options, Ref) ->
+new_closed_handle(Path, Mode, Options) ->
     WriteBufferSize =
         case proplists:get_value(write_buffer, Options, unbuffered) of
             unbuffered           -> 0;
             infinity             -> infinity;
             N when is_integer(N) -> N
         end,
-    Handle = #handle { hdl                     = closed,
-                       offset                  = 0,
-                       trusted_offset          = 0,
-                       is_dirty                = false,
-                       write_buffer_size       = 0,
-                       write_buffer_size_limit = WriteBufferSize,
-                       write_buffer            = [],
-                       at_eof                  = false,
-                       path                    = Path,
-                       mode                    = Mode,
-                       options                 = Options,
-                       is_write                = is_writer(Mode),
-                       is_read                 = is_reader(Mode),
-                       last_used_at            = undefined },
-    put({Ref, fhc_handle}, Handle),
-    {ok, Handle}.
+    Ref = make_ref(),
+    put({Ref, fhc_handle}, #handle { hdl                     = closed,
+                                     offset                  = 0,
+                                     trusted_offset          = 0,
+                                     is_dirty                = false,
+                                     write_buffer_size       = 0,
+                                     write_buffer_size_limit = WriteBufferSize,
+                                     write_buffer            = [],
+                                     at_eof                  = false,
+                                     path                    = Path,
+                                     mode                    = Mode,
+                                     options                 = Options,
+                                     is_write                = is_writer(Mode),
+                                     is_read                 = is_reader(Mode),
+                                     last_used_at            = undefined }),
+    {ok, Ref}.
 
 open1(Ref, #handle { hdl = closed, path = Path, mode = Mode, offset = Offset } =
           Handle, NewOrReopen) ->
