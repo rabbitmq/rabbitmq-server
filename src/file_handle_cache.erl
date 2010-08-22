@@ -560,12 +560,25 @@ sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
 reopen([], Tree, RefHdls) ->
     put_age_tree(Tree),
     {ok, lists:reverse(RefHdls)};
-reopen([{Ref, NewOrReopen, Handle} | RefNewOrReopenHdls], Tree, RefHdls) ->
-    Now = now(),
-    case open1(Ref, Handle #handle { last_used_at = Now }, NewOrReopen) of
-        {ok, #handle {} = Handle1} ->
+reopen([{Ref, NewOrReopen, Handle = #handle { hdl    = closed,
+                                              path   = Path,
+                                              mode   = Mode,
+                                              offset = Offset }} |
+        RefNewOrReopenHdls], Tree, RefHdls) ->
+    case file:open(Path, case NewOrReopen of
+                             new    -> Mode;
+                             reopen -> [read | Mode]
+                         end) of
+        {ok, Hdl} ->
+            Now = now(),
+            {{ok, Offset1}, Handle1} =
+                maybe_seek(Offset, Handle #handle { hdl          = Hdl,
+                                                    offset       = 0,
+                                                    last_used_at = Now }),
+            Handle2 = Handle1 #handle { trusted_offset = Offset1 },
+            put({Ref, fhc_handle}, Handle2),
             reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
-                   [{Ref, Handle1} | RefHdls]);
+                   [{Ref, Handle2} | RefHdls]);
         {error, Reason} ->
             put_age_tree(Tree),
             [age_tree_delete(Handle1 #handle.last_used_at) ||
@@ -655,23 +668,6 @@ new_closed_handle(Path, Mode, Options) ->
                                      is_read                 = is_reader(Mode),
                                      last_used_at            = undefined }),
     {ok, Ref}.
-
-open1(Ref, #handle { hdl = closed, path = Path, mode = Mode, offset = Offset } =
-          Handle, NewOrReopen) ->
-    Mode1 = case NewOrReopen of
-                new    -> Mode;
-                reopen -> [read | Mode]
-            end,
-    case file:open(Path, Mode1) of
-        {ok, Hdl} ->
-            {{ok, Offset1}, Handle1} =
-                maybe_seek(Offset, Handle #handle { hdl = Hdl, offset = 0 }),
-            Handle2 = Handle1 #handle { trusted_offset = Offset1 },
-            put({Ref, fhc_handle}, Handle2),
-            {ok, Handle2};
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 soft_close(Ref, Handle) ->
     {Res, Handle1} = soft_close(Handle),
