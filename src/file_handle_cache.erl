@@ -534,7 +534,7 @@ get_or_reopen(RefNewOrReopens) ->
                     case reopen(ClosedHdls) of
                         {ok, RefHdls}  -> sort_handles(RefNewOrReopens,
                                                        OpenHdls, RefHdls, []);
-                        {error, Error} -> {error, Error}
+                        Error          -> Error
                     end;
                 close ->
                     [soft_close(Ref, Handle) ||
@@ -569,12 +569,12 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl    = closed,
             put({Ref, fhc_handle}, Handle2),
             reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
                    [{Ref, Handle2} | RefHdls]);
-        {error, Reason} ->
+        Error ->
             %% NB: none of the handles in ToOpen are in the age tree
             Oldest = oldest(Tree, fun () -> undefined end),
             [gen_server:cast(?SERVER, {close, self(), Oldest}) || _ <- ToOpen],
             put_age_tree(Tree),
-            {error, Reason}
+            Error
     end.
 
 partition_handles(RefNewOrReopens) ->
