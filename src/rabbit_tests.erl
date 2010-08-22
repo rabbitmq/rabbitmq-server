@@ -56,6 +56,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
+    passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
     passed = test_bpqueue(),
@@ -1415,6 +1416,25 @@ extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
 
 test_supervisor_delayed_restart() ->
     test_sup:test_supervisor_delayed_restart().
+
+test_file_handle_cache() ->
+    %% test copying when there is just one spare handle
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(4), %% 2 reserved, 1 in use, 1 spare
+    TmpDir = rabbit_mnesia:dir() ++ "/tmp/",
+    ok = filelib:ensure_dir(TmpDir),
+    Src = TmpDir ++ "file1",
+    Dst = TmpDir ++ "file2",
+    Content = <<"foo">>,
+    ok = file:write_file(Src, Content),
+    {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
+    {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
+    Size = size(Content),
+    {ok, Size} = file_handle_cache:copy(SrcHdl, DstHdl, Size),
+    ok = file_handle_cache:delete(SrcHdl),
+    file_handle_cache:delete(DstHdl),
+    ok = file_handle_cache:set_limit(Limit),
+    passed.
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
