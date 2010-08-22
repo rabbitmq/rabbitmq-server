@@ -550,10 +550,11 @@ reopen(ClosedHdls) -> reopen(ClosedHdls, get_age_tree(), []).
 reopen([], Tree, RefHdls) ->
     put_age_tree(Tree),
     {ok, lists:reverse(RefHdls)};
-reopen([{Ref, NewOrReopen, Handle = #handle { hdl    = closed,
-                                              path   = Path,
-                                              mode   = Mode,
-                                              offset = Offset }} |
+reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
+                                              path         = Path,
+                                              mode         = Mode,
+                                              offset       = Offset,
+                                              last_used_at = undefined }} |
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
     case file:open(Path, case NewOrReopen of
                              new    -> Mode;
@@ -680,7 +681,9 @@ soft_close(Handle = #handle { hdl = closed }) ->
     {ok, Handle};
 soft_close(Handle) ->
     case write_buffer(Handle) of
-        {ok, #handle { hdl = Hdl, offset = Offset, is_dirty = IsDirty,
+        {ok, #handle { hdl         = Hdl,
+                       offset      = Offset,
+                       is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
                      true  -> file:sync(Hdl);
@@ -688,8 +691,10 @@ soft_close(Handle) ->
                  end,
             ok = file:close(Hdl),
             age_tree_delete(Then),
-            {ok, Handle1 #handle { hdl = closed, trusted_offset = Offset,
-                                   is_dirty = false }};
+            {ok, Handle1 #handle { hdl            = closed,
+                                   trusted_offset = Offset,
+                                   is_dirty       = false,
+                                   last_used_at   = undefined }};
         {_Error, _Handle} = Result ->
             Result
     end.
