@@ -528,11 +528,7 @@ get_or_reopen(RefNewOrReopens) ->
             {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
         {OpenHdls, ClosedHdls} ->
             Tree = get_age_tree(),
-            Oldest = case gb_trees:is_empty(Tree) of
-                         true  -> now();
-                         false -> {Then, _Ref} = gb_trees:smallest(Tree),
-                                  Then
-                     end,
+            Oldest = oldest(Tree, fun () -> now() end),
             case gen_server:call(?SERVER, {open, self(), length(ClosedHdls),
                                            Oldest}, infinity) of
                 ok ->
@@ -580,9 +576,10 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl    = closed,
             reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
                    [{Ref, Handle2} | RefHdls]);
         {error, Reason} ->
+            %% NB: none of the handles in ToOpen are in the age tree
+            Oldest = oldest(Tree, fun () -> undefined end),
+            [gen_server:cast(?SERVER, {close, self(), Oldest}) || _ <- ToOpen],
             put_age_tree(Tree),
-            [age_tree_delete(Handle1 #handle.last_used_at) ||
-                {_Ref1, _NewOrReopen1, Handle1} <- ToOpen],
             {error, Reason}
     end.
 
@@ -622,13 +619,7 @@ age_tree_delete(Then) ->
     with_age_tree(
       fun (Tree) ->
               Tree1 = gb_trees:delete_any(Then, Tree),
-              Oldest = case gb_trees:is_empty(Tree1) of
-                           true ->
-                               undefined;
-                           false ->
-                               {Oldest1, _Ref} = gb_trees:smallest(Tree1),
-                               Oldest1
-                       end,
+              Oldest = oldest(Tree1, fun () -> undefined end),
               gen_server:cast(?SERVER, {close, self(), Oldest}),
               Tree1
       end).
@@ -643,6 +634,13 @@ age_tree_change() ->
               end,
               Tree
       end).
+
+oldest(Tree, DefaultFun) ->
+    case gb_trees:is_empty(Tree) of
+        true  -> DefaultFun();
+        false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
+                 Oldest
+    end.
 
 new_closed_handle(Path, Mode, Options) ->
     WriteBufferSize =
