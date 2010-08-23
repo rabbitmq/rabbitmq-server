@@ -101,14 +101,57 @@ get_used_fd({unix, Os}) when Os =:= linux
                       orelse Os =:= freebsd ->
     get_used_fd_lsof();
 
-%% TODO Windows
-%% http://technet.microsoft.com/en-us/sysinternals/bb896655.aspx may be the
-%% right answer; it doesn't seem like there's anything built in. As long as we
-%% fall back if it's not there...
+%% handle.exe can be obtained from
+%% http://technet.microsoft.com/en-us/sysinternals/bb896655.aspx
+
+%% Output looks like:
+
+%% Handle v3.42
+%% Copyright (C) 1997-2008 Mark Russinovich
+%% Sysinternals - www.sysinternals.com
+%%
+%% Handle type summary:
+%%   ALPC Port       : 2
+%%   Desktop         : 1
+%%   Directory       : 1
+%%   Event           : 108
+%%   File            : 25
+%%   IoCompletion    : 3
+%%   Key             : 7
+%%   KeyedEvent      : 1
+%%   Mutant          : 1
+%%   Process         : 3
+%%   Process         : 38
+%%   Thread          : 41
+%%   Timer           : 3
+%%   TpWorkerFactory : 2
+%%   WindowStation   : 2
+%% Total handles: 238
+
+%% Note that the "File" number appears to include network sockets too; I assume
+%% that's the number we care about. Note also that if you omit "-s" you will
+%% see a list of file handles *without* network sockets. If you then add "-a"
+%% you will see a list of handles of various types, including network sockets
+%% shown as file handles to \Device\Afd.
+
+get_used_fd({win32, _}) ->
+    Handle = os:cmd("handle.exe /accepteula -s -p " ++ os:getpid() ++
+                        " 2> nul"),
+    case Handle of
+        [] -> install_handle_from_sysinternals;
+        _  -> find_files_line(string:tokens(Handle, "\r\n"))
+    end;
 
 get_used_fd(_) ->
     unknown.
 
+find_files_line([]) ->
+    unknown;
+find_files_line(["  File " ++ Rest | _T]) ->
+    [Files] = string:tokens(Rest, ": "),
+    list_to_integer(Files);
+find_files_line([_H|T]) ->
+    find_files_line(T).
 
 get_total_memory() ->
     vm_memory_monitor:get_vm_memory_high_watermark() *
