@@ -54,6 +54,8 @@ dispatcher() ->
      {["json","connection"],             rabbit_mgmt_wm_connection, []},
      {["json","connection", connection], rabbit_mgmt_wm_connection, []},
      {["json","queue"],                  rabbit_mgmt_wm_queue, []},
+     {["json","vhost"],                  rabbit_mgmt_wm_vhosts, []},
+     {["json","vhost", vhost],           rabbit_mgmt_wm_vhost, []},
      {["json","stats", type],            rabbit_mgmt_wm_stats, []}
     ].
 

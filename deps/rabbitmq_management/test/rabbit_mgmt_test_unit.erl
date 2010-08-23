@@ -19,10 +19,12 @@
 %%   Contributor(s): ______________________________________.
 %%
 -module(rabbit_mgmt_test_unit).
--export([test/0]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-define(OK, 200).
+-define(NO_CONTENT, 204).
+-define(NOT_FOUND, 404).
 
 rates_test() ->
     Previous = [{foo, 1}, {bar, 100}, {baz, 3}],
@@ -37,27 +39,73 @@ rates_test() ->
     undefined = pget(baz_rate, WithRates).
 
 http_overview_test() ->
-    {struct, Props} = request("/json/overview"),
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
-    [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, Props).
+    [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, http_get("/overview", ?OK)).
+
+%% This test is rather over-verbose as we're trying to test understanding of
+%% Webmachine
+http_vhosts_test() ->
+    [<<"/">>] = rget("vhosts", http_get("/vhost", ?OK)),
+    %% Create a new one
+    http_put("/vhost/myvhost", "", ?NO_CONTENT),
+    %% PUT should be idempotent
+    http_put("/vhost/myvhost", "", ?NO_CONTENT),
+    %% Check it's there
+    [<<"/">>, <<"myvhost">>] = rget("vhosts", http_get("/vhost", ?OK)),
+    %% Check individually
+    <<"/">> = rget("vhost", http_get("/vhost/%2f", ?OK)),
+    <<"myvhost">> = rget("vhost", http_get("/vhost/myvhost", ?OK)),
+    %% Delete it
+    http_delete("/vhost/myvhost", ?NO_CONTENT),
+    %% It's not there
+    http_get("/vhost/myvhost", ?NOT_FOUND),
+    http_delete("/vhost/myvhost", ?NOT_FOUND).
 
 %%---------------------------------------------------------------------------
 
-request(Path) ->
-    {ok, {{_HTTP, 200, _OK}, _Headers, Body}} =
-        httpc:request(
-          get,
-          {"http://localhost:55672" ++ Path,
-           [{"Authorization",
-             "Basic " ++ binary_to_list(base64:encode("guest:guest"))}]},
-          [], []),
-    mochijson2:decode(Body).
+http_get(Path, CodeExp) ->
+    {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
+        req(get, Path, [auth_header()]),
+    decode(CodeExp, ResBody).
+
+http_put(Path, Body, CodeExp) ->
+    {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
+        req(put, Path, [auth_header()], Body),
+    decode(CodeExp, ResBody).
+
+http_delete(Path, CodeExp) ->
+    {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
+        req(delete, Path, [auth_header()]),
+    decode(CodeExp, ResBody).
+
+req(Type, Path, Headers) ->
+    httpc:request(Type, {"http://localhost:55672/json" ++ Path, Headers},
+                  [], []).
+
+req(Type, Path, Headers, Body) ->
+    httpc:request(Type, {"http://localhost:55672/json" ++ Path, Headers,
+                         "application/json", Body},
+                  [], []).
+
+decode(Code, ResBody) ->
+    case Code of
+        ?OK -> {struct, Res} = mochijson2:decode(ResBody),
+               Res;
+        _   -> ok
+    end.
+
+auth_header() ->
+    {"Authorization",
+     "Basic " ++ binary_to_list(base64:encode("guest:guest"))}.
 
 %%---------------------------------------------------------------------------
 
 pget(K, L) ->
      proplists:get_value(K, L).
+
+rget(K, L) ->
+    pget(list_to_binary(K), L).
 
 equals(F1, F2) ->
     true = (abs(F1 - F2) < 0.001).
