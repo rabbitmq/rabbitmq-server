@@ -24,7 +24,10 @@
 
 -define(OK, 200).
 -define(NO_CONTENT, 204).
+-define(BAD_REQUEST, 400).
+-define(NOT_AUTHORISED, 401).
 -define(NOT_FOUND, 404).
+-define(PREFIX, "http://localhost:55672/json").
 
 rates_test() ->
     Previous = [{foo, 1}, {bar, 100}, {baz, 3}],
@@ -42,6 +45,11 @@ http_overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
     [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, http_get("/overview", ?OK)).
+
+http_auth_test() ->
+    test_auth(?NOT_AUTHORISED, []),
+    test_auth(?NOT_AUTHORISED, [auth_header("guest", "gust")]),
+    test_auth(?OK, [auth_header("guest", "guest")]).
 
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
@@ -62,6 +70,22 @@ http_vhosts_test() ->
     http_get("/vhost/myvhost", ?NOT_FOUND),
     http_delete("/vhost/myvhost", ?NOT_FOUND).
 
+http_users_test() ->
+    http_get("/user/myuser", ?NOT_FOUND),
+    http_put("/user/myuser", "Something not JSON", ?BAD_REQUEST),
+    http_put("/user/myuser", "{\"flim\": \"flam\"}", ?BAD_REQUEST),
+    http_put("/user/myuser", "{\"password\": \"myuser\"}", ?NO_CONTENT),
+    http_put("/user/myuser", "{\"password\": \"password\"}", ?NO_CONTENT),
+    <<"myuser">> = rget("user", http_get("/user/myuser", ?OK)),
+    [<<"guest">>, <<"myuser">>] = rget("users", http_get("/user", ?OK)),
+    test_auth(?OK, [auth_header("myuser", "password")]),
+    http_delete("/user/myuser", ?NO_CONTENT),
+    test_auth(?NOT_AUTHORISED, [auth_header("myuser", "password")]),
+    http_get("/user/myuser", ?NOT_FOUND).
+
+test_auth(Code, Headers) ->
+    {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).
+
 %%---------------------------------------------------------------------------
 
 http_get(Path, CodeExp) ->
@@ -80,12 +104,10 @@ http_delete(Path, CodeExp) ->
     decode(CodeExp, ResBody).
 
 req(Type, Path, Headers) ->
-    httpc:request(Type, {"http://localhost:55672/json" ++ Path, Headers},
-                  [], []).
+    httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
 
 req(Type, Path, Headers, Body) ->
-    httpc:request(Type, {"http://localhost:55672/json" ++ Path, Headers,
-                         "application/json", Body},
+    httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
                   [], []).
 
 decode(Code, ResBody) ->
@@ -96,8 +118,11 @@ decode(Code, ResBody) ->
     end.
 
 auth_header() ->
+    auth_header("guest", "guest").
+
+auth_header(Username, Password) ->
     {"Authorization",
-     "Basic " ++ binary_to_list(base64:encode("guest:guest"))}.
+     "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
 
 %%---------------------------------------------------------------------------
 
