@@ -107,7 +107,10 @@ boot_ssl() ->
             ok;
         {ok, SslListeners} ->
             ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
-            {ok, SslOpts} = application:get_env(ssl_options),
+            {ok, SslOptsConfig} = application:get_env(ssl_options),
+            SslOpts = [{verify_fun, fun([])  -> true;
+                                       ([_]) -> false
+                                    end} | SslOptsConfig],
             [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
             ok
     end.
