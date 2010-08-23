@@ -1,30 +1,52 @@
 $(document).ready(function() {
+    app.run();
     var url = this.location.toString();
-    url = url.indexOf('#') == -1 ? '#overview' : url;
-    apply_url(url);
+    if (url.indexOf('#') == -1) {
+        this.location = url + '#/';
+    }
     timer = setInterval('update()', 5000);
 });
 
-var current_page;
+var app = $.sammy(dispatcher);
+function dispatcher() {
+    var sammy = this;
+    function path(p, r, t) {
+        sammy.get(p, function() {
+                render(r, t, p);
+            });
+    }
+    path('#/', ['/overview'], 'overview');
+    path('#/connections', ['/connection/'], 'connections');
+    path('#/queues', ['/queue/'], 'queues');
+    path('#/channels',
+         ['/stats/channel_queue_stats/?group_by=channel',
+          '/stats/channel_exchange_stats/?group_by=channel'], 'channels');
+    this.get('#/connections/:id', function() {
+            render(['/connection/' + this.params['id']], 'connection',
+                   '#/connection');
+        });
+}
+
+var current_template;
+var current_reqs;
+var current_highlight;
 var timer;
 
-function apply_url(url) {
-    current_page = url.split('#', 2)[1];
+function render(reqs, template, highlight) {
+    current_template = template;
+    current_reqs = reqs;
+    current_highlight = highlight;
     update();
 }
 
 function update() {
-    var [reqs, template] = dispatch(current_page);
-
-    with_reqs(reqs, [], function(jsons) {
-            var json = merge(jsons, template);
-            var html = format(template, json);
+    with_reqs(current_reqs, [], function(jsons) {
+            var json = merge(jsons, current_template);
+            var html = format(current_template, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
-            $('a').removeClass('selected').unbind().click(function() {
-                apply_url(this.href);
-            });
-            $('a[href="#' + current_page + '"]').addClass('selected');
+            $('a').removeClass('selected');
+            $('a[href="' + current_highlight + '"]').addClass('selected');
         });
 }
 
@@ -33,8 +55,7 @@ function with_reqs(reqs, acc, fun) {
         // alert(reqs[0]);
         with_req('/json' + reqs[0], function(text) {
                 acc.push(jQuery.parseJSON(text));
-                reqs.shift();
-                with_reqs(reqs, acc, fun);
+                with_reqs(reqs.slice(1), acc, fun);
             });
     }
     else {
@@ -66,23 +87,6 @@ function merge(jsons, template) {
     return jsons[0];
 }
 
-function dispatch(page) {
-    if (page == 'channel') {
-        return [['/stats/channel_queue_stats/?group_by=channel',
-                 '/stats/channel_exchange_stats/?group_by=channel'],
-                'channels'];
-    }
-    else if (page == 'connection') {
-        return [['/connection/'], 'connections'];
-    }
-    else if (page == 'queue') {
-        return [['/queue/'], 'queues'];
-    }
-    else {
-        return [['/' + page], current_page.split('/', 1)];
-    }
-}
-
 function replace_content(id, html) {
     $("#" + id).empty();
     $(html).appendTo("#" + id);
@@ -94,7 +98,7 @@ function format(template, json) {
         return tmpl.render(json);
     } catch (err) {
         clearInterval(timer);
-        alert(err['name'] + ": " + err['message']);
+        debug(err['name'] + ": " + err['message']);
     }
 }
 
@@ -131,7 +135,7 @@ function with_req(path, fun) {
                 replace_content('main', html);
             }
             else {
-                alert("Got response code " + req.status);
+                debug("Got response code " + req.status);
                 clearInterval(timer);
             }
         }

@@ -7,7 +7,6 @@ Do sensible things with vhosts.
 Figure out coexistence with other webby plugins.
 Write some basic documentation.
 Figure out supervision.
-Investigate Sammy.
 Remove datetime from JSON.
 
 Then:
