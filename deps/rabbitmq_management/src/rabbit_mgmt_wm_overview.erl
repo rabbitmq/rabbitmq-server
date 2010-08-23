@@ -28,7 +28,6 @@
 %%--------------------------------------------------------------------
 
 init(_Config) -> {ok, undefined}.
-%%init(_Config) -> {{trace, "/tmp"}, undefined}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.

@@ -29,7 +29,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {{trace, "/tmp"}, undefined}.
+init(_Config) -> {ok, undefined}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
