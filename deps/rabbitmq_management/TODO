@@ -1,31 +1,29 @@
+Before "first release":
+Regularise REST API.
+Write more pages.
+Write management CR[U]D.
+Add superuser bit.
+Do sensible things with vhosts.
+Figure out coexistence with other webby plugins.
+Write some basic documentation.
+Figure out supervision.
+Investigate Sammy.
+
+Then:
 Figure out something sensible to do with time series.
   Cope with e.g. channel going away, want to view exchange / queue stats in the
   past.
   Garbage collection.
   Make rates into averages - configurable?
   Add pretty graphs.
-Write unit tests.
-Write integration tests (from AMQP / REST levels).
-Regularise REST API.
-Write more pages.
-Write management CR[U]D.
-Add superuser bit.
 Refactor lots.
-Do sensible things with vhosts.
 Add lots of uses of /stats/foo.
-Figure out coexistence with other webby plugins.
-Augment results lists so we don't have pids listed anywhere.
-Allow a page to make more than one JSON query.
 Improve L+F.
-Write some basic documentation.
-Figure out supervision.
-Add more OS-y things to overview.
-Support Windows.
 Write demo app.
 Do something sensible with non-amqp channels.
 Client side sorting / pagination / filtering.
-Investigate Sammy.
 Merge foo / foo_details in fine stats.
+Command-line / REPL client.
 
 Less urgent:
 Add more stats (bug 22996).
@@ -34,4 +32,4 @@ Make at least a cursory attempt to support IE6/7.
 Alarms(?).
 Clustering management.
 Sampling.
-Command-line / REPL client.
+Add more OS-y, Erlang-y things to overview(?)
