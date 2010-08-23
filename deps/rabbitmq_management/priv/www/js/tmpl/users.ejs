@@ -1,0 +1,19 @@
+<h1>Users</h1>
+
+<table class="list">
+ <thead>
+  <tr>
+    <th>Name</th>
+  </tr>
+ </thead>
+ <tbody>
+  <% for (var i = 0; i < users.length; i++) { %>
+  <tr<%= alt_rows(i)%>>
+   <td><%= link_to(users[i], '#/users/' + users[i]) %></td>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+
+<h2>Add a new user</h2>
+<%= format('user-form', {}) %>

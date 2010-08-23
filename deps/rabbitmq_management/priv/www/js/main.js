@@ -4,7 +4,6 @@ $(document).ready(function() {
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
     }
-    timer = setInterval('update()', 5000);
 });
 
 var app = $.sammy(dispatcher);
@@ -17,14 +16,49 @@ function dispatcher() {
     }
     path('#/', ['/overview'], 'overview');
     path('#/connections', ['/connection/'], 'connections');
+    this.get('#/connections/:id', function() {
+            render(['/connection/' + this.params['id']], 'connection',
+                   '#/connections');
+        });
     path('#/queues', ['/queue/'], 'queues');
     path('#/channels',
          ['/stats/channel_queue_stats/?group_by=channel',
           '/stats/channel_exchange_stats/?group_by=channel'], 'channels');
-    this.get('#/connections/:id', function() {
-            render(['/connection/' + this.params['id']], 'connection',
-                   '#/connection');
+    path('#/vhosts', ['/vhost/'], 'vhosts');
+    this.get('#/vhosts/:id', function() {
+            render(['/vhost/' + this.params['id']], 'vhost',
+                   '#/vhosts');
         });
+    this.put('#/vhosts', function() {
+            sync_req('put', '/vhost/' + $('#name').val(), {});
+            update();
+            return false;
+        });
+    this.del('#/vhosts', function() {
+            sync_req('delete', '/vhost/' + $('#name').val(), {});
+            go_to('#/vhosts');
+            return false;
+        });
+    path('#/users', ['/user/'], 'users');
+    this.get('#/users/:id', function() {
+            render(['/user/' + this.params['id']], 'user',
+                   '#/users');
+        });
+    this.put('#/users', function() {
+            sync_req('put', '/user/' + $('#username').val(),
+                     {'password': $('#password').val()});
+            update();
+            return false;
+        });
+    this.del('#/users', function() {
+            sync_req('delete', '/user/' + $('#username').val(), {});
+            go_to('#/users');
+            return false;
+        });
+}
+
+function go_to(url) {
+    this.location = url;
 }
 
 var current_template;
@@ -40,19 +74,28 @@ function render(reqs, template, highlight) {
 }
 
 function update() {
+    clearInterval(timer);
     with_reqs(current_reqs, [], function(jsons) {
             var json = merge(jsons, current_template);
             var html = format(current_template, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
-            $('a').removeClass('selected');
-            $('a[href="' + current_highlight + '"]').addClass('selected');
+            postprocess();
+            timer = setInterval('update()', 5000);
+        });
+}
+
+function postprocess() {
+    $('a').removeClass('selected');
+    $('a[href="' + current_highlight + '"]').addClass('selected');
+    $('input').focus(function() {
+            clearInterval(timer);
+            update_status('paused');
         });
 }
 
 function with_reqs(reqs, acc, fun) {
     if (reqs.length > 0) {
-        // alert(reqs[0]);
         with_req('/json' + reqs[0], function(text) {
                 acc.push(jQuery.parseJSON(text));
                 with_reqs(reqs.slice(1), acc, fun);
@@ -110,6 +153,8 @@ function update_status(status, datetime) {
         text = "Warning: server reported busy at " + datetime;
     else if (status == 'error')
         text = "Error: could not connect to server at " + datetime;
+    else if (status == 'paused')
+        text = "Updating halted due to form interaction.";
 
     var html = format('status', {status: status, text: text});
     replace_content('status', html);
@@ -143,6 +188,16 @@ function with_req(path, fun) {
     req.send(null);
 }
 
+function sync_req(type, path, json) {
+    var req = new XMLHttpRequest();
+    req.open(type, '/json' + path, false);
+    req.setRequestHeader('content-type', 'application/json');
+    req.send(JSON.stringify(json)); // TODO make portable
+
+    if (req.status >= 400) {
+        debug("Got response code " + req.status);
+    }
+}
 
 function debug(str) {
     $('<p>' + str + '</p>').appendTo('#debug');

@@ -19,6 +19,8 @@ table.list { border-width: 1px; border-bottom: 1px solid #bbb; }
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
 table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
 
+table.list td a { display: block; width: 100%; font-weight: bold; text-decoration: none;}
+
 sub { display: block; color: #888; }
 .unknown {color: #888;}
 
@@ -36,6 +38,7 @@ td.c {text-align: center;}
 td.r {text-align: right;}
 
 p.status-ok { color: #888; }
+p.status-paused { color: #888; }
 p.status-warning { color: black; background-color: #ff8; }
 p.status-error { color: white; background-color: #f00; }
 
@@ -43,3 +46,5 @@ p.status-error { color: white; background-color: #f00; }
 .highlight strong {font-size: 2em; display: block; color: #444; font-weight: normal;}
 
 h2 { color: #F60; font-size: 1.5em; }
+
+table.form { margin-bottom: 0.5em; }
