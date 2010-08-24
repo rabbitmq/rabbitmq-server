@@ -1,5 +1,11 @@
 <h1>User: <%= user %></h1>
+
+<div class="section-hidden">
+<h2>Delete this user</h2>
+<div>
 <form action="#/users" method="delete" class="confirm">
 <input type="hidden" id="username" value="<%= user %>"/>
 <input type="submit" value="Delete this user"/>
 </form>
+</div>
+</div>

@@ -1,5 +1,11 @@
 <h1>Virtual Host: <%= vhost %></h1>
+
+<div class="section-hidden">
+<h2>Delete this vhost</h2>
+<div>
 <form action="#/vhosts" method="delete" class="confirm">
 <input type="hidden" id="name" value="<%= vhost %>"/>
 <input type="submit" value="Delete this virtual host"/>
 </form>
+</div>
+</div>

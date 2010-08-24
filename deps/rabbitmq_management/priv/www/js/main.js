@@ -64,7 +64,7 @@ function go_to(url) {
 var current_template;
 var current_reqs;
 var current_highlight;
-var timer;
+//var timer;
 
 function render(reqs, template, highlight) {
     current_template = template;
@@ -74,27 +74,30 @@ function render(reqs, template, highlight) {
 }
 
 function update() {
-    clearInterval(timer);
+    //clearInterval(timer);
     with_reqs(current_reqs, [], function(jsons) {
             var json = merge(jsons, current_template);
             var html = format(current_template, json);
             replace_content('main', html);
             update_status('ok', json['datetime']);
             postprocess();
-            timer = setInterval('update()', 5000);
+            //timer = setInterval('update()', 5000);
         });
 }
 
 function postprocess() {
     $('a').removeClass('selected');
     $('a[href="' + current_highlight + '"]').addClass('selected');
-    $('input').focus(function() {
-            clearInterval(timer);
-            update_status('paused');
-        });
+    // $('input').focus(function() {
+    //         clearInterval(timer);
+    //         update_status('paused');
+    //     });
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
+        });
+    $('div.section h2, div.section-hidden h2').click(function() {
+            $(this).next().toggle(100);
         });
 }
 
@@ -144,7 +147,7 @@ function format(template, json) {
         var tmpl = new EJS({url: '/js/tmpl/' + template + '.ejs'});
         return tmpl.render(json);
     } catch (err) {
-        clearInterval(timer);
+        //clearInterval(timer);
         debug(err['name'] + ": " + err['message']);
     }
 }
@@ -157,8 +160,8 @@ function update_status(status, datetime) {
         text = "Warning: server reported busy at " + datetime;
     else if (status == 'error')
         text = "Error: could not connect to server at " + datetime;
-    else if (status == 'paused')
-        text = "Updating halted due to form interaction.";
+    //else if (status == 'paused')
+    //    text = "Updating halted due to form interaction.";
 
     var html = format('status', {status: status, text: text});
     replace_content('status', html);
@@ -185,7 +188,7 @@ function with_req(path, fun) {
             }
             else {
                 debug("Got response code " + req.status);
-                clearInterval(timer);
+                //clearInterval(timer);
             }
         }
     };
