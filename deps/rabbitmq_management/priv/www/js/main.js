@@ -30,29 +30,48 @@ function dispatcher() {
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            sync_req('put', '/vhosts/' + esc($('#name').val()), {});
+            sync_req('put', '/vhosts/' + esc(this.params['name']), {});
             update();
             return false;
         });
     this.del('#/vhosts', function() {
-            sync_req('delete', '/vhosts/' + esc($('#name').val()), {});
+            sync_req('delete', '/vhosts/' + esc(this.params['name']), {});
             go_to('#/vhosts');
             return false;
         });
     path('#/users', ['/users/'], 'users');
     this.get('#/users/:id', function() {
-            render(['/users/' + esc(this.params['id'])], 'user',
+            render(['/users/' + esc(this.params['id']),
+                    '/permissions/' + esc(this.params['id']),
+                    '/vhosts/'], 'user',
                    '#/users');
         });
     this.put('#/users', function() {
-            sync_req('put', '/users/' + esc($('#username').val()),
-                     {'password': $('#password').val()});
+            sync_req('put', '/users/' + esc(this.params['username']),
+                     {'password': this.params['password']});
             update();
             return false;
         });
     this.del('#/users', function() {
-            sync_req('delete', '/users/' + esc($('#username').val()), {});
+            sync_req('delete', '/users/' + esc(this.params['username']), {});
             go_to('#/users');
+            return false;
+        });
+    this.put('#/permissions', function() {
+            sync_req('put',
+                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']),
+                     {'configure': this.params['configure'],
+                      'write':     this.params['write'],
+                      'read':      this.params['read'],
+                      'scope':     this.params['scope']});
+            update();
+            return false;
+        });
+    this.del('#/permissions', function() {
+            sync_req('delete',
+                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']),
+                     {});
+            update();
             return false;
         });
 }
@@ -133,6 +152,14 @@ function merge(jsons, template) {
             }
         }
     }
+    else {
+        // TODO generalise this, replace the above?
+        for (var i = 1; i < jsons.length; i++) {
+            for (var k in jsons[i]) {
+                jsons[0][k] = jsons[i][k];
+            }
+        }
+    }
 
     return jsons[0];
 }
@@ -202,7 +229,8 @@ function sync_req(type, path, json) {
     req.send(JSON.stringify(json)); // TODO make portable
 
     if (req.status >= 400) {
-        debug("Got response code " + req.status);
+        debug("Got response code " + req.status + " with body " +
+              req.responseText);
     }
 }
 

@@ -52,3 +52,4 @@ div.section h2, div.section-hidden h2 { font-size: 1em; padding: 0.5em; cursor: 
 
 form { margin: 0; }
 table.form { margin-bottom: 0.5em; }
+table.form th { text-align: right; }

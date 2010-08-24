@@ -1,11 +1,90 @@
 <h1>User: <%= user %></h1>
 
-<div class="section-hidden">
-<h2>Delete this user</h2>
-<div>
-<form action="#/users" method="delete" class="confirm">
-<input type="hidden" id="username" value="<%= user %>"/>
-<input type="submit" value="Delete this user"/>
-</form>
+<div class="section">
+  <h2>Permissions</h2>
+  <div>
+    <table class="list">
+      <thead>
+        <tr>
+          <th>Virtual Host</th>
+          <th>Scope</th>
+          <th>Configure Regexp</th>
+          <th>Write Regexp</th>
+          <th>Read Regexp</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (var i = 0; i < permissions.length; i++) { %>
+           <tr<%= alt_rows(i)%>>
+             <td><%= link_to(permissions[i].vhost, '#/vhosts/' + esc(permissions[i].vhost)) %></td>
+             <td><%= permissions[i].scope %></td>
+             <td><%= permissions[i].configure %></td>
+             <td><%= permissions[i].write %></td>
+             <td><%= permissions[i].read %></td>
+             <td>
+               <form action="#/permissions" method="delete" class="confirmx">
+                 <input type="hidden" name="username" value="<%= user %>"/>
+                 <input type="hidden" name="vhost" value="<%= permissions[i].vhost %>"/>
+                 <input type="submit" value="Clear"/>
+               </form>
+             </td>
+           </tr>
+           <% } %>
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<div class="section-hidden">
+  <h2>Set Permission</h2>
+  <div>
+    <form action="#/permissions" method="put">
+      <input type="hidden" name="username" value="<%= user %>"/>
+      <table class="form">
+        <tr>
+          <th><label for="vhost">Virtual Host:</label></th>
+          <td>
+            <select id="vhost" name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= vhosts[i] %>"><%= vhosts[i] %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label for="configure">Configure Regexp:</label></th>
+          <td><input type="text" id="configure" name="configure" value=".*"/></td>
+        </tr>
+        <tr>
+          <th><label for="write">Write Regexp:</label></th>
+          <td><input type="text" id="write" name="write" value=".*"/></td>
+        </tr>
+        <tr>
+          <th><label for="read">Read Regexp:</label></th>
+          <td><input type="text" id="read" name="read" value=".*"/></td>
+        </tr>
+        <tr>
+          <th><label for="scope">Scope:</label></th>
+          <td>
+            <select id="scope" name="scope">
+              <option value="client">Client</option>
+              <option value="all">All</option>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Set Permission"/>
+    </form>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete This User</h2>
+  <div>
+    <form action="#/users" method="delete" class="confirm">
+      <input type="hidden" id="username" value="<%= user %>"/>
+      <input type="submit" value="Delete"/>
+    </form>
+  </div>
 </div>
