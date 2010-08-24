@@ -23,7 +23,7 @@
              <td><%= permissions[i].write %></td>
              <td><%= permissions[i].read %></td>
              <td>
-               <form action="#/permissions" method="delete" class="confirmx">
+               <form action="#/permissions" method="delete" class="confirm">
                  <input type="hidden" name="username" value="<%= user %>"/>
                  <input type="hidden" name="vhost" value="<%= permissions[i].vhost %>"/>
                  <input type="submit" value="Clear"/>
