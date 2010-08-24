@@ -83,7 +83,7 @@
   <h2>Delete This User</h2>
   <div>
     <form action="#/users" method="delete" class="confirm">
-      <input type="hidden" id="username" value="<%= user %>"/>
+      <input type="hidden" id="username" name="username" value="<%= user %>"/>
       <input type="submit" value="Delete"/>
     </form>
   </div>

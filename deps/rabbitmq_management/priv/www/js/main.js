@@ -30,12 +30,12 @@ function dispatcher() {
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            sync_req('put', '/vhosts/' + esc(this.params['name']), {});
+            sync_req('put', '/vhosts/' + esc(this.params['name']), this.params);
             update();
             return false;
         });
     this.del('#/vhosts', function() {
-            sync_req('delete', '/vhosts/' + esc(this.params['name']), {});
+            sync_req('delete', '/vhosts/' + esc(this.params['name']), this.params);
             go_to('#/vhosts');
             return false;
         });
@@ -47,8 +47,7 @@ function dispatcher() {
                    '#/users');
         });
     this.put('#/users', function() {
-            sync_req('put', '/users/' + esc(this.params['username']),
-                     {'password': this.params['password']});
+            sync_req('put', '/users/' + esc(this.params['username']), this.params);
             update();
             return false;
         });
@@ -59,18 +58,13 @@ function dispatcher() {
         });
     this.put('#/permissions', function() {
             sync_req('put',
-                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']),
-                     {'configure': this.params['configure'],
-                      'write':     this.params['write'],
-                      'read':      this.params['read'],
-                      'scope':     this.params['scope']});
+                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']), this.params);
             update();
             return false;
         });
     this.del('#/permissions', function() {
             sync_req('delete',
-                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']),
-                     {});
+                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']), this.params);
             update();
             return false;
         });

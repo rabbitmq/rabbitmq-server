@@ -8,6 +8,8 @@ Figure out coexistence with other webby plugins.
 Write some basic documentation.
 Figure out supervision.
 Remove datetime from JSON.
+Merge foo / foo_details in fine stats.
+Fix the rate bug.
 
 Then:
 Figure out something sensible to do with time series.
@@ -22,7 +24,6 @@ Improve L+F.
 Write demo app.
 Do something sensible with non-amqp channels.
 Client side sorting / pagination / filtering.
-Merge foo / foo_details in fine stats.
 Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
 
