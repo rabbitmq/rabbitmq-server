@@ -178,17 +178,18 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_call(info, _From, _State) ->
-    9;
-prioritise_call({info, _Items}, _From, _State) ->
-    9;
-prioritise_call(_Msg, _From, _State) ->
-    0.
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info           -> 9;
+        {info, _Items} -> 9;
+        _              -> 0
+    end.
 
-prioritise_cast(emit_stats, _State) ->
-    7;
-prioritise_cast(_Msg, _State) ->
-    0.
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        emit_stats -> 7;
+        _          -> 0
+    end.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);

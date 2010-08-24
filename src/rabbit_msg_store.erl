@@ -581,23 +581,21 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_call({new_client_state, _Ref}, _From, _State) ->
-    7;
-prioritise_call(successfully_recovered_state, _From, _State) ->
-    7;
-prioritise_call({read, _Guid}, _From, _State) ->
-    2;
-prioritise_call(_Msg, _From, _State) ->
-    0.
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        {new_client_state, _Ref}     -> 7;
+        successfully_recovered_state -> 7;
+        {read, _Guid}                -> 2;
+        _                            -> 0
+    end.
 
-prioritise_cast(sync, _State) ->
-    8;
-prioritise_cast({gc_done, _Reclaimed, _Source, _Destination}, _State) ->
-    8;
-prioritise_cast({set_maximum_since_use, _Age}, _State) ->
-    8;
-prioritise_cast(_Msg, _State) ->
-    0.
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        sync                                         -> 8;
+        {gc_done, _Reclaimed, _Source, _Destination} -> 8;
+        {set_maximum_since_use, _Age}                -> 8;
+        _                                            -> 0
+    end.
 
 handle_call({read, Guid}, From, State) ->
     State1 = read_message(Guid, From, State),
