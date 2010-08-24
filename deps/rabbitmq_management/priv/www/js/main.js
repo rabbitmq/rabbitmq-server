@@ -17,7 +17,7 @@ function dispatcher() {
     path('#/', ['/overview'], 'overview');
     path('#/connections', ['/connection/'], 'connections');
     this.get('#/connections/:id', function() {
-            render(['/connection/' + this.params['id']], 'connection',
+            render(['/connection/' + esc(this.params['id'])], 'connection',
                    '#/connections');
         });
     path('#/queues', ['/queue/'], 'queues');
@@ -26,32 +26,32 @@ function dispatcher() {
           '/stats/channel_exchange_stats/?group_by=channel'], 'channels');
     path('#/vhosts', ['/vhost/'], 'vhosts');
     this.get('#/vhosts/:id', function() {
-            render(['/vhost/' + this.params['id']], 'vhost',
+            render(['/vhost/' + esc(this.params['id'])], 'vhost',
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            sync_req('put', '/vhost/' + $('#name').val(), {});
+            sync_req('put', '/vhost/' + esc($('#name').val()), {});
             update();
             return false;
         });
     this.del('#/vhosts', function() {
-            sync_req('delete', '/vhost/' + $('#name').val(), {});
+            sync_req('delete', '/vhost/' + esc($('#name').val()), {});
             go_to('#/vhosts');
             return false;
         });
     path('#/users', ['/user/'], 'users');
     this.get('#/users/:id', function() {
-            render(['/user/' + this.params['id']], 'user',
+            render(['/user/' + esc(this.params['id'])], 'user',
                    '#/users');
         });
     this.put('#/users', function() {
-            sync_req('put', '/user/' + $('#username').val(),
+            sync_req('put', '/user/' + esc($('#username').val()),
                      {'password': $('#password').val()});
             update();
             return false;
         });
     this.del('#/users', function() {
-            sync_req('delete', '/user/' + $('#username').val(), {});
+            sync_req('delete', '/user/' + esc($('#username').val()), {});
             go_to('#/users');
             return false;
         });

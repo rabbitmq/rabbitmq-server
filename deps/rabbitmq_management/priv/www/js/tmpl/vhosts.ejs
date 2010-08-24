@@ -9,7 +9,7 @@
  <tbody>
   <% for (var i = 0; i < vhosts.length; i++) { %>
   <tr<%= alt_rows(i)%>>
-   <td><%= link_to(vhosts[i], '#/vhosts/' + vhosts[i]) %></td>
+   <td><%= link_to(vhosts[i], '#/vhosts/' + esc(vhosts[i])) %></td>
   </tr>
   <% } %>
  </tbody>

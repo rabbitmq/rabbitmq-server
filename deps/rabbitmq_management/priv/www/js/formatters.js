@@ -48,3 +48,6 @@ function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt"' : '';
 }
 
+function esc(str) {
+    return escape(str).replace('/', '%2F');
+}
