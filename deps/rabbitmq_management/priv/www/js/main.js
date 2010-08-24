@@ -30,12 +30,12 @@ function dispatcher() {
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            sync_req('put', '/vhosts/' + esc(this.params['name']), this.params);
+            sync_put(this, '/vhosts/:name');
             update();
             return false;
         });
     this.del('#/vhosts', function() {
-            sync_req('delete', '/vhosts/' + esc(this.params['name']), this.params);
+            sync_delete(this, '/vhosts/:name');
             go_to('#/vhosts');
             return false;
         });
@@ -47,24 +47,22 @@ function dispatcher() {
                    '#/users');
         });
     this.put('#/users', function() {
-            sync_req('put', '/users/' + esc(this.params['username']), this.params);
+            sync_put(this, '/users/:username');
             update();
             return false;
         });
     this.del('#/users', function() {
-            sync_req('delete', '/users/' + esc(this.params['username']), {});
+            sync_delete(this, '/users/:username');
             go_to('#/users');
             return false;
         });
     this.put('#/permissions', function() {
-            sync_req('put',
-                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']), this.params);
+            sync_put(this, '/permissions/:username/:vhost');
             update();
             return false;
         });
     this.del('#/permissions', function() {
-            sync_req('delete',
-                     '/permissions/' + esc(this.params['username']) + '/' + esc(this.params['vhost']), this.params);
+            sync_delete(this, '/permissions/:username/:vhost');
             update();
             return false;
         });
@@ -216,16 +214,32 @@ function with_req(path, fun) {
     req.send(null);
 }
 
-function sync_req(type, path, json) {
+function sync_put(sammy, path_template) {
+    sync_req('put', sammy, path_template);
+}
+
+function sync_delete(sammy, path_template) {
+    sync_req('delete', sammy, path_template);
+}
+
+function sync_req(type, sammy, path_template) {
+    var path = fill_path_template(path_template, sammy.params);
     var req = new XMLHttpRequest();
     req.open(type, '/json' + path, false);
     req.setRequestHeader('content-type', 'application/json');
-    req.send(JSON.stringify(json)); // TODO make portable
+    req.send(JSON.stringify(sammy.params)); // TODO make portable
 
     if (req.status >= 400) {
         debug("Got response code " + req.status + " with body " +
               req.responseText);
     }
+}
+
+function fill_path_template(template, params) {
+    var re = /:[a-zA-Z_]*/g;
+    return template.replace(re, function(m) {
+            return esc(params[m.substring(1)]);
+        });
 }
 
 function debug(str) {
