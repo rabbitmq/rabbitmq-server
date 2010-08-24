@@ -80,7 +80,14 @@ TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
-LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
+LIBS_PATH_UNIX=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
+OSTYPE=$(shell uname -o)
+ifeq ($(OSTYPE),Cygwin)
+    LIBS_PATH=ERL_LIBS="$(shell cygpath -wp $(LIBS_PATH_UNIX))"
+else
+    LIBS_PATH=ERL_LIBS=$(LIBS_PATH_UNIX)
+endif
+
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
 
 COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
