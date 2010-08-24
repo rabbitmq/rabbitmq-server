@@ -618,9 +618,9 @@ in({'$gen_pcall', From, {Priority, Msg}}, Queue, _GS2State) ->
 in({'$gen_cast', Msg}, Queue,
    GS2State = #gs2_state { prioritise_cast = PC }) ->
     priority_queue:in({'$gen_cast', Msg}, PC(Msg, GS2State), Queue);
-in({'$gan_call', From, Msg}, Queue,
+in({'$gen_call', From, Msg}, Queue,
    GS2State = #gs2_state { prioritise_call = PC }) ->
-    priority_queue:in({'$gen_call', Msg}, PC(Msg, From, GS2State), Queue);
+    priority_queue:in({'$gen_call', From, Msg}, PC(Msg, From, GS2State), Queue);
 in(Input, Queue,
    GS2State = #gs2_state { prioritise_info = PI }) ->
     priority_queue:in(Input, PI(Input, GS2State), Queue).
