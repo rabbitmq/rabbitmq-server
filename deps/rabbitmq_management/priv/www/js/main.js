@@ -92,6 +92,10 @@ function postprocess() {
             clearInterval(timer);
             update_status('paused');
         });
+    $('form.confirm').submit(function() {
+            return confirm("Are you sure? This object cannot be recovered " +
+                           "after deletion.");
+        });
 }
 
 function with_reqs(reqs, acc, fun) {
