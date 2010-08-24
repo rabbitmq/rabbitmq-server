@@ -615,15 +615,15 @@ in({'$gen_pcast', {Priority, Msg}}, Queue, _GS2State) ->
     priority_queue:in({'$gen_cast', Msg}, Priority, Queue);
 in({'$gen_pcall', From, {Priority, Msg}}, Queue, _GS2State) ->
     priority_queue:in({'$gen_call', From, Msg}, Priority, Queue);
-in({'$gen_cast', Msg}, Queue, #gs2_state { prioritise_cast = PC,
-                                           state           = State }) ->
-    priority_queue:in({'$gen_cast', Msg}, PC(Msg, State), Queue);
-in({'$gan_call', From, Msg}, Queue, #gs2_state { prioritise_call = PC,
-                                                 state           = State }) ->
-    priority_queue:in({'$gen_call', Msg}, PC(Msg, From, State), Queue);
-in(Input, Queue, #gs2_state { prioritise_info = PI,
-                              state           = State }) ->
-    priority_queue:in(Input, PI(Input, State), Queue).
+in({'$gen_cast', Msg}, Queue,
+   GS2State = #gs2_state { prioritise_cast = PC }) ->
+    priority_queue:in({'$gen_cast', Msg}, PC(Msg, GS2State), Queue);
+in({'$gan_call', From, Msg}, Queue,
+   GS2State = #gs2_state { prioritise_call = PC }) ->
+    priority_queue:in({'$gen_call', Msg}, PC(Msg, From, GS2State), Queue);
+in(Input, Queue,
+   GS2State = #gs2_state { prioritise_info = PI }) ->
+    priority_queue:in(Input, PI(Input, GS2State), Queue).
 
 process_msg(Msg,
             GS2State = #gs2_state { parent = Parent,
@@ -1174,11 +1174,25 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
 function_exported_or_default(Mod, Fun, Ar, Default) ->
     case erlang:function_exported(Mod, Fun, Ar) of
         true -> case Ar of
-                    2 -> fun (Msg, State) ->
-                                 Mod:Fun(Msg, State)
+                    2 -> fun (Msg, #gs2_state { state = State,
+                                                name  = Name,
+                                                debug = Debug }) ->
+                                 try
+                                     Mod:Fun(Msg, State)
+                                 catch
+                                     Reason ->
+                                         terminate(Reason, Name, Msg, Mod, State, Debug)
+                                 end
                          end;
-                    3 -> fun (Msg, From, State) ->
-                                 Mod:Fun(Msg, From, State)
+                    3 -> fun (Msg, From, #gs2_state { state = State,
+                                                      name  = Name,
+                                                      debug = Debug }) ->
+                                 try
+                                     Mod:Fun(Msg, From, State)
+                                 catch
+                                     Reason ->
+                                         terminate(Reason, Name, Msg, Mod, State, Debug)
+                                 end
                          end
                 end;
         false -> Default
