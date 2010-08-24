@@ -110,7 +110,7 @@ boot_ssl() ->
             {ok, SslOptsConfig} = application:get_env(ssl_options),
             SslOpts =
                 case proplists:get_value(verify, SslOptsConfig, verify_none) of
-                    verify_none -> [SslOptsConfig];
+                    verify_none -> SslOptsConfig;
                     verify_peer -> [{verify_fun, fun([])    -> true;
                                                     ([_|_]) -> false
                                                  end}
