@@ -50,15 +50,15 @@ start(_Type, _StartArgs) ->
     Res.
 
 dispatcher() ->
-    [{["json","overview"],               rabbit_mgmt_wm_overview, []},
-     {["json","connection"],             rabbit_mgmt_wm_connection, []},
-     {["json","connection", connection], rabbit_mgmt_wm_connection, []},
-     {["json","queue"],                  rabbit_mgmt_wm_queue, []},
-     {["json","vhost"],                  rabbit_mgmt_wm_vhosts, []},
-     {["json","vhost", vhost],           rabbit_mgmt_wm_vhost, []},
-     {["json","user"],                   rabbit_mgmt_wm_users, []},
-     {["json","user", user],             rabbit_mgmt_wm_user, []},
-     {["json","stats", type],            rabbit_mgmt_wm_stats, []}
+    [{["json","overview"],                rabbit_mgmt_wm_overview, []},
+     {["json","connections"],             rabbit_mgmt_wm_connection, []},
+     {["json","connections", connection], rabbit_mgmt_wm_connection, []},
+     {["json","queues"],                  rabbit_mgmt_wm_queue, []},
+     {["json","vhosts"],                  rabbit_mgmt_wm_vhosts, []},
+     {["json","vhosts", vhost],           rabbit_mgmt_wm_vhost, []},
+     {["json","users"],                   rabbit_mgmt_wm_users, []},
+     {["json","users", user],             rabbit_mgmt_wm_user, []},
+     {["json","stats", type],             rabbit_mgmt_wm_stats, []}
     ].
 
 stop(_State) ->

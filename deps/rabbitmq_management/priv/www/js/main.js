@@ -15,43 +15,43 @@ function dispatcher() {
             });
     }
     path('#/', ['/overview'], 'overview');
-    path('#/connections', ['/connection/'], 'connections');
+    path('#/connections', ['/connections/'], 'connections');
     this.get('#/connections/:id', function() {
-            render(['/connection/' + esc(this.params['id'])], 'connection',
+            render(['/connections/' + esc(this.params['id'])], 'connection',
                    '#/connections');
         });
-    path('#/queues', ['/queue/'], 'queues');
+    path('#/queues', ['/queues/'], 'queues');
     path('#/channels',
          ['/stats/channel_queue_stats/?group_by=channel',
           '/stats/channel_exchange_stats/?group_by=channel'], 'channels');
-    path('#/vhosts', ['/vhost/'], 'vhosts');
+    path('#/vhosts', ['/vhosts/'], 'vhosts');
     this.get('#/vhosts/:id', function() {
-            render(['/vhost/' + esc(this.params['id'])], 'vhost',
+            render(['/vhosts/' + esc(this.params['id'])], 'vhost',
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            sync_req('put', '/vhost/' + esc($('#name').val()), {});
+            sync_req('put', '/vhosts/' + esc($('#name').val()), {});
             update();
             return false;
         });
     this.del('#/vhosts', function() {
-            sync_req('delete', '/vhost/' + esc($('#name').val()), {});
+            sync_req('delete', '/vhosts/' + esc($('#name').val()), {});
             go_to('#/vhosts');
             return false;
         });
-    path('#/users', ['/user/'], 'users');
+    path('#/users', ['/users/'], 'users');
     this.get('#/users/:id', function() {
-            render(['/user/' + esc(this.params['id'])], 'user',
+            render(['/users/' + esc(this.params['id'])], 'user',
                    '#/users');
         });
     this.put('#/users', function() {
-            sync_req('put', '/user/' + esc($('#username').val()),
+            sync_req('put', '/users/' + esc($('#username').val()),
                      {'password': $('#password').val()});
             update();
             return false;
         });
     this.del('#/users', function() {
-            sync_req('delete', '/user/' + esc($('#username').val()), {});
+            sync_req('delete', '/users/' + esc($('#username').val()), {});
             go_to('#/users');
             return false;
         });

@@ -54,34 +54,34 @@ http_auth_test() ->
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
 http_vhosts_test() ->
-    [<<"/">>] = rget("vhosts", http_get("/vhost", ?OK)),
+    [<<"/">>] = rget("vhosts", http_get("/vhosts", ?OK)),
     %% Create a new one
-    http_put("/vhost/myvhost", "", ?NO_CONTENT),
+    http_put("/vhosts/myvhost", "", ?NO_CONTENT),
     %% PUT should be idempotent
-    http_put("/vhost/myvhost", "", ?NO_CONTENT),
+    http_put("/vhosts/myvhost", "", ?NO_CONTENT),
     %% Check it's there
-    [<<"/">>, <<"myvhost">>] = rget("vhosts", http_get("/vhost", ?OK)),
+    [<<"/">>, <<"myvhost">>] = rget("vhosts", http_get("/vhosts", ?OK)),
     %% Check individually
-    <<"/">> = rget("vhost", http_get("/vhost/%2f", ?OK)),
-    <<"myvhost">> = rget("vhost", http_get("/vhost/myvhost", ?OK)),
+    <<"/">> = rget("vhost", http_get("/vhosts/%2f", ?OK)),
+    <<"myvhost">> = rget("vhost", http_get("/vhosts/myvhost", ?OK)),
     %% Delete it
-    http_delete("/vhost/myvhost", ?NO_CONTENT),
+    http_delete("/vhosts/myvhost", ?NO_CONTENT),
     %% It's not there
-    http_get("/vhost/myvhost", ?NOT_FOUND),
-    http_delete("/vhost/myvhost", ?NOT_FOUND).
+    http_get("/vhosts/myvhost", ?NOT_FOUND),
+    http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 http_users_test() ->
-    http_get("/user/myuser", ?NOT_FOUND),
-    http_put("/user/myuser", "Something not JSON", ?BAD_REQUEST),
-    http_put("/user/myuser", "{\"flim\": \"flam\"}", ?BAD_REQUEST),
-    http_put("/user/myuser", "{\"password\": \"myuser\"}", ?NO_CONTENT),
-    http_put("/user/myuser", "{\"password\": \"password\"}", ?NO_CONTENT),
-    <<"myuser">> = rget("user", http_get("/user/myuser", ?OK)),
-    [<<"guest">>, <<"myuser">>] = rget("users", http_get("/user", ?OK)),
+    http_get("/users/myuser", ?NOT_FOUND),
+    http_put("/users/myuser", "Something not JSON", ?BAD_REQUEST),
+    http_put("/users/myuser", "{\"flim\": \"flam\"}", ?BAD_REQUEST),
+    http_put("/users/myuser", "{\"password\": \"myuser\"}", ?NO_CONTENT),
+    http_put("/users/myuser", "{\"password\": \"password\"}", ?NO_CONTENT),
+    <<"myuser">> = rget("user", http_get("/users/myuser", ?OK)),
+    [<<"guest">>, <<"myuser">>] = rget("users", http_get("/users", ?OK)),
     test_auth(?OK, [auth_header("myuser", "password")]),
-    http_delete("/user/myuser", ?NO_CONTENT),
+    http_delete("/users/myuser", ?NO_CONTENT),
     test_auth(?NOT_AUTHORISED, [auth_header("myuser", "password")]),
-    http_get("/user/myuser", ?NOT_FOUND).
+    http_get("/users/myuser", ?NOT_FOUND).
 
 test_auth(Code, Headers) ->
     {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).
