@@ -628,8 +628,6 @@ in(Input, Queue,
 process_msg(Msg,
             GS2State = #gs2_state { parent = Parent,
                                     name   = Name,
-                                    state  = State,
-                                    mod    = Mod,
                                     debug  = Debug }) ->
     case Msg of
 	{system, From, Req} ->
@@ -640,7 +638,7 @@ process_msg(Msg,
         %% version of the function seems not to be documented so
         %% leaving out for now.
 	{'EXIT', Parent, Reason} ->
-	    terminate(Reason, Name, Msg, Mod, State, Debug);
+	    terminate(Reason, Msg, GS2State);
 	_Msg when Debug =:= [] ->
 	    handle_msg(Msg, GS2State);
 	_Msg ->
@@ -845,8 +843,7 @@ dispatch(Info, Mod, State) ->
     Mod:handle_info(Info, State).
 
 handle_msg({'$gen_call', From, Msg},
-           GS2State = #gs2_state { name  = Name,
-                                   state = State,
+           GS2State = #gs2_state { state = State,
                                    mod   = Mod,
                                    debug = [] }) ->
     case catch Mod:handle_call(Msg, From, State) of
@@ -866,7 +863,8 @@ handle_msg({'$gen_call', From, Msg},
                                        time  = Time1 });
 	{stop, Reason, Reply, NState} ->
 	    {'EXIT', R} =
-		(catch terminate(Reason, Name, Msg, Mod, NState, [])),
+		(catch terminate(Reason, Msg,
+                                 GS2State #gs2_state { state = NState })),
 	    reply(From, Reply),
 	    exit(R);
 	Other -> handle_common_reply(Other, Msg, GS2State)
@@ -902,12 +900,13 @@ handle_msg({'$gen_call', From, Msg},
 	{noreply, NState, Time1} ->
 	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
 				      {noreply, NState}),
-	    loop(GS2State = #gs2_state {state = NState,
-                                        time  = Time1,
-                                        debug = Debug1});
+	    loop(GS2State #gs2_state {state = NState,
+                                      time  = Time1,
+                                      debug = Debug1});
 	{stop, Reason, Reply, NState} ->
 	    {'EXIT', R} =
-		(catch terminate(Reason, Name, Msg, Mod, NState, Debug)),
+		(catch terminate(Reason, Msg,
+                                 GS2State #gs2_state { state = NState })),
 	    reply(Name, From, Reply, NState, Debug),
 	    exit(R);
 	Other ->
@@ -951,17 +950,14 @@ handle_common_reply(Reply, Msg,
             handle_common_termination(Reply, Msg, GS2State)
     end.
 
-handle_common_termination(Reply, Msg , #gs2_state { name  = Name,
-                                                    mod   = Mod,
-                                                    state = State,
-                                                    debug = Debug }) ->
+handle_common_termination(Reply, Msg, GS2State) ->
     case Reply of
         {stop, Reason, NState} ->
-            terminate(Reason, Name, Msg, Mod, NState, Debug);
+            terminate(Reason, Msg, GS2State #gs2_state { state = NState });
         {'EXIT', What} ->
-            terminate(What, Name, Msg, Mod, State, Debug);
+            terminate(What, Msg, GS2State);
         _ ->
-            terminate({bad_return_value, Reply}, Name, Msg, Mod, State, Debug)
+            terminate({bad_return_value, Reply}, Msg, GS2State)
     end.
 
 reply(Name, {To, Tag}, Reply, State, Debug) ->
@@ -980,11 +976,8 @@ system_continue(Parent, Debug, GS2State) ->
 -spec system_terminate(_, _, _, [_]) -> no_return().
 -endif.
 
-system_terminate(Reason, _Parent, Debug,
-                 #gs2_state { name  = Name,
-                               state = State,
-                              mod   = Mod }) ->
-    terminate(Reason, Name, [], Mod, State, Debug).
+system_terminate(Reason, _Parent, Debug, GS2State) ->
+    terminate(Reason, [], GS2State #gs2_state { debug = Debug }).
 
 system_code_change(GS2State = #gs2_state { mod   = Mod,
                                            state = State },
@@ -1026,7 +1019,10 @@ print_event(Dev, Event, Name) ->
 %%% Terminate the server.
 %%% ---------------------------------------------------
 
-terminate(Reason, Name, Msg, Mod, State, Debug) ->
+terminate(Reason, Msg, #gs2_state { name  = Name,
+                                    mod   = Mod,
+                                    state = State,
+                                    debug = Debug }) ->
     case catch Mod:terminate(Reason, State) of
 	{'EXIT', R} ->
 	    error_info(R, Name, Msg, State, Debug),
@@ -1174,24 +1170,20 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
 function_exported_or_default(Mod, Fun, Ar, Default) ->
     case erlang:function_exported(Mod, Fun, Ar) of
         true -> case Ar of
-                    2 -> fun (Msg, #gs2_state { state = State,
-                                                name  = Name,
-                                                debug = Debug }) ->
+                    2 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
                                  try
                                      Mod:Fun(Msg, State)
                                  catch
                                      Reason ->
-                                         terminate(Reason, Name, Msg, Mod, State, Debug)
+                                         terminate(Reason, Msg, GS2State)
                                  end
                          end;
-                    3 -> fun (Msg, From, #gs2_state { state = State,
-                                                      name  = Name,
-                                                      debug = Debug }) ->
+                    3 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
                                  try
                                      Mod:Fun(Msg, From, State)
                                  catch
                                      Reason ->
-                                         terminate(Reason, Name, Msg, Mod, State, Debug)
+                                         terminate(Reason, Msg, GS2State)
                                  end
                          end
                 end;
