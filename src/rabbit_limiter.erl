@@ -34,7 +34,7 @@
 -behaviour(gen_server2).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2]).
+         handle_info/2, prioritise_call/3]).
 -export([start_link/2, shutdown/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1]).
@@ -115,7 +115,7 @@ get_limit(undefined) ->
 get_limit(Pid) ->
     rabbit_misc:with_exit_handler(
       fun () -> 0 end,
-      fun () -> gen_server2:pcall(Pid, 9, get_limit, infinity) end).
+      fun () -> gen_server2:call(Pid, get_limit, infinity) end).
 
 block(undefined) ->
     ok;
@@ -134,6 +134,9 @@ unblock(LimiterPid) ->
 
 init([ChPid, UnackedMsgCount]) ->
     {ok, #lim{ch_pid = ChPid, volume = UnackedMsgCount}}.
+
+prioritise_call(get_limit, _From, _State) -> 9;
+prioritise_call(_Msg, _From, _State)      -> 0.
 
 handle_call({can_send, _QPid, _AckRequired}, _From,
             State = #lim{blocked = true}) ->
