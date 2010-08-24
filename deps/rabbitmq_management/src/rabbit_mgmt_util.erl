@@ -20,7 +20,8 @@
 %%
 -module(rabbit_mgmt_util).
 
--export([is_authorized/2, now_ms/0, http_date/0]).
+-export([is_authorized/2, now_ms/0, http_date/0, vhost/1, vhost_exists/1]).
+-export([bad_request/3, id/2, decode/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -49,3 +50,43 @@ now_ms() ->
 
 http_date() ->
     httpd_util:rfc1123_date(erlang:universaltime()).
+
+vhost(ReqData) ->
+    VHost = id(vhost, ReqData),
+    case vhost_exists(VHost) of
+        true  -> VHost;
+        false -> not_found
+    end.
+
+vhost_exists(VHostBin) ->
+    lists:any(fun (E) -> E == VHostBin end,
+              rabbit_access_control:list_vhosts()).
+
+bad_request(Reason, ReqData, Context) ->
+    Json = {struct, [{error, bad_request},
+                     {reason, rabbit_mgmt_format:tuple(Reason)}]},
+    ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
+    {{halt, 400}, ReqData1, Context}.
+
+id(Key, ReqData) ->
+    {ok, Id} = dict:find(Key, wrq:path_info(ReqData)),
+    list_to_binary(mochiweb_util:unquote(Id)).
+
+decode(Keys, ReqData) ->
+    Body = wrq:req_body(ReqData),
+    {Res, Json} = try
+                      {struct, J} = mochijson2:decode(Body),
+                      {ok, J}
+                  catch error:_ -> {error, not_json}
+                  end,
+    case Res of
+        ok ->
+            Results =
+                [proplists:get_value(list_to_binary(K), Json) || K <- Keys],
+            case lists:any(fun(E) -> E == undefined end, Results) of
+                false -> Results;
+                true  -> {error, key_missing}
+            end;
+        _  ->
+            {Res, Json}
+    end.

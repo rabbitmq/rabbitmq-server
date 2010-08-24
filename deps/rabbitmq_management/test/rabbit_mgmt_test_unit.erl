@@ -54,16 +54,16 @@ http_auth_test() ->
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
 http_vhosts_test() ->
-    [<<"/">>] = rget("vhosts", http_get("/vhosts", ?OK)),
+    [<<"/">>] = http_get_check("/vhosts", "vhosts"),
     %% Create a new one
-    http_put("/vhosts/myvhost", "", ?NO_CONTENT),
+    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     %% PUT should be idempotent
-    http_put("/vhosts/myvhost", "", ?NO_CONTENT),
+    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     %% Check it's there
-    [<<"/">>, <<"myvhost">>] = rget("vhosts", http_get("/vhosts", ?OK)),
+    [<<"/">>, <<"myvhost">>] = http_get_check("/vhosts", "vhosts"),
     %% Check individually
-    <<"/">> = rget("vhost", http_get("/vhosts/%2f", ?OK)),
-    <<"myvhost">> = rget("vhost", http_get("/vhosts/myvhost", ?OK)),
+    <<"/">> = http_get_check("/vhosts/%2f", "vhost"),
+    <<"myvhost">> = http_get_check("/vhosts/myvhost", "vhost"),
     %% Delete it
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     %% It's not there
@@ -72,16 +72,84 @@ http_vhosts_test() ->
 
 http_users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
-    http_put("/users/myuser", "Something not JSON", ?BAD_REQUEST),
-    http_put("/users/myuser", "{\"flim\": \"flam\"}", ?BAD_REQUEST),
-    http_put("/users/myuser", "{\"password\": \"myuser\"}", ?NO_CONTENT),
-    http_put("/users/myuser", "{\"password\": \"password\"}", ?NO_CONTENT),
-    <<"myuser">> = rget("user", http_get("/users/myuser", ?OK)),
-    [<<"guest">>, <<"myuser">>] = rget("users", http_get("/users", ?OK)),
+    http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
+    http_put("/users/myuser", [{flim, "flam"}], ?BAD_REQUEST),
+    http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, "password"}], ?NO_CONTENT),
+    <<"myuser">> = http_get_check("/users/myuser", "user"),
+    [<<"guest">>, <<"myuser">>] = http_get_check("/users", "users"),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
     test_auth(?NOT_AUTHORISED, [auth_header("myuser", "password")]),
     http_get("/users/myuser", ?NOT_FOUND).
+
+http_permissions_validation_test() ->
+    Good = [{configure, ".*"}, {write, ".*"},
+            {read,      ".*"}, {scope, "client"}],
+    http_put("/permissions/guest/wrong", Good, ?BAD_REQUEST),
+    http_put("/permissions/wrong/%2f", Good, ?BAD_REQUEST),
+    http_put("/permissions/guest/%2f",
+             [{configure, ".*"}, {write, ".*"},
+              {read,      ".*"}], ?BAD_REQUEST),
+    http_put("/permissions/guest/%2f",
+             [{configure, ".*"}, {write, ".*"},
+              {read,      ".*"}, {scope, "wrong"}], ?BAD_REQUEST),
+    http_put("/permissions/guest/%2f",
+             [{configure, "["}, {write, ".*"},
+              {read,      ".*"}, {scope, "client"}], ?BAD_REQUEST),
+    http_put("/permissions/guest/%2f", Good, ?NO_CONTENT),
+    ok.
+
+http_permissions_list_test() ->
+    [{struct,[{<<"vhost">>,<<"/">>},
+              {<<"user">>,<<"guest">>},
+              {<<"configure">>,<<".*">>},
+              {<<"write">>,<<".*">>},
+              {<<"read">>,<<".*">>},
+              {<<"scope">>,<<"client">>}]}] =
+        http_get_check("/permissions", "permissions"),
+
+    http_put("/users/myuser1", [{password, ""}], ?NO_CONTENT),
+    http_put("/users/myuser2", [{password, ""}], ?NO_CONTENT),
+    http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
+
+    Perms = [{configure, "foo"}, {write, "foo"},
+             {read,      "foo"}, {scope, "client"}],
+    http_put("/permissions/myuser1/myvhost1", Perms, ?NO_CONTENT),
+    http_put("/permissions/myuser1/myvhost2", Perms, ?NO_CONTENT),
+    http_put("/permissions/myuser2/myvhost1", Perms, ?NO_CONTENT),
+
+    4 = length(http_get_check("/permissions", "permissions")),
+    2 = length(http_get_check("/permissions/myuser1", "permissions")),
+    1 = length(http_get_check("/permissions/myuser2", "permissions")),
+
+    http_delete("/users/myuser1", ?NO_CONTENT),
+    http_delete("/users/myuser2", ?NO_CONTENT),
+    http_delete("/vhosts/myvhost1", ?NO_CONTENT),
+    http_delete("/vhosts/myvhost2", ?NO_CONTENT),
+    ok.
+
+http_permissions_test() ->
+    http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
+    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
+
+    http_put("/permissions/myuser/myvhost",
+             [{configure, "foo"}, {write, "foo"},
+              {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
+
+    {struct,[{<<"vhost">>,<<"myvhost">>},
+             {<<"configure">>,<<"foo">>},
+             {<<"write">>,<<"foo">>},
+             {<<"read">>,<<"foo">>},
+             {<<"scope">>,<<"client">>}]} =
+        http_get_check("/permissions/myuser/myvhost", "permission"),
+    http_delete("/permissions/myuser/myvhost", ?NO_CONTENT),
+    http_get("/permissions/myuser/myvhost", ?NOT_FOUND),
+
+    http_delete("/users/myuser", ?NO_CONTENT),
+    http_delete("/vhosts/myvhost", ?NO_CONTENT),
+    ok.
 
 test_auth(Code, Headers) ->
     {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).
@@ -93,7 +161,12 @@ http_get(Path, CodeExp) ->
         req(get, Path, [auth_header()]),
     decode(CodeExp, ResBody).
 
-http_put(Path, Body, CodeExp) ->
+http_put(Path, List, CodeExp) ->
+    L2 = [{K, list_to_binary(V)} || {K, V} <- List],
+    Enc = iolist_to_binary(mochijson2:encode({struct, L2})),
+    http_put_raw(Path, Enc, CodeExp).
+
+http_put_raw(Path, Body, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
         req(put, Path, [auth_header()], Body),
     decode(CodeExp, ResBody).
@@ -102,6 +175,9 @@ http_delete(Path, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
         req(delete, Path, [auth_header()]),
     decode(CodeExp, ResBody).
+
+http_get_check(Path, Key) ->
+    pget(list_to_binary(Key), http_get(Path, ?OK)).
 
 req(Type, Path, Headers) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
@@ -128,9 +204,6 @@ auth_header(Username, Password) ->
 
 pget(K, L) ->
      proplists:get_value(K, L).
-
-rget(K, L) ->
-    pget(list_to_binary(K), L).
 
 equals(F1, F2) ->
     true = (abs(F1 - F2) < 0.001).

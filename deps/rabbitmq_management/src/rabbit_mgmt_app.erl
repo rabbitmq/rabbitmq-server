@@ -50,15 +50,18 @@ start(_Type, _StartArgs) ->
     Res.
 
 dispatcher() ->
-    [{["json","overview"],                rabbit_mgmt_wm_overview, []},
-     {["json","connections"],             rabbit_mgmt_wm_connection, []},
-     {["json","connections", connection], rabbit_mgmt_wm_connection, []},
-     {["json","queues"],                  rabbit_mgmt_wm_queue, []},
-     {["json","vhosts"],                  rabbit_mgmt_wm_vhosts, []},
-     {["json","vhosts", vhost],           rabbit_mgmt_wm_vhost, []},
-     {["json","users"],                   rabbit_mgmt_wm_users, []},
-     {["json","users", user],             rabbit_mgmt_wm_user, []},
-     {["json","stats", type],             rabbit_mgmt_wm_stats, []}
+    [{["json","overview"],                 rabbit_mgmt_wm_overview, []},
+     {["json","connections"],              rabbit_mgmt_wm_connection, []},
+     {["json","connections", connection],  rabbit_mgmt_wm_connection, []},
+     {["json","queues"],                   rabbit_mgmt_wm_queue, []},
+     {["json","vhosts"],                   rabbit_mgmt_wm_vhosts, []},
+     {["json","vhosts", vhost],            rabbit_mgmt_wm_vhost, []},
+     {["json","users"],                    rabbit_mgmt_wm_users, []},
+     {["json","users", user],              rabbit_mgmt_wm_user, []},
+     {["json","permissions"],              rabbit_mgmt_wm_permissions, []},
+     {["json","permissions", user],        rabbit_mgmt_wm_permissions_user, []},
+     {["json","permissions", user, vhost], rabbit_mgmt_wm_permission, []},
+     {["json","stats", type],              rabbit_mgmt_wm_stats, []}
     ].
 
 stop(_State) ->

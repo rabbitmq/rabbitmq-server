@@ -20,8 +20,8 @@
 %%
 -module(rabbit_mgmt_format).
 
--export([encode/1, format/2, print/2, pid/1, ip/1, table/1, protocol/1,
-         resource/1]).
+-export([encode/1, format/2, print/2, pid/1, ip/1, table/1, tuple/1]).
+-export([protocol/1, resource/1, permissions/1, user_permissions/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -34,9 +34,9 @@ encode(Facts) ->
                                      rabbit_mgmt_util:http_date())}
                        ] ++ Facts}).
 
-format([], Fs) ->
+format([], _Fs) ->
     [];
-format([{Name, unknown}|Stats], Fs) ->
+format([{_Name, unknown}|Stats], Fs) ->
     format(Stats, Fs);
 format([Stat|Stats], Fs) ->
     format_item(Stat, Fs) ++ format(Stats, Fs).
@@ -79,7 +79,7 @@ table(Table) ->
 tuple(unknown) ->
     unknown;
 tuple(Tuple) when is_tuple(Tuple) ->
-    tuple_to_list(Tuple);
+    [tuple(E) || E <- tuple_to_list(Tuple)];
 tuple(Term) ->
     Term.
 
@@ -94,3 +94,14 @@ resource(unknown) ->
     unknown;
 resource(#resource{name = Name, virtual_host = VHost}) ->
     [{name, Name}, {vhost, VHost}].
+
+permissions({VHost, Perms}) ->
+    [{vhost, VHost}|permissions(Perms)];
+
+permissions({User, Conf, Write, Read, Scope}) ->
+    [{user, User}, {configure, Conf}, {write, Write}, {read, Read},
+     {scope, Scope}].
+
+user_permissions({VHost, Conf, Write, Read, Scope}) ->
+    [{vhost, VHost}, {configure, Conf}, {write, Write}, {read, Read},
+     {scope, Scope}].

@@ -41,18 +41,18 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case rabbit_access_control:lookup_user(id(ReqData)) of
+    {case user(ReqData) of
          {ok, _}    -> true;
          {error, _} -> false
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    {ok, User} = rabbit_access_control:lookup_user(id(ReqData)),
+    {ok, User} = user(ReqData),
     {rabbit_mgmt_format:encode([{user, User#user.username}]), ReqData, Context}.
 
 accept_content(ReqData, Context) ->
-    User = id(ReqData),
-    case decode(["password"], ReqData) of
+    User = rabbit_mgmt_util:id(user, ReqData),
+    case rabbit_mgmt_util:decode(["password"], ReqData) of
         [Pass] ->
             case rabbit_access_control:lookup_user(User) of
                 {ok, _} ->
@@ -62,11 +62,11 @@ accept_content(ReqData, Context) ->
             end,
             {true, ReqData, Context};
         {error, Reason} ->
-            {{halt, 400}, ReqData, Context}
+            rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
     end.
 
 delete_resource(ReqData, Context) ->
-    User = id(ReqData),
+    User = rabbit_mgmt_util:id(user, ReqData),
     rabbit_access_control:delete_user(User),
     {true, ReqData, Context}.
 
@@ -75,25 +75,5 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-id(ReqData) ->
-    {ok, Id} = dict:find(user, wrq:path_info(ReqData)),
-    list_to_binary(mochiweb_util:unquote(Id)).
-
-decode(Keys, ReqData) ->
-    Body = wrq:req_body(ReqData),
-    {Res, Json} = try
-                      {struct, J} = mochijson2:decode(Body),
-                      {ok, J}
-                  catch error:_ -> {error, not_json}
-                  end,
-    case Res of
-        ok ->
-            Results =
-                [proplists:get_value(list_to_binary(K), Json) || K <- Keys],
-            case lists:any(fun(E) -> E == undefined end, Results) of
-                false -> Results;
-                true  -> {error, key_missing}
-            end;
-        _  ->
-            {Res, Json}
-    end.
+user(ReqData) ->
+    rabbit_access_control:lookup_user(rabbit_mgmt_util:id(user, ReqData)).

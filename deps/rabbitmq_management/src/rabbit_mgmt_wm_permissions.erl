@@ -18,53 +18,30 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_vhost).
+-module(rabbit_mgmt_wm_permissions).
 
--export([init/1, resource_exists/2, to_json/2,
-         content_types_provided/2, content_types_accepted/2,
-         is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2]).
+-export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
+
 init(_Config) -> {ok, undefined}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-content_types_accepted(ReqData, Context) ->
-   {[{"application/json", accept_content}], ReqData, Context}.
-
-allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
-
-resource_exists(ReqData, Context) ->
-    {rabbit_mgmt_util:vhost_exists(id(ReqData)), ReqData, Context}.
-
 to_json(ReqData, Context) ->
-    VHost = id(ReqData),
-    {rabbit_mgmt_format:encode([{vhost, VHost}]), ReqData, Context}.
-
-accept_content(ReqData, Context) ->
-    VHost = id(ReqData),
-    case rabbit_mgmt_util:vhost_exists(VHost) of
-        true  -> ok;
-        false -> rabbit_access_control:add_vhost(VHost)
-    end,
-    {true, ReqData, Context}.
-
-delete_resource(ReqData, Context) ->
-    VHost = id(ReqData),
-    rabbit_access_control:delete_vhost(VHost),
-    {true, ReqData, Context}.
+    Perms =
+        lists:flatten(
+          [[{V, P} ||
+               P <- rabbit_access_control:list_vhost_permissions(V)] ||
+              V <- rabbit_access_control:list_vhosts()]),
+    {rabbit_mgmt_format:encode(
+       [{permissions,
+         [rabbit_mgmt_format:permissions(P) || P <- Perms]}]),
+     ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
-
-%%--------------------------------------------------------------------
-
-id(ReqData) ->
-    {ok, Id} = dict:find(vhost, wrq:path_info(ReqData)),
-    list_to_binary(mochiweb_util:unquote(Id)).
