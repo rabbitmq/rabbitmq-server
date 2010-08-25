@@ -598,6 +598,7 @@ prioritise_call(Msg, _From, _State) ->
         info                                      -> 9;
         {info, _Items}                            -> 9;
         consumers                                 -> 9;
+        delete_now                                -> 9;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
         _                                         -> 0
     end.
@@ -784,6 +785,10 @@ handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
     reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+
+handle_call(delete_now, _From, State = #q{ backing_queue_state = BQS,
+                                           backing_queue       = BQ }) ->
+    {stop, normal, {ok, BQ:len(BQS)}, State};
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->

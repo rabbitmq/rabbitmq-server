@@ -31,7 +31,7 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, stop/0, declare/5, delete/3, purge/1]).
+-export([start/0, stop/0, declare/5, delete/1, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
@@ -115,6 +115,7 @@
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
 -spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(delete/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(delete/3 ::
       (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
@@ -357,6 +358,9 @@ stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
 emit_stats(#amqqueue{pid = QPid}) ->
     delegate_cast(QPid, emit_stats).
+
+delete(#amqqueue{ pid = QPid }) ->
+    gen_server2:call(QPid, delete_now, infinity).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
