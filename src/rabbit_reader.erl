@@ -46,7 +46,6 @@
 -export([emit_stats/1]).
 
 -import(gen_tcp).
--import(fprof).
 -import(inet).
 -import(prim_inet).
 
@@ -208,33 +207,6 @@ info(Pid, Items) ->
 emit_stats(Pid) ->
     gen_server:cast(Pid, emit_stats).
 
-setup_profiling() ->
-    Value = rabbit_misc:get_config(profiling_enabled, false),
-    case Value of
-        once ->
-            rabbit_log:info("Enabling profiling for this connection, "
-                            "and disabling for subsequent.~n"),
-            rabbit_misc:set_config(profiling_enabled, false),
-            fprof:trace(start);
-        true ->
-            rabbit_log:info("Enabling profiling for this connection.~n"),
-            fprof:trace(start);
-        false ->
-            ok
-    end,
-    Value.
-
-teardown_profiling(Value) ->
-    case Value of
-        false ->
-            ok;
-        _ ->
-            rabbit_log:info("Completing profiling for this connection.~n"),
-            fprof:trace(stop),
-            fprof:profile(),
-            fprof:analyse([{dest, []}, {cols, 100}])
-    end.
-
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
     ok.
@@ -270,7 +242,6 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
-    ProfilingValue = setup_profiling(),
     {ok, Collector} = rabbit_queue_collector:start_link(),
     try
         mainloop(Deb, switch_callback(
@@ -308,7 +279,6 @@ start_connection(Parent, Deb, Sock, SockTransform) ->
         %% output to be sent, which results in unnecessary delays.
         %%
         %% gen_tcp:close(ClientSock),
-        teardown_profiling(ProfilingValue),
         rabbit_misc:unlink_and_capture_exit(Collector),
         rabbit_queue_collector:shutdown(Collector),
         rabbit_event:notify(connection_closed, [{pid, self()}])
