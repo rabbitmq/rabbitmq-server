@@ -35,10 +35,20 @@ NODENAME=rabbit@${HOSTNAME%%.*}
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_listen_options [{nodelay,true}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
-CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
-CONFIG_FILE=/etc/rabbitmq/rabbitmq
-LOG_BASE=/var/log/rabbitmq
-MNESIA_BASE=/var/lib/rabbitmq/mnesia
+
+if [ "$OSTYPE" = "cygwin" ]
+then
+    RABBITMQ_BASE=`cygpath -ms "$APPDATA"`/RabbitMQ
+    CLUSTER_CONFIG_FILE=$RABBITMQ_BASE/rabbitmq_cluster.config
+    CONFIG_FILE=$RABBITMQ_BASE/rabbitmq
+    LOG_BASE=$RABBITMQ_BASE/log
+    MNESIA_BASE=$RABBITMQ_BASE/db
+else
+    CLUSTER_CONFIG_FILE=/etc/rabbitmq/rabbitmq_cluster.config
+    CONFIG_FILE=/etc/rabbitmq/rabbitmq
+    LOG_BASE=/var/log/rabbitmq
+    MNESIA_BASE=/var/lib/rabbitmq/mnesia
+fi
 SERVER_START_ARGS=
 
 . `dirname $0`/rabbitmq-env
