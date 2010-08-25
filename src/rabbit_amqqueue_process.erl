@@ -43,7 +43,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, prioritise_info/2]).
 
 -import(queue).
 -import(erlang).
@@ -616,6 +616,12 @@ prioritise_cast(Msg, _State) ->
         {unblock, _ChPid}                    -> 7;
         _                                    -> 0
     end.
+
+prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+                State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
+    9;
+prioritise_info(_Msg, _State) ->
+    0.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
