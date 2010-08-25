@@ -27,7 +27,7 @@
 -export([start/0]).
 
 -export([get_queues/0, get_connections/0, get_connection/1,
-         get_overview/0, get_msg_stats/4]).
+         get_overview/0, get_channels/0]).
 
 -export([group_sum/2]).
 
@@ -60,13 +60,11 @@ get_connections() ->
 get_connection(Name) ->
     gen_event:call(rabbit_event, ?MODULE, {get_connection, Name}, infinity).
 
+get_channels() ->
+    gen_event:call(rabbit_event, ?MODULE, get_channels, infinity).
+
 get_overview() ->
     gen_event:call(rabbit_event, ?MODULE, get_overview, infinity).
-
-get_msg_stats(Type, GroupBy, MatchKey, MatchValue) ->
-    gen_event:call(rabbit_event, ?MODULE,
-                   {get_msg_stats, Type, GroupBy, MatchKey, MatchValue},
-                   infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -129,24 +127,14 @@ sum(Table, Keys) ->
                 [{Key, 0} || Key <- Keys],
                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
-format_id({ChPid, #resource{name=XName, virtual_host=XVhost}}) ->
-    [{channel, ChPid}, {exchange, [{name, XName}, {vhost, XVhost}]}];
-format_id({ChPid, QPid}) ->
-    [{channel, ChPid}, {queue, QPid}];
-format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
-    [{channel, ChPid}, {queue, QPid},
-     {exchange, [{name, XName}, {vhost, XVhost}]}].
-
 group_sum(GroupBy, List) ->
-    Res =
-        lists:foldl(fun ({Ids, New}, Acc) ->
-                            Id = {GroupBy, pget(GroupBy, Ids)},
-                            dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
-                                        New, Acc)
-                    end,
-                    dict:new(),
-                    [I || I <- List]),
-    [{[Ids], Stats} || {Ids, Stats} <- dict:to_list(Res)].
+    lists:foldl(fun ({Ids, New}, Acc) ->
+                        Id = {GroupBy, pget(GroupBy, Ids)},
+                        dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
+                                    New, Acc)
+                end,
+                dict:new(),
+                [I || I <- List]).
 
 gs_update(Cur, New) ->
     [{Key, Val + pget(Key, Cur, 0)} || {Key, Val} <- New].
@@ -165,17 +153,17 @@ augment(K, Items, Fun, Tables) ->
                     Fun(Id, Tables)}
     end.
 
-augment_channel_pid(Pid, Tables) ->
-    Ch = lookup_element(
-           orddict:fetch(channel_stats, Tables),
-           {Pid, create}),
-    Conn = lookup_element(
-             orddict:fetch(connection_stats, Tables),
-             {pget(connection, Ch), create}),
-    [{number, pget(number, Ch)},
-     {connection_name, pget(name, Conn)},
-     {peer_address, pget(peer_address, Conn)},
-     {peer_port, pget(peer_port, Conn)}].
+%% augment_channel_pid(Pid, Tables) ->
+%%     Ch = lookup_element(
+%%            orddict:fetch(channel_stats, Tables),
+%%            {Pid, create}),
+%%     Conn = lookup_element(
+%%              orddict:fetch(connection_stats, Tables),
+%%              {pget(connection, Ch), create}),
+%%     [{number, pget(number, Ch)},
+%%      {connection_name, pget(name, Conn)},
+%%      {peer_address, pget(peer_address, Conn)},
+%%      {peer_port, pget(peer_port, Conn)}].
 
 augment_connection_pid(Pid, Tables) ->
     Conn = lookup_element(
@@ -185,20 +173,18 @@ augment_connection_pid(Pid, Tables) ->
      {peer_port, pget(peer_port, Conn)},
      {name, pget(name, Conn)}].
 
-augment_queue_pid(Pid, Tables) ->
-    Q = lookup_element(
-          orddict:fetch(queue_stats, Tables),
-          {Pid, create}),
-    [{name, pget(name, Q)},
-     {vhost, pget(vhost, Q)}].
+%% augment_queue_pid(Pid, Tables) ->
+%%     Q = lookup_element(
+%%           orddict:fetch(queue_stats, Tables),
+%%           {Pid, create}),
+%%     [{name, pget(name, Q)},
+%%      {vhost, pget(vhost, Q)}].
 
-augment_msg_stats(ItemStats, #state{tables = Tables}) ->
-    [{augment_msg_stats_items(Items, Tables), Stats} ||
-        {Items, Stats} <- ItemStats].
+augment_msg_stats(Stats, Tables) ->
+    [augment_msg_stats_items(Props, Tables) || Props <- Stats].
 
-augment_msg_stats_items(Items, Tables) ->
-    augment(Items, [{channel, fun augment_channel_pid/2},
-                    {queue,   fun augment_queue_pid/2}], Tables).
+augment_msg_stats_items(Props, Tables) ->
+    augment(Props, [{connection, fun augment_connection_pid/2}], Tables).
 
 %%----------------------------------------------------------------------------
 
@@ -225,32 +211,17 @@ handle_call({get_connection, Name}, State = #state{tables = Tables}) ->
     {ok, result_or_error(lookup_element(Table, {Id, create}) ++
                              lookup_element(Table, {Id, stats})), State};
 
+handle_call(get_channels, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(channel_stats, Tables),
+    Stats = merge_created_stats(Table),
+    FineQ = get_fine_stats(channel_queue_stats, channel, Tables),
+    FineX = get_fine_stats(channel_exchange_stats, channel, Tables),
+    {ok, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
+     State};
+
 handle_call(get_overview, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
     {ok, sum(Table, [recv_oct, send_oct, recv_oct_rate, send_oct_rate]), State};
-
-handle_call({get_msg_stats, Type, GroupBy, _MatchKey, _MatchValue},
-            State = #state{tables = Tables}) ->
-    Table = orddict:fetch(Type, Tables),
-    All = [{format_id(Id), Stats} ||
-              {Id, Stats, _Timestamp} <- ets:tab2list(Table)],
-    Group = case {Type, GroupBy} of
-                {_, undefined}                             -> false;
-                {channel_queue_stats, "channel"}           -> true;
-                {channel_queue_stats, "queue"}             -> true;
-                {channel_exchange_stats, "channel"}        -> true;
-                {channel_exchange_stats, "exchange"}       -> true;
-                {channel_queue_exchange_stats, "channel"}  -> true;
-                {channel_queue_exchange_stats, "exchange"} -> true;
-                {channel_queue_exchange_stats, "queue"}    -> true;
-                {_, _}                                     -> bad_request
-            end,
-    Res = case Group of
-              false -> All;
-              true  -> group_sum(list_to_atom(GroupBy), All);
-              _     -> bad_request
-          end,
-    {ok, augment_msg_stats(Res, State), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
@@ -261,9 +232,10 @@ handle_event(#event{type = queue_created, props = Stats}, State) ->
       [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
        {fun rabbit_mgmt_format:resource/1, [name]}], State);
 
-handle_event(Event = #event{type = queue_stats}, State) ->
+handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
+             State) ->
     handle_stats(
-      queue_stats, Event,
+      queue_stats, Stats, Timestamp,
       [{fun rabbit_mgmt_format:table/1,[backing_queue_status]}],
       [], State);
 
@@ -282,8 +254,11 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
        {fun rabbit_mgmt_format:protocol/1, [protocol]},
        {fun rabbit_mgmt_format:table/1,    [client_properties]}], State);
 
-handle_event(Event = #event{type = connection_stats}, State) ->
-    handle_stats(connection_stats, Event, [], [recv_oct, send_oct], State);
+handle_event(#event{type = connection_stats, props = Stats,
+                    timestamp = Timestamp},
+             State) ->
+    handle_stats(connection_stats, Stats, Timestamp, [], [recv_oct, send_oct],
+                 State);
 
 handle_event(Event = #event{type = connection_closed}, State) ->
     handle_deleted(connection_stats, Event, State);
@@ -293,9 +268,9 @@ handle_event(#event{type = channel_created, props = Stats}, State) ->
       channel_stats, Stats,
       [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
 
-handle_event(Event = #event{type = channel_stats, props = Stats,
-                            timestamp = Timestamp}, State) ->
-    handle_stats(channel_stats, Event, [], [], State),
+handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
+             State) ->
+    handle_stats(channel_stats, Stats, Timestamp, [], [], State),
     [handle_fine_stats(Type, Stats, Timestamp, State) ||
         Type <- ?FINE_STATS_TYPES],
     {ok, State};
@@ -329,8 +304,11 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
                                               pget(name, Stats)}),
     {ok, State}.
 
-handle_stats(TName, #event{props = Stats, timestamp = Timestamp}, Funs,
+handle_stats(TName, Stats0, Timestamp, Funs,
              RatesKeys, State = #state{tables = Tables}) ->
+    Stats = lists:foldl(
+              fun (K, StatsAcc) -> proplists:delete(K, StatsAcc) end,
+              Stats0, ?FINE_STATS_TYPES),
     Table = orddict:fetch(TName, Tables),
     Id = {id(Stats), stats},
     OldStats = lookup_element(Table, Id),
@@ -382,3 +360,34 @@ fine_stats_key(ChPid, X)                      -> {ChPid, X}.
 merge_created_stats(Table) ->
     [Stats ++ lookup_element(Table, {Pid, stats}) ||
         {{Pid, create}, Stats, _Name} <- ets:tab2list(Table)].
+
+get_fine_stats(Type, GroupBy, Tables) ->
+    Table = orddict:fetch(Type, Tables),
+    All = [{format_id(Id), Stats} ||
+              {Id, Stats, _Timestamp} <- ets:tab2list(Table)],
+    group_sum(GroupBy, All).
+
+format_id({ChPid, #resource{name=XName, virtual_host=XVhost}}) ->
+    [{channel, ChPid}, {exchange, [{name, XName}, {vhost, XVhost}]}];
+format_id({ChPid, QPid}) ->
+    [{channel, ChPid}, {queue, QPid}];
+format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
+    [{channel, ChPid}, {queue, QPid},
+     {exchange, [{name, XName}, {vhost, XVhost}]}].
+
+merge_fine_stats(Stats, []) ->
+    Stats;
+merge_fine_stats(Stats, [Dict|Dicts]) ->
+    merge_fine_stats(
+      [merge_fine_stats0(Props, Dict) || Props <- Stats],
+      Dicts).
+
+merge_fine_stats0(Props, Dict) ->
+    Id = pget(pid, Props),
+    case dict:find({channel, Id}, Dict) of
+        {ok, Stats} ->
+            Stats0 = pget(message_stats, Props, []),
+            [{message_stats, Stats0 ++ Stats}|
+             proplists:delete(message_stats, Props)];
+        error -> Props
+    end.

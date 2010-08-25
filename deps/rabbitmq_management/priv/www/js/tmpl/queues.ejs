@@ -1,5 +1,5 @@
 <h1>Queues</h1>
-
+<p>TODO - bring this table under control a bit</p>
 <% if (queues.length > 0) { %>
 <table class="list">
  <thead>
@@ -18,7 +18,7 @@
  <tbody>
   <% for (var i = 0; i < queues.length; i++) { %>
   <tr<%= alt_rows(i)%>>
-   <td><%= queues[i].vhost %></td>
+   <td><%= link_vhost(queues[i].vhost) %></td>
    <td><%= queues[i].name %></td>
    <td class="r"><%= fmt_string(queues[i].consumers) %></td>
    <td class="r"><%= fmt_bytes(queues[i].memory) %></td>

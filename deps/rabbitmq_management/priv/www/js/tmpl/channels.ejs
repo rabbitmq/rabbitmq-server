@@ -1,34 +1,54 @@
 <h1>Channels</h1>
 
-<% if (stats.length > 0) { %>
+<% if (channels.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
    <th></th>
+   <th colspan="4">Details</th>
    <th colspan="6">Message rates</th>
   </tr>
   <tr>
    <th>Channel</th>
-   <th>basic.publish</th>
-   <th>basic.deliver</th>
-   <th>basic.get</th>
-   <th>basic.ack</th>
-   <th>basic.deliver (noack)</th>
-   <th>basic.get (noack)</th>
+   <th>Virtual host</th>
+   <th>Username</th>
+   <th>Transactional</th>
+   <th>Prefetch</th>
+   <th>publish</th>
+   <th>deliver</th>
+   <th>get</th>
+   <th>deliver<sub>(noack)</sub></th>
+   <th>get<sub>(noack)</sub></th>
+   <th>ack</th>
   </tr>
  </thead>
  <tbody>
-  <% for (var i = 0; i < stats.length; i++) { %>
+  <% for (var i = 0; i < channels.length; i++) { %>
   <tr<%= alt_rows(i)%>>
     <td>
-      <%= link_conn(stats[i].channel_details.connection_name) %> (<%= stats[i].channel_details.number %>)
+      <%= link_conn(channels[i].connection_details.name) %>
+      Channel <%= channels[i].number %>
     </td>
-    <td><%= fmt_rate(stats[i].msg_stats, 'publish') %></td>
-    <td><%= fmt_rate(stats[i].msg_stats, 'deliver') %></td>
-    <td><%= fmt_rate(stats[i].msg_stats, 'get') %></td>
-    <td><%= fmt_rate(stats[i].msg_stats, 'ack') %></td>
-    <td><%= fmt_rate(stats[i].msg_stats, 'deliver_noack') %></td>
-    <td><%= fmt_rate(stats[i].msg_stats, 'get_noack') %></td>
+    <td class="c"><%= link_vhost(channels[i].vhost) %></td>
+    <td class="c"><%= link_user(channels[i].user) %></td>
+    <td class="c">
+      <%= fmt_boolean(channels[i].transactional) %>
+      <% if (channels[i].transactional) { %>
+      <sub><%= channels[i].acks_uncommitted %> uncommitted acks</sub>
+      <% } %>
+    </td>
+    <td class="c"><%= channels[i].prefetch_count %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'publish') %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver') %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'get') %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver_noack') %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'get_noack') %></td>
+    <td class="l">
+      <%= fmt_rate(channels[i].message_stats, 'ack') %>
+      <% if (channels[i].messages_unacknowledged > 0) { %>
+      <sub>(<%= channels[i].messages_unacknowledged %> msgs unacked)</sub>
+      <% } %>
+    </td>
   </tr>
   <% } %>
  </tbody>

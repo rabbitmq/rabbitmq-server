@@ -38,7 +38,7 @@ function fmt_color(r) {
 }
 
 function fmt_rate(obj, name) {
-    if (obj[name] == undefined) return '';
+    if (obj == undefined || obj[name] == undefined) return '';
 
     return fmt_num(obj[name + '_rate']) + '/s' +
         '<sub>(' + fmt_num(obj[name]) + ' total)</sub>';
@@ -54,6 +54,14 @@ function esc(str) {
 
 function link_conn(name) {
     return link_to(name, '#/connections/' + esc(name))
+}
+
+function link_vhost(name) {
+    return link_to(name, '#/vhosts/' + esc(name))
+}
+
+function link_user(name) {
+    return link_to(name, '#/user/' + esc(name))
 }
 
 function link_to(name, url) {

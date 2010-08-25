@@ -9,7 +9,7 @@
   </tr>
   <tr>
    <th>Peer address</th><th>Receiving</th><th>Sending</th>
-   <th>Channels</th><th>Vhost</th><th>Username</th><th>State</th>
+   <th>Channels</th><th>Virtual host</th><th>Username</th><th>State</th>
   </tr>
  </thead>
  <tbody>
@@ -19,8 +19,8 @@
     <td><%= fmt_bytes(connections[i].recv_oct_rate) %>/s<sub>(<%= fmt_bytes(connections[i].recv_oct) %> total)</sub></td>
     <td><%= fmt_bytes(connections[i].send_oct_rate) %>/s<sub>(<%= fmt_bytes(connections[i].send_oct) %> total)</sub></td>
     <td><%= connections[i].channels %></td>
-    <td><%= connections[i].vhost %></td>
-    <td><%= connections[i].user %></td>
+    <td><%= link_vhost(connections[i].vhost) %></td>
+    <td><%= link_user(connections[i].user) %></td>
     <td><%= connections[i].state %></td>
   </tr>
   <% } %>

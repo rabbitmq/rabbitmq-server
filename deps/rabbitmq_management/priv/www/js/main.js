@@ -25,10 +25,8 @@ function dispatcher() {
             go_to('#/connections');
             return false;
         });
-    path('#/queues', ['/queues/'], 'queues');
-    path('#/channels',
-         ['/stats/channel_queue_stats/?group_by=channel',
-          '/stats/channel_exchange_stats/?group_by=channel'], 'channels');
+    path('#/queues', ['/queues'], 'queues');
+    path('#/channels', ['/channels'], 'channels');
     path('#/vhosts', ['/vhosts/'], 'vhosts');
     this.get('#/vhosts/:id', function() {
             render(['/vhosts/' + esc(this.params['id'])], 'vhost',
@@ -138,31 +136,9 @@ function with_reqs(reqs, acc, fun) {
 }
 
 function merge(jsons, template) {
-    if (template == 'channels') {
-        var stats0 = jsons[0].stats;
-        var stats1 = jsons[1].stats;
-        for (var i = 0; i < stats0.length; i++) {
-            for (var j = 0; j < stats1.length; j++) {
-                if (stats0[i].channel == stats1[j].channel) {
-                    for (var key in stats1[j].msg_stats) {
-                        stats0[i].msg_stats[key] = stats1[j].msg_stats[key];
-                    }
-                    stats1[j].used = true;
-                }
-            }
-        }
-        for (var j = 0; j < stats1.length; j++) {
-            if (stats1[j].used == undefined) {
-                stats0.push(stats1[j]);
-            }
-        }
-    }
-    else {
-        // TODO generalise this, replace the above?
-        for (var i = 1; i < jsons.length; i++) {
-            for (var k in jsons[i]) {
-                jsons[0][k] = jsons[i][k];
-            }
+    for (var i = 1; i < jsons.length; i++) {
+        for (var k in jsons[i]) {
+            jsons[0][k] = jsons[i][k];
         }
     }
 
