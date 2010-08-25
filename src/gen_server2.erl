@@ -16,10 +16,12 @@
 %% The original code could reorder messages when communicating with a
 %% process on a remote node that was not currently connected.
 %%
-%% 4) The new functions gen_server2:pcall/3, pcall/4, and pcast/3
-%% allow callers to attach priorities to requests. Requests with
-%% higher priorities are processed before requests with lower
-%% priorities. The default priority is 0.
+%% 4) The callback module can optionally implement prioritise_call/3,
+%% prioritise_cast/2 and prioritise_info/2.  These functions take
+%% Message, From and State or just Message and State and return a
+%% single integer representing the priority attached to the message.
+%% Messages with higher priorities are processed before requests with
+%% lower priorities. The default priority is 0.
 %%
 %% 5) The callback module can optionally implement
 %% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
