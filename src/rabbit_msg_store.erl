@@ -362,7 +362,7 @@ set_maximum_since_use(Server, Age) ->
 client_init(Server, Ref) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
-        gen_server2:call(Server, {new_client_state, Ref}, infinity),
+        gen_server2:pcall(Server, 7, {new_client_state, Ref}, infinity),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
@@ -382,7 +382,7 @@ client_delete_and_terminate(CState, Server, Ref) ->
     ok = gen_server2:cast(Server, {delete_client, Ref}).
 
 successfully_recovered_state(Server) ->
-    gen_server2:call(Server, successfully_recovered_state, infinity).
+    gen_server2:pcall(Server, 7, successfully_recovered_state, infinity).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
