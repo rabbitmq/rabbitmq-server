@@ -287,7 +287,7 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
-handle_info({'DOWN', _MRef, process, QPid, Reason},
+handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{qpid_to_msgs = QTM}) ->
     case dict:find(QPid, QTM) of
         {ok, Msgs} ->
