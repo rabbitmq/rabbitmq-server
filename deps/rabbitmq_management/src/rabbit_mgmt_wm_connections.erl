@@ -18,10 +18,9 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_connection).
+-module(rabbit_mgmt_wm_connections).
 
--export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
-         is_authorized/2]).
+-export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -33,18 +32,10 @@ init(_Config) -> {ok, undefined}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-resource_exists(ReqData, Context) ->
-    case rabbit_mgmt_db:get_connection(
-           rabbit_mgmt_util:id(connection, ReqData)) of
-        error -> {false, ReqData, Context};
-        _Conn -> {true, ReqData, Context}
-    end.
-
 to_json(ReqData, Context) ->
-    Conn = {connection,
-            {struct, rabbit_mgmt_db:get_connection(
-                       rabbit_mgmt_util:id(connection, ReqData))}},
-    {rabbit_mgmt_format:encode([Conn]), ReqData, Context}.
+    Conns = {connections,
+             [{struct, C} || C <- rabbit_mgmt_db:get_connections()]},
+    {rabbit_mgmt_format:encode([Conns]), ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

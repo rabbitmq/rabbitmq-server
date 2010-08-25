@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_queue).
+-module(rabbit_mgmt_wm_queues).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
