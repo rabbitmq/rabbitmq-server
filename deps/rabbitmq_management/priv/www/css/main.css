@@ -13,7 +13,8 @@ body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 h1 { font-size: 2em; }
 
 table { border-collapse: collapse; }
-table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; vertical-align: top; min-width: 6em;}
+table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 6em;}
+table.list th, table.list td { vertical-align: top; }
 
 table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1em;}
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }

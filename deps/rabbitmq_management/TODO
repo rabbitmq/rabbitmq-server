@@ -8,8 +8,9 @@ Figure out coexistence with other webby plugins.
 Write some basic documentation.
 Figure out supervision.
 Remove datetime from JSON.
-Merge foo / foo_details in fine stats.
 Fix the rate bug.
+More user friendly 400 errors from decode/2.
+More user-friendly form submission errors.
 
 Then:
 Figure out something sensible to do with time series.
