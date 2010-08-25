@@ -43,9 +43,9 @@
       <input type="hidden" name="username" value="<%= user %>"/>
       <table class="form">
         <tr>
-          <th><label for="vhost">Virtual Host:</label></th>
+          <th><label>Virtual Host:</label></th>
           <td>
-            <select id="vhost" name="vhost">
+            <select name="vhost">
               <% for (var i = 0; i < vhosts.length; i++) { %>
               <option value="<%= vhosts[i] %>"><%= vhosts[i] %></option>
               <% } %>
@@ -53,21 +53,21 @@
           </td>
         </tr>
         <tr>
-          <th><label for="configure">Configure Regexp:</label></th>
-          <td><input type="text" id="configure" name="configure" value=".*"/></td>
+          <th><label>Configure Regexp:</label></th>
+          <td><input type="text" name="configure" value=".*"/></td>
         </tr>
         <tr>
-          <th><label for="write">Write Regexp:</label></th>
-          <td><input type="text" id="write" name="write" value=".*"/></td>
+          <th><label>Write Regexp:</label></th>
+          <td><input type="text" name="write" value=".*"/></td>
         </tr>
         <tr>
-          <th><label for="read">Read Regexp:</label></th>
-          <td><input type="text" id="read" name="read" value=".*"/></td>
+          <th><label>Read Regexp:</label></th>
+          <td><input type="text" name="read" value=".*"/></td>
         </tr>
         <tr>
-          <th><label for="scope">Scope:</label></th>
+          <th><label>Scope:</label></th>
           <td>
-            <select id="scope" name="scope">
+            <select name="scope">
               <option value="client">Client</option>
               <option value="all">All</option>
             </select>
@@ -83,7 +83,7 @@
   <h2>Delete This User</h2>
   <div>
     <form action="#/users" method="delete" class="confirm">
-      <input type="hidden" id="username" name="username" value="<%= user %>"/>
+      <input type="hidden" name="username" value="<%= user %>"/>
       <input type="submit" value="Delete"/>
     </form>
   </div>

@@ -110,6 +110,14 @@ function postprocess() {
     $('div.section h2, div.section-hidden h2').click(function() {
             $(this).next().toggle(100);
         });
+    $('label').map(function() {
+            if ($(this).attr('for') == '') {
+                var id = 'auto-label-' + Math.floor(Math.random()*1000000000);
+                $(this).attr('for', id);
+                var input = $(this).parents('tr').first().find('input, select');
+                input.attr('id', id);
+            }
+        });
 }
 
 function with_reqs(reqs, acc, fun) {
