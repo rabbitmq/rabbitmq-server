@@ -1514,7 +1514,7 @@ msg_store_remove(Guids) ->
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
       lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref), L)).
+                  rabbit_msg_store:client_init(MsgStore, Ref), L), MsgStore).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1577,7 +1577,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:release(?PERSISTENT_MSG_STORE, Guids2ndHalf),
     %% read the second half again, just for fun (aka code coverage)
     MSCState7 = msg_store_read(Guids2ndHalf, MSCState6),
-    ok = rabbit_msg_store:client_terminate(MSCState7),
+    ok = rabbit_msg_store:client_terminate(MSCState7, ?PERSISTENT_MSG_STORE),
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
@@ -1602,7 +1602,7 @@ test_msg_store() ->
     {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
-           msg_store_read(Guids1stHalf, MSCState9)),
+           msg_store_read(Guids1stHalf, MSCState9), ?PERSISTENT_MSG_STORE),
     ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids1stHalf),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse guids
