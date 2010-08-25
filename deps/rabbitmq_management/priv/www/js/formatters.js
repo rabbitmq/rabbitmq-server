@@ -51,3 +51,11 @@ function alt_rows(i) {
 function esc(str) {
     return escape(str).replace('/', '%2F');
 }
+
+function link_conn(name) {
+    return link_to(name, '#/connections/' + esc(name))
+}
+
+function link_to(name, url) {
+    return '<a href="' + url + '">' + name + '</a>';
+}

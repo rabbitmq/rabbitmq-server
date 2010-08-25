@@ -86,8 +86,8 @@ test_connections(Conn, Chan) ->
             ConnInfo = find_conn_by_local_port(Port, Conns),
             %% There's little we can actually test - just retrieve and check
             %% equality.
-            Pid = pget(pid, ConnInfo),
-            ConnInfo2 = rabbit_mgmt_db:get_connection(Pid),
+            Name = pget(name, ConnInfo),
+            ConnInfo2 = rabbit_mgmt_db:get_connection(Name),
             [assert_equal(Item, ConnInfo, ConnInfo2) ||
                 Item <- rabbit_reader:info_keys()]
     end.
