@@ -38,7 +38,7 @@
 -export([set_maximum_since_use/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, prioritise_cast/2]).
 
 -record(gcstate,
         {dir,
@@ -81,7 +81,7 @@ stop(Server) ->
     gen_server2:call(Server, stop, infinity).
 
 set_maximum_since_use(Pid, Age) ->
-    gen_server2:pcast(Pid, 8, {set_maximum_since_use, Age}).
+    gen_server2:cast(Pid, {set_maximum_since_use, Age}).
 
 %%----------------------------------------------------------------------------
 
@@ -96,6 +96,11 @@ init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
                     scheduled        = undefined },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+prioritise_cast({set_maximum_since_use, _Age}, _State) ->
+    8;
+prioritise_cast(_Msg, _State) ->
+    0.
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.

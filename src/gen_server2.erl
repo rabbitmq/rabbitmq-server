@@ -160,8 +160,8 @@
 %% API
 -export([start/3, start/4,
 	 start_link/3, start_link/4,
-	 call/2, call/3, pcall/3, pcall/4,
-	 cast/2, pcast/3, reply/2,
+	 call/2, call/3,
+	 cast/2, reply/2,
 	 abcast/2, abcast/3,
 	 multi_call/2, multi_call/3, multi_call/4,
 	 enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
@@ -259,22 +259,6 @@ call(Name, Request, Timeout) ->
 	    exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
     end.
 
-pcall(Name, Priority, Request) ->
-    case catch gen:call(Name, '$gen_pcall', {Priority, Request}) of
-	{ok,Res} ->
-	    Res;
-	{'EXIT',Reason} ->
-	    exit({Reason, {?MODULE, pcall, [Name, Priority, Request]}})
-    end.
-
-pcall(Name, Priority, Request, Timeout) ->
-    case catch gen:call(Name, '$gen_pcall', {Priority, Request}, Timeout) of
-	{ok,Res} ->
-	    Res;
-	{'EXIT',Reason} ->
-	    exit({Reason, {?MODULE, pcall, [Name, Priority, Request, Timeout]}})
-    end.
-
 %% -----------------------------------------------------------------
 %% Make a cast to a generic server.
 %% -----------------------------------------------------------------
@@ -288,27 +272,11 @@ cast(Dest, Request) when is_atom(Dest) ->
 cast(Dest, Request) when is_pid(Dest) ->
     do_cast(Dest, Request).
 
-do_cast(Dest, Request) -> 
+do_cast(Dest, Request) ->
     do_send(Dest, cast_msg(Request)),
     ok.
-    
+
 cast_msg(Request) -> {'$gen_cast',Request}.
-
-pcast({global,Name}, Priority, Request) ->
-    catch global:send(Name, cast_msg(Priority, Request)),
-    ok;
-pcast({Name,Node}=Dest, Priority, Request) when is_atom(Name), is_atom(Node) -> 
-    do_cast(Dest, Priority, Request);
-pcast(Dest, Priority, Request) when is_atom(Dest) ->
-    do_cast(Dest, Priority, Request);
-pcast(Dest, Priority, Request) when is_pid(Dest) ->
-    do_cast(Dest, Priority, Request).
-
-do_cast(Dest, Priority, Request) -> 
-    do_send(Dest, cast_msg(Priority, Request)),
-    ok.
-    
-cast_msg(Priority, Request) -> {'$gen_pcast', {Priority, Request}}.
 
 %% -----------------------------------------------------------------
 %% Send a reply to the client.
@@ -611,10 +579,6 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
     CurrentTO1 = Base + Extra,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
-in({'$gen_pcast', {Priority, Msg}}, Queue, _GS2State) ->
-    priority_queue:in({'$gen_cast', Msg}, Priority, Queue);
-in({'$gen_pcall', From, {Priority, Msg}}, Queue, _GS2State) ->
-    priority_queue:in({'$gen_call', From, Msg}, Priority, Queue);
 in({'$gen_cast', Msg}, Queue,
    GS2State = #gs2_state { prioritise_cast = PC }) ->
     priority_queue:in({'$gen_cast', Msg}, PC(Msg, GS2State), Queue);
