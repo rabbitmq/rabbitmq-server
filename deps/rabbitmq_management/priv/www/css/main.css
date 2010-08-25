@@ -51,5 +51,9 @@ div.section div, div.section-hidden div {padding: 0.5em;}
 div.section h2, div.section-hidden h2 { font-size: 1em; padding: 0.5em; cursor: pointer; background: #ddd; margin: 0;}
 
 form { margin: 0; }
+input, select { padding: 0.2em; }
+
 table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; }
+table.form input { font: 1.1em Lucidatypewriter, Courier, monospace; width: 200px; }
+table.form select { width: 200px; }
