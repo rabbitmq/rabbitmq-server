@@ -42,6 +42,7 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
+-export([register_ack_handler/2]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -57,6 +58,7 @@
                   tagged_sub_requests = dict:new(),
                   closing = false,
                   return_handler_pid = none,
+                  ack_handler_pid = none,
                   flow_control = false,
                   flow_handler_pid = none,
                   consumers = dict:new(),
@@ -192,6 +194,15 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
 %% registered process will receive #basic.return{} commands.
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+
+%% @spec (Channel, AckHandler) -> ok
+%% where
+%%      Channel = pid()
+%%      AckHandler = pid()
+%% @doc This registers a handler to deal with ack'd messages. The
+%% registered process will receive #basic.ack{} commands.
+register_ack_handler(Channel, AckHandler) ->
+    gen_server:cast(Channel, {register_ack_handler, AckHandler} ).
 
 %% @spec (Channel, FlowHandler) -> ok
 %% where
@@ -420,6 +431,17 @@ handle_regular_method(
     end,
     {noreply, State};
 
+handle_regular_method(
+        #'basic.ack'{} = BasicAck, AmqpMsg,
+        #c_state{return_ack_pid = AckHandler} = State) ->
+    case AckHandler of
+        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
+                          "ack handler registered~n",
+                          [self(), BasicAck, AmqpMsg]);
+        _    -> AckHandler ! {BasicAck, AmqpMsg}
+    end,
+    {noreply, State};
+
 handle_regular_method(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
 
@@ -515,6 +537,12 @@ handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     link(ReturnHandler),
     {noreply, State#c_state{return_handler_pid = ReturnHandler}};
+
+%% Registers a handler to process ack messages
+%% @private
+handle_cast({register_ack_handler, AckHandler}, State) ->
+    link(AckHandler),
+    {noreply, State#c_state{ack_handler_pid = AckHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private
@@ -657,6 +685,15 @@ handle_info({'EXIT', ReturnHandler, Reason},
     ?LOG_INFO("Channel ~p: unregistering return handler because it is "
               "closing: ~p~n", [ChannelNumber, Reason]),
     {noreply, State#c_state{return_handler_pid = none}};
+
+%% Handle ack handler exit
+%% @private
+handle_info({'EXIT', AckHandler, Reason},
+            State = #c_state{number = ChannelNumber,
+                             return_handler_pid = AckHandler}) ->
+    ?LOG_INFO("Channel ~p: unregistering ack handler because it is "
+              "closing: ~p~n", [ChannelNumber, Reason]),
+    {noreply, State#c_state{ack_handler_pid = none}};
 
 %% Handle other exit
 %% @private
