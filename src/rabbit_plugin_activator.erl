@@ -132,8 +132,8 @@ start() ->
     end,
     io:format("~n~w plugins activated:~n", [length(PluginApps)]),
     [io:format("* ~s-~s~n", [App, Vsn]) ||
-        App <- PluginApps,
-        {App, Vsn} <- [proplists:lookup(App, AppVersions)]],
+        App      <- PluginApps,
+        {_, Vsn} <- [proplists:lookup(App, AppVersions)]],
     io:nl(),
     halt(),
     ok.
