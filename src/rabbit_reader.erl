@@ -799,9 +799,10 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-    State1 = State#v1{connection_state = running,
-                      connection = NewConnection},
+    State1 = internal_conserve_memory(
+               rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+               State#v1{connection_state = running,
+                        connection = NewConnection}),
     rabbit_event:notify(
       connection_created,
       [{Item, i(Item, State1)} || Item <- ?CREATION_EVENT_KEYS]),

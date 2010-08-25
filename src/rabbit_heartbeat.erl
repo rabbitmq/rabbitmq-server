@@ -62,24 +62,22 @@ start_heartbeat_sender(_Parent, Sock, TimeoutSec) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
     %% 2 * TimeoutSec before sending a heartbeat in the boundary case
     %% where the last message was sent just after a heartbeat.
-    {ok, proc_lib:spawn_link(
-           fun () -> heartbeater({Sock, TimeoutSec * 1000 div 2, send_oct, 0,
-                                 fun () ->
-                                         catch rabbit_net:send(Sock, rabbit_binary_generator:build_heartbeat_frame()),
-                                         continue
-                                 end}, {0, 0})
-           end)}.
+    heartbeater(
+      {Sock, TimeoutSec * 1000 div 2, send_oct, 0,
+       fun () ->
+               catch rabbit_net:send(
+                       Sock, rabbit_binary_generator:build_heartbeat_frame()),
+               continue
+       end}).
 
 start_heartbeat_receiver(Parent, Sock, TimeoutSec) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
-    {ok, proc_lib:spawn_link(
-           fun () -> heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1,
-                                 fun () ->
-                                         Parent ! timeout,
-                                         stop
-                                 end}, {0, 0}) end)}.
+    heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1, fun () ->
+                                                               Parent ! timeout,
+                                                               stop
+                                                       end}).
 
 pause_monitor(none) ->
     ok;
@@ -94,6 +92,9 @@ resume_monitor({_Sender, Receiver}) ->
     ok.
 
 %%----------------------------------------------------------------------------
+
+heartbeater(Params) ->
+    {ok, proc_lib:spawn_link(fun () -> heartbeater(Params, {0, 0}) end)}.
 
 heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
             {StatVal, SameCount}) ->
