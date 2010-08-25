@@ -69,7 +69,7 @@ dialyze_files(PltPath, ModifiedFiles) ->
     Files = string:tokens(ModifiedFiles, " "),
     DialyzerWarnings = dialyzer:run([{init_plt, PltPath},
                                      {files, Files},
-                                     {warnings, [underspecs, behaviours,
+                                     {warnings, [behaviours,
                                                  race_conditions]}]),
     case DialyzerWarnings of
         [] -> io:format("~nOk~n");
