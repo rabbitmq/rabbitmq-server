@@ -360,7 +360,7 @@ emit_stats(#amqqueue{pid = QPid}) ->
     delegate_cast(QPid, emit_stats).
 
 delete(#amqqueue{ pid = QPid }) ->
-    gen_server2:call(QPid, delete_now, infinity).
+    gen_server2:call(QPid, delete, infinity).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
