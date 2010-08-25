@@ -76,7 +76,7 @@ pget(Key, List) ->
 pget(Key, List, Default) ->
     proplists:get_value(Key, List, Default).
 
-id(Pid) when is_pid(Pid) -> list_to_binary(pid_to_list(Pid));
+id(Pid) when is_pid(Pid) -> rabbit_mgmt_format:pid(Pid);
 id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
 
 add(unknown, _) -> unknown;
@@ -92,8 +92,10 @@ lookup_element(Table, Key, Pos) ->
     end.
 
 name_to_id(Table, Name) ->
-    [[Id]] = ets:match(Table, {{'$1', create}, '_', Name}),
-    Id.
+    case ets:match(Table, {{'$1', create}, '_', Name}) of
+        []     -> none;
+        [[Id]] -> Id
+    end.
 
 result_or_error([]) -> error;
 result_or_error(S)  -> S.

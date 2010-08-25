@@ -30,3 +30,13 @@
 <%= format('table', {'table': connection.client_properties}) %>
 </div>
 </div>
+
+<div class="section-hidden">
+  <h2>Close This Connection</h2>
+  <div>
+    <form action="#/connections" method="delete" class="confirm">
+      <input type="hidden" name="name" value="<%= connection.name %>"/>
+      <input type="submit" value="Force Close"/>
+    </form>
+  </div>
+</div>

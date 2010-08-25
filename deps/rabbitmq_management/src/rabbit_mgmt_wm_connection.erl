@@ -21,7 +21,7 @@
 -module(rabbit_mgmt_wm_connection).
 
 -export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
-         is_authorized/2]).
+         is_authorized/2, allowed_methods/2, delete_resource/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -33,6 +33,9 @@ init(_Config) -> {ok, undefined}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
+allowed_methods(ReqData, Context) ->
+    {['HEAD', 'GET', 'DELETE'], ReqData, Context}.
+
 resource_exists(ReqData, Context) ->
     case rabbit_mgmt_db:get_connection(
            rabbit_mgmt_util:id(connection, ReqData)) of
@@ -41,10 +44,17 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    Conn = {connection,
-            {struct, rabbit_mgmt_db:get_connection(
-                       rabbit_mgmt_util:id(connection, ReqData))}},
+    Conn = {connection, {struct, conn(ReqData)}},
     {rabbit_mgmt_format:encode([Conn]), ReqData, Context}.
+
+delete_resource(ReqData, Context) ->
+    PidStr = proplists:get_value(pid, conn(ReqData)),
+    rabbit_networking:close_connection(
+      rabbit_misc:string_to_pid(PidStr), "Closed via management plugin"),
+    {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+conn(ReqData) ->
+    rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData)).

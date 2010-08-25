@@ -21,12 +21,13 @@
 -module(rabbit_mgmt_test_unit).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(OK, 200).
 -define(NO_CONTENT, 204).
 -define(BAD_REQUEST, 400).
 -define(NOT_AUTHORISED, 401).
--define(NOT_FOUND, 404).
+%%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
 -define(PREFIX, "http://localhost:55672/json").
 
 rates_test() ->
@@ -150,6 +151,16 @@ http_permissions_test() ->
     http_delete("/users/myuser", ?NO_CONTENT),
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     ok.
+
+http_connections_test() ->
+    Conn = amqp_connection:start_network(),
+    LocalPort = rabbit_mgmt_test_db:local_port(Conn),
+    Path = binary_to_list(
+             rabbit_mgmt_format:print(
+               "/connections/127.0.0.1%3A~w", [LocalPort])),
+    http_get(Path, ?OK),
+    http_delete(Path, ?NO_CONTENT),
+    http_get(Path, ?NOT_FOUND).
 
 test_auth(Code, Headers) ->
     {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).

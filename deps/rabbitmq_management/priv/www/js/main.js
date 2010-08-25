@@ -16,9 +16,14 @@ function dispatcher() {
     }
     path('#/', ['/overview'], 'overview');
     path('#/connections', ['/connections/'], 'connections');
-    this.get('#/connections/:id', function() {
-            render(['/connections/' + esc(this.params['id'])], 'connection',
+    this.get('#/connections/:name', function() {
+            render(['/connections/' + esc(this.params['name'])], 'connection',
                    '#/connections');
+        });
+    this.del('#/connections', function() {
+            sync_delete(this, '/connections/:name');
+            go_to('#/connections');
+            return false;
         });
     path('#/queues', ['/queues/'], 'queues');
     path('#/channels',
