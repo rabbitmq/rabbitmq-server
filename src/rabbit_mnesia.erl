@@ -194,6 +194,17 @@ table_definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
+     {rabbit_topic_trie_edge,
+      [{record_name, topic_trie_edge},
+       {attributes, record_info(fields, topic_trie_edge)},
+       {type, ordered_set},
+       {match, #topic_trie_edge{trie_edge = trie_edge_match(), _='_'}}]},
+     {rabbit_topic_trie_binding,
+      [{record_name, topic_trie_binding},
+       {attributes, record_info(fields, topic_trie_binding)},
+       {type, ordered_set},
+       {match, #topic_trie_binding{trie_binding = trie_binding_match(),
+                                   _='_'}}]},
      %% Consider the implications to nodes_of_type/1 before altering
      %% the next entry.
      {rabbit_durable_exchange,
@@ -223,6 +234,12 @@ reverse_binding_match() ->
     #reverse_binding{queue_name = queue_name_match(),
                      exchange_name = exchange_name_match(),
                      _='_'}.
+trie_edge_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
+trie_binding_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->

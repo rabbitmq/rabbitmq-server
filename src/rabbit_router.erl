@@ -34,6 +34,7 @@
 -include("rabbit.hrl").
 
 -export([deliver/2,
+         deliver_by_queue_names/2,
          match_bindings/2,
          match_routing_key/2]).
 
@@ -48,6 +49,8 @@
 
 -spec(deliver/2 ::
         ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
+-spec(deliver_by_queue_names/2 ::
+        ([binary()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
 
 -endif.
 
@@ -76,6 +79,9 @@ deliver(QPids, Delivery) ->
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
                    {Routed, Handled}).
+
+deliver_by_queue_names(Qs, Delivery) ->
+    deliver(lookup_qpids(Qs), Delivery).
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
