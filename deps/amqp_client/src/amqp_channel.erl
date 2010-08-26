@@ -43,6 +43,7 @@
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
 -export([register_ack_handler/2]).
+-export([get_published_message_count/1]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -59,6 +60,7 @@
                   closing = false,
                   return_handler_pid = none,
                   ack_handler_pid = none,
+                  pub_msg_count = undefined,
                   flow_control = false,
                   flow_handler_pid = none,
                   consumers = dict:new(),
@@ -167,6 +169,15 @@ close(Channel, Code, Text) ->
                              method_id  = 0},
     #'channel.close_ok'{} = call(Channel, Close),
     ok.
+
+%% @spec (Channel) -> integer()
+%% where
+%%      Channel = pid()
+%% @doc Returns the number of published messages since the channel was put
+%% in confirm mode
+get_published_message_count(Channel) ->
+    gen_server:call(Channel, get_published_message_count).
+
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
 %%---------------------------------------------------------------------------
@@ -433,8 +444,8 @@ handle_regular_method(
 
 handle_regular_method(
         #'basic.ack'{} = BasicAck, AmqpMsg,
-        #c_state{return_ack_pid = AckHandler} = State) ->
-    case AckHandler of
+        #c_state{ack_handler_pid = AckHandler} = State) ->
+   case AckHandler of
         none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
                           "ack handler registered~n",
                           [self(), BasicAck, AmqpMsg]);
@@ -472,11 +483,15 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
         {#'basic.consume'{}, _} ->
             {reply, {error, use_subscribe}, State};
         {_, ok} ->
+            State1 = case Method of
+                         #'confirm.select'{} -> State #c_state { pub_msg_count = 0 };
+                         _                   -> State
+                     end,
             Content = build_content(AmqpMsg),
             case ?PROTOCOL:is_method_synchronous(Method) of
-                true  -> {noreply, rpc_top_half(Method, Content, From, State)};
-                false -> do(Method, Content, State),
-                         {reply, ok, State}
+                true  -> {noreply, rpc_top_half(Method, Content, From, State1)};
+                false -> do(Method, Content, State1),
+                         {reply, ok, State1}
             end;
         {_, BlockReply} ->
             {reply, BlockReply, State}
@@ -505,7 +520,13 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
             {noreply, rpc_top_half(NewMethod, none, From, NewState)};
         BlockReply ->
             {reply, BlockReply, State}
-    end.
+    end;
+
+%% Get the number of published messages since the channel was put in confirm mode.
+%% @private
+handle_call(get_published_message_count, _From,
+            State = #c_state { pub_msg_count = PMC }) ->
+    {reply, PMC, State}.
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
@@ -516,15 +537,24 @@ handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
                       "Use subscribe/3 instead!~n", [self(), Method]),
             {noreply, State};
         {_, ok} ->
+            State1 = case {Method, State} of
+                         {#'confirm.select'{}, _} ->
+                             State #c_state { pub_msg_count = 0 };
+                         {#'basic.publish'{}, #c_state { pub_msg_count = undefined }} ->
+                             State;
+                         {#'basic.publish'{}, #c_state { pub_msg_count = PMC }} ->
+                             State #c_state { pub_msg_count = PMC + 1 };
+                         _                   -> State
+                     end,
             Content = build_content(AmqpMsg),
             case ?PROTOCOL:is_method_synchronous(Method) of
                 true  -> ?LOG_WARN("Channel (~p): casting synchronous method "
                                    "~p.~n"
                                    "The reply will be ignored!~n",
                                    [self(), Method]),
-                         {noreply, rpc_top_half(Method, Content, none, State)};
-                false -> do(Method, Content, State),
-                         {noreply, State}
+                         {noreply, rpc_top_half(Method, Content, none, State1)};
+                false -> do(Method, Content, State1),
+                         {noreply, State1}
             end;
         {_, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method in cast ~p.~n"
