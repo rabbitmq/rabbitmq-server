@@ -262,7 +262,7 @@ trie_remove_all_bindings(X) ->
     Query = qlc:q([Entry ||
                    Entry = #topic_trie_binding{
                                trie_binding = #trie_binding{exchange_name = X1,
-                                              _='_'},
+                                                            _='_'},
                                _='_'}
                        <- mnesia:table(rabbit_topic_trie_binding),
                    X1 == X]),
