@@ -1006,7 +1006,8 @@ error_info(Reason, RootCause, Name, Msg, State, Debug) ->
         "** Reason for termination == ~n** ~p~n",
     case RootCause of
         undefined -> format(Fmt, [Name, Msg, State, Reason1]);
-        _         -> format(Fmt ++ "** Root cause for termination ==~n** ~p~n",
+        _         -> format(Fmt ++ "** In 'terminate' callback "
+                            "with reason ==~n** ~p~n",
                             [Name, Msg, State, Reason1,
                              error_reason(RootCause)])
     end,
