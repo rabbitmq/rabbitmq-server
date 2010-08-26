@@ -171,10 +171,6 @@ check_resource_access(Username,
     check_resource_access(Username,
                           R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(_Username,
-                      #resource{name = <<"amq.gen",_/binary>>},
-                      #permission{scope = client}) ->
-    ok;
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
@@ -184,14 +180,19 @@ check_resource_access(Username,
               [] ->
                   false;
               [#user_permission{permission = P}] ->
-                  PermRegexp = case element(permission_index(Permission), P) of
-                                   %% <<"^$">> breaks Emacs' erlang mode
-                                   <<"">> -> <<$^, $$>>;
-                                   RE     -> RE
-                               end,
-                  case re:run(Name, PermRegexp, [{capture, none}]) of
-                      match    -> true;
-                      nomatch  -> false
+                  case {Name, P} of
+                      {<<"amq.",_/binary>>, #permission{scope = client}} ->
+                          true;
+                      _ ->
+                          PermRegexp = case element(permission_index(Permission), P) of
+                                           %% <<"^$">> breaks Emacs' erlang mode
+                                           <<"">> -> <<$^, $$>>;
+                                           RE     -> RE
+                                       end,
+                          case re:run(Name, PermRegexp, [{capture, none}]) of
+                              match    -> true;
+                              nomatch  -> false
+                          end
                   end
           end,
     if Res  -> ok;
