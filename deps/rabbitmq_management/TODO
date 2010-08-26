@@ -1,16 +1,26 @@
-Before "first release":
-Regularise REST API.
-Write more pages.
-Write management CR[U]D.
-Add superuser bit.
-Do sensible things with vhosts.
+Before first release:
+Write remaining management:
+  Queue details GET PUT DELETE
+  Exchanges list GET
+  Exchange details GET PUT DELETE
+  Bindings list GET
+  Binding GET PUT DELETE
+  Channel GET
+  Application list / start / stop
+  VM stop
+  Reset / rotate logs / cluster
+Add superuser bit (bug 22983).
+  Do sensible things with vhosts.
+  Tests for permissions.
 Figure out coexistence with other webby plugins.
 Write some basic documentation.
 Figure out supervision.
-Remove datetime from JSON.
 Fix the rate bug.
 More user friendly 400 errors from decode/2.
 More user-friendly form submission errors.
+Fix / test GET / PUT round-tripping.
+  Remove datetime from JSON.
+Make it work with fine stats turned off.
 
 Then:
 Figure out something sensible to do with time series.
@@ -19,12 +29,14 @@ Figure out something sensible to do with time series.
   Garbage collection.
   Make rates into averages - configurable?
   Add pretty graphs.
+  Persist time series data over restarts?
 Refactor lots.
-Add lots of uses of /stats/foo.
+Add lots of uses of fine stats.
 Improve L+F.
 Write demo app.
 Do something sensible with non-amqp channels.
 Client side sorting / pagination / filtering.
+client-side column hiding for message rates.
 Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
 
@@ -36,3 +48,5 @@ Alarms(?).
 Clustering management.
 Sampling.
 Add more OS-y, Erlang-y things to overview(?)
+Catch up if mgmt application is restarted.
+
