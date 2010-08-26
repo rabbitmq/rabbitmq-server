@@ -379,7 +379,7 @@ client_terminate(CState) ->
 
 client_delete_and_terminate(CState, Server, Ref) ->
     ok = client_terminate(CState),
-    ok = gen_server2:call(Server, {delete_client, Ref}, infinity).
+    ok = gen_server2:cast(Server, {delete_client, Ref}).
 
 successfully_recovered_state(Server) ->
     gen_server2:pcall(Server, 7, successfully_recovered_state, infinity).
@@ -604,12 +604,7 @@ handle_call({new_client_state, CRef}, _From,
           State #msstate { client_refs = sets:add_element(CRef, ClientRefs) });
 
 handle_call(successfully_recovered_state, _From, State) ->
-    reply(State #msstate.successfully_recovered, State);
-
-handle_call({delete_client, CRef}, _From,
-            State = #msstate { client_refs = ClientRefs }) ->
-    reply(ok,
-          State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
+    reply(State #msstate.successfully_recovered, State).
 
 handle_cast({write, Guid},
             State = #msstate { current_file_handle = CurHdl,
@@ -724,7 +719,12 @@ handle_cast({gc_done, Reclaimed, Src, Dst},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State).
+    noreply(State);
+
+handle_cast({delete_client, CRef},
+            State = #msstate { client_refs = ClientRefs }) ->
+    noreply(
+      State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
