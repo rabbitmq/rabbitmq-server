@@ -47,14 +47,7 @@ to_json(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
+%%--------------------------------------------------------------------
+
 exchanges(ReqData) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
-        none ->
-            rabbit_mgmt_util:flatten(
-              [rabbit_exchange:info_all(V) ||
-                  V <- rabbit_access_control:list_vhosts()]);
-        not_found ->
-            vhost_not_found;
-        VHost ->
-            rabbit_exchange:info_all(VHost)
-    end.
+    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_exchange:info_all/1).

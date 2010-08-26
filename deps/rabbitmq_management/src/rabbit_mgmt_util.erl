@@ -23,6 +23,7 @@
 -export([is_authorized/2, now_ms/0, http_date/0, vhost/1, vhost_exists/1]).
 -export([bad_request/3, id/2, decode/2, flatten/1, parse_bool/1]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/3]).
+-export([all_or_one_vhost/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -170,4 +171,15 @@ amqp_request(VHost, Context, Method) ->
             throw(Name);
           exit:{{server_initiated_close, Code, Reason}, _} ->
             throw({server_closed, Reason})
+    end.
+
+all_or_one_vhost(ReqData, Fun) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        none ->
+            rabbit_mgmt_util:flatten(
+              [Fun(V) || V <- rabbit_access_control:list_vhosts()]);
+        not_found ->
+            vhost_not_found;
+        VHost ->
+            Fun(VHost)
     end.

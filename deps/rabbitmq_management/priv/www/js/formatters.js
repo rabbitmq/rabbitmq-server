@@ -74,7 +74,7 @@ function link_vhost(name) {
 }
 
 function link_user(name) {
-    return link_to(name, '#/user/' + esc(name))
+    return link_to(name, '#/users/' + esc(name))
 }
 
 function link_to(name, url) {

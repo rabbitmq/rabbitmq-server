@@ -26,7 +26,7 @@
 
 -export([start/0]).
 
--export([get_queues/0, get_connections/0, get_connection/1,
+-export([get_queues/1, get_connections/0, get_connection/1,
          get_overview/0, get_channels/0]).
 
 -export([group_sum/2]).
@@ -51,8 +51,8 @@
 start() ->
     gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
 
-get_queues() ->
-    gen_event:call(rabbit_event, ?MODULE, get_queues, infinity).
+get_queues(Qs) ->
+    gen_event:call(rabbit_event, ?MODULE, {get_queues, Qs}, infinity).
 
 get_connections() ->
     gen_event:call(rabbit_event, ?MODULE, get_connections, infinity).
@@ -175,7 +175,7 @@ augment_connection_pid(Pid, Tables) ->
 
 %% augment_queue_pid(Pid, Tables) ->
 %%     Q = lookup_element(
-%%           orddict:fetch(queue_stats, Tables),
+%%           orddict:fetch(queue_stats, Tables), NB  this won't work any more
 %%           {Pid, create}),
 %%     [{name, pget(name, Q)},
 %%      {vhost, pget(vhost, Q)}].
@@ -195,11 +195,13 @@ init([]) ->
                     orddict:from_list(
                       [{Key, ets:new(anon, [private])} || Key <- ?TABLES])}}.
 
-handle_call(get_queues, State = #state{tables = Tables}) ->
+handle_call({get_queues, Qs0}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    {ok, [augment(Q,
-                  [{owner_pid, fun augment_connection_pid/2}],
-                  Tables) || Q <- merge_created_stats(Table)], State};
+    Qs1 = [queue_to_list(Q) || Q <- Qs0],
+    Qs2 = merge_created_stats(Qs1, Table),
+    Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}],
+                   Tables) || Q <- Qs2],
+    {ok, Qs3, State};
 
 handle_call(get_connections, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
@@ -225,12 +227,6 @@ handle_call(get_overview, State = #state{tables = Tables}) ->
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
-
-handle_event(#event{type = queue_created, props = Stats}, State) ->
-    handle_created(
-      queue_stats, Stats,
-      [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
-       {fun rabbit_mgmt_format:resource/1, [name]}], State);
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -358,8 +354,12 @@ fine_stats_key(ChPid, QPid) when is_pid(QPid) -> {ChPid, id(QPid)};
 fine_stats_key(ChPid, X)                      -> {ChPid, X}.
 
 merge_created_stats(Table) ->
-    [Stats ++ lookup_element(Table, {Pid, stats}) ||
-        {{Pid, create}, Stats, _Name} <- ets:tab2list(Table)].
+    merge_created_stats(
+      [Facts || {{_, create}, Facts, _Name} <- ets:tab2list(Table)],
+      Table).
+
+merge_created_stats(In, Table) ->
+    [Facts ++ lookup_element(Table, {pget(pid, Facts), stats}) || Facts <- In].
 
 get_fine_stats(Type, GroupBy, Tables) ->
     Table = orddict:fetch(Type, Tables),
@@ -391,3 +391,19 @@ merge_fine_stats0(Props, Dict) ->
              proplists:delete(message_stats, Props)];
         error -> Props
     end.
+
+queue_to_list(#amqqueue{name = Name, durable = Durable,
+                        auto_delete = AutoDelete,
+                        exclusive_owner = ExclusiveOwner,
+                        arguments = Arguments,
+                        pid = Pid }) ->
+    rabbit_mgmt_format:format(
+      [{durable, Durable},
+       {name, Name},
+       {auto_delete, AutoDelete},
+       {owner_pid, ExclusiveOwner},
+       {arguments, Arguments},
+       {pid, Pid}],
+      [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
+       {fun rabbit_mgmt_format:resource/1, [name]},
+       {fun rabbit_mgmt_format:table/1,    [arguments]}]).
