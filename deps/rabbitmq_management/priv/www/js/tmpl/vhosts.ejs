@@ -1,23 +1,31 @@
 <h1>Virtual Hosts</h1>
 
 <table class="list">
- <thead>
-  <tr>
-    <th>Name</th>
-  </tr>
- </thead>
- <tbody>
-  <% for (var i = 0; i < vhosts.length; i++) { %>
-  <tr<%= alt_rows(i)%>>
-   <td><%= link_to(vhosts[i], '#/vhosts/' + esc(vhosts[i])) %></td>
-  </tr>
-  <% } %>
- </tbody>
+  <thead>
+    <tr>
+      <th>Name</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% for (var i = 0; i < vhosts.length; i++) { %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= link_to(vhosts[i], '#/vhosts/' + esc(vhosts[i])) %></td>
+       </tr>
+    <% } %>
+  </tbody>
 </table>
 
 <div class="section-hidden">
-<h2>Add a new virtual host</h2>
-<div>
-<%= format('vhost-form', {}) %>
-</div>
+  <h2>Add a new virtual host</h2>
+  <div>
+    <form action="#/vhosts" method="put">
+      <table class="form">
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add virtual host"/>
+    </form>
+  </div>
 </div>

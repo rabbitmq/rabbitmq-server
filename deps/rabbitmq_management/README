@@ -16,18 +16,15 @@ A summary:
     make
 
 After that in the directory 'rabbitmq-public-umbrella/rabbitmq-management' you
-should be able to see plugins:
+should be able to see the plugins:
+    $ ls dist
+    amqp_client.ez  rabbit_common.ez     rabbitmq-management.ez  webmachine.ez
+    mochiweb.ez     rabbitmq-management  rabbitmq-mochiweb.ez
 
-    $ ls  dist/
-    amqp_client.ez  mochiweb.ez  rabbit_common.ez      rabbitmq-mochiweb.ez
-    mochiweb.ez                  rabbit_management     webmachine.ez
-    mochiweb-for-management.ez   rabbit_management.ez
-
-To install them to a local RabbitMQ instance you need to copy some of *.ez
+To install them to a local RabbitMQ instance you need to copy some of the *.ez
 files into your rabbit plugins directory and activate them, for example:
 
-    mkdir /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
-    cp rabbitmq-mochiweb.ez mochiweb-for-management.ez \
-       webmachine.ez rabbit_management.ez \
-        /usr/lib/rabbitmq/lib/rabbitmq_server-1.7.0/plugins
+    cp rabbitmq-mochiweb.ez mochiweb.ez webmachine.ez \
+        amqp_client.ez rabbitmq-management.ez \
+        /usr/lib/rabbitmq/lib/rabbitmq_server-2.0.0/plugins
     rabbitmq-activate-plugins

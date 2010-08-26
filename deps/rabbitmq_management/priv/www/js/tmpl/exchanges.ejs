@@ -1,0 +1,81 @@
+<h1>Exchanges</h1>
+
+<table class="list">
+ <thead>
+  <tr>
+   <th>Virtual host</th>
+   <th>Name</th>
+   <th>Type</th>
+   <th>Durable</th>
+   <th>Auto delete</th>
+   <th>Arguments</th>
+  </tr>
+ </thead>
+ <tbody>
+  <% for (var i = 0; i < exchanges.length; i++) { %>
+  <tr<%= alt_rows(i)%>>
+   <td><%= link_vhost(exchanges[i].vhost) %></td>
+   <td><%= link_exchange(exchanges[i].vhost, exchanges[i].name) %></td>
+   <td><%= exchanges[i].type %></td>
+   <td class="c"><%= fmt_boolean(exchanges[i].durable) %></td>
+   <td class="c"><%= fmt_boolean(exchanges[i].auto_delete) %></td>
+   <td>
+     <% for (var j = 0; j < exchanges[i].arguments.length; j++) { %>
+       <%= exchanges[i].arguments[j] %>
+     <% } %>
+   </td>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+
+<div class="section-hidden">
+  <h2>Add a new exchange</h2>
+  <div>
+    <form action="#/exchanges" method="put">
+      <table class="form">
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= vhosts[i] %>"><%= vhosts[i] %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/></td>
+        </tr>
+        <tr>
+          <th><label>Type:</label></th>
+          <td><input type="text" name="type"/></td>
+        </tr>
+        <tr>
+          <th><label>Durability:</label></th>
+          <td>
+            <select name="durable">
+              <option value="true">Durable</option>
+              <option value="false">Transient</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Auto delete:</label></th>
+          <td>
+            <select name="auto_delete">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Arguments:</label></th>
+          <td><input type="hidden" value="" name="arguments" />(TODO)</td>
+        </tr>
+      </table>
+      <input type="submit" value="Add exchange"/>
+    </form>
+  </div>
+</div>

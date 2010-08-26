@@ -1,23 +1,35 @@
 <h1>Users</h1>
 
 <table class="list">
- <thead>
-  <tr>
-    <th>Name</th>
-  </tr>
- </thead>
- <tbody>
-  <% for (var i = 0; i < users.length; i++) { %>
-  <tr<%= alt_rows(i)%>>
-   <td><%= link_to(users[i], '#/users/' + esc(users[i])) %></td>
-  </tr>
-  <% } %>
- </tbody>
+  <thead>
+    <tr>
+      <th>Name</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% for (var i = 0; i < users.length; i++) { %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= link_to(users[i], '#/users/' + esc(users[i])) %></td>
+       </tr>
+    <% } %>
+  </tbody>
 </table>
 
 <div class="section-hidden">
-<h2>Add a new user</h2>
-<div>
-<%= format('user-form', {}) %>
-</div>
+  <h2>Add a new user</h2>
+  <div>
+    <form action="#/users" method="put">
+      <table class="form">
+        <tr>
+          <th><label>Username:</label></th>
+          <td><input type="text" name="username"/></td>
+        </tr>
+        <tr>
+          <th><label>Password:</label></th>
+          <td><input type="text" name="password"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add user"/>
+    </form>
+  </div>
 </div>

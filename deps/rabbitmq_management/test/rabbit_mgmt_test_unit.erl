@@ -165,6 +165,47 @@ http_connections_test() ->
 test_auth(Code, Headers) ->
     {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).
 
+http_exchanges_test() ->
+    %% Can pass booleans or strings
+    Good = [{type, "direct"}, {durable, "true"}, {auto_delete, false},
+            {arguments, ""}],
+    http_put("/vhosts/myvhost", [], ?NO_CONTENT),
+    http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
+    http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
+    http_put("/permissions/guest/myvhost",
+             [{configure, ".*"}, {write, ".*"},
+              {read,      ".*"}, {scope, "client"}], ?NO_CONTENT),
+    http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
+    http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
+    http_get("/exchanges/%2f/foo", ?NOT_FOUND),
+    {struct,[{<<"name">>,<<"foo">>},
+             {<<"vhost">>,<<"myvhost">>},
+             {<<"type">>,<<"direct">>},
+             {<<"durable">>,true},
+             {<<"auto_delete">>,false},
+             {<<"arguments">>,{struct,[]}}]} =
+        http_get_check("/exchanges/myvhost/foo", "exchange"),
+
+    http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
+    http_put("/exchanges/myvhost/bar",
+             [{type, "bad_exchange_type"},
+              {durable, true}, {auto_delete, false}, {arguments, ""}],
+             ?BAD_REQUEST),
+    http_put("/exchanges/myvhost/bar",
+             [{type, "direct"},
+              {durable, "troo"}, {auto_delete, false}, {arguments, ""}],
+             ?BAD_REQUEST),
+    http_put("/exchanges/myvhost/foo",
+             [{type, "direct"},
+              {durable, false}, {auto_delete, false}, {arguments, ""}],
+             ?BAD_REQUEST),
+
+    http_delete("/exchanges/myvhost/foo", ?NO_CONTENT),
+    http_delete("/exchanges/myvhost/foo", ?NOT_FOUND),
+
+    http_delete("/vhosts/myvhost", ?NO_CONTENT),
+    ok.
+
 %%---------------------------------------------------------------------------
 
 http_get(Path, CodeExp) ->
@@ -173,13 +214,20 @@ http_get(Path, CodeExp) ->
     decode(CodeExp, ResBody).
 
 http_put(Path, List, CodeExp) ->
-    L2 = [{K, list_to_binary(V)} || {K, V} <- List],
+    L2 = [{K, format_for_put(V)} || {K, V} <- List],
     Enc = iolist_to_binary(mochijson2:encode({struct, L2})),
     http_put_raw(Path, Enc, CodeExp).
 
+format_for_put(V) when is_list(V) ->
+    list_to_binary(V);
+format_for_put(V) ->
+    V.
+
+%% TODO Lose the sleep below. What is happening async?
 http_put_raw(Path, Body, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
         req(put, Path, [auth_header()], Body),
+    timer:sleep(100),
     decode(CodeExp, ResBody).
 
 http_delete(Path, CodeExp) ->

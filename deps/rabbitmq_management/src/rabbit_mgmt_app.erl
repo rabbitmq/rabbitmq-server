@@ -50,18 +50,21 @@ start(_Type, _StartArgs) ->
     Res.
 
 dispatcher() ->
-    [{["json","overview"],                 rabbit_mgmt_wm_overview, []},
-     {["json","connections"],              rabbit_mgmt_wm_connections, []},
-     {["json","connections", connection],  rabbit_mgmt_wm_connection, []},
-     {["json","channels"],                 rabbit_mgmt_wm_channels, []},
-     {["json","queues"],                   rabbit_mgmt_wm_queues, []},
-     {["json","vhosts"],                   rabbit_mgmt_wm_vhosts, []},
-     {["json","vhosts", vhost],            rabbit_mgmt_wm_vhost, []},
-     {["json","users"],                    rabbit_mgmt_wm_users, []},
-     {["json","users", user],              rabbit_mgmt_wm_user, []},
-     {["json","permissions"],              rabbit_mgmt_wm_permissions, []},
-     {["json","permissions", user],        rabbit_mgmt_wm_permissions_user, []},
-     {["json","permissions", user, vhost], rabbit_mgmt_wm_permission, []}
+    [{["json","overview"],                  rabbit_mgmt_wm_overview, []},
+     {["json","connections"],               rabbit_mgmt_wm_connections, []},
+     {["json","connections", connection],   rabbit_mgmt_wm_connection, []},
+     {["json","channels"],                  rabbit_mgmt_wm_channels, []},
+     {["json","exchanges"],                 rabbit_mgmt_wm_exchanges, []},
+     {["json","exchanges", vhost],          rabbit_mgmt_wm_exchanges, []},
+     {["json","exchanges", vhost, exchange],rabbit_mgmt_wm_exchange, []},
+     {["json","queues"],                    rabbit_mgmt_wm_queues, []},
+     {["json","vhosts"],                    rabbit_mgmt_wm_vhosts, []},
+     {["json","vhosts", vhost],             rabbit_mgmt_wm_vhost, []},
+     {["json","users"],                     rabbit_mgmt_wm_users, []},
+     {["json","users", user],               rabbit_mgmt_wm_user, []},
+     {["json","permissions"],               rabbit_mgmt_wm_permissions, []},
+     {["json","permissions", user],         rabbit_mgmt_wm_permissions_user,[]},
+     {["json","permissions", user, vhost],  rabbit_mgmt_wm_permission, []}
     ].
 
 stop(_State) ->

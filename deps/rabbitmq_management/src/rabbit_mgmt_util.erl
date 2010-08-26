@@ -21,9 +21,11 @@
 -module(rabbit_mgmt_util).
 
 -export([is_authorized/2, now_ms/0, http_date/0, vhost/1, vhost_exists/1]).
--export([bad_request/3, id/2, decode/2]).
+-export([bad_request/3, id/2, decode/2, flatten/1, parse_bool/1]).
+-export([with_decode/4, not_found/3, not_authorised/3, amqp_request/3]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_mgmt.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -33,13 +35,18 @@ is_authorized(ReqData, Context) ->
     case wrq:get_req_header("authorization", ReqData) of
         "Basic " ++ Base64 ->
             Str = base64:mime_decode_to_string(Base64),
-            [User, Pass] = string:tokens(Str, ":"),
-            case rabbit_access_control:lookup_user(list_to_binary(User)) of
-                {ok, U}  -> case list_to_binary(Pass) == U#user.password of
-                                true ->  {true, ReqData, Context};
-                                false -> Unauthorized
-                            end;
-                {error, _} -> Unauthorized
+            [User, Pass] = [list_to_binary(S) || S <- string:tokens(Str, ":")],
+            case rabbit_access_control:lookup_user(User) of
+                {ok, U}  ->
+                    case Pass == U#user.password of
+                        true ->
+                            {true, ReqData,
+                             Context#context{username = User, password = Pass}};
+                        false ->
+                            Unauthorized
+                    end;
+                {error, _} ->
+                    Unauthorized
             end;
         _ -> Unauthorized
     end.
@@ -52,10 +59,14 @@ http_date() ->
     httpd_util:rfc1123_date(erlang:universaltime()).
 
 vhost(ReqData) ->
-    VHost = id(vhost, ReqData),
-    case vhost_exists(VHost) of
-        true  -> VHost;
-        false -> not_found
+    case id(vhost, ReqData) of
+        none ->
+            none;
+        VHost ->
+            case vhost_exists(VHost) of
+                true  -> VHost;
+                false -> not_found
+            end
     end.
 
 vhost_exists(VHostBin) ->
@@ -63,14 +74,44 @@ vhost_exists(VHostBin) ->
               rabbit_access_control:list_vhosts()).
 
 bad_request(Reason, ReqData, Context) ->
+    halt_response(400, Reason, ReqData, Context).
+
+not_authorised(Reason, ReqData, Context) ->
+    halt_response(401, Reason, ReqData, Context).
+
+not_found(Reason, ReqData, Context) ->
+    halt_response(404, Reason, ReqData, Context).
+
+halt_response(Code, Reason, ReqData, Context) ->
     Json = {struct, [{error, bad_request},
                      {reason, rabbit_mgmt_format:tuple(Reason)}]},
     ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
-    {{halt, 400}, ReqData1, Context}.
+    {{halt, Code}, ReqData1, Context}.
 
 id(Key, ReqData) ->
-    {ok, Id} = dict:find(Key, wrq:path_info(ReqData)),
-    list_to_binary(mochiweb_util:unquote(Id)).
+    case dict:find(Key, wrq:path_info(ReqData)) of
+        {ok, Id} ->
+            list_to_binary(mochiweb_util:unquote(Id));
+        error ->
+            none
+    end.
+
+with_decode(Keys, ReqData, Context, Fun) ->
+    case decode(Keys, ReqData) of
+        {error, Reason} ->
+            bad_request(Reason, ReqData, Context);
+        Values ->
+            try
+                Fun(Values),
+                {true, ReqData, Context}
+            catch throw:{error, Error} ->
+                    bad_request(Error, ReqData, Context);
+                  throw:access_refused ->
+                    not_authorised(not_authorised, ReqData, Context);
+                  throw:{server_closed, Reason} ->
+                    bad_request(list_to_binary(Reason), ReqData, Context)
+            end
+    end.
 
 decode(Keys, ReqData) ->
     Body = wrq:req_body(ReqData),
@@ -82,11 +123,51 @@ decode(Keys, ReqData) ->
     case Res of
         ok ->
             Results =
-                [proplists:get_value(list_to_binary(K), Json) || K <- Keys],
-            case lists:any(fun(E) -> E == undefined end, Results) of
-                false -> Results;
-                true  -> {error, key_missing}
+                [get_or_missing(list_to_binary(K), Json) || K <- Keys],
+            case lists:filter(fun({key_missing, _}) -> true;
+                                 (_)                -> false
+                              end, Results) of
+                []      -> Results;
+                Errors  -> {error, Errors}
             end;
         _  ->
             {Res, Json}
+    end.
+
+get_or_missing(K, L) ->
+    case proplists:get_value(K, L) of
+        undefined -> {key_missing, K};
+        V         -> V
+    end.
+
+%% Only flatten one level
+flatten([]) ->
+    [];
+flatten([H|T]) ->
+    H ++ flatten(T).
+
+parse_bool(V) ->
+    case V of
+        <<"true">>  -> true;
+        <<"false">> -> false;
+        true        -> true;
+        false       -> false;
+        _           -> throw({error, {not_boolean, V}})
+    end.
+
+amqp_request(VHost, Context, Method) ->
+    try
+        Params = #amqp_params{username = Context#context.username,
+                              password = Context#context.password,
+                              virtual_host = VHost},
+        Conn = amqp_connection:start_direct(Params),
+        Ch = amqp_connection:open_channel(Conn),
+        amqp_channel:call(Ch, Method),
+        amqp_channel:close(Ch),
+        amqp_connection:close(Conn)
+    %% See bug 23187
+    catch error:{badmatch,{error, #amqp_error{name = Name}}} ->
+            throw(Name);
+          exit:{{server_initiated_close, Code, Reason}, _} ->
+            throw({server_closed, Reason})
     end.

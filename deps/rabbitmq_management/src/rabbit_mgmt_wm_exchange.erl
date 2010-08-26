@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_permission).
+-module(rabbit_mgmt_wm_exchange).
 
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
@@ -27,7 +27,7 @@
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
@@ -42,38 +42,43 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case perms(ReqData) of
-         none      -> false;
+    {case exchange(ReqData) of
          not_found -> false;
          _         -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
     {rabbit_mgmt_format:encode(
-       [{permission,
-         rabbit_mgmt_format:user_permissions(perms(ReqData))}]),
+       [{exchange, rabbit_mgmt_format:exchange(
+                     rabbit_exchange:info(exchange(ReqData)))}]),
      ReqData, Context}.
 
 accept_content(ReqData, Context) ->
-    case perms(ReqData) of
-         not_found ->
-            rabbit_mgmt_util:bad_request(vhost_or_user_not_found,
-                                         ReqData, Context);
-         _         ->
-            User = rabbit_mgmt_util:id(user, ReqData),
-            VHost = rabbit_mgmt_util:id(vhost, ReqData),
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found ->
+            rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
+        VHost ->
+            Name = rabbit_mgmt_util:id(exchange, ReqData),
             rabbit_mgmt_util:with_decode(
-              ["scope", "configure", "write", "read"], ReqData, Context,
-              fun([Scope, Conf, Write, Read]) ->
-                      rabbit_access_control:set_permissions(
-                        Scope, User, VHost, Conf, Write, Read)
-              end)
+              ["type", "durable", "auto_delete", "arguments"], ReqData, Context,
+                fun([Type, Durable, AutoDelete, Arguments]) ->
+                        rabbit_mgmt_util:amqp_request(
+                          VHost, Context,
+                          #'exchange.declare'{
+                                   exchange = Name,
+                                   type = Type,
+                                   durable =
+                                       rabbit_mgmt_util:parse_bool(Durable),
+                                   auto_delete =
+                                       rabbit_mgmt_util:parse_bool(AutoDelete),
+                                   arguments = []}) %% TODO
+                end)
     end.
 
 delete_resource(ReqData, Context) ->
-    User = rabbit_mgmt_util:id(user, ReqData),
-    VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    rabbit_access_control:clear_permissions(User, VHost),
+    rabbit_mgmt_util:amqp_request(
+      rabbit_mgmt_util:vhost(ReqData),
+      Context, #'exchange.delete'{ exchange = id(ReqData) }),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -81,21 +86,24 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-perms(ReqData) ->
-    User = rabbit_mgmt_util:id(user, ReqData),
-    case rabbit_access_control:lookup_user(User) of
-        {ok, _} ->
-            case rabbit_mgmt_util:vhost(ReqData) of
-                not_found ->
-                    not_found;
-                VHost ->
-                    Perms = rabbit_access_control:list_user_permissions(User),
-                    Filtered = [P || {V, _, _, _, _} = P <- Perms, V == VHost],
-                    case Filtered of
-                        [Perm] -> Perm;
-                        []     -> none
-                    end
-            end;
-        {error, _} ->
-            not_found
+exchange(ReqData) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        none ->
+            not_found;
+        not_found ->
+            not_found;
+        VHost ->
+            Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
+            case rabbit_exchange:lookup(Name) of
+                {ok, X} ->
+                    X;
+                {error, not_found} ->
+                    not_found
+            end
+    end.
+
+id(ReqData) ->
+    case rabbit_mgmt_util:id(exchange, ReqData) of
+        <<"amq.default">> -> <<"">>;
+        Name              -> Name
     end.

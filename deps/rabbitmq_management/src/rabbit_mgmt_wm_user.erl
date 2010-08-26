@@ -25,11 +25,12 @@
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2]).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {ok, undefined}.
+init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
@@ -52,18 +53,16 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    case rabbit_mgmt_util:decode(["password"], ReqData) of
-        [Pass] ->
+    rabbit_mgmt_util:with_decode(
+      ["password"], ReqData, Context,
+      fun([Password]) ->
             case rabbit_access_control:lookup_user(User) of
                 {ok, _} ->
-                    rabbit_access_control:change_password(User, Pass);
+                    rabbit_access_control:change_password(User, Password);
                 {error, not_found} ->
-                    rabbit_access_control:add_user(User, Pass)
-            end,
-            {true, ReqData, Context};
-        {error, Reason} ->
-            rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
-    end.
+                    rabbit_access_control:add_user(User, Password)
+            end
+      end).
 
 delete_resource(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),

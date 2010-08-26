@@ -18,25 +18,4 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_connections).
-
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
-
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
-
-%%--------------------------------------------------------------------
-
-init(_Config) -> {ok, #context{}}.
-
-content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-to_json(ReqData, Context) ->
-    Conns = {connections,
-             [{struct, C} || C <- rabbit_mgmt_db:get_connections()]},
-    {rabbit_mgmt_format:encode([Conns]), ReqData, Context}.
-
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+-record(context, {username, password}).

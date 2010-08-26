@@ -1,8 +1,7 @@
 Before first release:
 Write remaining management:
   Queue details GET PUT DELETE
-  Exchanges list GET
-  Exchange details GET PUT DELETE
+  Exchange arguments support
   Bindings list GET
   Binding GET PUT DELETE
   Channel GET
@@ -10,17 +9,17 @@ Write remaining management:
   VM stop
   Reset / rotate logs / cluster
 Add superuser bit (bug 22983).
-  Do sensible things with vhosts.
   Tests for permissions.
 Figure out coexistence with other webby plugins.
 Write some basic documentation.
 Figure out supervision.
 Fix the rate bug.
-More user friendly 400 errors from decode/2.
 More user-friendly form submission errors.
 Fix / test GET / PUT round-tripping.
   Remove datetime from JSON.
 Make it work with fine stats turned off.
+Do sensible things with vhosts in UI.
+Fix refreshing.
 
 Then:
 Figure out something sensible to do with time series.
@@ -49,4 +48,4 @@ Clustering management.
 Sampling.
 Add more OS-y, Erlang-y things to overview(?)
 Catch up if mgmt application is restarted.
-
+Queues with server generated names

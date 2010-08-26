@@ -15,6 +15,7 @@ function dispatcher() {
             });
     }
     path('#/', ['/overview'], 'overview');
+
     path('#/connections', ['/connections/'], 'connections');
     this.get('#/connections/:name', function() {
             render(['/connections/' + esc(this.params['name'])], 'connection',
@@ -25,8 +26,27 @@ function dispatcher() {
             go_to('#/connections');
             return false;
         });
-    path('#/queues', ['/queues'], 'queues');
+
     path('#/channels', ['/channels'], 'channels');
+
+    path('#/exchanges', ['/exchanges', '/vhosts'], 'exchanges');
+    this.get('#/exchanges/:vhost/:name', function() {
+            render(['/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])], 'exchange',
+                   '#/exchanges');
+        });
+    this.put('#/exchanges', function() {
+            sync_put(this, '/exchanges/:vhost/:name');
+            update();
+            return false;
+        });
+    this.del('#/exchanges', function() {
+            sync_delete(this, '/exchanges/:vhost/:name');
+            go_to('#/exchanges');
+            return false;
+        });
+
+    path('#/queues', ['/queues'], 'queues');
+
     path('#/vhosts', ['/vhosts/'], 'vhosts');
     this.get('#/vhosts/:id', function() {
             render(['/vhosts/' + esc(this.params['id'])], 'vhost',
@@ -42,6 +62,7 @@ function dispatcher() {
             go_to('#/vhosts');
             return false;
         });
+
     path('#/users', ['/users/'], 'users');
     this.get('#/users/:id', function() {
             render(['/users/' + esc(this.params['id']),
@@ -59,6 +80,7 @@ function dispatcher() {
             go_to('#/users');
             return false;
         });
+
     this.put('#/permissions', function() {
             sync_put(this, '/permissions/:username/:vhost');
             update();

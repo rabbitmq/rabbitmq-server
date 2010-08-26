@@ -25,11 +25,12 @@
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2]).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {ok, undefined}.
+init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.

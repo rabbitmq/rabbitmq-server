@@ -44,6 +44,14 @@ function fmt_rate(obj, name) {
         '<sub>(' + fmt_num(obj[name]) + ' total)</sub>';
 }
 
+function fmt_exchange(name) {
+    return name == '' ? '<i>(AMQP default)</i>' : name;
+}
+
+function fmt_exchange_url(name) {
+    return name == '' ? 'amq.default' : name;
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt"' : '';
 }
@@ -54,6 +62,11 @@ function esc(str) {
 
 function link_conn(name) {
     return link_to(name, '#/connections/' + esc(name))
+}
+
+function link_exchange(vhost, name) {
+    var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
+    return link_to(fmt_exchange(name), '#/exchanges/' + url)
 }
 
 function link_vhost(name) {
