@@ -1,6 +1,6 @@
 {application, rabbit_management,
  [{description, "RabbitMQ Management Console"},
-  {vsn, "0.01"},
+  {vsn, "%%VSN%%"},
   {modules, [
     rabbit_mgmt,
     rabbit_mgmt_app,
