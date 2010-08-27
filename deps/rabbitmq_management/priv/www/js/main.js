@@ -161,7 +161,7 @@ function postprocess() {
 
 function with_reqs(reqs, acc, fun) {
     if (reqs.length > 0) {
-        with_req('/json' + reqs[0], function(text) {
+        with_req('/rest' + reqs[0], function(text) {
                 acc.push(jQuery.parseJSON(text));
                 with_reqs(reqs.slice(1), acc, fun);
             });
@@ -188,7 +188,7 @@ function replace_content(id, html) {
 
 function format(template, json) {
     try {
-        var tmpl = new EJS({url: '/js/tmpl/' + template + '.ejs'});
+        var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs'});
         return tmpl.render(json);
     } catch (err) {
         //clearInterval(timer);
@@ -250,7 +250,7 @@ function sync_delete(sammy, path_template) {
 function sync_req(type, sammy, path_template) {
     var path = fill_path_template(path_template, sammy.params);
     var req = new XMLHttpRequest();
-    req.open(type, '/json' + path, false);
+    req.open(type, '/rest' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     req.send(JSON.stringify(sammy.params)); // TODO make portable
 

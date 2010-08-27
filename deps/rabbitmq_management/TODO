@@ -9,7 +9,6 @@ Write remaining management:
   Reset / rotate logs / cluster
 Add superuser bit (bug 22983).
   Tests for permissions.
-Figure out coexistence with other webby plugins.
 Write some basic documentation.
 Figure out supervision.
 Fix the rate bug.

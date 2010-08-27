@@ -24,15 +24,19 @@
 
 -export([start/2, stop/1]).
 
+-define(PREFIX, "rest").
+-define(UI_PREFIX, "mgmt").
+
 start(_Type, _StartArgs) ->
-    case application:get_env(rabbit_mochiweb, port) of
-        undefined ->
-            exit(mochiweb_port_not_configured);
-        {ok, Port} ->
-            S = io_lib:format("~s (on port ~p)",
-                              ["management console", Port]),
-            io:format("starting ~-60s ...", [S])
-    end,
+    Port =
+        case application:get_env(rabbit_mochiweb, port) of
+            undefined ->
+                exit(mochiweb_port_not_configured);
+            {ok, P} ->
+                S = io_lib:format("~s", ["management console"]),
+                io:format("starting ~-60s ...", [S]),
+                P
+        end,
     application:set_env(rabbit, collect_statistics, fine),
     Res = rabbit_mgmt_sup:start_link(),
     %% TODO is this supervised correctly?
@@ -42,31 +46,36 @@ start(_Type, _StartArgs) ->
     %% This would do access.log type stuff. Needs configuring though.
     %% application:set_env(webmachine, webmachine_logger_module,
     %%                     webmachine_logger),
-    rabbit_mochiweb:register_context_handler("json",
+    rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1),
-    rabbit_mochiweb:register_global_handler(
-      rabbit_mochiweb:static_context_handler("", ?MODULE, "priv/www")),
+    rabbit_mochiweb:register_context_handler(?UI_PREFIX,
+      rabbit_mochiweb:static_context_handler(?UI_PREFIX, ?MODULE, "priv/www")),
     io:format("done~n"),
+    {ok, Hostname} = inet:gethostname(),
+    URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
+    io:format("  REST API:      ~s/rest/~n", [URLPrefix]),
+    io:format("  Management UI: ~s/mgmt/~n", [URLPrefix]),
     Res.
 
 dispatcher() ->
-    [{["json","overview"],                  rabbit_mgmt_wm_overview, []},
-     {["json","connections"],               rabbit_mgmt_wm_connections, []},
-     {["json","connections", connection],   rabbit_mgmt_wm_connection, []},
-     {["json","channels"],                  rabbit_mgmt_wm_channels, []},
-     {["json","exchanges"],                 rabbit_mgmt_wm_exchanges, []},
-     {["json","exchanges", vhost],          rabbit_mgmt_wm_exchanges, []},
-     {["json","exchanges", vhost, exchange],rabbit_mgmt_wm_exchange, []},
-     {["json","queues"],                    rabbit_mgmt_wm_queues, []},
-     {["json","queues", vhost],             rabbit_mgmt_wm_queues, []},
-     {["json","queues", vhost, queue],      rabbit_mgmt_wm_queue, []},
-     {["json","vhosts"],                    rabbit_mgmt_wm_vhosts, []},
-     {["json","vhosts", vhost],             rabbit_mgmt_wm_vhost, []},
-     {["json","users"],                     rabbit_mgmt_wm_users, []},
-     {["json","users", user],               rabbit_mgmt_wm_user, []},
-     {["json","permissions"],               rabbit_mgmt_wm_permissions, []},
-     {["json","permissions", user],         rabbit_mgmt_wm_permissions_user,[]},
-     {["json","permissions", user, vhost],  rabbit_mgmt_wm_permission, []}
+    [{[?PREFIX],                            rabbit_mgmt_wm_help, []},
+     {[?PREFIX,"overview"],                 rabbit_mgmt_wm_overview, []},
+     {[?PREFIX,"connections"],              rabbit_mgmt_wm_connections, []},
+     {[?PREFIX,"connections", connection],  rabbit_mgmt_wm_connection, []},
+     {[?PREFIX,"channels"],                 rabbit_mgmt_wm_channels, []},
+     {[?PREFIX,"exchanges"],                rabbit_mgmt_wm_exchanges, []},
+     {[?PREFIX,"exchanges", vhost],         rabbit_mgmt_wm_exchanges, []},
+     {[?PREFIX,"exchanges", vhost, exchange],rabbit_mgmt_wm_exchange, []},
+     {[?PREFIX,"queues"],                   rabbit_mgmt_wm_queues, []},
+     {[?PREFIX,"queues", vhost],            rabbit_mgmt_wm_queues, []},
+     {[?PREFIX,"queues", vhost, queue],     rabbit_mgmt_wm_queue, []},
+     {[?PREFIX,"vhosts"],                   rabbit_mgmt_wm_vhosts, []},
+     {[?PREFIX,"vhosts", vhost],            rabbit_mgmt_wm_vhost, []},
+     {[?PREFIX,"users"],                    rabbit_mgmt_wm_users, []},
+     {[?PREFIX,"users", user],              rabbit_mgmt_wm_user, []},
+     {[?PREFIX,"permissions"],              rabbit_mgmt_wm_permissions, []},
+     {[?PREFIX,"permissions", user],        rabbit_mgmt_wm_permissions_user,[]},
+     {[?PREFIX,"permissions", user, vhost], rabbit_mgmt_wm_permission, []}
     ].
 
 stop(_State) ->

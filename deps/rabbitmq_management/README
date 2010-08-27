@@ -30,3 +30,7 @@ For example:
         amqp_client.ez rabbitmq-management.ez \
         /usr/lib/rabbitmq/lib/rabbitmq_server-2.0.0/plugins
     rabbitmq-activate-plugins
+
+Finally, restart RabbitMQ and point your browser to
+
+http://<server>:55672/mgmt/
