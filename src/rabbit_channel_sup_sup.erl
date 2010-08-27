@@ -29,21 +29,37 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(tcp_client_sup).
+-module(rabbit_channel_sup_sup).
 
 -behaviour(supervisor2).
 
--export([start_link/1, start_link/2]).
+-export([start_link/0, start_channel/2]).
 
 -export([init/1]).
 
-start_link(Callback) ->
-    supervisor2:start_link(?MODULE, Callback).
+%%----------------------------------------------------------------------------
 
-start_link(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, Callback).
+-ifdef(use_specs).
 
-init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
-          [{tcp_client, {M,F,A},
-            temporary, infinity, supervisor, [M]}]}}.
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
+                              {'ok', pid(), pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
+start_link() ->
+    supervisor2:start_link(?MODULE, []).
+
+start_channel(Pid, Args) ->
+    {ok, ChSupPid, _} = Result = supervisor2:start_child(Pid, [Args]),
+    link(ChSupPid),
+    Result.
+
+%%----------------------------------------------------------------------------
+
+init([]) ->
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{channel_sup, {rabbit_channel_sup, start_link, []},
+            temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.

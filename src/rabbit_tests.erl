@@ -1019,7 +1019,8 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         <<"user">>, <<"/">>, self()),
+                                         <<"user">>, <<"/">>, self(),
+                                         fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1060,6 +1061,8 @@ test_server_status() ->
 
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
+
+    unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
@@ -1067,14 +1070,14 @@ test_server_status() ->
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"guest">>,
-                                         <<"/">>, self()),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
+                                         <<"guest">>, <<"/">>, self(),
+                                         fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
-    MRef = erlang:monitor(process, Ch),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
-    {Writer, Ch, MRef}.
+    {Writer, Ch}.
 
 test_statistics_receiver(Pid) ->
     receive
@@ -1113,7 +1116,7 @@ test_statistics() ->
     %% by far the most complex code though.
 
     %% Set up a channel and queue
-    {_Writer, Ch, _MRef} = test_spawn(fun test_statistics_receiver/1),
+    {_Writer, Ch} = test_spawn(fun test_statistics_receiver/1),
     rabbit_channel:do(Ch, #'queue.declare'{}),
     QName = receive #'queue.declare_ok'{queue = Q0} ->
                     Q0
