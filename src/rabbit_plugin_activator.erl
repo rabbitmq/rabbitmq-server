@@ -51,6 +51,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    io:format("Activating RabbitMQ plugins ..."),
     %% Ensure Rabbit is loaded so we can access it's environment
     application:load(rabbit),
 
@@ -76,7 +77,7 @@ start() ->
                       AppList
               end,
     AppVersions = [determine_version(App) || App <- AllApps],
-    {rabbit, RabbitVersion} = proplists:lookup(rabbit, AppVersions),
+    RabbitVersion = proplists:get_value(rabbit, AppVersions),
 
     %% Build the overall release descriptor
     RDesc = {release,
@@ -129,8 +130,10 @@ start() ->
         ok    -> ok;
         error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
-    io:format("~n~w plugins activated.~n~n", [length(PluginApps)]),
-    [io:format("* ~w~n", [App]) || App <- PluginApps],
+    io:format("~n~w plugins activated:~n", [length(PluginApps)]),
+    [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
+     || App <- PluginApps],
+    io:nl(),
     halt(),
     ok.
 

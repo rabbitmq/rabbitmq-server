@@ -35,7 +35,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/6, do/2, do/3, shutdown/1]).
+-export([start_link/7, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([emit_stats/1, flush/1, flush_multiple_acks/1, confirm/2]).
@@ -44,7 +44,7 @@
          handle_info/2, handle_pre_hibernate/1]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
-             transaction_id, tx_participants, next_tag,
+             start_limiter_fun, transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
@@ -80,9 +80,11 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/6 ::
+-spec(start_link/7 ::
       (channel_number(), pid(), pid(), rabbit_access_control:username(),
-       rabbit_types:vhost(), pid()) -> rabbit_types:ok(pid())).
+       rabbit_types:vhost(), pid(),
+       fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -106,9 +108,10 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid) ->
-    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid,
-                                     Username, VHost, CollectorPid], []).
+start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
+           StartLimiterFun) ->
+    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid, Username,
+                                     VHost, CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -163,15 +166,16 @@ confirm(Pid, MsgSeqNo) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid]) ->
+init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
+      StartLimiterFun]) ->
     process_flag(trap_exit, true),
-    link(WriterPid),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{ state                   = starting,
                  channel                 = Channel,
                  reader_pid              = ReaderPid,
                  writer_pid              = WriterPid,
                  limiter_pid             = undefined,
+                 start_limiter_fun       = StartLimiterFun,
                  transaction_id          = none,
                  tx_participants         = sets:new(),
                  next_tag                = 1,
@@ -281,24 +285,19 @@ handle_cast({msg_sent_to_queues, MsgSeqNo, QPids}, State) ->
                           end, State, QPids)}.
 
 
-handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
-            State = #ch{writer_pid = WriterPid}) ->
-    State#ch.reader_pid ! {channel_exit, State#ch.channel, Reason},
-    {stop, normal, State};
-handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{qpid_to_msgs = QTM}) ->
-    case dict:find(QPid, QTM) of
-        {ok, Msgs} ->
-            S = gb_sets:fold(fun (MsgSeqNo, State0) ->
-                                     send_or_enqueue_ack(MsgSeqNo, State0)
-                             end, State, Msgs),
-            {noreply, S #ch {qpid_to_msgs = dict:erase(QPid, QTM)}};
-        error ->
-            erase_queue_stats(QPid),
-            {noreply, queue_blocked(QPid, State)}
-    end.
+    State1 = case dict:find(QPid, QTM) of
+               {ok, Msgs} ->
+                   S = gb_sets:fold(fun (MsgSeqNo, State0) ->
+                                            send_or_enqueue_ack(MsgSeqNo, State0)
+                                    end, State, Msgs),
+                   S #ch {qpid_to_msgs = dict:erase(QPid, QTM)};
+               error ->
+                   State
+             end,
+    erase_queue_stats(QPid),
+    {noreply, queue_blocked(QPid, State1)}.
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -310,8 +309,10 @@ terminate(_Reason, State = #ch{state = terminating}) ->
 terminate(Reason, State) ->
     Res = rollback_and_notify(State),
     case Reason of
-        normal -> ok = Res;
-        _      -> ok
+        normal            -> ok = Res;
+        shutdown          -> ok = Res;
+        {shutdown, _Term} -> ok = Res;
+        _                 -> ok
     end,
     terminate(State).
 
@@ -506,7 +507,7 @@ handle_method(_Method, _, #ch{state = starting}) ->
 
 handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
     ok = rollback_and_notify(State),
-    ok = rabbit_writer:send_command(WriterPid, #'channel.close_ok'{}),
+    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
     stop;
 
 handle_method(#'access.request'{},_, State) ->
@@ -1185,8 +1186,8 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
-start_limiter(State = #ch{unacked_message_q = UAMQ}) ->
-    {ok, LPid} = rabbit_limiter:start_link(self(), queue:len(UAMQ)),
+start_limiter(State = #ch{unacked_message_q = UAMQ, start_limiter_fun = SLF}) ->
+    {ok, LPid} = SLF(queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
 
@@ -1258,12 +1259,10 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
 
-terminate(State = #ch{writer_pid = WriterPid, limiter_pid = LimiterPid}) ->
+terminate(State) ->
     stop_ack_timer(State),
     pg_local:leave(rabbit_channels, self()),
-    rabbit_event:notify(channel_closed, [{pid, self()}]),
-    rabbit_writer:shutdown(WriterPid),
-    rabbit_limiter:shutdown(LimiterPid).
+    rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -1292,11 +1291,9 @@ maybe_incr_stats(QXIncs, Measure, #ch{stats_timer = StatsTimer}) ->
     end.
 
 incr_stats({QPid, _} = QX, Inc, Measure) ->
-    io:format("incr_stats for ~p~n", [QPid]),
     maybe_monitor(QPid),
     update_measures(queue_exchange_stats, QX, Inc, Measure);
 incr_stats(QPid, Inc, Measure) when is_pid(QPid) ->
-    io:format("incr_stats for ~p~n", [QPid]),
     maybe_monitor(QPid),
     update_measures(queue_stats, QPid, Inc, Measure);
 incr_stats(X, Inc, Measure) ->

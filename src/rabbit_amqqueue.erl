@@ -197,7 +197,8 @@ find_durable_queues() ->
 
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
-    [Q || Q <- Qs, gen_server2:call(Q#amqqueue.pid, {init, true}) == Q].
+    [Q || Q <- Qs,
+          gen_server2:call(Q#amqqueue.pid, {init, true}, infinity) == Q].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),

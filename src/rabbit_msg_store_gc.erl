@@ -56,7 +56,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/4 :: (file:filename(), any(), atom(), ets:tid()) ->
-                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
+                           rabbit_types:ok_pid_or_error()).
 -spec(gc/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
 -spec(no_readers/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(stop/1 :: (pid()) -> 'ok').

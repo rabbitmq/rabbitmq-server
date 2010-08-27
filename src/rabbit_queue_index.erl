@@ -259,8 +259,8 @@ publish(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Guid]),
-    State2 = State#qistate { unsynced_guids =
-                                 [Guid | State#qistate.unsynced_guids] },
+    State2 = State1 #qistate { unsynced_guids =
+                                   [Guid | State1#qistate.unsynced_guids] },
     maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State2)).
 
 deliver(SeqIds, State) ->
@@ -273,7 +273,7 @@ sync([], State) ->
     State;
 sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
     State;
-sync(SeqIds, State = #qistate { journal_handle = JournalHdl,
+sync(_SeqIds, State = #qistate { journal_handle = JournalHdl,
                                  on_sync = OnSyncFun }) ->
     %% The SeqIds here contains the SeqId of every publish and ack in
     %% the transaction. Ideally we should go through these seqids and

@@ -118,7 +118,7 @@ start() ->
                {rabbit_tcp_client_sup,
                 {tcp_client_sup, start_link,
                  [{local, rabbit_tcp_client_sup},
-                  {rabbit_reader,start_link,[]}]},
+                  {rabbit_connection_sup,start_link,[]}]},
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok.
 
@@ -204,10 +204,10 @@ on_node_down(Node) ->
     ok = mnesia:dirty_delete(rabbit_listener, Node).
 
 start_client(Sock, SockTransform) ->
-    {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
-    ok = rabbit_net:controlling_process(Sock, Child),
-    Child ! {go, Sock, SockTransform},
-    Child.
+    {ok, _Child, Reader} = supervisor:start_child(rabbit_tcp_client_sup, []),
+    ok = rabbit_net:controlling_process(Sock, Reader),
+    Reader ! {go, Sock, SockTransform},
+    Reader.
 
 start_client(Sock) ->
     start_client(Sock, fun (S) -> {ok, S} end).
@@ -230,8 +230,9 @@ start_ssl_client(SslOpts, Sock) ->
       end).
 
 connections() ->
-    [Pid || {_, Pid, _, _} <- supervisor:which_children(
-                                rabbit_tcp_client_sup)].
+    [rabbit_connection_sup:reader(ConnSup) ||
+        {_, ConnSup, supervisor, _}
+            <- supervisor:which_children(rabbit_tcp_client_sup)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
@@ -242,8 +243,7 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
-    case lists:any(fun ({_, ChildPid, _, _}) -> ChildPid =:= Pid end,
-                   supervisor:which_children(rabbit_tcp_client_sup)) of
+    case lists:member(Pid, connections()) of
         true  -> rabbit_reader:shutdown(Pid, Explanation);
         false -> throw({error, {not_a_connection_pid, Pid}})
     end.

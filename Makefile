@@ -4,7 +4,6 @@ RABBITMQ_NODENAME ?= rabbit
 RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
-RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 
 DEPS_FILE=deps.mk
 SOURCE_DIR=src
@@ -147,8 +146,7 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
-	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)"
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
@@ -239,7 +237,7 @@ distclean: clean
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
 	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	    xmlto man -o $(DOCS_DIR) $$opt $<.tmp && \
+	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
 	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 

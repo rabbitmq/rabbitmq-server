@@ -42,7 +42,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(stop/1 :: (pid()) -> 'ok').
 -spec(fork/1 :: (pid()) -> 'ok').
 -spec(finish/1 :: (pid()) -> 'ok').

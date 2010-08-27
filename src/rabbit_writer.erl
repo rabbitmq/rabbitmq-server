@@ -33,9 +33,9 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([start/4, start_link/4, shutdown/1, mainloop/1]).
--export([send_command/2, send_command/3, send_command_and_signal_back/3,
-         send_command_and_signal_back/4, send_command_and_notify/5]).
+-export([start/5, start_link/5, mainloop/2, mainloop1/2]).
+-export([send_command/2, send_command/3, send_command_sync/2,
+         send_command_sync/3, send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
 
 -import(gen_tcp).
@@ -48,24 +48,23 @@
 
 -ifdef(use_specs).
 
--spec(start/4 ::
+-spec(start/5 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol())
+         non_neg_integer(), rabbit_types:protocol(), pid())
         -> rabbit_types:ok(pid())).
--spec(start_link/4 ::
+-spec(start_link/5 ::
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol())
+         non_neg_integer(), rabbit_types:protocol(), pid())
         -> rabbit_types:ok(pid())).
 -spec(send_command/2 ::
         (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(send_command/3 ::
         (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
         -> 'ok').
--spec(send_command_and_signal_back/3 ::
-        (pid(), rabbit_framing:amqp_method(), pid()) -> 'ok').
--spec(send_command_and_signal_back/4 ::
-        (pid(), rabbit_framing:amqp_method(), rabbit_types:content(), pid())
-        -> 'ok').
+-spec(send_command_sync/2 ::
+        (pid(), rabbit_framing:amqp_method()) -> 'ok').
+-spec(send_command_sync/3 ::
+        (pid(), rabbit_framing:amqp_method(), rabbit_types:content()) -> 'ok').
 -spec(send_command_and_notify/5 ::
         (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
          rabbit_types:content())
@@ -84,23 +83,35 @@
 
 %%----------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax, Protocol) ->
-    {ok, spawn(?MODULE, mainloop, [#wstate{sock = Sock,
-                                           channel = Channel,
-                                           frame_max = FrameMax,
-                                           protocol = Protocol}])}.
-
-start_link(Sock, Channel, FrameMax, Protocol) ->
-    {ok, spawn_link(?MODULE, mainloop, [#wstate{sock = Sock,
+start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
+    {ok,
+     proc_lib:spawn(?MODULE, mainloop, [ReaderPid,
+                                        #wstate{sock = Sock,
                                                 channel = Channel,
                                                 frame_max = FrameMax,
                                                 protocol = Protocol}])}.
 
-mainloop(State) ->
+start_link(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
+    {ok,
+     proc_lib:spawn_link(?MODULE, mainloop, [ReaderPid,
+                                             #wstate{sock = Sock,
+                                                     channel = Channel,
+                                                     frame_max = FrameMax,
+                                                     protocol = Protocol}])}.
+
+mainloop(ReaderPid, State) ->
+    try
+        mainloop1(ReaderPid, State)
+    catch
+        exit:Error -> ReaderPid ! {channel_exit, #wstate.channel, Error}
+    end,
+    done.
+
+mainloop1(ReaderPid, State) ->
     receive
-        Message -> ?MODULE:mainloop(handle_message(Message, State))
+        Message -> ?MODULE:mainloop1(ReaderPid, handle_message(Message, State))
     after ?HIBERNATE_AFTER ->
-            erlang:hibernate(?MODULE, mainloop, [State])
+            erlang:hibernate(?MODULE, mainloop, [ReaderPid, State])
     end.
 
 handle_message({send_command, MethodRecord},
@@ -116,20 +127,20 @@ handle_message({send_command, MethodRecord, Content},
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
                                      Content, FrameMax, Protocol),
     State;
-handle_message({send_command_and_signal_back, MethodRecord, Parent},
+handle_message({send_command_sync, From, MethodRecord},
                State = #wstate{sock = Sock, channel = Channel,
                                protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
-    Parent ! rabbit_writer_send_command_signal,
+    gen_server:reply(From, ok),
     State;
-handle_message({send_command_and_signal_back, MethodRecord, Content, Parent},
+handle_message({send_command_sync, From, {MethodRecord, Content}},
                State = #wstate{sock = Sock,
                                channel = Channel,
                                frame_max = FrameMax,
                                protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
                                      Content, FrameMax, Protocol),
-    Parent ! rabbit_writer_send_command_signal,
+    gen_server:reply(From, ok),
     State;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
                State = #wstate{sock = Sock,
@@ -144,8 +155,6 @@ handle_message({inet_reply, _, ok}, State) ->
     State;
 handle_message({inet_reply, _, Status}, _State) ->
     exit({writer, send_failed, Status});
-handle_message(shutdown, _State) ->
-    exit(normal);
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
 
@@ -159,22 +168,21 @@ send_command(W, MethodRecord, Content) ->
     W ! {send_command, MethodRecord, Content},
     ok.
 
-send_command_and_signal_back(W, MethodRecord, Parent) ->
-    W ! {send_command_and_signal_back, MethodRecord, Parent},
-    ok.
+send_command_sync(W, MethodRecord) ->
+    call(W, send_command_sync, MethodRecord).
 
-send_command_and_signal_back(W, MethodRecord, Content, Parent) ->
-    W ! {send_command_and_signal_back, MethodRecord, Content, Parent},
-    ok.
+send_command_sync(W, MethodRecord, Content) ->
+    call(W, send_command_sync, {MethodRecord, Content}).
 
 send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
     ok.
 
-shutdown(W) ->
-    W ! shutdown,
-    rabbit_misc:unlink_and_capture_exit(W),
-    ok.
+%---------------------------------------------------------------------------
+
+call(Pid, Label, Msg) ->
+    {ok, Res} = gen:call(Pid, Label, Msg, infinity),
+    Res.
 
 %---------------------------------------------------------------------------
 

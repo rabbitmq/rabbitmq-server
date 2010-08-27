@@ -116,13 +116,13 @@
 %% do not need to worry about their handles being closed by the server
 %% - reopening them when necessary is handled transparently.
 %%
-%% The server also supports obtain and release_on_death. obtain/0
-%% blocks until a file descriptor is available. release_on_death/1
-%% takes a pid and monitors the pid, reducing the count by 1 when the
-%% pid dies. Thus the assumption is that obtain/0 is called first, and
-%% when that returns, release_on_death/1 is called with the pid who
-%% "owns" the file descriptor. This is, for example, used to track the
-%% use of file descriptors through network sockets.
+%% The server also supports obtain and transfer. obtain/0 blocks until
+%% a file descriptor is available. transfer/1 is transfers ownership
+%% of a file descriptor between processes. It is non-blocking.
+%%
+%% The callers of register_callback/3, obtain/0, and the argument of
+%% transfer/1 are monitored, reducing the count of handles in use
+%% appropriately when the processes terminate.
 
 -behaviour(gen_server).
 
@@ -130,16 +130,26 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([release_on_death/1, obtain/0]).
+-export([obtain/0, transfer/1, set_limit/1, get_limit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
--define(FILE_HANDLES_LIMIT_WINDOWS, 10000000).
+
+%% Googling around suggests that Windows has a limit somewhere around
+%% 16M, eg
+%% http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
+%% however, it turns out that's only available through the win32
+%% API. Via the C Runtime, we have just 512:
+%% http://msdn.microsoft.com/en-us/library/6e3b887c%28VS.80%29.aspx
+-define(FILE_HANDLES_LIMIT_WINDOWS, 512).
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
+
+-define(OBTAIN_LIMIT(LIMIT), trunc((LIMIT * 0.9) - 2)).
+-define(CLIENT_ETS_TABLE, ?MODULE).
 
 %%----------------------------------------------------------------------------
 
@@ -168,11 +178,29 @@
 -record(fhc_state,
         { elders,
           limit,
-          count,
-          obtains,
-          callbacks,
-          client_mrefs,
+          open_count,
+          open_pending,
+          obtain_limit,
+          obtain_count,
+          obtain_pending,
+          clients,
           timer_ref
+        }).
+
+-record(cstate,
+        { pid,
+          callback,
+          opened,
+          obtained,
+          blocked,
+          pending_closes
+        }).
+
+-record(pending,
+        { kind,
+          pid,
+          requested,
+          from
         }).
 
 %%----------------------------------------------------------------------------
@@ -182,8 +210,8 @@
 -ifdef(use_specs).
 
 -type(ref() :: any()).
--type(ok_or_error() :: rabbit_types:ok_or_error(any())).
--type(val_or_error(T) :: rabbit_types:ok_or_error2(T, any())).
+-type(ok_or_error() :: 'ok' | {'error', any()}).
+-type(val_or_error(T) :: {'ok', T} | {'error', any()}).
 -type(position() :: ('bof' | 'eof' | non_neg_integer() |
                      {('bof' |'eof'), non_neg_integer()} |
                      {'cur', integer()})).
@@ -210,8 +238,10 @@
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
--spec(release_on_death/1 :: (pid()) -> 'ok').
 -spec(obtain/0 :: () -> 'ok').
+-spec(transfer/1 :: (pid()) -> 'ok').
+-spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
+-spec(get_limit/0 :: () -> non_neg_integer()).
 
 -endif.
 
@@ -238,9 +268,9 @@ open(Path, Mode, Options) ->
     IsWriter = is_writer(Mode1),
     case IsWriter andalso HasWriter of
         true  -> {error, writer_exists};
-        false -> Ref = make_ref(),
-                 case open1(Path1, Mode1, Options, Ref, bof, new) of
-                     {ok, _Handle} ->
+        false -> {ok, Ref} = new_closed_handle(Path1, Mode1, Options),
+                 case get_or_reopen([{Ref, new}]) of
+                     {ok, [_Handle1]} ->
                          RCount1 = case is_reader(Mode1) of
                                        true  -> RCount + 1;
                                        false -> RCount
@@ -251,6 +281,7 @@ open(Path, Mode, Options) ->
                                            has_writer = HasWriter1 }),
                          {ok, Ref};
                      Error ->
+                         erase({Ref, fhc_handle}),
                          Error
                  end
     end.
@@ -301,7 +332,7 @@ append(Ref, Data) ->
                       Size1 = Size + iolist_size(Data),
                       Handle2 = Handle1 #handle { write_buffer = WriteBuffer1,
                                                   write_buffer_size = Size1 },
-                      case Limit /= infinity andalso Size1 > Limit of
+                      case Limit =/= infinity andalso Size1 > Limit of
                           true  -> {Result, Handle3} = write_buffer(Handle2),
                                    {Result, [Handle3]};
                           false -> {ok, [Handle2]}
@@ -375,7 +406,8 @@ copy(Src, Dest, Count) ->
                   {ok, Count1} = Result1 ->
                       {Result1,
                        [SHandle #handle { offset = SOffset + Count1 },
-                        DHandle #handle { offset = DOffset + Count1 }]};
+                        DHandle #handle { offset = DOffset + Count1,
+                                          is_dirty = true }]};
                   Error ->
                       {Error, [SHandle, DHandle]}
               end;
@@ -420,29 +452,29 @@ set_maximum_since_use(MaximumAge) ->
     case lists:foldl(
            fun ({{Ref, fhc_handle},
                  Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
-                   Age = timer:now_diff(Now, Then),
-                   case Hdl /= closed andalso Age >= MaximumAge of
-                       true  -> {Res, Handle1} = soft_close(Handle),
-                                case Res of
-                                    ok -> put({Ref, fhc_handle}, Handle1),
-                                          false;
-                                    _  -> put_handle(Ref, Handle1),
-                                          Rep
-                                end;
+                   case Hdl =/= closed andalso
+                       timer:now_diff(Now, Then) >= MaximumAge of
+                       true  -> soft_close(Ref, Handle) orelse Rep;
                        false -> Rep
                    end;
                (_KeyValuePair, Rep) ->
                    Rep
-           end, true, get()) of
-        true  -> age_tree_change(), ok;
-        false -> ok
+           end, false, get()) of
+        false -> age_tree_change(), ok;
+        true  -> ok
     end.
 
-release_on_death(Pid) when is_pid(Pid) ->
-    gen_server:cast(?SERVER, {release_on_death, Pid}).
-
 obtain() ->
-    gen_server:call(?SERVER, obtain, infinity).
+    gen_server:call(?SERVER, {obtain, self()}, infinity).
+
+transfer(Pid) ->
+    gen_server:cast(?SERVER, {transfer, self(), Pid}).
+
+set_limit(Limit) ->
+    gen_server:call(?SERVER, {set_limit, Limit}, infinity).
+
+get_limit() ->
+    gen_server:call(?SERVER, get_limit, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -459,18 +491,9 @@ append_to_write(Mode) ->
     end.
 
 with_handles(Refs, Fun) ->
-    ResHandles = lists:foldl(
-                   fun (Ref, {ok, HandlesAcc}) ->
-                           case get_or_reopen(Ref) of
-                               {ok, Handle} -> {ok, [Handle | HandlesAcc]};
-                               Error        -> Error
-                           end;
-                       (_Ref, Error) ->
-                           Error
-                   end, {ok, []}, Refs),
-    case ResHandles of
+    case get_or_reopen([{Ref, reopen} || Ref <- Refs]) of
         {ok, Handles} ->
-            case Fun(lists:reverse(Handles)) of
+            case Fun(Handles) of
                 {Result, Handles1} when is_list(Handles1) ->
                     lists:zipwith(fun put_handle/2, Refs, Handles1),
                     Result;
@@ -499,36 +522,94 @@ with_flushed_handles(Refs, Fun) ->
               end
       end).
 
-get_or_reopen(Ref) ->
-    case get({Ref, fhc_handle}) of
-        undefined ->
-            {error, not_open, Ref};
-        #handle { hdl = closed, offset = Offset,
-                  path = Path, mode = Mode, options = Options } ->
-            open1(Path, Mode, Options, Ref, Offset, reopen);
-        Handle ->
-            {ok, Handle}
+get_or_reopen(RefNewOrReopens) ->
+    case partition_handles(RefNewOrReopens) of
+        {OpenHdls, []} ->
+            {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
+        {OpenHdls, ClosedHdls} ->
+            Oldest = oldest(get_age_tree(), fun () -> now() end),
+            case gen_server:call(?SERVER, {open, self(), length(ClosedHdls),
+                                           Oldest}, infinity) of
+                ok ->
+                    case reopen(ClosedHdls) of
+                        {ok, RefHdls}  -> sort_handles(RefNewOrReopens,
+                                                       OpenHdls, RefHdls, []);
+                        Error          -> Error
+                    end;
+                close ->
+                    [soft_close(Ref, Handle) ||
+                        {{Ref, fhc_handle}, Handle = #handle { hdl = Hdl }} <-
+                            get(),
+                        Hdl =/= closed],
+                    get_or_reopen(RefNewOrReopens)
+            end
     end.
+
+reopen(ClosedHdls) -> reopen(ClosedHdls, get_age_tree(), []).
+
+reopen([], Tree, RefHdls) ->
+    put_age_tree(Tree),
+    {ok, lists:reverse(RefHdls)};
+reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
+                                              path         = Path,
+                                              mode         = Mode,
+                                              offset       = Offset,
+                                              last_used_at = undefined }} |
+        RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
+    case file:open(Path, case NewOrReopen of
+                             new    -> Mode;
+                             reopen -> [read | Mode]
+                         end) of
+        {ok, Hdl} ->
+            Now = now(),
+            {{ok, Offset1}, Handle1} =
+                maybe_seek(Offset, Handle #handle { hdl          = Hdl,
+                                                    offset       = 0,
+                                                    last_used_at = Now }),
+            Handle2 = Handle1 #handle { trusted_offset = Offset1 },
+            put({Ref, fhc_handle}, Handle2),
+            reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
+                   [{Ref, Handle2} | RefHdls]);
+        Error ->
+            %% NB: none of the handles in ToOpen are in the age tree
+            Oldest = oldest(Tree, fun () -> undefined end),
+            [gen_server:cast(?SERVER, {close, self(), Oldest}) || _ <- ToOpen],
+            put_age_tree(Tree),
+            Error
+    end.
+
+partition_handles(RefNewOrReopens) ->
+    lists:foldr(
+      fun ({Ref, NewOrReopen}, {Open, Closed}) ->
+              case get({Ref, fhc_handle}) of
+                  #handle { hdl = closed } = Handle ->
+                      {Open, [{Ref, NewOrReopen, Handle} | Closed]};
+                  #handle {} = Handle ->
+                      {[{Ref, Handle} | Open], Closed}
+              end
+      end, {[], []}, RefNewOrReopens).
+
+sort_handles([], [], [], Acc) ->
+    {ok, lists:reverse(Acc)};
+sort_handles([{Ref, _} | RefHdls], [{Ref, Handle} | RefHdlsA], RefHdlsB, Acc) ->
+    sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]);
+sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
+    sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]).
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
     Now = now(),
     age_tree_update(Then, Now, Ref),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
-with_age_tree(Fun) ->
-    put(fhc_age_tree, Fun(case get(fhc_age_tree) of
-                              undefined -> gb_trees:empty();
-                              AgeTree   -> AgeTree
-                          end)).
+with_age_tree(Fun) -> put_age_tree(Fun(get_age_tree())).
 
-age_tree_insert(Now, Ref) ->
-    with_age_tree(
-      fun (Tree) ->
-              Tree1 = gb_trees:insert(Now, Ref, Tree),
-              {Oldest, _Ref} = gb_trees:smallest(Tree1),
-              gen_server:cast(?SERVER, {open, self(), Oldest}),
-              Tree1
-      end).
+get_age_tree() ->
+    case get(fhc_age_tree) of
+        undefined -> gb_trees:empty();
+        AgeTree   -> AgeTree
+    end.
+
+put_age_tree(Tree) -> put(fhc_age_tree, Tree).
 
 age_tree_update(Then, Now, Ref) ->
     with_age_tree(
@@ -540,13 +621,7 @@ age_tree_delete(Then) ->
     with_age_tree(
       fun (Tree) ->
               Tree1 = gb_trees:delete_any(Then, Tree),
-              Oldest = case gb_trees:is_empty(Tree1) of
-                           true ->
-                               undefined;
-                           false ->
-                               {Oldest1, _Ref} = gb_trees:smallest(Tree1),
-                               Oldest1
-                       end,
+              Oldest = oldest(Tree1, fun () -> undefined end),
               gen_server:cast(?SERVER, {close, self(), Oldest}),
               Tree1
       end).
@@ -562,48 +637,53 @@ age_tree_change() ->
               Tree
       end).
 
-open1(Path, Mode, Options, Ref, Offset, NewOrReopen) ->
-    Mode1 = case NewOrReopen of
-                new    -> Mode;
-                reopen -> [read | Mode]
-            end,
-    case file:open(Path, Mode1) of
-        {ok, Hdl} ->
-            WriteBufferSize =
-                case proplists:get_value(write_buffer, Options, unbuffered) of
-                    unbuffered           -> 0;
-                    infinity             -> infinity;
-                    N when is_integer(N) -> N
-                end,
-            Now = now(),
-            Handle = #handle { hdl                     = Hdl,
-                               offset                  = 0,
-                               trusted_offset          = 0,
-                               is_dirty                = false,
-                               write_buffer_size       = 0,
-                               write_buffer_size_limit = WriteBufferSize,
-                               write_buffer            = [],
-                               at_eof                  = false,
-                               path                    = Path,
-                               mode                    = Mode,
-                               options                 = Options,
-                               is_write                = is_writer(Mode),
-                               is_read                 = is_reader(Mode),
-                               last_used_at            = Now },
-            {{ok, Offset1}, Handle1} = maybe_seek(Offset, Handle),
-            Handle2 = Handle1 #handle { trusted_offset = Offset1 },
-            put({Ref, fhc_handle}, Handle2),
-            age_tree_insert(Now, Ref),
-            {ok, Handle2};
-        {error, Reason} ->
-            {error, Reason}
+oldest(Tree, DefaultFun) ->
+    case gb_trees:is_empty(Tree) of
+        true  -> DefaultFun();
+        false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
+                 Oldest
+    end.
+
+new_closed_handle(Path, Mode, Options) ->
+    WriteBufferSize =
+        case proplists:get_value(write_buffer, Options, unbuffered) of
+            unbuffered           -> 0;
+            infinity             -> infinity;
+            N when is_integer(N) -> N
+        end,
+    Ref = make_ref(),
+    put({Ref, fhc_handle}, #handle { hdl                     = closed,
+                                     offset                  = 0,
+                                     trusted_offset          = 0,
+                                     is_dirty                = false,
+                                     write_buffer_size       = 0,
+                                     write_buffer_size_limit = WriteBufferSize,
+                                     write_buffer            = [],
+                                     at_eof                  = false,
+                                     path                    = Path,
+                                     mode                    = Mode,
+                                     options                 = Options,
+                                     is_write                = is_writer(Mode),
+                                     is_read                 = is_reader(Mode),
+                                     last_used_at            = undefined }),
+    {ok, Ref}.
+
+soft_close(Ref, Handle) ->
+    {Res, Handle1} = soft_close(Handle),
+    case Res of
+        ok -> put({Ref, fhc_handle}, Handle1),
+              true;
+        _  -> put_handle(Ref, Handle1),
+              false
     end.
 
 soft_close(Handle = #handle { hdl = closed }) ->
     {ok, Handle};
 soft_close(Handle) ->
     case write_buffer(Handle) of
-        {ok, #handle { hdl = Hdl, offset = Offset, is_dirty = IsDirty,
+        {ok, #handle { hdl         = Hdl,
+                       offset      = Offset,
+                       is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
                      true  -> file:sync(Hdl);
@@ -611,8 +691,10 @@ soft_close(Handle) ->
                  end,
             ok = file:close(Hdl),
             age_tree_delete(Then),
-            {ok, Handle1 #handle { hdl = closed, trusted_offset = Offset,
-                                   is_dirty = false }};
+            {ok, Handle1 #handle { hdl            = closed,
+                                   trusted_offset = Offset,
+                                   is_dirty       = false,
+                                   last_used_at   = undefined }};
         {_Error, _Handle} = Result ->
             Result
     end.
@@ -701,114 +783,303 @@ init([]) ->
                 _ ->
                     ulimit()
             end,
-    error_logger:info_msg("Limiting to approx ~p file handles~n", [Limit]),
-    {ok, #fhc_state { elders = dict:new(), limit = Limit, count = 0,
-                      obtains = [], callbacks = dict:new(),
-                      client_mrefs = dict:new(), timer_ref = undefined }}.
+    ObtainLimit = obtain_limit(Limit),
+    error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
+                          [Limit, ObtainLimit]),
+    Clients = ets:new(?CLIENT_ETS_TABLE, [set, private, {keypos, #cstate.pid}]),
+    {ok, #fhc_state { elders         = dict:new(),
+                      limit          = Limit,
+                      open_count     = 0,
+                      open_pending   = pending_new(),
+                      obtain_limit   = ObtainLimit,
+                      obtain_count   = 0,
+                      obtain_pending = pending_new(),
+                      clients        = Clients,
+                      timer_ref      = undefined }}.
 
-handle_call(obtain, From, State = #fhc_state { count = Count }) ->
-    State1 = #fhc_state { count = Count1, limit = Limit, obtains = Obtains } =
-        maybe_reduce(State #fhc_state { count = Count + 1 }),
-    case Limit /= infinity andalso Count1 >= Limit of
-        true  -> {noreply, State1 #fhc_state { obtains = [From | Obtains],
-                                               count = Count1 - 1 }};
-        false -> {reply, ok, State1}
-    end.
+handle_call({open, Pid, Requested, EldestUnusedSince}, From,
+            State = #fhc_state { open_count   = Count,
+                                 open_pending = Pending,
+                                 elders       = Elders,
+                                 clients      = Clients })
+  when EldestUnusedSince =/= undefined ->
+    Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
+    Item = #pending { kind      = open,
+                      pid       = Pid,
+                      requested = Requested,
+                      from      = From },
+    ok = track_client(Pid, Clients),
+    State1 = State #fhc_state { elders = Elders1 },
+    case needs_reduce(State1 #fhc_state { open_count = Count + Requested }) of
+        true  -> case ets:lookup(Clients, Pid) of
+                     [#cstate { opened = 0 }] ->
+                         true = ets:update_element(
+                                  Clients, Pid, {#cstate.blocked, true}),
+                         {noreply,
+                          reduce(State1 #fhc_state {
+                                   open_pending = pending_in(Item, Pending) })};
+                     [#cstate { opened = Opened }] ->
+                         true = ets:update_element(
+                                  Clients, Pid,
+                                  {#cstate.pending_closes, Opened}),
+                         {reply, close, State1}
+                 end;
+        false -> {noreply, run_pending_item(Item, State1)}
+    end;
+
+handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
+                                                      obtain_count   = Count,
+                                                      obtain_pending = Pending,
+                                                      clients = Clients })
+  when Limit =/= infinity andalso Count >= Limit ->
+    ok = track_client(Pid, Clients),
+    true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
+    Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
+    {noreply, State #fhc_state { obtain_pending = pending_in(Item, Pending) }};
+handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
+                                                      obtain_pending = Pending,
+                                                      clients = Clients }) ->
+    Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
+    ok = track_client(Pid, Clients),
+    case needs_reduce(State #fhc_state { obtain_count = Count + 1 }) of
+        true ->
+            true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
+            {noreply, reduce(State #fhc_state {
+                               obtain_pending = pending_in(Item, Pending) })};
+        false ->
+            {noreply, run_pending_item(Item, State)}
+    end;
+handle_call({set_limit, Limit}, _From, State) ->
+    {reply, ok, maybe_reduce(
+                  process_pending(State #fhc_state {
+                                    limit        = Limit,
+                                    obtain_limit = obtain_limit(Limit) }))};
+handle_call(get_limit, _From, State = #fhc_state { limit = Limit }) ->
+    {reply, Limit, State}.
 
 handle_cast({register_callback, Pid, MFA},
-            State = #fhc_state { callbacks = Callbacks }) ->
-    {noreply, ensure_mref(
-                Pid, State #fhc_state {
-                       callbacks = dict:store(Pid, MFA, Callbacks) })};
+            State = #fhc_state { clients = Clients }) ->
+    ok = track_client(Pid, Clients),
+    true = ets:update_element(Clients, Pid, {#cstate.callback, MFA}),
+    {noreply, State};
 
-handle_cast({open, Pid, EldestUnusedSince}, State =
-            #fhc_state { elders = Elders, count = Count }) ->
-    Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
-    {noreply, maybe_reduce(
-                ensure_mref(Pid, State #fhc_state { elders = Elders1,
-                                                    count = Count + 1 }))};
-
-handle_cast({update, Pid, EldestUnusedSince}, State =
-            #fhc_state { elders = Elders }) ->
+handle_cast({update, Pid, EldestUnusedSince},
+            State = #fhc_state { elders = Elders })
+  when EldestUnusedSince =/= undefined ->
     Elders1 = dict:store(Pid, EldestUnusedSince, Elders),
     %% don't call maybe_reduce from here otherwise we can create a
     %% storm of messages
-    {noreply, ensure_mref(Pid, State #fhc_state { elders = Elders1 })};
+    {noreply, State #fhc_state { elders = Elders1 }};
 
-handle_cast({close, Pid, EldestUnusedSince}, State =
-            #fhc_state { elders = Elders, count = Count }) ->
+handle_cast({close, Pid, EldestUnusedSince},
+            State = #fhc_state { elders = Elders, clients = Clients }) ->
     Elders1 = case EldestUnusedSince of
                   undefined -> dict:erase(Pid, Elders);
                   _         -> dict:store(Pid, EldestUnusedSince, Elders)
               end,
-    {noreply, process_obtains(
-                ensure_mref(Pid, State #fhc_state { elders = Elders1,
-                                                    count = Count - 1 }))};
+    ets:update_counter(Clients, Pid, {#cstate.pending_closes, -1, 0, 0}),
+    {noreply, process_pending(
+                update_counts(open, Pid, -1,
+                              State #fhc_state { elders = Elders1 }))};
+
+handle_cast({transfer, FromPid, ToPid}, State) ->
+    ok = track_client(ToPid, State#fhc_state.clients),
+    {noreply, process_pending(
+                update_counts(obtain, ToPid, +1,
+                              update_counts(obtain, FromPid, -1, State)))};
 
 handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })};
+    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })}.
 
-handle_cast({release_on_death, Pid}, State) ->
-    _MRef = erlang:monitor(process, Pid),
-    {noreply, State}.
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
+            State = #fhc_state { elders         = Elders,
+                                 open_count     = OpenCount,
+                                 open_pending   = OpenPending,
+                                 obtain_count   = ObtainCount,
+                                 obtain_pending = ObtainPending,
+                                 clients        = Clients }) ->
+    [#cstate { opened = Opened, obtained = Obtained }] =
+        ets:lookup(Clients, Pid),
+    true = ets:delete(Clients, Pid),
+    FilterFun = fun (#pending { pid = Pid1 }) -> Pid1 =/= Pid end,
+    {noreply, process_pending(
+                State #fhc_state {
+                  open_count     = OpenCount - Opened,
+                  open_pending   = filter_pending(FilterFun, OpenPending),
+                  obtain_count   = ObtainCount - Obtained,
+                  obtain_pending = filter_pending(FilterFun, ObtainPending),
+                  elders         = dict:erase(Pid, Elders) })}.
 
-handle_info({'DOWN', MRef, process, Pid, _Reason}, State =
-                #fhc_state { count = Count, callbacks = Callbacks,
-                             client_mrefs = ClientMRefs, elders = Elders }) ->
-    {noreply, process_obtains(
-                case dict:find(Pid, ClientMRefs) of
-                    {ok, MRef} -> State #fhc_state {
-                                    elders       = dict:erase(Pid, Elders),
-                                    client_mrefs = dict:erase(Pid, ClientMRefs),
-                                    callbacks    = dict:erase(Pid, Callbacks) };
-                    _          -> State #fhc_state { count = Count - 1 }
-                end)}.
-
-terminate(_Reason, State) ->
+terminate(_Reason, State = #fhc_state { clients = Clients }) ->
+    ets:delete(Clients),
     State.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
+%% pending queue abstraction helpers
+%%----------------------------------------------------------------------------
+
+queue_fold(Fun, Init, Q) ->
+    case queue:out(Q) of
+        {empty, _Q}      -> Init;
+        {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
+    end.
+
+filter_pending(Fun, {Count, Queue}) ->
+    {Delta, Queue1} =
+        queue_fold(fun (Item, {DeltaN, QueueN}) ->
+                           case Fun(Item) of
+                               true  -> {DeltaN, queue:in(Item, QueueN)};
+                               false -> {DeltaN - requested(Item), QueueN}
+                           end
+                   end, {0, queue:new()}, Queue),
+    {Count + Delta, Queue1}.
+
+pending_new() ->
+    {0, queue:new()}.
+
+pending_in(Item = #pending { requested = Requested }, {Count, Queue}) ->
+    {Count + Requested, queue:in(Item, Queue)}.
+
+pending_out({0, _Queue} = Pending) ->
+    {empty, Pending};
+pending_out({N, Queue}) ->
+    {{value, #pending { requested = Requested }} = Result, Queue1} =
+        queue:out(Queue),
+    {Result, {N - Requested, Queue1}}.
+
+pending_count({Count, _Queue}) ->
+    Count.
+
+pending_is_empty({0, _Queue}) ->
+    true;
+pending_is_empty({_N, _Queue}) ->
+    false.
+
+%%----------------------------------------------------------------------------
 %% server helpers
 %%----------------------------------------------------------------------------
 
-process_obtains(State = #fhc_state { obtains = [] }) ->
-    State;
-process_obtains(State = #fhc_state { limit = Limit, count = Count })
-  when Limit /= infinity andalso Count >= Limit ->
-    State;
-process_obtains(State = #fhc_state { limit = Limit, count = Count,
-                                     obtains = Obtains }) ->
-    ObtainsLen = length(Obtains),
-    ObtainableLen = lists:min([ObtainsLen, Limit - Count]),
-    Take = ObtainsLen - ObtainableLen,
-    {ObtainsNew, ObtainableRev} = lists:split(Take, Obtains),
-    [gen_server:reply(From, ok) || From <- ObtainableRev],
-    State #fhc_state { count = Count + ObtainableLen, obtains = ObtainsNew }.
+obtain_limit(infinity) -> infinity;
+obtain_limit(Limit)    -> case ?OBTAIN_LIMIT(Limit) of
+                              OLimit when OLimit < 0 -> 0;
+                              OLimit                 -> OLimit
+                          end.
 
-maybe_reduce(State = #fhc_state { limit = Limit, count = Count, elders = Elders,
-                                  callbacks = Callbacks, timer_ref = TRef })
-  when Limit /= infinity andalso Count >= Limit ->
+requested({_Kind, _Pid, Requested, _From}) ->
+    Requested.
+
+process_pending(State = #fhc_state { limit = infinity }) ->
+    State;
+process_pending(State) ->
+    process_open(process_obtain(State)).
+
+process_open(State = #fhc_state { limit        = Limit,
+                                  open_pending = Pending,
+                                  open_count   = OpenCount,
+                                  obtain_count = ObtainCount }) ->
+    {Pending1, State1} =
+        process_pending(Pending, Limit - (ObtainCount + OpenCount), State),
+    State1 #fhc_state { open_pending = Pending1 }.
+
+process_obtain(State = #fhc_state { limit          = Limit,
+                                    obtain_pending = Pending,
+                                    obtain_limit   = ObtainLimit,
+                                    obtain_count   = ObtainCount,
+                                    open_count     = OpenCount }) ->
+    Quota = lists:min([ObtainLimit - ObtainCount,
+                       Limit - (ObtainCount + OpenCount)]),
+    {Pending1, State1} = process_pending(Pending, Quota, State),
+    State1 #fhc_state { obtain_pending = Pending1 }.
+
+process_pending(Pending, Quota, State) when Quota =< 0 ->
+    {Pending, State};
+process_pending(Pending, Quota, State) ->
+    case pending_out(Pending) of
+        {empty, _Pending} ->
+            {Pending, State};
+        {{value, #pending { requested = Requested }}, _Pending1}
+          when Requested > Quota ->
+            {Pending, State};
+        {{value, #pending { requested = Requested } = Item}, Pending1} ->
+            process_pending(Pending1, Quota - Requested,
+                            run_pending_item(Item, State))
+    end.
+
+run_pending_item(#pending { kind      = Kind,
+                            pid       = Pid,
+                            requested = Requested,
+                            from      = From },
+                 State = #fhc_state { clients = Clients }) ->
+    gen_server:reply(From, ok),
+    true = ets:update_element(Clients, Pid, {#cstate.blocked, false}),
+    update_counts(Kind, Pid, Requested, State).
+
+update_counts(Kind, Pid, Delta,
+              State = #fhc_state { open_count   = OpenCount,
+                                   obtain_count = ObtainCount,
+                                   clients      = Clients }) ->
+    {OpenDelta, ObtainDelta} = update_counts1(Kind, Pid, Delta, Clients),
+    State #fhc_state { open_count   = OpenCount   + OpenDelta,
+                       obtain_count = ObtainCount + ObtainDelta }.
+
+update_counts1(open, Pid, Delta, Clients) ->
+    ets:update_counter(Clients, Pid, {#cstate.opened, Delta}),
+    {Delta, 0};
+update_counts1(obtain, Pid, Delta, Clients) ->
+    ets:update_counter(Clients, Pid, {#cstate.obtained, Delta}),
+    {0, Delta}.
+
+maybe_reduce(State) ->
+    case needs_reduce(State) of
+        true  -> reduce(State);
+        false -> State
+    end.
+
+needs_reduce(#fhc_state { limit          = Limit,
+                          open_count     = OpenCount,
+                          open_pending   = OpenPending,
+                          obtain_count   = ObtainCount,
+                          obtain_limit   = ObtainLimit,
+                          obtain_pending = ObtainPending }) ->
+    Limit =/= infinity
+        andalso ((OpenCount + ObtainCount > Limit)
+                 orelse (not pending_is_empty(OpenPending))
+                 orelse (ObtainCount < ObtainLimit
+                         andalso not pending_is_empty(ObtainPending))).
+
+reduce(State = #fhc_state { open_pending   = OpenPending,
+                            obtain_pending = ObtainPending,
+                            elders         = Elders,
+                            clients        = Clients,
+                            timer_ref      = TRef }) ->
     Now = now(),
-    {Pids, Sum, ClientCount} =
-        dict:fold(fun (_Pid, undefined, Accs) ->
-                          Accs;
-                      (Pid, Eldest, {PidsAcc, SumAcc, CountAcc}) ->
-                          {[Pid|PidsAcc], SumAcc + timer:now_diff(Now, Eldest),
-                           CountAcc + 1}
+    {CStates, Sum, ClientCount} =
+        dict:fold(fun (Pid, Eldest, {CStatesAcc, SumAcc, CountAcc} = Accs) ->
+                          [#cstate { pending_closes = PendingCloses,
+                                     opened         = Opened,
+                                     blocked        = Blocked } = CState] =
+                              ets:lookup(Clients, Pid),
+                          case Blocked orelse PendingCloses =:= Opened of
+                              true  -> Accs;
+                              false -> {[CState | CStatesAcc],
+                                        SumAcc + timer:now_diff(Now, Eldest),
+                                        CountAcc + 1}
+                          end
                   end, {[], 0, 0}, Elders),
-    case Pids of
+    case CStates of
         [] -> ok;
-        _  -> AverageAge = Sum / ClientCount,
-              lists:foreach(
-                fun (Pid) ->
-                        case dict:find(Pid, Callbacks) of
-                            error           -> ok;
-                            {ok, {M, F, A}} -> apply(M, F, A ++ [AverageAge])
-                        end
-                end, Pids)
+        _  -> case (Sum / ClientCount) -
+                       (1000 * ?FILE_HANDLES_CHECK_INTERVAL) of
+                  AverageAge when AverageAge > 0 ->
+                      notify_age(CStates, AverageAge);
+                  _ ->
+                      notify_age0(Clients, CStates,
+                                  pending_count(OpenPending) +
+                                      pending_count(ObtainPending))
+              end
     end,
     case TRef of
         undefined -> {ok, TRef1} = timer:apply_after(
@@ -816,20 +1087,51 @@ maybe_reduce(State = #fhc_state { limit = Limit, count = Count, elders = Elders,
                                      gen_server, cast, [?SERVER, check_counts]),
                      State #fhc_state { timer_ref = TRef1 };
         _         -> State
-    end;
-maybe_reduce(State) ->
-    State.
+    end.
 
-%% Googling around suggests that Windows has a limit somewhere around
-%% 16M, eg
-%% http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
-%% For everything else, assume ulimit exists. Further googling
-%% suggests that BSDs (incl OS X), solaris and linux all agree that
-%% ulimit -n is file handles
+notify_age(CStates, AverageAge) ->
+    lists:foreach(
+      fun (#cstate { callback = undefined }) -> ok;
+          (#cstate { callback = {M, F, A} }) -> apply(M, F, A ++ [AverageAge])
+      end, CStates).
+
+notify_age0(Clients, CStates, Required) ->
+    Notifications =
+        [CState || CState <- CStates, CState#cstate.callback =/= undefined],
+    {L1, L2} = lists:split(random:uniform(length(Notifications)),
+                           Notifications),
+    notify(Clients, Required, L2 ++ L1).
+
+notify(_Clients, _Required, []) ->
+    ok;
+notify(_Clients, Required, _Notifications) when Required =< 0 ->
+    ok;
+notify(Clients, Required, [#cstate{ pid      = Pid,
+                                    callback = {M, F, A},
+                                    opened   = Opened } | Notifications]) ->
+    apply(M, F, A ++ [0]),
+    ets:update_element(Clients, Pid, {#cstate.pending_closes, Opened}),
+    notify(Clients, Required - Opened, Notifications).
+
+track_client(Pid, Clients) ->
+    case ets:insert_new(Clients, #cstate { pid            = Pid,
+                                           callback       = undefined,
+                                           opened         = 0,
+                                           obtained       = 0,
+                                           blocked        = false,
+                                           pending_closes = 0 }) of
+        true  -> _MRef = erlang:monitor(process, Pid),
+                 ok;
+        false -> ok
+    end.
+
+%% For all unices, assume ulimit exists. Further googling suggests
+%% that BSDs (incl OS X), solaris and linux all agree that ulimit -n
+%% is file handles
 ulimit() ->
     case os:type() of
         {win32, _OsName} ->
-            ?FILE_HANDLES_LIMIT_WINDOWS;
+            ?FILE_HANDLES_LIMIT_WINDOWS - ?RESERVED_FOR_OTHERS;
         {unix, _OsName} ->
             %% Under Linux, Solaris and FreeBSD, ulimit is a shell
             %% builtin, not a command. In OS X, it's a command.
@@ -851,12 +1153,4 @@ ulimit() ->
             end;
         _ ->
             ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
-    end.
-
-ensure_mref(Pid, State = #fhc_state { client_mrefs = ClientMRefs }) ->
-    case dict:find(Pid, ClientMRefs) of
-        {ok, _MRef} -> State;
-        error       -> MRef = erlang:monitor(process, Pid),
-                       State #fhc_state {
-                         client_mrefs = dict:store(Pid, MRef, ClientMRefs) }
     end.
