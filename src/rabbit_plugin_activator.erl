@@ -140,20 +140,6 @@ start() ->
 stop() ->
     ok.
 
-fail(Context, Error) ->
-    io:format("~n~nERROR:~n", []),
-    case {Context, Error} of
-        {{delete_dir, Dir}, _} ->
-            io:format("Could not delete ~s~n", [Dir]);
-        {{assert_dir, Dir}, _} ->
-            io:format("Could not create ~s~n", [Dir]);
-        _ ->
-            io:format("Unknown error: ~w in context ~w~n", [Error, Context])
-    end,
-    io:nl(),
-    halt(1),
-    ok.
-
 get_env(Key, Default) ->
     case application:get_env(rabbit, Key) of
         {ok, V} -> V;
@@ -165,13 +151,15 @@ determine_version(App) ->
     {ok, Vsn} = application:get_key(App, vsn),
     {App, Vsn}.
 
-assert_dir(Dir) ->
-    case filelib:ensure_dir(Dir ++ "/") of
-        ok -> ok;
-        E  -> fail({assert_dir, Dir}, E)
+delete_dir(Dir) ->
+    try
+        delete_dir0(Dir),
+        ok
+    catch
+        throw:E -> E
     end.
 
-delete_dir(Dir) ->
+delete_dir0(Dir) ->
     case filelib:is_dir(Dir) of
         true ->
             case file:list_dir(Dir) of
@@ -179,14 +167,21 @@ delete_dir(Dir) ->
                     [case Dir ++ "/" ++ F of
                          Fn ->
                              case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
-                                 true  -> delete_dir(Fn);
-                                 false -> file:delete(Fn)
+                                 true  ->
+                                     delete_dir(Fn);
+                                 false ->
+                                     case file:delete(Fn) of
+                                         ok -> ok;
+                                         {error, E} ->
+                                             throw({error, {could_not_delete,
+                                                            Fn, E}})
+                                     end
                              end
                      end || F <- Files]
             end,
             case file:del_dir(Dir) of
-                ok -> ok;
-                E  -> fail({delete_dir, Dir}, E)
+                ok          -> ok;
+                {error, E}  -> throw({error, {could_not_delete, Dir, E}})
             end;
         false ->
             ok
@@ -198,13 +193,20 @@ is_symlink(Name) ->
         _       -> false
     end.
 
-unpack_ez_plugins(PluginSrcDir, PluginDestDir) ->
+unpack_ez_plugins(SrcDir, DestDir) ->
     %% Eliminate the contents of the destination directory
-    delete_dir(PluginDestDir),
-
-    assert_dir(PluginDestDir),
-    [unpack_ez_plugin(PluginName, PluginDestDir) ||
-        PluginName <- filelib:wildcard(PluginSrcDir ++ "/*.ez")].
+    case delete_dir(DestDir) of
+        ok ->
+            ok;
+        {error, {could_not_delete, D, E}} ->
+            error("Could not delete ~s (~w)", [D, E])
+    end,
+    case filelib:ensure_dir(DestDir ++ "/") of
+        ok          -> ok;
+        {error, E2} -> error("Could not create dir ~s (~w)", [DestDir, E2])
+    end,
+    [unpack_ez_plugin(PluginName, DestDir) ||
+        PluginName <- filelib:wildcard(SrcDir ++ "/*.ez")].
 
 unpack_ez_plugin(PluginFn, PluginDestDir) ->
     zip:unzip(PluginFn, [{cwd, PluginDestDir}]),
