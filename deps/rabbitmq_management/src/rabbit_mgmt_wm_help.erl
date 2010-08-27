@@ -20,7 +20,7 @@
 %%
 -module(rabbit_mgmt_wm_help).
 
--export([init/1, to_html/2, content_types_provided/2]).
+-export([init/1, to_html/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -30,13 +30,10 @@
 
 init(_Config) -> {ok, #context{}}.
 
-content_types_provided(ReqData, Context) ->
-   {[{"text/html", to_html}], ReqData, Context}.
-
 to_html(ReqData, Context) ->
     %% TODO why does code:priv_dir(rabbit_management) not work? This does
     %% not work under "make cover":
     {ok, Help} = file:read_file(filename:join(
                                   [filename:dirname(code:which(?MODULE)),
-                                   "..", "priv", "help.html"])),
+                                   "..", "priv", "www-rest", "help.html"])),
     {Help, ReqData, Context}.

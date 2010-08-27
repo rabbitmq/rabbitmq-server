@@ -1,0 +1,242 @@
+<html>
+  <head>
+    <title>RabbitMQ Management REST API</title>
+    <style>
+      body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+      td, th { font: 12px Verdana,sans-serif; color: #444; }
+      h1 { font-size: 2em; }
+      h2 { font-size: 1.5em; }
+      td.path { font-family: monospace; }
+      th { font-size 1em; font-weight: bold; }
+      table { border-collapse: collapse; }
+      table th, table td { vertical-align: top; border: 1px solid #bbb; padding: 5px; }
+      code { background: #ffd; }
+      pre { background: black; color: #0f0; padding: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>RabbitMQ Management REST API</h1>
+
+    <p>Apart from this help page, all URLs will serve only resources
+    of type <code>application/json</code>, and will require HTTP basic
+    authentication (using the standard RabbitMQ user database). The
+    default user is guest/guest.</p>
+
+    <p>Many URLs require the name of a virtual host as part of the
+    path. As the default virtual host is called "<code>/</code>", this
+    will need to be encoded as "<code>%2f</code>".</p>
+
+    <p>PUTing a resource creates it. The JSON object you upload must
+    have certain keys (TODO documented below). Other keys are
+    ignored. Missing keys consitute an error.</p>
+
+    <h2>Examples</h2>
+
+    <p>A couple of quick examples, using the Unix command line
+    tool <code>curl</code>:</p>
+
+    <ul>
+      <li>
+        Get a list of vhosts: TODO update after fixing round trip
+<pre>$ curl -i -u guest:guest http://localhost:55672/rest/vhosts
+HTTP/1.1 200 OK
+Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
+Date: Fri, 27 Aug 2010 16:53:02 GMT
+Content-Type: application/json
+Content-Length: 87
+
+{"node":"rabbit@misshelpful","datetime":"Fri, 27 Aug 2010 15:53:02 GMT","vhosts":["/"]}</pre>
+      </li>
+      <li>
+        Create a new vhost:
+<pre>$ curl --noproxy localhost -i -u guest:guest -H "content-type:application/json" \
+  -XPUT http://localhost:55672/rest/vhosts/foo
+HTTP/1.1 204 No Content
+Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
+Date: Fri, 27 Aug 2010 16:56:00 GMT
+Content-Type: application/json
+Content-Length: 0</pre>
+        <p>Note: you must specify <code>application/json</code> as the
+        mime type.</p>
+        <p>Note: the name of the object is not needed in the JSON
+          object uploaded, since it is in the URI. As a virtual host
+          has no properties apart from its name, this means you do not
+          need to specify a body at all!</p>
+      </li>
+      <li>
+        Create a new exchange in the default virtual host:
+<pre>$ curl -i -u guest:guest -H "content-type:application/json" \
+  -XPUT -d'{"type":"direct","auto_delete":false,"durable":true,"arguments":[]}' \
+  http://localhost:55672/rest/exchanges/%2f/my-new-exchange
+HTTP/1.1 204 No Content
+Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
+Date: Fri, 27 Aug 2010 17:04:29 GMT
+Content-Type: application/json
+Content-Length: 0</pre>
+        <p>Note: we never return a body in response to a PUT or
+        DELETE, unless it fails.</p>
+      </li>
+      <li>
+        And delete it again:
+<pre>$ curl --noproxy localhost -i -u guest:guest -H "content-type:application/json" \
+  -XDELETE http://localhost:55672/rest/exchanges/%2f/my-new-exchange
+HTTP/1.1 204 No Content
+Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
+Date: Fri, 27 Aug 2010 17:05:30 GMT
+Content-Type: application/json
+Content-Length: 0</pre>
+      </li>
+    </ul>
+
+    <h2>Reference</h2>
+
+    <table>
+      <tr>
+        <th>GET</th>
+        <th>PUT</th>
+        <th>DELETE</th>
+        <th>POST</th>
+        <th>Path</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/overview">/rest/overview</a></td>
+        <td>Various random bits of information that describe the whole
+        system.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/connections">/rest/connections</a></td>
+        <td>A list of all open connections.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/rest/connections/<i>name</i></td>
+        <td>An individual connection. DELETEing it will close the
+        connection.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/channels">/rest/channels</a></td>
+        <td>A list of all open channels.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/exchanges">/rest/exchanges</a></td>
+        <td>A list of all exchanges.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/rest/exchanges/<i>vhost</i></td>
+        <td>A list of all exchanges in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/rest/exchanges/<i>vhost</i>/<i>name</i></td>
+        <td>An individual exchange.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/queues">/rest/queues</a></td>
+        <td>A list of all queues.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/rest/queues/<i>vhost</i></td>
+        <td>A list of all queues in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/rest/queues/<i>vhost</i>/<i>name</i></td>
+        <td>An individual queue.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/vhosts">/rest/vhosts</a></td>
+        <td>A list of all vhosts.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/rest/vhosts/<i>name</i></td>
+        <td>An individual vhost.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/user">/rest/users</a></td>
+        <td>A list of all users.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/rest/users/<i>name</i></td>
+        <td>An individual user.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/rest/permissions">/rest/permissions</a></td>
+        <td>A list of all permissions for all users.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/rest/permissions/<i>user</i></td>
+        <td>A list of all permissions for a given user.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/rest/permissions/<i>user</i>/<i>vhost</i></td>
+        <td>An individual permission of a user and virtual host.</td>
+      </tr>
+    </table>
+  </body>
+</html>
