@@ -63,7 +63,7 @@ accept_content(ReqData, Context) ->
             User = rabbit_mgmt_util:id(user, ReqData),
             VHost = rabbit_mgmt_util:id(vhost, ReqData),
             rabbit_mgmt_util:with_decode(
-              ["scope", "configure", "write", "read"], ReqData, Context,
+              [scope, configure, write, read], ReqData, Context,
               fun([Scope, Conf, Write, Read]) ->
                       rabbit_access_control:set_permissions(
                         Scope, User, VHost, Conf, Write, Read)

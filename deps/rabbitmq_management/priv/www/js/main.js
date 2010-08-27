@@ -45,7 +45,21 @@ function dispatcher() {
             return false;
         });
 
-    path('#/queues', ['/queues'], 'queues');
+    path('#/queues', ['/queues', '/vhosts'], 'queues');
+    this.get('#/queues/:vhost/:name', function() {
+            render(['/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])], 'queue',
+                   '#/queues');
+        });
+    this.put('#/queues', function() {
+            sync_put(this, '/queues/:vhost/:name');
+            update();
+            return false;
+        });
+    this.del('#/queues', function() {
+            sync_delete(this, '/queues/:vhost/:name');
+            go_to('#/queues');
+            return false;
+        });
 
     path('#/vhosts', ['/vhosts/'], 'vhosts');
     this.get('#/vhosts/:id', function() {

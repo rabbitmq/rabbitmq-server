@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_exchange).
+-module(rabbit_mgmt_wm_queue).
 
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
@@ -42,27 +42,26 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case exchange(ReqData) of
+    {case queue(ReqData) of
          not_found -> false;
          _         -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    {rabbit_mgmt_format:encode(
-       [{exchange, rabbit_mgmt_format:exchange(
-                     rabbit_exchange:info(exchange(ReqData)))}]),
+    Q0 = queue(ReqData),
+    [Q] = rabbit_mgmt_db:get_queues([Q0]),
+    {rabbit_mgmt_format:encode([{queue, Q}]),
      ReqData, Context}.
 
 accept_content(ReqData, Context) ->
-    Name = rabbit_mgmt_util:id(exchange, ReqData),
+    Name = rabbit_mgmt_util:id(queue, ReqData),
     rabbit_mgmt_util:with_decode_vhost(
-      [type, durable, auto_delete, arguments], ReqData, Context,
-      fun(VHost, [Type, Durable, AutoDelete, Arguments]) ->
+      [durable, auto_delete, arguments], ReqData, Context,
+      fun(VHost, [Durable, AutoDelete, Arguments]) ->
               rabbit_mgmt_util:amqp_request(
                 VHost, Context,
-                #'exchange.declare'{
-                         exchange = Name,
-                         type = Type,
+                #'queue.declare'{
+                         queue = Name,
                          durable =
                              rabbit_mgmt_util:parse_bool(Durable),
                          auto_delete =
@@ -71,34 +70,35 @@ accept_content(ReqData, Context) ->
       end).
 
 delete_resource(ReqData, Context) ->
-    rabbit_mgmt_util:amqp_request(
-      rabbit_mgmt_util:vhost(ReqData),
-      Context, #'exchange.delete'{ exchange = id(ReqData) }),
-    {true, ReqData, Context}.
+    try
+        rabbit_mgmt_util:amqp_request(
+          rabbit_mgmt_util:vhost(ReqData),
+          Context,
+          #'queue.delete'{ queue = rabbit_mgmt_util:id(queue, ReqData) }),
+        {true, ReqData, Context}
+    catch throw:{server_closed, Reason} ->
+            rabbit_mgmt_util:bad_request(
+              list_to_binary(Reason), ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-exchange(ReqData) ->
+queue(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
             not_found;
         not_found ->
             not_found;
         VHost ->
-            Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
-            case rabbit_exchange:lookup(Name) of
+            Name = rabbit_misc:r(VHost, queue,
+                                 rabbit_mgmt_util:id(queue, ReqData)),
+            case rabbit_amqqueue:lookup(Name) of
                 {ok, X} ->
                     X;
                 {error, not_found} ->
                     not_found
             end
-    end.
-
-id(ReqData) ->
-    case rabbit_mgmt_util:id(exchange, ReqData) of
-        <<"amq.default">> -> <<"">>;
-        Name              -> Name
     end.

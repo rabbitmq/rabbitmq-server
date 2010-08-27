@@ -65,7 +65,9 @@ pid(Pid) when is_pid(Pid) ->
 pid('') ->
     <<"">>;
 pid(unknown) ->
-    unknown.
+    unknown;
+pid(none) ->
+    none.
 
 ip(unknown) ->
     unknown;

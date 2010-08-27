@@ -142,15 +142,16 @@ gs_update(Cur, New) ->
 %%----------------------------------------------------------------------------
 
 augment(Items, Funs, Tables) ->
-    Augmentations = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs],
-    [A || A <- Augmentations, A =/= unknown] ++ Items.
+    Augmented = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs] ++ Items,
+    [{K, V} || {K, V} <- Augmented, V =/= unknown].
 
 augment(K, Items, Fun, Tables) ->
     Id = pget(K, Items),
+    Key = list_to_atom(atom_to_list(K) ++ "_details"),
     case Id of
-        unknown -> unknown;
-        _       -> {list_to_atom(atom_to_list(K) ++ "_details"),
-                    Fun(Id, Tables)}
+        none    -> {Key, unknown};
+        unknown -> {Key, unknown};
+        _       -> {Key, Fun(Id, Tables)}
     end.
 
 %% augment_channel_pid(Pid, Tables) ->
@@ -199,9 +200,11 @@ handle_call({get_queues, Qs0}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
     Qs1 = [queue_to_list(Q) || Q <- Qs0],
     Qs2 = merge_created_stats(Qs1, Table),
-    Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}],
-                   Tables) || Q <- Qs2],
-    {ok, Qs3, State};
+    Qs3 = [[{messages, add(pget(messages_ready, Q),
+                           pget(messages_unacknowledged, Q))}|Q] || Q <- Qs2],
+    Qs4 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}],
+                   Tables) || Q <- Qs3],
+    {ok, Qs4, State};
 
 handle_call(get_connections, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),

@@ -26,6 +26,7 @@ sub { display: block; color: #888; }
 .unknown {color: #888;}
 
 table.facts th { text-align: right; font-weight: bold; }
+table.facts th, table.facts td { vertical-align: top; }
 
 tr.alt td {background:#eee;}
 

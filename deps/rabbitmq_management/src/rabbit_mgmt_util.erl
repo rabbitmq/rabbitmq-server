@@ -20,10 +20,12 @@
 %%
 -module(rabbit_mgmt_util).
 
+%% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
+
 -export([is_authorized/2, now_ms/0, http_date/0, vhost/1, vhost_exists/1]).
--export([bad_request/3, id/2, decode/2, flatten/1, parse_bool/1]).
+-export([bad_request/3, id/2, parse_bool/1]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/3]).
--export([all_or_one_vhost/2]).
+-export([all_or_one_vhost/2, with_decode_vhost/4]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -124,7 +126,8 @@ decode(Keys, ReqData) ->
     case Res of
         ok ->
             Results =
-                [get_or_missing(list_to_binary(K), Json) || K <- Keys],
+                [get_or_missing(list_to_binary(atom_to_list(K)), Json)
+                 || K <- Keys],
             case lists:filter(fun({key_missing, _}) -> true;
                                  (_)                -> false
                               end, Results) of
@@ -135,17 +138,20 @@ decode(Keys, ReqData) ->
             {Res, Json}
     end.
 
+with_decode_vhost(Keys, ReqData, Context, Fun) ->
+    case vhost(ReqData) of
+        not_found ->
+            not_found(vhost_not_found, ReqData, Context);
+        VHost ->
+            with_decode(Keys, ReqData, Context,
+                        fun (Vals) -> Fun(VHost, Vals) end)
+    end.
+
 get_or_missing(K, L) ->
     case proplists:get_value(K, L) of
         undefined -> {key_missing, K};
         V         -> V
     end.
-
-%% Only flatten one level
-flatten([]) ->
-    [];
-flatten([H|T]) ->
-    H ++ flatten(T).
 
 parse_bool(V) ->
     case V of
@@ -169,15 +175,14 @@ amqp_request(VHost, Context, Method) ->
     %% See bug 23187
     catch error:{badmatch,{error, #amqp_error{name = Name}}} ->
             throw(Name);
-          exit:{{server_initiated_close, Code, Reason}, _} ->
+          exit:{{server_initiated_close, _Code, Reason}, _} ->
             throw({server_closed, Reason})
     end.
 
 all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
-            rabbit_mgmt_util:flatten(
-              [Fun(V) || V <- rabbit_access_control:list_vhosts()]);
+            lists:append([Fun(V) || V <- rabbit_access_control:list_vhosts()]);
         not_found ->
             vhost_not_found;
         VHost ->

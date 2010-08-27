@@ -59,7 +59,7 @@ dispatcher() ->
      {["json","exchanges", vhost, exchange],rabbit_mgmt_wm_exchange, []},
      {["json","queues"],                    rabbit_mgmt_wm_queues, []},
      {["json","queues", vhost],             rabbit_mgmt_wm_queues, []},
-%%     {["json","queues", vhost, queue],      rabbit_mgmt_wm_queue, []},
+     {["json","queues", vhost, queue],      rabbit_mgmt_wm_queue, []},
      {["json","vhosts"],                    rabbit_mgmt_wm_vhosts, []},
      {["json","vhosts", vhost],             rabbit_mgmt_wm_vhost, []},
      {["json","users"],                     rabbit_mgmt_wm_users, []},

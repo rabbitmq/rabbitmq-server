@@ -206,6 +206,26 @@ http_exchanges_test() ->
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     ok.
 
+%% TODO this test could be more
+http_queues_test() ->
+    Good = [{durable, "true"}, {auto_delete, false}, {arguments, ""}],
+    http_get("/queues/%2f/foo", ?NOT_FOUND),
+    http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
+    http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
+    http_get("/queues/%2f/foo", ?OK),
+
+    http_put("/queues/badvhost/bar", Good, ?NOT_FOUND),
+    http_put("/queues/%2f/bar",
+             [{durable, "troo"}, {auto_delete, false}, {arguments, ""}],
+             ?BAD_REQUEST),
+    http_put("/queues/%2f/foo",
+             [{durable, false}, {auto_delete, false}, {arguments, ""}],
+             ?BAD_REQUEST),
+
+    http_delete("/queues/%2f/foo", ?NO_CONTENT),
+    http_delete("/queues/%2f/foo", ?NOT_FOUND),
+    ok.
+
 %%---------------------------------------------------------------------------
 
 http_get(Path, CodeExp) ->

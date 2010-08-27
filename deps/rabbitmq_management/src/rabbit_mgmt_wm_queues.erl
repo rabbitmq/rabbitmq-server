@@ -44,13 +44,7 @@ to_json(ReqData, Context) ->
     Qs0 = queues(ReqData),
     Qs = rabbit_mgmt_db:get_queues(Qs0),
     {rabbit_mgmt_format:encode(
-       [{queues, [{struct, format(Q)} || Q <- Qs]}]), ReqData, Context}.
-
-%% TODO move this to _db?
-format(Q) ->
-    MsgsReady = rabbit_mgmt_db:pget(messages_ready, Q),
-    MsgsUnacked = rabbit_mgmt_db:pget(messages_unacknowledged, Q),
-    [{messages, rabbit_mgmt_db:add(MsgsReady, MsgsUnacked)}|Q].
+       [{queues, [{struct, Q} || Q <- Qs]}]), ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

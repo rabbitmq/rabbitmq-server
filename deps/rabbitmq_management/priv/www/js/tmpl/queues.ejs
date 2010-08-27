@@ -1,16 +1,14 @@
 <h1>Queues</h1>
-<p>TODO - bring this table under control a bit</p>
 <% if (queues.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
-    <th colspan="4">Overview</th>
+    <th colspan="2">Overview</th>
     <th colspan="3">Messages</th>
     <th colspan="4">Parameters</th>
   </tr>
   <tr>
-   <th>Virtual host</th><th>Name</th><th>Consumers</th>
-   <th>Memory</th>
+   <th>Virtual host</th><th>Name</th>
    <th>Ready</th><th>Unacked</th><th>Total</th>
    <th>Durable</th><th>Auto delete</th><th>Exclusive</th><th>Arguments</th>
   </tr>
@@ -19,16 +17,14 @@
   <% for (var i = 0; i < queues.length; i++) { %>
   <tr<%= alt_rows(i)%>>
    <td><%= link_vhost(queues[i].vhost) %></td>
-   <td><%= queues[i].name %></td>
-   <td class="r"><%= fmt_string(queues[i].consumers) %></td>
-   <td class="r"><%= fmt_bytes(queues[i].memory) %></td>
+   <td><%= link_queue(queues[i].vhost, queues[i].name) %></td>
    <td class="r"><%= fmt_string(queues[i].messages_ready) %></td>
    <td class="r"><%= fmt_string(queues[i].messages_unacknowledged) %></td>
    <td class="r"><%= fmt_string(queues[i].messages) %></td>
    <td class="c"><%= fmt_boolean(queues[i].durable) %></td>
    <td class="c"><%= fmt_boolean(queues[i].auto_delete) %></td>
    <td class="c">
-     <% if (queues[i].owner_pid.length > 0) { %>
+     <% if (queues[i].owner_pid != 'none') { %>
      <%= link_conn(queues[i].owner_pid_details.name) %>
      <% } %>
    </td>
@@ -44,3 +40,50 @@
 <% } else { %>
   <p>... no queues ...</p>
 <% } %>
+
+<div class="section-hidden">
+  <h2>Add a new queue</h2>
+  <div>
+    <form action="#/queues" method="put">
+      <table class="form">
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= vhosts[i] %>"><%= vhosts[i] %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/></td>
+        </tr>
+        <tr>
+          <th><label>Durability:</label></th>
+          <td>
+            <select name="durable">
+              <option value="true">Durable</option>
+              <option value="false">Transient</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Auto delete:</label></th>
+          <td>
+            <select name="auto_delete">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Arguments:</label></th>
+          <td><input type="hidden" value="" name="arguments" />(TODO)</td>
+        </tr>
+      </table>
+      <input type="submit" value="Add queue"/>
+    </form>
+  </div>
+</div>

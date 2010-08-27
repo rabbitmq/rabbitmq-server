@@ -1,7 +1,6 @@
 Before first release:
 Write remaining management:
-  Queue details GET PUT DELETE
-  Exchange arguments support
+  Exchange / queue arguments support
   Bindings list GET
   Binding GET PUT DELETE
   Channel GET

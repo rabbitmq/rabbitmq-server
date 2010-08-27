@@ -54,7 +54,7 @@ to_json(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     rabbit_mgmt_util:with_decode(
-      ["password"], ReqData, Context,
+      [password], ReqData, Context,
       fun([Password]) ->
             case rabbit_access_control:lookup_user(User) of
                 {ok, _} ->

@@ -1,0 +1,62 @@
+<h1>Queue: <%= queue.name %></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div>
+    <table class="facts">
+      <tr>
+        <th>Virtual host</th>
+        <td><%= queue.vhost %></td>
+      </tr>
+      <tr>
+        <th>Durable</th>
+        <td><%= fmt_boolean(queue.durable) %></td>
+      </tr>
+      <tr>
+        <th>Auto delete</th>
+        <td><%= fmt_boolean(queue.auto_delete) %></td>
+      </tr>
+      <tr>
+        <th>Exclusive owner</th>
+        <td>
+          <% if (queue.owner_pid != 'none') { %>
+          <%= link_conn(queue.owner_pid_details.name) %>
+          <% } %>
+        </td>
+      </tr>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <tr>
+        <th>Memory</th>
+        <td><%= fmt_bytes(queue.memory) %></td>
+      </tr>
+      <tr>
+        <th>Messages ready</th>
+        <td>
+          <%= fmt_string(queue.messages_ready) %> ready<br/>
+          <%= fmt_string(queue.messages_unacknowledged) %> unacknowledged<br/>
+          <%= fmt_string(queue.messages) %> total
+        </td>
+      </tr>
+      <tr>
+        <th>Arguments</th>
+        <td>
+          <%= format('table', {'table': queue.arguments}) %>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete This Queue</h2>
+  <div>
+    <form action="#/queues" method="delete" class="confirm">
+      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="submit" value="Delete"/>
+    </form>
+  </div>
+</div>

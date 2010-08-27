@@ -57,7 +57,7 @@ function alt_rows(i) {
 }
 
 function esc(str) {
-    return escape(str).replace('/', '%2F');
+    return escape(str).replace(/\//g, '%2F').replace(/\+/g, '%2B');
 }
 
 function link_conn(name) {
@@ -67,6 +67,10 @@ function link_conn(name) {
 function link_exchange(vhost, name) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
     return link_to(fmt_exchange(name), '#/exchanges/' + url)
+}
+
+function link_queue(vhost, name) {
+    return link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name))
 }
 
 function link_vhost(name) {
