@@ -1,6 +1,6 @@
 {application, rabbit_stomp,
  [{description, "Embedded Rabbit Stomp Adapter"},
-  {vsn, "0.01"},
+  {vsn, "%%VSN%%"},
   {modules, [
     rabbit_stomp,
     rabbit_stomp_sup,
