@@ -140,6 +140,20 @@ start() ->
 stop() ->
     ok.
 
+fail(Context, Error) ->
+    io:format("~n~nERROR:~n", []),
+    case {Context, Error} of
+        {{delete_dir, Dir}, _} ->
+            io:format("Could not delete ~s~n", [Dir]);
+        {{assert_dir, Dir}, _} ->
+            io:format("Could not create ~s~n", [Dir]);
+        _ ->
+            io:format("Unknown error: ~w in context ~w~n", [Error, Context])
+    end,
+    io:nl(),
+    halt(1),
+    ok.
+
 get_env(Key, Default) ->
     case application:get_env(rabbit, Key) of
         {ok, V} -> V;
@@ -152,10 +166,9 @@ determine_version(App) ->
     {App, Vsn}.
 
 assert_dir(Dir) ->
-    case filelib:is_dir(Dir) of
-        true  -> ok;
-        false -> ok = filelib:ensure_dir(Dir),
-                 ok = file:make_dir(Dir)
+    case filelib:ensure_dir(Dir ++ "/") of
+        ok -> ok;
+        E  -> fail({assert_dir, Dir}, E)
     end.
 
 delete_dir(Dir) ->
@@ -171,7 +184,10 @@ delete_dir(Dir) ->
                              end
                      end || F <- Files]
             end,
-            ok = file:del_dir(Dir);
+            case file:del_dir(Dir) of
+                ok -> ok;
+                E  -> fail({delete_dir, Dir}, E)
+            end;
         false ->
             ok
     end.
