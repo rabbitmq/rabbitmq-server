@@ -35,9 +35,6 @@
 
 -export([all_tests/0, test_parsing/0]).
 
-%% Exported so the hook mechanism can call back
--export([handle_hook/3, bad_handle_hook/3, extra_arg_hook/5]).
-
 -import(lists).
 
 -include("rabbit.hrl").
@@ -1067,52 +1064,6 @@ test_server_status() ->
 
     passed.
 
-test_hooks() ->
-    %% Firing of hooks calls all hooks in an isolated manner
-    rabbit_hooks:subscribe(test_hook, test, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:subscribe(test_hook, test2, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:subscribe(test_hook2, test2, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:trigger(test_hook, [arg1, arg2]),
-    [arg1, arg2] = get(test_hook_test_fired),
-    [arg1, arg2] = get(test_hook_test2_fired),
-    undefined = get(test_hook2_test2_fired),
-
-    %% Hook Deletion works
-    put(test_hook_test_fired, undefined),
-    put(test_hook_test2_fired, undefined),
-    rabbit_hooks:unsubscribe(test_hook, test),
-    rabbit_hooks:trigger(test_hook, [arg3, arg4]),
-    undefined = get(test_hook_test_fired),
-    [arg3, arg4] = get(test_hook_test2_fired),
-    undefined = get(test_hook2_test2_fired),
-
-    %% Catches exceptions from bad hooks
-    rabbit_hooks:subscribe(test_hook3, test, {rabbit_tests, bad_handle_hook, []}),
-    ok = rabbit_hooks:trigger(test_hook3, []),
-
-    %% Passing extra arguments to hooks
-    rabbit_hooks:subscribe(arg_hook, test, {rabbit_tests, extra_arg_hook, [1, 3]}),
-    rabbit_hooks:trigger(arg_hook, [arg1, arg2]),
-    {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
-
-    %% Invoking Pids
-    Remote = fun () ->
-        receive
-            {rabbitmq_hook,[remote_test,test,[],Target]} ->
-                Target ! invoked
-        end
-    end,
-    P = spawn(Remote),
-    rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
-    rabbit_hooks:trigger(remote_test, []),
-    receive
-       invoked -> ok
-    after 100 ->
-       io:format("Remote hook not invoked"),
-       throw(timeout)
-    end,
-    passed.
-
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
@@ -1405,14 +1356,6 @@ delete_log_handlers(Handlers) ->
     [[] = error_logger:delete_report_handler(Handler) ||
         Handler <- Handlers],
     ok.
-
-handle_hook(HookName, Handler, Args) ->
-    A = atom_to_list(HookName) ++ "_" ++ atom_to_list(Handler) ++ "_fired",
-    put(list_to_atom(A), Args).
-bad_handle_hook(_, _, _) ->
-    exit(bad_handle_hook_called).
-extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
-    handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
 
 test_supervisor_delayed_restart() ->
     test_sup:test_supervisor_delayed_restart().
