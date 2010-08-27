@@ -265,8 +265,8 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}) ->
-    [Entry, {apply,{rabbit,prepare,[]}}];
+process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
+    [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
 
