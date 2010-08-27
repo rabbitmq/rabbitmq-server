@@ -1,6 +1,6 @@
 {application, rabbit_shovel,
  [{description, "Data Shovel for RabbitMQ"},
-  {vsn, "0.01"},
+  {vsn, "%%VSN%%"},
   {modules, [
     rabbit_shovel,
     rabbit_shovel_sup,

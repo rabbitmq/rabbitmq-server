@@ -1,4 +1,5 @@
 PACKAGE:=rabbitmq-shovel
+APPNAME:=rabbit_shovel
 DEPS:=rabbitmq-erlang-client
 DEPS_FILE:=deps.mk
 TEST_APPS:=amqp_client
