@@ -26,8 +26,9 @@ $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 	cp -r $< $@
 
 $(CHECKOUT_DIR):
-	hg clone -r $(REVISION) $(HG_UPSTREAM) $@
-	cd $(CHECKOUT_DIR) && patch -p1 < ../version.patch
+	rm -rf $@-tmp
+	hg clone -r $(REVISION) $(HG_UPSTREAM) $@-tmp
+	cd $@-tmp && patch -p1 < ../version.patch && cd .. && mv $@-tmp $@
 
 %.ez: $(LIB_PACKAGE_DIR)
 	$(MAKE) -C $(LIB_PACKAGE_DIR) clean all
