@@ -21,8 +21,11 @@ should be able to see the plugins:
     amqp_client.ez  rabbit_common.ez     rabbitmq-management.ez  webmachine.ez
     mochiweb.ez     rabbitmq-management  rabbitmq-mochiweb.ez
 
-To install them to a local RabbitMQ instance you need to copy some of the *.ez
-files into your rabbit plugins directory and activate them, for example:
+To install them to a local RabbitMQ instance you need to copy *some* of the *.ez
+files into your rabbit plugins directory and activate them. NB: do *not* copy
+rabbit_common.ez!
+
+For example:
 
     cp rabbitmq-mochiweb.ez mochiweb.ez webmachine.ez \
         amqp_client.ez rabbitmq-management.ez \
