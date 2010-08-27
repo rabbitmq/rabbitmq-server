@@ -1,4 +1,5 @@
 PACKAGE=rabbitmq-mochiweb
+APPNAME=rabbit_mochiweb
 DEPS=
 INTERNAL_DEPS=mochiweb
 RUNTIME_DEPS=mochiweb

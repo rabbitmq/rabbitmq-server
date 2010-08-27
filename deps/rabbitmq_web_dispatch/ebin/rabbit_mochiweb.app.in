@@ -1,6 +1,6 @@
 {application, rabbit_mochiweb,
  [{description, "RabbitMQ Mochiweb Embedding"},
-  {vsn, "0.01"},
+  {vsn, "%%VSN%%"},
   {modules, [
     rabbit_mochiweb,
     rabbit_mochiweb_app,
