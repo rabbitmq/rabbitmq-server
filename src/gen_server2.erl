@@ -457,12 +457,12 @@ extend_backoff({backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod}) ->
 loop(GS2State = #gs2_state { time          = hibernate,
                              timeout_state = undefined }) ->
     pre_hibernate(GS2State);
-loop(GS2State = #gs2_state { queue = Queue }) ->
-    process_next_msg(GS2State #gs2_state { queue = drain(Queue, GS2State) }).
+loop(GS2State) ->
+    process_next_msg(GS2State #gs2_state { queue = drain(GS2State) }).
 
-drain(Queue, GS2State) ->
+drain(GS2State = #gs2_state { queue = Queue }) ->
     receive
-        Input -> drain(in(Input, Queue, GS2State), GS2State)
+        Input -> drain(GS2State #gs2_state { queue = in(Input, GS2State) })
     after 0 -> Queue
     end.
 
@@ -493,7 +493,10 @@ process_next_msg(GS2State = #gs2_state { time          = Time,
                     %% Time could be 'hibernate' here, so *don't* call loop
                     process_next_msg(
                       GS2State #gs2_state {
-                        queue = drain(in(Input, Queue1, GS2State), GS2State) })
+                        queue = drain(GS2State #gs2_state {
+                                        queue = in(Input,
+                                                   GS2State #gs2_state {
+                                                     queue = Queue1 })})})
             after Time1 ->
                     case HibOnTimeout of
                         true ->
@@ -506,8 +509,7 @@ process_next_msg(GS2State = #gs2_state { time          = Time,
             end
     end.
 
-wake_hib(GS2State = #gs2_state { timeout_state = TS,
-                                 queue         = Queue }) ->
+wake_hib(GS2State = #gs2_state { timeout_state = TS }) ->
     TimeoutState1 = case TS of
                         undefined ->
                             undefined;
@@ -515,7 +517,7 @@ wake_hib(GS2State = #gs2_state { timeout_state = TS,
                             adjust_timeout_state(SleptAt, now(), TimeoutState)
                     end,
     post_hibernate(GS2State #gs2_state { timeout_state = TimeoutState1,
-                                         queue         = drain(Queue, GS2State) }).
+                                         queue         = drain(GS2State) }).
 
 hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
     TS = case TimeoutState of
@@ -581,14 +583,13 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
     CurrentTO1 = Base + Extra,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
-in({'$gen_cast', Msg}, Queue,
-   GS2State = #gs2_state { prioritise_cast = PC }) ->
+in({'$gen_cast', Msg}, GS2State = #gs2_state { prioritise_cast = PC,
+                                               queue           = Queue }) ->
     priority_queue:in({'$gen_cast', Msg}, PC(Msg, GS2State), Queue);
-in({'$gen_call', From, Msg}, Queue,
-   GS2State = #gs2_state { prioritise_call = PC }) ->
+in({'$gen_call', From, Msg}, GS2State = #gs2_state { prioritise_call = PC,
+                                                     queue           = Queue }) ->
     priority_queue:in({'$gen_call', From, Msg}, PC(Msg, From, GS2State), Queue);
-in(Input, Queue,
-   GS2State = #gs2_state { prioritise_info = PI }) ->
+in(Input, GS2State = #gs2_state { prioritise_info = PI, queue = Queue }) ->
     priority_queue:in(Input, PI(Input, GS2State), Queue).
 
 process_msg(Msg,
