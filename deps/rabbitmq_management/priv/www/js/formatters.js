@@ -18,7 +18,9 @@ function fmt_bytes(bytes) {
         else return [n, p];
     }
 
-    [num, power] = f(bytes, 0);
+    var num_power = f(bytes, 0);
+    var num = num_power[0];
+    var power = num_power[1];
     var powers = ['B', 'kB', 'MB', 'GB', 'TB'];
     return (power == 0 ? num.toFixed(0) : num.toFixed(1)) + powers[power];
 }
