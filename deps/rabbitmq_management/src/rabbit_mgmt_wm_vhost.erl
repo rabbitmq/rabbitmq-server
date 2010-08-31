@@ -46,7 +46,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     VHost = id(ReqData),
-    {rabbit_mgmt_format:encode([{vhost, VHost}]), ReqData, Context}.
+    rabbit_mgmt_util:reply(VHost, ReqData, Context).
 
 accept_content(ReqData, Context) ->
     VHost = id(ReqData),
@@ -67,5 +67,4 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 id(ReqData) ->
-    {ok, Id} = dict:find(vhost, wrq:path_info(ReqData)),
-    list_to_binary(mochiweb_util:unquote(Id)).
+    rabbit_mgmt_util:id(vhost, ReqData).

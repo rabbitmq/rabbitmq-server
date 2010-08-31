@@ -1,20 +1,22 @@
-Before first release:
-Write remaining management:
+Before preview release:
+Write more management:
   Exchange / queue arguments support
   Bindings list GET
   Binding GET PUT DELETE
   Channel GET
+Write some basic documentation.
+Figure out supervision.
+Cross-browser testing.
+
+Before first release:
+Write remaining management:
   Application list / start / stop
   VM stop
   Reset / rotate logs / cluster
 Add superuser bit (bug 22983).
   Tests for permissions.
-Write some basic documentation.
-Figure out supervision.
 Fix the rate bug.
 More user-friendly form submission errors.
-Fix / test GET / PUT round-tripping.
-  Remove datetime from JSON.
 Make it work with fine stats turned off.
 Do sensible things with vhosts in UI.
 Fix refreshing.
@@ -40,7 +42,6 @@ Publish / get via HTTP, tie into simple messaging idea.
 Less urgent:
 Add more stats (bug 22996).
 Write browser-level tests (from e.g. Selenium).
-Make at least a cursory attempt to support IE6/7.
 Alarms(?).
 Clustering management.
 Sampling.

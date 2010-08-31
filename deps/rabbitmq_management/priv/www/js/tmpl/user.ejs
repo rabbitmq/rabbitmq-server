@@ -1,4 +1,4 @@
-<h1>User: <%= user %></h1>
+<h1>User: <%= user.name %></h1>
 
 <div class="section">
   <h2>Permissions</h2>
@@ -24,7 +24,7 @@
              <td><%= permissions[i].read %></td>
              <td class="c">
                <form action="#/permissions" method="delete" class="confirm">
-                 <input type="hidden" name="username" value="<%= user %>"/>
+                 <input type="hidden" name="username" value="<%= user.name %>"/>
                  <input type="hidden" name="vhost" value="<%= permissions[i].vhost %>"/>
                  <input type="submit" value="Clear"/>
                </form>
@@ -40,7 +40,7 @@
   <h2>Set Permission</h2>
   <div>
     <form action="#/permissions" method="put">
-      <input type="hidden" name="username" value="<%= user %>"/>
+      <input type="hidden" name="username" value="<%= user.name %>"/>
       <table class="form">
         <tr>
           <th><label>Virtual Host:</label></th>

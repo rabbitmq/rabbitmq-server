@@ -22,10 +22,10 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, now_ms/0, http_date/0, vhost/1, vhost_exists/1]).
+-export([is_authorized/2, now_ms/0, vhost/1, vhost_exists/1]).
 -export([bad_request/3, id/2, parse_bool/1]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/3]).
--export([all_or_one_vhost/2, with_decode_vhost/4]).
+-export([all_or_one_vhost/2, with_decode_vhost/4, reply/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -75,6 +75,9 @@ vhost(ReqData) ->
 vhost_exists(VHostBin) ->
     lists:any(fun (E) -> E == VHostBin end,
               rabbit_access_control:list_vhosts()).
+
+reply(Facts, ReqData, Context) ->
+    {mochijson2:encode(Facts), ReqData, Context}.
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, Reason, ReqData, Context).

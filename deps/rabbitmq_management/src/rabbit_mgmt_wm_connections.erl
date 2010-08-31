@@ -34,9 +34,8 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Conns = {connections,
-             [{struct, C} || C <- rabbit_mgmt_db:get_connections()]},
-    {rabbit_mgmt_format:encode([Conns]), ReqData, Context}.
+    Conns = [{struct, C} || C <- rabbit_mgmt_db:get_connections()],
+    rabbit_mgmt_util:reply(Conns, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

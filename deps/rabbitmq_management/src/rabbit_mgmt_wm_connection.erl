@@ -45,8 +45,7 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    Conn = {connection, {struct, conn(ReqData)}},
-    {rabbit_mgmt_format:encode([Conn]), ReqData, Context}.
+    rabbit_mgmt_util:reply({struct, conn(ReqData)}, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
     PidStr = proplists:get_value(pid, conn(ReqData)),

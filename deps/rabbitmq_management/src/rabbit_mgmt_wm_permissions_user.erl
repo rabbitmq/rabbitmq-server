@@ -36,10 +36,9 @@ content_types_provided(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Perms = rabbit_access_control:list_user_permissions(
               rabbit_mgmt_util:id(user, ReqData)),
-    {rabbit_mgmt_format:encode(
-       [{permissions,
-         [rabbit_mgmt_format:user_permissions(P) || P <- Perms]}]),
-     ReqData, Context}.
+    rabbit_mgmt_util:reply(
+      [rabbit_mgmt_format:user_permissions(P) || P <- Perms],
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

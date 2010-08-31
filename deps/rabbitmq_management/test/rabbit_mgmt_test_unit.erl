@@ -45,7 +45,8 @@ rates_test() ->
 http_overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
-    [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, http_get("/overview", ?OK)).
+    {struct, Overview} = http_get("/overview"),
+    [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, Overview).
 
 http_auth_test() ->
     test_auth(?NOT_AUTHORISED, []),
@@ -55,16 +56,16 @@ http_auth_test() ->
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
 http_vhosts_test() ->
-    [<<"/">>] = http_get_check("/vhosts", "vhosts"),
+    [<<"/">>] = http_get("/vhosts"),
     %% Create a new one
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     %% PUT should be idempotent
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     %% Check it's there
-    [<<"/">>, <<"myvhost">>] = http_get_check("/vhosts", "vhosts"),
+    [<<"/">>, <<"myvhost">>] = http_get("/vhosts"),
     %% Check individually
-    <<"/">> = http_get_check("/vhosts/%2f", "vhost"),
-    <<"myvhost">> = http_get_check("/vhosts/myvhost", "vhost"),
+    <<"/">> = http_get("/vhosts/%2f", ?OK),
+    <<"myvhost">> = http_get("/vhosts/myvhost"),
     %% Delete it
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     %% It's not there
@@ -77,12 +78,19 @@ http_users_test() ->
     http_put("/users/myuser", [{flim, "flam"}], ?BAD_REQUEST),
     http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, "password"}], ?NO_CONTENT),
-    <<"myuser">> = http_get_check("/users/myuser", "user"),
-    [<<"guest">>, <<"myuser">>] = http_get_check("/users", "users"),
+    {struct,[{<<"name">>,<<"myuser">>},
+             {<<"password">>,<<"password">>}]} =
+        http_get("/users/myuser"),
+    [{struct,[{<<"name">>,<<"guest">>},
+              {<<"password">>,<<"guest">>}]},
+     {struct,[{<<"name">>,<<"myuser">>},
+              {<<"password">>,<<"password">>}]}] =
+        http_get("/users"),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
     test_auth(?NOT_AUTHORISED, [auth_header("myuser", "password")]),
-    http_get("/users/myuser", ?NOT_FOUND).
+    http_get("/users/myuser", ?NOT_FOUND),
+    ok.
 
 http_permissions_validation_test() ->
     Good = [{configure, ".*"}, {write, ".*"},
@@ -108,7 +116,7 @@ http_permissions_list_test() ->
               {<<"write">>,<<".*">>},
               {<<"read">>,<<".*">>},
               {<<"scope">>,<<"client">>}]}] =
-        http_get_check("/permissions", "permissions"),
+        http_get("/permissions"),
 
     http_put("/users/myuser1", [{password, ""}], ?NO_CONTENT),
     http_put("/users/myuser2", [{password, ""}], ?NO_CONTENT),
@@ -121,9 +129,9 @@ http_permissions_list_test() ->
     http_put("/permissions/myuser1/myvhost2", Perms, ?NO_CONTENT),
     http_put("/permissions/myuser2/myvhost1", Perms, ?NO_CONTENT),
 
-    4 = length(http_get_check("/permissions", "permissions")),
-    2 = length(http_get_check("/permissions/myuser1", "permissions")),
-    1 = length(http_get_check("/permissions/myuser2", "permissions")),
+    4 = length(http_get("/permissions")),
+    2 = length(http_get("/permissions/myuser1")),
+    1 = length(http_get("/permissions/myuser2")),
 
     http_delete("/users/myuser1", ?NO_CONTENT),
     http_delete("/users/myuser2", ?NO_CONTENT),
@@ -144,7 +152,7 @@ http_permissions_test() ->
              {<<"write">>,<<"foo">>},
              {<<"read">>,<<"foo">>},
              {<<"scope">>,<<"client">>}]} =
-        http_get_check("/permissions/myuser/myvhost", "permission"),
+        http_get("/permissions/myuser/myvhost"),
     http_delete("/permissions/myuser/myvhost", ?NO_CONTENT),
     http_get("/permissions/myuser/myvhost", ?NOT_FOUND),
 
@@ -184,7 +192,7 @@ http_exchanges_test() ->
              {<<"durable">>,true},
              {<<"auto_delete">>,false},
              {<<"arguments">>,{struct,[]}}]} =
-        http_get_check("/exchanges/myvhost/foo", "exchange"),
+        http_get("/exchanges/myvhost/foo"),
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/exchanges/myvhost/bar",
@@ -255,8 +263,8 @@ http_delete(Path, CodeExp) ->
         req(delete, Path, [auth_header()]),
     decode(CodeExp, ResBody).
 
-http_get_check(Path, Key) ->
-    pget(list_to_binary(Key), http_get(Path, ?OK)).
+http_get(Path) ->
+    http_get(Path, ?OK).
 
 req(Type, Path, Headers) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
@@ -267,8 +275,7 @@ req(Type, Path, Headers, Body) ->
 
 decode(Code, ResBody) ->
     case Code of
-        ?OK -> {struct, Res} = mochijson2:decode(ResBody),
-               Res;
+        ?OK -> mochijson2:decode(ResBody);
         _   -> ok
     end.
 

@@ -14,11 +14,11 @@ function dispatcher() {
                 render(r, t, p);
             });
     }
-    path('#/', ['/overview'], 'overview');
+    path('#/', {'overview': '/overview'}, 'overview');
 
-    path('#/connections', ['/connections/'], 'connections');
+    path('#/connections', {'connections': '/connections/'}, 'connections');
     this.get('#/connections/:name', function() {
-            render(['/connections/' + esc(this.params['name'])], 'connection',
+            render({'connection': '/connections/' + esc(this.params['name'])}, 'connection',
                    '#/connections');
         });
     this.del('#/connections', function() {
@@ -27,11 +27,11 @@ function dispatcher() {
             return false;
         });
 
-    path('#/channels', ['/channels'], 'channels');
+    path('#/channels', {'channels': '/channels'}, 'channels');
 
-    path('#/exchanges', ['/exchanges', '/vhosts'], 'exchanges');
+    path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
     this.get('#/exchanges/:vhost/:name', function() {
-            render(['/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])], 'exchange',
+            render({'exchange': '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])}, 'exchange',
                    '#/exchanges');
         });
     this.put('#/exchanges', function() {
@@ -45,9 +45,9 @@ function dispatcher() {
             return false;
         });
 
-    path('#/queues', ['/queues', '/vhosts'], 'queues');
+    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
-            render(['/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])], 'queue',
+            render({'queue': '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])}, 'queue',
                    '#/queues');
         });
     this.put('#/queues', function() {
@@ -61,9 +61,9 @@ function dispatcher() {
             return false;
         });
 
-    path('#/vhosts', ['/vhosts/'], 'vhosts');
+    path('#/vhosts', {'vhosts': '/vhosts/'}, 'vhosts');
     this.get('#/vhosts/:id', function() {
-            render(['/vhosts/' + esc(this.params['id'])], 'vhost',
+            render({'vhost': '/vhosts/' + esc(this.params['id'])}, 'vhost',
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
@@ -77,11 +77,11 @@ function dispatcher() {
             return false;
         });
 
-    path('#/users', ['/users/'], 'users');
+    path('#/users', {'users': '/users/'}, 'users');
     this.get('#/users/:id', function() {
-            render(['/users/' + esc(this.params['id']),
-                    '/permissions/' + esc(this.params['id']),
-                    '/vhosts/'], 'user',
+            render({'user': '/users/' + esc(this.params['id']),
+                    'permissions': '/permissions/' + esc(this.params['id']),
+                    'vhosts': '/vhosts/'}, 'user',
                    '#/users');
         });
     this.put('#/users', function() {
@@ -125,11 +125,10 @@ function render(reqs, template, highlight) {
 
 function update() {
     //clearInterval(timer);
-    with_reqs(current_reqs, [], function(jsons) {
-            var json = merge(jsons, current_template);
+    with_reqs(current_reqs, [], function(json) {
             var html = format(current_template, json);
             replace_content('main', html);
-            update_status('ok', json['datetime']);
+            update_status('ok');
             postprocess();
             //timer = setInterval('update()', 5000);
         });
@@ -160,25 +159,24 @@ function postprocess() {
 }
 
 function with_reqs(reqs, acc, fun) {
-    if (reqs.length > 0) {
-        with_req('/api' + reqs[0], function(text) {
-                acc.push(jQuery.parseJSON(text));
-                with_reqs(reqs.slice(1), acc, fun);
+    var key;
+    for (var k in reqs) {
+        key = k;
+    }
+    if (key != undefined) {
+        with_req('/api' + reqs[key], function(resp) {
+                acc[key] = jQuery.parseJSON(resp.responseText);
+                acc['last-modified'] = resp.getResponseHeader('Last-Modified');
+                var remainder = {};
+                for (var k in reqs) {
+                    if (k != key) remainder[k] = reqs[k];
+                }
+                with_reqs(remainder, acc, fun);
             });
     }
     else {
         fun(acc);
     }
-}
-
-function merge(jsons, template) {
-    for (var i = 1; i < jsons.length; i++) {
-        for (var k in jsons[i]) {
-            jsons[0][k] = jsons[i][k];
-        }
-    }
-
-    return jsons[0];
 }
 
 function replace_content(id, html) {
@@ -196,14 +194,14 @@ function format(template, json) {
     }
 }
 
-function update_status(status, datetime) {
+function update_status(status) {
     var text;
     if (status == 'ok')
-        text = "Last update: " + datetime;
+        text = "Last update: " + new Date();
     else if (status == 'timeout')
-        text = "Warning: server reported busy at " + datetime;
+        text = "Warning: server reported busy at " + new Date();
     else if (status == 'error')
-        text = "Error: could not connect to server at " + datetime;
+        text = "Error: could not connect to server at " + new Date();
     //else if (status == 'paused')
     //    text = "Updating halted due to form interaction.";
 
@@ -218,13 +216,13 @@ function with_req(path, fun) {
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (req.status == 200) {
-                fun(req.responseText);
+                fun(req);
             }
             else if (req.status == 408) {
-                update_status('timeout', new Date());
+                update_status('timeout');
             }
             else if (req.status == 0) {
-                update_status('error', new Date());
+                update_status('error');
             }
             else if (req.status == 404) {
                 var html = format('404', {});

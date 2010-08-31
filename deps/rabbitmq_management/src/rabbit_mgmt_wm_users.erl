@@ -34,8 +34,10 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Users = rabbit_access_control:list_users(),
-    {rabbit_mgmt_format:encode([{users, Users}]), ReqData, Context}.
+    Users0 = [rabbit_access_control:lookup_user(U)
+             || U <- rabbit_access_control:list_users()],
+    Users = [rabbit_mgmt_format:user(U) || {ok, U} <- Users0],
+    rabbit_mgmt_util:reply(Users, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

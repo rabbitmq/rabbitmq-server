@@ -20,20 +20,13 @@
 %%
 -module(rabbit_mgmt_format).
 
--export([encode/1, format/2, print/2, pid/1, ip/1, table/1, tuple/1]).
+-export([format/2, print/2, pid/1, ip/1, table/1, tuple/1]).
 -export([protocol/1, resource/1, permissions/1, user_permissions/1]).
--export([exchange/1]).
+-export([exchange/1, user/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-
-encode(Facts) ->
-    mochijson2:encode({struct,
-                       [{node, node()},
-                        {datetime, list_to_binary(
-                                     rabbit_mgmt_util:http_date())}
-                       ] ++ Facts}).
 
 format([], _Fs) ->
     [];
@@ -112,3 +105,7 @@ user_permissions({VHost, Conf, Write, Read, Scope}) ->
 exchange(X) ->
     format(X, [{fun rabbit_mgmt_format:resource/1, [name]},
                {fun rabbit_mgmt_format:table/1, [arguments]}]).
+
+user(User) ->
+    [{name, User#user.username},
+     {password, User#user.password}].
