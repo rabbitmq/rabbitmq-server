@@ -314,7 +314,7 @@ check_declare_arguments(QueueName, Args) ->
 check_expires_argument(undefined) ->
     ok;
 check_expires_argument({Type, Expires}) when Expires > 0 ->
-    case lists:any(fun(E) -> E == Type end, ?EXPIRES_TYPES) of
+    case lists:member(Type, ?EXPIRES_TYPES) of
         true  -> ok;
         false -> {error, {expires_not_of_acceptable_type, Type, Expires}}
     end;
