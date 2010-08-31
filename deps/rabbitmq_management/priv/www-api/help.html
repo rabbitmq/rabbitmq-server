@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>RabbitMQ Management REST API</title>
+    <title>RabbitMQ Management HTTP API</title>
     <style>
       body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
       td, th { font: 12px Verdana,sans-serif; color: #444; }
@@ -15,7 +15,7 @@
     </style>
   </head>
   <body>
-    <h1>RabbitMQ Management REST API</h1>
+    <h1>RabbitMQ Management HTTP API</h1>
 
     <p>Apart from this help page, all URLs will serve only resources
     of type <code>application/json</code>, and will require HTTP basic
@@ -38,7 +38,7 @@
     <ul>
       <li>
         Get a list of vhosts: TODO update after fixing round trip
-<pre>$ curl -i -u guest:guest http://localhost:55672/rest/vhosts
+<pre>$ curl -i -u guest:guest http://localhost:55672/api/vhosts
 HTTP/1.1 200 OK
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 16:53:02 GMT
@@ -49,8 +49,8 @@ Content-Length: 87
       </li>
       <li>
         Create a new vhost:
-<pre>$ curl --noproxy localhost -i -u guest:guest -H "content-type:application/json" \
-  -XPUT http://localhost:55672/rest/vhosts/foo
+<pre>$ curl -i -u guest:guest -H "content-type:application/json" \
+  -XPUT http://localhost:55672/api/vhosts/foo
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 16:56:00 GMT
@@ -67,7 +67,7 @@ Content-Length: 0</pre>
         Create a new exchange in the default virtual host:
 <pre>$ curl -i -u guest:guest -H "content-type:application/json" \
   -XPUT -d'{"type":"direct","auto_delete":false,"durable":true,"arguments":[]}' \
-  http://localhost:55672/rest/exchanges/%2f/my-new-exchange
+  http://localhost:55672/api/exchanges/%2f/my-new-exchange
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 17:04:29 GMT
@@ -78,8 +78,8 @@ Content-Length: 0</pre>
       </li>
       <li>
         And delete it again:
-<pre>$ curl --noproxy localhost -i -u guest:guest -H "content-type:application/json" \
-  -XDELETE http://localhost:55672/rest/exchanges/%2f/my-new-exchange
+<pre>$ curl -i -u guest:guest -H "content-type:application/json" \
+  -XDELETE http://localhost:55672/api/exchanges/%2f/my-new-exchange
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Fri, 27 Aug 2010 17:05:30 GMT
@@ -104,7 +104,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/overview">/rest/overview</a></td>
+        <td class="path"><a href="/api/overview">/api/overview</a></td>
         <td>Various random bits of information that describe the whole
         system.</td>
       </tr>
@@ -113,7 +113,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/connections">/rest/connections</a></td>
+        <td class="path"><a href="/api/connections">/api/connections</a></td>
         <td>A list of all open connections.</td>
       </tr>
       <tr>
@@ -121,7 +121,7 @@ Content-Length: 0</pre>
         <td></td>
         <td>X</td>
         <td></td>
-        <td class="path">/rest/connections/<i>name</i></td>
+        <td class="path">/api/connections/<i>name</i></td>
         <td>An individual connection. DELETEing it will close the
         connection.</td>
       </tr>
@@ -130,7 +130,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/channels">/rest/channels</a></td>
+        <td class="path"><a href="/api/channels">/api/channels</a></td>
         <td>A list of all open channels.</td>
       </tr>
       <tr>
@@ -138,7 +138,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/exchanges">/rest/exchanges</a></td>
+        <td class="path"><a href="/api/exchanges">/api/exchanges</a></td>
         <td>A list of all exchanges.</td>
       </tr>
       <tr>
@@ -146,7 +146,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/rest/exchanges/<i>vhost</i></td>
+        <td class="path">/api/exchanges/<i>vhost</i></td>
         <td>A list of all exchanges in a given virtual host.</td>
       </tr>
       <tr>
@@ -154,7 +154,7 @@ Content-Length: 0</pre>
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/rest/exchanges/<i>vhost</i>/<i>name</i></td>
+        <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i></td>
         <td>An individual exchange.</td>
       </tr>
       <tr>
@@ -162,7 +162,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/queues">/rest/queues</a></td>
+        <td class="path"><a href="/api/queues">/api/queues</a></td>
         <td>A list of all queues.</td>
       </tr>
       <tr>
@@ -170,7 +170,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/rest/queues/<i>vhost</i></td>
+        <td class="path">/api/queues/<i>vhost</i></td>
         <td>A list of all queues in a given virtual host.</td>
       </tr>
       <tr>
@@ -178,7 +178,7 @@ Content-Length: 0</pre>
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/rest/queues/<i>vhost</i>/<i>name</i></td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i></td>
         <td>An individual queue.</td>
       </tr>
       <tr>
@@ -186,7 +186,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/vhosts">/rest/vhosts</a></td>
+        <td class="path"><a href="/api/vhosts">/api/vhosts</a></td>
         <td>A list of all vhosts.</td>
       </tr>
       <tr>
@@ -194,7 +194,7 @@ Content-Length: 0</pre>
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/rest/vhosts/<i>name</i></td>
+        <td class="path">/api/vhosts/<i>name</i></td>
         <td>An individual vhost.</td>
       </tr>
       <tr>
@@ -202,7 +202,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/user">/rest/users</a></td>
+        <td class="path"><a href="/api/user">/api/users</a></td>
         <td>A list of all users.</td>
       </tr>
       <tr>
@@ -210,7 +210,7 @@ Content-Length: 0</pre>
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/rest/users/<i>name</i></td>
+        <td class="path">/api/users/<i>name</i></td>
         <td>An individual user.</td>
       </tr>
       <tr>
@@ -218,7 +218,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path"><a href="/rest/permissions">/rest/permissions</a></td>
+        <td class="path"><a href="/api/permissions">/api/permissions</a></td>
         <td>A list of all permissions for all users.</td>
       </tr>
       <tr>
@@ -226,7 +226,7 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/rest/permissions/<i>user</i></td>
+        <td class="path">/api/permissions/<i>user</i></td>
         <td>A list of all permissions for a given user.</td>
       </tr>
       <tr>
@@ -234,7 +234,7 @@ Content-Length: 0</pre>
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/rest/permissions/<i>user</i>/<i>vhost</i></td>
+        <td class="path">/api/permissions/<i>user</i>/<i>vhost</i></td>
         <td>An individual permission of a user and virtual host.</td>
       </tr>
     </table>

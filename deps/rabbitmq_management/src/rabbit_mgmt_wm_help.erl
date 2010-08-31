@@ -35,5 +35,5 @@ to_html(ReqData, Context) ->
     %% not work under "make cover":
     {ok, Help} = file:read_file(filename:join(
                                   [filename:dirname(code:which(?MODULE)),
-                                   "..", "priv", "www-rest", "help.html"])),
+                                   "..", "priv", "www-api", "help.html"])),
     {Help, ReqData, Context}.

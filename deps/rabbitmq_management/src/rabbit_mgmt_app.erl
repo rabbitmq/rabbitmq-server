@@ -24,7 +24,7 @@
 
 -export([start/2, stop/1]).
 
--define(PREFIX, "rest").
+-define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 
 start(_Type, _StartArgs) ->
@@ -53,8 +53,8 @@ start(_Type, _StartArgs) ->
     io:format("done~n"),
     {ok, Hostname} = inet:gethostname(),
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
-    io:format("  REST API:      ~s/rest/~n", [URLPrefix]),
-    io:format("  Management UI: ~s/mgmt/~n", [URLPrefix]),
+    io:format("  HTTP API:      ~s/~s/~n", [URLPrefix, ?PREFIX]),
+    io:format("  Management UI: ~s/~s/~n", [URLPrefix, ?UI_PREFIX]),
     Res.
 
 dispatcher() ->
