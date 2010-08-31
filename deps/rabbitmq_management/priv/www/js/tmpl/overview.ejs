@@ -14,9 +14,7 @@
  <tr><th>node</th><td><%= overview.node %></td></tr>
  <tr><th>pid</th><td><%= overview.os_pid %></td></tr>
  <tr><th>bound to</th><td><%= overview.bound_to %></td></tr>
- <tr><th>file descriptors</th><td class="<%= fmt_color(overview.fd_used / overview.fd_total) %>"><%= overview.fd_used %> / <%= overview.fd_total %> <sub>(used/available)</span></td></tr>
- <tr><th>erlang processes</th><td class="<%= fmt_color(overview.proc_used / overview.proc_total) %>"><%= overview.proc_used %> / <%= overview.proc_total %> <sub>(used/available)</td></tr>
- <tr><th>memory</th><td class="<%= fmt_color(overview.mem_used / overview.mem_total) %>"><%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %> <sub>(used/available)</td></tr>
- <tr><th>ets memory</th><td><%= fmt_bytes(overview.mem_ets) %></td></tr>
- <tr><th>binary memory</th><td><%= fmt_bytes(overview.mem_binary) %></td></tr>
+ <tr><th>file descriptors</th><td class="status"><div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>"><%= overview.fd_used %> / <%= overview.fd_total %> <sub>(used/available)</span></div></td></tr>
+ <tr><th>erlang processes</th><td class="status"><div class="<%= fmt_color(overview.proc_used / overview.proc_total) %>"><%= overview.proc_used %> / <%= overview.proc_total %> <sub>(used/available)</div></td></tr>
+ <tr><th>memory</th><td class="status"><div class="<%= fmt_color(overview.mem_used / overview.mem_total) %>"><%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %> <sub>(used/available)</div></td></tr>
 </table>

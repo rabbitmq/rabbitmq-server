@@ -30,10 +30,11 @@ table.facts th, table.facts td { vertical-align: top; }
 
 tr.alt td {background:#eee;}
 
-td.red {background: #F62817; color:white; font-weight: bolder;}
-td.red * {color:white;}
-td.yellow {background: yellow;}
-td.green {background: lightgreen;}
+td.status div { padding: 5px; text-align: center; font-weight: bold; border-radius: 5px; -moz-border-radius: 5px; }
+td.status div.red {background: #F62817; color:white; }
+td.status div.red * {color:white;}
+td.status div.yellow {background: yellow;}
+td.status div.green {background: lightgreen;}
 
 td.l {text-align: left;}
 td.c {text-align: center;}
@@ -44,7 +45,7 @@ p.status-paused { color: #888; }
 p.status-warning { color: black; background-color: #ff8; }
 p.status-error { color: white; background-color: #f00; }
 
-.highlight {width: 150px; font-size: 150%; float: right; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 20px 0; color: #888;}
+.highlight {width: 150px; font-size: 150%; float: right; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 20px 0; color: #888; border-radius: 10px; -moz-border-radius: 10px;}
 .highlight strong {font-size: 2em; display: block; color: #444; font-weight: normal;}
 
 div.section, div.section-hidden {border: 1px solid #ddd; margin: 0 0 1em 0;}
