@@ -19,7 +19,7 @@ clean:
 	rm -rf $(INCLUDE_DIR)
 	rm -rf $(LIB_PACKAGE_DIR) $(TARGETS)
 
-squeakyclean: clean
+distclean: clean
 	rm -rf $(CHECKOUT_DIR)
 
 $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
