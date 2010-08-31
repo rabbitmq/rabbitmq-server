@@ -1103,19 +1103,17 @@ function_exported_or_default(Mod, Fun, Ar, Default) ->
     case erlang:function_exported(Mod, Fun, Ar) of
         true -> case Ar of
                     2 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
-                                 try
-                                     Mod:Fun(Msg, State)
-                                 catch
-                                     Reason ->
-                                         terminate(Reason, Msg, GS2State)
+                                 case catch Mod:Fun(Msg, State) of
+                                     Res when is_integer(Res) -> Res;
+                                     Err                   ->
+                                         handle_common_termination(Err, Msg, GS2State)
                                  end
                          end;
                     3 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
-                                 try
-                                     Mod:Fun(Msg, From, State)
-                                 catch
-                                     Reason ->
-                                         terminate(Reason, Msg, GS2State)
+                                 case catch Mod:Fun(Msg, From, State) of
+                                     Res when is_integer(Res) -> Res;
+                                     Err                   ->
+                                         handle_common_termination(Err, Msg, GS2State)
                                  end
                          end
                 end;
