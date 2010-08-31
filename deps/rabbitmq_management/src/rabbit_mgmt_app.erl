@@ -50,7 +50,7 @@ start(_Type, _StartArgs) ->
                                             "Management Console"),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
-                                             "REST API"),
+                                             "HTTP API"),
     io:format("done~n"),
     {ok, Hostname} = inet:gethostname(),
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
