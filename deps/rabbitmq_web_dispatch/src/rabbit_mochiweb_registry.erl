@@ -47,7 +47,7 @@ handle_call({lookup, Req}, _From,
     end;
 
 handle_call(list, _From, State = #state{ selectors = Selectors }) ->
-    {reply, [{P, D} || {_S, _H, {P, D}} <- Selectors, D =/= none], State};
+    {reply, [Link || {_S, _H, Link} <- Selectors], State};
 
 handle_call(Req, _From, State) ->
     error_logger:format("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
@@ -81,7 +81,7 @@ match_request([{Selector, Handler, _Link}|Rest], Req) ->
 
 listing_fallback_handler(Req) ->
     List = [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Name, Path])
-            || {Name, Path} <- gen_server:call(?MODULE, list)],
+            || {Name, Path} <- gen_server:call(?MODULE, list), Name =/= none],
     Req:respond({200, [],
                  "<h1>RabbitMQ Web Server</h1><ul>" ++ lists:flatten(List)
                  ++ "</ul>"}).
