@@ -56,7 +56,7 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(EXPIRES_TYPE, long).
+-define(EXPIRES_TYPE, signedint).
 
 %%----------------------------------------------------------------------------
 
@@ -318,8 +318,8 @@ check_expires_argument({?EXPIRES_TYPE, Expires})
     ok;
 check_expires_argument({?EXPIRES_TYPE, _Expires}) ->
     {error, expires_zero_or_less};
-check_expires_argument(_) ->
-    {error, expires_not_of_type_long}.
+check_expires_argument(Arg) ->
+    {error, {expires_not_of_type_int, Arg}}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
