@@ -1,14 +1,15 @@
 body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
-#logo { width: 204px; height: 37px; margin-bottom: 25px; background: url(../img/rabbitmqlogo.png); }
+.br { clear: both; display: block; }
+#logo { width: 204px; height: 37px; margin-bottom: 20px; background: url(../img/rabbitmqlogo.png); }
 #strap { float: right; }
-#menu ul { height: 2em; padding: 0; }
+#menu ul { float: left; padding: 0; margin: 0; }
 #menu li { float: left; list-style-type: none; padding: 0 2em 0 0; }
-#menu li a { padding: 0.5em; }
+#menu li a { display: block; padding: 0.5em; }
 #menu { border-bottom: 1px solid #FF8C00; }
 #main { clear: both; }
 #menu a { color: #444; font-weight: bold; text-decoration: none; }
 #main a { color: #444; }
-#menu a.selected { background-color: #F60; color:white; }
+#menu a.selected { background-color: #F60; color:white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
 #status { border-top:1px solid #E4E4E4; }
 h1 { font-size: 2em; }
 
