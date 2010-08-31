@@ -809,38 +809,16 @@ dispatch({'$gen_cast', Msg}, Mod, State) ->
 dispatch(Info, Mod, State) ->
     Mod:handle_info(Info, State).
 
-handle_msg({'$gen_call', From, Msg},
-           GS2State = #gs2_state { state = State,
-                                   mod   = Mod,
-                                   debug = [] }) ->
-    case catch Mod:handle_call(Msg, From, State) of
-	{reply, Reply, NState} ->
-	    reply(From, Reply),
-	    loop(GS2State #gs2_state { state = NState,
-                                       time  = infinity });
-	{reply, Reply, NState, Time1} ->
-	    reply(From, Reply),
-	    loop(GS2State #gs2_state { state = NState,
-                                       time  = Time1 });
-	{noreply, NState} ->
-	    loop(GS2State #gs2_state { state = NState,
-                                       time  = infinity });
-	{noreply, NState, Time1} ->
-	    loop(GS2State #gs2_state { state = NState,
-                                       time  = Time1 });
-	{stop, Reason, Reply, NState} ->
-	    {'EXIT', R} =
-		(catch terminate(Reason, Msg,
-                                 GS2State #gs2_state { state = NState })),
-	    reply(From, Reply),
-	    exit(R);
-	Other -> handle_common_reply(Other, Msg, GS2State)
-    end;
-handle_msg(Msg, GS2State = #gs2_state { mod   = Mod,
-                                        state = State,
-                                        debug = [] }) ->
-    Reply = (catch dispatch(Msg, Mod, State)),
-    handle_common_reply(Reply, Msg, GS2State);
+common_reply(_Name, From, Reply, _NState, [] = _Debug) ->
+    reply(From, Reply),
+    [];
+common_reply(Name, From, Reply, NState, Debug) ->
+    reply(Name, From, Reply, NState, Debug).
+
+common_debug([] = _Debug, _Func, _Info, _Event) ->
+    [];
+common_debug(Debug, Func, Info, Event) ->
+    sys:handle_debug(Debug, Func, Info, Event).
 
 handle_msg({'$gen_call', From, Msg},
            GS2State = #gs2_state { mod = Mod,
@@ -849,24 +827,24 @@ handle_msg({'$gen_call', From, Msg},
                                    debug = Debug }) ->
     case catch Mod:handle_call(Msg, From, State) of
 	{reply, Reply, NState} ->
-	    Debug1 = reply(Name, From, Reply, NState, Debug),
+	    Debug1 = common_reply(Name, From, Reply, NState, Debug),
 	    loop(GS2State #gs2_state { state = NState,
                                        time  = infinity,
                                        debug = Debug1 });
 	{reply, Reply, NState, Time1} ->
-	    Debug1 = reply(Name, From, Reply, NState, Debug),
+	    Debug1 = common_reply(Name, From, Reply, NState, Debug),
 	    loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
                                        debug = Debug1});
 	{noreply, NState} ->
-	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
-				      {noreply, NState}),
+	    Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+                                  {noreply, NState}),
 	    loop(GS2State #gs2_state {state = NState,
                                       time  = infinity,
                                       debug = Debug1});
 	{noreply, NState, Time1} ->
-	    Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
-				      {noreply, NState}),
+	    Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+                                  {noreply, NState}),
 	    loop(GS2State #gs2_state {state = NState,
                                       time  = Time1,
                                       debug = Debug1});
@@ -884,32 +862,19 @@ handle_msg(Msg,
     Reply = (catch dispatch(Msg, Mod, State)),
     handle_common_reply(Reply, Msg, GS2State).
 
-handle_common_reply(Reply, Msg, GS2State = #gs2_state { debug = [] }) ->
-    case Reply of
-	{noreply, NState} ->
-	    loop(GS2State #gs2_state { state = NState,
-                                       time  = infinity });
-        {noreply, NState, Time1} ->
-            loop(GS2State #gs2_state { state = NState,
-                                       time  = Time1 });
-        _ ->
-            handle_common_termination(Reply, Msg,
-                                      GS2State #gs2_state { debug = [] })
-    end;
-
 handle_common_reply(Reply, Msg,
                     GS2State = #gs2_state { name  = Name,
                                             debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
-            Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
-                                      {noreply, NState}),
+            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+                                  {noreply, NState}),
             loop(GS2State #gs2_state { state = NState,
                                        time  = infinity,
                                        debug = Debug1 });
         {noreply, NState, Time1} ->
-            Debug1 = sys:handle_debug(Debug, {?MODULE, print_event}, Name,
-                                      {noreply, NState}),
+            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+                                  {noreply, NState}),
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
                                        debug = Debug1 });
