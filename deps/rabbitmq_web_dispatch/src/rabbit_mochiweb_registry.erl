@@ -80,7 +80,9 @@ match_request([{Selector, Handler, _Link}|Rest], Req) ->
 %%---------------------------------------------------------------------------
 
 listing_fallback_handler(Req) ->
-    HTMLPrefix = "<html><head><title>RabbitMQ Web Server</title></head>" ++
+    HTMLPrefix =
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">" ++
+        "<head><title>RabbitMQ Web Server</title></head>" ++
         "<body><h1>RabbitMQ Web Server</h1><ul>",
     HTMLSuffix = "</ul></body></html>",
     List = [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc])
