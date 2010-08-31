@@ -205,8 +205,7 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers(),
-    ok = rabbit_mnesia:ensure_mnesia_dir().
+    ok = ensure_working_log_handlers().
 
 start() ->
     try

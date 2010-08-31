@@ -51,7 +51,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    io:format("Activating RabbitMQ plugins ..."),
+    io:format("Activating RabbitMQ plugins ...~n"),
     %% Ensure Rabbit is loaded so we can access it's environment
     application:load(rabbit),
 
@@ -130,7 +130,7 @@ start() ->
         ok    -> ok;
         error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
-    io:format("~n~w plugins activated:~n", [length(PluginApps)]),
+    io:format("~w plugins activated:~n", [length(PluginApps)]),
     [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
      || App <- PluginApps],
     io:nl(),
@@ -151,29 +151,33 @@ determine_version(App) ->
     {ok, Vsn} = application:get_key(App, vsn),
     {App, Vsn}.
 
-assert_dir(Dir) ->
-    case filelib:is_dir(Dir) of
-        true  -> ok;
-        false -> ok = filelib:ensure_dir(Dir),
-                 ok = file:make_dir(Dir)
-    end.
-
-delete_dir(Dir) ->
-    case filelib:is_dir(Dir) of
+delete_recursively(Fn) ->
+    case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
         true ->
-            case file:list_dir(Dir) of
+            case file:list_dir(Fn) of
                 {ok, Files} ->
-                    [case Dir ++ "/" ++ F of
-                         Fn ->
-                             case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
-                                 true  -> delete_dir(Fn);
-                                 false -> file:delete(Fn)
-                             end
-                     end || F <- Files]
-            end,
-            ok = file:del_dir(Dir);
+                    case lists:foldl(fun ( Fn1,  ok) -> delete_recursively(
+                                                          Fn ++ "/" ++ Fn1);
+                                         (_Fn1, Err) -> Err
+                                     end, ok, Files) of
+                        ok  -> case file:del_dir(Fn) of
+                                   ok         -> ok;
+                                   {error, E} -> {error,
+                                                  {cannot_delete, Fn, E}}
+                               end;
+                        Err -> Err
+                    end;
+                {error, E} ->
+                    {error, {cannot_list_files, Fn, E}}
+            end;
         false ->
-            ok
+            case filelib:is_file(Fn) of
+                true  -> case file:delete(Fn) of
+                             ok         -> ok;
+                             {error, E} -> {error, {cannot_delete, Fn, E}}
+                         end;
+                false -> ok
+            end
     end.
 
 is_symlink(Name) ->
@@ -182,13 +186,18 @@ is_symlink(Name) ->
         _       -> false
     end.
 
-unpack_ez_plugins(PluginSrcDir, PluginDestDir) ->
+unpack_ez_plugins(SrcDir, DestDir) ->
     %% Eliminate the contents of the destination directory
-    delete_dir(PluginDestDir),
-
-    assert_dir(PluginDestDir),
-    [unpack_ez_plugin(PluginName, PluginDestDir) ||
-        PluginName <- filelib:wildcard(PluginSrcDir ++ "/*.ez")].
+    case delete_recursively(DestDir) of
+        ok         -> ok;
+        {error, E} -> error("Could not delete dir ~s (~p)", [DestDir, E])
+    end,
+    case filelib:ensure_dir(DestDir ++ "/") of
+        ok          -> ok;
+        {error, E2} -> error("Could not create dir ~s (~p)", [DestDir, E2])
+    end,
+    [unpack_ez_plugin(PluginName, DestDir) ||
+        PluginName <- filelib:wildcard(SrcDir ++ "/*.ez")].
 
 unpack_ez_plugin(PluginFn, PluginDestDir) ->
     zip:unzip(PluginFn, [{cwd, PluginDestDir}]),
@@ -247,8 +256,8 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}) ->
-    [Entry, {apply,{rabbit,prepare,[]}}];
+process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
+    [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
 
