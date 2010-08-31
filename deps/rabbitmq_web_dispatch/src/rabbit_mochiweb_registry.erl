@@ -83,6 +83,6 @@ listing_fallback_handler(Req) ->
     HTMLPrefix = "<html><head><title>RabbitMQ Web Server</title></head>" ++
         "<body><h1>RabbitMQ Web Server</h1><ul>",
     HTMLSuffix = "</ul></body></html>",
-    List = [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Name, Path])
-            || {Name, Path} <- gen_server:call(?MODULE, list), Name =/= none],
+    List = [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc])
+            || {Path, Desc} <- gen_server:call(?MODULE, list), Desc =/= none],
     Req:respond({200, [], HTMLPrefix ++ List ++ HTMLSuffix}).
