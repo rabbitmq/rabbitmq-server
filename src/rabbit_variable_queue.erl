@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/1, delete_and_terminate/1,
+-export([init/3, init/4, terminate/1, delete_and_terminate/1,
          purge/1, publish/2, publish_delivered/3, fetch/2, ack/2,
          tx_publish/3, tx_ack/3, tx_rollback/2, tx_commit/3,
          requeue/2, len/1, is_empty/1,
@@ -236,7 +236,8 @@
           ram_index_count,
           out_counter,
           in_counter,
-          rates
+          rates,
+          confirm_functions
          }).
 
 -record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
@@ -322,7 +323,8 @@
              ram_index_count      :: non_neg_integer(),
              out_counter          :: non_neg_integer(),
              in_counter           :: non_neg_integer(),
-             rates                :: rates() }).
+             rates                :: rates(),
+             confirm_functions    :: {any(), any(), any()} }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -370,6 +372,19 @@ stop_msg_store() ->
 
 init(QueueName, IsDurable, Recover) ->
     Self = self(),
+    init(QueueName, IsDurable, Recover,
+         { fun(Guids) ->                        %% index-on-disk fun
+                   gen_server2:cast(Self,
+                                    {msg_indices_written_to_disk, Guids})
+           end,
+           fun (Guids) ->                       %% msg-on-disk fun
+                   gen_server2:cast(Self, {msgs_written_to_disk, Guids})
+           end,
+           fun (Guids) ->                       %% ack-received fun
+                   gen_server2:cast(Self, {confirm_messages, Guids})
+           end }).
+
+init(QueueName, IsDurable, Recover, {IndicesOnDisk, MsgsOnDisk, _} = CF) ->
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(
           QueueName, Recover,
@@ -377,9 +392,7 @@ init(QueueName, IsDurable, Recover) ->
           fun (Guid) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
           end,
-          fun (Guids) ->
-                  gen_server2:cast(Self, {msg_indices_written_to_disk, Guids})
-          end),
+          IndicesOnDisk),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {PRef, TRef, Terms1} =
@@ -403,12 +416,9 @@ init(QueueName, IsDurable, Recover) ->
             false -> undefined
         end,
 
-    Self = self(),
     rabbit_msg_store:register_sync_callback(
       ?PERSISTENT_MSG_STORE,
-      fun (Guids) ->
-              gen_server2:cast(Self, {msgs_written_to_disk, Guids})
-      end),
+      MsgsOnDisk),
 
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
@@ -440,7 +450,8 @@ init(QueueName, IsDurable, Recover) ->
                                       ingress     = {Now, DeltaCount1},
                                       avg_egress  = 0.0,
                                       avg_ingress = 0.0,
-                                      timestamp   = Now } },
+                                      timestamp   = Now },
+      confirm_functions    = CF},
     a(maybe_deltas_to_betas(State)).
 
 terminate(State) ->
@@ -1115,7 +1126,8 @@ remove_pending_ack(KeepPersistent,
 
 ack(_MsgStoreFun, _Fun, [], State) ->
     State;
-ack(MsgStoreFun, Fun, AckTags, State) ->
+ack(MsgStoreFun, Fun, AckTags,
+    State = #vqstate { confirm_functions = {_, _, AcksReceived} }) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
         lists:foldl(
@@ -1127,7 +1139,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
-                              gen_server2:cast(self(), {confirm_messages, Guids}),
+                              AcksReceived(Guids),
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
