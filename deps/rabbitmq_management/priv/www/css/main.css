@@ -13,45 +13,45 @@ body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 h1 { font-size: 2em; }
 
 table { border-collapse: collapse; }
-table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 6em;}
+table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 6em; }
 table.list th, table.list td { vertical-align: top; }
 
-table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1em;}
+table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1em; }
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
 table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
-table.list td a { display: block; width: 100%; font-weight: bold; text-decoration: none;}
+table.list td a { display: block; width: 100%; font-weight: bold; text-decoration: none; }
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 sub { display: block; color: #888; }
-.unknown {color: #888;}
+.unknown { color: #888; }
 
 table.facts th { text-align: right; font-weight: bold; }
 table.facts th, table.facts td { vertical-align: top; }
 
-tr.alt td {background:#eee;}
+tr.alt td { background:#eee; }
 
 td.status div { padding: 5px; text-align: center; font-weight: bold; border-radius: 5px; -moz-border-radius: 5px; }
-td.status div.red {background: #F62817; color:white; }
-td.status div.red * {color:white;}
-td.status div.yellow {background: yellow;}
-td.status div.green {background: lightgreen;}
+td.status div.red { background: #F62817; color:white; }
+td.status div.red * { color:white; }
+td.status div.yellow { background: yellow; }
+td.status div.green { background: lightgreen; }
 
-td.l {text-align: left;}
-td.c {text-align: center;}
-td.r {text-align: right;}
+td.l { text-align: left; }
+td.c { text-align: center; }
+td.r { text-align: right; }
 
 p.status-ok { color: #888; }
 p.status-paused { color: #888; }
 p.status-warning { color: black; background-color: #ff8; }
 p.status-error { color: white; background-color: #f00; }
 
-.highlight {width: 150px; font-size: 150%; float: right; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 20px 0; color: #888; border-radius: 10px; -moz-border-radius: 10px;}
-.highlight strong {font-size: 2em; display: block; color: #444; font-weight: normal;}
+.highlight { width: 150px; font-size: 150%; float: right; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 20px 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 
-div.section, div.section-hidden {border: 1px solid #ddd; margin: 0 0 1em 0;}
-div.section-hidden div {display: none;}
-div.section div, div.section-hidden div {padding: 0.5em;}
-div.section h2, div.section-hidden h2 { font-size: 1em; padding: 0.5em; cursor: pointer; background: #ddd; margin: 0;}
+div.section, div.section-hidden { border: 1px solid #ddd; margin: 0 0 1em 0; }
+div.section-hidden div { display: none; }
+div.section div, div.section-hidden div { padding: 0.5em; }
+div.section h2, div.section-hidden h2 { font-size: 1em; padding: 0.5em; cursor: pointer; background: #ddd; margin: 0; }
 
 form { margin: 0; }
 input, select { padding: 0.2em; }
