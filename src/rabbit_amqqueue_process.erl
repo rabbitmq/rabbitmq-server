@@ -146,8 +146,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
-        {signedint, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
-        undefined            -> State
+        {_Type, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
+        undefined        -> State
     end.
 
 declare(Recover, From,
