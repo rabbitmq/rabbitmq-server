@@ -181,7 +181,7 @@ check_resource_access(Username,
                   false;
               [#user_permission{permission = P}] ->
                   case {Name, P} of
-                      {<<"amq.",_/binary>>, #permission{scope = client}} ->
+                      {<<"amq.gen",_/binary>>, #permission{scope = client}} ->
                           true;
                       _ ->
                           PermRegexp = case element(permission_index(Permission), P) of
