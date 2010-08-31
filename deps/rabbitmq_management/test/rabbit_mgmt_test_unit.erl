@@ -28,7 +28,7 @@
 -define(BAD_REQUEST, 400).
 -define(NOT_AUTHORISED, 401).
 %%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
--define(PREFIX, "http://localhost:55672/rest").
+-define(PREFIX, "http://localhost:55672/api").
 
 rates_test() ->
     Previous = [{foo, 1}, {bar, 100}, {baz, 3}],
