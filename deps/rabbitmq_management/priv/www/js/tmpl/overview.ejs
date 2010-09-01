@@ -2,21 +2,50 @@
 
 <div class="highlight">
   Receiving
-  <strong><%= fmt_bytes(recv_oct_rate) %>/s</strong>
+  <strong><%= fmt_bytes(overview.recv_oct_rate) %>/s</strong>
 </div>
 
 <div class="highlight">
   <span>Sending</span>
-  <strong><%= fmt_bytes(send_oct_rate) %>/s</strong>
+  <strong><%= fmt_bytes(overview.send_oct_rate) %>/s</strong>
 </div>
 
 <table class="facts">
- <tr><th>node</th><td><%= node %></td></tr>
- <tr><th>pid</th><td><%= os_pid %></td></tr>
- <tr><th>bound to</th><td><%= bound_to %></td></tr>
- <tr><th>file descriptors</th><td class="<%= fmt_color(fd_used / fd_total) %>"><%= fd_used %> / <%= fd_total %> <sub>(used/available)</span></td></tr>
- <tr><th>erlang processes</th><td class="<%= fmt_color(proc_used / proc_total) %>"><%= proc_used %> / <%= proc_total %> <sub>(used/available)</td></tr>
- <tr><th>memory</th><td class="<%= fmt_color(mem_used / mem_total) %>"><%= fmt_bytes(mem_used) %> / <%= fmt_bytes(mem_total) %> <sub>(used/available)</td></tr>
- <tr><th>ets memory</th><td><%= fmt_bytes(mem_ets) %></td></tr>
- <tr><th>binary memory</th><td><%= fmt_bytes(mem_binary) %></td></tr>
+  <tr>
+    <th>node</th>
+    <td><%= overview.node %></td>
+  </tr>
+  <tr>
+    <th>pid</th>
+    <td><%= overview.os_pid %></td></tr>
+  <tr>
+    <th>bound to</th>
+    <td><%= overview.bound_to %></td></tr>
+  <tr>
+    <th>file descriptors</th>
+    <td class="status">
+      <div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>">
+        <%= overview.fd_used %> / <%= overview.fd_total %>
+        <sub>(used/available)</sub>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <th>erlang processes</th>
+    <td class="status">
+      <div class="<%= fmt_color(overview.proc_used / overview.proc_total) %>">
+        <%= overview.proc_used %> / <%= overview.proc_total %>
+        <sub>(used/available)</sub>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <th>memory</th>
+    <td class="status">
+      <div class="<%= fmt_color(overview.mem_used / overview.mem_total) %>">
+        <%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %>
+        <sub>(used/available)</sub>
+      </div>
+    </td>
+  </tr>
 </table>

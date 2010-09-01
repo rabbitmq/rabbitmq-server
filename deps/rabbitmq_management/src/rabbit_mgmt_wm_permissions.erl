@@ -39,10 +39,9 @@ to_json(ReqData, Context) ->
           [[{V, P} ||
                P <- rabbit_access_control:list_vhost_permissions(V)] ||
               V <- rabbit_access_control:list_vhosts()]),
-    {rabbit_mgmt_format:encode(
-       [{permissions,
-         [rabbit_mgmt_format:permissions(P) || P <- Perms]}]),
-     ReqData, Context}.
+    rabbit_mgmt_util:reply(
+      [rabbit_mgmt_format:permissions(P) || P <- Perms],
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

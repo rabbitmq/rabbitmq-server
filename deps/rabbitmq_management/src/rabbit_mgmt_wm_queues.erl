@@ -43,8 +43,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Qs0 = queues(ReqData),
     Qs = rabbit_mgmt_db:get_queues(Qs0),
-    {rabbit_mgmt_format:encode(
-       [{queues, [{struct, Q} || Q <- Qs]}]), ReqData, Context}.
+    rabbit_mgmt_util:reply([{struct, Q} || Q <- Qs], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

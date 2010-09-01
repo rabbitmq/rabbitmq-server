@@ -42,7 +42,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Xs = [rabbit_mgmt_format:exchange(X) || X <- exchanges(ReqData)],
-    {rabbit_mgmt_format:encode([{exchanges, Xs}]), ReqData, Context}.
+    rabbit_mgmt_util:reply(Xs, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

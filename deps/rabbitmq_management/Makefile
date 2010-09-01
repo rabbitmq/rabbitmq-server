@@ -1,4 +1,5 @@
 PACKAGE=rabbitmq-management
+APPNAME=rabbit_management
 DEPS=rabbitmq-mochiweb rabbitmq-server rabbitmq-erlang-client
 INTERNAL_DEPS=webmachine
 RUNTIME_DEPS=webmachine

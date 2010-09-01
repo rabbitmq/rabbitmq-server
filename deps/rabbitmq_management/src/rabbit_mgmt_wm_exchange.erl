@@ -48,10 +48,9 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    {rabbit_mgmt_format:encode(
-       [{exchange, rabbit_mgmt_format:exchange(
-                     rabbit_exchange:info(exchange(ReqData)))}]),
-     ReqData, Context}.
+    rabbit_mgmt_util:reply(
+      rabbit_mgmt_format:exchange(rabbit_exchange:info(exchange(ReqData))),
+      ReqData, Context).
 
 accept_content(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(exchange, ReqData),

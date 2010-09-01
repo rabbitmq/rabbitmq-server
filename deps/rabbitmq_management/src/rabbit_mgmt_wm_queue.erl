@@ -50,8 +50,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Q0 = queue(ReqData),
     [Q] = rabbit_mgmt_db:get_queues([Q0]),
-    {rabbit_mgmt_format:encode([{queue, Q}]),
-     ReqData, Context}.
+    rabbit_mgmt_util:reply(Q, ReqData, Context).
 
 accept_content(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(queue, ReqData),

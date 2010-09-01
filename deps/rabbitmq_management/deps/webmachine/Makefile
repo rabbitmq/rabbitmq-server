@@ -17,7 +17,8 @@ all: $(TARGETS)
 clean:
 	rm -rf $(EBIN_DIR)
 	rm -rf $(INCLUDE_DIR)
-	rm -rf $(LIB_PACKAGE_DIR) $(TARGETS)
+	rm -rf $(TARGETS)
+	make -C $(LIB_PACKAGE_DIR) clean
 
 squeakyclean: clean
 	rm -rf $(CHECKOUT_DIR)

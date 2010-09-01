@@ -49,7 +49,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     {ok, User} = user(ReqData),
-    {rabbit_mgmt_format:encode([{user, User#user.username}]), ReqData, Context}.
+    rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
 
 accept_content(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),

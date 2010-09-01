@@ -49,10 +49,9 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    {rabbit_mgmt_format:encode(
-       [{permission,
-         rabbit_mgmt_format:user_permissions(perms(ReqData))}]),
-     ReqData, Context}.
+    rabbit_mgmt_util:reply(
+      rabbit_mgmt_format:user_permissions(perms(ReqData)),
+      ReqData, Context).
 
 accept_content(ReqData, Context) ->
     case perms(ReqData) of

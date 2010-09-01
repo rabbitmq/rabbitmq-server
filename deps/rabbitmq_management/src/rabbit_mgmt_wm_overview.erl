@@ -36,12 +36,13 @@ content_types_provided(ReqData, Context) ->
 to_json(ReqData, Context) ->
     OSStats = rabbit_mgmt_cache:info(),
     Overview = rabbit_mgmt_db:get_overview(),
-    {rabbit_mgmt_format:encode(
-       OSStats ++ Overview ++
-           [{os_pid, list_to_binary(os:getpid())},
-            {mem_ets, erlang:memory(ets)},
-            {mem_binary, erlang:memory(binary)}]),
-       ReqData, Context}.
+    rabbit_mgmt_util:reply(
+      OSStats ++ Overview ++
+          [{node, node()},
+           {os_pid, list_to_binary(os:getpid())},
+           {mem_ets, erlang:memory(ets)},
+           {mem_binary, erlang:memory(binary)}],
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
