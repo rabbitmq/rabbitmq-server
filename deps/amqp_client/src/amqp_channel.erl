@@ -35,7 +35,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -55,12 +55,13 @@
                 anon_sub_requests = queue:new(),
                 tagged_sub_requests = dict:new(),
                 closing = false,
-                writer = undefined,
+                writer,
                 return_handler_pid = none,
                 flow_control = false,
                 flow_handler_pid = none,
                 consumers = dict:new(),
-                default_consumer = none}).
+                default_consumer = none,
+                start_infrastructure_fun}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -256,20 +257,23 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
 
 do_rpc(State0 = #state{rpc_requests = RequestQueue,
                        closing = Closing}) ->
-    State1 = check_writer(State0),
     case queue:peek(RequestQueue) of
-        {value, {_From, Method = #'channel.close'{}, Content}} ->
-            do(Method, Content, State1),
-            State1#state{closing = just_channel};
-        {value, {_From, Method, Content}} ->
+        {value, {_From, Method = #'channel.open'{}, Content}} ->
+            State1 = start_infrastructure(State0),
             do(Method, Content, State1),
             State1;
+        {value, {_From, Method = #'channel.close'{}, Content}} ->
+            do(Method, Content, State0),
+            State0#state{closing = just_channel};
+        {value, {_From, Method, Content}} ->
+            do(Method, Content, State0),
+            State0;
         empty ->
             case Closing of
                 {connection, Reason} -> self() ! {shutdown, Reason};
                 _                    -> ok
             end,
-            State1
+            State0
     end.
 
 %%---------------------------------------------------------------------------
@@ -279,13 +283,9 @@ do_rpc(State0 = #state{rpc_requests = RequestQueue,
 do(Method, Content, #state{driver = Driver, writer = Writer}) ->
     ok = amqp_channel_util:do(Driver, Writer, Method, Content).
 
-check_writer(State = #state{writer = undefined, driver = Driver, sup = Sup}) ->
-    State#state{writer = hd(supervisor2:find_child(Sup,
-                                case Driver of network -> writer;
-                                               direct  -> rabbit_channel
-                                end))};
-check_writer(State) ->
-    State.
+start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
+    {Writer} = SIF(),
+    State#state{writer = Writer}.
 
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
     exit(no_consumers_registered);
@@ -436,16 +436,19 @@ handle_regular_method(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, ChannelNumber) ->
-    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber], []).
+start_link(Driver, ChannelNumber, SIF) ->
+    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SIF], []).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Sup, Driver, ChannelNumber]) ->
-    {ok, #state{sup = Sup, driver = Driver, number = ChannelNumber}}.
+init([Sup, Driver, ChannelNumber, SIF]) ->
+    {ok, #state{sup = Sup,
+                driver = Driver,
+                number = ChannelNumber,
+                start_infrastructure_fun = SIF}}.
 
 %% Standard implementation of the call/{2,3} command
 %% @private

@@ -106,12 +106,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{sup = Sup,
-                              collector = Collector,
+               State = #state{collector = Collector,
+                              channel_sup_sup = ChSupSup,
                               params = #amqp_params{username = User,
                                                     virtual_host = VHost},
                               channels = Channels}) ->
-    try amqp_channel_util:open_channel(Sup, ProposedNumber, ?MAX_CHANNEL_NUMBER,
+    try amqp_channel_util:open_channel(ChSupSup, ProposedNumber,
+                                       ?MAX_CHANNEL_NUMBER,
                                        [User, VHost, Collector], Channels) of
         {ChannelPid, NewChannels} ->
             {reply, ChannelPid, State#state{channels = NewChannels}}

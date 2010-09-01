@@ -43,11 +43,10 @@
 %% Spawns a new channel supervision tree linked under the given connection
 %% supervisor, starts monitoring the channel and registers it in the given
 %% Channels dict
-open_channel(Sup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
+open_channel(ChSupSup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    [ChannelSupSup] = supervisor2:find_child(Sup, channel_sup_sup),
     {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(
-                           ChannelSupSup, InfraArgs, ChannelNumber),
+                           ChSupSup, InfraArgs, ChannelNumber),
     [ChPid] = supervisor2:find_child(ChannelSup, channel),
     #'channel.open_ok'{} = amqp_channel:call(ChPid, #'channel.open'{}),
     erlang:monitor(process, ChPid),

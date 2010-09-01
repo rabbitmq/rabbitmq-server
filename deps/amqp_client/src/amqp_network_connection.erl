@@ -126,13 +126,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{sup = Sup,
-                              sock = Sock,
+               State = #state{sock = Sock,
                               channels = Channels,
-                              max_channel = MaxChannel}) ->
-    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
-    [MainReader] = supervisor2:find_child(CTSup, main_reader),
-    try amqp_channel_util:open_channel(Sup, ProposedNumber, MaxChannel,
+                              max_channel = MaxChannel,
+                              main_reader = MainReader,
+                              channel_sup_sup = ChSupSup}) ->
+    try amqp_channel_util:open_channel(ChSupSup, ProposedNumber, MaxChannel,
                                        [Sock, MainReader], Channels) of
         {ChannelPid, NewChannels} ->
             {reply, ChannelPid, State#state{channels = NewChannels}}
@@ -179,7 +178,7 @@ i(amqp_params,       State) -> State#state.params;
 i(supervisor,        State) -> State#state.sup;
 i(max_channel,       State) -> State#state.max_channel;
 i(heartbeat,         State) -> State#state.heartbeat;
-i(sock,              State) -> State#nc_state.sock;
+i(sock,              State) -> State#state.sock;
 i(num_channels,      State) -> amqp_channel_util:num_channels(
                                    State#state.channels);
 i(Item,             _State) -> throw({bad_argument, Item}).
