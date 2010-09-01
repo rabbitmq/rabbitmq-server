@@ -1,9 +1,9 @@
 -module(rabbit_mochiweb).
 
 -export([start/0, stop/0]).
--export([register_handler/2]).
--export([register_global_handler/1, register_context_handler/2, register_static_context/3,
-         static_context_selector/1, static_context_handler/3, static_context_handler/2]).
+-export([register_handler/4, register_global_handler/1]).
+-export([register_context_handler/3, register_static_context/4]).
+-export([static_context_selector/1, static_context_handler/3, static_context_handler/2]).
 
 ensure_started(App) ->
     case application:start(App) of
@@ -28,9 +28,10 @@ stop() ->
 
 %% Handler Registration
 
-%% @doc Registers a completely dynamic selector and handler combination.
-register_handler(Selector, Handler) ->
-    rabbit_mochiweb_registry:add(Selector, Handler).
+%% @doc Registers a completely dynamic selector and handler combination, with
+%% a link to display in the global context.
+register_handler(Selector, Handler, LinkPath, LinkDesc) ->
+    rabbit_mochiweb_registry:add(Selector, Handler, {LinkPath, LinkDesc}).
 
 %% Utility Methods for standard use cases
 
@@ -39,23 +40,25 @@ register_handler(Selector, Handler) ->
 register_global_handler(Handler) ->
     rabbit_mochiweb_registry:set_fallback(Handler).
 
-%% @spec register_context_handler(Context, Handler) -> ok
-%% @doc Registers a dynamic handler under a fixed context path.
-register_context_handler(Context, Handler) ->
+%% @spec register_context_handler(Context, Handler, Link) -> ok
+%% @doc Registers a dynamic handler under a fixed context path, with
+%% link to display in the global context.
+register_context_handler(Context, Handler, LinkDesc) ->
     rabbit_mochiweb_registry:add(
-        fun(Req) ->
-            "/" ++ Path = Req:get(raw_path),
-            (Path == Context) or (string:str(Path, Context ++ "/") == 1)
-        end,
-        Handler).
+      fun(Req) ->
+              "/" ++ Path = Req:get(raw_path),
+              (Path == Context) or (string:str(Path, Context ++ "/") == 1)
+      end,
+      Handler,
+      {Context, LinkDesc}).
 
 %% @doc Convenience function registering a fully static context to
-%% serve content from a module-relative directory. Composed of calls
-%% to static_context_selector/1, static_context_handler/3 and
-%% register_handler/2.
-register_static_context(Context, Module, Path) ->
+%% serve content from a module-relative directory, with
+%% link to display in the global context.
+register_static_context(Context, Module, FSPath, LinkDesc) ->
     register_handler(static_context_selector(Context),
-                     static_context_handler(Context, Module, Path)).
+                     static_context_handler(Context, Module, FSPath),
+                     Context, LinkDesc).
 
 %% @doc Produces a selector for use with register_handler that
 %% responds to GET and HEAD HTTP methods for resources within the
@@ -75,10 +78,10 @@ static_context_selector(Context) ->
 %% up static content from a directory specified relative to the
 %% directory containing the ebin directory containing the named
 %% module's beam file.
-static_context_handler(Context, Module, Path) ->
+static_context_handler(Context, Module, FSPath) ->
     {file, Here} = code:is_loaded(Module),
     ModuleRoot = filename:dirname(filename:dirname(Here)),
-    LocalPath = filename:join(ModuleRoot, Path),
+    LocalPath = filename:join(ModuleRoot, FSPath),
     static_context_handler(Context, LocalPath).
 
 %% @doc Produces a handler for use with register_handler that serves
