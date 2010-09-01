@@ -127,21 +127,6 @@ handle_message({send_command, MethodRecord, Content},
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
                                      Content, FrameMax, Protocol),
     State;
-handle_message({send_command_sync, From, {MethodRecord, Content}},
-               State = #wstate{sock = Sock,
-                               channel = Channel,
-                               frame_max = FrameMax,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax, Protocol),
-    gen_server:reply(From, ok),
-    State;
-handle_message({send_command_sync, From, MethodRecord},
-               State = #wstate{sock = Sock, channel = Channel,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
-    gen_server:reply(From, ok),
-    State;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
                State = #wstate{sock = Sock,
                                channel = Channel,
@@ -155,8 +140,26 @@ handle_message({inet_reply, _, ok}, State) ->
     State;
 handle_message({inet_reply, _, Status}, _State) ->
     exit({writer, send_failed, Status});
+handle_message({'$gen_call', From, Msg}, State) ->
+    case handle_call(From, Msg, State) of
+        {reply, Reply, State2}  -> gen_server:reply(From, Reply), State2;
+        {noreply, State2}       -> State2;
+        {stop, Reason, _State2} -> exit(Reason)
+    end;
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
+
+handle_call({send_command_async, MethodRecord}, _From,
+            State = #wstate{sock = Sock, channel = Channel,
+                            protocol = Protocol}) ->
+    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
+    {reply, ok, State};
+handle_call({send_command_async, MethodRecord, Content}, _From,
+            State = #wstate{sock = Sock, channel = Channel,
+                            frame_max = FrameMax, protocol = Protocol}) ->
+    ok = internal_send_command_async(Sock, Channel, MethodRecord,
+                                     Content, FrameMax, Protocol),
+    {reply, ok, State}.
 
 %---------------------------------------------------------------------------
 
@@ -169,10 +172,10 @@ send_command(W, MethodRecord, Content) ->
     ok.
 
 send_command_sync(W, MethodRecord) ->
-    call(W, send_command_sync, MethodRecord).
+    call(W, {send_command_sync, MethodRecord}).
 
 send_command_sync(W, MethodRecord, Content) ->
-    call(W, send_command_sync, {MethodRecord, Content}).
+    call(W, {send_command_sync, MethodRecord, Content}).
 
 send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
@@ -180,8 +183,8 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
 
 %---------------------------------------------------------------------------
 
-call(Pid, Label, Msg) ->
-    {ok, Res} = gen:call(Pid, Label, Msg, infinity),
+call(Pid, Msg) ->
+    {ok, Res} = gen:call(Pid, '$gen_call', Msg, infinity),
     Res.
 
 %---------------------------------------------------------------------------
