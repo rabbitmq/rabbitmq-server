@@ -92,7 +92,7 @@ function dispatcher() {
     path('#/users', {'users': '/users/'}, 'users');
     this.get('#/users/:id', function() {
             render({'user': '/users/' + esc(this.params['id']),
-                    'permissions': '/permissions/' + esc(this.params['id']),
+                    'permissions': '/users/' + esc(this.params['id']) + '/permissions',
                     'vhosts': '/vhosts/'}, 'user',
                    '#/users');
         });
@@ -108,12 +108,12 @@ function dispatcher() {
         });
 
     this.put('#/permissions', function() {
-            sync_put(this, '/permissions/:username/:vhost');
+            sync_put(this, '/permissions/:vhost/:username');
             update();
             return false;
         });
     this.del('#/permissions', function() {
-            sync_delete(this, '/permissions/:username/:vhost');
+            sync_delete(this, '/permissions/:vhost/:username');
             update();
             return false;
         });

@@ -96,18 +96,18 @@ http_users_test() ->
 http_permissions_validation_test() ->
     Good = [{configure, ".*"}, {write, ".*"},
             {read,      ".*"}, {scope, "client"}],
-    http_put("/permissions/guest/wrong", Good, ?BAD_REQUEST),
-    http_put("/permissions/wrong/%2f", Good, ?BAD_REQUEST),
-    http_put("/permissions/guest/%2f",
+    http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
+    http_put("/permissions/%2f/wrong", Good, ?BAD_REQUEST),
+    http_put("/permissions/%2f/guest",
              [{configure, ".*"}, {write, ".*"},
               {read,      ".*"}], ?BAD_REQUEST),
-    http_put("/permissions/guest/%2f",
+    http_put("/permissions/%2f/guest",
              [{configure, ".*"}, {write, ".*"},
               {read,      ".*"}, {scope, "wrong"}], ?BAD_REQUEST),
-    http_put("/permissions/guest/%2f",
+    http_put("/permissions/%2f/guest",
              [{configure, "["}, {write, ".*"},
               {read,      ".*"}, {scope, "client"}], ?BAD_REQUEST),
-    http_put("/permissions/guest/%2f", Good, ?NO_CONTENT),
+    http_put("/permissions/%2f/guest", Good, ?NO_CONTENT),
     ok.
 
 http_permissions_list_test() ->
@@ -126,13 +126,13 @@ http_permissions_list_test() ->
 
     Perms = [{configure, "foo"}, {write, "foo"},
              {read,      "foo"}, {scope, "client"}],
-    http_put("/permissions/myuser1/myvhost1", Perms, ?NO_CONTENT),
-    http_put("/permissions/myuser1/myvhost2", Perms, ?NO_CONTENT),
-    http_put("/permissions/myuser2/myvhost1", Perms, ?NO_CONTENT),
+    http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
+    http_put("/permissions/myvhost2/myuser1", Perms, ?NO_CONTENT),
+    http_put("/permissions/myvhost1/myuser2", Perms, ?NO_CONTENT),
 
     4 = length(http_get("/permissions")),
-    2 = length(http_get("/permissions/myuser1")),
-    1 = length(http_get("/permissions/myuser2")),
+    2 = length(http_get("/users/myuser1/permissions")),
+    1 = length(http_get("/users/myuser2/permissions")),
 
     http_delete("/users/myuser1", ?NO_CONTENT),
     http_delete("/users/myuser2", ?NO_CONTENT),
@@ -144,7 +144,7 @@ http_permissions_test() ->
     http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
-    http_put("/permissions/myuser/myvhost",
+    http_put("/permissions/myvhost/myuser",
              [{configure, "foo"}, {write, "foo"},
               {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
 
@@ -153,9 +153,9 @@ http_permissions_test() ->
              {<<"write">>,<<"foo">>},
              {<<"read">>,<<"foo">>},
              {<<"scope">>,<<"client">>}]} =
-        http_get("/permissions/myuser/myvhost"),
-    http_delete("/permissions/myuser/myvhost", ?NO_CONTENT),
-    http_get("/permissions/myuser/myvhost", ?NOT_FOUND),
+        http_get("/permissions/myvhost/myuser"),
+    http_delete("/permissions/myvhost/myuser", ?NO_CONTENT),
+    http_get("/permissions/myvhost/myuser", ?NOT_FOUND),
 
     http_delete("/users/myuser", ?NO_CONTENT),
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
@@ -181,7 +181,7 @@ http_exchanges_test() ->
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
-    http_put("/permissions/guest/myvhost",
+    http_put("/permissions/myvhost/guest",
              [{configure, ".*"}, {write, ".*"},
               {read,      ".*"}, {scope, "client"}], ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),

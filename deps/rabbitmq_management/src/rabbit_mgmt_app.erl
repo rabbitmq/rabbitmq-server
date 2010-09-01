@@ -82,10 +82,9 @@ dispatcher() ->
      {["vhosts", vhost],                           rabbit_mgmt_wm_vhost, []},
      {["users"],                                   rabbit_mgmt_wm_users, []},
      {["users", user],                             rabbit_mgmt_wm_user, []},
+     {["users", user, "permissions"],              rabbit_mgmt_wm_permissions_user, []},
      {["permissions"],                             rabbit_mgmt_wm_permissions, []},
-     %% TODO move this
-     {["permissions", user],                       rabbit_mgmt_wm_permissions_user, []},
-     {["permissions", user, vhost],                rabbit_mgmt_wm_permission, []}
+     {["permissions", vhost, user],                rabbit_mgmt_wm_permission, []}
     ].
 
 stop(_State) ->
