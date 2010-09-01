@@ -20,7 +20,7 @@ clean:
 	rm -rf $(TARGETS)
 	make -C $(LIB_PACKAGE_DIR) clean
 
-squeakyclean: clean
+distclean: clean
 	rm -rf $(CHECKOUT_DIR)
 
 $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
