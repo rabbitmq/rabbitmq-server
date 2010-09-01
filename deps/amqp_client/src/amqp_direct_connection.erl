@@ -134,7 +134,6 @@ handle_command({close, Close}, From, State) ->
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
-i(supervisor,        State) -> State#state.sup;
 i(num_channels,      State) -> amqp_channel_util:num_channels(
                                    State#state.channels);
 i(Item,             _State) -> throw({bad_argument, Item}).

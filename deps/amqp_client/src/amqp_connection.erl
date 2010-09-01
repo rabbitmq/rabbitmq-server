@@ -38,7 +38,7 @@
 -export([info/2, info_keys/1, info_keys/0]).
 
 -define(COMMON_INFO_KEYS,
-        [server_properties, is_closing, amqp_params, supervisor, num_channels]).
+        [server_properties, is_closing, amqp_params, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -162,7 +162,6 @@ close(ConnectionPid, Code, Text) ->
 %%          and false otherwise
 %%      amqp_params - returns the #amqp_params{} structure used to start the
 %%          connection
-%%      supervisor - returns the pid of the supervisor of the connection
 %%      num_channels - returns the number of channels currently open under the
 %%          connection (excluding channel 0)
 %%      max_channel - returns the max_channel value negotiated with the server

@@ -40,9 +40,6 @@
 %% Opening channels
 %%---------------------------------------------------------------------------
 
-%% Spawns a new channel supervision tree linked under the given connection
-%% supervisor, starts monitoring the channel and registers it in the given
-%% Channels dict
 open_channel(ChSupSup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
     {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(

@@ -175,7 +175,6 @@ handle_method(#'connection.close_ok'{}, none,
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
-i(supervisor,        State) -> State#state.sup;
 i(max_channel,       State) -> State#state.max_channel;
 i(heartbeat,         State) -> State#state.heartbeat;
 i(sock,              State) -> State#state.sock;
