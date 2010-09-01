@@ -58,7 +58,7 @@ accept_content(ReqData, Context) ->
       [type, durable, auto_delete, arguments], ReqData, Context,
       fun(VHost, [Type, Durable, AutoDelete, Arguments]) ->
               rabbit_mgmt_util:amqp_request(
-                VHost, Context,
+                VHost, ReqData, Context,
                 #'exchange.declare'{
                          exchange = Name,
                          type = Type,
@@ -71,8 +71,8 @@ accept_content(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:amqp_request(
-      rabbit_mgmt_util:vhost(ReqData),
-      Context, #'exchange.delete'{ exchange = id(ReqData) }),
+      rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
+      #'exchange.delete'{ exchange = id(ReqData) }),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -97,7 +97,4 @@ exchange(ReqData) ->
     end.
 
 id(ReqData) ->
-    case rabbit_mgmt_util:id(exchange, ReqData) of
-        <<"amq.default">> -> <<"">>;
-        Name              -> Name
-    end.
+    rabbit_mgmt_util:id(exchange, ReqData).

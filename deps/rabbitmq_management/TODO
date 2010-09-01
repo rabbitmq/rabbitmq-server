@@ -1,12 +1,12 @@
 Before preview release:
 Write more management:
   Exchange / queue arguments support
-  Bindings list GET
-  Binding GET PUT DELETE
+  Bindings arguments support
   Channel GET
-Write some basic documentation.
+Finish basic documentation.
 Figure out supervision.
 Cross-browser testing.
+Rearrange rates for future expansion.
 
 Before first release:
 Write remaining management:
@@ -20,6 +20,7 @@ More user-friendly form submission errors.
 Make it work with fine stats turned off.
 Do sensible things with vhosts in UI.
 Fix refreshing.
+Write more thorough unit tests, especially around listings.
 
 Then:
 Figure out something sensible to do with time series.

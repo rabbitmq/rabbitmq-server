@@ -65,7 +65,8 @@ accept_content(ReqData, Context) ->
               [scope, configure, write, read], ReqData, Context,
               fun([Scope, Conf, Write, Read]) ->
                       rabbit_access_control:set_permissions(
-                        Scope, User, VHost, Conf, Write, Read)
+                        Scope, User, VHost, Conf, Write, Read),
+                      {true, ReqData, Context}
               end)
     end.
 

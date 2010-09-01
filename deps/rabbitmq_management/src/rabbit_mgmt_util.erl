@@ -24,7 +24,7 @@
 
 -export([is_authorized/2, now_ms/0, vhost/1, vhost_exists/1]).
 -export([bad_request/3, id/2, parse_bool/1]).
--export([with_decode/4, not_found/3, not_authorised/3, amqp_request/3]).
+-export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3]).
 
 -include("rabbit_mgmt.hrl").
@@ -80,21 +80,29 @@ reply(Facts, ReqData, Context) ->
     {mochijson2:encode(Facts), ReqData, Context}.
 
 bad_request(Reason, ReqData, Context) ->
-    halt_response(400, Reason, ReqData, Context).
+    halt_response(400, bad_request, Reason, ReqData, Context).
 
 not_authorised(Reason, ReqData, Context) ->
-    halt_response(401, Reason, ReqData, Context).
+    halt_response(401, not_authorised, Reason, ReqData, Context).
 
 not_found(Reason, ReqData, Context) ->
-    halt_response(404, Reason, ReqData, Context).
+    halt_response(404, not_found, Reason, ReqData, Context).
 
-halt_response(Code, Reason, ReqData, Context) ->
-    Json = {struct, [{error, bad_request},
+halt_response(Code, Type, Reason, ReqData, Context) ->
+    Json = {struct, [{error, Type},
                      {reason, rabbit_mgmt_format:tuple(Reason)}]},
     ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
     {{halt, Code}, ReqData1, Context}.
 
+id(exchange, ReqData) ->
+    case id0(exchange, ReqData) of
+        <<"amq.default">> -> <<"">>;
+        Name              -> Name
+    end;
 id(Key, ReqData) ->
+    id0(Key, ReqData).
+
+id0(Key, ReqData) ->
     case dict:find(Key, wrq:path_info(ReqData)) of
         {ok, Id} ->
             list_to_binary(mochiweb_util:unquote(Id));
@@ -108,11 +116,10 @@ with_decode(Keys, ReqData, Context, Fun) ->
             bad_request(Reason, ReqData, Context);
         Values ->
             try
-                Fun(Values),
-                {true, ReqData, Context}
+                Fun(Values)
             catch throw:{error, Error} ->
                     bad_request(Error, ReqData, Context);
-                  throw:access_refused ->
+                  fb3efbwfbhf2bj throw:access_refused ->
                     not_authorised(not_authorised, ReqData, Context);
                   throw:{server_closed, Reason} ->
                     bad_request(list_to_binary(Reason), ReqData, Context)
@@ -165,7 +172,7 @@ parse_bool(V) ->
         _           -> throw({error, {not_boolean, V}})
     end.
 
-amqp_request(VHost, Context, Method) ->
+amqp_request(VHost, ReqData, Context, Method) ->
     try
         Params = #amqp_params{username = Context#context.username,
                               password = Context#context.password,
@@ -174,12 +181,17 @@ amqp_request(VHost, Context, Method) ->
         Ch = amqp_connection:open_channel(Conn),
         amqp_channel:call(Ch, Method),
         amqp_channel:close(Ch),
-        amqp_connection:close(Conn)
+        amqp_connection:close(Conn),
+        {true, ReqData, Context}
     %% See bug 23187
-    catch error:{badmatch,{error, #amqp_error{name = Name}}} ->
-            throw(Name);
+    catch error:{badmatch,{error, #amqp_error{name = access_refused}}} ->
+            not_authorised(not_authorised, ReqData, Context);
+          error:{badmatch,{error, #amqp_error{name = {error, Error}}}} ->
+            bad_request(Error, ReqData, Context);
+          exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
+            not_found(list_to_binary(Reason), ReqData, Context);
           exit:{{server_initiated_close, _Code, Reason}, _} ->
-            throw({server_closed, Reason})
+            bad_request(list_to_binary(Reason), ReqData, Context)
     end.
 
 all_or_one_vhost(ReqData, Fun) ->

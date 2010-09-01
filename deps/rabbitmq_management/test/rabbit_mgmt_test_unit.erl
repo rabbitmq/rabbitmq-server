@@ -24,6 +24,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(OK, 200).
+-define(CREATED, 201).
 -define(NO_CONTENT, 204).
 -define(BAD_REQUEST, 400).
 -define(NOT_AUTHORISED, 401).
@@ -234,34 +235,93 @@ http_queues_test() ->
     http_delete("/queues/%2f/foo", ?NOT_FOUND),
     ok.
 
+http_bindings_test() ->
+    XArgs = [{type, "direct"}, {durable, false}, {auto_delete, false},
+             {arguments, ""}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/bindings/%2f/badqueue/myexchange/key_routing", [], ?NOT_FOUND),
+    http_put("/bindings/%2f/myqueue/badexchange/key_routing", [], ?NOT_FOUND),
+    http_put("/bindings/%2f/myqueue/myexchange/bad_routing", [], ?BAD_REQUEST),
+    http_put("/bindings/%2f/myqueue/myexchange/key_routing", [], ?NO_CONTENT),
+    {struct,[{<<"exchange">>,<<"myexchange">>},
+             {<<"vhost">>,<<"/">>},
+             {<<"queue">>,<<"myqueue">>},
+             {<<"routing_key">>,<<"routing">>},
+             {<<"arguments">>,[]},
+             {<<"properties_key">>,<<"key_routing">>}]} =
+        http_get("/bindings/%2f/myqueue/myexchange/key_routing", ?OK),
+    http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NOT_FOUND),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+http_bindings_post_test() ->
+    XArgs = [{type, "direct"}, {durable, false}, {auto_delete, false},
+             {arguments, ""}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    BArgs = [{routing_key, "routing"}, {arguments, ""}],
+    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_post("/bindings/%2f/badqueue/myexchange", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/myqueue/badexchange", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/myqueue/myexchange", [{a, "b"}], ?BAD_REQUEST),
+    Headers = http_post("/bindings/%2f/myqueue/myexchange", BArgs, ?CREATED),
+    "/api/bindings/%2F/myqueue/myexchange/key_routing" =
+        pget("location", Headers),
+    {struct,[{<<"exchange">>,<<"myexchange">>},
+             {<<"vhost">>,<<"/">>},
+             {<<"queue">>,<<"myqueue">>},
+             {<<"routing_key">>,<<"routing">>},
+             {<<"arguments">>,[]},
+             {<<"properties_key">>,<<"key_routing">>}]} =
+        http_get("/bindings/%2f/myqueue/myexchange/key_routing", ?OK),
+    http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NO_CONTENT),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
 %%---------------------------------------------------------------------------
 
 http_get(Path, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
+    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
         req(get, Path, [auth_header()]),
-    decode(CodeExp, ResBody).
+    decode(CodeExp, Headers, ResBody).
 
 http_put(Path, List, CodeExp) ->
-    L2 = [{K, format_for_put(V)} || {K, V} <- List],
-    Enc = iolist_to_binary(mochijson2:encode({struct, L2})),
-    http_put_raw(Path, Enc, CodeExp).
+    http_put_raw(Path, format_for_upload(List), CodeExp).
 
-format_for_put(V) when is_list(V) ->
+http_post(Path, List, CodeExp) ->
+    http_post_raw(Path, format_for_upload(List), CodeExp).
+
+format_for_upload(List) ->
+    L2 = [{K, format_for_upload_item(V)} || {K, V} <- List],
+    iolist_to_binary(mochijson2:encode({struct, L2})).
+
+format_for_upload_item(V) when is_list(V) ->
     list_to_binary(V);
-format_for_put(V) ->
+format_for_upload_item(V) ->
     V.
 
-%% TODO Lose the sleep below. What is happening async?
 http_put_raw(Path, Body, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
-        req(put, Path, [auth_header()], Body),
+    http_upload_raw(put, Path, Body, CodeExp).
+
+http_post_raw(Path, Body, CodeExp) ->
+    http_upload_raw(post, Path, Body, CodeExp).
+
+%% TODO Lose the sleep below. What is happening async?
+http_upload_raw(Type, Path, Body, CodeExp) ->
+    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+        req(Type, Path, [auth_header()], Body),
     timer:sleep(100),
-    decode(CodeExp, ResBody).
+    decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, _Headers, ResBody}} =
+    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
         req(delete, Path, [auth_header()]),
-    decode(CodeExp, ResBody).
+    decode(CodeExp, Headers, ResBody).
 
 http_get(Path) ->
     http_get(Path, ?OK).
@@ -273,10 +333,10 @@ req(Type, Path, Headers, Body) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
                   [], []).
 
-decode(Code, ResBody) ->
+decode(Code, Headers, ResBody) ->
     case Code of
         ?OK -> mochijson2:decode(ResBody);
-        _   -> ok
+        _   -> Headers
     end.
 
 auth_header() ->

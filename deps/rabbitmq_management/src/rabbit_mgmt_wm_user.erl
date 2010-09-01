@@ -56,12 +56,13 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [password], ReqData, Context,
       fun([Password]) ->
-            case rabbit_access_control:lookup_user(User) of
-                {ok, _} ->
-                    rabbit_access_control:change_password(User, Password);
-                {error, not_found} ->
-                    rabbit_access_control:add_user(User, Password)
-            end
+              case rabbit_access_control:lookup_user(User) of
+                  {ok, _} ->
+                      rabbit_access_control:change_password(User, Password);
+                  {error, not_found} ->
+                      rabbit_access_control:add_user(User, Password)
+              end,
+              {true, ReqData, Context}
       end).
 
 delete_resource(ReqData, Context) ->

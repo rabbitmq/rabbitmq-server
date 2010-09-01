@@ -41,7 +41,9 @@ start(_Type, _StartArgs) ->
     Res = rabbit_mgmt_sup:start_link(),
     %% TODO is this supervised correctly?
     rabbit_mgmt_db:start(),
-    application:set_env(webmachine, dispatch_list, dispatcher()),
+    application:set_env(
+      webmachine, dispatch_list,
+      [{[?PREFIX|Path], F, A} || {Path, F, A} <- dispatcher()]),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     %% This would do access.log type stuff. Needs configuring though.
     %% application:set_env(webmachine, webmachine_logger_module,
@@ -59,24 +61,31 @@ start(_Type, _StartArgs) ->
     Res.
 
 dispatcher() ->
-    [{[?PREFIX],                            rabbit_mgmt_wm_help, []},
-     {[?PREFIX,"overview"],                 rabbit_mgmt_wm_overview, []},
-     {[?PREFIX,"connections"],              rabbit_mgmt_wm_connections, []},
-     {[?PREFIX,"connections", connection],  rabbit_mgmt_wm_connection, []},
-     {[?PREFIX,"channels"],                 rabbit_mgmt_wm_channels, []},
-     {[?PREFIX,"exchanges"],                rabbit_mgmt_wm_exchanges, []},
-     {[?PREFIX,"exchanges", vhost],         rabbit_mgmt_wm_exchanges, []},
-     {[?PREFIX,"exchanges", vhost, exchange],rabbit_mgmt_wm_exchange, []},
-     {[?PREFIX,"queues"],                   rabbit_mgmt_wm_queues, []},
-     {[?PREFIX,"queues", vhost],            rabbit_mgmt_wm_queues, []},
-     {[?PREFIX,"queues", vhost, queue],     rabbit_mgmt_wm_queue, []},
-     {[?PREFIX,"vhosts"],                   rabbit_mgmt_wm_vhosts, []},
-     {[?PREFIX,"vhosts", vhost],            rabbit_mgmt_wm_vhost, []},
-     {[?PREFIX,"users"],                    rabbit_mgmt_wm_users, []},
-     {[?PREFIX,"users", user],              rabbit_mgmt_wm_user, []},
-     {[?PREFIX,"permissions"],              rabbit_mgmt_wm_permissions, []},
-     {[?PREFIX,"permissions", user],        rabbit_mgmt_wm_permissions_user,[]},
-     {[?PREFIX,"permissions", user, vhost], rabbit_mgmt_wm_permission, []}
+    [{[],                                          rabbit_mgmt_wm_help, []},
+     {["overview"],                                rabbit_mgmt_wm_overview, []},
+     {["connections"],                             rabbit_mgmt_wm_connections, []},
+     {["connections", connection],                 rabbit_mgmt_wm_connection, []},
+     {["channels"],                                rabbit_mgmt_wm_channels, []},
+     {["exchanges"],                               rabbit_mgmt_wm_exchanges, []},
+     {["exchanges", vhost],                        rabbit_mgmt_wm_exchanges, []},
+     {["exchanges", vhost, exchange],              rabbit_mgmt_wm_exchange, []},
+     {["exchanges", vhost, exchange, "bindings"],  rabbit_mgmt_wm_bindings, [exchange]},
+     {["queues"],                                  rabbit_mgmt_wm_queues, []},
+     {["queues", vhost],                           rabbit_mgmt_wm_queues, []},
+     {["queues", vhost, queue],                    rabbit_mgmt_wm_queue, []},
+     {["queues", vhost, queue, "bindings"],        rabbit_mgmt_wm_bindings, [queue]},
+     {["bindings"],                                rabbit_mgmt_wm_bindings, [all]},
+     {["bindings", vhost],                         rabbit_mgmt_wm_bindings, [vhost]},
+     {["bindings", vhost, queue, exchange],        rabbit_mgmt_wm_bindings, [queue_exchange]},
+     {["bindings", vhost, queue, exchange, props], rabbit_mgmt_wm_binding, []},
+     {["vhosts"],                                  rabbit_mgmt_wm_vhosts, []},
+     {["vhosts", vhost],                           rabbit_mgmt_wm_vhost, []},
+     {["users"],                                   rabbit_mgmt_wm_users, []},
+     {["users", user],                             rabbit_mgmt_wm_user, []},
+     {["permissions"],                             rabbit_mgmt_wm_permissions, []},
+     %% TODO move this
+     {["permissions", user],                       rabbit_mgmt_wm_permissions_user, []},
+     {["permissions", user, vhost],                rabbit_mgmt_wm_permission, []}
     ].
 
 stop(_State) ->

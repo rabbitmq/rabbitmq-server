@@ -58,7 +58,7 @@ accept_content(ReqData, Context) ->
       [durable, auto_delete, arguments], ReqData, Context,
       fun(VHost, [Durable, AutoDelete, Arguments]) ->
               rabbit_mgmt_util:amqp_request(
-                VHost, Context,
+                VHost, ReqData, Context,
                 #'queue.declare'{
                          queue = Name,
                          durable =
@@ -72,7 +72,7 @@ delete_resource(ReqData, Context) ->
     try
         rabbit_mgmt_util:amqp_request(
           rabbit_mgmt_util:vhost(ReqData),
-          Context,
+          ReqData, Context,
           #'queue.delete'{ queue = rabbit_mgmt_util:id(queue, ReqData) }),
         {true, ReqData, Context}
     catch throw:{server_closed, Reason} ->

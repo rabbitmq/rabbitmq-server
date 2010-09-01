@@ -47,8 +47,9 @@ function dispatcher() {
 
     path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
-            render({'queue': '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])}, 'queue',
-                   '#/queues');
+            var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
+            render({'queue': path,
+                    'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     this.put('#/queues', function() {
             sync_put(this, '/queues/:vhost/:name');
@@ -58,6 +59,17 @@ function dispatcher() {
     this.del('#/queues', function() {
             sync_delete(this, '/queues/:vhost/:name');
             go_to('#/queues');
+            return false;
+        });
+
+    this.post('#/bindings', function() {
+            sync_post(this, '/bindings/:vhost/:queue/:exchange');
+            update();
+            return false;
+        });
+    this.del('#/bindings', function() {
+            sync_delete(this, '/bindings/:vhost/:queue/:exchange/:properties_key');
+            update();
             return false;
         });
 
@@ -243,6 +255,10 @@ function sync_put(sammy, path_template) {
 
 function sync_delete(sammy, path_template) {
     sync_req('delete', sammy, path_template);
+}
+
+function sync_post(sammy, path_template) {
+    sync_req('post', sammy, path_template);
 }
 
 function sync_req(type, sammy, path_template) {

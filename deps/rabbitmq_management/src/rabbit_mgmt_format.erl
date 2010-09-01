@@ -22,7 +22,7 @@
 
 -export([format/2, print/2, pid/1, ip/1, table/1, tuple/1]).
 -export([protocol/1, resource/1, permissions/1, user_permissions/1]).
--export([exchange/1, user/1]).
+-export([exchange/1, user/1, binding/1, pack_props/2, url/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -88,8 +88,13 @@ protocol({Major, Minor, Revision}) ->
 
 resource(unknown) ->
     unknown;
-resource(#resource{name = Name, virtual_host = VHost}) ->
-    [{name, Name}, {vhost, VHost}].
+resource(Res) ->
+    resource(name, Res).
+
+resource(_, unknown) ->
+    unknown;
+resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
+    [{NameAs, Name}, {vhost, VHost}].
 
 permissions({VHost, Perms}) ->
     [{vhost, VHost}|permissions(Perms)];
@@ -103,9 +108,21 @@ user_permissions({VHost, Conf, Write, Read, Scope}) ->
      {scope, Scope}].
 
 exchange(X) ->
-    format(X, [{fun rabbit_mgmt_format:resource/1, [name]},
-               {fun rabbit_mgmt_format:table/1, [arguments]}]).
+    format(X, [{fun resource/1, [name]},
+               {fun table/1, [arguments]}]).
 
 user(User) ->
     [{name, User#user.username},
      {password, User#user.password}].
+
+binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
+    format([{exchange, X}, {queue, Q#resource.name}, {routing_key, Key},
+            {arguments, Args}, {properties_key, pack_props(Key, Args)}],
+           [{fun (Res) -> resource(exchange, Res) end, [exchange]}]).
+
+%% TODO
+pack_props(Key, Args) ->
+    list_to_binary("key_" ++ mochiweb_util:quote_plus(binary_to_list(Key))).
+
+url(Fmt, Vals) ->
+    print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
