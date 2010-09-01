@@ -54,8 +54,7 @@ start_link(Type, AmqpParams) ->
 start_connection(Sup, network, AmqpParams, ChSupSup, SIF) ->
     {ok, _} = supervisor2:start_child(Sup,
                   {connection, {amqp_network_connection, start_link,
-                                [AmqpParams, ChSupSup, SIF,
-                                 start_heartbeat_fun(Sup)]},
+                                [AmqpParams, ChSupSup, SIF]},
                    intrinsic, ?MAX_WAIT, worker, [amqp_network_connection]});
 start_connection(Sup, direct, AmqpParams, ChSupSup, SIF) ->
     {ok, _} = supervisor2:start_child(Sup,
@@ -75,7 +74,8 @@ start_infrastructure_fun(Sup, network) ->
         [MainReader] = supervisor2:find_child(CTSup, main_reader),
         [Framing] = supervisor2:find_child(CTSup, framing),
         [Writer] = supervisor2:find_child(CTSup, writer),
-        {MainReader, Framing, Writer}
+        {MainReader, Framing, Writer,
+         amqp_connection_type_sup:start_heartbeat_fun(CTSup)}
     end;
 start_infrastructure_fun(Sup, direct) ->
     fun() ->
@@ -86,24 +86,6 @@ start_infrastructure_fun(Sup, direct) ->
                            [amqp_connection_type_sup]}),
         [Collector] = supervisor2:find_child(CTSup, collector),
         {Collector}
-    end.
-
-start_heartbeat_fun(Sup) ->
-    fun(_Sock, 0) ->
-        none;
-       (Sock, Timeout) ->
-        Connection = self(),
-        {ok, Sender} = supervisor2:start_child(Sup,
-                           {heartbeat_sender, {rabbit_heartbeat,
-                                               start_heartbeat_sender,
-                                               [Connection, Sock, Timeout]},
-                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-        {ok, Receiver} = supervisor2:start_child(Sup,
-                           {heartbeat_receiver, {rabbit_heartbeat,
-                                                 start_heartbeat_receiver,
-                                                 [Connection, Sock, Timeout]},
-                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-        {Sender, Receiver}
     end.
 
 %%---------------------------------------------------------------------------

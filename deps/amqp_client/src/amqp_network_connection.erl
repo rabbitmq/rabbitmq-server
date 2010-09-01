@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/4, connect/1]).
+-export([start_link/3, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -64,9 +64,8 @@
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams, ChSupSup, SIF, SHF) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams, ChSupSup, SIF, SHF],
-                          []).
+start_link(AmqpParams, ChSupSup, SIF) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, ChSupSup, SIF], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -75,12 +74,11 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams, ChSupSup, SIF, SHF]) ->
+init([Sup, AmqpParams, ChSupSup, SIF]) ->
     {ok, #state{sup = Sup,
                 params = AmqpParams,
                 channel_sup_sup = ChSupSup,
-                start_infrastructure_fun = SIF,
-                start_heartbeat_fun = SHF}}.
+                start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -363,10 +361,11 @@ handshake(State0 = #state{sock = Sock}) ->
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF,
                                     sock = Sock}) ->
-    {MainReader, Framing, Writer} = SIF(Sock),
+    {MainReader, Framing, Writer, SHF} = SIF(Sock),
     State#state{main_reader = MainReader,
                 framing0 = Framing,
-                writer0 = Writer}.
+                writer0 = Writer,
+                start_heartbeat_fun = SHF}.
 
 network_handshake(State = #state{writer0 = Writer, params = Params}) ->
     Start = handshake_recv(),

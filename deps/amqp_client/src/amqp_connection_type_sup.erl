@@ -29,7 +29,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link_direct/0, start_link_network/2]).
+-export([start_link_direct/0, start_link_network/2, start_heartbeat_fun/1]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -59,6 +59,24 @@ start_link_network(Sock, ConnectionPid) ->
                             [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, MainReader]},
                    intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
     {ok, Sup}.
+
+start_heartbeat_fun(Sup) ->
+    fun(_Sock, 0) ->
+        none;
+       (Sock, Timeout) ->
+        Connection = self(),
+        {ok, Sender} = supervisor2:start_child(Sup,
+                           {heartbeat_sender, {rabbit_heartbeat,
+                                               start_heartbeat_sender,
+                                               [Connection, Sock, Timeout]},
+                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+        {ok, Receiver} = supervisor2:start_child(Sup,
+                           {heartbeat_receiver, {rabbit_heartbeat,
+                                                 start_heartbeat_receiver,
+                                                 [Connection, Sock, Timeout]},
+                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+        {Sender, Receiver}
+    end.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
