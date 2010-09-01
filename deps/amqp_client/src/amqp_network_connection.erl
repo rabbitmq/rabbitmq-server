@@ -58,7 +58,7 @@
                   from = none,
                   phase = terminate_channels}).
 
--define(INFO_KEYS, (amqp_connection:info_keys() ++ [max_channel, heartbeat])).
+-define(INFO_KEYS, (amqp_connection:info_keys() ++ [max_channel, heartbeat, sock])).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
@@ -179,6 +179,7 @@ i(amqp_params,       State) -> State#state.params;
 i(supervisor,        State) -> State#state.sup;
 i(max_channel,       State) -> State#state.max_channel;
 i(heartbeat,         State) -> State#state.heartbeat;
+i(sock,              State) -> State#nc_state.sock;
 i(num_channels,      State) -> amqp_channel_util:num_channels(
                                    State#state.channels);
 i(Item,             _State) -> throw({bad_argument, Item}).

@@ -169,6 +169,9 @@ close(ConnectionPid, Code, Text) ->
 %%          (only for the network connection)
 %%      heartbeat - returns the heartbeat value negotiated with the server
 %%          (only for the network connection)
+%%      sock - returns the socket for the network connection (for use with
+%%             e.g. inet:sockname/1)
+%%          (only for the network connection)
 %%      any other value - throws an exception
 info(ConnectionPid, Items) ->
     gen_server:call(ConnectionPid, {info, Items}, infinity).
