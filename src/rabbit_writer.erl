@@ -127,12 +127,6 @@ handle_message({send_command, MethodRecord, Content},
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
                                      Content, FrameMax, Protocol),
     State;
-handle_message({send_command_sync, From, MethodRecord},
-               State = #wstate{sock = Sock, channel = Channel,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
-    gen_server:reply(From, ok),
-    State;
 handle_message({send_command_sync, From, {MethodRecord, Content}},
                State = #wstate{sock = Sock,
                                channel = Channel,
@@ -140,6 +134,12 @@ handle_message({send_command_sync, From, {MethodRecord, Content}},
                                protocol = Protocol}) ->
     ok = internal_send_command_async(Sock, Channel, MethodRecord,
                                      Content, FrameMax, Protocol),
+    gen_server:reply(From, ok),
+    State;
+handle_message({send_command_sync, From, MethodRecord},
+               State = #wstate{sock = Sock, channel = Channel,
+                               protocol = Protocol}) ->
+    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
     gen_server:reply(From, ok),
     State;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
