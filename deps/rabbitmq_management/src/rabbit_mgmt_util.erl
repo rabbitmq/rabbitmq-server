@@ -118,11 +118,7 @@ with_decode(Keys, ReqData, Context, Fun) ->
             try
                 Fun(Values)
             catch throw:{error, Error} ->
-                    bad_request(Error, ReqData, Context);
-                  fb3efbwfbhf2bj throw:access_refused ->
-                    not_authorised(not_authorised, ReqData, Context);
-                  throw:{server_closed, Reason} ->
-                    bad_request(list_to_binary(Reason), ReqData, Context)
+                    bad_request(Error, ReqData, Context)
             end
     end.
 
