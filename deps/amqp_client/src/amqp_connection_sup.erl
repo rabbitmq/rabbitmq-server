@@ -29,23 +29,86 @@
 
 -behaviour(supervisor2).
 
--export([start_link/3]).
+-export([start_link/2]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Module, AmqpParams) ->
-    supervisor2:start_link(?MODULE, [Type, Module, AmqpParams]).
+start_link(Type, AmqpParams) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {ok, ChSupSup} = supervisor2:start_child(Sup,
+                         {channel_sup_sup, {amqp_channel_sup_sup, start_link,
+                                            [Type]},
+                          intrinsic, infinity, supervisor,
+                          [amqp_channel_sup_sup]}),
+    start_connection(Sup, Type, AmqpParams, ChSupSup,
+                     start_infrastructure_fun(Sup, Type)),
+    {ok, Sup}.
+    
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
+
+start_connection(Sup, network, AmqpParams, ChSupSup, SIF) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {connection, {amqp_network_connection, start_link,
+                                [AmqpParams, ChSupSup, SIF,
+                                 start_heartbeat_fun(Sup)]},
+                   intrinsic, ?MAX_WAIT, worker, [amqp_network_connection]});
+start_connection(Sup, direct, AmqpParams, ChSupSup, SIF) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {connection, {amqp_direct_connection, start_link,
+                                [AmqpParams, ChSupSup, SIF]},
+                   intrinsic, ?MAX_WAIT, worker, [amqp_direct_connection]}).
+
+start_infrastructure_fun(Sup, network) ->
+    fun(Sock) ->
+        Connection = self(),
+        {ok, CTSup} = supervisor2:start_child(Sup,
+                          {connection_type_sup, {amqp_connection_type_sup,
+                                                 start_link_network,
+                                                 [Sock, Connection]},
+                           intrinsic, infinity, supervisor,
+                           [amqp_connection_type_sup]}),
+        [MainReader] = supervisor2:find_child(CTSup, main_reader),
+        [Framing] = supervisor2:find_child(CTSup, framing),
+        [Writer] = supervisor2:find_child(CTSup, writer),
+        {MainReader, Framing, Writer}
+    end;
+start_infrastructure_fun(Sup, direct) ->
+    fun() ->
+        {ok, CTSup} = supervisor2:start_child(Sup,
+                          {connection_type_sup, {amqp_connection_type_sup,
+                                                 start_link_direct, []},
+                           intrinsic, infinity, supervisor,
+                           [amqp_connection_type_sup]}),
+        [Collector] = supervisor2:find_child(CTSup, collector),
+        {Collector}
+    end.
+
+start_heartbeat_fun(Sup) ->
+    fun(_Sock, 0) ->
+        none;
+       (Sock, Timeout) ->
+        Connection = self(),
+        {ok, Sender} = supervisor2:start_child(Sup,
+                           {heartbeat_sender, {rabbit_heartbeat,
+                                               start_heartbeat_sender,
+                                               [Connection, Sock, Timeout]},
+                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+        {ok, Receiver} = supervisor2:start_child(Sup,
+                           {heartbeat_receiver, {rabbit_heartbeat,
+                                                 start_heartbeat_receiver,
+                                                 [Connection, Sock, Timeout]},
+                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+        {Sender, Receiver}
+    end.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Type, Module, AmqpParams]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{connection, {Module, start_link, [AmqpParams]},
-            permanent, ?MAX_WAIT, worker, [Module]},
-           {channel_sup_sup, {amqp_channel_sup_sup, start_link, [Type]},
-           permanent, infinity, supervisor, [amqp_channel_sup_sup]}]}}.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

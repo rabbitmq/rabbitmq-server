@@ -60,7 +60,7 @@
                 flow_control = false,
                 flow_handler_pid = none,
                 consumers = dict:new(),
-                default_consumer = unknown}).
+                default_consumer = none}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -255,7 +255,7 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     end.
 
 do_rpc(State0 = #state{rpc_requests = RequestQueue,
-                      closing = Closing}) ->
+                       closing = Closing}) ->
     State1 = check_writer(State0),
     case queue:peek(RequestQueue) of
         {value, {_From, Method = #'channel.close'{}, Content}} ->
@@ -290,7 +290,7 @@ check_writer(State) ->
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
     exit(no_consumers_registered);
 resolve_consumer(ConsumerTag, #state{consumers = Consumers,
-                                       default_consumer = DefaultConsumer}) ->
+                                     default_consumer = DefaultConsumer}) ->
     case dict:find(ConsumerTag, Consumers) of
         {ok, Value} ->
             Value;
@@ -487,7 +487,19 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
             {noreply, rpc_top_half(NewMethod, none, From, NewState)};
         BlockReply ->
             {reply, BlockReply, State}
-    end.
+    end;
+
+%% These handle the delivery of messages from a direct channel
+%% @private
+handle_call({send_command_sync, Method, Content}, From, State) ->
+    Ret = handle_method(Method, Content, State),
+    gen_server:reply(From, ok),
+    Ret;
+%% @private
+handle_call({send_command_sync, Method}, From, State) ->
+    Ret = handle_method(Method, none, State),
+    gen_server:reply(From, ok),
+    Ret.
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
@@ -517,22 +529,19 @@ handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
 %% Registers a handler to process return messages
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
-    %% TODO just monitor, no link
-    link(ReturnHandler),
+    erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
-    %% TODO just monitor, no link
-    link(FlowHandler),
+    erlang:monitor(process, FlowHandler),
     {noreply, State#state{flow_handler_pid = FlowHandler}};
 
 %% Registers a handler to process unexpected deliveries
 %% @private
 handle_cast({register_default_consumer, Consumer}, State) ->
-    %% TODO just monitor, no link
-    link(Consumer),
+    erlang:monitor(process, Consumer),
     {noreply, State#state{default_consumer = Consumer}};
 
 %% @private
@@ -554,18 +563,11 @@ handle_info({send_command, Method}, State) ->
 handle_info({send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
 
-%% Handles the delivery of a message from a direct channel
+%% This handles the delivery of a message from a direct channel
 %% @private
 handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
-    {noreply, State};
-
-%% This is used in the direct case to fake a response from the writer, when
-%% rabbit_channel sends a flush message to it
-%% @private
-handle_info({flush, Caller, Ref}, State) ->
-    Caller ! Ref,
     {noreply, State};
 
 %% @private
@@ -621,15 +623,37 @@ handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
             State = #state{number = Number}) ->
     ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
     {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
-    {stop, {server_initiated_close, Code, Expl}, State}.
+    {stop, {server_initiated_close, Code, Expl}, State};
+
+%% @private
+handle_info({'DOWN', _, process, Pid, Reason}, State) ->
+    handle_down(Pid, Reason, State).
+
+handle_down(ReturnHandler, Reason,
+            State = #state{return_handler_pid = ReturnHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
+              "Reason: ~p~n", [self(), ReturnHandler, Reason]),
+    {noreply, State#state{return_handler_pid = none}};
+handle_down(FlowHandler, Reason,
+            State = #state{flow_handler_pid = FlowHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
+              "Reason: ~p~n", [self(), FlowHandler, Reason]),
+    {noreply, State#state{flow_handler_pid = none}};
+handle_down(DefaultConsumer, Reason,
+            State = #state{default_consumer = DefaultConsumer}) ->
+    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
+              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
+    {noreply, State#state{default_consumer = none}};
+handle_down(Other, Reason, State) ->
+    {stop, {unexpected_down, Other, Reason}, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(_Reason, #state{sup = Sup, driver = Driver}) ->
-    amqp_channel_util:terminate_channel_infrastructure(Driver, Sup).
+terminate(_Reason, _State) ->
+    ok.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

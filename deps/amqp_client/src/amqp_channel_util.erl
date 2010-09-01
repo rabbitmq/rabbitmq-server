@@ -28,7 +28,6 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/5]).
--export([terminate_channel_infrastructure/2]).
 -export([do/4]).
 -export([new_channel_dict/0, is_channel_dict_empty/1, num_channels/1,
          register_channel/3, unregister_channel_number/2,
@@ -55,28 +54,14 @@ open_channel(Sup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     NewChannels = register_channel(ChannelNumber, ChPid, Channels),
     {ChPid, NewChannels}.
 
-terminate_channel_infrastructure(network, Sup) ->
-    [Writer] = supervisor2:find_child(Sup, writer),
-    rabbit_writer:flush(Writer),
-    ok;
-terminate_channel_infrastructure(direct, Sup) ->
-    [RChannel] = supervisor2:find_child(Sup, rabbit_channel),
-    rabbit_channel:shutdown(RChannel),
-    ok.
-
 %%---------------------------------------------------------------------------
 %% Do
 %%---------------------------------------------------------------------------
 
 do(network, Writer, Method, Content) ->
     case Content of
-        none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
-                                                           self());
-        _    -> rabbit_writer:send_command_and_signal_back(Writer, Method,
-                                                           Content, self())
-    end,
-    receive
-        rabbit_writer_send_command_signal -> ok
+        none -> rabbit_writer:send_command_sync(Writer, Method);
+        _    -> rabbit_writer:send_command_sync(Writer, Method, Content)
     end;
 do(direct, RabbitChannel, Method, Content) ->
     case Content of
@@ -212,7 +197,6 @@ handle_exit(Pid, Reason, Channels, Closing) ->
     end.
 
 handle_channel_exit(_Pid, normal, _Closing) ->
-    %% Normal amqp_channel shutdown
     normal;
 handle_channel_exit(Pid, {server_initiated_close, Code, _Text}, false) ->
     %% Channel terminating (server sent 'channel.close')

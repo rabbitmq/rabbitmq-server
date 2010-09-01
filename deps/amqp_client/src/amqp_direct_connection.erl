@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, connect/1]).
+-export([start_link/3, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -38,7 +38,9 @@
                 collector,
                 closing = false,
                 server_properties,
-                channels = amqp_channel_util:new_channel_dict()}).
+                channel_sup_sup,
+                channels = amqp_channel_util:new_channel_dict(),
+                start_infrastructure_fun}).
 
 -record(closing, {reason,
                   close = none, %% At least one of close and reply has to be
@@ -52,8 +54,8 @@
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams], []).
+start_link(AmqpParams, ChSupSup, SIF) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, ChSupSup, SIF], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -62,8 +64,11 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams]) ->
-    {ok, #state{sup = Sup, params = AmqpParams}}.
+init([Sup, AmqpParams, ChSupSup, SIF]) ->
+    {ok, #state{sup = Sup,
+                params = AmqpParams,
+                channel_sup_sup = ChSupSup,
+                start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -185,8 +190,6 @@ all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
     [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
     [Collector] = supervisor2:find_child(CTSup, collector),
     rabbit_queue_collector:delete_all(Collector),
-    rabbit_queue_collector:shutdown(Collector),
-    rabbit_misc:unlink_and_capture_exit(Collector),
     case Closing#closing.from of
         none -> ok;
         From -> gen_server:reply(From, ok)
@@ -255,10 +258,6 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     ServerProperties = rabbit_reader:server_properties(),
     State1#state{server_properties = ServerProperties}.
 
-start_infrastructure(State = #state{sup = Sup}) ->
-    {ok, CTSup} = supervisor2:start_child(Sup,
-        {connection_type_sup, {amqp_connection_type_sup,
-                                   start_link_direct, []},
-         permanent, infinity, supervisor, [amqp_connection_type_sup]}),
-    [Collector] = supervisor2:find_child(CTSup, collector),
+start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
+    {Collector} = SIF(),
     State#state{collector = Collector}.

@@ -82,7 +82,9 @@ handle_cast(Cast, State) ->
 handle_info({inet_async, _, _, _} = InetAsync, State) ->
     handle_inet_async(InetAsync, State);
 handle_info({'DOWN', _, _, _, _} = Down, State) ->
-    handle_down(Down, State).
+    handle_down(Down, State);
+handle_info({channel_exit, Ch, Reason}, State) ->
+    {stop, {channel_died, Ch, Reason}, State}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
