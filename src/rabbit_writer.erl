@@ -171,8 +171,8 @@ call(Pid, Msg) ->
 
 assemble_frames(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
-    rabbit_binary_generator:build_simple_method_frame(Channel, MethodRecord,
-                                                      Protocol).
+    rabbit_binary_generator:build_simple_method_frame(
+      Channel, MethodRecord, Protocol).
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, Content),
