@@ -246,28 +246,22 @@ rpc_top_half(Method, Content, From,
 
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     case queue:out(RequestQueue) of
-        {empty, _} ->
-            exit(empty_rpc_bottom_half);
         {{value, {From, _Method, _Content}}, NewRequestQueue} ->
             case From of none -> ok;
                          _    -> gen_server:reply(From, Reply)
             end,
-            do_rpc(State#state{rpc_requests = NewRequestQueue})
+            do_rpc(State#state{rpc_requests = NewRequestQueue});
+        {empty, _} ->
+            exit(empty_rpc_bottom_half)
     end.
 
 do_rpc(State0 = #state{rpc_requests = RequestQueue,
                        closing = Closing}) ->
     case queue:peek(RequestQueue) of
-        {value, {_From, Method = #'channel.open'{}, Content}} ->
-            State1 = start_infrastructure(State0),
+        {value, {_From, Method, Content}} ->
+            State1 = pre_do(Method, Content, State0),
             do(Method, Content, State1),
             State1;
-        {value, {_From, Method = #'channel.close'{}, Content}} ->
-            do(Method, Content, State0),
-            State0#state{closing = just_channel};
-        {value, {_From, Method, Content}} ->
-            do(Method, Content, State0),
-            State0;
         empty ->
             case Closing of
                 {connection, Reason} -> self() ! {shutdown, Reason};
@@ -275,6 +269,13 @@ do_rpc(State0 = #state{rpc_requests = RequestQueue,
             end,
             State0
     end.
+
+pre_do(#'channel.open'{}, _Content, State) ->
+    start_infrastructure(State);
+pre_do(#'channel.close'{}, _Content, State) ->
+    State#state{closing = just_channel};
+pre_do(_, _, State) ->
+    State.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing

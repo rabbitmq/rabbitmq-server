@@ -41,7 +41,7 @@ start_link(Driver, InfraArgs, ChNumber) ->
     SIF = start_infrastructure_fun(Sup, Driver, InfraArgs, ChNumber),
     {ok, _} = supervisor2:start_child(Sup,
                   {channel, {amqp_channel, start_link, [Driver, ChNumber, SIF]},
-                   intrinsic, ?MAX_WAIT, worker, [amqp_channel]}),
+                   intrinsic, brutal_kill, worker, [amqp_channel]}),
     {ok, Sup}.
 
 %%---------------------------------------------------------------------------

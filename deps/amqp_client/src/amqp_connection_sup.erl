@@ -55,12 +55,12 @@ start_connection(Sup, network, AmqpParams, ChSupSup, SIF) ->
     {ok, _} = supervisor2:start_child(Sup,
                   {connection, {amqp_network_connection, start_link,
                                 [AmqpParams, ChSupSup, SIF]},
-                   intrinsic, ?MAX_WAIT, worker, [amqp_network_connection]});
+                   intrinsic, brutal_kill, worker, [amqp_network_connection]});
 start_connection(Sup, direct, AmqpParams, ChSupSup, SIF) ->
     {ok, _} = supervisor2:start_child(Sup,
                   {connection, {amqp_direct_connection, start_link,
                                 [AmqpParams, ChSupSup, SIF]},
-                   intrinsic, ?MAX_WAIT, worker, [amqp_direct_connection]}).
+                   intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
 
 start_infrastructure_fun(Sup, network) ->
     fun(Sock) ->
