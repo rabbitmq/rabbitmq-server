@@ -27,7 +27,7 @@
 -export([start/0]).
 
 -export([get_queues/1, get_connections/0, get_connection/1,
-         get_overview/0, get_channels/0]).
+         get_overview/0, get_channels/0, get_channel/1]).
 
 -export([group_sum/2]).
 
@@ -62,6 +62,9 @@ get_connection(Name) ->
 
 get_channels() ->
     gen_event:call(rabbit_event, ?MODULE, get_channels, infinity).
+
+get_channel(Name) ->
+    gen_event:call(rabbit_event, ?MODULE, {get_channel, Name}, infinity).
 
 get_overview() ->
     gen_event:call(rabbit_event, ?MODULE, get_overview, infinity).
@@ -100,10 +103,6 @@ name_to_id(Table, Name) ->
 
 result_or_error([]) -> error;
 result_or_error(S)  -> S.
-
-%% TODO until we do rates properly (i.e. looking at a time series)
-%% we have the problem that an object which stops emitting events will look
-%% like its rate has stayed up. This might make time series more important.
 
 rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
     Stats ++ lists:filter(
@@ -240,6 +239,17 @@ handle_call(get_channels, State = #state{tables = Tables}) ->
     {ok, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
      State};
 
+handle_call({get_channel, Name}, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(channel_stats, Tables),
+    Id = name_to_id(Table, Name),
+    Chs = [lookup_element(Table, {Id, create})],
+    %% TODO refactor this, and connection(s) above
+    Stats = merge_created_stats(Chs, Table),
+    FineQ = get_fine_stats(channel_queue_stats, [channel], Tables),
+    FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
+    [Res] = augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
+    {ok, result_or_error(Res), State};
+
 handle_call(get_overview, State = #state{tables = Tables}) ->
     FineQ = extract_singleton_fine_stats(
               get_fine_stats(channel_queue_stats, [], Tables)),
@@ -281,9 +291,16 @@ handle_event(#event{type = connection_stats, props = Stats,
 handle_event(Event = #event{type = connection_closed}, State) ->
     handle_deleted(connection_stats, Event, State);
 
-handle_event(#event{type = channel_created, props = Stats}, State) ->
+handle_event(#event{type = channel_created, props = Stats},
+             State = #state{tables = Tables}) ->
+    ConnTable = orddict:fetch(connection_stats, Tables),
+    Conn = lookup_element(ConnTable, {id(pget(connection, Stats)), create}),
+    Name = rabbit_mgmt_format:print(
+             "~s:~w:~w",
+             [pget(peer_address, Conn), pget(peer_port, Conn),
+              pget(number, Stats)]),
     handle_created(
-      channel_stats, Stats,
+      channel_stats, [{name, Name}|Stats],
       [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},

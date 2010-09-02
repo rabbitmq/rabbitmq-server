@@ -28,6 +28,10 @@ function dispatcher() {
         });
 
     path('#/channels', {'channels': '/channels'}, 'channels');
+    this.get('#/channels/:name', function() {
+            render({'channel': '/channels/' + esc(this.params['name'])}, 'channel',
+                   '#/channels');
+        });
 
     path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
     this.get('#/exchanges/:vhost/:name', function() {

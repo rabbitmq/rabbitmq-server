@@ -76,6 +76,10 @@ function link_conn(name) {
     return link_to(name, '#/connections/' + esc(name))
 }
 
+function link_channel(name) {
+    return link_to(name, '#/channels/' + esc(name))
+}
+
 function link_exchange(vhost, name) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
     return link_to(fmt_exchange(name), '#/exchanges/' + url)
@@ -95,4 +99,28 @@ function link_user(name) {
 
 function link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
+}
+
+function message_rates(stats) {
+    var res = "";
+    if (keys(stats).length > 0) {
+        var items = [['Publish', 'publish'], ['Deliver', 'deliver'],
+                     ['Acknowledge', 'ack'], ['Get', 'get'],
+                     ['Deliver (noack)', 'deliver_no_ack'],
+                     ['Get (noack)', 'get_no_ack']];
+        for (var i in items) {
+            var name = items[i][0];
+            var key = items[i][1] + '_details';
+            if (key in stats) {
+                res += '<div class="highlight">' + name;
+                res += '<strong>' + Math.round(stats[key].rate) + '</strong>';
+                res += 'msg/s</div>';
+            }
+        }
+    }
+    else {
+        res = '<p>Currently idle</p>';
+    }
+
+    return res;
 }

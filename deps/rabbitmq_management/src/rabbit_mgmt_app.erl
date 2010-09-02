@@ -66,6 +66,7 @@ dispatcher() ->
      {["connections"],                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                 rabbit_mgmt_wm_connection, []},
      {["channels"],                                rabbit_mgmt_wm_channels, []},
+     {["channels", channel],                       rabbit_mgmt_wm_channel, []},
      {["exchanges"],                               rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost],                        rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost, exchange],              rabbit_mgmt_wm_exchange, []},

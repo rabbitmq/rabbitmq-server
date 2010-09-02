@@ -5,7 +5,7 @@
  <thead>
   <tr>
    <th></th>
-   <th colspan="4">Details</th>
+   <th colspan="5">Details</th>
    <th colspan="6">Message rates</th>
   </tr>
   <tr>
@@ -14,6 +14,7 @@
    <th>Username</th>
    <th>Transactional</th>
    <th>Prefetch</th>
+   <th>Messages unacked</th>
    <th>publish</th>
    <th>deliver</th>
    <th>get</th>
@@ -26,8 +27,7 @@
   <% for (var i = 0; i < channels.length; i++) { %>
   <tr<%= alt_rows(i)%>>
     <td>
-      <%= link_conn(channels[i].connection_details.name) %>
-      Channel <%= channels[i].number %>
+      <%= link_channel(channels[i].name) %>
     </td>
     <td class="c"><%= link_vhost(channels[i].vhost) %></td>
     <td class="c"><%= link_user(channels[i].user) %></td>
@@ -38,6 +38,7 @@
       <% } %>
     </td>
     <td class="c"><%= channels[i].prefetch_count %></td>
+    <td class="c"><%= channels[i].messages_unacknowledged %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'publish') %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver') %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'get') %></td>
@@ -45,9 +46,6 @@
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'get_no_ack') %></td>
     <td class="l">
       <%= fmt_rate(channels[i].message_stats, 'ack') %>
-      <% if (channels[i].messages_unacknowledged > 0) { %>
-      <sub>(<%= channels[i].messages_unacknowledged %> msgs unacked)</sub>
-      <% } %>
     </td>
   </tr>
   <% } %>
