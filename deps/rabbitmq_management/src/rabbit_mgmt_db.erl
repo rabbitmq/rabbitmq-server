@@ -74,6 +74,9 @@ pget(Key, List) ->
 pget(Key, List, Default) ->
     proplists:get_value(Key, List, Default).
 
+pset(Key, Value, List) ->
+    [{Key, Value}|proplists:delete(Key, List)].
+
 id(Pid) when is_pid(Pid) -> rabbit_mgmt_format:pid(Pid);
 id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
 
@@ -142,8 +145,8 @@ gs_update(Cur, New) ->
     [{Key, gs_update_add(Key, Val, pget(Key, Cur, 0))} || {Key, Val} <- New].
 
 gs_update_add(Key, Old, New) ->
-    case lists:reverse(atom_to_list(Key)) of
-        "sliated_" ++ _ -> %% "_details" backwards
+    case is_details(Key) of
+        true ->
             [{rate, pget(rate, Old) + pget(rate, New)},
              {last_event, erlang:max(pget(last_event, Old),
                                      pget(last_event, New))}];
@@ -220,13 +223,14 @@ handle_call({get_queues, Qs0}, State = #state{tables = Tables}) ->
 
 handle_call(get_connections, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
-    {ok, merge_created_stats(Table), State};
+    {ok, [zero_old_rates(S) || S <- merge_created_stats(Table)], State};
 
 handle_call({get_connection, Name}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
     Id = name_to_id(Table, Name),
     {ok, result_or_error(lookup_element(Table, {Id, create}) ++
-                             lookup_element(Table, {Id, stats})), State};
+                             zero_old_rates(
+                               lookup_element(Table, {Id, stats}))), State};
 
 handle_call(get_channels, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
@@ -381,7 +385,7 @@ merge_created_stats(In, Table) ->
 
 get_fine_stats(Type, GroupBy, Tables) ->
     Table = orddict:fetch(Type, Tables),
-    All = [{format_id(Id), Stats} ||
+    All = [{format_id(Id), zero_old_rates(Stats)} ||
               {Id, Stats, _Timestamp} <- ets:tab2list(Table)],
     group_sum(GroupBy, All).
 
@@ -431,3 +435,26 @@ queue_to_list(#amqqueue{name = Name, durable = Durable,
       [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
        {fun rabbit_mgmt_format:resource/1, [name]},
        {fun rabbit_mgmt_format:table/1,    [arguments]}]).
+
+zero_old_rates(Stats) ->
+    [maybe_zero_rate(S) || S <- Stats].
+
+maybe_zero_rate({Key, Val}) ->
+    case is_details(Key) of
+        true ->
+            Age = rabbit_mgmt_util:now_ms() - pget(last_event, Val),
+            case Age > ?STATS_INTERVAL * 1.5 of
+                true ->
+                    {Key, pset(rate, 0, Val)};
+                _ ->
+                    {Key, Val}
+            end;
+        _ ->
+            {Key, Val}
+    end.
+
+is_details(Key) ->
+    case lists:reverse(atom_to_list(Key)) of
+        "sliated_" ++ _ -> true; %% "_details" backwards
+        _               -> false
+    end.
