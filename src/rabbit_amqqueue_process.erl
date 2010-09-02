@@ -61,9 +61,7 @@
             rate_timer_ref,
             expiry_timer_ref,
             stats_timer,
-            guid_to_channel,
-            msgs_on_disk,
-            msg_indices_on_disk
+            guid_to_channel
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -126,9 +124,7 @@ init(Q) ->
             rate_timer_ref      = undefined,
             expiry_timer_ref    = undefined,
             stats_timer         = rabbit_event:init_stats_timer(),
-            guid_to_channel     = dict:new(),
-            msgs_on_disk        = gb_sets:new(),
-            msg_indices_on_disk = gb_sets:new()}, hibernate,
+            guid_to_channel     = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -406,17 +402,13 @@ deliver_from_queue_deliver(AckRequired, false,
     {{Message, IsDelivered, AckTag}, 0 == Remaining,
      State #q { backing_queue_state = BQS1 }}.
 
-confirm_message_internal(Guid, State = #q { guid_to_channel     = GTC,
-                                            msgs_on_disk        = MOD,
-                                            msg_indices_on_disk = MIOD }) ->
+confirm_message_internal(Guid, State = #q { guid_to_channel = GTC }) ->
     case dict:find(Guid, GTC) of
         {ok, {_    , undefined}} -> ok;
         {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
         _                        -> ok
     end,
-    State #q { guid_to_channel     = dict:erase(Guid, GTC),
-               msgs_on_disk        = gb_sets:delete_any(Guid, MOD),
-               msg_indices_on_disk = gb_sets:delete_any(Guid, MIOD) }.
+    State #q { guid_to_channel     = dict:erase(Guid, GTC) }.
 
 maybe_record_confirm_message(undefined, _, _, State) ->
     State;
@@ -553,7 +545,15 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
-    run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
+    case Fun(BQS) of
+        {BQS1, {confirm, Guids}} ->
+            State1 = lists:foldl(fun (Guid, State0) ->
+                                         confirm_message_internal(Guid, State0) end,
+                                 State, Guids),
+            State1 #q { backing_queue_state = BQS1};
+        BQS1 ->
+            run_message_queue(State#q{backing_queue_state = BQS1})
+    end.
 
 commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
                                                 backing_queue_state = BQS}) ->
@@ -850,48 +850,6 @@ handle_cast({ack, Txn, AckTags, ChPid},
             store_ch_record(C1),
             noreply(State#q{backing_queue_state = BQS1})
     end;
-
-%% Called when variable queue gets ack from a consumer.
-handle_cast({confirm_messages, Guids}, State) ->
-    noreply(lists:foldl(fun (Guid, State0) ->
-                                confirm_message_internal(Guid, State0)
-                        end, State, Guids));
-
-handle_cast({msgs_written_to_disk, Guids},
-            State = #q{guid_to_channel = GTC,
-                       msgs_on_disk = MOD,
-                       msg_indices_on_disk = MIOD}) ->
-    GuidSet = gb_sets:from_list(
-                lists:filter(fun(Guid) ->
-                                     dict:is_key(Guid, GTC)
-                             end, Guids)),
-    ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
-    gb_sets:fold(fun (Guid, State0) ->
-                         confirm_message_internal(Guid, State0)
-                 end, State, ToConfirmMsgs),
-    noreply(State#q{msgs_on_disk =
-                        gb_sets:difference(gb_sets:union(MOD, GuidSet),
-                                           ToConfirmMsgs),
-                    msg_indices_on_disk =
-                        gb_sets:difference(MIOD, ToConfirmMsgs)});
-
-handle_cast({msg_indices_written_to_disk, Guids},
-            State = #q{guid_to_channel = GTC,
-                       msgs_on_disk = MOD,
-                       msg_indices_on_disk = MIOD}) ->
-    GuidSet = gb_sets:from_list(
-                lists:filter(fun(Guid) ->
-                                     dict:is_key(Guid, GTC)
-                             end, Guids)),
-    ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
-    gb_sets:fold(fun (Guid, State0) ->
-                         confirm_message_internal(Guid, State0)
-                 end, State, ToConfirmMsgs),
-    noreply(State#q{msgs_on_disk =
-                        gb_sets:difference(MOD, ToConfirmMsgs),
-                    msg_indices_on_disk =
-                        gb_sets:difference(gb_sets:union(MIOD, GuidSet),
-                                           ToConfirmMsgs)});
 
 handle_cast({reject, AckTags, Requeue, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->

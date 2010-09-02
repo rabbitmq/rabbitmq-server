@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, init/4, terminate/1, delete_and_terminate/1,
+-export([init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/2, publish_delivered/3, fetch/2, ack/2,
          tx_publish/3, tx_ack/3, tx_rollback/2, tx_commit/3,
          requeue/2, len/1, is_empty/1,
@@ -237,8 +237,9 @@
           out_counter,
           in_counter,
           rates,
-          confirm_functions
-         }).
+          msgs_on_disk,
+          msg_indices_on_disk
+        }).
 
 -record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
 
@@ -324,7 +325,8 @@
              out_counter          :: non_neg_integer(),
              in_counter           :: non_neg_integer(),
              rates                :: rates(),
-             confirm_functions    :: {any(), any(), any()} }).
+             msgs_on_disk         :: gb_set(),
+             msg_indices_on_disk  :: gb_set()}).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -371,20 +373,6 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
 init(QueueName, IsDurable, Recover) ->
-    Self = self(),
-    init(QueueName, IsDurable, Recover,
-         { fun(Guids) ->                        %% index-on-disk fun
-                   gen_server2:cast(Self,
-                                    {msg_indices_written_to_disk, Guids})
-           end,
-           fun (Guids) ->                       %% msg-on-disk fun
-                   gen_server2:cast(Self, {msgs_written_to_disk, Guids})
-           end,
-           fun (Guids) ->                       %% ack-received fun
-                   gen_server2:cast(Self, {confirm_messages, Guids})
-           end }).
-
-init(QueueName, IsDurable, Recover, {IndicesOnDisk, MsgsOnDisk, _} = CF) ->
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(
           QueueName, Recover,
@@ -392,7 +380,7 @@ init(QueueName, IsDurable, Recover, {IndicesOnDisk, MsgsOnDisk, _} = CF) ->
           fun (Guid) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
           end,
-          IndicesOnDisk),
+          fun msg_indices_written_to_disk/1),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {PRef, TRef, Terms1} =
@@ -416,9 +404,12 @@ init(QueueName, IsDurable, Recover, {IndicesOnDisk, MsgsOnDisk, _} = CF) ->
             false -> undefined
         end,
 
+    Self = self(),
     rabbit_msg_store:register_sync_callback(
       ?PERSISTENT_MSG_STORE,
-      MsgsOnDisk),
+      fun (Guids) ->
+              msgs_written_to_disk(Self, Guids)
+      end),
 
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
@@ -451,7 +442,8 @@ init(QueueName, IsDurable, Recover, {IndicesOnDisk, MsgsOnDisk, _} = CF) ->
                                       avg_egress  = 0.0,
                                       avg_ingress = 0.0,
                                       timestamp   = Now },
-      confirm_functions    = CF},
+      msgs_on_disk         = gb_sets:new(),
+      msg_indices_on_disk  = gb_sets:new()},
     a(maybe_deltas_to_betas(State)).
 
 terminate(State) ->
@@ -1126,8 +1118,7 @@ remove_pending_ack(KeepPersistent,
 
 ack(_MsgStoreFun, _Fun, [], State) ->
     State;
-ack(MsgStoreFun, Fun, AckTags,
-    State = #vqstate { confirm_functions = {_, _, AcksReceived} }) ->
+ack(MsgStoreFun, Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
         lists:foldl(
@@ -1139,7 +1130,7 @@ ack(MsgStoreFun, Fun, AckTags,
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
-                              AcksReceived(Guids),
+                              confirm_messages(Guids),
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
@@ -1156,6 +1147,61 @@ accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
 accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
     {cons_if(IsPersistent, SeqId, SeqIdsAcc),
      rabbit_misc:orddict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
+
+
+%%----------------------------------------------------------------------------
+%% Internal plumbing for confirms (aka publisher acks)
+%%----------------------------------------------------------------------------
+
+confirm_messages(Guids) ->
+    Self = self(),
+    spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                     Self,
+                     fun (State = #vqstate { msgs_on_disk = MOD,
+                              msg_indices_on_disk = MIOD }) ->
+                             { State #vqstate {
+                                 msgs_on_disk =
+                                     gb_sets:difference(MOD, gb_sets:from_list(Guids)),
+                                 msg_indices_on_disk =
+                                     gb_sets:delete_any(MIOD, gb_sets:from_list(Guids)) },
+                               {confirm, Guids} }
+                     end)
+          end).
+
+msgs_written_to_disk(QPid, Guids) ->
+    spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                     QPid,
+                     fun(State = #vqstate { msgs_on_disk = MOD,
+                                            msg_indices_on_disk = MIOD}) ->
+                             GuidSet = gb_sets:from_list(Guids),
+                             ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
+                             { State #vqstate {
+                                 msgs_on_disk =
+                                     gb_sets:difference(gb_sets:union(MOD, GuidSet),
+                                                        ToConfirmMsgs),
+                                 msg_indices_on_disk =
+                                     gb_sets:difference(MIOD, ToConfirmMsgs) },
+                               {confirm, gb_sets:to_list(ToConfirmMsgs)} }
+                     end)
+          end).
+
+msg_indices_written_to_disk(Guids) ->
+    Self = self(),
+    spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                     Self,
+                     fun(State = #vqstate { msgs_on_disk = MOD,
+                                            msg_indices_on_disk = MIOD}) ->
+                             GuidSet = gb_sets:from_list(Guids),
+                             ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
+                             { State #vqstate {
+                                 msgs_on_disk =
+                                     gb_sets:difference(MOD, ToConfirmMsgs),
+                                 msg_indices_on_disk =
+                                     gb_sets:difference(gb_sets:union(MIOD, GuidSet),
+                                                        ToConfirmMsgs) },
+                               {confirm, gb_sets:to_list(ToConfirmMsgs)} }
+                     end)
+          end).
 
 %%----------------------------------------------------------------------------
 %% Phase changes
