@@ -454,7 +454,4 @@ maybe_zero_rate({Key, Val}) ->
     end.
 
 is_details(Key) ->
-    case lists:reverse(atom_to_list(Key)) of
-        "sliated_" ++ _ -> true; %% "_details" backwards
-        _               -> false
-    end.
+    lists:suffix("_details", atom_to_list(Key)).
