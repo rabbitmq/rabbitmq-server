@@ -172,5 +172,5 @@ no_permission_test() ->
 
 assert_fail_start_with_params(Params) ->
     {error, {auth_failure_likely, _}} =
-        amqp_connection:start_link(network, Params),
+        amqp_connection:start(network, Params),
     ok.

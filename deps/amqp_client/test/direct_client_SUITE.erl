@@ -109,9 +109,7 @@ channel_death_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    {ok, Pid} = amqp_connection:start_link(direct),
-    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
-    unlink(Sup),
+    {ok, Pid} = amqp_connection:start(direct),
     Pid.
 
 test_coverage() ->

@@ -33,12 +33,12 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/1, open_channel/2]).
--export([start_link/1, start_link/2]).
+-export([start/1, start/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
 -define(COMMON_INFO_KEYS,
-        [server_properties, is_closing, amqp_params, supervisor, num_channels]).
+        [server_properties, is_closing, amqp_params, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -73,10 +73,9 @@
 %% authorising a user guest/guest. Use direct type for a direct connection to
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space, and with a default set of amqp_params. If a different host, port,
-%% vhost or credential set is required, start_link/2 should be used. The
-%% resulting process's supervisor is linked to the invoking process.
-start_link(Type) ->
-    start_link(Type, #amqp_params{}).
+%% vhost or credential set is required, start/2 should be used.
+start(Type) ->
+    start(Type, #amqp_params{}).
 
 %% @spec (Type, amqp_params()) -> {ok, Connection} | {error, Error}
 %% where
@@ -85,17 +84,17 @@ start_link(Type) ->
 %% @doc Starts a connection to an AMQP server. Use network type to connect
 %% to a remote AMQP server or direct type for a direct connection to
 %% a RabbitMQ server, assuming that the server is running in the same process
-%% space.The resulting process's supervisor is linked to the invoking process.
-start_link(Type, AmqpParams) ->
+%% space.
+start(Type, AmqpParams) ->
+    {ok, Sup} = amqp_connection_sup:start_link(Type, AmqpParams),
+    %% This unlink will disappear as part of bug 23003
+    unlink(Sup),
+    [Connection] = supervisor2:find_child(Sup, connection),
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection
              end,
-    {ok, Sup} = amqp_connection_sup:start_link(Type, Module, AmqpParams),
-    [Connection] = supervisor2:find_child(Sup, connection),
-    %% The unlink-link calls will disapear as part of bug 23003
-    unlink(Sup),
     try Module:connect(Connection) of
-        ok -> link(Sup), {ok, Connection}
+        ok -> {ok, Connection}
     catch
         exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
             {error, Reason};
@@ -171,12 +170,14 @@ close(ConnectionPid, Code, Text) ->
 %%          and false otherwise
 %%      amqp_params - returns the #amqp_params{} structure used to start the
 %%          connection
-%%      supervisor - returns the pid of the supervisor of the connection
 %%      num_channels - returns the number of channels currently open under the
 %%          connection (excluding channel 0)
 %%      channel_max - returns the channel_max value negotiated with the server
 %%          (only for the network connection)
 %%      heartbeat - returns the heartbeat value negotiated with the server
+%%          (only for the network connection)
+%%      sock - returns the socket for the network connection (for use with
+%%             e.g. inet:sockname/1)
 %%          (only for the network connection)
 %%      any other value - throws an exception
 info(ConnectionPid, Items) ->

@@ -29,16 +29,17 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, connect/1]).
+-export([start_link/3, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
 -record(state, {sup,
                 params = #amqp_params{},
-                collector = undefined,
+                collector,
                 channels_manager,
                 closing = false,
-                server_properties}).
+                server_properties,
+                start_infrastructure_fun}).
 
 -record(closing, {reason,
                   close = none, %% At least one of close and reply has to be
@@ -52,8 +53,8 @@
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams, ChMgr) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr], []).
+start_link(AmqpParams, ChMgr, SIF) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr, SIF], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -62,8 +63,11 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams, ChMgr]) ->
-    {ok, #state{sup = Sup, params = AmqpParams, channels_manager = ChMgr}}.
+init([Sup, AmqpParams, ChMgr, SIF]) ->
+    {ok, #state{sup = Sup,
+                params = AmqpParams,
+                channels_manager = ChMgr,
+                start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -122,7 +126,6 @@ handle_command({close, Close}, From, State) ->
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
-i(supervisor,        State) -> State#state.sup;
 i(num_channels,      State) ->
     amqp_channels_manager:num_channels(State#state.channels_manager);
 i(Item, _State) ->
@@ -176,8 +179,6 @@ handle_all_channels_terminated(State = #state{closing = Closing,
                                               collector = Collector}) ->
     #state{closing = #closing{}} = State, % assertion
     rabbit_queue_collector:delete_all(Collector),
-    rabbit_queue_collector:shutdown(Collector),
-    rabbit_misc:unlink_and_capture_exit(Collector),
     case Closing#closing.from of none -> ok;
                                  From -> gen_server:reply(From, ok)
     end,
@@ -220,11 +221,6 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     ServerProperties = rabbit_reader:server_properties(),
     State1#state{server_properties = ServerProperties}.
 
-start_infrastructure(State = #state{sup = Sup, channels_manager = ChMgr}) ->
-    {ok, CTSup} = supervisor2:start_child(Sup,
-        {connection_type_sup, {amqp_connection_type_sup,
-                                   start_link_direct, []},
-         permanent, infinity, supervisor, [amqp_connection_type_sup]}),
-    [Collector] = supervisor2:find_child(CTSup, collector),
-    amqp_channels_manager:register_connection(ChMgr, self()),
+start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
+    {Collector} = SIF(),
     State#state{collector = Collector}.

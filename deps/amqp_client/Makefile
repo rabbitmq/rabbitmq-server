@@ -23,10 +23,6 @@
 #   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 #
 
-DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
-                                 file:consult("rabbit_common.app"), \
-                                 [io:format("~p ",[M]) || M <- Mods], halt().')
-
 VERSION=0.0.0
 SOURCE_PACKAGE_DIR=$(PACKAGE)-$(VERSION)-src
 SOURCE_PACKAGE_TAR_GZ=$(SOURCE_PACKAGE_DIR).tar.gz
@@ -46,6 +42,8 @@ run_in_broker: compile $(BROKER_DEPS) $(EBIN_DIR)/$(PACKAGE).app
 clean: common_clean
 	rm -f $(INTARGETS)
 	rm -rf $(DIST_DIR)
+
+distribution: documentation source_tarball package
 
 %.app: %.app.in
 	sed -e 's:%%VSN%%:$(VERSION):g' < $< > $@
@@ -68,7 +66,7 @@ $(RABBIT_PLT):
 ##  Documentation
 ###############################################################################
 
-doc: $(DOC_DIR)/index.html
+documentation: $(DOC_DIR)/index.html
 
 $(DOC_DIR)/overview.edoc: $(SOURCE_DIR)/overview.edoc.in
 	mkdir -p $(DOC_DIR)
@@ -83,7 +81,7 @@ $(DOC_DIR)/index.html: $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) $(DOC_DIR)/overview.edo
 
 include test.mk
 
-test_common_package: common_package package prepare_tests
+test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) package prepare_tests
 	$(MAKE) start_test_broker_node
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
@@ -109,28 +107,26 @@ $(TEST_DIR): $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 
 COPY=cp -pR
 
-common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ)
-
 $(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(DIST_DIR)/$(COMMON_PACKAGE_DIR) | $(DIST_DIR)
 	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
 
-$(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE_DIR).app | $(DIST_DIR)
+$(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_DIR)
 	$(MAKE) -C $(BROKER_DIR)
 	rm -rf $(DIST_DIR)/$(COMMON_PACKAGE_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)
-	cp $(COMMON_PACKAGE_DIR).app $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/
+	cp $(COMMON_PACKAGE).app $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/
 	$(foreach DEP, $(DEPS), \
 	    ( cp $(BROKER_DIR)/ebin/$(DEP).beam $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/ \
 	    );)
 	cp $(BROKER_DIR)/include/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)/
 
-source_tarball: clean $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DIST_DIR)
+source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)
 	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)/
 	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
 	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
-	$(COPY) Makefile.in $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/Makefile
+	sed 's/%%VSN%%/$(VERSION)/' Makefile.in > $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/Makefile
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(SOURCE_DIR)
 	$(COPY) $(SOURCE_DIR)/*.erl $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(SOURCE_DIR)/
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(EBIN_DIR)

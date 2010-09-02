@@ -35,7 +35,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -55,12 +55,13 @@
                 anon_sub_requests = queue:new(),
                 tagged_sub_requests = dict:new(),
                 closing = false,
-                writer = undefined,
+                writer,
                 return_handler_pid = none,
                 flow_control = false,
                 flow_handler_pid = none,
                 consumers = dict:new(),
-                default_consumer = unknown}).
+                default_consumer = none,
+                start_infrastructure_fun}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -248,23 +249,20 @@ rpc_top_half(Method, Content, From,
 
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     case queue:out(RequestQueue) of
-        {empty, _} ->
-            exit(empty_rpc_bottom_half);
         {{value, {From, _Method, _Content}}, NewRequestQueue} ->
             case From of none -> ok;
                          _    -> gen_server:reply(From, Reply)
             end,
-            do_rpc(State#state{rpc_requests = NewRequestQueue})
+            do_rpc(State#state{rpc_requests = NewRequestQueue});
+        {empty, _} ->
+            exit(empty_rpc_bottom_half)
     end.
 
 do_rpc(State0 = #state{rpc_requests = RequestQueue,
                        closing = Closing}) ->
-    State1 = check_writer(State0),
     case queue:peek(RequestQueue) of
-        {value, {_From, Method = #'channel.close'{}, Content}} ->
-            do(Method, Content, State1),
-            State1#state{closing = just_channel};
         {value, {_From, Method, Content}} ->
+            State1 = pre_do(Method, Content, State0),
             do(Method, Content, State1),
             State1;
         empty ->
@@ -274,8 +272,15 @@ do_rpc(State0 = #state{rpc_requests = RequestQueue,
                 _ ->
                     ok
             end,
-            State1
+            State0
     end.
+
+pre_do(#'channel.open'{}, _Content, State) ->
+    start_infrastructure(State);
+pre_do(#'channel.close'{}, _Content, State) ->
+    State#state{closing = just_channel};
+pre_do(_, _, State) ->
+    State.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -284,18 +289,14 @@ do_rpc(State0 = #state{rpc_requests = RequestQueue,
 do(Method, Content, #state{driver = Driver, writer = Writer}) ->
     ok = amqp_channel_util:do(Driver, Writer, Method, Content).
 
-check_writer(State = #state{writer = undefined, driver = Driver, sup = Sup}) ->
-    State#state{writer = hd(supervisor2:find_child(Sup,
-                                case Driver of network -> writer;
-                                               direct  -> rabbit_channel
-                                end))};
-check_writer(State) ->
-    State.
+start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
+    {Writer} = SIF(),
+    State#state{writer = Writer}.
 
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
     exit(no_consumers_registered);
 resolve_consumer(ConsumerTag, #state{consumers = Consumers,
-                                       default_consumer = DefaultConsumer}) ->
+                                     default_consumer = DefaultConsumer}) ->
     case dict:find(ConsumerTag, Consumers) of
         {ok, Value} ->
             Value;
@@ -447,16 +448,19 @@ handle_regular_method(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, ChannelNumber) ->
-    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber], []).
+start_link(Driver, ChannelNumber, SIF) ->
+    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SIF], []).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Sup, Driver, ChannelNumber]) ->
-    {ok, #state{sup = Sup, driver = Driver, number = ChannelNumber}}.
+init([Sup, Driver, ChannelNumber, SIF]) ->
+    {ok, #state{sup = Sup,
+                driver = Driver,
+                number = ChannelNumber,
+                start_infrastructure_fun = SIF}}.
 
 %% Standard implementation of the call/{2,3} command
 %% @private
@@ -498,7 +502,19 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
             {noreply, rpc_top_half(NewMethod, none, From, NewState)};
         BlockReply ->
             {reply, BlockReply, State}
-    end.
+    end;
+
+%% These handle the delivery of messages from a direct channel
+%% @private
+handle_call({send_command_sync, Method, Content}, From, State) ->
+    Ret = handle_method(Method, Content, State),
+    gen_server:reply(From, ok),
+    Ret;
+%% @private
+handle_call({send_command_sync, Method}, From, State) ->
+    Ret = handle_method(Method, none, State),
+    gen_server:reply(From, ok),
+    Ret.
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
@@ -528,22 +544,19 @@ handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
 %% Registers a handler to process return messages
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
-    %% TODO just monitor, no link
-    link(ReturnHandler),
+    erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
-    %% TODO just monitor, no link
-    link(FlowHandler),
+    erlang:monitor(process, FlowHandler),
     {noreply, State#state{flow_handler_pid = FlowHandler}};
 
 %% Registers a handler to process unexpected deliveries
 %% @private
 handle_cast({register_default_consumer, Consumer}, State) ->
-    %% TODO just monitor, no link
-    link(Consumer),
+    erlang:monitor(process, Consumer),
     {noreply, State#state{default_consumer = Consumer}};
 
 %% @private
@@ -565,18 +578,11 @@ handle_info({send_command, Method}, State) ->
 handle_info({send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
 
-%% Handles the delivery of a message from a direct channel
+%% This handles the delivery of a message from a direct channel
 %% @private
 handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
-    {noreply, State};
-
-%% This is used in the direct case to fake a response from the writer, when
-%% rabbit_channel sends a flush message to it
-%% @private
-handle_info({flush, Caller, Ref}, State) ->
-    Caller ! Ref,
     {noreply, State};
 
 %% @private
@@ -632,15 +638,37 @@ handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
             State = #state{number = Number}) ->
     ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
     {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
-    {stop, {server_initiated_close, Code, Expl}, State}.
+    {stop, {server_initiated_close, Code, Expl}, State};
+
+%% @private
+handle_info({'DOWN', _, process, Pid, Reason}, State) ->
+    handle_down(Pid, Reason, State).
+
+handle_down(ReturnHandler, Reason,
+            State = #state{return_handler_pid = ReturnHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
+              "Reason: ~p~n", [self(), ReturnHandler, Reason]),
+    {noreply, State#state{return_handler_pid = none}};
+handle_down(FlowHandler, Reason,
+            State = #state{flow_handler_pid = FlowHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
+              "Reason: ~p~n", [self(), FlowHandler, Reason]),
+    {noreply, State#state{flow_handler_pid = none}};
+handle_down(DefaultConsumer, Reason,
+            State = #state{default_consumer = DefaultConsumer}) ->
+    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
+              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
+    {noreply, State#state{default_consumer = none}};
+handle_down(Other, Reason, State) ->
+    {stop, {unexpected_down, Other, Reason}, State}.
 
 %%---------------------------------------------------------------------------
 %% Rest of the gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(_Reason, #state{sup = Sup, driver = Driver}) ->
-    amqp_channel_util:terminate_channel_infrastructure(Driver, Sup).
+terminate(_Reason, _State) ->
+    ok.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

@@ -29,28 +29,68 @@
 
 -behaviour(supervisor2).
 
--export([start_link/3]).
+-export([start_link/2]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Module, AmqpParams) ->
+start_link(Type, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     {ok, ChSupSup} = supervisor2:start_child(Sup,
                          {channel_sup_sup, {amqp_channel_sup_sup, start_link,
                                             [Type]},
-                          permanent, infinity, supervisor,
+                          intrinsic, infinity, supervisor,
                           [amqp_channel_sup_sup]}),
     {ok, ChMgr} = supervisor2:start_child(Sup,
                       {channels_manager, {amqp_channels_manager, start_link,
                                           [ChSupSup]},
-                       permanent, ?MAX_WAIT, worker, [amqp_channels_manager]}),
-    {ok, _} = supervisor2:start_child(Sup,
-                  {connection, {Module, start_link, [AmqpParams, ChMgr]},
-                   permanent, ?MAX_WAIT, worker, [Module]}),
+                       intrinsic, ?MAX_WAIT, worker, [amqp_channels_manager]}),
+    start_connection(Sup, Type, AmqpParams, ChMgr,
+                     start_infrastructure_fun(Sup, Type)),
     {ok, Sup}.
+    
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
+
+start_connection(Sup, network, AmqpParams, ChMgr, SIF) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {connection, {amqp_network_connection, start_link,
+                                [AmqpParams, ChMgr, SIF]},
+                   intrinsic, brutal_kill, worker, [amqp_network_connection]});
+start_connection(Sup, direct, AmqpParams, ChMgr, SIF) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {connection, {amqp_direct_connection, start_link,
+                                [AmqpParams, ChMgr, SIF]},
+                   intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
+
+start_infrastructure_fun(Sup, network) ->
+    fun(Sock) ->
+        Connection = self(),
+        {ok, CTSup} = supervisor2:start_child(Sup,
+                          {connection_type_sup, {amqp_connection_type_sup,
+                                                 start_link_network,
+                                                 [Sock, Connection]},
+                           intrinsic, infinity, supervisor,
+                           [amqp_connection_type_sup]}),
+        [MainReader] = supervisor2:find_child(CTSup, main_reader),
+        [Framing] = supervisor2:find_child(CTSup, framing),
+        [Writer] = supervisor2:find_child(CTSup, writer),
+        {MainReader, Framing, Writer,
+         amqp_connection_type_sup:start_heartbeat_fun(CTSup)}
+    end;
+start_infrastructure_fun(Sup, direct) ->
+    fun() ->
+        {ok, CTSup} = supervisor2:start_child(Sup,
+                          {connection_type_sup, {amqp_connection_type_sup,
+                                                 start_link_direct, []},
+                           intrinsic, infinity, supervisor,
+                           [amqp_connection_type_sup]}),
+        [Collector] = supervisor2:find_child(CTSup, collector),
+        {Collector}
+    end.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

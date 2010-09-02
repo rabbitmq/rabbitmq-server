@@ -138,15 +138,11 @@ repeat(Fun, Times) ->
     [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
 
 new_connection(Params) ->
-    {ok, Pid} = amqp_connection:start_link(network, Params),
-    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
-    unlink(Sup),
+    {ok, Pid} = amqp_connection:start(network, Params),
     Pid.
 
 new_connection() ->
-    {ok, Pid} = amqp_connection:start_link(network),
-    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
-    unlink(Sup),
+    {ok, Pid} = amqp_connection:start(network),
     Pid.
 
 test_coverage() ->

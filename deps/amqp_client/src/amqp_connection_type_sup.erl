@@ -29,7 +29,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link_direct/0, start_link_network/3]).
+-export([start_link_direct/0, start_link_network/3, start_heartbeat_fun/1]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -40,25 +40,43 @@ start_link_direct() ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     {ok, _} = supervisor2:start_child(Sup,
                   {collector, {rabbit_queue_collector, start_link, []},
-                   permanent, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
+                   intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
     {ok, Sup}.
 
 start_link_network(Sock, Connection, ChMgr) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     {ok, Framing0} = supervisor2:start_child(Sup,
                          {framing, {rabbit_framing_channel, start_link,
-                                    [Connection, ?PROTOCOL]},
-                          permanent, ?MAX_WAIT, worker,
+                                    [Sup, Connection, ?PROTOCOL]},
+                          intrinsic, ?MAX_WAIT, worker,
                           [rabbit_framing_channel]}),
+    {ok, MainReader} = supervisor2:start_child(Sup,
+                           {main_reader, {amqp_main_reader, start_link,
+                                          [Sock, Connection, ChMgr, Framing0]},
+                            intrinsic, ?MAX_WAIT, worker, [amqp_main_reader]}),
     {ok, _} = supervisor2:start_child(Sup,
                   {writer, {rabbit_writer, start_link,
-                            [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL]},
-                   permanent, ?MAX_WAIT, worker, [rabbit_writer]}),
-    {ok, _} = supervisor2:start_child(Sup,
-                  {main_reader, {amqp_main_reader, start_link,
-                                 [Sock, Connection, ChMgr, Framing0]},
-                   permanent, ?MAX_WAIT, worker, [amqp_main_reader]}),
+                            [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, MainReader]},
+                   intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
     {ok, Sup}.
+
+start_heartbeat_fun(Sup) ->
+    fun(_Sock, 0) ->
+        none;
+       (Sock, Timeout) ->
+        Connection = self(),
+        {ok, Sender} = supervisor2:start_child(Sup,
+                           {heartbeat_sender, {rabbit_heartbeat,
+                                               start_heartbeat_sender,
+                                               [Connection, Sock, Timeout]},
+                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+        {ok, Receiver} = supervisor2:start_child(Sup,
+                           {heartbeat_receiver, {rabbit_heartbeat,
+                                                 start_heartbeat_receiver,
+                                                 [Connection, Sock, Timeout]},
+                            intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+        {Sender, Receiver}
+    end.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

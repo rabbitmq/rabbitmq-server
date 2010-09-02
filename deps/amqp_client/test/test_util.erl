@@ -195,7 +195,6 @@ basic_return_test(Connection) ->
     Publish = #'basic.publish'{exchange = X, routing_key = Key, 
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
-    timer:sleep(200),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
             #'basic.return'{reply_code = ReplyCode,

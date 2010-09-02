@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, connect/1]).
+-export([start_link/3, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -43,26 +43,29 @@
                 sock,
                 channel_max,
                 heartbeat,
-                framing0 = undefined,
-                writer0 = undefined,
-                main_reader = undefined,
+                framing0,
+                writer0,
+                main_reader,
                 channels_manager,
                 closing = false,
-                server_properties}).
+                server_properties,
+                start_heartbeat_fun,
+                start_infrastructure_fun}).
 
 -record(closing, {reason,
                   close,
                   from = none,
                   phase = terminate_channels}).
 
--define(INFO_KEYS, (amqp_connection:info_keys() ++ [channel_max, heartbeat])).
+-define(INFO_KEYS, (amqp_connection:info_keys() ++
+                        [max_channel, heartbeat, sock])).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams, ChMgr) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr], []).
+start_link(AmqpParams, ChMgr, SIF) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr, SIF], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -71,8 +74,11 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams, ChMgr]) ->
-    {ok, #state{sup = Sup, params = AmqpParams, channels_manager = ChMgr}}.
+init([Sup, AmqpParams, ChMgr, SIF]) ->
+    {ok, #state{sup = Sup,
+                params = AmqpParams,
+                channels_manager = ChMgr,
+                start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
     case Closing of
@@ -108,9 +114,8 @@ handle_info({channel_internal_error, _Pid, _Reason}, State) ->
 handle_info(all_channels_terminated, State) ->
     handle_all_channels_terminated(State).
 
-terminate(_Reason, #state{sup = Sup}) ->
-    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
-    amqp_channel_util:terminate_channel_infrastructure(network, CTSup).
+terminate(_Reason, _State) ->
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     State.
@@ -157,9 +162,9 @@ handle_method(#'connection.close_ok'{}, none,
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
-i(supervisor,        State) -> State#state.sup;
 i(channel_max,       State) -> State#state.channel_max;
 i(heartbeat,         State) -> State#state.heartbeat;
+i(sock,              State) -> State#state.sock;
 i(num_channels,      State) ->
     amqp_channels_manager:num_channels(State#state.channels_manager);
 i(Item, _State) ->
@@ -300,9 +305,18 @@ do_connect(State = #state{params = #amqp_params{host = Host,
 
 handshake(State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    State1 = start_infrastructure_pre_hs(State0),
+    State1 = start_infrastructure(State0),
     State2 = network_handshake(State1),
-    start_infrastructure_post_hs(State2).
+    start_heartbeat(State2),
+    State2.
+
+start_infrastructure(State = #state{start_infrastructure_fun = SIF,
+                                    sock = Sock}) ->
+    {MainReader, Framing, Writer, SHF} = SIF(Sock),
+    State#state{main_reader = MainReader,
+                framing0 = Framing,
+                writer0 = Writer,
+                start_heartbeat_fun = SHF}.
 
 network_handshake(State = #state{writer0 = Writer, params = Params}) ->
     Start = handshake_recv(),
@@ -326,33 +340,10 @@ network_handshake(State = #state{writer0 = Writer, params = Params}) ->
                 heartbeat = Heartbeat,
                 server_properties = ServerProperties}.
 
-start_infrastructure_pre_hs(State = #state{sup = Sup,
-                                           sock = Sock,
-                                           channels_manager = ChMgr}) ->
-    {ok, CTSup} = supervisor2:start_child(Sup,
-        {connection_type_sup, {amqp_connection_type_sup,
-                               start_link_network, [Sock, self(), ChMgr]},
-         permanent, infinity, supervisor, [amqp_connection_type_sup]}),
-    [MainReader, Framing0, Writer0] =
-        [hd(supervisor2:find_child(CTSup, Child)) ||
-            Child <- [main_reader, framing, writer]],
-    State#state{main_reader = MainReader,
-                framing0 = Framing0,
-                writer0 = Writer0}.
-
-start_infrastructure_post_hs(State = #state{sup = Sup,
-                             sock = Sock,
-                             heartbeat = Heartbeat,
-                             channel_max = ChannelMax,
-                             channels_manager = ChMgr}) ->
-    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
-    rabbit_heartbeat:start_heartbeat(CTSup, Sock, Heartbeat),
-    case ChannelMax of
-        0 -> ok;
-        _ -> amqp_channels_manager:set_channel_max(ChMgr, ChannelMax)
-    end,
-    amqp_channels_manager:register_connection(ChMgr, self()),
-    State.
+start_heartbeat(#state{start_heartbeat_fun = SHF,
+                       sock = Sock,
+                       heartbeat = Heartbeat}) ->
+    SHF(Sock, Heartbeat).
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->

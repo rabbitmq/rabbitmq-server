@@ -27,29 +27,14 @@
 
 -include("amqp_client.hrl").
 
--export([terminate_channel_infrastructure/2]).
 -export([do/4]).
 
 %%---------------------------------------------------------------------------
 
-terminate_channel_infrastructure(network, Sup) ->
-    [Writer] = supervisor2:find_child(Sup, writer),
-    rabbit_writer:flush(Writer),
-    ok;
-terminate_channel_infrastructure(direct, Sup) ->
-    [RChannel] = supervisor2:find_child(Sup, rabbit_channel),
-    rabbit_channel:shutdown(RChannel),
-    ok.
-
 do(network, Writer, Method, Content) ->
     case Content of
-        none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
-                                                           self());
-        _    -> rabbit_writer:send_command_and_signal_back(Writer, Method,
-                                                           Content, self())
-    end,
-    receive
-        rabbit_writer_send_command_signal -> ok
+        none -> rabbit_writer:send_command_sync(Writer, Method);
+        _    -> rabbit_writer:send_command_sync(Writer, Method, Content)
     end;
 do(direct, RabbitChannel, Method, Content) ->
     case Content of
