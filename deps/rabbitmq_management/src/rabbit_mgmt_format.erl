@@ -20,7 +20,7 @@
 %%
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, pid/1, ip/1, table/1, tuple/1]).
+-export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
 -export([protocol/1, resource/1, permissions/1, user_permissions/1]).
 -export([exchange/1, user/1, binding/1, pack_props/2, url/2]).
 
@@ -85,6 +85,11 @@ protocol({Major, Minor, 0}) ->
     print("~p-~p", [Major, Minor]);
 protocol({Major, Minor, Revision}) ->
     print("~p-~p-~p", [Major, Minor, Revision]).
+
+timestamp(unknown) ->
+    unknown;
+timestamp({MegaSecs, Secs, MicroSecs}) ->
+    trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).
 
 resource(unknown) ->
     unknown;

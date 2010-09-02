@@ -16,8 +16,8 @@
   <% for (var i = 0; i < connections.length; i++) { %>
   <tr<%= alt_rows(i)%>>
     <td><%= link_conn(connections[i].name) %></td>
-    <td><%= fmt_bytes(connections[i].recv_oct_rate) %>/s<sub>(<%= fmt_bytes(connections[i].recv_oct) %> total)</sub></td>
-    <td><%= fmt_bytes(connections[i].send_oct_rate) %>/s<sub>(<%= fmt_bytes(connections[i].send_oct) %> total)</sub></td>
+    <td><%= fmt_rate_bytes(connections[i], 'recv_oct') %></td>
+    <td><%= fmt_rate_bytes(connections[i], 'send_oct') %></td>
     <td><%= connections[i].channels %></td>
     <td><%= link_vhost(connections[i].vhost) %></td>
     <td><%= link_user(connections[i].user) %></td>

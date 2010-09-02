@@ -38,10 +38,10 @@ rates_test() ->
     NewTS = {0, 10, 0},
     WithRates = rabbit_mgmt_db:rates(New, NewTS, Previous, PreviousTS,
                                      [foo, bar, bash]),
-    equals(0.1, pget(foo_rate, WithRates)),
-    equals(10, pget(bar_rate, WithRates)),
-    undefined = pget(bash_rate, WithRates),
-    undefined = pget(baz_rate, WithRates).
+    equals(0.1, pget(rate, pget(foo_details, WithRates))),
+    equals(10, pget(rate, pget(bar_details, WithRates))),
+    undefined = pget(bash_details, WithRates),
+    undefined = pget(baz_details, WithRates).
 
 http_overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it

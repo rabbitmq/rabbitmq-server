@@ -40,10 +40,20 @@ function fmt_color(r) {
 }
 
 function fmt_rate(obj, name) {
-    if (obj == undefined || obj[name] == undefined) return '';
+    return fmt_rate0(obj, name, fmt_num);
+}
 
-    return fmt_num(obj[name + '_rate']) + '/s' +
-        '<sub>(' + fmt_num(obj[name]) + ' total)</sub>';
+function fmt_rate_bytes(obj, name) {
+    return fmt_rate0(obj, name, fmt_bytes);
+}
+
+function fmt_rate0(obj, name, fmt) {
+    if (obj == undefined || obj[name] == undefined) return '';
+    var res = '<sub>(' + fmt(obj[name]) + ' total)</sub>';
+    if (obj[name + '_details'] != undefined) {
+        res = fmt(obj[name + '_details'].rate) + '/s' + res;
+    }
+    return res;
 }
 
 function fmt_exchange(name) {

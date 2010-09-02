@@ -1,26 +1,26 @@
 Before preview release:
 Write more management:
-  Exchange / queue arguments support
-  Bindings arguments support
   Channel GET
 Finish basic documentation.
 Figure out supervision.
 Cross-browser testing.
-Rearrange rates for future expansion.
+Fix the rate bug.
 
 Before first release:
 Write remaining management:
+  Exchange / queue arguments support
+  Bindings arguments support
   Application list / start / stop
   VM stop
   Reset / rotate logs / cluster
 Add superuser bit (bug 22983).
   Tests for permissions.
-Fix the rate bug.
 More user-friendly form submission errors.
 Make it work with fine stats turned off.
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
+Fix backing queue status breakage.
 
 Then:
 Figure out something sensible to do with time series.

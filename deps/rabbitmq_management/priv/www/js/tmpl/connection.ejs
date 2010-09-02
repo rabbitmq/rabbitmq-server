@@ -3,15 +3,15 @@
 <div class="section">
 <h2>Overview</h2>
 <div>
-<div class="highlight">
+<div class="highlight-right">
   Receiving
-  <strong><%= fmt_bytes(connection.recv_oct_rate) %>/s</strong>
+  <strong><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</strong>
   (<%= fmt_bytes(connection.recv_oct) %> total)
 </div>
 
-<div class="highlight">
+<div class="highlight-right">
   <span>Sending</span>
-  <strong><%= fmt_bytes(connection.send_oct_rate) %>/s</strong>
+  <strong><%= fmt_bytes(connection.send_oct_details.rate) %>/s</strong>
   (<%= fmt_bytes(connection.send_oct) %> total)
 </div>
 <table class="facts">

@@ -1,28 +1,53 @@
 <h1>Overview</h1>
 
+<div class="section">
+<h2>Message Rates</h2>
+<div>
+<% if (keys(overview.message_stats).length > 0) {
+     var items = [['Publish', 'publish'], ['Deliver', 'deliver'],
+                  ['Acknowledge', 'ack'], ['Get', 'get'],
+                  ['Deliver (noack)', 'deliver_no_ack'],
+                  ['Get (noack)', 'get_no_ack']];
+     for (var i in items) {
+       var name = items[i][0];
+       var key = items[i][1] + '_details';
+       if (key in overview.message_stats) {
+%>
 <div class="highlight">
-  Receiving
-  <strong><%= fmt_bytes(overview.recv_oct_rate) %>/s</strong>
+  <%= name %>
+  <strong><%= Math.round(overview.message_stats[key].rate) %></strong>
+  msg/s
+</div>
+<%
+       }
+     }
+   }
+   else {
+%>
+<p>Currently idle</p>
+<%
+   }
+%>
+<span class="br"></span>
+</div>
 </div>
 
-<div class="highlight">
-  <span>Sending</span>
-  <strong><%= fmt_bytes(overview.send_oct_rate) %>/s</strong>
-</div>
-
+<div class="section">
+<h2>System Information</h2>
+<div>
 <table class="facts">
   <tr>
-    <th>node</th>
+    <th>Erlang Nodename</th>
     <td><%= overview.node %></td>
   </tr>
   <tr>
-    <th>pid</th>
+    <th>Operating System PID</th>
     <td><%= overview.os_pid %></td></tr>
   <tr>
-    <th>bound to</th>
+    <th>Bound To</th>
     <td><%= overview.bound_to %></td></tr>
   <tr>
-    <th>file descriptors</th>
+    <th>File Descriptors</th>
     <td class="status">
       <div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>">
         <%= overview.fd_used %> / <%= overview.fd_total %>
@@ -31,7 +56,7 @@
     </td>
   </tr>
   <tr>
-    <th>erlang processes</th>
+    <th>Erlang Processes</th>
     <td class="status">
       <div class="<%= fmt_color(overview.proc_used / overview.proc_total) %>">
         <%= overview.proc_used %> / <%= overview.proc_total %>
@@ -40,7 +65,7 @@
     </td>
   </tr>
   <tr>
-    <th>memory</th>
+    <th>Memory</th>
     <td class="status">
       <div class="<%= fmt_color(overview.mem_used / overview.mem_total) %>">
         <%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %>
@@ -49,3 +74,5 @@
     </td>
   </tr>
 </table>
+</div>
+</div>

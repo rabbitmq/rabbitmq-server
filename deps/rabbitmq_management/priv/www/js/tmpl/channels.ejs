@@ -41,8 +41,8 @@
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'publish') %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver') %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'get') %></td>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver_noack') %></td>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'get_noack') %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver_no_ack') %></td>
+    <td class="l"><%= fmt_rate(channels[i].message_stats, 'get_no_ack') %></td>
     <td class="l">
       <%= fmt_rate(channels[i].message_stats, 'ack') %>
       <% if (channels[i].messages_unacknowledged > 0) { %>

@@ -116,20 +116,22 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
             unknown;
         _ ->
             Diff = pget(Key, Stats) - pget(Key, OldStats),
-            {list_to_atom(atom_to_list(Key) ++ "_rate"),
-             Diff / (timer:now_diff(Timestamp, OldTimestamp) / 1000000)}
+            Name = list_to_atom(atom_to_list(Key) ++ "_details"),
+            Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) / 1000000),
+            {Name, [{rate, Rate},
+                    {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
     end.
 
-sum(Table, Keys) ->
-    lists:foldl(fun (Stats, Acc) ->
-                        [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
-                end,
-                [{Key, 0} || Key <- Keys],
-                [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
+%% sum(Table, Keys) ->
+%%     lists:foldl(fun (Stats, Acc) ->
+%%                         [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
+%%                 end,
+%%                 [{Key, 0} || Key <- Keys],
+%%                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
 group_sum(GroupBy, List) ->
     lists:foldl(fun ({Ids, New}, Acc) ->
-                        Id = {GroupBy, pget(GroupBy, Ids)},
+                        Id = [{G, pget(G, Ids)} || G <- GroupBy],
                         dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
                                     New, Acc)
                 end,
@@ -137,7 +139,17 @@ group_sum(GroupBy, List) ->
                 [I || I <- List]).
 
 gs_update(Cur, New) ->
-    [{Key, Val + pget(Key, Cur, 0)} || {Key, Val} <- New].
+    [{Key, gs_update_add(Key, Val, pget(Key, Cur, 0))} || {Key, Val} <- New].
+
+gs_update_add(Key, Old, New) ->
+    case lists:reverse(atom_to_list(Key)) of
+        "sliated_" ++ _ -> %% "_details" backwards
+            [{rate, pget(rate, Old) + pget(rate, New)},
+             {last_event, erlang:max(pget(last_event, Old),
+                                     pget(last_event, New))}];
+        _ ->
+            Old + New
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -219,14 +231,17 @@ handle_call({get_connection, Name}, State = #state{tables = Tables}) ->
 handle_call(get_channels, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Stats = merge_created_stats(Table),
-    FineQ = get_fine_stats(channel_queue_stats, channel, Tables),
-    FineX = get_fine_stats(channel_exchange_stats, channel, Tables),
+    FineQ = get_fine_stats(channel_queue_stats, [channel], Tables),
+    FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
     {ok, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
      State};
 
 handle_call(get_overview, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(connection_stats, Tables),
-    {ok, sum(Table, [recv_oct, send_oct, recv_oct_rate, send_oct_rate]), State};
+    FineQ = extract_singleton_fine_stats(
+              get_fine_stats(channel_queue_stats, [], Tables)),
+    FineX = extract_singleton_fine_stats(
+              get_fine_stats(channel_exchange_stats, [], Tables)),
+    {ok, [{message_stats, FineX ++ FineQ}], State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
@@ -387,12 +402,18 @@ merge_fine_stats(Stats, [Dict|Dicts]) ->
 
 merge_fine_stats0(Props, Dict) ->
     Id = pget(pid, Props),
-    case dict:find({channel, Id}, Dict) of
+    case dict:find([{channel, Id}], Dict) of
         {ok, Stats} ->
             Stats0 = pget(message_stats, Props, []),
             [{message_stats, Stats0 ++ Stats}|
              proplists:delete(message_stats, Props)];
         error -> Props
+    end.
+
+extract_singleton_fine_stats(Dict) ->
+    case dict:to_list(Dict) of
+        []            -> [];
+        [{[], Stats}] -> Stats
     end.
 
 queue_to_list(#amqqueue{name = Name, durable = Durable,

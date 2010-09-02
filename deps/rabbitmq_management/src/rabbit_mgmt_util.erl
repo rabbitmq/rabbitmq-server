@@ -55,8 +55,7 @@ is_authorized(ReqData, Context) ->
     end.
 
 now_ms() ->
-    {MegaSecs, Secs, MicroSecs} = now(),
-    trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).
+    rabbit_mgmt_format:timestamp(now()).
 
 http_date() ->
     httpd_util:rfc1123_date(erlang:universaltime()).
