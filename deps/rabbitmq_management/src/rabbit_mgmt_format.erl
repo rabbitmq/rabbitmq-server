@@ -39,13 +39,11 @@ format_item(Stat, []) ->
     [Stat];
 format_item({Name, Value}, [{Fun, Names}|Fs]) ->
     case lists:member(Name, Names) of
-        true ->
-            case Fun(Value) of
-                List when is_list(List) -> List;
-                Formatted               -> [{Name, Formatted}]
-            end;
-        _    ->
-            format_item({Name, Value}, Fs)
+        true  -> case Fun(Value) of
+                     List when is_list(List) -> List;
+                     Formatted               -> [{Name, Formatted}]
+                 end;
+        false -> format_item({Name, Value}, Fs)
     end.
 
 print(Fmt, Val) when is_list(Val) ->
@@ -53,48 +51,34 @@ print(Fmt, Val) when is_list(Val) ->
 print(Fmt, Val) ->
     print(Fmt, [Val]).
 
-pid(Pid) when is_pid(Pid) ->
-    list_to_binary(rabbit_misc:pid_to_string(Pid));
-pid('') ->
-    <<"">>;
-pid(unknown) ->
-    unknown;
-pid(none) ->
-    none.
+pid(Pid) when is_pid(Pid) -> list_to_binary(rabbit_misc:pid_to_string(Pid));
+pid('')                   ->  <<"">>;
+pid(unknown)              -> unknown;
+pid(none)                 -> none.
 
-ip(unknown) ->
-    unknown;
-ip(IP) ->
-    list_to_binary(inet_parse:ntoa(IP)).
+ip(unknown) -> unknown;
+ip(IP)      -> list_to_binary(inet_parse:ntoa(IP)).
 
-table(unknown) ->
-    unknown;
-table(Table) ->
-    {struct, [{Name, tuple(Value)} || {Name, _Type, Value} <- Table]}.
+table(unknown) -> unknown;
+table(Table)   -> {struct, [{Name, tuple(Value)} ||
+                               {Name, _Type, Value} <- Table]}.
 
-tuple(unknown) ->
-    unknown;
-tuple(Tuple) when is_tuple(Tuple) ->
-    [tuple(E) || E <- tuple_to_list(Tuple)];
-tuple(Term) ->
-    Term.
+tuple(unknown)                    -> unknown;
+tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
+tuple(Term)                       -> Term.
 
-protocol(unknown) ->
-    unknown;
-protocol({Major, Minor, 0}) ->
-    print("~p-~p", [Major, Minor]);
-protocol({Major, Minor, Revision}) ->
-    print("~p-~p-~p", [Major, Minor, Revision]).
+protocol(unknown)                  -> unknown;
+protocol({Major, Minor, 0})        -> print("~p-~p", [Major, Minor]);
+protocol({Major, Minor, Revision}) -> print("~p-~p-~p",
+                                            [Major, Minor, Revision]).
 
 timestamp(unknown) ->
     unknown;
 timestamp({MegaSecs, Secs, MicroSecs}) ->
     trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).
 
-resource(unknown) ->
-    unknown;
-resource(Res) ->
-    resource(name, Res).
+resource(unknown) -> unknown;
+resource(Res)     -> resource(name, Res).
 
 resource(_, unknown) ->
     unknown;
@@ -105,24 +89,33 @@ permissions({VHost, Perms}) ->
     [{vhost, VHost}|permissions(Perms)];
 
 permissions({User, Conf, Write, Read, Scope}) ->
-    [{user, User}, {configure, Conf}, {write, Write}, {read, Read},
-     {scope, Scope}].
+    [{user,      User},
+     {configure, Conf},
+     {write,     Write},
+     {read,      Read},
+     {scope,     Scope}].
 
 user_permissions({VHost, Conf, Write, Read, Scope}) ->
-    [{vhost, VHost}, {configure, Conf}, {write, Write}, {read, Read},
-     {scope, Scope}].
+    [{vhost,     VHost},
+     {configure, Conf},
+     {write,     Write},
+     {read,      Read},
+     {scope,     Scope}].
 
 exchange(X) ->
     format(X, [{fun resource/1, [name]},
                {fun table/1, [arguments]}]).
 
 user(User) ->
-    [{name, User#user.username},
+    [{name,     User#user.username},
      {password, User#user.password}].
 
 binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
-    format([{exchange, X}, {queue, Q#resource.name}, {routing_key, Key},
-            {arguments, Args}, {properties_key, pack_props(Key, Args)}],
+    format([{exchange,       X},
+            {queue,          Q#resource.name},
+            {routing_key,    Key},
+            {arguments,      Args},
+            {properties_key, pack_props(Key, Args)}],
            [{fun (Res) -> resource(exchange, Res) end, [exchange]}]).
 
 %% TODO

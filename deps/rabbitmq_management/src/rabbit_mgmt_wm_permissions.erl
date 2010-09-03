@@ -34,11 +34,10 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Perms =
-        lists:flatten(
-          [[{V, P} ||
-               P <- rabbit_access_control:list_vhost_permissions(V)] ||
-              V <- rabbit_access_control:list_vhosts()]),
+    Perms = lists:flatten(
+              [[{V, P} ||
+                   P <- rabbit_access_control:list_vhost_permissions(V)] ||
+                  V <- rabbit_access_control:list_vhosts()]),
     rabbit_mgmt_util:reply(
       [rabbit_mgmt_format:permissions(P) || P <- Perms],
       ReqData, Context).

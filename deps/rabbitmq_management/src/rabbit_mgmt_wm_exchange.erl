@@ -57,16 +57,15 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode_vhost(
       [type, durable, auto_delete, arguments], ReqData, Context,
       fun(VHost, [Type, Durable, AutoDelete, Arguments]) ->
+              Durable1    = rabbit_mgmt_util:parse_bool(Durable),
+              AutoDelete1 = rabbit_mgmt_util:parse_bool(AutoDelete),
               rabbit_mgmt_util:amqp_request(
                 VHost, ReqData, Context,
-                #'exchange.declare'{
-                         exchange = Name,
-                         type = Type,
-                         durable =
-                             rabbit_mgmt_util:parse_bool(Durable),
-                         auto_delete =
-                             rabbit_mgmt_util:parse_bool(AutoDelete),
-                         arguments = []}) %% TODO
+                #'exchange.declare'{ exchange    = Name,
+                                     type        = Type,
+                                     durable     = Durable1,
+                                     auto_delete = AutoDelete1,
+                                     arguments   = [] }) %% TODO
       end).
 
 delete_resource(ReqData, Context) ->
@@ -82,18 +81,13 @@ is_authorized(ReqData, Context) ->
 
 exchange(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        none ->
-            not_found;
-        not_found ->
-            not_found;
-        VHost ->
-            Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
-            case rabbit_exchange:lookup(Name) of
-                {ok, X} ->
-                    X;
-                {error, not_found} ->
-                    not_found
-            end
+        none      -> not_found;
+        not_found -> not_found;
+        VHost     -> Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
+                     case rabbit_exchange:lookup(Name) of
+                         {ok, X}            -> X;
+                         {error, not_found} -> not_found
+                     end
     end.
 
 id(ReqData) ->

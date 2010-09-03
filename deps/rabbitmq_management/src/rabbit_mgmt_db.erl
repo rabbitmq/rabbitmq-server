@@ -114,14 +114,13 @@ rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
 
 rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
     case OldTimestamp == [] orelse not proplists:is_defined(Key, OldStats) of
-        true ->
-            unknown;
-        _ ->
-            Diff = pget(Key, Stats) - pget(Key, OldStats),
-            Name = list_to_atom(atom_to_list(Key) ++ "_details"),
-            Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) / 1000000),
-            {Name, [{rate, Rate},
-                    {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
+        true  -> unknown;
+        false -> Diff = pget(Key, Stats) - pget(Key, OldStats),
+                 Name = list_to_atom(atom_to_list(Key) ++ "_details"),
+                 Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) /
+                                    1000000),
+                 {Name, [{rate, Rate},
+                         {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
     end.
 
 %% sum(Table, Keys) ->
@@ -136,21 +135,17 @@ group_sum(GroupBy, List) ->
                         Id = [{G, pget(G, Ids)} || G <- GroupBy],
                         dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
                                     New, Acc)
-                end,
-                dict:new(),
-                [I || I <- List]).
+                end, dict:new(), List).
 
 gs_update(Cur, New) ->
     [{Key, gs_update_add(Key, Val, pget(Key, Cur, 0))} || {Key, Val} <- New].
 
 gs_update_add(Key, Old, New) ->
     case is_details(Key) of
-        true ->
-            [{rate, pget(rate, Old) + pget(rate, New)},
-             {last_event, erlang:max(pget(last_event, Old),
-                                     pget(last_event, New))}];
-        _ ->
-            Old + New
+        true  -> [{rate,       pget(rate, Old) + pget(rate, New)},
+                  {last_event, erlang:max(pget(last_event, Old),
+                                          pget(last_event, New))}];
+        false -> Old + New
     end.
 
 %%----------------------------------------------------------------------------
@@ -160,12 +155,11 @@ augment(Items, Funs, Tables) ->
     [{K, V} || {K, V} <- Augmented, V =/= unknown].
 
 augment(K, Items, Fun, Tables) ->
-    Id = pget(K, Items),
     Key = list_to_atom(atom_to_list(K) ++ "_details"),
-    case Id of
+    case pget(K, Items) of
         none    -> {Key, unknown};
         unknown -> {Key, unknown};
-        _       -> {Key, Fun(Id, Tables)}
+        Id      -> {Key, Fun(Id, Tables)}
     end.
 
 %% augment_channel_pid(Pid, Tables) ->
@@ -181,12 +175,11 @@ augment(K, Items, Fun, Tables) ->
 %%      {peer_port, pget(peer_port, Conn)}].
 
 augment_connection_pid(Pid, Tables) ->
-    Conn = lookup_element(
-             orddict:fetch(connection_stats, Tables),
-             {Pid, create}),
+    Conn = lookup_element(orddict:fetch(connection_stats, Tables),
+                          {Pid, create}),
     [{peer_address, pget(peer_address, Conn)},
-     {peer_port, pget(peer_port, Conn)},
-     {name, pget(name, Conn)}].
+     {peer_port,    pget(peer_port,    Conn)},
+     {name,         pget(name,         Conn)}].
 
 %% augment_queue_pid(Pid, Tables) ->
 %%     Q = lookup_element(
@@ -206,19 +199,18 @@ augment_msg_stats_items(Props, Tables) ->
 %% TODO some sort of generalised query mechanism for the coarse stats?
 
 init([]) ->
-    {ok, #state{tables =
-                    orddict:from_list(
-                      [{Key, ets:new(anon, [private])} || Key <- ?TABLES])}}.
+    {ok, #state{tables = orddict:from_list(
+                           [{Key, ets:new(anon, [private])} ||
+                               Key <- ?TABLES])}}.
 
 handle_call({get_queues, Qs0}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    Qs1 = [queue_to_list(Q) || Q <- Qs0],
-    Qs2 = merge_created_stats(Qs1, Table),
-    Qs3 = [[{messages, add(pget(messages_ready, Q),
-                           pget(messages_unacknowledged, Q))}|Q] || Q <- Qs2],
-    Qs4 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}],
-                   Tables) || Q <- Qs3],
-    {ok, Qs4, State};
+    Qs1 = merge_created_stats([queue_to_list(Q) || Q <- Qs0], Table),
+    Qs2 = [[{messages, add(pget(messages_ready, Q),
+                           pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
+    Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
+              Q <- Qs2],
+    {ok, Qs3, State};
 
 handle_call(get_connections, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
@@ -234,7 +226,7 @@ handle_call({get_connection, Name}, State = #state{tables = Tables}) ->
 handle_call(get_channels, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Stats = merge_created_stats(Table),
-    FineQ = get_fine_stats(channel_queue_stats, [channel], Tables),
+    FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
     FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
     {ok, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
      State};
@@ -245,7 +237,7 @@ handle_call({get_channel, Name}, State = #state{tables = Tables}) ->
     Chs = [lookup_element(Table, {Id, create})],
     %% TODO refactor this, and connection(s) above
     Stats = merge_created_stats(Chs, Table),
-    FineQ = get_fine_stats(channel_queue_stats, [channel], Tables),
+    FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
     FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
     [Res] = augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
     {ok, result_or_error(Res), State};
@@ -262,10 +254,9 @@ handle_call(_Request, State) ->
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
-    handle_stats(
-      queue_stats, Stats, Timestamp,
-      [{fun rabbit_mgmt_format:table/1,[backing_queue_status]}],
-      [], State);
+    handle_stats(queue_stats, Stats, Timestamp,
+                 [{fun rabbit_mgmt_format:table/1,[backing_queue_status]}],
+                 [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
@@ -295,13 +286,12 @@ handle_event(#event{type = channel_created, props = Stats},
              State = #state{tables = Tables}) ->
     ConnTable = orddict:fetch(connection_stats, Tables),
     Conn = lookup_element(ConnTable, {id(pget(connection, Stats)), create}),
-    Name = rabbit_mgmt_format:print(
-             "~s:~w:~w",
-             [pget(peer_address, Conn), pget(peer_port, Conn),
-              pget(number, Stats)]),
-    handle_created(
-      channel_stats, [{name, Name}|Stats],
-      [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
+    Name = rabbit_mgmt_format:print("~s:~w:~w",
+                                    [pget(peer_address, Conn),
+                                     pget(peer_port,    Conn),
+                                     pget(number,       Stats)]),
+    handle_created(channel_stats, [{name, Name}|Stats],
+                   [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -349,11 +339,8 @@ handle_stats(TName, Stats0, Timestamp, Funs,
     OldStats = lookup_element(Table, Id),
     OldTimestamp = lookup_element(Table, Id, 3),
     Stats1 = rates(Stats, Timestamp, OldStats, OldTimestamp, RatesKeys),
-    ets:insert(Table,
-               {Id,
-                proplists:delete(pid,
-                                 rabbit_mgmt_format:format(Stats1, Funs)),
-                Timestamp}),
+    Stats2 = proplists:delete(pid, rabbit_mgmt_format:format(Stats1, Funs)),
+    ets:insert(Table, {Id, Stats2, Timestamp}),
     {ok, State}.
 
 handle_deleted(TName, #event{props = [{pid, Pid}]},
@@ -417,18 +404,15 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
 merge_fine_stats(Stats, []) ->
     Stats;
 merge_fine_stats(Stats, [Dict|Dicts]) ->
-    merge_fine_stats(
-      [merge_fine_stats0(Props, Dict) || Props <- Stats],
-      Dicts).
+    merge_fine_stats([merge_fine_stats0(Props, Dict) || Props <- Stats], Dicts).
 
 merge_fine_stats0(Props, Dict) ->
     Id = pget(pid, Props),
     case dict:find([{channel, Id}], Dict) of
-        {ok, Stats} ->
-            Stats0 = pget(message_stats, Props, []),
-            [{message_stats, Stats0 ++ Stats}|
-             proplists:delete(message_stats, Props)];
-        error -> Props
+        {ok, Stats} -> [{message_stats, pget(message_stats, Props, []) ++
+                             Stats} |
+                        proplists:delete(message_stats, Props)];
+        error       -> Props
     end.
 
 extract_singleton_fine_stats(Dict) ->
@@ -437,37 +421,33 @@ extract_singleton_fine_stats(Dict) ->
         [{[], Stats}] -> Stats
     end.
 
-queue_to_list(#amqqueue{name = Name, durable = Durable,
-                        auto_delete = AutoDelete,
+queue_to_list(#amqqueue{name            = Name,
+                        durable         = Durable,
+                        auto_delete     = AutoDelete,
                         exclusive_owner = ExclusiveOwner,
-                        arguments = Arguments,
-                        pid = Pid }) ->
+                        arguments       = Arguments,
+                        pid             = Pid }) ->
     rabbit_mgmt_format:format(
-      [{durable, Durable},
-       {name, Name},
+      [{name,        Name},
+       {durable,     Durable},
        {auto_delete, AutoDelete},
-       {owner_pid, ExclusiveOwner},
-       {arguments, Arguments},
-       {pid, Pid}],
+       {owner_pid,   ExclusiveOwner},
+       {arguments,   Arguments},
+       {pid,         Pid}],
       [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
        {fun rabbit_mgmt_format:resource/1, [name]},
        {fun rabbit_mgmt_format:table/1,    [arguments]}]).
 
-zero_old_rates(Stats) ->
-    [maybe_zero_rate(S) || S <- Stats].
+zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
     case is_details(Key) of
-        true ->
-            Age = rabbit_mgmt_util:now_ms() - pget(last_event, Val),
-            case Age > ?STATS_INTERVAL * 1.5 of
-                true ->
-                    {Key, pset(rate, 0, Val)};
-                _ ->
-                    {Key, Val}
-            end;
-        _ ->
-            {Key, Val}
+        true  -> Age = rabbit_mgmt_util:now_ms() - pget(last_event, Val),
+                 {Key, case Age > ?STATS_INTERVAL * 1.5 of
+                           true  -> pset(rate, 0, Val);
+                           false -> Val
+                       end};
+        false -> {Key, Val}
     end.
 
 is_details(Key) ->

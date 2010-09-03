@@ -38,9 +38,9 @@ to_json(ReqData, Context) ->
     Overview = rabbit_mgmt_db:get_overview(),
     rabbit_mgmt_util:reply(
       OSStats ++ Overview ++
-          [{node, node()},
-           {os_pid, list_to_binary(os:getpid())},
-           {mem_ets, erlang:memory(ets)},
+          [{node,       node()},
+           {os_pid,     list_to_binary(os:getpid())},
+           {mem_ets,    erlang:memory(ets)},
            {mem_binary, erlang:memory(binary)}],
       ReqData, Context).
 

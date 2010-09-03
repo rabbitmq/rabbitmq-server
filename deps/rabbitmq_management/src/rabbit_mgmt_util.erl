@@ -62,13 +62,11 @@ http_date() ->
 
 vhost(ReqData) ->
     case id(vhost, ReqData) of
-        none ->
-            none;
-        VHost ->
-            case vhost_exists(VHost) of
-                true  -> VHost;
-                false -> not_found
-            end
+        none  -> none;
+        VHost -> case vhost_exists(VHost) of
+                     true  -> VHost;
+                     false -> not_found
+                 end
     end.
 
 vhost_exists(VHostBin) ->
@@ -103,22 +101,18 @@ id(Key, ReqData) ->
 
 id0(Key, ReqData) ->
     case dict:find(Key, wrq:path_info(ReqData)) of
-        {ok, Id} ->
-            list_to_binary(mochiweb_util:unquote(Id));
-        error ->
-            none
+        {ok, Id} -> list_to_binary(mochiweb_util:unquote(Id));
+        error    -> none
     end.
 
 with_decode(Keys, ReqData, Context, Fun) ->
     case decode(Keys, ReqData) of
-        {error, Reason} ->
-            bad_request(Reason, ReqData, Context);
-        Values ->
-            try
-                Fun(Values)
-            catch throw:{error, Error} ->
-                    bad_request(Error, ReqData, Context)
-            end
+        {error, Reason} -> bad_request(Reason, ReqData, Context);
+        Values          -> try
+                               Fun(Values)
+                           catch throw:{error, Error} ->
+                                   bad_request(Error, ReqData, Context)
+                           end
     end.
 
 decode(Keys, ReqData) ->
@@ -129,27 +123,23 @@ decode(Keys, ReqData) ->
                   catch error:_ -> {error, not_json}
                   end,
     case Res of
-        ok ->
-            Results =
-                [get_or_missing(list_to_binary(atom_to_list(K)), Json)
-                 || K <- Keys],
-            case lists:filter(fun({key_missing, _}) -> true;
-                                 (_)                -> false
-                              end, Results) of
-                []      -> Results;
-                Errors  -> {error, Errors}
-            end;
-        _  ->
-            {Res, Json}
+        ok -> Results =
+                  [get_or_missing(list_to_binary(atom_to_list(K)), Json)
+                   || K <- Keys],
+              case lists:filter(fun({key_missing, _}) -> true;
+                                   (_)                -> false
+                                end, Results) of
+                  []      -> Results;
+                  Errors  -> {error, Errors}
+              end;
+        _  -> {Res, Json}
     end.
 
 with_decode_vhost(Keys, ReqData, Context, Fun) ->
     case vhost(ReqData) of
-        not_found ->
-            not_found(vhost_not_found, ReqData, Context);
-        VHost ->
-            with_decode(Keys, ReqData, Context,
-                        fun (Vals) -> Fun(VHost, Vals) end)
+        not_found -> not_found(vhost_not_found, ReqData, Context);
+        VHost     -> with_decode(Keys, ReqData, Context,
+                                 fun (Vals) -> Fun(VHost, Vals) end)
     end.
 
 get_or_missing(K, L) ->
@@ -191,10 +181,8 @@ amqp_request(VHost, ReqData, Context, Method) ->
 
 all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        none ->
-            lists:append([Fun(V) || V <- rabbit_access_control:list_vhosts()]);
-        not_found ->
-            vhost_not_found;
-        VHost ->
-            Fun(VHost)
+        none      -> lists:append(
+                       [Fun(V) || V <- rabbit_access_control:list_vhosts()]);
+        not_found -> vhost_not_found;
+        VHost     -> Fun(VHost)
     end.

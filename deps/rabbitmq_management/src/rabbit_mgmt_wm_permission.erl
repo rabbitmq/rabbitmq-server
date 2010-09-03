@@ -90,8 +90,7 @@ perms(ReqData) ->
                     not_found;
                 VHost ->
                     Perms = rabbit_access_control:list_user_permissions(User),
-                    Filtered = [P || {V, _, _, _, _} = P <- Perms, V == VHost],
-                    case Filtered of
+                    case [P || {V, _, _, _, _} = P <- Perms, V == VHost] of
                         [Perm] -> Perm;
                         []     -> none
                     end

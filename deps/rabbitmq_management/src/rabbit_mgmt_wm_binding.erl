@@ -88,22 +88,21 @@ is_authorized(ReqData, Context) ->
 
 binding(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        not_found ->
-            not_found;
-        VHost ->
-            Q = rabbit_mgmt_util:id(queue, ReqData),
-            X = rabbit_mgmt_util:id(exchange, ReqData),
-            Props = rabbit_mgmt_util:id(props, ReqData),
-            case unpack_props(binary_to_list(Props)) of
-                {bad_request, Str} ->
-                    {bad_request, Str};
-                {Key, Args} ->
-                    #binding{
-                      exchange_name = rabbit_misc:r(VHost, exchange, X),
-                      queue_name    = rabbit_misc:r(VHost, queue, Q),
-                      key           = Key,
-                      args          = Args}
-            end
+        not_found -> not_found;
+        VHost     -> Q = rabbit_mgmt_util:id(queue, ReqData),
+                     X = rabbit_mgmt_util:id(exchange, ReqData),
+                     Props = rabbit_mgmt_util:id(props, ReqData),
+                     case unpack_props(binary_to_list(Props)) of
+                         {bad_request, Str} ->
+                             {bad_request, Str};
+                         {Key, Args} ->
+                             XName = rabbit_misc:r(VHost, exchange, X),
+                             QName = rabbit_misc:r(VHost, queue, Q),
+                             #binding{ exchange_name = XName,
+                                       queue_name    = QName,
+                                       key           = Key,
+                                       args          = Args }
+                     end
     end.
 
 exists(Binding) ->

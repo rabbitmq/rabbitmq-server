@@ -40,16 +40,8 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {
-        time_ms,
-        bound_to,
-        fd_used,
-        fd_total,
-        mem_used,
-        mem_total,
-        proc_used,
-        proc_total
-        }).
+-record(state, {time_ms, bound_to, fd_used, fd_total,
+                mem_used, mem_total, proc_used, proc_total}).
 
 %%--------------------------------------------------------------------
 
@@ -71,17 +63,17 @@ get_total_fd_ulimit() ->
 get_total_fd() ->
     get_total_fd(os:type()).
 
-get_total_fd({unix, Os}) when Os =:= linux
-                       orelse Os =:= darwin
-                       orelse Os =:= freebsd
-                       orelse Os =:= sunos ->
+get_total_fd({unix, Os}) when Os =:= linux   orelse
+                              Os =:= darwin  orelse
+                              Os =:= freebsd orelse
+                              Os =:= sunos ->
     get_total_fd_ulimit();
 
 %% According to
 %% http://stackoverflow.com/questions/870173/is-there-a-limit-on-number-of-open-files-in-windows
-%% the limit using the POSIX API is 2048, or 512 using libc. It's unlimited
-%% using the win32 API ironically. I did a test with MM and ran out just after
-%% 500 connections, so I guess Erlang uses libc.
+%% the limit using the POSIX API is 2048, or 512 using libc. It's
+%% unlimited using the win32 API ironically. I did a test with MM and
+%% ran out just after 500 connections, so I guess Erlang uses libc.
 get_total_fd({win32, _}) ->
     512;
 
@@ -162,37 +154,34 @@ get_total_memory() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(bound_to,    #state{bound_to = BoundTo})        -> BoundTo;
-i(fd_used,     #state{fd_used = FdUsed})          -> FdUsed;
-i(fd_total,    #state{fd_total = FdTotal})        -> FdTotal;
-i(mem_used,    #state{mem_used = MemUsed})        -> MemUsed;
-i(mem_total,   #state{mem_total = MemTotal})      -> MemTotal;
-i(proc_used,   #state{proc_used = ProcUsed})      -> ProcUsed;
-i(proc_total,  #state{proc_total = ProcTotal})    -> ProcTotal.
+i(bound_to,    #state{bound_to   = BoundTo})   -> BoundTo;
+i(fd_used,     #state{fd_used    = FdUsed})    -> FdUsed;
+i(fd_total,    #state{fd_total   = FdTotal})   -> FdTotal;
+i(mem_used,    #state{mem_used   = MemUsed})   -> MemUsed;
+i(mem_total,   #state{mem_total  = MemTotal})  -> MemTotal;
+i(proc_used,   #state{proc_used  = ProcUsed})  -> ProcUsed;
+i(proc_total,  #state{proc_total = ProcTotal}) -> ProcTotal.
 
 %%--------------------------------------------------------------------
 
 init([]) ->
     {ok, Binds} = application:get_env(rabbit, tcp_listeners),
     BoundTo = lists:flatten(
-                [ rabbit_mgmt_format:print("~s:~p", [Addr,Port])
-                  || {Addr, Port} <- Binds ] ),
-    State = #state{
-      fd_total = get_total_fd(),
-      mem_total = get_total_memory(),
-      proc_total = erlang:system_info(process_limit),
-      bound_to = BoundTo
-     },
+                [rabbit_mgmt_format:print("~s:~p", [Addr,Port]) ||
+                    {Addr, Port} <- Binds]),
+    State = #state{fd_total   = get_total_fd(),
+                   mem_total  = get_total_memory(),
+                   proc_total = erlang:system_info(process_limit),
+                   bound_to   = BoundTo},
     {ok, internal_update(State)}.
 
 
 handle_call({info, Items}, _From, State0) ->
-    State = case rabbit_mgmt_util:now_ms() - State0#state.time_ms >
-                ?REFRESH_RATIO of
-        true  -> internal_update(State0);
-        false -> State0
-    end,
-
+    State = case (rabbit_mgmt_util:now_ms() - State0#state.time_ms >
+                      ?REFRESH_RATIO) of
+                true  -> internal_update(State0);
+                false -> State0
+            end,
     {reply, infos(Items, State), State};
 
 handle_call(_Req, _From, State) ->
@@ -216,9 +205,7 @@ code_change(_, State, _) -> {ok, State}.
 %%--------------------------------------------------------------------
 
 internal_update(State) ->
-    State#state{
-        time_ms = rabbit_mgmt_util:now_ms(),
-        fd_used = get_used_fd(),
-        mem_used = erlang:memory(total),
-        proc_used = erlang:system_info(process_count)
-    }.
+    State#state{time_ms   = rabbit_mgmt_util:now_ms(),
+                fd_used   = get_used_fd(),
+                mem_used  = erlang:memory(total),
+                proc_used = erlang:system_info(process_count)}.
