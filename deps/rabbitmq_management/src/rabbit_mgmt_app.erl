@@ -26,6 +26,8 @@
 
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
+-define(SETUP_WM_TRACE, false).
+-define(SETUP_WM_LOGGING, false).
 
 start(_Type, _StartArgs) ->
     Port =
@@ -45,9 +47,6 @@ start(_Type, _StartArgs) ->
       webmachine, dispatch_list,
       [{[?PREFIX|Path], F, A} || {Path, F, A} <- dispatcher()]),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
-    %% This would do access.log type stuff. Needs configuring though.
-    %% application:set_env(webmachine, webmachine_logger_module,
-    %%                     webmachine_logger),
     rabbit_mochiweb:register_static_context(?UI_PREFIX, ?MODULE, "priv/www",
                                             "Management Console"),
     rabbit_mochiweb:register_context_handler(?PREFIX,
@@ -58,6 +57,14 @@ start(_Type, _StartArgs) ->
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
     io:format("  HTTP API:      ~s/~s/~n", [URLPrefix, ?PREFIX]),
     io:format("  Management UI: ~s/~s/~n", [URLPrefix, ?UI_PREFIX]),
+    case ?SETUP_WM_LOGGING of
+        true -> setup_wm_logging(".");
+        _    -> ok
+    end,
+    case ?SETUP_WM_TRACE of
+        true -> setup_wm_trace_app();
+        _    -> ok
+    end,
     Res.
 
 dispatcher() ->
@@ -90,3 +97,20 @@ dispatcher() ->
 
 stop(_State) ->
     ok.
+
+setup_wm_logging(LogDir) ->
+    application:set_env(webmachine, webmachine_logger_module,
+                        webmachine_logger),
+    webmachine_sup:start_link(), %% Seems odd.
+    webmachine_sup:start_logger(LogDir).
+
+%% This doesn't *entirely* seem to work. It fails to load a non-existent
+%% image which seems to partly break it, but some stuff is usable.
+setup_wm_trace_app() ->
+    webmachine_router:start_link(),
+    wmtrace_resource:add_dispatch_rule("wmtrace", "/tmp"),
+    rabbit_mochiweb:register_static_context(
+      "wmtrace/static", ?MODULE, "deps/webmachine/webmachine/priv/trace", none),
+    rabbit_mochiweb:register_context_handler("wmtrace",
+                                             fun webmachine_mochiweb:loop/1,
+                                             "Webmachine tracer").
