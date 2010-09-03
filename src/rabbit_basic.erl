@@ -33,7 +33,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, properties/1, delivery/4, delivery/5]).
+-export([publish/1, message/4, properties/1, delivery/5]).
 -export([publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
 -export([is_message_persistent/1]).
@@ -50,9 +50,6 @@
 
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/4 ::
-        (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         rabbit_types:message()) -> rabiit_types:delivery()).
 -spec(delivery/5 ::
         (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
          rabbit_types:message(), undefined | integer())
@@ -95,9 +92,6 @@ publish(Delivery = #delivery{
         Other ->
             Other
     end.
-
-delivery(Mandatory, Immediate, Txn, Message) ->
-    delivery(Mandatory, Immediate, Txn, Message, undefined).
 
 delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
@@ -168,7 +162,8 @@ publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
         BodyBin) ->
     publish(delivery(Mandatory, Immediate, Txn,
                      message(ExchangeName, RoutingKeyBin,
-                             properties(Properties), BodyBin))).
+                             properties(Properties), BodyBin),
+                     undefined)).
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->
