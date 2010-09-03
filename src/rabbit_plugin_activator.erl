@@ -35,7 +35,6 @@
 
 -define(DefaultPluginDir, "plugins").
 -define(DefaultUnpackedPluginDir, "priv/plugins").
--define(DefaultRabbitEBin, "ebin").
 -define(BaseApps, [rabbit]).
 
 %%----------------------------------------------------------------------------
@@ -52,23 +51,22 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    io:format("Activating RabbitMQ plugins ...~n"),
     %% Ensure Rabbit is loaded so we can access it's environment
     application:load(rabbit),
 
     %% Determine our various directories
     PluginDir         = get_env(plugins_dir,        ?DefaultPluginDir),
     UnpackedPluginDir = get_env(plugins_expand_dir, ?DefaultUnpackedPluginDir),
-    RabbitEBin        = get_env(rabbit_ebin,        ?DefaultRabbitEBin),
 
-    RootName = RabbitEBin ++ "/rabbit",
+    RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
     unpack_ez_plugins(PluginDir, UnpackedPluginDir),
 
     %% Build a list of required apps based on the fixed set, and any plugins
-    RequiredApps = ?BaseApps ++
-        find_plugins(PluginDir) ++
-        find_plugins(UnpackedPluginDir),
+    PluginApps = find_plugins(PluginDir) ++ find_plugins(UnpackedPluginDir),
+    RequiredApps = ?BaseApps ++ PluginApps,
 
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
@@ -79,7 +77,7 @@ start() ->
                       AppList
               end,
     AppVersions = [determine_version(App) || App <- AllApps],
-    {rabbit, RabbitVersion} = proplists:lookup(rabbit, AppVersions),
+    RabbitVersion = proplists:get_value(rabbit, AppVersions),
 
     %% Build the overall release descriptor
     RDesc = {release,
@@ -87,7 +85,7 @@ start() ->
              {erts, erlang:system_info(version)},
              AppVersions},
 
-    %% Write it out to ebin/rabbit.rel
+    %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
     file:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% Compile the script
@@ -132,6 +130,10 @@ start() ->
         ok    -> ok;
         error -> error("failed to compile boot script file ~s", [ScriptFile])
     end,
+    io:format("~w plugins activated:~n", [length(PluginApps)]),
+    [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
+     || App <- PluginApps],
+    io:nl(),
     halt(),
     ok.
 
@@ -149,29 +151,33 @@ determine_version(App) ->
     {ok, Vsn} = application:get_key(App, vsn),
     {App, Vsn}.
 
-assert_dir(Dir) ->
-    case filelib:is_dir(Dir) of
-        true  -> ok;
-        false -> ok = filelib:ensure_dir(Dir),
-                 ok = file:make_dir(Dir)
-    end.
-
-delete_dir(Dir) ->
-    case filelib:is_dir(Dir) of
+delete_recursively(Fn) ->
+    case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
         true ->
-            case file:list_dir(Dir) of
+            case file:list_dir(Fn) of
                 {ok, Files} ->
-                    [case Dir ++ "/" ++ F of
-                         Fn ->
-                             case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
-                                 true  -> delete_dir(Fn);
-                                 false -> file:delete(Fn)
-                             end
-                     end || F <- Files]
-            end,
-            ok = file:del_dir(Dir);
+                    case lists:foldl(fun ( Fn1,  ok) -> delete_recursively(
+                                                          Fn ++ "/" ++ Fn1);
+                                         (_Fn1, Err) -> Err
+                                     end, ok, Files) of
+                        ok  -> case file:del_dir(Fn) of
+                                   ok         -> ok;
+                                   {error, E} -> {error,
+                                                  {cannot_delete, Fn, E}}
+                               end;
+                        Err -> Err
+                    end;
+                {error, E} ->
+                    {error, {cannot_list_files, Fn, E}}
+            end;
         false ->
-            ok
+            case filelib:is_file(Fn) of
+                true  -> case file:delete(Fn) of
+                             ok         -> ok;
+                             {error, E} -> {error, {cannot_delete, Fn, E}}
+                         end;
+                false -> ok
+            end
     end.
 
 is_symlink(Name) ->
@@ -180,13 +186,18 @@ is_symlink(Name) ->
         _       -> false
     end.
 
-unpack_ez_plugins(PluginSrcDir, PluginDestDir) ->
+unpack_ez_plugins(SrcDir, DestDir) ->
     %% Eliminate the contents of the destination directory
-    delete_dir(PluginDestDir),
-
-    assert_dir(PluginDestDir),
-    [unpack_ez_plugin(PluginName, PluginDestDir) ||
-        PluginName <- filelib:wildcard(PluginSrcDir ++ "/*.ez")].
+    case delete_recursively(DestDir) of
+        ok         -> ok;
+        {error, E} -> error("Could not delete dir ~s (~p)", [DestDir, E])
+    end,
+    case filelib:ensure_dir(DestDir ++ "/") of
+        ok          -> ok;
+        {error, E2} -> error("Could not create dir ~s (~p)", [DestDir, E2])
+    end,
+    [unpack_ez_plugin(PluginName, DestDir) ||
+        PluginName <- filelib:wildcard(SrcDir ++ "/*.ez")].
 
 unpack_ez_plugin(PluginFn, PluginDestDir) ->
     zip:unzip(PluginFn, [{cwd, PluginDestDir}]),
@@ -245,8 +256,8 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[stdlib,permanent]}}) ->
-    [Entry, {apply,{rabbit,prepare,[]}}];
+process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
+    [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
 

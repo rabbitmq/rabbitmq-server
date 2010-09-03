@@ -29,45 +29,19 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_hooks).
+-module(rabbit_msg_store_index).
 
--export([start/0]).
--export([subscribe/3, unsubscribe/2, trigger/2, notify_remote/5]).
+-export([behaviour_info/1]).
 
--define(TableName, rabbit_hooks).
-
--ifdef(use_specs).
-
--spec(start/0 :: () -> 'ok').
--spec(subscribe/3 :: (atom(), atom(), {atom(), atom(), list()}) -> 'ok').
--spec(unsubscribe/2 :: (atom(), atom()) -> 'ok').
--spec(trigger/2 :: (atom(), list()) -> 'ok').
--spec(notify_remote/5 :: (atom(), atom(), list(), pid(), list()) -> 'ok').
-
--endif.
-
-start() ->
-    ets:new(?TableName, [bag, public, named_table]),
-    ok.
-
-subscribe(Hook, HandlerName, Handler) ->
-    ets:insert(?TableName, {Hook, HandlerName, Handler}),
-    ok.
-
-unsubscribe(Hook, HandlerName) ->
-    ets:match_delete(?TableName, {Hook, HandlerName, '_'}),
-    ok.
-
-trigger(Hook, Args) ->
-    Hooks = ets:lookup(?TableName, Hook),
-    [case catch apply(M, F, [Hook, Name, Args | A]) of
-        {'EXIT', Reason} ->
-            rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p",
-                               [Name, Hook, Reason]);
-        _ -> ok
-     end || {_, Name, {M, F, A}} <- Hooks],
-    ok.
-
-notify_remote(Hook, HandlerName, Args, Pid, PidArgs) ->
-    Pid ! {rabbitmq_hook, [Hook, HandlerName, Args | PidArgs]},
-    ok.
+behaviour_info(callbacks) ->
+    [{new,            1},
+     {recover,        1},
+     {lookup,         2},
+     {insert,         2},
+     {update,         2},
+     {update_fields,  3},
+     {delete,         2},
+     {delete_by_file, 2},
+     {terminate,      1}];
+behaviour_info(_Other) ->
+    undefined.

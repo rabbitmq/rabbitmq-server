@@ -31,6 +31,7 @@ scalable implementation of an AMQP broker.
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 %define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
 %define _rabbit_server_ocf %{_builddir}/`basename %{S:5}`
+%define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
@@ -58,8 +59,6 @@ install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-multi
-install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-activate-plugins
-install -p -D -m 0755 %{_rabbit_asroot_wrapper} %{buildroot}%{_sbindir}/rabbitmq-deactivate-plugins
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
@@ -108,7 +107,7 @@ if [ $1 = 0 ]; then
 fi
 
 # Clean out plugin activation state, both on uninstall and upgrade
-rm -rf %{_rabbit_erllibdir}/priv
+rm -rf %{_plugins_state_dir}
 for ext in rel script boot ; do
     rm -f %{_rabbit_erllibdir}/ebin/rabbit.$ext
 done
@@ -128,6 +127,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Mon Aug 23 2010 mikeb@rabbitmq.com 2.0.0-1
+- New Upstream Release
+
 * Wed Jul 14 2010 Emile Joubert <emile@rabbitmq.com> 1.8.1-1
 - New Upstream Release
 

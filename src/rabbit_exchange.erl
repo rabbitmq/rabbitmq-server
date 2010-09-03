@@ -49,7 +49,6 @@
 -import(mnesia).
 -import(sets).
 -import(lists).
--import(regexp).
 
 %%----------------------------------------------------------------------------
 
@@ -72,17 +71,21 @@
 -spec(declare/5 ::
         (name(), type(), boolean(), boolean(), rabbit_framing:amqp_table())
         -> rabbit_types:exchange()).
--spec(check_type/1 :: (binary()) -> atom()).
+-spec(check_type/1 ::
+        (binary()) -> atom() | rabbit_types:connection_exit()).
 -spec(assert_equivalence/5 ::
         (rabbit_types:exchange(), atom(), boolean(), boolean(),
          rabbit_framing:amqp_table())
-        -> 'ok').
+        -> 'ok' | rabbit_types:connection_exit()).
 -spec(assert_args_equivalence/2 ::
-        (rabbit_types:exchange(), rabbit_framing:amqp_table()) -> 'ok').
+        (rabbit_types:exchange(), rabbit_framing:amqp_table())
+        -> 'ok' | rabbit_types:connection_exit()).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
                     rabbit_types:error('not_found')).
--spec(lookup_or_die/1 :: (name()) -> rabbit_types:exchange()).
+-spec(lookup_or_die/1 ::
+        (name()) -> rabbit_types:exchange() |
+                    rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (rabbit_types:exchange()) -> [rabbit_types:info()]).
@@ -96,8 +99,7 @@
                    -> {rabbit_router:routing_result(), [pid()]}).
 -spec(add_binding/5 ::
         (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
-         rabbit_framing:amqp_table(), inner_fun())
-        -> bind_res()).
+         rabbit_framing:amqp_table(), inner_fun()) -> bind_res()).
 -spec(delete_binding/5 ::
         (name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
          rabbit_framing:amqp_table(), inner_fun())
@@ -107,9 +109,9 @@
         -> [{name(), rabbit_amqqueue:name(), rabbit_router:routing_key(),
              rabbit_framing:amqp_table()}]).
 -spec(delete_queue_bindings/1 ::
-        (rabbit_amqqueue:name()) -> fun (() -> none())).
+        (rabbit_amqqueue:name()) -> fun (() -> any())).
 -spec(delete_transient_queue_bindings/1 ::
-        (rabbit_amqqueue:name()) -> fun (() -> none())).
+        (rabbit_amqqueue:name()) -> fun (() -> any())).
 -spec(delete/2 ::
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
@@ -190,6 +192,9 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                    end
            end) of
         {new, X}      -> TypeModule:create(X),
+                         rabbit_event:notify(
+                           exchange_created,
+                           [{Item, i(Item, Exchange)} || Item <- ?INFO_KEYS]),
                          X;
         {existing, X} -> X;
         Err           -> Err
@@ -197,12 +202,8 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    case rabbit_exchange_type_registry:lookup_module(T) of
-        {ok, Module}       -> Module;
-        {error, not_found} -> rabbit_misc:protocol_error(
-                                command_invalid,
-                                "invalid exchange type '~s'", [T])
-    end.
+    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
+    Module.
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
@@ -211,16 +212,19 @@ check_type(TypeBin) ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
         T ->
-            _Module = type_to_module(T),
-            T
+            case rabbit_exchange_type_registry:lookup_module(T) of
+                {error, not_found} -> rabbit_misc:protocol_error(
+                                        command_invalid,
+                                        "invalid exchange type '~s'", [T]);
+                {ok, _Module}      -> T
+            end
     end.
 
 assert_equivalence(X = #exchange{ durable = Durable,
                                   auto_delete = AutoDelete,
                                   type = Type},
-                   Type, Durable, AutoDelete,
-                   RequiredArgs) ->
-    ok = (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
+                   Type, Durable, AutoDelete, RequiredArgs) ->
+    (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
 assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
                    _Args) ->
     rabbit_misc:protocol_error(
@@ -228,23 +232,14 @@ assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
       "cannot redeclare ~s with different type, durable or autodelete value",
       [rabbit_misc:rs(Name)]).
 
-alternate_exchange_value(Args) ->
-    lists:keysearch(<<"alternate-exchange">>, 1, Args).
-
 assert_args_equivalence(#exchange{ name = Name,
                                    arguments = Args },
                         RequiredArgs) ->
     %% The spec says "Arguments are compared for semantic
     %% equivalence".  The only arg we care about is
     %% "alternate-exchange".
-    Ae1 = alternate_exchange_value(RequiredArgs),
-    Ae2 = alternate_exchange_value(Args),
-    if Ae1==Ae2 -> ok;
-       true     -> rabbit_misc:protocol_error(
-                     not_allowed,
-                     "cannot redeclare ~s with inequivalent args",
-                     [rabbit_misc:rs(Name)])
-    end.
+    rabbit_misc:assert_args_equivalence(Args, RequiredArgs, Name,
+                                        [<<"alternate-exchange">>]).
 
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_exchange, Name}).
@@ -388,7 +383,6 @@ cleanup_deleted_queue_bindings1(ExchangeName, Bindings) ->
     [X] = mnesia:read({rabbit_exchange, ExchangeName}),
     {maybe_auto_delete(X), Bindings}.
 
-
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
     ok = mnesia:delete_object(rabbit_durable_route, Route, write).
@@ -437,6 +431,12 @@ add_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                                      X#exchange.durable andalso
                                                      Q#amqqueue.durable,
                                                      fun mnesia:write/3),
+                                   rabbit_event:notify(
+                                     binding_created,
+                                     [{exchange_name, ExchangeName},
+                                      {queue_name, QueueName},
+                                      {routing_key, RoutingKey},
+                                      {arguments, Arguments}]),
                                    {new, X, B};
                                [_R] ->
                                    {existing, X, B}
@@ -469,6 +469,10 @@ delete_binding(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
                                                     X#exchange.durable andalso
                                                     Q#amqqueue.durable,
                                                     fun mnesia:delete_object/3),
+                                   rabbit_event:notify(
+                                     binding_deleted,
+                                     [{exchange_name, ExchangeName},
+                                      {queue_name, QueueName}]),
                                    {maybe_auto_delete(X), B};
                                {error, _} = E ->
                                    E
@@ -587,6 +591,7 @@ unconditional_delete(Exchange = #exchange{name = ExchangeName}) ->
     Bindings = delete_exchange_bindings(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}),
+    rabbit_event:notify(exchange_deleted, [{name, ExchangeName}]),
     {deleted, Exchange, Bindings}.
 
 %%----------------------------------------------------------------------------

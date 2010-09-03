@@ -83,9 +83,10 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
--rabbit_boot_step({rabbit_hooks,
-                   [{description, "internal event notification system"},
-                    {mfa,         {rabbit_hooks, start, []}},
+-rabbit_boot_step({rabbit_event,
+                   [{description, "statistics event manager"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_event]}},
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
@@ -204,8 +205,7 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers(),
-    ok = rabbit_mnesia:ensure_mnesia_dir().
+    ok = ensure_working_log_handlers().
 
 start() ->
     try
@@ -426,9 +426,9 @@ print_banner() ->
               "| ~s  +---+   |~n"
               "|                   |~n"
               "+-------------------+~n"
-              "AMQP ~p-~p~n~s~n~s~n~n",
+              "~s~n~s~n~s~n~n",
               [Product, string:right([$v|Version], ProductLen),
-               ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
+               ?PROTOCOL_VERSION,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},

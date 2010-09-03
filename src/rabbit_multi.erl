@@ -93,7 +93,14 @@ usage() ->
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
     application:load(rabbit),
-    NodeName = rabbit_misc:nodeparts(getenv("RABBITMQ_NODENAME")),
+    {_NodeNamePrefix, NodeHost} = NodeName = rabbit_misc:nodeparts(
+                                               getenv("RABBITMQ_NODENAME")),
+    case net_adm:names(NodeHost) of
+        {error, EpmdReason} ->
+            throw({cannot_connect_to_epmd, NodeHost, EpmdReason});
+        {ok, _} ->
+            ok
+    end,
     {NodePids, Running} =
         case list_to_integer(NodeCount) of
             1 -> {NodePid, Started} = start_node(rabbit_misc:makenode(NodeName),
@@ -309,9 +316,9 @@ is_dead(Pid) ->
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
                                           PidS ++ "\""),
-                             case regexp:first_match(Res, "erl.exe") of
-                                 {match, _, _} -> false;
-                                 _             -> true
+                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
+                                 match -> false;
+                                 _     -> true
                              end
                      end}]).
 

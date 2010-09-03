@@ -38,6 +38,7 @@
 -type(ack_required() :: boolean()).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
+-spec(stop/0 :: () -> 'ok').
 -spec(init/3 :: (rabbit_amqqueue:name(), is_durable(), attempt_recovery()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
@@ -57,7 +58,7 @@
 -spec(set_ram_duration_target/2 ::
       (('undefined' | 'infinity' | number()), state()) -> state()).
 -spec(ram_duration/1 :: (state()) -> {number(), state()}).
--spec(needs_sync/1 :: (state()) -> boolean()).
--spec(sync/1 :: (state()) -> state()).
+-spec(needs_idle_timeout/1 :: (state()) -> boolean()).
+-spec(idle_timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).

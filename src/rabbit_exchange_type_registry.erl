@@ -45,8 +45,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 ::
-        () -> 'ignore' | rabbit_types:ok_or_error2(pid(), term())).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(register/2 :: (binary(), atom()) -> 'ok').
 -spec(binary_to_type/1 ::
         (binary()) -> atom() | rabbit_types:error('not_found')).
