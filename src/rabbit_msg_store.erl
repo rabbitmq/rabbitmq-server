@@ -377,7 +377,10 @@ client_init(Server, Ref) ->
                       cur_file_cache_ets = CurFileCacheEts }.
 
 client_terminate(CState) ->
-    close_all_handles(CState),
+    Self = self(),
+    spawn(fun() ->
+                  gen_server2:call(self(), {client_terminate, CState})
+          end),
     ok.
 
 client_delete_and_terminate(CState, Server, Ref) ->
@@ -616,10 +619,16 @@ handle_call(successfully_recovered_state, _From, State) ->
 
 handle_call({register_sync_callback, Fun}, {Pid, _},
             State = #msstate { pid_to_fun = PTF }) ->
-    erlang:monitor(process, Pid),
     reply(ok,
-          State #msstate { pid_to_fun = dict:store(Pid, Fun, PTF) }).
+          State #msstate { pid_to_fun = dict:store(Pid, Fun, PTF) });
 
+handle_call({client_terminate, CState}, {Pid, _},
+            State = #msstate { pid_to_fun   = PTF,
+                               pid_to_guids = PTG }) ->
+    ok = close_all_handles(CState),
+    reply(ok,
+          State #msstate { pid_to_fun   = dict:erase(Pid, PTF),
+                           pid_to_guids = dict:erase(Pid, PTG) }).
 
 handle_cast({write, Pid, Guid},
             State = #msstate { current_file_handle = CurHdl,
@@ -750,13 +759,6 @@ handle_cast({delete_client, CRef},
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
-
-handle_info({'DOWN', _MRef, process, Pid, _Reason},
-            State = #msstate { pid_to_fun   = PTF,
-                               pid_to_guids = PTG }) ->
-    % A queue with a callback has died, so remove it from dicts.
-    {noreply, State #msstate { pid_to_fun   = dict:erase(Pid, PTF),
-                               pid_to_guids = dict:erase(Pid, PTG) }};
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
