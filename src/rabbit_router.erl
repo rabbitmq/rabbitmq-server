@@ -65,14 +65,6 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% case below.
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
-    case {QPids, MsgSeqNo} of
-        {_, undefined} -> ok;
-        {[], _}        ->
-            %% No queues will get the message.  This is fine, so we
-            %% just confirm it.
-            rabbit_channel:confirm(self(), MsgSeqNo);
-        _              -> ok
-    end,
     maybe_inform_channel(MsgSeqNo, QPids),
     {routed, QPids};
 

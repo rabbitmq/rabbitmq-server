@@ -554,10 +554,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     State2 = case RoutingRes of
                  %% Confirm transient messages now
                  routed        ->
-                     case IsPersistent of
-                         true  -> State1;
-                         false -> send_or_enqueue_ack(
-                                    MsgSeqNo, State1)
+                     case {IsPersistent, DeliveredQPids} of
+                         {_, []}    -> send_or_enqueue_ack(MsgSeqNo, State1);
+                         {true, _}  -> State1;
+                         {false, _} -> send_or_enqueue_ack(MsgSeqNo, State1)
                      end;
                  %% Confirm after basic.returns
                  unroutable    ->
