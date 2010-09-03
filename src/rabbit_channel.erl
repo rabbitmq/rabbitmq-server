@@ -70,7 +70,7 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
--define(MULTIPLE_ACK_FLUSH_INTERVAL, 1000).
+-define(FLUSH_MULTIPLE_ACKS_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -158,7 +158,7 @@ flush(Pid) ->
     gen_server2:call(Pid, flush).
 
 flush_multiple_acks(Pid) ->
-    gen_server2:cast(Pid, multiple_ack_flush).
+    gen_server2:cast(Pid, flush_multiple_acks).
 
 confirm(Pid, MsgSeqNo) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNo}).
@@ -262,7 +262,7 @@ handle_cast(emit_stats, State) ->
     internal_emit_stats(State),
     {noreply, State};
 
-handle_cast(multiple_ack_flush,
+handle_cast(flush_multiple_acks,
             State = #ch{writer_pid      = WriterPid,
                         held_confirms   = As,
                         need_confirming = NA}) ->
@@ -963,7 +963,7 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
 
 handle_method(#'tx.select'{}, _, #ch{confirm_enabled = true}) ->
     rabbit_misc:protocol_error(
-      precondition_failed, "a confirm channel cannot be made transactional", []);
+      precondition_failed, "cannot switch from confirm to tx mode", []);
 
 handle_method(#'tx.select'{}, _, State = #ch{transaction_id = none}) ->
     {reply, #'tx.select_ok'{}, new_tx(State)};
@@ -988,7 +988,7 @@ handle_method(#'tx.rollback'{}, _, State) ->
 handle_method(#'confirm.select'{}, _, #ch{transaction_id = TxId})
   when TxId =/= none ->
     rabbit_misc:protocol_error(
-      precondition_failed, "transactional channel cannot be made confirm", []);
+      precondition_failed, "cannot switch from tx to confirm mode", []);
 
 handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
               _,
@@ -1341,7 +1341,7 @@ erase_queue_stats(QPid) ->
         {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
 
 start_ack_timer(State = #ch{confirm_tref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?MULTIPLE_ACK_FLUSH_INTERVAL,
+    {ok, TRef} = timer:apply_after(?FLUSH_MULTIPLE_ACKS_INTERVAL,
                                    ?MODULE, flush_multiple_acks, [self()]),
     State #ch { confirm_tref = TRef };
 start_ack_timer(State) ->
