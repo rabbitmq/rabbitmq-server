@@ -100,7 +100,7 @@ sup_args() ->
      {amqp_network_connection, start_infrastructure, return_ms()},
      {amqp_network_connection, start_heartbeat, return_ms()},
      {amqp_direct_connection, start_infrastructure, return_ms()},
-     {amqp_channel, start_infrastructure, return_ms()}].
+     {amqp_channel, start_writer, return_ms()}].
 
 ncl_args() ->
     [{amqp_main_reader, start_link, return_ms()},
@@ -127,8 +127,9 @@ cl_args() ->
      {amqp_channel, terminate, []}].
 
 m_args() ->
-    [{amqp_channel_util, do, []},
+    [{amqp_channel, do, [return_ms()]},
      {amqp_channel, handle_method, []},
+     {amqp_network_connection, do, [return_ms()]},
      {amqp_network_connection, handle_method, []},
      {amqp_network_connection, handshake_recv, return_ms()}].
 
