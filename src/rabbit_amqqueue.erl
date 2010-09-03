@@ -251,8 +251,8 @@ start_queue_process(Q) ->
 add_default_binding(#amqqueue{name = QueueName}) ->
     Exchange = rabbit_misc:r(QueueName, exchange, <<>>),
     RoutingKey = QueueName#resource.name,
-    rabbit_exchange:add_binding(Exchange, QueueName, RoutingKey, [],
-                                fun (_X, _Q) -> ok end),
+    rabbit_binding:add(Exchange, QueueName, RoutingKey, [],
+                       fun (_X, _Q) -> ok end),
     ok.
 
 lookup(Name) ->
@@ -433,7 +433,7 @@ internal_delete1(QueueName) ->
     %% we want to execute some things, as
     %% decided by rabbit_exchange, after the
     %% transaction.
-    rabbit_exchange:delete_queue_bindings(QueueName).
+    rabbit_binding:delete_queue_bindings(QueueName).
 
 internal_delete(QueueName) ->
     case
@@ -478,7 +478,7 @@ on_node_down(Node) ->
     ok.
 
 delete_queue(QueueName) ->
-    Post = rabbit_exchange:delete_transient_queue_bindings(QueueName),
+    Post = rabbit_binding:delete_transient_queue_bindings(QueueName),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     Post.
 
