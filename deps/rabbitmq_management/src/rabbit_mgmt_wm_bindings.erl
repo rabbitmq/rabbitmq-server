@@ -53,6 +53,7 @@ post_is_create(ReqData, {Mode, Context}) ->
 
 to_json(ReqData, {Mode, Context}) ->
     Route = #route{binding = binding_example(Mode, ReqData)},
+    %% TODO move into rabbit_binding
     Bs = [B || #route{binding = B} <-
                    mnesia:dirty_match_object(rabbit_route, Route)],
     rabbit_mgmt_util:reply(
