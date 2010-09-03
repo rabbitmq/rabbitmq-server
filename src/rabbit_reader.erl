@@ -74,7 +74,7 @@
 -define(SSL_KEYS,
         [ssl_subject, ssl_fingerprint, ssl_ca]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS ++ SSL_KEYS -- [pid]).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS ++ ?SSL_KEYS -- [pid]).
 
 %% connection lifecycle
 %%
