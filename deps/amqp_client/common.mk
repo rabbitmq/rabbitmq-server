@@ -81,8 +81,8 @@ TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
 LIBS_PATH_UNIX=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
-OSTYPE=$(shell uname -o)
-ifeq ($(OSTYPE),Cygwin)
+IS_CYGWIN=$(shell if [ $(shell expr match "$(shell uname -s)" 'CYGWIN_NT') -gt 0 ]; then echo "true"; else echo "false"; fi)
+ifeq ($(IS_CYGWIN),true)
     LIBS_PATH=ERL_LIBS="$(shell cygpath -wp $(LIBS_PATH_UNIX))"
 else
     LIBS_PATH=ERL_LIBS=$(LIBS_PATH_UNIX)
