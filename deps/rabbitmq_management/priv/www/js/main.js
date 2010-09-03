@@ -223,7 +223,7 @@ function update_status(status) {
 
 function with_req(path, fun) {
     var json;
-    var req = new XMLHttpRequest();
+    var req = xmlHttpRequest();
     req.open( "GET", path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
@@ -233,7 +233,10 @@ function with_req(path, fun) {
             else if (req.status == 408) {
                 update_status('timeout');
             }
-            else if (req.status == 0) {
+            else if (req.status == 0) { // Non-MSIE: could not connect
+                update_status('error');
+            }
+            else if (req.status > 12000) { // MSIE: could not connect
                 update_status('error');
             }
             else if (req.status == 404) {
@@ -263,12 +266,23 @@ function sync_post(sammy, path_template) {
 
 function sync_req(type, sammy, path_template) {
     var path = fill_path_template(path_template, sammy.params);
-    var req = new XMLHttpRequest();
+    var req = xmlHttpRequest();
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
-    req.send(JSON.stringify(sammy.params)); // TODO make portable
+    try {
+        req.send(JSON.stringify(sammy.params));
+    }
+    catch (e) {
+        if (e.number == 0x80004004) {
+            // 0x80004004 means "Operation aborted."
+            // http://support.microsoft.com/kb/186063
+            // MSIE6 appears to do this in response to HTTP 204.
+        }
+    }
 
-    if (req.status >= 400) {
+    // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
+    // MSIE7 and 8 appear to do this in response to HTTP 204.
+    if (req.status >= 400 && req.status != 1223) {
         debug("Got response code " + req.status + " with body " +
               req.responseText);
     }
@@ -291,4 +305,17 @@ function keys(obj) {
         ks.push(k);
     }
     return ks;
+}
+
+// Don't use the jQuery AJAX support, it seemss to have trouble reporting
+// server-down type errors.
+function xmlHttpRequest() {
+    var res;
+    try {
+        res = new XMLHttpRequest();
+    }
+    catch(e) {
+        res = new ActiveXObject("Microsoft.XMLHttp");
+    }
+    return res;
 }
