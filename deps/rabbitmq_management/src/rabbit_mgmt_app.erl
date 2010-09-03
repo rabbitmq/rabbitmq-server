@@ -35,7 +35,7 @@ start(_Type, _StartArgs) ->
             undefined ->
                 exit(mochiweb_port_not_configured);
             {ok, P} ->
-                S = io_lib:format("~s", ["management console"]),
+                S = io_lib:format("~s", ["management plugin"]),
                 io:format("starting ~-60s ...", [S]),
                 P
         end,
@@ -45,7 +45,8 @@ start(_Type, _StartArgs) ->
     rabbit_mgmt_db:start(),
     application:set_env(
       webmachine, dispatch_list,
-      [{[?PREFIX|Path], F, A} || {Path, F, A} <- dispatcher()]),
+      [{[?PREFIX|Path], F, A} ||
+          {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()]),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     rabbit_mochiweb:register_static_context(?UI_PREFIX, ?MODULE, "priv/www",
                                             "Management Console"),
@@ -53,10 +54,7 @@ start(_Type, _StartArgs) ->
                                              fun webmachine_mochiweb:loop/1,
                                              "HTTP API"),
     io:format("done~n"),
-    {ok, Hostname} = inet:gethostname(),
-    URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
-    io:format("  HTTP API:      ~s/~s/~n", [URLPrefix, ?PREFIX]),
-    io:format("  Management UI: ~s/~s/~n", [URLPrefix, ?UI_PREFIX]),
+    log_startup(Port),
     case ?SETUP_WM_LOGGING of
         true -> setup_wm_logging(".");
         _    -> ok
@@ -66,34 +64,6 @@ start(_Type, _StartArgs) ->
         _    -> ok
     end,
     Res.
-
-dispatcher() ->
-    [{[],                                          rabbit_mgmt_wm_help, []},
-     {["overview"],                                rabbit_mgmt_wm_overview, []},
-     {["connections"],                             rabbit_mgmt_wm_connections, []},
-     {["connections", connection],                 rabbit_mgmt_wm_connection, []},
-     {["channels"],                                rabbit_mgmt_wm_channels, []},
-     {["channels", channel],                       rabbit_mgmt_wm_channel, []},
-     {["exchanges"],                               rabbit_mgmt_wm_exchanges, []},
-     {["exchanges", vhost],                        rabbit_mgmt_wm_exchanges, []},
-     {["exchanges", vhost, exchange],              rabbit_mgmt_wm_exchange, []},
-     {["exchanges", vhost, exchange, "bindings"],  rabbit_mgmt_wm_bindings, [exchange]},
-     {["queues"],                                  rabbit_mgmt_wm_queues, []},
-     {["queues", vhost],                           rabbit_mgmt_wm_queues, []},
-     {["queues", vhost, queue],                    rabbit_mgmt_wm_queue, []},
-     {["queues", vhost, queue, "bindings"],        rabbit_mgmt_wm_bindings, [queue]},
-     {["bindings"],                                rabbit_mgmt_wm_bindings, [all]},
-     {["bindings", vhost],                         rabbit_mgmt_wm_bindings, [vhost]},
-     {["bindings", vhost, queue, exchange],        rabbit_mgmt_wm_bindings, [queue_exchange]},
-     {["bindings", vhost, queue, exchange, props], rabbit_mgmt_wm_binding, []},
-     {["vhosts"],                                  rabbit_mgmt_wm_vhosts, []},
-     {["vhosts", vhost],                           rabbit_mgmt_wm_vhost, []},
-     {["users"],                                   rabbit_mgmt_wm_users, []},
-     {["users", user],                             rabbit_mgmt_wm_user, []},
-     {["users", user, "permissions"],              rabbit_mgmt_wm_permissions_user, []},
-     {["permissions"],                             rabbit_mgmt_wm_permissions, []},
-     {["permissions", vhost, user],                rabbit_mgmt_wm_permission, []}
-    ].
 
 stop(_State) ->
     ok.
@@ -114,3 +84,11 @@ setup_wm_trace_app() ->
     rabbit_mochiweb:register_context_handler("wmtrace",
                                              fun webmachine_mochiweb:loop/1,
                                              "Webmachine tracer").
+log_startup(Port) ->
+    {ok, Hostname} = inet:gethostname(),
+    URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
+    rabbit_log:info(
+      "RabbitMQ Management plugin started.~n"
+      ++ "HTTP API:       ~s/~s/~n"
+      ++ "Management UI:  ~s/~s/~n",
+      [URLPrefix, ?PREFIX, URLPrefix, ?UI_PREFIX]).
