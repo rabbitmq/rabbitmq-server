@@ -72,7 +72,7 @@
                               client_properties]).
 
 -define(SSL_KEYS,
-        [ssl_subject, ssl_fingerprint, ssl_ca]).
+        [ssl_cn, ssl_issuer, ssl_validity]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS ++ ?SSL_KEYS -- [pid]).
 
@@ -823,6 +823,8 @@ i(port, #v1{sock = Sock}) ->
 i(peer_address, #v1{sock = Sock}) ->
     {ok, {A, _}} = rabbit_net:peername(Sock),
     A;
+i(ssl_issuer, #v1{sock = Sock}) ->
+    get_ssl_info(fun get_ssl_issuer/1, Sock);
 i(ssl_subject, #v1{sock = Sock}) ->
     get_ssl_info(fun (Cert) ->
                          TBSCert = Cert#'OTPCertificate'.tbsCertificate,
@@ -873,9 +875,36 @@ get_ssl_info(F, Sock) ->
         nossl               -> nossl;
         no_peer_certificate -> no_peer_certificate;
         {ok, Cert}          ->
-            io:format("Some information: ~p~n", [F(Cert)]),
             F(Cert)
     end.
+
+get_ssl_issuer(#'OTPCertificate' {
+                  tbsCertificate = #'OTPTBSCertificate' {
+                    issuer = Issuer }}) ->
+    case extract_ssl_values(Issuer) of
+        [I] -> I;
+        _   -> cantsay
+    end;
+get_ssl_issuer(_) ->
+    cantsay.
+
+extract_ssl_values({rdnSequence, List}) ->
+    extract_ssl_values2(List).
+
+extract_ssl_values2([[#'AttributeTypeAndValue'{value = V}] | Rest]) ->
+    [parse_erlang_value(V) | extract_ssl_values2(Rest)];
+extract_ssl_values2([_|Rest]) ->
+    extract_ssl_values2(Rest);
+extract_ssl_values2([]) ->
+    [].
+
+parse_erlang_value({printableString, S}) ->
+    S;
+parse_erlang_value({utf8String, Bin}) ->
+    Bin;
+parse_erlang_value(V) ->
+    V.
+
 
 %%--------------------------------------------------------------------------
 
