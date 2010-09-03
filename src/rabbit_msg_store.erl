@@ -663,10 +663,11 @@ handle_cast({write, Pid, Guid},
                 NextOffset, State #msstate {
                               sum_valid_data = SumValid + TotalSize,
                               sum_file_size  = SumFileSize + TotalSize,
-                              pid_to_guids = case dict:find(Pid, PTF) of
-                                                 {ok, _} -> dict:append(Pid, Guid, PTG);
-                                                 error   -> PTG
-                                             end}));
+                              pid_to_guids =
+                                  case dict:find(Pid, PTF) of
+                                      {ok, _} -> rabbit_misc:dict_cons(Pid, Guid, PTG);
+                                      error   -> PTG
+                                  end}));
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
