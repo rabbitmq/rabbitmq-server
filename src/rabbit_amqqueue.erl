@@ -56,7 +56,7 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(EXPIRES_TYPE, long).
+-define(EXPIRES_TYPES, [byte, short, signedint, long]).
 
 %%----------------------------------------------------------------------------
 
@@ -313,13 +313,13 @@ check_declare_arguments(QueueName, Args) ->
 
 check_expires_argument(undefined) ->
     ok;
-check_expires_argument({?EXPIRES_TYPE, Expires})
-  when is_integer(Expires) andalso Expires > 0 ->
-    ok;
-check_expires_argument({?EXPIRES_TYPE, _Expires}) ->
-    {error, expires_zero_or_less};
-check_expires_argument(_) ->
-    {error, expires_not_of_type_long}.
+check_expires_argument({Type, Expires}) when Expires > 0 ->
+    case lists:member(Type, ?EXPIRES_TYPES) of
+        true  -> ok;
+        false -> {error, {expires_not_of_acceptable_type, Type, Expires}}
+    end;
+check_expires_argument({_Type, _Expires}) ->
+    {error, expires_zero_or_less}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(

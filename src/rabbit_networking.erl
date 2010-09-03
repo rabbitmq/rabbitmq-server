@@ -107,7 +107,15 @@ boot_ssl() ->
             ok;
         {ok, SslListeners} ->
             ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
-            {ok, SslOpts} = application:get_env(ssl_options),
+            {ok, SslOptsConfig} = application:get_env(ssl_options),
+            SslOpts =
+                case proplists:get_value(verify, SslOptsConfig, verify_none) of
+                    verify_none -> SslOptsConfig;
+                    verify_peer -> [{verify_fun, fun([])    -> true;
+                                                    ([_|_]) -> false
+                                                 end}
+                                   | SslOptsConfig]
+                end,
             [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
             ok
     end.
