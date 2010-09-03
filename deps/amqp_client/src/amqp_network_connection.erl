@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/3, connect/1]).
+-export([start_link/2, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -64,8 +64,8 @@
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams, ChMgr, SIF) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr, SIF], []).
+start_link(AmqpParams, SIF) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, SIF], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -74,10 +74,9 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams, ChMgr, SIF]) ->
+init([Sup, AmqpParams, SIF]) ->
     {ok, #state{sup = Sup,
                 params = AmqpParams,
-                channels_manager = ChMgr,
                 start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
@@ -112,7 +111,12 @@ handle_info({hard_error_in_channel, Pid, Reason}, State) ->
 handle_info({channel_internal_error, _Pid, _Reason}, State) ->
     {noreply, set_closing_state(abrupt, internal_error_closing(), State)};
 handle_info(all_channels_terminated, State) ->
-    handle_all_channels_terminated(State).
+    handle_all_channels_terminated(State);
+handle_info({channel_exit, Framing0, Reason},
+            State = #state{framing0 = Framing0}) ->
+    {stop, {channel0_died, Reason}, State};
+handle_info({channel_exit, 0, Reason},State) ->
+    {stop, {channel0_died, Reason}, State}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -232,21 +236,19 @@ signal_connection_closing(ChannelCloseType, #state{channels_manager = ChMgr,
     amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
                                                     closing_to_reason(Closing)).
 
-handle_all_channels_terminated(State = #state{writer0 = Writer,
-                                              closing = Closing}) ->
+handle_all_channels_terminated(State = #state{closing = Closing}) ->
     #state{closing = #closing{}} = State, % assertion
     #closing{reason = Reason, close = Close} = Closing,
     NewState =
         case Reason of
             server_initiated_close ->
-                amqp_channel_util:do(network, Writer, #'connection.close_ok'{},
-                                     none),
+                do(#'connection.close_ok'{}, State),
                 erlang:send_after(?SOCKET_CLOSING_TIMEOUT, self(),
                                   socket_closing_timeout),
                 State#state{closing =
                     Closing#closing{phase = wait_socket_close}};
             _ ->
-                amqp_channel_util:do(network, Writer, Close, none),
+                do(Close, State),
                 erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
                                   timeout_waiting_for_close_ok),
                 State#state{closing = Closing#closing{phase = wait_close_ok}}
@@ -270,6 +272,7 @@ handle_socket_closed(State = #state{closing =
     {stop, closing_to_reason(Closing), State};
 handle_socket_closed(State) ->
     {stop, socket_closed_unexpectedly, State}.
+
 %%---------------------------------------------------------------------------
 %% Handshake
 %%---------------------------------------------------------------------------
@@ -312,23 +315,24 @@ handshake(State0 = #state{sock = Sock}) ->
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF,
                                     sock = Sock}) ->
-    {MainReader, Framing, Writer, SHF} = SIF(Sock),
-    State#state{main_reader = MainReader,
+    {ChMgr, MainReader, Framing, Writer, SHF} = SIF(Sock),
+    State#state{channels_manager = ChMgr,
+                main_reader = MainReader,
                 framing0 = Framing,
                 writer0 = Writer,
                 start_heartbeat_fun = SHF}.
 
-network_handshake(State = #state{writer0 = Writer, params = Params}) ->
+network_handshake(State = #state{params = Params, channels_manager = ChMgr}) ->
     Start = handshake_recv(),
     #'connection.start'{server_properties = ServerProperties} = Start,
     ok = check_version(Start),
-    amqp_channel_util:do(network, Writer, start_ok(State), none),
+    do(start_ok(State), State),
     Tune = handshake_recv(),
     TuneOk = negotiate_values(Tune, Params),
-    amqp_channel_util:do(network, Writer, TuneOk, none),
+    do(TuneOk, State),
     ConnectionOpen =
         #'connection.open'{virtual_host = Params#amqp_params.virtual_host},
-    amqp_channel_util:do(network, Writer, ConnectionOpen, none),
+    do(ConnectionOpen, State),
     #'connection.open_ok'{} = handshake_recv(),
     #'connection.tune_ok'{channel_max = ChannelMax,
                           frame_max   = FrameMax,
@@ -336,6 +340,10 @@ network_handshake(State = #state{writer0 = Writer, params = Params}) ->
     ?LOG_INFO("Negotiated maximums: (Channel = ~p, Frame = ~p, "
               "Heartbeat = ~p)~n",
              [ChannelMax, FrameMax, Heartbeat]),
+    if ChannelMax =/= 0 -> amqp_channels_manager:set_channel_max(ChMgr,
+                                                                 ChannelMax);
+       true             -> ok
+    end,
     State#state{channel_max = ChannelMax,
                 heartbeat = Heartbeat,
                 server_properties = ServerProperties}.
@@ -400,6 +408,10 @@ client_properties(UserProperties) ->
     lists:foldl(fun({K, _, _} = Tuple, Acc) ->
                     lists:keystore(K, 1, Acc, Tuple)
                 end, Default, UserProperties).
+
+do(Method, #state{writer0 = Writer}) ->
+    %% Catching because it expects the {channel_exit, _, _} message on error
+    catch rabbit_writer:send_command_sync(Writer, Method).
 
 handshake_recv() ->
     receive

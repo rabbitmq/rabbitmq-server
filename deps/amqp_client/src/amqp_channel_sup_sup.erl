@@ -36,8 +36,8 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Driver) ->
-    supervisor2:start_link(?MODULE, [Driver]).
+start_link(Type) ->
+    supervisor2:start_link(?MODULE, [Type]).
 
 start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
     supervisor2:start_child(Sup, [InfraArgs, ChannelNumber]).
@@ -46,7 +46,7 @@ start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Driver]) ->
+init([Type]) ->
     {ok, {{simple_one_for_one, 0, 1},
-          [{channel_sup, {amqp_channel_sup, start_link, [Driver]},
+          [{channel_sup, {amqp_channel_sup, start_link, [Type]},
            temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.

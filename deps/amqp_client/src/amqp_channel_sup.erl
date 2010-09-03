@@ -36,19 +36,22 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Driver, InfraArgs, ChNumber) ->
+start_link(Type, InfraArgs, ChNumber) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
-    SIF = start_infrastructure_fun(Sup, Driver, InfraArgs, ChNumber),
-    {ok, _} = supervisor2:start_child(Sup,
-                  {channel, {amqp_channel, start_link, [Driver, ChNumber, SIF]},
-                   intrinsic, brutal_kill, worker, [amqp_channel]}),
+    {ok, ChPid} = supervisor2:start_child(Sup,
+                      {channel, {amqp_channel, start_link,
+                                 [Type, ChNumber,
+                                  start_writer_fun(Sup, Type, InfraArgs,
+                                                   ChNumber)]},
+                       intrinsic, brutal_kill, worker, [amqp_channel]}),
+    start_framing(Sup, Type, ChPid),
     {ok, Sup}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_infrastructure_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
+start_writer_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
     fun() ->
         ChPid = self(),
         {ok, RabbitChannel} = supervisor2:start_child(Sup,
@@ -56,23 +59,26 @@ start_infrastructure_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
                                         [ChNumber, ChPid, ChPid, User, VHost,
                                          Collector, start_limiter_fun(Sup)]},
                        transient, ?MAX_WAIT, worker, [rabbit_channel]}),
-        {RabbitChannel}
+        RabbitChannel
     end;
-start_infrastructure_fun(Sup, network, [Sock, MainReader], ChNumber) ->
+start_writer_fun(Sup, network, [Sock], ChNumber) ->
     fun() ->
         ChPid = self(),
-        {ok, Framing} = supervisor2:start_child(Sup,
-                        {framing, {rabbit_framing_channel, start_link,
-                                   [Sup, ChPid, ?PROTOCOL]},
-                         intrinsic, ?MAX_WAIT, worker,
-                         [rabbit_framing_channel]}),
         {ok, Writer} = supervisor2:start_child(Sup,
                            {writer, {rabbit_writer, start_link,
                                      [Sock, ChNumber, ?FRAME_MIN_SIZE,
-                                      ?PROTOCOL, MainReader]},
-                            intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
-        {Writer}
+                                      ?PROTOCOL, ChPid]},
+                            transient, ?MAX_WAIT, worker, [rabbit_writer]}),
+        Writer
     end.
+
+start_framing(_Sup, direct, _ChPid) ->
+    {ok, none};
+start_framing(Sup, network, ChPid) ->
+    {ok, _} = supervisor2:start_child(Sup,
+                  {framing, {rabbit_framing_channel, start_link,
+                             [ChPid, ChPid, ?PROTOCOL]},
+                   transient, ?MAX_WAIT, worker, [rabbit_framing_channel]}).
 
 start_limiter_fun(Sup) ->
     fun(UnackedCount) ->

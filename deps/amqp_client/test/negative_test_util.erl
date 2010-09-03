@@ -84,7 +84,7 @@ hard_error_test(Connection) ->
         case OtherExit of
             %% Direct case
             %% TODO fix error code in the direct case
-            shutdown -> ok;
+            killed -> ok;
             %% Network case
             _        -> ?assertMatch({connection_closing,
                             {server_initiated_close, ?NOT_IMPLEMENTED, _}},

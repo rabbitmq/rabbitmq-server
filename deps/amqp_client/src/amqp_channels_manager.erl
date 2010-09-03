@@ -29,13 +29,13 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, open_channel/3, set_channel_max/2, register_connection/2,
-         is_empty/1, num_channels/1, get_pid/2, get_framing/2,
+-export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
+         num_channels/1, get_pid/2, get_framing/2,
          signal_connection_closing/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
--record(state, {connection = undefined,
+-record(state, {connection,
                 channel_sup_sup,
                 map_num_pid = gb_trees:empty(), %% Number -> {Pid, Framing}
                 map_pid_num = dict:new(),       %% Pid -> Number
@@ -46,8 +46,8 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(ChSupSup) ->
-    gen_server:start_link(?MODULE, [ChSupSup], []).
+start_link(Connection, ChSupSup) ->
+    gen_server:start_link(?MODULE, [Connection, ChSupSup], []).
 
 open_channel(Manager, ProposedNumber, InfraArgs) ->
     gen_server:call(Manager, {open_channel, ProposedNumber, InfraArgs},
@@ -55,9 +55,6 @@ open_channel(Manager, ProposedNumber, InfraArgs) ->
 
 set_channel_max(Manager, ChannelMax) ->
     gen_server:cast(Manager, {set_channel_max, ChannelMax}).
-
-register_connection(Manager, Connection) ->
-    gen_server:cast(Manager, {register_connection, Connection}).
 
 is_empty(Manager) ->
     gen_server:call(Manager, is_empty, infinity).
@@ -78,8 +75,8 @@ signal_connection_closing(Manager, ChannelCloseType, Reason) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([ChSupSup]) ->
-    {ok, #state{channel_sup_sup = ChSupSup}}.
+init([Connection, ChSupSup]) ->
+    {ok, #state{connection = Connection, channel_sup_sup = ChSupSup}}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -87,28 +84,20 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     State.
 
-handle_call({open_channel, ProposedNumber, InfraArgs}, _From,
+handle_call({open_channel, ProposedNumber, InfraArgs}, _,
             State = #state{closing = false}) ->
     handle_open_channel(ProposedNumber, InfraArgs, State);
-handle_call(is_empty, _From, State) ->
+handle_call(is_empty, _, State) ->
     {reply, internal_is_empty(State), State};
-handle_call(num_channels, _From, State) ->
+handle_call(num_channels, _, State) ->
     {reply, internal_num_channels(State), State};
-handle_call({get_pid, Number}, _, State = #state{map_num_pid = MapNP}) ->
-    {reply, case gb_trees:lookup(Number, MapNP) of
-                {value, {Pid, _}} -> Pid;
-                none              -> undefined
-            end, State};
-handle_call({get_framing, Number}, _, State = #state{map_num_pid = MapNP}) ->
-    {reply, case gb_trees:lookup(Number, MapNP) of
-                {value, {_, Framing}} -> Framing;
-                none                  -> undefined
-            end, State}.
+handle_call({get_pid, Number}, _, State) ->
+    {reply, internal_lookup_np(Number, State), State};
+handle_call({get_framing, Number}, _, State) ->
+    {reply, internal_lookup_nf(Number, State), State}.
 
 handle_cast({set_channel_max, ChannelMax}, State) ->
     {noreply, State#state{channel_max = ChannelMax}};
-handle_cast({register_connection, Connection}, State) ->
-    {noreply, State#state{connection = Connection}};
 handle_cast({connection_closing, ChannelCloseType, Reason}, State) ->
     handle_connection_closing(ChannelCloseType, Reason, State).
 
@@ -128,9 +117,9 @@ handle_open_channel(ProposedNumber, InfraArgs,
             [Ch] = supervisor2:find_child(ChSup, channel),
             Framing = case supervisor2:find_child(ChSup, framing) of
                           [F] -> F;
-                          []  -> undefined
+                          []  -> none
                       end,
-            NewState = register(Number, Ch, Framing, State),
+            NewState = internal_register(Number, Ch, Framing, State),
             erlang:monitor(process, Ch),
             {reply, {ok, Ch}, NewState};
         {error, _} = Error ->
@@ -171,21 +160,15 @@ find_free(It, Candidate) ->
         none             -> {error, out_of_channel_numbers}
     end.
 
-register(Number, Pid, Framing, State = #state{map_num_pid = MapNP,
-                                              map_pid_num = MapPN}) ->
-    MapNP1 = gb_trees:enter(Number, {Pid, Framing}, MapNP),
-    MapPN1 = dict:store(Pid, Number, MapPN),
-    State#state{map_num_pid = MapNP1, map_pid_num = MapPN1}.
-
-handle_down(Pid, Reason, State = #state{map_pid_num = MapPN}) ->
-    case dict:fetch(Pid, MapPN) of
+handle_down(Pid, Reason, State) ->
+    case internal_lookup_pn(Pid, State) of
         undefined -> {stop, {error, unexpected_down}, State};
         Number    -> handle_channel_down(Pid, Number, Reason, State)
     end.
 
 handle_channel_down(Pid, Number, Reason, State) ->
     down_side_effect(Pid, Reason, State),
-    NewState = internal_unregister(Pid, Number, State),
+    NewState = internal_unregister(Number, Pid, State),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
 
@@ -221,17 +204,44 @@ handle_connection_closing(ChannelCloseType, Reason, State) ->
     end,
     {noreply, State#state{closing = true}}.
 
-internal_unregister(Pid, Number, State = #state{map_num_pid = MapNP,
-                                                map_pid_num = MapPN}) ->
+%%---------------------------------------------------------------------------
+
+internal_register(Number, Pid, Framing,
+                  State = #state{map_num_pid = MapNP,
+                                 map_pid_num = MapPN}) ->
+    MapNP1 = gb_trees:enter(Number, {Pid, Framing}, MapNP),
+    MapPN1 = dict:store(Pid, Number, MapPN),
+    State#state{map_num_pid = MapNP1,
+                map_pid_num = MapPN1}.
+
+internal_unregister(Number, Pid,
+                    State = #state{map_num_pid = MapNP,
+                                   map_pid_num = MapPN}) ->
     MapNP1 = gb_trees:delete(Number, MapNP),
     MapPN1 = dict:erase(Pid, MapPN),
-    State#state{map_num_pid = MapNP1, map_pid_num = MapPN1}.
+    State#state{map_num_pid = MapNP1,
+                map_pid_num = MapPN1}.
 
 internal_is_empty(#state{map_num_pid = MapNP}) ->
     gb_trees:is_empty(MapNP).
 
 internal_num_channels(#state{map_num_pid = MapNP}) ->
     gb_trees:size(MapNP).
+
+internal_lookup_np(Number, #state{map_num_pid = MapNP}) ->
+    case gb_trees:lookup(Number, MapNP) of {value, {Pid, _}} -> Pid;
+                                           none              -> undefined
+    end.
+
+internal_lookup_nf(Number, #state{map_num_pid = MapNP}) ->
+    case gb_trees:lookup(Number, MapNP) of {value, {_, Framing}} -> Framing;
+                                           none                  -> undefined
+    end.
+
+internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
+    case dict:find(Pid, MapPN) of {ok, Number} -> Number;
+                                  error        -> undefined
+    end.
 
 signal_channels(Msg, #state{map_pid_num = MapPN}) ->
     dict:map(fun(Pid, _) -> Pid ! Msg, ok end, MapPN),

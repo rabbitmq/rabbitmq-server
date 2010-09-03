@@ -61,7 +61,7 @@
                 flow_handler_pid = none,
                 consumers = dict:new(),
                 default_consumer = none,
-                start_infrastructure_fun}).
+                start_writer_fun}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -276,7 +276,7 @@ do_rpc(State0 = #state{rpc_requests = RequestQueue,
     end.
 
 pre_do(#'channel.open'{}, _Content, State) ->
-    start_infrastructure(State);
+    start_writer(State);
 pre_do(#'channel.close'{}, _Content, State) ->
     State#state{closing = just_channel};
 pre_do(_, _, State) ->
@@ -286,11 +286,18 @@ pre_do(_, _, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-do(Method, Content, #state{driver = Driver, writer = Writer}) ->
-    ok = amqp_channel_util:do(Driver, Writer, Method, Content).
+do(Method, Content, #state{driver = Driver, writer = W}) ->
+    %% Catching because it expects the {channel_exit, _, _} message on error
+    catch case {Driver, Content} of
+              {network, none} -> rabbit_writer:send_command_sync(W, Method);
+              {network, _}    -> rabbit_writer:send_command_sync(W, Method,
+                                                                 Content);
+              {direct, none}  -> rabbit_channel:do(W, Method);
+              {direct, _}     -> rabbit_channel:do(W, Method, Content)
+          end.
 
-start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
-    {Writer} = SIF(),
+start_writer(State = #state{start_writer_fun = SWF}) ->
+    Writer = SWF(),
     State#state{writer = Writer}.
 
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
@@ -448,19 +455,19 @@ handle_regular_method(Method, Content, State) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, ChannelNumber, SIF) ->
-    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SIF], []).
+start_link(Driver, ChannelNumber, SWF) ->
+    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Sup, Driver, ChannelNumber, SIF]) ->
+init([Sup, Driver, ChannelNumber, SWF]) ->
     {ok, #state{sup = Sup,
                 driver = Driver,
                 number = ChannelNumber,
-                start_infrastructure_fun = SIF}}.
+                start_writer_fun = SWF}}.
 
 %% Standard implementation of the call/{2,3} command
 %% @private
@@ -472,8 +479,11 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
             Content = build_content(AmqpMsg),
             case ?PROTOCOL:is_method_synchronous(Method) of
                 true  -> {noreply, rpc_top_half(Method, Content, From, State)};
-                false -> do(Method, Content, State),
-                         {reply, ok, State}
+                false -> case do(Method, Content, State) of
+                             ok -> {reply, ok, State};
+                             %% Error. Expect a {channel_exit, _, _} message
+                             _  -> {noreply, State}
+                         end
             end;
         {_, BlockReply} ->
             {reply, BlockReply, State}
@@ -585,9 +595,21 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
 
+%% This comes from framing channel, the writer or rabbit_channel
 %% @private
-handle_info(shutdown, State) ->
-    {stop, normal, State};
+handle_info({channel_exit, _FrPidOrChNumber, Reason},
+            State = #state{number = Number}) ->
+    case Reason of
+        %% Sent by rabbit_channel in the direct case, due to a hard error
+        #amqp_error{name = ErrorName, explanation = Expl} ->
+            ?LOG_WARN("Channel ~p closing: server sent error ~p~n",
+                      [Number, Reason]),
+            {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
+            {stop, {server_initiated_close, Code, Expl}, State};
+        %% Unexpected death of a channel infrastructure process
+        _ ->
+            {stop, {infrastructure_died, Reason}, State}
+    end;
 
 %% @private
 handle_info({shutdown, Reason}, State) ->
@@ -630,16 +652,6 @@ handle_info({connection_closing, CloseType, Reason},
             shutdown_with_reason({connection_closing, Reason}, State)
     end;
 
-%% This is for a channel exception that is sent by the direct
-%% rabbit_channel process
-%% @private
-handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
-                                                 explanation = Expl} = Error},
-            State = #state{number = Number}) ->
-    ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
-    {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
-    {stop, {server_initiated_close, Code, Expl}, State};
-
 %% @private
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
     handle_down(Pid, Reason, State).
@@ -661,10 +673,6 @@ handle_down(DefaultConsumer, Reason,
     {noreply, State#state{default_consumer = none}};
 handle_down(Other, Reason, State) ->
     {stop, {unexpected_down, Other, Reason}, State}.
-
-%%---------------------------------------------------------------------------
-%% Rest of the gen_server callbacks
-%%---------------------------------------------------------------------------
 
 %% @private
 terminate(_Reason, _State) ->

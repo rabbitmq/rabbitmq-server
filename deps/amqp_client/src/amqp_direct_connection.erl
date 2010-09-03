@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/3, connect/1]).
+-export([start_link/2, connect/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -53,8 +53,8 @@
 %% Internal interface
 %%---------------------------------------------------------------------------
 
-start_link(AmqpParams, ChMgr, SIF) ->
-    gen_server:start_link(?MODULE, [self(), AmqpParams, ChMgr, SIF], []).
+start_link(AmqpParams, SIF) ->
+    gen_server:start_link(?MODULE, [self(), AmqpParams, SIF], []).
 
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
@@ -63,10 +63,9 @@ connect(Pid) ->
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sup, AmqpParams, ChMgr, SIF]) ->
+init([Sup, AmqpParams, SIF]) ->
     {ok, #state{sup = Sup,
                 params = AmqpParams,
-                channels_manager = ChMgr,
                 start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
@@ -222,5 +221,5 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     State1#state{server_properties = ServerProperties}.
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
-    {Collector} = SIF(),
-    State#state{collector = Collector}.
+    {ChMgr, Collector} = SIF(),
+    State#state{channels_manager = ChMgr, collector = Collector}.
