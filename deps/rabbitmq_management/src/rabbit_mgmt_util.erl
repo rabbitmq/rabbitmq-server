@@ -74,7 +74,8 @@ vhost_exists(VHostBin) ->
               rabbit_access_control:list_vhosts()).
 
 reply(Facts, ReqData, Context) ->
-    {mochijson2:encode(Facts), ReqData, Context}.
+    ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
+    {mochijson2:encode(Facts), ReqData1, Context}.
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
