@@ -758,6 +758,10 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
+a({State, _} = I) ->
+    a(State),
+    I;
+
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                      len                  = Len,
                      persistent_count     = PersistentCount,
@@ -966,7 +970,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
                   IsPersistent1 = IsDurable andalso IsPersistent,
                   {SeqId, State3} = publish(Msg, false, IsPersistent1, State2),
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
-          end, {PAcks, ack(Acks, State)}, Pubs),
+          end, {PAcks, element(1, ack(Acks, State))}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
     reduce_memory_use(
@@ -1117,7 +1121,7 @@ remove_pending_ack(KeepPersistent,
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
-    State;
+    {State, []};
 ack(MsgStoreFun, Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
@@ -1130,15 +1134,19 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
-                              confirm_messages(Guids),
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
+    AckdGuids = lists:append(orddict:fold(fun (_, Guids, Acc) ->
+                                                  [Guids || Acc]
+                                          end, [], GuidsByStore)),
+    State2 = msgs_confirmed(AckdGuids, State1),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
                            error       -> 0;
                            {ok, Guids} -> length(Guids)
                        end,
-    State1 #vqstate { index_state      = IndexState1,
-                      persistent_count = PCount1 }.
+    {State2 #vqstate { index_state      = IndexState1,
+                       persistent_count = PCount1 },
+     AckdGuids}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
@@ -1153,20 +1161,13 @@ accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-confirm_messages(Guids) ->
-    Self = self(),
-    spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                     Self,
-                     fun (State = #vqstate { msgs_on_disk = MOD,
-                              msg_indices_on_disk = MIOD }) ->
-                             { State #vqstate {
-                                 msgs_on_disk =
-                                     gb_sets:difference(MOD, gb_sets:from_list(Guids)),
-                                 msg_indices_on_disk =
-                                     gb_sets:delete_any(MIOD, gb_sets:from_list(Guids)) },
-                               {confirm, Guids} }
-                     end)
-          end).
+msgs_confirmed(Guids, State = #vqstate { msgs_on_disk = MOD,
+                                         msg_indices_on_disk = MIOD }) ->
+    State #vqstate {
+      msgs_on_disk =
+          gb_sets:difference(MOD, gb_sets:from_list(Guids)),
+      msg_indices_on_disk =
+          gb_sets:delete_any(MIOD, gb_sets:from_list(Guids)) }.
 
 msgs_written_to_disk(QPid, Guids) ->
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
@@ -1241,6 +1242,9 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, State) ->
                         _                   -> {Reduce, State1}
                     end
     end.
+
+reduce_memory_use({State, Other}) ->
+    {reduce_memory_use(State), Other};
 
 reduce_memory_use(State) ->
     {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
