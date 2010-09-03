@@ -70,10 +70,10 @@ accept_content(ReqData, {_Mode, Context}) ->
               Queue = rabbit_mgmt_util:id(queue, ReqData),
               Res = rabbit_mgmt_util:amqp_request(
                       VHost, ReqData, Context,
-                      #'queue.bind'{exchange    = Exchange,
-                                    queue       = Queue,
-                                    routing_key = Key,
-                                    arguments   = []}), %% TODO
+                      #'queue.bind'{ exchange    = Exchange,
+                                     queue       = Queue,
+                                     routing_key = Key,
+                                     arguments   = [] }), %% TODO
               case Res of
                   {{halt, _}, _, _} ->
                       Res;
