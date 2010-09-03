@@ -253,15 +253,15 @@ function with_req(path, fun) {
 }
 
 function sync_put(sammy, path_template) {
-    sync_req('put', sammy, path_template);
+    sync_req('PUT', sammy, path_template);
 }
 
 function sync_delete(sammy, path_template) {
-    sync_req('delete', sammy, path_template);
+    sync_req('DELETE', sammy, path_template);
 }
 
 function sync_post(sammy, path_template) {
-    sync_req('post', sammy, path_template);
+    sync_req('POST', sammy, path_template);
 }
 
 function sync_req(type, sammy, path_template) {
