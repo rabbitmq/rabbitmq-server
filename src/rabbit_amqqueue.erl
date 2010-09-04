@@ -254,9 +254,7 @@ add_default_binding(#amqqueue{name = QueueName}) ->
     rabbit_binding:add(#binding{exchange_name = ExchangeName,
                                 queue_name    = QueueName,
                                 key           = RoutingKey,
-                                args          = []},
-                       fun (_X, _Q) -> ok end),
-    ok.
+                                args          = []}).
 
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_queue, Name}).
