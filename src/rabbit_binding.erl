@@ -32,11 +32,11 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/0, add/5, delete/5, list/1]).
--export([list_exchange_bindings/1, list_queue_bindings/1]).
+-export([recover/0, add/5, remove/5, list/1]).
+-export([list_for_exchange/1, list_for_queue/1]).
 %% these must all be run inside a mnesia tx
--export([has_exchange_bindings/1, delete_exchange_bindings/1,
-         delete_queue_bindings/1, delete_transient_queue_bindings/1]).
+-export([has_for_exchange/1, remove_for_exchange/1,
+         remove_for_queue/1, remove_transient_for_queue/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -58,7 +58,7 @@
         (rabbit_exchange:name(), rabbit_amqqueue:name(),
          rabbit_router:routing_key(), rabbit_framing:amqp_table(),
          inner_fun()) -> bind_res()).
--spec(delete/5 ::
+-spec(remove/5 ::
         (rabbit_exchange:name(), rabbit_amqqueue:name(),
          rabbit_router:routing_key(), rabbit_framing:amqp_table(),
          inner_fun()) -> bind_res() | rabbit_types:error('binding_not_found')).
@@ -66,20 +66,20 @@
                      [{rabbit_exchange:name(), rabbit_amqqueue:name(),
                        rabbit_router:routing_key(),
                        rabbit_framing:amqp_table()}]).
--spec(list_exchange_bindings/1 ::
+-spec(list_for_exchange/1 ::
         (rabbit_exchange:name()) -> [{rabbit_amqqueue:name(),
                                       rabbit_router:routing_key(),
                                       rabbit_framing:amqp_table()}]).
--spec(list_queue_bindings/1 ::
+-spec(list_for_queue/1 ::
         (rabbit_amqqueue:name()) -> [{rabbit_exchange:name(),
                                       rabbit_router:routing_key(),
                                       rabbit_framing:amqp_table()}]).
--spec(has_exchange_bindings/1 :: (rabbit_exchange:name()) -> boolean()).
--spec(delete_exchange_bindings/1 ::
+-spec(has_for_exchange/1 :: (rabbit_exchange:name()) -> boolean()).
+-spec(remove_for_exchange/1 ::
         (rabbit_exchange:name()) -> [rabbit_types:binding()]).
--spec(delete_queue_bindings/1 ::
+-spec(remove_for_queue/1 ::
         (rabbit_amqqueue:name()) -> fun (() -> any())).
--spec(delete_transient_queue_bindings/1 ::
+-spec(remove_transient_for_queue/1 ::
         (rabbit_amqqueue:name()) -> fun (() -> any())).
 
 -endif.
@@ -132,7 +132,7 @@ add(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
             Err
     end.
 
-delete(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
+remove(ExchangeName, QueueName, RoutingKey, Arguments, InnerFun) ->
     case binding_action(
            ExchangeName, QueueName, RoutingKey, Arguments,
            fun (X, Q, B) ->
@@ -183,7 +183,7 @@ list(VHostPath) ->
                           _             = '_'},
                         _       = '_'})].
 
-list_exchange_bindings(ExchangeName) ->
+list_for_exchange(ExchangeName) ->
     Route = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
     [{QueueName, RoutingKey, Arguments} ||
         #route{binding = #binding{queue_name = QueueName,
@@ -192,7 +192,7 @@ list_exchange_bindings(ExchangeName) ->
             <- mnesia:dirty_match_object(rabbit_route, Route)].
 
 % Refactoring is left as an exercise for the reader
-list_queue_bindings(QueueName) ->
+list_for_queue(QueueName) ->
     Route = #route{binding = #binding{queue_name = QueueName, _ = '_'}},
     [{ExchangeName, RoutingKey, Arguments} ||
         #route{binding = #binding{exchange_name = ExchangeName,
@@ -200,14 +200,14 @@ list_queue_bindings(QueueName) ->
                                   args          = Arguments}}
             <- mnesia:dirty_match_object(rabbit_route, Route)].
 
-has_exchange_bindings(ExchangeName) ->
+has_for_exchange(ExchangeName) ->
     Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
     contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match).
 
-delete_exchange_bindings(ExchangeName) ->
+remove_for_exchange(ExchangeName) ->
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
@@ -219,11 +219,11 @@ delete_exchange_bindings(ExchangeName) ->
                                                  _ = '_'}},
                        write)].
 
-delete_queue_bindings(QueueName) ->
-    delete_queue_bindings(QueueName, fun delete_forward_routes/1).
+remove_for_queue(QueueName) ->
+    remove_for_queue(QueueName, fun delete_forward_routes/1).
 
-delete_transient_queue_bindings(QueueName) ->
-    delete_queue_bindings(QueueName, fun delete_transient_forward_routes/1).
+remove_transient_for_queue(QueueName) ->
+    remove_for_queue(QueueName, fun delete_transient_forward_routes/1).
 
 %%----------------------------------------------------------------------------
 
@@ -272,7 +272,7 @@ continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
-delete_queue_bindings(QueueName, FwdDeleteFun) ->
+remove_for_queue(QueueName, FwdDeleteFun) ->
     DeletedBindings =
         [begin
              Route = reverse_route(ReverseRoute),
@@ -287,7 +287,7 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
                                                 queue_name = QueueName,
                                                 _          = '_'}}),
                          write)],
-    Cleanup = cleanup_deleted_queue_bindings(
+    Cleanup = cleanup_removed_queue_bindings(
                 lists:keysort(#binding.exchange_name, DeletedBindings), []),
     fun () ->
             lists:foreach(
@@ -302,23 +302,23 @@ delete_queue_bindings(QueueName, FwdDeleteFun) ->
 
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to
-%% cleanup_deleted_queue_bindings1) works properly.
-cleanup_deleted_queue_bindings([], Acc) ->
+%% cleanup_removed_queue_bindings1) works properly.
+cleanup_removed_queue_bindings([], Acc) ->
     Acc;
-cleanup_deleted_queue_bindings(
+cleanup_removed_queue_bindings(
   [B = #binding{exchange_name = ExchangeName} | Bs], Acc) ->
-    cleanup_deleted_queue_bindings(ExchangeName, Bs, [B], Acc).
+    cleanup_removed_queue_bindings(ExchangeName, Bs, [B], Acc).
 
-cleanup_deleted_queue_bindings(
+cleanup_removed_queue_bindings(
   ExchangeName, [B = #binding{exchange_name = ExchangeName} | Bs],
   Bindings, Acc) ->
-    cleanup_deleted_queue_bindings(ExchangeName, Bs, [B | Bindings], Acc);
-cleanup_deleted_queue_bindings(ExchangeName, Deleted, Bindings, Acc) ->
-    %% either Deleted is [], or its head has a non-matching ExchangeName
-    NewAcc = [cleanup_deleted_queue_bindings1(ExchangeName, Bindings) | Acc],
-    cleanup_deleted_queue_bindings(Deleted, NewAcc).
+    cleanup_removed_queue_bindings(ExchangeName, Bs, [B | Bindings], Acc);
+cleanup_removed_queue_bindings(ExchangeName, Removed, Bindings, Acc) ->
+    %% either Removed is [], or its head has a non-matching ExchangeName
+    NewAcc = [cleanup_removed_queue_bindings1(ExchangeName, Bindings) | Acc],
+    cleanup_removed_queue_bindings(Removed, NewAcc).
 
-cleanup_deleted_queue_bindings1(ExchangeName, Bindings) ->
+cleanup_removed_queue_bindings1(ExchangeName, Bindings) ->
     [X] = mnesia:read({rabbit_exchange, ExchangeName}),
     {{rabbit_exchange:maybe_auto_delete(X), X}, Bindings}.
 

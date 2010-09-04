@@ -433,7 +433,7 @@ internal_delete1(QueueName) ->
     %% we want to execute some things, as
     %% decided by rabbit_exchange, after the
     %% transaction.
-    rabbit_binding:delete_queue_bindings(QueueName).
+    rabbit_binding:remove_for_queue(QueueName).
 
 internal_delete(QueueName) ->
     case
@@ -478,7 +478,7 @@ on_node_down(Node) ->
     ok.
 
 delete_queue(QueueName) ->
-    Post = rabbit_binding:delete_transient_queue_bindings(QueueName),
+    Post = rabbit_binding:remove_transient_for_queue(QueueName),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     Post.
 

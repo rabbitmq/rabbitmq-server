@@ -289,13 +289,13 @@ maybe_auto_delete(#exchange{auto_delete = true} = Exchange) ->
     end.
 
 conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
-    case rabbit_binding:has_exchange_bindings(ExchangeName) of
+    case rabbit_binding:has_for_exchange(ExchangeName) of
         false  -> unconditional_delete(Exchange);
         true   -> {error, in_use}
     end.
 
 unconditional_delete(Exchange = #exchange{name = ExchangeName}) ->
-    Bindings = rabbit_binding:delete_exchange_bindings(ExchangeName),
+    Bindings = rabbit_binding:remove_for_exchange(ExchangeName),
     ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
     ok = mnesia:delete({rabbit_exchange, ExchangeName}),
     rabbit_event:notify(exchange_deleted, [{name, ExchangeName}]),
