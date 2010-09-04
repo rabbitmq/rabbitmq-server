@@ -287,7 +287,7 @@ remove_for_queue(QueueName, FwdDeleteFun) ->
                                                 queue_name = QueueName,
                                                 _          = '_'}}),
                          write)],
-    Cleanup = cleanup_removed_queue_bindings(
+    Grouped = group_bindings_and_auto_delete(
                 lists:keysort(#binding.exchange_name, DeletedBindings), []),
     fun () ->
             lists:foreach(
@@ -297,30 +297,27 @@ remove_for_queue(QueueName, FwdDeleteFun) ->
                           auto_deleted -> Module:delete(X, Bs);
                           not_deleted  -> Module:remove_bindings(X, Bs)
                       end
-              end, Cleanup)
+              end, Grouped)
     end.
 
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to
-%% cleanup_removed_queue_bindings1) works properly.
-cleanup_removed_queue_bindings([], Acc) ->
+%% group_bindings_and_auto_delete1) works properly.
+group_bindings_and_auto_delete([], Acc) ->
     Acc;
-cleanup_removed_queue_bindings(
+group_bindings_and_auto_delete(
   [B = #binding{exchange_name = ExchangeName} | Bs], Acc) ->
-    cleanup_removed_queue_bindings(ExchangeName, Bs, [B], Acc).
+    group_bindings_and_auto_delete(ExchangeName, Bs, [B], Acc).
 
-cleanup_removed_queue_bindings(
+group_bindings_and_auto_delete(
   ExchangeName, [B = #binding{exchange_name = ExchangeName} | Bs],
   Bindings, Acc) ->
-    cleanup_removed_queue_bindings(ExchangeName, Bs, [B | Bindings], Acc);
-cleanup_removed_queue_bindings(ExchangeName, Removed, Bindings, Acc) ->
+    group_bindings_and_auto_delete(ExchangeName, Bs, [B | Bindings], Acc);
+group_bindings_and_auto_delete(ExchangeName, Removed, Bindings, Acc) ->
     %% either Removed is [], or its head has a non-matching ExchangeName
-    NewAcc = [cleanup_removed_queue_bindings1(ExchangeName, Bindings) | Acc],
-    cleanup_removed_queue_bindings(Removed, NewAcc).
-
-cleanup_removed_queue_bindings1(ExchangeName, Bindings) ->
     [X] = mnesia:read({rabbit_exchange, ExchangeName}),
-    {{rabbit_exchange:maybe_auto_delete(X), X}, Bindings}.
+    NewAcc = [{{rabbit_exchange:maybe_auto_delete(X), X}, Bindings} | Acc],
+    group_bindings_and_auto_delete(Removed, NewAcc).
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
