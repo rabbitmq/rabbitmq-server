@@ -773,9 +773,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
                State#v1{connection_state = running,
                         connection = NewConnection}),
-    rabbit_event:notify(
-      connection_created,
-      [{Item, i(Item, State1)} || Item <- ?CREATION_EVENT_KEYS]),
+    rabbit_event:notify(connection_created,
+                        infos(?CREATION_EVENT_KEYS, State1)),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
@@ -939,5 +938,4 @@ amqp_exception_explanation(Text, Expl) ->
     end.
 
 internal_emit_stats(State) ->
-    rabbit_event:notify(connection_stats,
-                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
+    rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)).

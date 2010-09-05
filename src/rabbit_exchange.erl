@@ -192,9 +192,7 @@ declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
                    end
            end) of
         {new, X}      -> TypeModule:create(X),
-                         rabbit_event:notify(
-                           exchange_created,
-                           [{Item, i(Item, Exchange)} || Item <- ?INFO_KEYS]),
+                         rabbit_event:notify(exchange_created, info(X)),
                          X;
         {existing, X} -> X;
         Err           -> Err

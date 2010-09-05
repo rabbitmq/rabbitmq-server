@@ -175,9 +175,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = rabbit_event:init_stats_timer()},
-    rabbit_event:notify(
-      channel_created,
-      [{Item, i(Item, State)} || Item <- ?CREATION_EVENT_KEYS]),
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -1148,7 +1146,7 @@ update_measures(Type, QX, Inc, Measure) ->
         orddict:store(Measure, Cur + Inc, Measures)).
 
 internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
-    CoarseStats = [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS],
+    CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->
             rabbit_event:notify(channel_stats, CoarseStats);
