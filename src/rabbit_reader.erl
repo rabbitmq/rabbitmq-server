@@ -944,13 +944,14 @@ escape_ssl_string([$  | S], ending) ->
 
 format_ssl_type_and_value(Type, Value) ->
     FV = format_ssl_value(Value),
-    Fmts = [{?'id-at-commonName', "CN=~s"}, {?'id-at-countryName', "C=~s"},
-            {?'id-at-organizationName', "O=~s"},
-            {?'id-at-organizationalUnitName', "OU=~s"},
-            {?'street-address', "STREET=~s"},
-            {?'id-domainComponent', "DC=~s"},
-            {?'id-at-stateOrProvinceName', "ST=~sp"},
-            {?'id-at-localityName', "L=~s"}],
+    Fmts = [{?'id-at-commonName'             , "CN=~s"},
+            {?'id-at-countryName'            , "C=~s"},
+            {?'id-at-organizationName'       , "O=~s"},
+            {?'id-at-organizationalUnitName' , "OU=~s"},
+            {?'street-address'               , "STREET=~s"},
+            {?'id-domainComponent'           , "DC=~s"},
+            {?'id-at-stateOrProvinceName'    , "ST=~s"},
+            {?'id-at-localityName'           , "L=~s"}],
     case proplists:lookup(Type, Fmts) of
         none      -> io_lib:format("~p:~p", [Type, FV]);
         {_, Fmt}  -> io_lib:format(Fmt, [FV])
