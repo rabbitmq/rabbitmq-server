@@ -83,12 +83,6 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
--rabbit_boot_step({rabbit_hooks,
-                   [{description, "internal event notification system"},
-                    {mfa,         {rabbit_hooks, start, []}},
-                    {requires,    external_infrastructure},
-                    {enables,     kernel_ready}]}).
-
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -211,8 +205,7 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers(),
-    ok = rabbit_mnesia:ensure_mnesia_dir().
+    ok = ensure_working_log_handlers().
 
 start() ->
     try

@@ -46,11 +46,17 @@
 
 -type(routing_key() :: binary()).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
+-type(qpids() :: [pid()]).
 
 -spec(deliver/2 ::
-        ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
+        ([qpids()], rabbit_types:delivery()) -> {routing_result(), [qpids()]}).
 -spec(deliver_by_queue_names/2 ::
-        ([binary()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
+        ([binary()], rabbit_types:delivery()) -> {routing_result(), [qpids()]}).
+-spec(match_bindings/2 :: (rabbit_exchange:name(),
+                           fun ((rabbit_types:binding()) -> boolean())) ->
+    qpids()).
+-spec(match_routing_key/2 :: (rabbit_exchange:name(), routing_key() | '_') ->
+                                  qpids()).
 
 -endif.
 

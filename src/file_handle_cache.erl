@@ -131,6 +131,7 @@
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
 -export([obtain/0, transfer/1, set_limit/1, get_limit/0]).
+-export([ulimit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -242,6 +243,7 @@
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
+-spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
 
 -endif.
 
@@ -781,7 +783,11 @@ init([]) ->
                                       Watermark > 0) ->
                     Watermark;
                 _ ->
-                    ulimit()
+                    case ulimit() of
+                        infinity -> infinity;
+                        unknown  -> ?FILE_HANDLES_LIMIT_OTHER;
+                        Lim      -> lists:max([2, Lim - ?RESERVED_FOR_OTHERS])
+                    end
             end,
     ObtainLimit = obtain_limit(Limit),
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
@@ -1131,7 +1137,7 @@ track_client(Pid, Clients) ->
 ulimit() ->
     case os:type() of
         {win32, _OsName} ->
-            ?FILE_HANDLES_LIMIT_WINDOWS - ?RESERVED_FOR_OTHERS;
+            ?FILE_HANDLES_LIMIT_WINDOWS;
         {unix, _OsName} ->
             %% Under Linux, Solaris and FreeBSD, ulimit is a shell
             %% builtin, not a command. In OS X, it's a command.
@@ -1141,16 +1147,14 @@ ulimit() ->
                 "unlimited" ->
                     infinity;
                 String = [C|_] when $0 =< C andalso C =< $9 ->
-                    Num = list_to_integer(
-                            lists:takewhile(
-                              fun (D) -> $0 =< D andalso D =< $9 end, String)) -
-                        ?RESERVED_FOR_OTHERS,
-                    lists:max([1, Num]);
+                    list_to_integer(
+                      lists:takewhile(
+                        fun (D) -> $0 =< D andalso D =< $9 end, String));
                 _ ->
                     %% probably a variant of
                     %% "/bin/sh: line 1: ulimit: command not found\n"
-                    ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+                    unknown
             end;
         _ ->
-            ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+            unknown
     end.

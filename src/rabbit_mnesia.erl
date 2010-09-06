@@ -169,10 +169,6 @@ table_definitions() ->
        {attributes, record_info(fields, vhost)},
        {disc_copies, [node()]},
        {match, #vhost{_='_'}}]},
-     {rabbit_config,
-      [{attributes, [key, val]},                % same mnesia's default
-       {disc_copies, [node()]},
-       {match, {rabbit_config, '_', '_'}}]},
      {rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
