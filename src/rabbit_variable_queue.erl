@@ -409,6 +409,7 @@ init(QueueName, IsDurable, Recover) ->
     Self = self(),
     rabbit_msg_store:register_sync_callback(
       ?PERSISTENT_MSG_STORE,
+      PRef,
       fun (Guids) ->
               msgs_written_to_disk(Self, Guids)
       end),
