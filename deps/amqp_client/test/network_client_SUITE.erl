@@ -131,13 +131,11 @@ shortstr_overflow_field_test() ->
 repeat(Fun, Times) ->
     [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
 
-new_connection(Params) ->
-    {ok, Pid} = amqp_connection:start(network, Params),
-    Pid.
-
 new_connection() ->
-    {ok, Pid} = amqp_connection:start(network),
-    Pid.
+    new_connection(#amqp_params{}).
+
+new_connection(Params) ->
+    amqp_connection:start_network_link(Params).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
