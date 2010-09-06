@@ -894,7 +894,7 @@ get_ssl_validity(#'OTPCertificate' {
                     tbsCertificate = #'OTPTBSCertificate' {
                       validity = Validity }}) ->
     case extract_ssl_values(Validity) of
-        {'validity', Start, End} -> io_lib:format("~s:~s", [Start, End]);
+        {'validity', Start, End} -> io_lib:format("~s to ~s", [Start, End]);
         V                        -> V
     end.
 
@@ -960,8 +960,10 @@ format_ssl_value({printableString, S}) ->
     S;
 format_ssl_value({utf8String, Bin}) ->
     Bin;
-format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2 | _]}) ->
-    io_lib:format("20~c~c-~c~c-~c~c", [Y1, Y2, M1, M2, D1, D2]);
+format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
+                            Min1, Min2, S1, S2, $Z]}) ->
+    io_lib:format("20~c~c-~c~c-~c~c ~c~c:~c~c:~c~c",
+                  [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 format_ssl_value(V) ->
     V.
 
