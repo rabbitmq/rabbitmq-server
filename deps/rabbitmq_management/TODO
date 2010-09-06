@@ -1,6 +1,3 @@
-Before preview release:
-Figure out supervision.
-
 Before first release:
 Write remaining management:
   Exchange / queue arguments support
@@ -16,6 +13,7 @@ Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
 Fix backing queue status breakage.
+Fix management plugin shutdown.
 
 Then:
 Figure out something sensible to do with time series.
@@ -34,6 +32,7 @@ Client side sorting / pagination / filtering.
 client-side column hiding for message rates.
 Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
+Backup / restore entire state (except messages).
 
 Less urgent:
 Add more stats (bug 22996).
@@ -44,3 +43,4 @@ Sampling.
 Add more OS-y, Erlang-y things to overview(?)
 Catch up if mgmt application is restarted.
 Queues with server generated names
+Backup / restore entire state (with messages) (sane?)

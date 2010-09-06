@@ -30,19 +30,27 @@
 -define(SETUP_WM_LOGGING, false).
 
 start(_Type, _StartArgs) ->
-    Port =
-        case application:get_env(rabbit_mochiweb, port) of
-            undefined ->
-                exit(mochiweb_port_not_configured);
-            {ok, P} ->
-                S = io_lib:format("~s", ["management plugin"]),
-                io:format("starting ~-60s ...", [S]),
-                P
-        end,
+    io:format("starting ~-60s ...",
+              [io_lib:format("~s", ["management plugin"])]),
     application:set_env(rabbit, collect_statistics, fine),
-    Res = rabbit_mgmt_sup:start_link(),
-    %% TODO is this supervised correctly?
-    rabbit_mgmt_db:start(),
+    register_contexts(),
+    Sup = rabbit_mgmt_sup:start_link(),
+    io:format("done~n"),
+    log_startup(),
+    case ?SETUP_WM_LOGGING of
+        true -> setup_wm_logging(".");
+        _    -> ok
+    end,
+    case ?SETUP_WM_TRACE of
+        true -> setup_wm_trace_app();
+        _    -> ok
+    end,
+    Sup.
+
+stop(_State) ->
+    ok.
+
+register_contexts() ->
     application:set_env(
       webmachine, dispatch_list,
       [{[?PREFIX|Path], F, A} ||
@@ -52,21 +60,7 @@ start(_Type, _StartArgs) ->
                                             "Management Console"),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
-                                             "HTTP API"),
-    io:format("done~n"),
-    log_startup(Port),
-    case ?SETUP_WM_LOGGING of
-        true -> setup_wm_logging(".");
-        _    -> ok
-    end,
-    case ?SETUP_WM_TRACE of
-        true -> setup_wm_trace_app();
-        _    -> ok
-    end,
-    Res.
-
-stop(_State) ->
-    ok.
+                                             "HTTP API").
 
 setup_wm_logging(LogDir) ->
     application:set_env(webmachine, webmachine_logger_module,
@@ -84,11 +78,19 @@ setup_wm_trace_app() ->
     rabbit_mochiweb:register_context_handler("wmtrace",
                                              fun webmachine_mochiweb:loop/1,
                                              "Webmachine tracer").
-log_startup(Port) ->
+log_startup() ->
     {ok, Hostname} = inet:gethostname(),
-    URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(Port),
+    URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(get_port()),
     rabbit_log:info(
       "RabbitMQ Management plugin started.~n"
       ++ "HTTP API:       ~s/~s/~n"
       ++ "Management UI:  ~s/~s/~n",
       [URLPrefix, ?PREFIX, URLPrefix, ?UI_PREFIX]).
+
+get_port() ->
+    case application:get_env(rabbit_mochiweb, port) of
+        undefined ->
+            exit(mochiweb_port_not_configured);
+        {ok, P} ->
+            P
+    end.

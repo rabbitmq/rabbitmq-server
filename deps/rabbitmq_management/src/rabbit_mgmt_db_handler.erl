@@ -18,21 +18,38 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_sup).
+-module(rabbit_mgmt_db_handler).
 
--behaviour(supervisor).
+-behaviour(gen_event).
 
--export([init/1]).
--export([start_link/0]).
+-export([add_handler/0]).
+
+-export([init/1, handle_call/2, handle_event/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+%%----------------------------------------------------------------------------
+
+add_handler() ->
+    gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
+
+%%----------------------------------------------------------------------------
 
 init([]) ->
-    CmdLineCache = {rabbit_mgmt_cmdline_cache,
-                    {rabbit_mgmt_cmdline_cache, start_link, []},
-                    permanent, 5000, worker, [rabbit_mgmt_cmdline_cache]},
-    DB = {rabbit_mgmt_db,
-          {rabbit_mgmt_db, start_link, []},
-          permanent, 5000, worker, [rabbit_mgmt_cmdline_cache]},
-    {ok, {{one_for_one, 10, 10}, [CmdLineCache, DB]}}.
+    {ok, []}.
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+handle_call(_Request, State) ->
+    {ok, not_understood, State}.
+
+handle_event(Event, State) ->
+%%    io:format("Got event ~p~n", [Event]),
+    rabbit_mgmt_db:event(Event),
+    {ok, State}.
+
+handle_info(_Info, State) ->
+    {ok, State}.
+
+terminate(_Arg, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.

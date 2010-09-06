@@ -22,9 +22,11 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--behaviour(gen_event).
+-behaviour(gen_server).
 
--export([start/0]).
+-export([start_link/0]).
+
+-export([event/1]).
 
 -export([get_queues/1, get_connections/0, get_connection/1,
          get_overview/0, get_channels/0, get_channel/1]).
@@ -33,8 +35,8 @@
 
 -export([pget/2, add/2, rates/5]).
 
--export([init/1, handle_call/2, handle_event/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -record(state, {tables}).
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
@@ -45,29 +47,31 @@
 %% TODO can this be got rid of?
 -define(FINE_STATS, [ack, deliver, deliver_no_ack, get, get_no_ack, publish]).
 
-
 %%----------------------------------------------------------------------------
 
-start() ->
-    gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+event(Event) ->
+    gen_server:cast(?MODULE, {event, Event}).
 
 get_queues(Qs) ->
-    gen_event:call(rabbit_event, ?MODULE, {get_queues, Qs}, infinity).
+    gen_server:call(?MODULE, {get_queues, Qs}, infinity).
 
 get_connections() ->
-    gen_event:call(rabbit_event, ?MODULE, get_connections, infinity).
+    gen_server:call(?MODULE, get_connections, infinity).
 
 get_connection(Name) ->
-    gen_event:call(rabbit_event, ?MODULE, {get_connection, Name}, infinity).
+    gen_server:call(?MODULE, {get_connection, Name}, infinity).
 
 get_channels() ->
-    gen_event:call(rabbit_event, ?MODULE, get_channels, infinity).
+    gen_server:call(?MODULE, get_channels, infinity).
 
 get_channel(Name) ->
-    gen_event:call(rabbit_event, ?MODULE, {get_channel, Name}, infinity).
+    gen_server:call(?MODULE, {get_channel, Name}, infinity).
 
 get_overview() ->
-    gen_event:call(rabbit_event, ?MODULE, get_overview, infinity).
+    gen_server:call(?MODULE, get_overview, infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -199,39 +203,40 @@ augment_msg_stats_items(Props, Tables) ->
 %% TODO some sort of generalised query mechanism for the coarse stats?
 
 init([]) ->
+    rabbit_mgmt_db_handler:add_handler(),
     {ok, #state{tables = orddict:from_list(
                            [{Key, ets:new(anon, [private])} ||
                                Key <- ?TABLES])}}.
 
-handle_call({get_queues, Qs0}, State = #state{tables = Tables}) ->
+handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
     Qs1 = merge_created_stats([queue_to_list(Q) || Q <- Qs0], Table),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
               Q <- Qs2],
-    {ok, Qs3, State};
+    {reply, Qs3, State};
 
-handle_call(get_connections, State = #state{tables = Tables}) ->
+handle_call(get_connections, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
-    {ok, [zero_old_rates(S) || S <- merge_created_stats(Table)], State};
+    {reply, [zero_old_rates(S) || S <- merge_created_stats(Table)], State};
 
-handle_call({get_connection, Name}, State = #state{tables = Tables}) ->
+handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
     Id = name_to_id(Table, Name),
-    {ok, result_or_error(lookup_element(Table, {Id, create}) ++
-                             zero_old_rates(
-                               lookup_element(Table, {Id, stats}))), State};
+    {reply, result_or_error(lookup_element(Table, {Id, create}) ++
+                                zero_old_rates(
+                                  lookup_element(Table, {Id, stats}))), State};
 
-handle_call(get_channels, State = #state{tables = Tables}) ->
+handle_call(get_channels, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Stats = merge_created_stats(Table),
     FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
     FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
-    {ok, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
+    {reply, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
      State};
 
-handle_call({get_channel, Name}, State = #state{tables = Tables}) ->
+handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Id = name_to_id(Table, Name),
     Chs = [lookup_element(Table, {Id, create})],
@@ -240,17 +245,35 @@ handle_call({get_channel, Name}, State = #state{tables = Tables}) ->
     FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
     FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
     [Res] = augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
-    {ok, result_or_error(Res), State};
+    {reply, result_or_error(Res), State};
 
-handle_call(get_overview, State = #state{tables = Tables}) ->
+handle_call(get_overview, _From, State = #state{tables = Tables}) ->
     FineQ = extract_singleton_fine_stats(
               get_fine_stats(channel_queue_stats, [], Tables)),
     FineX = extract_singleton_fine_stats(
               get_fine_stats(channel_exchange_stats, [], Tables)),
-    {ok, [{message_stats, FineX ++ FineQ}], State};
+    {reply, [{message_stats, FineX ++ FineQ}], State};
 
-handle_call(_Request, State) ->
-    {ok, not_understood, State}.
+handle_call(_Request, _From, State) ->
+    {reply, not_understood, State}.
+
+handle_cast({event, Event}, State) ->
+    handle_event(Event, State),
+    {noreply, State};
+
+handle_cast(_Request, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Arg, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%----------------------------------------------------------------------------
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -308,16 +331,6 @@ handle_event(Event = #event{type = channel_closed,
     {ok, State};
 
 handle_event(_Event, State) ->
-%%    io:format("Got event ~p~n", [Event]),
-    {ok, State}.
-
-handle_info(_Info, State) ->
-    {ok, State}.
-
-terminate(_Arg, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
