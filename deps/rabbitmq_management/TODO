@@ -1,4 +1,5 @@
-Before first release:
+Before first release
+====================
 Write remaining management:
   Exchange / queue arguments support
   Bindings arguments support
@@ -14,8 +15,13 @@ Fix refreshing.
 Write more thorough unit tests, especially around listings.
 Fix backing queue status breakage.
 Fix management plugin shutdown.
+Fix non-ASCII characters in names.
+Clustering management:
+  One rabbit_event / rabbit_mgmt_db per cluster
+  Per-node events to replace external_stats
 
-Then:
+Then
+====
 Figure out something sensible to do with time series.
   Cope with e.g. channel going away, want to view exchange / queue stats in the
   past.
@@ -34,11 +40,11 @@ Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
 Backup / restore entire state (except messages).
 
-Less urgent:
+Less urgent
+===========
 Add more stats (bug 22996).
 Write browser-level tests (from e.g. Selenium).
 Alarms(?).
-Clustering management.
 Sampling.
 Add more OS-y, Erlang-y things to overview(?)
 Catch up if mgmt application is restarted.
