@@ -35,8 +35,8 @@
 
 -export([check_login/2, user_pass_login/2,
          check_vhost_access/2, check_resource_access/3]).
--export([add_user/2, delete_user/1, change_password/2, list_users/0,
-         lookup_user/1]).
+-export([add_user/2, delete_user/1, change_password/2, set_admin/2,
+         list_users/0, lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
 -export([set_permissions/5, set_permissions/6, clear_permissions/2,
          list_vhost_permissions/1, list_user_permissions/1]).
@@ -68,6 +68,7 @@
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
+-spec(set_admin/2 :: (username(), boolean()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
 -spec(lookup_user/1 ::
         (username()) -> rabbit_types:ok(rabbit_types:user())
@@ -208,7 +209,8 @@ add_user(Username, Password) ->
                       [] ->
                           ok = mnesia:write(rabbit_user,
                                             #user{username = Username,
-                                                  password = Password},
+                                                  password = Password,
+                                                  is_admin = false},
                                             write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
@@ -248,6 +250,20 @@ change_password(Username, Password) ->
                                       write)
             end)),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
+    R.
+
+set_admin(Username, IsAdmin) ->
+    R = rabbit_misc:execute_mnesia_transaction(
+          rabbit_misc:with_user(
+            Username,
+            fun () ->
+                    ok = mnesia:write(rabbit_user,
+                                      #user{username = Username,
+                                            is_admin = IsAdmin},
+                                      write)
+            end)),
+    rabbit_log:info("Set user admin flag for user ~p to ~p~n",
+                    [Username, IsAdmin]),
     R.
 
 list_users() ->

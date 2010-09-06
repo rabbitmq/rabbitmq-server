@@ -401,7 +401,7 @@
 
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg> <arg choice="req"><replaceable>is_admin</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -412,12 +412,23 @@
                 <term>password</term>
                 <listitem><para>The password the created user will use to log in to the broker.</para></listitem>
               </varlistentry>
+
+              <varlistentry>
+                <term>is_admin</term>
+                <listitem><para>Whether the user is an administrative
+                user. This has no effect when the user logs in via
+                AMQP, but can be used to permit access to additional
+                features when the user logs in via some other means
+                (for example with the management
+                plugin).</para></listitem>
+              </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl add_user tonyg changeit</screen>
+            <screen role="example">rabbitmqctl add_user tonyg changeit true</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to create a
-              user named <command>tonyg</command> with (initial) password
+              This command instructs the RabbitMQ broker to create an
+              administrative user named <command>tonyg</command> with
+              (initial) password
               <command>changeit</command>.
             </para>
           </listitem>
@@ -460,6 +471,44 @@
               This command instructs the RabbitMQ broker to change the
               password for the user named <command>tonyg</command> to
               <command>newpass</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose administrative
+                status is to be set.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_admin tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to ensure the user
+               named <command>tonyg</command> is an administrator.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose administrative
+                status is to be cleared.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_admin tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to ensure the user
+               named <command>tonyg</command> is not an administrator.
             </para>
           </listitem>
         </varlistentry>
