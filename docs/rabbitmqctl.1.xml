@@ -830,22 +830,58 @@
             </para>
           </listitem>
         </varlistentry>
-      </variablelist>
 
-      <variablelist>
-        <varlistentry>
-          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>bindinginfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
-              By default the bindings for the <command>/</command> virtual
-              host are returned. The "-p" flag can be used to override
-              this default.  Each result row will contain an exchange
-              name, queue name, routing key and binding arguments, in
-              that order. Non-ASCII characters will be escaped as in C.
+              Returns binding details. By default the bindings for
+              the <command>/</command> virtual host are returned. The
+              "-p" flag can be used to override this default.
             </para>
-            <para role="usage">
-              The output format for "list_bindings" is a list of rows containing
-              exchange name, queue name, routing key and arguments, in that order.
+            <para>
+              The <command>bindinginfoitem</command> parameter is used
+              to indicate which binding information items to include
+              in the results. The column order in the results will
+              match the order of the parameters.
+              <command>bindinginfoitem</command> can take any value
+              from the list that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>exchange_name</term>
+                <listitem><para>The name of the exchange to which the
+                binding is attached. with non-ASCII characters
+                escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>queue_name</term>
+                <listitem><para>The name of the queue to which the
+                binding is attached. with non-ASCII characters
+                escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>routing_key</term>
+                <listitem><para>The binding's routing key, with
+                non-ASCII characters escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>arguments</term>
+                <listitem><para>The binding's arguments.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>bindinginfoitem</command>s are specified then
+              all above items are displayed.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl list_bindings -p /myvhost exchange_name queue_name</screen>
+            <para role="example">
+              This command displays the exchange name and queue name
+              of the bindings in the virtual host
+              named <command>/myvhost</command>.
             </para>
           </listitem>
         </varlistentry>

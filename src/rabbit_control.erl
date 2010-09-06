@@ -246,14 +246,14 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
                                [VHostArg, ArgAtoms]),
                       ArgAtoms);
 
-action(list_bindings, Node, _Args, Opts, Inform) ->
+action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    InfoKeys = [exchange_name, queue_name, routing_key, args],
-    display_info_list(
-      [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_binding, list, [VHostArg])],
-      InfoKeys);
+    ArgAtoms = default_if_empty(Args, [exchange_name, queue_name,
+                                       routing_key, arguments]),
+    display_info_list(rpc_call(Node, rabbit_binding, info_all,
+                               [VHostArg, ArgAtoms]),
+                      ArgAtoms);
 
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),

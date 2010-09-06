@@ -805,7 +805,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:add/5,
+    binding_action(fun rabbit_binding:add/2,
                    ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                    #'queue.bind_ok'{}, NoWait, State);
 
@@ -813,7 +813,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:remove/5,
+    binding_action(fun rabbit_binding:remove/2,
                    ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                    #'queue.unbind_ok'{}, false, State);
 
@@ -893,7 +893,10 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
+    case Fun(#binding{exchange_name = ExchangeName,
+                      queue_name    = QueueName,
+                      key           = ActualRoutingKey,
+                      args          = Arguments},
              fun (_X, Q) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                      catch exit:Reason -> {error, Reason}
