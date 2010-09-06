@@ -19,6 +19,7 @@ Fix non-ASCII characters in names.
 Clustering management:
   One rabbit_event / rabbit_mgmt_db per cluster
   Per-node events to replace external_stats
+Start earlier in the boot sequence (before queue recovery).
 
 Then
 ====

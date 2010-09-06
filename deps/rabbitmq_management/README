@@ -1,36 +1,17 @@
 WARNING: this is experimental, unstable, unfinished. Do not rely on any
 APIs exposed. Do not rely on it not to crash your server.
 
-This is a normal RabbitMQ plugin. For detailed installation instructions
-go to:
-        http://www.rabbitmq.com/admin-guide.html#installing-plugins
+See BUILDING for information on building. For a binary version of this
+plugin for the latest released RabbitMQ, go to
+http://www.rabbitmq.com/plugins.html.
 
-A summary:
-
-    hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella/
-    cd rabbitmq-public-umbrella
-    make co
-    make
-    hg clone http://hg.rabbitmq.com/rabbitmq-management/
-    cd rabbitmq-management
-    make
-
-After that in the directory 'rabbitmq-public-umbrella/rabbitmq-management' you
-should be able to see the plugins:
-    $ ls dist
-    amqp_client.ez  rabbit_common.ez     rabbitmq-management.ez  webmachine.ez
-    mochiweb.ez     rabbitmq-management  rabbitmq-mochiweb.ez
-
-To install them to a local RabbitMQ instance you need to copy all of the *.ez
-files into your rabbit plugins *except* rabbit_common.ez.
-
-For example:
-
-    cp rabbitmq-mochiweb.ez mochiweb.ez webmachine.ez \
-        amqp_client.ez rabbitmq-management.ez \
-        /usr/lib/rabbitmq/lib/rabbitmq_server-2.0.0/plugins
-    rabbitmq-activate-plugins
-
-Finally, restart RabbitMQ and point your browser to
+When installed, point your broswer at:
 
 http://<server>:55672/mgmt/
+
+and log in with AMQP credentials (guest/guest by default).
+
+Documentation for the HTTP API can be found at
+
+http://<server>:55672/api/
+
