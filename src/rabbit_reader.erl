@@ -33,6 +33,8 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
+-compile(export_all).
+
 -include_lib("public_key/include/public_key.hrl").
 
 -export([start_link/3, info_keys/0, info/1, info/2, shutdown/2]).
@@ -874,7 +876,7 @@ get_ssl_info(F, Sock) ->
             try F(Cert)  %% here be dragons; decompose an undocumented
                          %% structure
             catch
-                _ -> unknown
+                _:_ -> unknown
             end
     end.
 
@@ -912,15 +914,41 @@ extract_ssl_values_list([V|Rest]) ->
 extract_ssl_values_list([]) ->
     [].
 
+format_ssl_subject([C]) ->
+    [escape_ssl_string(C, start)];
 format_ssl_subject([C|Cs]) ->
-    ["/", C | format_ssl_subject(Cs)];
+    [escape_ssl_string(C, start), "," | format_ssl_subject(Cs)];
 format_ssl_subject([]) ->
-    ["/"].
+    [].
+
+escape_ssl_string([], _) ->
+    [];
+escape_ssl_string([$  | S], start) ->
+    ["\\ " | escape_ssl_string(S, start)];
+escape_ssl_string([$# | S], start) ->
+    ["\\#" | escape_ssl_string(S, start)];
+escape_ssl_string(S, start) ->
+    escape_ssl_string(S, middle);
+escape_ssl_string([$  | S], middle) ->
+    case lists:filter(fun(C) -> C =/= $  end, S) of
+        []    -> escape_ssl_string([$  | S], ending);
+        [_|_] -> [" " | escape_ssl_string(S, middle)]
+    end;
+escape_ssl_string([C | S], middle) ->
+    case lists:member(C, ",+\"\\<>;") of
+        false -> [C | escape_ssl_string(S, middle)];
+        true  -> ["\\", C | escape_ssl_string(S, middle)]
+    end;
+escape_ssl_string([$  | S], ending) ->
+    ["\\ " | escape_ssl_string(S, ending)].
 
 format_ssl_type_and_value(Type, Value) ->
     FV = format_ssl_value(Value),
     Fmts = [{?'id-at-commonName', "CN=~s"}, {?'id-at-countryName', "C=~s"},
             {?'id-at-organizationName', "O=~s"},
+            {?'id-at-organizationalUnitName', "OU=~s"},
+            {?'street-address', "STREET=~s"},
+            {?'id-domainComponent', "DC=~s"},
             {?'id-at-stateOrProvinceName', "ST=~sp"},
             {?'id-at-localityName', "L=~s"}],
     case proplists:lookup(Type, Fmts) of
