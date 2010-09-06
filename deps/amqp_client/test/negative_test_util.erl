@@ -61,6 +61,7 @@ bogus_rpc_test(Connection) ->
     amqp_connection:close(Connection).
 
 hard_error_test(Connection) ->
+    unlink(Connection),
     Channel = amqp_connection:open_channel(Connection),
     Qos = #'basic.qos'{global = true},
     try amqp_channel:call(Channel, Qos) of
@@ -132,18 +133,22 @@ shortstr_overflow_field_test(Connection) ->
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    ?assertThrow({error, {auth_failure_likely, _}},
+                 network_client_SUITE:new_connection(Params)).
 
 invalid_password_test() ->
     Params = #amqp_params{username = <<"guest">>,
                           password = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    ?assertThrow({error, {auth_failure_likely, _}},
+                 network_client_SUITE:new_connection(Params)).
 
 non_existent_vhost_test() ->
     Params = #amqp_params{virtual_host = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    ?assertThrow({error, {auth_failure_likely, _}},
+                 network_client_SUITE:new_connection(Params)).
 
 no_permission_test() ->
     Params = #amqp_params{username = <<"test_user_no_perm">>,
                           password = <<"test_user_no_perm">>},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    ?assertThrow({error, {auth_failure_likely, _}},
+                 network_client_SUITE:new_connection(Params)).

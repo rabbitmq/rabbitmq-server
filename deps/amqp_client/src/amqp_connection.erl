@@ -34,6 +34,7 @@
 
 -export([open_channel/1, open_channel/2]).
 -export([start/1, start/2]).
+-export([start_link/1, start_link/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
@@ -77,6 +78,9 @@
 start(Type) ->
     start(Type, #amqp_params{}).
 
+start_link(Type) ->
+    start_link(Type, #amqp_params{}).
+
 %% @spec (Type, amqp_params()) -> {ok, Connection} | {error, Error}
 %% where
 %%      Type = network | direct
@@ -86,12 +90,17 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(direct, AmqpParams) ->
-    start_internal(AmqpParams, amqp_direct_connection);
+    start_internal(AmqpParams, amqp_direct_connection, false);
 start(network, AmqpParams) ->
-    start_network_internal(AmqpParams).
+    start_network_internal(AmqpParams, false).
 
-start_network_internal(#amqp_params{} = AmqpParams) ->
-    case start_internal(AmqpParams, amqp_network_connection) of
+start_link(direct, AmqpParams) ->
+    start_internal(AmqpParams, amqp_direct_connection, true);
+start_link(network, AmqpParams) ->
+    start_network_internal(AmqpParams, true).
+
+start_network_internal(#amqp_params{} = AmqpParams, Link) ->
+    case start_internal(AmqpParams, amqp_network_connection, Link) of
         {ok, Pid} ->
             {ok, Pid};
         {error, {protocol_version_mismatch, _, _}} = Err ->
@@ -100,7 +109,9 @@ start_network_internal(#amqp_params{} = AmqpParams) ->
             throw({error, {auth_failure_likely, Bad}})
     end.
 
-start_internal(Params, Module) when is_atom(Module) ->
+start_internal(Params, Module, false) when is_atom(Module) ->
+    gen_server:start(Module, Params, []);
+start_internal(Params, Module, true) when is_atom(Module) ->
     gen_server:start_link(Module, Params, []).
 
 %%---------------------------------------------------------------------------
