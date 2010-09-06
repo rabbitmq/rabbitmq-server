@@ -252,7 +252,7 @@ action(list_bindings, Node, _Args, Opts, Inform) ->
     InfoKeys = [exchange_name, queue_name, routing_key, args],
     display_info_list(
       [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_exchange, list_bindings, [VHostArg])],
+          X <- rpc_call(Node, rabbit_binding, list, [VHostArg])],
       InfoKeys);
 
 action(list_connections, Node, Args, _Opts, Inform) ->

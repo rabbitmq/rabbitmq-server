@@ -805,17 +805,17 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:add_binding/5, ExchangeNameBin,
-                   QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
-                   NoWait, State);
+    binding_action(fun rabbit_binding:add/5,
+                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   #'queue.bind_ok'{}, NoWait, State);
 
 handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:delete_binding/5, ExchangeNameBin,
-                   QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
-                   false, State);
+    binding_action(fun rabbit_binding:remove/5,
+                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   #'queue.unbind_ok'{}, false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},

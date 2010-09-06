@@ -79,8 +79,8 @@ parse_x_match(Other) ->
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
-%% (rabbit_misc:sort_field_table) that route/3 and
-%% rabbit_exchange:{add,delete}_binding/4 do.
+%% (rabbit_misc:sort_field_table) that publish/1 and
+%% rabbit_binding:{add,remove}/5 do.
 %%
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
