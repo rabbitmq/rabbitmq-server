@@ -26,13 +26,13 @@
 -export([start_link/0]).
 
 init([]) ->
-    CmdLineCache = {rabbit_mgmt_cmdline_cache,
-                    {rabbit_mgmt_cmdline_cache, start_link, []},
-                    permanent, 5000, worker, [rabbit_mgmt_cmdline_cache]},
+    ExternalStats = {rabbit_mgmt_external_stats,
+                     {rabbit_mgmt_external_stats, start_link, []},
+                     permanent, 5000, worker, [rabbit_mgmt_external_stats]},
     DB = {rabbit_mgmt_db,
           {rabbit_mgmt_db, start_link, []},
-          permanent, 5000, worker, [rabbit_mgmt_cmdline_cache]},
-    {ok, {{one_for_one, 10, 10}, [CmdLineCache, DB]}}.
+          permanent, 5000, worker, [rabbit_mgmt_external_stats]},
+    {ok, {{one_for_one, 10, 10}, [ExternalStats, DB]}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).

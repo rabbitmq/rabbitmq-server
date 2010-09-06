@@ -22,7 +22,7 @@
 %% TODO this is vestigal from the status plugin. Do we need a caching
 %% mechanism for the os-level info this returns?
 
--module(rabbit_mgmt_cmdline_cache).
+-module(rabbit_mgmt_external_stats).
 
 -behaviour(gen_server).
 

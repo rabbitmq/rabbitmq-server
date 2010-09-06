@@ -34,7 +34,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    OSStats = rabbit_mgmt_cmdline_cache:info(),
+    OSStats = rabbit_mgmt_external_stats:info(),
     Overview = rabbit_mgmt_db:get_overview(),
     rabbit_mgmt_util:reply(
       OSStats ++ Overview ++
