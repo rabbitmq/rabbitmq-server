@@ -704,7 +704,7 @@
             <variablelist>
               <varlistentry>
                 <term>name</term>
-                <listitem><para>The name of the queue with non-ASCII characters URL-escaped.</para></listitem>
+                <listitem><para>The name of the queue with non-ASCII characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>durable</term>
@@ -795,7 +795,7 @@
             <variablelist>
               <varlistentry>
                 <term>name</term>
-                <listitem><para>The name of the exchange with non-ASCII characters URL-escaped.</para></listitem>
+                <listitem><para>The name of the exchange with non-ASCII characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>type</term>
@@ -841,7 +841,7 @@
               host are returned. The "-p" flag can be used to override
               this default.  Each result row will contain an exchange
               name, queue name, routing key and binding arguments, in
-              that order. Non-ASCII characters will be URL-encoded.
+              that order. Non-ASCII characters will be escaped as in C.
             </para>
             <para role="usage">
               The output format for "list_bindings" is a list of rows containing
@@ -904,7 +904,7 @@
               </varlistentry>
               <varlistentry>
                 <term>vhost</term>
-                <listitem><para>Virtual host name with non-ASCII characters URL-escaped.</para></listitem>
+                <listitem><para>Virtual host name with non-ASCII characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>timeout</term>
