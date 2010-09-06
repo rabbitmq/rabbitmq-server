@@ -826,12 +826,9 @@ i(peer_address, #v1{sock = Sock}) ->
 i(ssl_issuer, #v1{sock = Sock}) ->
     get_ssl_info(fun get_ssl_issuer/1, Sock);
 i(ssl_subject, #v1{sock = Sock}) ->
-    get_ssl_info(fun (Cert) ->
-                         TBSCert = Cert#'OTPCertificate'.tbsCertificate,
-                         Subj = TBSCert#'OTPTBSCertificate'.subject,
-                         {ok, Subj}
-                 end,
-                 Sock);
+    get_ssl_info(fun get_ssl_subject/1, Sock);
+i(ssl_validity, #v1{sock = Sock}) ->
+    get_ssl_info(fun get_ssl_validity/1, Sock);
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
@@ -870,39 +867,74 @@ i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
 get_ssl_info(F, Sock) ->
-    io:format("Peer cert: ~p~n", [rabbit_net:peercert(Sock)]),
     case rabbit_net:peercert(Sock) of
         nossl               -> nossl;
         no_peer_certificate -> no_peer_certificate;
         {ok, Cert}          ->
-            F(Cert)
+            try F(Cert)  %% here be dragons; decompose an undocumented
+                         %% structure
+            catch
+                _ -> unknown
+            end
     end.
 
 get_ssl_issuer(#'OTPCertificate' {
                   tbsCertificate = #'OTPTBSCertificate' {
                     issuer = Issuer }}) ->
-    case extract_ssl_values(Issuer) of
-        [I] -> I;
-        _   -> cantsay
-    end;
-get_ssl_issuer(_) ->
-    cantsay.
+    format_ssl_subject(extract_ssl_values(Issuer)).
+
+get_ssl_subject(#'OTPCertificate' {
+                   tbsCertificate = #'OTPTBSCertificate' {
+                     subject = Subject }}) ->
+    format_ssl_subject(extract_ssl_values(Subject)).
+
+get_ssl_validity(#'OTPCertificate' {
+                    tbsCertificate = #'OTPTBSCertificate' {
+                      validity = Validity }}) ->
+    case extract_ssl_values(Validity) of
+        {'validity', Start, End} -> io_lib:format("~s:~s", [Start, End]);
+        V                        -> V
+    end.
+
 
 extract_ssl_values({rdnSequence, List}) ->
-    extract_ssl_values2(List).
+    extract_ssl_values_list(List);
+extract_ssl_values({'Validity', Start, End}) ->
+    {'validity', format_ssl_value(Start), format_ssl_value(End)};
+extract_ssl_values(V) ->
+    V.
 
-extract_ssl_values2([[#'AttributeTypeAndValue'{value = V}] | Rest]) ->
-    [parse_erlang_value(V) | extract_ssl_values2(Rest)];
-extract_ssl_values2([_|Rest]) ->
-    extract_ssl_values2(Rest);
-extract_ssl_values2([]) ->
+extract_ssl_values_list([[#'AttributeTypeAndValue'{type = T, value = V}]
+                         | Rest]) ->
+    [format_ssl_type_and_value(T, V) | extract_ssl_values_list(Rest)];
+extract_ssl_values_list([V|Rest]) ->
+    [io_lib:format("~p", V) | extract_ssl_values_list(Rest)];
+extract_ssl_values_list([]) ->
     [].
 
-parse_erlang_value({printableString, S}) ->
+format_ssl_subject([C|Cs]) ->
+    ["/", C | format_ssl_subject(Cs)];
+format_ssl_subject([]) ->
+    ["/"].
+
+format_ssl_type_and_value(Type, Value) ->
+    FV = format_ssl_value(Value),
+    Fmts = [{?'id-at-commonName', "CN=~s"}, {?'id-at-countryName', "C=~s"},
+            {?'id-at-organizationName', "O=~s"},
+            {?'id-at-stateOrProvinceName', "ST=~sp"},
+            {?'id-at-localityName', "L=~s"}],
+    case proplists:lookup(Type, Fmts) of
+        none      -> io_lib:format("~p:~p", [Type, FV]);
+        {_, Fmt}  -> io_lib:format(Fmt, [FV])
+    end.
+
+format_ssl_value({printableString, S}) ->
     S;
-parse_erlang_value({utf8String, Bin}) ->
+format_ssl_value({utf8String, Bin}) ->
     Bin;
-parse_erlang_value(V) ->
+format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2 | _]}) ->
+    io_lib:format("20~c~c-~c~c-~c~c", [Y1, Y2, M1, M2, D1, D2]);
+format_ssl_value(V) ->
     V.
 
 

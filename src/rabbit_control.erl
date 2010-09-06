@@ -322,6 +322,10 @@ format_info_item(Key, Items) ->
         Value when Key =:= address; Key =:= peer_address andalso
                    is_tuple(Value) ->
             inet_parse:ntoa(Value);
+        Value when Key =:= ssl_issuer; Key =:= ssl_subject;
+                   Key =:= ssl_validity andalso
+                   is_list(Value) ->
+            escape(Value);
         Value when is_pid(Value) ->
             rabbit_misc:pid_to_string(Value);
         Value when is_binary(Value) ->
