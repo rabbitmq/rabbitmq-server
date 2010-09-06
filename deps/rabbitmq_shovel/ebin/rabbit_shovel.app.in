@@ -3,8 +3,10 @@
   {vsn, "%%VSN%%"},
   {modules, [
     rabbit_shovel,
+    rabbit_shovel_status,
     rabbit_shovel_sup,
-    rabbit_shovel_worker
+    rabbit_shovel_worker,
+    uri_parser
   ]},
   {registered, []},
   {env, [{defaults, [{prefetch_count,     0},
