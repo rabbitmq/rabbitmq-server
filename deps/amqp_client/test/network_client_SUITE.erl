@@ -25,7 +25,7 @@
 
 -module(network_client_SUITE).
 
--export([test_coverage/0]).
+-export([test_coverage/0, new_connection/1]).
 
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -135,7 +135,7 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(Params) ->
-    amqp_connection:start_network_link(Params).
+    amqp_connection:start_network(Params).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

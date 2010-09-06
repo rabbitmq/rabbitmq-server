@@ -33,8 +33,8 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/1, open_channel/2]).
--export([start_direct_link/0, start_direct_link/1]).
--export([start_network_link/0, start_network_link/1]).
+-export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
+-export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
@@ -72,8 +72,11 @@
 %% set of amqp_params. If a different vhost or credential set is required,
 %% start_direct_link/1 should be used. The resulting
 %% process is linked to the invoking process.
+start_direct() ->
+    start(direct, #amqp_params{}, false).
+
 start_direct_link() ->
-    start(direct, #amqp_params{}).
+    start(direct, #amqp_params{}, true).
 
 %% @spec (amqp_params()) -> Connection
 %% where
@@ -81,8 +84,11 @@ start_direct_link() ->
 %% @doc Starts a direct connection to a RabbitMQ server, assuming that
 %% the server is running in the same process space. The resulting process
 %% is linked to the invoking process.
+start_direct(Params) ->
+    start(direct, Params, false).
+
 start_direct_link(Params) ->
-    start(direct, Params).
+    start(direct, Params, true).
 
 %% @spec () -> Connection
 %% where
@@ -91,16 +97,22 @@ start_direct_link(Params) ->
 %% connection settings are used, meaning that the server is expected
 %% to be at localhost:5672, with a vhost of "/" authorising a user
 %% guest/guest. The resulting process is linked to the invoking process.
+start_network() ->
+    start(network, #amqp_params{}, false).
+
 start_network_link() ->
-    start(network, #amqp_params{}).
+    start(network, #amqp_params{}, true).
 
 %% @spec (amqp_params()) -> Connection
 %% where
 %%      Connection = pid()
 %% @doc Starts a networked connection to a remote AMQP server. The resulting 
 %% process is linked to the invoking process.
+start_network(Params) ->
+    start(network, Params, false).
+
 start_network_link(Params) ->
-    start(network, Params).
+    start(network, Params, true).
 
 %% @spec (Type, amqp_params()) -> {ok, Connection} | {error, Error}
 %% where
@@ -110,10 +122,8 @@ start_network_link(Params) ->
 %% to a remote AMQP server or direct type for a direct connection to
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
-start(Type, AmqpParams) ->
-    {ok, Sup} = amqp_connection_sup:start_link(Type, AmqpParams),
-    %% This unlink will disappear as part of bug 23003
-    unlink(Sup),
+start(Type, AmqpParams, Link) ->
+    {ok, Sup} = amqp_connection_sup:start_link(Type, AmqpParams, Link),
     [Connection] = supervisor2:find_child(Sup, connection),
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection

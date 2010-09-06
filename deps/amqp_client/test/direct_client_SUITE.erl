@@ -103,7 +103,7 @@ channel_death_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    amqp_connection:start_direct_link().
+    amqp_connection:start_direct().
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

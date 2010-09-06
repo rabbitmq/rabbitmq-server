@@ -87,10 +87,7 @@ new_connection() ->
                       {keyfile, CertsDir ++ "/client/key.pem"},
                       {verify, verify_peer},
                       {fail_if_no_peer_cert, true}]},
-    Pid = amqp_connection:start_network_link(Params),
-    [{supervisor, Sup}] = amqp_connection:info(Pid, [supervisor]),
-    unlink(Sup),
-    Pid.
+    amqp_connection:start_network(Params).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

@@ -29,15 +29,19 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, AmqpParams) ->
+start_link(Type, AmqpParams, Link) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    case Link of
+        true  -> ok;
+        false -> unlink(Sup)
+    end,
     {ok, ChSupSup} = supervisor2:start_child(Sup,
                          {channel_sup_sup, {amqp_channel_sup_sup, start_link,
                                             [Type]},
