@@ -116,7 +116,12 @@ boot_ssl() ->
                                                  end}
                                    | SslOptsConfig]
                 end,
-            [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+            % In R13B04 and R14A (at least), rc4 is incorrectly implemented.
+            CSs = lists:filter(fun ({_, rc4_128, _}) -> false;
+                                   (_)               -> true
+                               end, ssl:cipher_suites()),
+            SslOpts1 = [{ciphers, CSs} | SslOpts],
+            [start_ssl_listener(Host, Port, SslOpts1) || {Host, Port} <- SslListeners],
             ok
     end.
 
