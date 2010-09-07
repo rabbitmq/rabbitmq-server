@@ -401,7 +401,7 @@
 
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg> <arg choice="req"><replaceable>is_admin</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -412,22 +412,12 @@
                 <term>password</term>
                 <listitem><para>The password the created user will use to log in to the broker.</para></listitem>
               </varlistentry>
-
-              <varlistentry>
-                <term>is_admin</term>
-                <listitem><para>Whether the user is an administrative
-                user. This has no effect when the user logs in via
-                AMQP, but can be used to permit access to additional
-                features when the user logs in via some other means
-                (for example with the management
-                plugin).</para></listitem>
-              </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl add_user tonyg changeit true</screen>
+            <screen role="example">rabbitmqctl add_user tonyg changeit</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to create an
-              administrative user named <command>tonyg</command> with
+              This command instructs the RabbitMQ broker to create a
+              (non-administrative) user named <command>tonyg</command> with
               (initial) password
               <command>changeit</command>.
             </para>
@@ -489,7 +479,11 @@
             <screen role="example">rabbitmqctl set_admin tonyg</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to ensure the user
-               named <command>tonyg</command> is an administrator.
+               named <command>tonyg</command> is an administrator. This has no
+               effect when the user logs in via AMQP, but can be used to permit
+               the user to manage users, virtual hosts and permissions when the
+               user logs in via some other means (for example with the
+               management plugin).
             </para>
           </listitem>
         </varlistentry>
@@ -520,7 +514,9 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_users</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to list all users.
+              This command instructs the RabbitMQ broker to list all
+              users. Each result row will contain the user name and
+              the administrator status of the user, in that order.
             </para>
           </listitem>
         </varlistentry>

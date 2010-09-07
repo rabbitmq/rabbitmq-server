@@ -496,7 +496,7 @@ insert_default_data() ->
     ok = rabbit_access_control:add_vhost(DefaultVHost),
     ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
     case DefaultAdmin of
-        true -> rabbit_access_control:set_admin(DefaultUser, true);
+        true -> rabbit_access_control:set_admin(DefaultUser);
         _    -> ok
     end,
     ok = rabbit_access_control:set_permissions(DefaultUser, DefaultVHost,

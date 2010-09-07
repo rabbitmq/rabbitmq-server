@@ -211,11 +211,11 @@ action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
 
 action(set_admin, Node, [Username], _Opts, Inform) ->
     Inform("Setting administrative status for user ~p", [Username]),
-    call(Node, {rabbit_access_control, set_admin, [Username, true]});
+    call(Node, {rabbit_access_control, set_admin, [Username]});
 
 action(clear_admin, Node, [Username], _Opts, Inform) ->
     Inform("Clearing administrative status for user ~p", [Username]),
-    call(Node, {rabbit_access_control, set_admin, [Username, false]});
+    call(Node, {rabbit_access_control, clear_admin, [Username]});
 
 action(list_users, Node, [], _Opts, Inform) ->
     Inform("Listing users", []),
