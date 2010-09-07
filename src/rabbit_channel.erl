@@ -175,9 +175,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = rabbit_event:init_stats_timer()},
-    rabbit_event:notify(
-      channel_created,
-      [{Item, i(Item, State)} || Item <- ?CREATION_EVENT_KEYS]),
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -807,17 +805,17 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:add_binding/5, ExchangeNameBin,
-                   QueueNameBin, RoutingKey, Arguments, #'queue.bind_ok'{},
-                   NoWait, State);
+    binding_action(fun rabbit_binding:add/2,
+                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   #'queue.bind_ok'{}, NoWait, State);
 
 handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_exchange:delete_binding/5, ExchangeNameBin,
-                   QueueNameBin, RoutingKey, Arguments, #'queue.unbind_ok'{},
-                   false, State);
+    binding_action(fun rabbit_binding:remove/2,
+                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   #'queue.unbind_ok'{}, false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
@@ -895,7 +893,10 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
+    case Fun(#binding{exchange_name = ExchangeName,
+                      queue_name    = QueueName,
+                      key           = ActualRoutingKey,
+                      args          = Arguments},
              fun (_X, Q) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                      catch exit:Reason -> {error, Reason}
@@ -1148,7 +1149,7 @@ update_measures(Type, QX, Inc, Measure) ->
         orddict:store(Measure, Cur + Inc, Measures)).
 
 internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
-    CoarseStats = [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS],
+    CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->
             rabbit_event:notify(channel_stats, CoarseStats);
