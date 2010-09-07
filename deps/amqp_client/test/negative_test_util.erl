@@ -80,9 +80,8 @@ channel_writer_death_test(Connection) ->
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
     ?assertExit(_, amqp_channel:call(Channel, Publish, Message)),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 %% An error in the channel process should result in the death of the entire
@@ -91,9 +90,8 @@ channel_writer_death_test(Connection) ->
 channel_death_test(Connection) ->
     Channel = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, bogus_message)),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 %% Attempting to send a shortstr longer than 255 bytes in a property field
@@ -108,9 +106,8 @@ shortstr_overflow_property_test(Connection) ->
     PBasic = #'P_basic'{content_type = SentString},
     AmqpMsg = #amqp_msg{payload = Payload, props = PBasic},
     ?assertExit(_, amqp_channel:call(Channel, Publish, AmqpMsg)),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 %% Attempting to send a shortstr longer than 255 bytes in a method's field
@@ -124,9 +121,8 @@ shortstr_overflow_field_test(Connection) ->
                        Channel, #'basic.consume'{queue = Q, no_ack = true,
                                                   consumer_tag = SentString},
                        self())),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 non_existent_user_test() ->
