@@ -74,7 +74,7 @@ delete_resource(ReqData, Context) ->
           ReqData, Context,
           #'queue.delete'{ queue = rabbit_mgmt_util:id(queue, ReqData) }),
         {true, ReqData, Context}
-    catch throw:{server_closed, Reason} ->
+    catch {server_closed, Reason} ->
             rabbit_mgmt_util:bad_request(
               list_to_binary(Reason), ReqData, Context)
     end.

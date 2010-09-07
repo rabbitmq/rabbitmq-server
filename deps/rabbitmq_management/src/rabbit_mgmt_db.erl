@@ -109,6 +109,7 @@ result_or_error([]) -> error;
 result_or_error(S)  -> S.
 
 rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
+    %% TODO do the filtering as part of the comprehension
     Stats ++ lists:filter(
                fun (unknown) -> false;
                    (_)       -> true
@@ -240,7 +241,7 @@ handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Id = name_to_id(Table, Name),
     Chs = [lookup_element(Table, {Id, create})],
-    %% TODO refactor this, and connection(s) above
+    %% TODO extract commonality between this and get_channels
     Stats = merge_created_stats(Chs, Table),
     FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
     FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),

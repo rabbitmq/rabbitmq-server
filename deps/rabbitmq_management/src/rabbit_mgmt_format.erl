@@ -28,6 +28,7 @@
 
 %%--------------------------------------------------------------------
 
+%% TODO rewrite using lists:concat([<filtering-list-comprehension>])
 format([], _Fs) ->
     [];
 format([{_Name, unknown}|Stats], Fs) ->
@@ -68,14 +69,14 @@ tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
 tuple(Term)                       -> Term.
 
 protocol(unknown)                  -> unknown;
-protocol({Major, Minor, 0})        -> print("~p-~p", [Major, Minor]);
-protocol({Major, Minor, Revision}) -> print("~p-~p-~p",
+protocol({Major, Minor, 0})        -> print("~w-~w", [Major, Minor]);
+protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
                                             [Major, Minor, Revision]).
 
 timestamp(unknown) ->
     unknown;
-timestamp({MegaSecs, Secs, MicroSecs}) ->
-    trunc(MegaSecs*1000000000 + Secs*1000 + MicroSecs/1000).
+timestamp(Timestamp) ->
+    timer:now_diff(now(), {0,0,0}) div 1000.
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).

@@ -40,14 +40,11 @@ is_authorized(ReqData, Context) ->
             Str = base64:mime_decode_to_string(Base64),
             [User, Pass] = [list_to_binary(S) || S <- string:tokens(Str, ":")],
             case rabbit_access_control:lookup_user(User) of
-                {ok, U}  ->
-                    case Pass == U#user.password of
-                        true ->
-                            {true, ReqData,
-                             Context#context{username = User, password = Pass}};
-                        false ->
-                            Unauthorized
-                    end;
+                {ok, #user{password = Pass1}} when Pass == Pass1  ->
+                    {true, ReqData, Context#context{username = User,
+                                                    password = Pass}};
+                {ok, #user{}} ->
+                    Unauthorized;
                 {error, _} ->
                     Unauthorized
             end;
@@ -70,8 +67,8 @@ vhost(ReqData) ->
     end.
 
 vhost_exists(VHostBin) ->
-    lists:any(fun (E) -> E == VHostBin end,
-              rabbit_access_control:list_vhosts()).
+    %% TODO call rabbit_access_control:vhost_exists/1 instead
+    lists:member(VHostBin, rabbit_access_control:list_vhosts()).
 
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
@@ -111,7 +108,7 @@ with_decode(Keys, ReqData, Context, Fun) ->
         {error, Reason} -> bad_request(Reason, ReqData, Context);
         Values          -> try
                                Fun(Values)
-                           catch throw:{error, Error} ->
+                           catch {error, Error} ->
                                    bad_request(Error, ReqData, Context)
                            end
     end.
@@ -127,6 +124,7 @@ decode(Keys, ReqData) ->
         ok -> Results =
                   [get_or_missing(list_to_binary(atom_to_list(K)), Json)
                    || K <- Keys],
+              %% TODO use a list comprehension instead
               case lists:filter(fun({key_missing, _}) -> true;
                                    (_)                -> false
                                 end, Results) of
@@ -149,14 +147,11 @@ get_or_missing(K, L) ->
         V         -> V
     end.
 
-parse_bool(V) ->
-    case V of
-        <<"true">>  -> true;
-        <<"false">> -> false;
-        true        -> true;
-        false       -> false;
-        _           -> throw({error, {not_boolean, V}})
-    end.
+parse_bool(<<"true">>)  -> true;
+parse_bool(<<"false">>) -> false;
+parse_bool(true)        -> true;
+parse_bool(false)       -> false;
+parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
 amqp_request(VHost, ReqData, Context, Method) ->
     try

@@ -60,6 +60,7 @@ get_total_fd_ulimit() ->
     {MaxFds, _} = string:to_integer(os:cmd("ulimit -n")),
     MaxFds.
 
+%% TODO replace with call to file_handle_cache:ulimit/0
 get_total_fd() ->
     get_total_fd(os:type()).
 
@@ -165,6 +166,8 @@ i(proc_total,  #state{proc_total = ProcTotal}) -> ProcTotal.
 %%--------------------------------------------------------------------
 
 init([]) ->
+    %% TODO obtain this information dynamically from
+    %% rabbit_networking:active_listeners(), or ditch it.
     {ok, Binds} = application:get_env(rabbit, tcp_listeners),
     BoundTo = lists:flatten(
                 [rabbit_mgmt_format:print("~s:~p", [Addr,Port]) ||

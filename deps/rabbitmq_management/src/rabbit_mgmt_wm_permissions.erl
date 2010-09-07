@@ -34,6 +34,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
+    %% TODO call rabbit_access_control:list_permissions instead
     Perms = lists:flatten(
               [[{V, P} ||
                    P <- rabbit_access_control:list_vhost_permissions(V)] ||

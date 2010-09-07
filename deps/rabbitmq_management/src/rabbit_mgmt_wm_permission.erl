@@ -89,6 +89,7 @@ perms(ReqData) ->
                 not_found ->
                     not_found;
                 VHost ->
+                    %% TODO call list_user_vhost_permissions instead
                     Perms = rabbit_access_control:list_user_permissions(User),
                     case [P || {V, _, _, _, _} = P <- Perms, V == VHost] of
                         [Perm] -> Perm;
