@@ -32,13 +32,18 @@
 -module(rabbit_ssl).
 
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("ssl/src/ssl_int.hrl").
 
--export([ssl_issuer/1, ssl_subject/1, ssl_validity/1]).
+-export([ssl_issuer/1, ssl_subject/1, ssl_validity/1, ssl_info/2]).
 
 
 %%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-type(ssl_info_fun() :: fun((#'OTPCertificate'{}) -> string())).
+
+-spec(ssl_info/2 :: (ssl_info_fun(), #'sslsocket'{}) -> any()).
 
 -spec(ssl_issuer/1 :: (#'OTPCertificate'{}) -> string()).
 -spec(ssl_subject/1 :: (#'OTPCertificate'{}) -> string()).
@@ -51,13 +56,29 @@
 %% High-level functions used by reader
 %%--------------------------------------------------------------------------
 
+%% Wrapper for applying a function to a socket's certificate.
+ssl_info(F, Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl               -> nossl;
+        no_peer_certificate -> no_peer_certificate;
+        {ok, Cert}          ->
+            try F(Cert)  %% here be dragons; decompose an undocumented
+                         %% structure
+            catch
+                C:E ->
+                    rabbit_log:info("Problems while processing SSL info: ~p:~p~n",
+                                    [C, E]),
+                    unknown
+            end
+    end.
+
 %% Return a string describing the certificate's issuer.
 ssl_issuer(#'OTPCertificate' {
               tbsCertificate = #'OTPTBSCertificate' {
                 issuer = Issuer }}) ->
     format_ssl_subject(extract_ssl_values(Issuer)).
 
-%% Return a string describing the certificate's subject, as per RFC2253.
+%% Return a string describing the certificate's subject, as per RFC4514.
 ssl_subject(#'OTPCertificate' {
                tbsCertificate = #'OTPTBSCertificate' {
                  subject = Subject }}) ->
@@ -90,9 +111,8 @@ extract_ssl_values(V) ->
 extract_ssl_values_list([[#'AttributeTypeAndValue'{type = T, value = V}]
                          | Rest]) ->
     [{T, V} | extract_ssl_values_list(Rest)];
-extract_ssl_values_list([V|Rest]) ->
-    rabbit_log:info("Found unexpected element ~p in an rdnSequence~n", [V]),
-    extract_ssl_values_list(Rest);
+extract_ssl_values_list([V|_]) ->
+    throw({unknown_rdnSequence_element, V});
 extract_ssl_values_list([]) ->
     [].
 
@@ -101,13 +121,14 @@ extract_ssl_values_list([]) ->
 %% Formatting functions
 %%--------------------------------------------------------------------------
 
-%% Convert a proplist to a RFC2253 subject string.
+%% Convert a proplist to a RFC4514 subject string.
 format_ssl_subject(RDNs) ->
     rabbit_misc:intersperse(
-      ",", [escape_ssl_string(format_ssl_type_and_value(T, V), start)
-            || {T, V} <- RDNs]).
+      ",", lists:reverse(
+             [escape_ssl_string(format_ssl_type_and_value(T, V), start)
+              || {T, V} <- RDNs])).
 
-%% Escape a string as per RFC2253.
+%% Escape a string as per RFC4514.
 escape_ssl_string([], _) ->
     [];
 escape_ssl_string([$  | S], start) ->
@@ -130,17 +151,25 @@ escape_ssl_string([$  | S], ending) ->
     ["\\ " | escape_ssl_string(S, ending)].
 
 %% Format a type-value pair as an RDN.  If the type name is unknown,
-%% use the dotted decimal representation.  See RFC2253, section 2.3.
+%% use the dotted decimal representation.  See RFC4514, section 2.3.
 format_ssl_type_and_value(Type, Value) ->
     FV = format_ssl_value(Value),
-    Fmts = [{?'id-at-commonName'             , "CN"},
-            {?'id-at-countryName'            , "C"},
+    Fmts = [{?'id-at-surname'                , "SN"},
+            {?'id-at-givenName'              , "GIVENNAME"},
+            {?'id-at-initials'               , "INITIALS"},
+            {?'id-at-generationQualifier'    , "GENERATIONQUALIFIER"},
+            {?'id-at-commonName'             , "CN"},
+            {?'id-at-localityName'           , "L"},
+            {?'id-at-stateOrProvinceName'    , "ST"},
             {?'id-at-organizationName'       , "O"},
             {?'id-at-organizationalUnitName' , "OU"},
-            {?'street-address'               , "STREET"},
-            {?'id-domainComponent'           , "DC"},
-            {?'id-at-stateOrProvinceName'    , "ST"},
-            {?'id-at-localityName'           , "L"}],
+            {?'id-at-title'                  , "TITLE"},
+            {?'id-at-countryName'            , "C"},
+            {?'id-at-serialNumber'           , "SERIALNUMBER"},
+            {?'id-at-pseudonym'              , "PSEUDONYM"},
+            {?'id-domainComponent'        , "DC"},
+            {?'id-emailAddress'              , "EMAILADDRESS"},
+            {?'street-address'               , "STREET"}],
     case proplists:lookup(Type, Fmts) of
         {_, Fmt} ->
             io_lib:format(Fmt ++ "=~s", [FV]);
