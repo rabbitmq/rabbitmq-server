@@ -52,6 +52,7 @@
 -type(password() :: binary()).
 -type(regexp() :: binary()).
 -type(scope() :: binary()).
+-type(scope_atom() :: 'client' | 'all').
 
 -spec(check_login/2 ::
         (binary(), binary()) -> rabbit_types:user() |
@@ -84,10 +85,12 @@
 -spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
         (rabbit_types:vhost())
-        -> [{username(), regexp(), regexp(), regexp()}]).
+        -> [{username(), regexp(), regexp(), regexp(),
+             scope_atom()}]).
 -spec(list_user_permissions/1 ::
         (username())
-        -> [{rabbit_types:vhost(), regexp(), regexp(), regexp()}]).
+        -> [{rabbit_types:vhost(), regexp(), regexp(), regexp(),
+             scope_atom()}]).
 
 -endif.
 
