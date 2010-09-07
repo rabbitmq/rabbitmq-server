@@ -160,7 +160,6 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
-permission_index(scope)     -> #permission.scope;
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
 permission_index(read)      -> #permission.read.
