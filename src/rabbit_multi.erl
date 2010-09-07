@@ -310,8 +310,7 @@ kill_wait(Pid, TimeLeft, Forceful) ->
 is_dead(Pid) ->
     PidS = integer_to_list(Pid),
     with_os([{unix, fun () ->
-                            Res = os:cmd("ps --no-headers --pid " ++ PidS),
-                            Res == ""
+                            os:cmd("kill -0 " ++ PidS) /= ""
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
