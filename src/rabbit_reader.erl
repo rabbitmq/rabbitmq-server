@@ -942,20 +942,28 @@ escape_ssl_string([C | S], middle) ->
 escape_ssl_string([$  | S], ending) ->
     ["\\ " | escape_ssl_string(S, ending)].
 
+%% A few common attribute type names, as described by RFC 2253 (2.3)
 format_ssl_type_and_value(Type, Value) ->
     FV = format_ssl_value(Value),
-    Fmts = [{?'id-at-commonName'             , "CN=~s"},
-            {?'id-at-countryName'            , "C=~s"},
-            {?'id-at-organizationName'       , "O=~s"},
-            {?'id-at-organizationalUnitName' , "OU=~s"},
-            {?'street-address'               , "STREET=~s"},
-            {?'id-domainComponent'           , "DC=~s"},
-            {?'id-at-stateOrProvinceName'    , "ST=~s"},
-            {?'id-at-localityName'           , "L=~s"}],
+    Fmts = [{?'id-at-commonName'             , "CN"},
+            {?'id-at-countryName'            , "C"},
+            {?'id-at-organizationName'       , "O"},
+            {?'id-at-organizationalUnitName' , "OU"},
+            {?'street-address'               , "STREET"},
+            {?'id-domainComponent'           , "DC"},
+            {?'id-at-stateOrProvinceName'    , "ST="},
+            {?'id-at-localityName'           , "L="}],
     case proplists:lookup(Type, Fmts) of
-        none      -> io_lib:format("~p:~p", [Type, FV]);
-        {_, Fmt}  -> io_lib:format(Fmt, [FV])
+        {_, Fmt}  -> io_lib:format(Fmt ++ "=~s", [FV]);
+        none when is_tuple(Type) ->
+            io_lib:format("~s:~s",
+                          [textify(intersperse( ".", tuple_to_list(Type))), FV]);
+        none      -> io_lib:format("~p:~s", [Type, FV])
     end.
+
+textify(Xs) ->
+    lists:map(fun(X) when list(X) -> X;
+                 (X)              -> io_lib:format("~p", [X]) end, Xs).
 
 format_ssl_value({printableString, S}) ->
     S;
@@ -968,6 +976,12 @@ format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
 format_ssl_value(V) ->
     V.
 
+intersperse(_, []) ->
+    [];
+intersperse(_, [Y]) ->
+    [Y];
+intersperse(X, [Y|Ys]) ->
+    [Y, X | intersperse(X, Ys)].
 
 %%--------------------------------------------------------------------------
 
