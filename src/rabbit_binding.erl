@@ -101,7 +101,7 @@ recover() ->
 exists(Binding) ->
     binding_action(
       Binding,
-      fun (_X, _Q, B) -> not(mnesia:read({rabbit_route, B}) == []) end).
+      fun (_X, _Q, B) -> mnesia:read({rabbit_route, B}) /= [] end).
 
 add(Binding) -> add(Binding, fun (_X, _Q) -> ok end).
 
