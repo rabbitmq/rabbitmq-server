@@ -70,13 +70,11 @@
                           send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
+                              ssl_cn, ssl_issuer, ssl_validity,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
--define(SSL_KEYS,
-        [ssl_cn, ssl_issuer, ssl_validity]).
-
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS ++ ?SSL_KEYS -- [pid]).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %% connection lifecycle
 %%
