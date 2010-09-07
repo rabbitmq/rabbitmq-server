@@ -33,10 +33,6 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--compile(export_all).
-
--include_lib("public_key/include/public_key.hrl").
-
 -export([start_link/3, info_keys/0, info/1, info/2, shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
@@ -70,7 +66,7 @@
                           send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
-                              ssl_cn, ssl_issuer, ssl_validity,
+                              ssl_subject, ssl_issuer, ssl_validity,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
@@ -823,11 +819,11 @@ i(peer_address, #v1{sock = Sock}) ->
     {ok, {A, _}} = rabbit_net:peername(Sock),
     A;
 i(ssl_issuer, #v1{sock = Sock}) ->
-    get_ssl_info(fun get_ssl_issuer/1, Sock);
+    get_ssl_info(fun rabbit_ssl:ssl_issuer/1, Sock);
 i(ssl_subject, #v1{sock = Sock}) ->
-    get_ssl_info(fun get_ssl_subject/1, Sock);
+    get_ssl_info(fun rabbit_ssl:ssl_subject/1, Sock);
 i(ssl_validity, #v1{sock = Sock}) ->
-    get_ssl_info(fun get_ssl_validity/1, Sock);
+    get_ssl_info(fun rabbit_ssl:ssl_validity/1, Sock);
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
@@ -877,99 +873,6 @@ get_ssl_info(F, Sock) ->
             end
     end.
 
-get_ssl_issuer(#'OTPCertificate' {
-                  tbsCertificate = #'OTPTBSCertificate' {
-                    issuer = Issuer }}) ->
-    format_ssl_subject(extract_ssl_values(Issuer)).
-
-get_ssl_subject(#'OTPCertificate' {
-                   tbsCertificate = #'OTPTBSCertificate' {
-                     subject = Subject }}) ->
-    format_ssl_subject(extract_ssl_values(Subject)).
-
-get_ssl_validity(#'OTPCertificate' {
-                    tbsCertificate = #'OTPTBSCertificate' {
-                      validity = Validity }}) ->
-    case extract_ssl_values(Validity) of
-        {'validity', Start, End} -> io_lib:format("~s to ~s", [Start, End]);
-        V                        -> V
-    end.
-
-
-extract_ssl_values({rdnSequence, List}) ->
-    extract_ssl_values_list(List);
-extract_ssl_values({'Validity', Start, End}) ->
-    {'validity', format_ssl_value(Start), format_ssl_value(End)};
-extract_ssl_values(V) ->
-    V.
-
-extract_ssl_values_list([[#'AttributeTypeAndValue'{type = T, value = V}]
-                         | Rest]) ->
-    [format_ssl_type_and_value(T, V) | extract_ssl_values_list(Rest)];
-extract_ssl_values_list([V|Rest]) ->
-    [io_lib:format("~p", V) | extract_ssl_values_list(Rest)];
-extract_ssl_values_list([]) ->
-    [].
-
-format_ssl_subject([C]) ->
-    [escape_ssl_string(C, start)];
-format_ssl_subject([C|Cs]) ->
-    [escape_ssl_string(C, start), "," | format_ssl_subject(Cs)];
-format_ssl_subject([]) ->
-    [].
-
-escape_ssl_string([], _) ->
-    [];
-escape_ssl_string([$  | S], start) ->
-    ["\\ " | escape_ssl_string(S, start)];
-escape_ssl_string([$# | S], start) ->
-    ["\\#" | escape_ssl_string(S, start)];
-escape_ssl_string(S, start) ->
-    escape_ssl_string(S, middle);
-escape_ssl_string([$  | S], middle) ->
-    case lists:filter(fun(C) -> C =/= $  end, S) of
-        []    -> escape_ssl_string([$  | S], ending);
-        [_|_] -> [" " | escape_ssl_string(S, middle)]
-    end;
-escape_ssl_string([C | S], middle) ->
-    case lists:member(C, ",+\"\\<>;") of
-        false -> [C | escape_ssl_string(S, middle)];
-        true  -> ["\\", C | escape_ssl_string(S, middle)]
-    end;
-escape_ssl_string([$  | S], ending) ->
-    ["\\ " | escape_ssl_string(S, ending)].
-
-%% A few common attribute type names, as described by RFC 2253 (2.3)
-format_ssl_type_and_value(Type, Value) ->
-    FV = format_ssl_value(Value),
-    Fmts = [{?'id-at-commonName'             , "CN"},
-            {?'id-at-countryName'            , "C"},
-            {?'id-at-organizationName'       , "O"},
-            {?'id-at-organizationalUnitName' , "OU"},
-            {?'street-address'               , "STREET"},
-            {?'id-domainComponent'           , "DC"},
-            {?'id-at-stateOrProvinceName'    , "ST"},
-            {?'id-at-localityName'           , "L"}],
-    case proplists:lookup(Type, Fmts) of
-        {_, Fmt} ->
-            io_lib:format(Fmt ++ "=~s", [FV]);
-        none when is_tuple(Type) ->
-            TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(Type)],
-            io_lib:format("~s:~s", [rabbit_misc:intersperse(".", TypeL), FV]);
-        none ->
-            io_lib:format("~p:~s", [Type, FV])
-    end.
-
-format_ssl_value({printableString, S}) ->
-    S;
-format_ssl_value({utf8String, Bin}) ->
-    Bin;
-format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
-                            Min1, Min2, S1, S2, $Z]}) ->
-    io_lib:format("20~c~c-~c~c-~c~c ~c~c:~c~c:~c~c",
-                  [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
-format_ssl_value(V) ->
-    V.
 
 %%--------------------------------------------------------------------------
 
