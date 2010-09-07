@@ -39,7 +39,7 @@
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, set_permissions/6, clear_permissions/2,
-         list_vhost_permissions/1, list_user_permissions/1,
+         list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
          list_user_vhost_permissions/2]).
 
 %%----------------------------------------------------------------------------
@@ -83,6 +83,9 @@
 -spec(set_permissions/6 ::(scope(), username(), rabbit_types:vhost(),
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
+-spec(list_permissions/0 ::
+        () -> [{username(), rabbit_types:vhost(), regexp(), regexp(), regexp(),
+                scope_atom()}]).
 -spec(list_vhost_permissions/1 ::
         (rabbit_types:vhost()) -> [{username(), regexp(), regexp(), regexp(),
                                     scope_atom()}]).
@@ -366,6 +369,11 @@ clear_permissions(Username, VHostPath) ->
                                     #user_vhost{username     = Username,
                                                 virtual_host = VHostPath}})
         end)).
+
+list_permissions() ->
+    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
+            list_permissions(match_user_vhost('_', '_'))].
 
 list_vhost_permissions(VHostPath) ->
     [{Username, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
