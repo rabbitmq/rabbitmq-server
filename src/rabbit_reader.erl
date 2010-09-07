@@ -775,6 +775,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                         connection = NewConnection}),
     rabbit_event:notify(connection_created,
                         infos(?CREATION_EVENT_KEYS, State1)),
+    internal_emit_stats(State1),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),

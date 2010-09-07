@@ -163,9 +163,11 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
+                     State1 = State#q{backing_queue_state = BQS},
                      rabbit_event:notify(queue_created,
-                                         infos(?CREATION_EVENT_KEYS, State)),
-                     noreply(init_expires(State#q{backing_queue_state = BQS}));
+                                         infos(?CREATION_EVENT_KEYS, State1)),
+                     emit_stats(State1),
+                     noreply(init_expires(State1));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
 
