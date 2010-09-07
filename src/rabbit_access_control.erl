@@ -39,7 +39,8 @@
          lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
 -export([set_permissions/5, set_permissions/6, clear_permissions/2,
-         list_vhost_permissions/1, list_user_permissions/1]).
+         list_vhost_permissions/1, list_user_permissions/1,
+         list_user_vhost_permissions/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -84,13 +85,14 @@
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
-        (rabbit_types:vhost())
-        -> [{username(), regexp(), regexp(), regexp(),
-             scope_atom()}]).
+        (rabbit_types:vhost()) -> [{username(), regexp(), regexp(), regexp(),
+                                    scope_atom()}]).
 -spec(list_user_permissions/1 ::
-        (username())
-        -> [{rabbit_types:vhost(), regexp(), regexp(), regexp(),
-             scope_atom()}]).
+        (username()) -> [{rabbit_types:vhost(), regexp(), regexp(), regexp(),
+                          scope_atom()}]).
+-spec(list_user_vhost_permissions/2 ::
+        (username(), rabbit_types:vhost()) -> [{regexp(), regexp(), regexp(),
+                                                scope_atom()}]).
 
 -endif.
 
@@ -374,6 +376,13 @@ list_user_permissions(Username) ->
         {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
             list_permissions(rabbit_misc:with_user(
                                Username, match_user_vhost(Username, '_')))].
+
+list_user_vhost_permissions(Username, VHostPath) ->
+    [{ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {_, _, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
+            list_permissions(rabbit_misc:with_user_and_vhost(
+                               Username, VHostPath,
+                               match_user_vhost(Username, VHostPath)))].
 
 list_permissions(QueryThunk) ->
     [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
