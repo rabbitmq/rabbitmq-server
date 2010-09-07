@@ -951,16 +951,14 @@ format_ssl_type_and_value(Type, Value) ->
             {?'id-at-stateOrProvinceName'    , "ST="},
             {?'id-at-localityName'           , "L="}],
     case proplists:lookup(Type, Fmts) of
-        {_, Fmt}  -> io_lib:format(Fmt ++ "=~s", [FV]);
+        {_, Fmt} ->
+            io_lib:format(Fmt ++ "=~s", [FV]);
         none when is_tuple(Type) ->
-            io_lib:format("~s:~s",
-                          [textify(intersperse( ".", tuple_to_list(Type))), FV]);
-        none      -> io_lib:format("~p:~s", [Type, FV])
+            TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(Type)],
+            io_lib:format("~s:~s", [rabbit_misc:intersperse(".", TypeL), FV]);
+        none ->
+            io_lib:format("~p:~s", [Type, FV])
     end.
-
-textify(Xs) ->
-    lists:map(fun(X) when list(X) -> X;
-                 (X)              -> io_lib:format("~p", [X]) end, Xs).
 
 format_ssl_value({printableString, S}) ->
     S;
@@ -972,13 +970,6 @@ format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 format_ssl_value(V) ->
     V.
-
-intersperse(_, []) ->
-    [];
-intersperse(_, [Y]) ->
-    [Y];
-intersperse(X, [Y|Ys]) ->
-    [Y, X | intersperse(X, Ys)].
 
 %%--------------------------------------------------------------------------
 
