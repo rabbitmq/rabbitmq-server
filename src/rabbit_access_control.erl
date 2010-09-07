@@ -37,7 +37,7 @@
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, list_users/0,
          lookup_user/1]).
--export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
+-export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, set_permissions/6, clear_permissions/2,
          list_vhost_permissions/1, list_user_permissions/1,
          list_user_vhost_permissions/2]).
@@ -74,10 +74,9 @@
 -spec(lookup_user/1 ::
         (username()) -> rabbit_types:ok(rabbit_types:user())
                             | rabbit_types:error('not_found')).
--spec(add_vhost/1 ::
-        (rabbit_types:vhost()) -> 'ok').
--spec(delete_vhost/1 ::
-        (rabbit_types:vhost()) -> 'ok').
+-spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(vhost_exists/1 :: (rabbit_types:vhost()) -> boolean()).
 -spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
 -spec(set_permissions/5 ::(username(), rabbit_types:vhost(), regexp(),
                            regexp(), regexp()) -> 'ok').
@@ -316,6 +315,9 @@ internal_delete_vhost(VHostPath) ->
                   list_vhost_permissions(VHostPath)),
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
     ok.
+
+vhost_exists(VHostPath) ->
+    mnesia:dirty_read({rabbit_vhost, VHostPath}) /= [].
 
 list_vhosts() ->
     mnesia:dirty_all_keys(rabbit_vhost).
