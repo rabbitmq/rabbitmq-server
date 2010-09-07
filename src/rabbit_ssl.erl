@@ -167,7 +167,7 @@ format_ssl_type_and_value(Type, Value) ->
             {?'id-at-countryName'            , "C"},
             {?'id-at-serialNumber'           , "SERIALNUMBER"},
             {?'id-at-pseudonym'              , "PSEUDONYM"},
-            {?'id-domainComponent'        , "DC"},
+            {?'id-domainComponent'           , "DC"},
             {?'id-emailAddress'              , "EMAILADDRESS"},
             {?'street-address'               , "STREET"}],
     case proplists:lookup(Type, Fmts) of
