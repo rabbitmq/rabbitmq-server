@@ -948,8 +948,8 @@ format_ssl_type_and_value(Type, Value) ->
             {?'id-at-organizationalUnitName' , "OU"},
             {?'street-address'               , "STREET"},
             {?'id-domainComponent'           , "DC"},
-            {?'id-at-stateOrProvinceName'    , "ST="},
-            {?'id-at-localityName'           , "L="}],
+            {?'id-at-stateOrProvinceName'    , "ST"},
+            {?'id-at-localityName'           , "L"}],
     case proplists:lookup(Type, Fmts) of
         {_, Fmt} ->
             io_lib:format(Fmt ++ "=~s", [FV]);
