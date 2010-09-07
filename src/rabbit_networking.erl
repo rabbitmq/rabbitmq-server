@@ -117,10 +117,16 @@ boot_ssl() ->
                                    | SslOptsConfig]
                 end,
             % In R13B04 and R14A (at least), rc4 is incorrectly implemented.
-            CSs = lists:filter(fun ({_, rc4_128, _}) -> false;
-                                   (_)               -> true
-                               end, ssl:cipher_suites()),
-            SslOpts1 = [{ciphers, CSs} | SslOpts],
+            CSs = lists:filter(
+                    fun ({_, rc4_128, _})   ->
+                            false;
+                        (S) when is_list(S) ->
+                            match =/= re:run(S, "RC4", [{capture, none}]);
+                        (_) ->
+                            true
+                    end,
+                    proplists:get_value(ciphers, SslOpts, ssl:cipher_suites())),
+            SslOpts1 = [{ciphers, CSs} | [{K, V} || {K, V} <- SslOpts, K =/= ciphers]],
             [start_ssl_listener(Host, Port, SslOpts1) || {Host, Port} <- SslListeners],
             ok
     end.
