@@ -32,7 +32,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/0, add/1, remove/1, add/2, remove/2, list/1]).
+-export([recover/0, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
 -export([list_for_exchange/1, list_for_queue/1, list_for_exchange_and_queue/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 %% these must all be run inside a mnesia tx
@@ -47,15 +47,17 @@
 
 -type(key() :: binary()).
 
--type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
-                                             'exchange_not_found' |
-                                             'exchange_and_queue_not_found')).
+-type(bind_errors() :: rabbit_types:error('queue_not_found' |
+                                          'exchange_not_found' |
+                                          'exchange_and_queue_not_found')).
+-type(bind_res() :: 'ok' | bind_errors()).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(), queue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
+-spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
 -spec(add/1 :: (rabbit_types:binding()) -> bind_res()).
 -spec(remove/1 :: (rabbit_types:binding()) ->
                        bind_res() | rabbit_types:error('binding_not_found')).
@@ -95,6 +97,11 @@ recover() ->
               ok = mnesia:write(rabbit_reverse_route, ReverseRoute, write),
               [B | Acc]
       end, [], rabbit_durable_route).
+
+exists(Binding) ->
+    binding_action(
+      Binding,
+      fun (_X, _Q, B) -> not(mnesia:read({rabbit_route, B}) == []) end).
 
 add(Binding) -> add(Binding, fun (_X, _Q) -> ok end).
 
