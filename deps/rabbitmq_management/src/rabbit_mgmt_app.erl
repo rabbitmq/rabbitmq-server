@@ -29,12 +29,20 @@
 -define(SETUP_WM_TRACE, false).
 -define(SETUP_WM_LOGGING, false).
 
+%% Make sure our database is hooked in *before* listening on the network or
+%% recovering queues (i.e. so there can't be any events fired before it starts).
+-rabbit_boot_step({rabbit_mgmt_database,
+                   [{description, "management statistics database"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_mgmt_sup]}},
+                    {requires,    rabbit_event},
+                    {enables,     queue_sup_queue_recovery}]}).
+
 start(_Type, _StartArgs) ->
     io:format("starting ~-60s ...",
               [io_lib:format("~s", ["management plugin"])]),
     application:set_env(rabbit, collect_statistics, fine),
     register_contexts(),
-    Sup = rabbit_mgmt_sup:start_link(),
     io:format("done~n"),
     log_startup(),
     case ?SETUP_WM_LOGGING of
@@ -45,7 +53,7 @@ start(_Type, _StartArgs) ->
         true -> setup_wm_trace_app();
         _    -> ok
     end,
-    Sup.
+    rabbit_mgmt_dummy:start_link().
 
 stop(_State) ->
     ok.
