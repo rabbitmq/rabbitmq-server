@@ -39,11 +39,8 @@
                     {enables,     queue_sup_queue_recovery}]}).
 
 start(_Type, _StartArgs) ->
-    io:format("starting ~-60s ...",
-              [io_lib:format("~s", ["management plugin"])]),
     application:set_env(rabbit, collect_statistics, fine),
     register_contexts(),
-    io:format("done~n"),
     log_startup(),
     case ?SETUP_WM_LOGGING of
         true -> setup_wm_logging(".");
