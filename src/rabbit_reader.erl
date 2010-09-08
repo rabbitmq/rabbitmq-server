@@ -339,7 +339,7 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             throw(E);
         {channel_exit, ChannelOrFrPid, Reason} ->
             mainloop(Deb, handle_channel_exit(ChannelOrFrPid, Reason, State));
-        {'EXIT', ChSupPid, Reason} ->
+        {'DOWN', _MRef, process, ChSupPid, Reason} ->
             mainloop(Deb, handle_dependent_exit(ChSupPid, Reason, State));
         terminate_connection ->
             State;
