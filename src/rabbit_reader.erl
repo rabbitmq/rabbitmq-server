@@ -822,9 +822,12 @@ i(peer_address, #v1{sock = Sock}) ->
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
-i(peer_cert_issuer,   #v1{sock = Sock}) -> rabbit_ssl:peer_cert_issuer(Sock);
-i(peer_cert_subject,  #v1{sock = Sock}) -> rabbit_ssl:peer_cert_subject(Sock);
-i(peer_cert_validity, #v1{sock = Sock}) -> rabbit_ssl:peer_cert_validity(Sock);
+i(peer_cert_issuer, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
+i(peer_cert_subject, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_subject/1, Sock);
+i(peer_cert_validity, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_validity/1, Sock);
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
@@ -858,6 +861,13 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+cert_info(F, Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl                -> '';
+        {error, no_peercert} -> '';
+        {ok, Cert}           -> F(Cert)
+    end.
 
 %%--------------------------------------------------------------------------
 

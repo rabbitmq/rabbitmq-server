@@ -46,9 +46,9 @@
 
 -type(certificate() :: #'OTPCertificate'{}).
 
--spec(peer_cert_issuer/1   :: (rabbit_net:socket()) -> string()).
--spec(peer_cert_subject/1  :: (rabbit_net:socket()) -> string()).
--spec(peer_cert_validity/1 :: (rabbit_net:socket()) -> string()).
+-spec(peer_cert_issuer/1   :: (certificate()) -> string()).
+-spec(peer_cert_subject/1  :: (certificate()) -> string()).
+-spec(peer_cert_validity/1 :: (certificate()) -> string()).
 
 -endif.
 
@@ -57,59 +57,36 @@
 %%--------------------------------------------------------------------------
 
 %% Return a string describing the certificate's issuer.
-peer_cert_issuer(Sock) ->
+peer_cert_issuer(Cert) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        issuer = Issuer }}) ->
                       format_rdn_sequence(Issuer)
-              end, Sock).
+              end, Cert).
 
 %% Return a string describing the certificate's subject, as per RFC4514.
-peer_cert_subject(Sock) ->
+peer_cert_subject(Cert) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        subject = Subject }}) ->
                       format_rdn_sequence(Subject)
-              end, Sock).
+              end, Cert).
 
 %% Return a string describing the certificate's validity.
-peer_cert_validity(Sock) ->
+peer_cert_validity(Cert) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        validity = {'Validity', Start, End} }}) ->
                       lists:flatten(
                         io_lib:format("~s - ~s", [format_asn1_value(Start),
                                                   format_asn1_value(End)]))
-              end, Sock).
+              end, Cert).
 
 %%--------------------------------------------------------------------------
 
-%% Wrapper for applying a function to a socket's certificate.
-cert_info(F, Sock) ->
-    case rabbit_net:peercert(Sock) of
-        {error, no_peercert} -> no_peer_certificate;
-        {error, E}           -> rabbit_log:warning("cannot obtain cert: "
-                                                   "~p~n", [E]),
-                                no_peer_certificate;
-        nossl                -> nossl;
-        {ok, Cert}           ->
-            case public_key:pkix_decode_cert(Cert, otp) of
-                {ok, DecCert} ->
-                    %% here be dragons; decompose an undocumented
-                    %% structure
-                    try
-                        F(DecCert)
-                    catch
-                        C:E ->
-                            rabbit_log:info("failure in processing SSL info: "
-                                            "~p:~p~n", [C, E]),
-                            unknown
-                    end;
-                {error, E} ->
-                    rabbit_log:warning("error decoding cert: ~p~n", [E]),
-                    no_peer_certificate
-            end
-    end.
+cert_info(F, Cert) ->
+    {ok, DecCert} = public_key:pkix_decode_cert(Cert, otp),
+    F(DecCert).
 
 %%--------------------------------------------------------------------------
 %% Formatting functions
