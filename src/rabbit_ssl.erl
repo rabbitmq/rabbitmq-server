@@ -128,7 +128,7 @@ format_complex_rdn(RDNs) ->
 %% Format an RDN.  If the type name is unknown, use the dotted decimal
 %% representation.  See RFC4514, section 2.3.
 format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
-    FV = escape_rdn_value(format_asn1_value(V), start),
+    FV = escape_rdn_value(format_asn1_value(V)),
     Fmts = [{?'id-at-surname'                , "SN"},
             {?'id-at-givenName'              , "GIVENNAME"},
             {?'id-at-initials'               , "INITIALS"},
@@ -156,18 +156,21 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
     end.
 
 %% Escape a string as per RFC4514.
-escape_rdn_value([], _) ->
+escape_rdn_value(V) ->
+    lists:flatten(escape_rdn_value_int(V, start)).
+
+escape_rdn_value_int([], _) ->
     [];
-escape_rdn_value([C | S], start) when C =:= $  ; C =:= $#->
-    ["\\", [C] | escape_rdn_value(S, middle)];
-escape_rdn_value(S, start) ->
-    escape_rdn_value(S, middle);
-escape_rdn_value([$ ], middle) ->
+escape_rdn_value_int([C | S], start) when C =:= $  ; C =:= $#->
+    ["\\", [C] | escape_rdn_value_int(S, middle)];
+escape_rdn_value_int(S, start) ->
+    escape_rdn_value_int(S, middle);
+escape_rdn_value_int([$ ], middle) ->
        ["\\ "];
-escape_rdn_value([C | S], middle) ->
+escape_rdn_value_int([C | S], middle) ->
     case lists:member(C, ",+\"\\<>;") of
-        false -> [C | escape_rdn_value(S, middle)];
-        true  -> ["\\", C | escape_rdn_value(S, middle)]
+        false -> [C | escape_rdn_value_int(S, middle)];
+        true  -> ["\\", C | escape_rdn_value_int(S, middle)]
     end.
 
 %% Get the string representation of an OTPCertificate field.

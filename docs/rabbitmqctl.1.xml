@@ -975,6 +975,21 @@
                 <term>send_pend</term>
                 <listitem><para>Send queue size.</para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>ssl_subject</term>
+                <listitem><para>The subject of the peer's SSL
+                certificate.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_issuer</term>
+                <listitem><para>The issuer of the peer's SSL
+                certificate.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_validity</term>
+                <listitem><para>The period the peer's SSL certificate
+                is valid.</para></listitem>
+              </varlistentry>
             </variablelist>
             <para>
               If no <command>connectioninfoitem</command>s are specified then  user, peer
