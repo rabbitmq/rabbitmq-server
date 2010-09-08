@@ -1535,7 +1535,10 @@ delete_file_if_empty(File, State = #msstate {
              end,
              true = mark_handle_to_close(FileHandlesEts, File),
              true = ets:delete(FileSummaryEts, File),
-             ok = index_delete_by_file(File, State),
+             {ok, Messages, FileSize} =
+                 scan_file_for_valid_messages(Dir, filenum_to_name(File)),
+             [index_delete(Guid, State) ||
+                 {Guid, _TotalSize, _Offset} <- Messages],
              State1 = close_handle(File, State),
              ok = file:delete(form_filename(Dir, filenum_to_name(File))),
              State1 #msstate { sum_file_size = SumFileSize - FileSize };
