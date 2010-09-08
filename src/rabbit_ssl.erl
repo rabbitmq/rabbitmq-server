@@ -119,30 +119,7 @@ format_rdn_sequence({rdnSequence, Seq}) ->
     lists:flatten(
       rabbit_misc:intersperse(
         ",", lists:reverse(
-               [escape_rdn_value(format_complex_rdn(RDN), start)
-                || RDN <- Seq]))).
-
-%% Escape a string as per RFC4514.
-escape_rdn_value([], _) ->
-    [];
-escape_rdn_value([$  | S], start) ->
-    ["\\ " | escape_rdn_value(S, start)];
-escape_rdn_value([$# | S], start) ->
-    ["\\#" | escape_rdn_value(S, start)];
-escape_rdn_value(S, start) ->
-    escape_rdn_value(S, middle);
-escape_rdn_value([$  | S], middle) ->
-    case lists:filter(fun(C) -> C =/= $  end, S) of
-        []    -> escape_rdn_value([$  | S], ending);
-        [_|_] -> [" " | escape_rdn_value(S, middle)]
-    end;
-escape_rdn_value([C | S], middle) ->
-    case lists:member(C, ",+\"\\<>;") of
-        false -> [C | escape_rdn_value(S, middle)];
-        true  -> ["\\", C | escape_rdn_value(S, middle)]
-    end;
-escape_rdn_value([$  | S], ending) ->
-    ["\\ " | escape_rdn_value(S, ending)].
+               [format_complex_rdn(RDN) || RDN <- Seq]))).
 
 %% Format an RDN set.
 format_complex_rdn(RDNs) ->
@@ -151,7 +128,7 @@ format_complex_rdn(RDNs) ->
 %% Format an RDN.  If the type name is unknown, use the dotted decimal
 %% representation.  See RFC4514, section 2.3.
 format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
-    FV = format_asn1_value(V),
+    FV = escape_rdn_value(format_asn1_value(V), start),
     Fmts = [{?'id-at-surname'                , "SN"},
             {?'id-at-givenName'              , "GIVENNAME"},
             {?'id-at-initials'               , "INITIALS"},
@@ -178,11 +155,26 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             io_lib:format("~p:~s", [T, FV])
     end.
 
+%% Escape a string as per RFC4514.
+escape_rdn_value([], _) ->
+    [];
+escape_rdn_value([C | S], start) when C =:= $  ; C =:= $#->
+    ["\\", [C] | escape_rdn_value(S, middle)];
+escape_rdn_value(S, start) ->
+    escape_rdn_value(S, middle);
+escape_rdn_value([$ ], middle) ->
+       ["\\ "];
+escape_rdn_value([C | S], middle) ->
+    case lists:member(C, ",+\"\\<>;") of
+        false -> [C | escape_rdn_value(S, middle)];
+        true  -> ["\\", C | escape_rdn_value(S, middle)]
+    end.
+
 %% Get the string representation of an OTPCertificate field.
-format_asn1_value({printableString, S}) ->
+format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
+                                ST =:= universalString; ST =:= utf8string;
+                                ST =:= bmpString ->
     S;
-format_asn1_value({utf8String, Bin}) ->
-    binary_to_list(Bin);
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                             Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
