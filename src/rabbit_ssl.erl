@@ -135,21 +135,21 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
 
 %% Escape a string as per RFC4514.
 escape_rdn_value(V) ->
-    lists:flatten(escape_rdn_value_int(V, start)).
+    escape_rdn_value(V, start).
 
-escape_rdn_value_int([], _) ->
+escape_rdn_value([], _) ->
     [];
-escape_rdn_value_int([C | S], start) when C =:= $  ; C =:= $# ->
-    ["\\", [C] | escape_rdn_value_int(S, middle)];
-escape_rdn_value_int(S, start) ->
-    escape_rdn_value_int(S, middle);
-escape_rdn_value_int([$ ], middle) ->
-       ["\\ "];
-escape_rdn_value_int([C | S], middle) ->
-    case lists:member(C, ",+\"\\<>;") of
-        false -> [C | escape_rdn_value_int(S, middle)];
-        true  -> ["\\", C | escape_rdn_value_int(S, middle)]
-    end.
+escape_rdn_value([C | S], start) when C =:= $ ; C =:= $# ->
+    [$\\, C | escape_rdn_value(S, middle)];
+escape_rdn_value(S, start) ->
+    escape_rdn_value(S, middle);
+escape_rdn_value([$ ], middle) ->
+    [$\\, $ ];
+escape_rdn_value([C | S], middle) when C =:= $"; C =:= $+; C =:= $,; C =:= $;;
+                                       C =:= $<; C =:= $>; C =:= $\\ ->
+    [$\\, C | escape_rdn_value(S, middle)];
+escape_rdn_value([C | S], middle) ->
+    [C | escape_rdn_value(S, middle)].
 
 %% Get the string representation of an OTPCertificate field.
 format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
