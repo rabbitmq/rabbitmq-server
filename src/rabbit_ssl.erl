@@ -123,10 +123,11 @@ extract_ssl_values_list([]) ->
 
 %% Convert a proplist to a RFC4514 subject string.
 format_ssl_subject(RDNs) ->
-    rabbit_misc:intersperse(
-      ",", lists:reverse(
-             [escape_ssl_string(format_ssl_type_and_value(T, V), start)
-              || {T, V} <- RDNs])).
+    lists:flatten(
+      rabbit_misc:intersperse(
+        ",", lists:reverse(
+               [escape_ssl_string(format_ssl_type_and_value(T, V), start)
+                || {T, V} <- RDNs]))).
 
 %% Escape a string as per RFC4514.
 escape_ssl_string([], _) ->
