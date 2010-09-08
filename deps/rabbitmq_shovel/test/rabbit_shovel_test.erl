@@ -149,8 +149,8 @@ test() ->
       infinity),
     ok = application:start(rabbit_shovel),
 
-    Conn = amqp_connection:start_network(),
-    Chan = amqp_connection:open_channel(Conn),
+    {ok, Conn} = amqp_connection:start(network),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
 
     #'queue.declare_ok'{ queue = Q } =
         amqp_channel:call(Chan, #'queue.declare' { exclusive = true }),
