@@ -819,11 +819,11 @@ i(peer_address, #v1{sock = Sock}) ->
     {ok, {A, _}} = rabbit_net:peername(Sock),
     A;
 i(ssl_issuer, #v1{sock = Sock}) ->
-    rabbit_ssl:ssl_info(fun rabbit_ssl:ssl_issuer/1, Sock);
+    rabbit_ssl:ssl_issuer(Sock);
 i(ssl_subject, #v1{sock = Sock}) ->
-    rabbit_ssl:ssl_info(fun rabbit_ssl:ssl_subject/1, Sock);
+    rabbit_ssl:ssl_subject(Sock);
 i(ssl_validity, #v1{sock = Sock}) ->
-    rabbit_ssl:ssl_info(fun rabbit_ssl:ssl_validity/1, Sock);
+    rabbit_ssl:ssl_validity(Sock);
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
