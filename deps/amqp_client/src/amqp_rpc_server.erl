@@ -39,8 +39,8 @@
 -export([start/3]).
 -export([stop/1]).
 
--record(rpc_s_state, {channel,
-                      handler}).
+-record(state, {channel,
+                handler}).
 
 %%--------------------------------------------------------------------------
 %% API
@@ -76,7 +76,7 @@ init([Connection, Q, Fun]) ->
     Channel = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
     amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
-    {ok, #rpc_s_state{channel = Channel, handler = Fun} }.
+    {ok, #state{channel = Channel, handler = Fun} }.
 
 %% @private
 handle_info(shutdown, State) ->
@@ -93,7 +93,7 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 %% @private
 handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
              #amqp_msg{props = Props, payload = Payload}},
-            State = #rpc_s_state{handler = Fun, channel = Channel}) ->
+            State = #state{handler = Fun, channel = Channel}) ->
     #'P_basic'{correlation_id = CorrelationId,
                reply_to = Q} = Props,
     Response = Fun(Payload),
@@ -120,7 +120,7 @@ handle_cast(_Message, State) ->
 
 %% Closes the channel this gen_server instance started
 %% @private
-terminate(_Reason, #rpc_s_state{channel = Channel}) ->
+terminate(_Reason, #state{channel = Channel}) ->
     amqp_channel:close(Channel),
     ok.
 

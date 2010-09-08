@@ -47,20 +47,20 @@
 -define(TIMEOUT_FLUSH, 60000).
 -define(TIMEOUT_CLOSE_OK, 3000).
 
--record(c_state, {number,
-                  parent_connection,
-                  reader_pid,
-                  writer_pid,
-                  driver,
-                  rpc_requests = queue:new(),
-                  anon_sub_requests = queue:new(),
-                  tagged_sub_requests = dict:new(),
-                  closing = false,
-                  return_handler_pid = none,
-                  flow_control = false,
-                  flow_handler_pid = none,
-                  consumers = dict:new(),
-                  default_consumer = unknown}).
+-record(state, {number,
+                parent_connection,
+                reader_pid,
+                writer_pid,
+                driver,
+                rpc_requests = queue:new(),
+                anon_sub_requests = queue:new(),
+                tagged_sub_requests = dict:new(),
+                closing = false,
+                return_handler_pid = none,
+                flow_control = false,
+                flow_handler_pid = none,
+                consumers = dict:new(),
+                default_consumer = unknown}).
 
 %% This diagram shows the interaction between the different component
 %% processes in an AMQP client scenario.
@@ -235,16 +235,16 @@ register_default_consumer(Channel, Consumer) ->
 %%---------------------------------------------------------------------------
 
 rpc_top_half(Method, Content, From, 
-             State0 = #c_state{rpc_requests = RequestQueue}) ->
+             State0 = #state{rpc_requests = RequestQueue}) ->
     % Enqueue the incoming RPC request to serialize RPC dispatching
-    State1 = State0#c_state{
+    State1 = State0#state{
         rpc_requests = queue:in({From, Method, Content}, RequestQueue)},
     IsFirstElement = queue:is_empty(RequestQueue),
     if IsFirstElement -> do_rpc(State1);
        true           -> State1
     end.
 
-rpc_bottom_half(Reply, State = #c_state{rpc_requests = RequestQueue}) ->
+rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     case queue:out(RequestQueue) of
         {empty, _} ->
             exit(empty_rpc_bottom_half);
@@ -252,15 +252,15 @@ rpc_bottom_half(Reply, State = #c_state{rpc_requests = RequestQueue}) ->
             case From of none -> ok;
                          _    -> gen_server:reply(From, Reply)
             end,
-            do_rpc(State#c_state{rpc_requests = NewRequestQueue})
+            do_rpc(State#state{rpc_requests = NewRequestQueue})
     end.
 
-do_rpc(State = #c_state{rpc_requests = RequestQueue,
+do_rpc(State = #state{rpc_requests = RequestQueue,
                         closing = Closing}) ->
     case queue:peek(RequestQueue) of
         {value, {_From, Method = #'channel.close'{}, Content}} ->
             do(Method, Content, State),
-            State#c_state{closing = just_channel};
+            State#state{closing = just_channel};
         {value, {_From, Method, Content}} ->
             do(Method, Content, State),
             State;
@@ -276,14 +276,14 @@ do_rpc(State = #c_state{rpc_requests = RequestQueue,
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-do(Method, Content, #c_state{writer_pid = Writer,
-                             driver = Driver}) ->
+do(Method, Content, #state{writer_pid = Writer,
+                           driver = Driver}) ->
     amqp_channel_util:do(Driver, Writer, Method, Content).
 
-resolve_consumer(_ConsumerTag, #c_state{consumers = []}) ->
+resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
     exit(no_consumers_registered);
-resolve_consumer(ConsumerTag, #c_state{consumers = Consumers,
-                                       default_consumer = DefaultConsumer}) ->
+resolve_consumer(ConsumerTag, #state{consumers = Consumers,
+                                     default_consumer = DefaultConsumer}) ->
     case dict:find(ConsumerTag, Consumers) of
         {ok, Value} ->
             Value;
@@ -295,14 +295,14 @@ resolve_consumer(ConsumerTag, #c_state{consumers = Consumers,
     end.
 
 register_consumer(ConsumerTag, Consumer,
-                  State = #c_state{consumers = Consumers0}) ->
+                  State = #state{consumers = Consumers0}) ->
     Consumers1 = dict:store(ConsumerTag, Consumer, Consumers0),
-    State#c_state{consumers = Consumers1}.
+    State#state{consumers = Consumers1}.
 
 unregister_consumer(ConsumerTag,
-                    State = #c_state{consumers = Consumers0}) ->
+                    State = #state{consumers = Consumers0}) ->
     Consumers1 = dict:erase(ConsumerTag, Consumers0),
-    State#c_state{consumers = Consumers1}.
+    State#state{consumers = Consumers1}.
 
 amqp_msg(none) ->
     none;
@@ -315,15 +315,15 @@ build_content(none) ->
 build_content(#amqp_msg{props = Props, payload = Payload}) ->
     rabbit_basic:build_content(Props, Payload).
 
-check_block(_Method, _AmqpMsg, #c_state{closing = just_channel}) ->
+check_block(_Method, _AmqpMsg, #state{closing = just_channel}) ->
     channel_closing;
-check_block(_Method, _AmqpMsg, #c_state{closing = {connection, _}}) ->
+check_block(_Method, _AmqpMsg, #state{closing = {connection, _}}) ->
     connection_closing;
-check_block(_Method, none, #c_state{}) ->
+check_block(_Method, none, #state{}) ->
     ok;
-check_block(_Method, _AmqpMsg, #c_state{flow_control = true}) ->
+check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
     blocked;
-check_block(_Method, _AmqpMsg, #c_state{}) ->
+check_block(_Method, _AmqpMsg, #state{}) ->
     ok.
 
 shutdown_with_reason({_, 200, _}, State) ->
@@ -335,7 +335,7 @@ shutdown_with_reason(Reason, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-handle_method(Method, Content, #c_state{closing = Closing} = State) ->
+handle_method(Method, Content, #state{closing = Closing} = State) ->
     case {Method, Content} of
         %% Handle 'channel.close': send 'channel.close_ok' and stop channel.
         %% Do this even if already closing, as per 0-9-1 spec.
@@ -364,19 +364,19 @@ handle_method(Method, Content, #c_state{closing = Closing} = State) ->
 
 handle_regular_method(
         #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk, none,
-        #c_state{tagged_sub_requests = Tagged,
-                 anon_sub_requests = Anon} = State) ->
+        #state{tagged_sub_requests = Tagged,
+               anon_sub_requests = Anon} = State) ->
     {_From, Consumer, State0} =
         case dict:find(ConsumerTag, Tagged) of
             {ok, {F, C}} ->
                 NewTagged = dict:erase(ConsumerTag,Tagged),
-                {F, C, State#c_state{tagged_sub_requests = NewTagged}};
+                {F, C, State#state{tagged_sub_requests = NewTagged}};
             error ->
                 case queue:out(Anon) of
                     {empty, _} ->
                         exit({anonymous_queue_empty, ConsumerTag});
                     {{value, {F, C}}, NewAnon} ->
-                        {F, C, State#c_state{anon_sub_requests = NewAnon}}
+                        {F, C, State#state{anon_sub_requests = NewAnon}}
                 end
         end,
     Consumer ! ConsumeOk,
@@ -385,7 +385,7 @@ handle_regular_method(
 
 handle_regular_method(
         #'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
-        #c_state{} = State) ->
+        #state{} = State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
     Consumer ! CancelOk,
     NewState = unregister_consumer(ConsumerTag, State),
@@ -395,13 +395,13 @@ handle_regular_method(
 %% If flow_control flag is defined, it informs the flow control handler to
 %% suspend submitting any content bearing methods
 handle_regular_method(#'channel.flow'{active = Active} = Flow, none,
-                      #c_state{flow_handler_pid = FlowHandler} = State) ->
+                      #state{flow_handler_pid = FlowHandler} = State) ->
     case FlowHandler of
         none -> ok;
         _    -> FlowHandler ! Flow
     end,
     do(#'channel.flow_ok'{active = Active}, none, State),
-    {noreply, State#c_state{flow_control = not(Active)}};
+    {noreply, State#state{flow_control = not(Active)}};
 
 handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
                       AmqpMsg, State) ->
@@ -411,7 +411,7 @@ handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
 
 handle_regular_method(
         #'basic.return'{} = BasicReturn, AmqpMsg,
-        #c_state{return_handler_pid = ReturnHandler} = State) ->
+        #state{return_handler_pid = ReturnHandler} = State) ->
     case ReturnHandler of
         none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
                           "return handler registered~n",
@@ -436,11 +436,11 @@ init({ParentConnection, ChannelNumber, Driver, StartArgs}) ->
     {ReaderPid, WriterPid} =
         amqp_channel_util:start_channel_infrastructure(Driver, ChannelNumber,
                                                        StartArgs),
-    InitialState = #c_state{parent_connection = ParentConnection,
-                            number = ChannelNumber,
-                            driver = Driver,
-                            reader_pid = ReaderPid,
-                            writer_pid = WriterPid},
+    InitialState = #state{parent_connection = ParentConnection,
+                          number = ChannelNumber,
+                          driver = Driver,
+                          reader_pid = ReaderPid,
+                          writer_pid = WriterPid},
     {ok, InitialState}.
 
 %% Standard implementation of the call/{2,3} command
@@ -463,7 +463,7 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
 %% Standard implementation of the subscribe/3 command
 %% @private
 handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
-            From, #c_state{tagged_sub_requests = Tagged,
+            From, #state{tagged_sub_requests = Tagged,
                            anon_sub_requests = Anon} = State) ->
     case check_block(Method, none, State) of
         ok ->
@@ -471,14 +471,14 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
                 if Tag =:= undefined orelse size(Tag) == 0 ->
                        NewAnon = queue:in({From,Consumer}, Anon),
                        {Method#'basic.consume'{consumer_tag = <<"">>},
-                        State#c_state{anon_sub_requests = NewAnon}};
+                        State#state{anon_sub_requests = NewAnon}};
                    is_binary(Tag) ->
                        %% TODO test whether this tag already exists, either in
                        %% the pending tagged request map or in general as
                        %% already subscribed consumer
                        NewTagged = dict:store(Tag,{From,Consumer}, Tagged),
                        {Method,
-                        State#c_state{tagged_sub_requests = NewTagged}}
+                        State#state{tagged_sub_requests = NewTagged}}
                 end,
             {noreply, rpc_top_half(NewMethod, none, From, NewState)};
         BlockReply ->
@@ -514,19 +514,19 @@ handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     link(ReturnHandler),
-    {noreply, State#c_state{return_handler_pid = ReturnHandler}};
+    {noreply, State#state{return_handler_pid = ReturnHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
     link(FlowHandler),
-    {noreply, State#c_state{flow_handler_pid = FlowHandler}};
+    {noreply, State#state{flow_handler_pid = FlowHandler}};
 
 %% Registers a handler to process unexpected deliveries
 %% @private
 handle_cast({register_default_consumer, Consumer}, State) ->
     link(Consumer),
-    {noreply, State#c_state{default_consumer = Consumer}};
+    {noreply, State#state{default_consumer = Consumer}};
 
 %% @private
 handle_cast({notify_sent, _Peer}, State) ->
@@ -564,7 +564,7 @@ handle_info({shutdown, Reason}, State) ->
 
 %% @private
 handle_info({shutdown, FailShutdownReason, InitialReason},
-            #c_state{number = Number} = State) ->
+            #state{number = Number} = State) ->
     case FailShutdownReason of
         {connection_closing, timed_out_flushing_channel} ->
             ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
@@ -580,15 +580,15 @@ handle_info({shutdown, FailShutdownReason, InitialReason},
 %% flush the RPC queue (optional), and terminate
 %% @private
 handle_info({connection_closing, CloseType, Reason},
-            #c_state{rpc_requests = RpcQueue,
-                     closing = Closing} = State) ->
+            #state{rpc_requests = RpcQueue,
+                   closing = Closing} = State) ->
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
             erlang:send_after(?TIMEOUT_FLUSH, self(),
                               {shutdown,
                                {connection_closing, timed_out_flushing_channel},
                                Reason}),
-            {noreply, State#c_state{closing = {connection, Reason}}};
+            {noreply, State#state{closing = {connection, Reason}}};
         {flush, just_channel, false} ->
             erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
                               {shutdown,
@@ -604,7 +604,7 @@ handle_info({connection_closing, CloseType, Reason},
 %% @private
 handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
                                                  explanation = Expl} = Error},
-            State = #c_state{number = Number}) ->
+            State = #state{number = Number}) ->
     ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
     {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
     {stop, {server_initiated_close, Code, Expl}, State};
@@ -616,8 +616,8 @@ handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
 %% Handle parent connection exit
 %% @private
 handle_info({'EXIT', ConnectionPid, Reason},
-            State = #c_state{number = ChannelNumber,
-                             parent_connection = ConnectionPid}) ->
+            State = #state{number = ChannelNumber,
+                           parent_connection = ConnectionPid}) ->
     ?LOG_WARN("Channel ~p closing: parent connection died. Reason: ~p~n",
               [ChannelNumber, Reason]),
     {stop, {parent_connection_died, ConnectionPid, Reason}, State};
@@ -625,8 +625,8 @@ handle_info({'EXIT', ConnectionPid, Reason},
 %% Handle writer exit
 %% @private
 handle_info({'EXIT', WriterPid, Reason},
-            State = #c_state{number = ChannelNumber,
-                             writer_pid = WriterPid}) ->
+            State = #state{number = ChannelNumber,
+                           writer_pid = WriterPid}) ->
     ?LOG_WARN("Channel ~p closing: received exit signal from writer. "
               "Reason: ~p~n", [ChannelNumber, Reason]),
     {stop, {writer_died, WriterPid, Reason}, State};
@@ -634,8 +634,8 @@ handle_info({'EXIT', WriterPid, Reason},
 %% Handle reader exit
 %% @private
 handle_info({'EXIT', ReaderPid, Reason},
-            State = #c_state{number = ChannelNumber,
-                             reader_pid = ReaderPid}) ->
+            State = #state{number = ChannelNumber,
+                           reader_pid = ReaderPid}) ->
     ?LOG_WARN("Channel ~p closing: received exit signal from reader. "
               "Reason: ~p~n", [ChannelNumber, Reason]),
     {stop, {reader_died, ReaderPid, Reason}, State};
@@ -643,24 +643,24 @@ handle_info({'EXIT', ReaderPid, Reason},
 %% Handle flow handler exit
 %% @private
 handle_info({'EXIT', FlowHandler, Reason},
-            State = #c_state{number = ChannelNumber,
-                             flow_handler_pid = FlowHandler}) ->
+            State = #state{number = ChannelNumber,
+                           flow_handler_pid = FlowHandler}) ->
     ?LOG_INFO("Channel ~p: unregistering flow handler because it is "
               "closing: ~p~n", [ChannelNumber, Reason]),
-    {noreply, State#c_state{flow_handler_pid = none}};
+    {noreply, State#state{flow_handler_pid = none}};
 
 %% Handle return handler exit
 %% @private
 handle_info({'EXIT', ReturnHandler, Reason},
-            State = #c_state{number = ChannelNumber,
-                             return_handler_pid = ReturnHandler}) ->
+            State = #state{number = ChannelNumber,
+                           return_handler_pid = ReturnHandler}) ->
     ?LOG_INFO("Channel ~p: unregistering return handler because it is "
               "closing: ~p~n", [ChannelNumber, Reason]),
-    {noreply, State#c_state{return_handler_pid = none}};
+    {noreply, State#state{return_handler_pid = none}};
 
 %% Handle other exit
 %% @private
-handle_info({'EXIT', Pid, Reason}, State = #c_state{number = ChannelNumber}) ->
+handle_info({'EXIT', Pid, Reason}, State = #state{number = ChannelNumber}) ->
     ?LOG_WARN("Channel ~p closing: received unexpected exit signal from (~p). "
               "Reason: ~p~n", [ChannelNumber, Pid, Reason]),
     {stop, {unexpected_exit_signal, Pid, Reason}, State}.
@@ -670,9 +670,9 @@ handle_info({'EXIT', Pid, Reason}, State = #c_state{number = ChannelNumber}) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-terminate(_Reason, #c_state{driver = Driver,
-                           reader_pid = ReaderPid,
-                           writer_pid = WriterPid}) ->
+terminate(_Reason, #state{driver = Driver,
+                          reader_pid = ReaderPid,
+                          writer_pid = WriterPid}) ->
     amqp_channel_util:terminate_channel_infrastructure(
         Driver, {ReaderPid, WriterPid}).
 
