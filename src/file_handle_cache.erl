@@ -40,7 +40,7 @@
 %% 1) This supports one writer, multiple readers per file. Nothing
 %% else.
 %% 2) Do not open the same file from different processes. Bad things
-%% may happen.
+%% may happen, especially for writes.
 %% 3) Writes are all appends. You cannot write to the middle of a
 %% file, although you can truncate and then append if you want.
 %% 4) Although there is a write buffer, there is no read buffer. Feel
@@ -60,23 +60,28 @@
 %% 5) You can find out what the offset was when you last sync'd.
 %%
 %% There is also a server component which serves to limit the number
-%% of open file handles in a "soft" way - the server will never
-%% prevent a client from opening a handle, but may immediately tell it
-%% to close the handle. Thus you can set the limit to zero and it will
-%% still all work correctly, it is just that effectively no caching
-%% will take place. The operation of limiting is as follows:
+%% of open file handles. This is a hard limit: the server component
+%% will ensure that clients do not have more file descriptors open
+%% than it's configured to allow.
 %%
-%% On open and close, the client sends messages to the server
-%% informing it of opens and closes. This allows the server to keep
-%% track of the number of open handles. The client also keeps a
-%% gb_tree which is updated on every use of a file handle, mapping the
-%% time at which the file handle was last used (timestamp) to the
-%% handle. Thus the smallest key in this tree maps to the file handle
-%% that has not been used for the longest amount of time. This
-%% smallest key is included in the messages to the server. As such,
-%% the server keeps track of when the least recently used file handle
-%% was used *at the point of the most recent open or close* by each
-%% client.
+%% On open, the client requests permission from the server to open the
+%% required number of file descriptors. The server may ask the client
+%% to close other file descriptors that it has open, or it may queue
+%% the request and ask other clients to close file descriptors they
+%% have open in order to satisfy the request. Requests are always
+%% satisfied in the order they arrive, even if a latter request (for a
+%% small number of file descriptors) can be satisfied before an
+%% earlier request (for a larger number of file descriptors). On
+%% close, the client sends a message to the server. These messages
+%% allow the server to keep track of the number of open handles. The
+%% client also keeps a gb_tree which is updated on every use of a file
+%% handle, mapping the time at which the file handle was last used
+%% (timestamp) to the handle. Thus the smallest key in this tree maps
+%% to the file handle that has not been used for the longest amount of
+%% time. This smallest key is included in the messages to the
+%% server. As such, the server keeps track of when the least recently
+%% used file handle was used *at the point of the most recent open or
+%% close* by each client.
 %%
 %% Note that this data can go very out of date, by the client using
 %% the least recently used handle.
@@ -96,6 +101,21 @@
 %% not, it will calculate a new average age. Its data will be much
 %% more recent now, and so it is very likely that when this is
 %% communicated to the clients, the clients will close file handles.
+%% (In extreme cases, where it's very likely that all clients have
+%% used their open handles since they last sent in an update, which
+%% would mean that the average will never cause any file descriptor to
+%% be closed, the server can send out an average age of 0, resulting
+%% in all available clients closing all their file descriptors.)
+%%
+%% Note that care is taken to ensure that (a) processes which are
+%% blocked waiting for file descriptors to become available are not
+%% sent requests to close file descriptors; and (b) given it is known
+%% how many file descriptors a process has open, when the average age
+%% is forced to 0, close messages are only sent to enough processes to
+%% release the correct number of file descriptors and the list of
+%% processes is randomly shuffled. This ensures we don't cause
+%% processes to needlessly close file descriptors, and ensures that we
+%% don't always make such requests of the same processes.
 %%
 %% The advantage of this scheme is that there is only communication
 %% from the client to the server on open, close, and when in the
@@ -103,11 +123,7 @@
 %% communication from the client to the server on normal file handle
 %% operations. This scheme forms a feed-back loop - the server does
 %% not care which file handles are closed, just that some are, and it
-%% checks this repeatedly when over the limit. Given the guarantees of
-%% now(), even if there is just one file handle open, a limit of 1,
-%% and one client, it is certain that when the client calculates the
-%% age of the handle, it will be greater than when the server
-%% calculated it, hence it should be closed.
+%% checks this repeatedly when over the limit.
 %%
 %% Handles which are closed as a result of the server are put into a
 %% "soft-closed" state in which the handle is closed (data flushed out
