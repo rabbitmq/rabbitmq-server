@@ -48,8 +48,8 @@
 -type(certificate() :: #'OTPCertificate'{}).
 -type(a_socket() :: rabbit_networking:socket() | ssl_socket()).
 
--spec(ssl_issuer/1 :: (a_socket()) -> string()).
--spec(ssl_subject/1 :: (a_socket()) -> string()).
+-spec(ssl_issuer/1   :: (a_socket()) -> string()).
+-spec(ssl_subject/1  :: (a_socket()) -> string()).
 -spec(ssl_validity/1 :: (a_socket()) -> string()).
 
 -endif. %% use_specs
@@ -81,30 +81,33 @@ ssl_validity(Sock) ->
                     tbsCertificate = #'OTPTBSCertificate' {
                       validity = {'Validity', Start, End} }}) ->
                      lists:flatten(
-                       io_lib:format("~s-~s", [format_asn1_value(Start),
-                                               format_asn1_value(End)]))
+                       io_lib:format("~s - ~s", [format_asn1_value(Start),
+                                                 format_asn1_value(End)]))
              end, Sock).
 
 %% Wrapper for applying a function to a socket's certificate.
 ssl_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         {error, no_peercert} -> no_peer_certificate;
-        {error, E}           -> rabbit_log:warning("Error getting cert: ~p~n", [E]),
+        {error, E}           -> rabbit_log:warning("cannot obtain cert: "
+                                                   "~p~n", [E]),
                                 no_peer_certificate;
         nossl                -> nossl;
         {ok, Cert}           ->
             case public_key:pkix_decode_cert(Cert, otp) of
                 {ok, DecCert} ->
-                    try F(DecCert)  %% here be dragons; decompose an undocumented
-                                    %% structure
+                    %% here be dragons; decompose an undocumented
+                    %% structure
+                    try
+                        F(DecCert)
                     catch
                         C:E ->
-                            rabbit_log:info("Problems while processing SSL info: ~p:~p~n",
-                                            [C, E]),
+                            rabbit_log:info("failure in processing SSL info: "
+                                            "~p:~p~n", [C, E]),
                             unknown
                     end;
                 {error, E} ->
-                    rabbit_log:warning("Error decoding cert: ~p~n", [E]),
+                    rabbit_log:warning("error decoding cert: ~p~n", [E]),
                     no_peer_certificate
             end
     end.
@@ -118,12 +121,12 @@ ssl_info(F, Sock) ->
 format_rdn_sequence({rdnSequence, Seq}) ->
     lists:flatten(
       rabbit_misc:intersperse(
-        ",", lists:reverse(
-               [format_complex_rdn(RDN) || RDN <- Seq]))).
+        ",", lists:reverse([format_complex_rdn(RDN) || RDN <- Seq]))).
 
 %% Format an RDN set.
 format_complex_rdn(RDNs) ->
-    lists:flatten(rabbit_misc:intersperse("+", [format_rdn(RDN) || RDN <- RDNs])).
+    lists:flatten(
+      rabbit_misc:intersperse("+", [format_rdn(RDN) || RDN <- RDNs])).
 
 %% Format an RDN.  If the type name is unknown, use the dotted decimal
 %% representation.  See RFC4514, section 2.3.
@@ -161,7 +164,7 @@ escape_rdn_value(V) ->
 
 escape_rdn_value_int([], _) ->
     [];
-escape_rdn_value_int([C | S], start) when C =:= $  ; C =:= $#->
+escape_rdn_value_int([C | S], start) when C =:= $  ; C =:= $# ->
     ["\\", [C] | escape_rdn_value_int(S, middle)];
 escape_rdn_value_int(S, start) ->
     escape_rdn_value_int(S, middle);

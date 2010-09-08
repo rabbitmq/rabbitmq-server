@@ -987,8 +987,8 @@
               </varlistentry>
               <varlistentry>
                 <term>ssl_validity</term>
-                <listitem><para>The period the peer's SSL certificate
-                is valid.</para></listitem>
+                <listitem><para>The period for which the peer's SSL
+                certificate is valid.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
