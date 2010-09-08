@@ -47,7 +47,7 @@
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any())).
 -type(ok_or_any_error() :: rabbit_types:ok_or_error(any())).
--type(socket() :: rabbit_networking:ip_port() | rabbit_types:ssl_socket()).
+-type(socket() :: port() | #ssl_socket{}).
 
 -spec(async_recv/3 ::
         (socket(), integer(), timeout()) -> rabbit_types:ok(any())).

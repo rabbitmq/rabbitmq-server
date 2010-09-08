@@ -417,7 +417,8 @@
             <screen role="example">rabbitmqctl add_user tonyg changeit</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to create a
-              user named <command>tonyg</command> with (initial) password
+              (non-administrative) user named <command>tonyg</command> with
+              (initial) password
               <command>changeit</command>.
             </para>
           </listitem>
@@ -465,13 +466,57 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose administrative
+                status is to be set.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_admin tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to ensure the user
+               named <command>tonyg</command> is an administrator. This has no
+               effect when the user logs in via AMQP, but can be used to permit
+               the user to manage users, virtual hosts and permissions when the
+               user logs in via some other means (for example with the
+               management plugin).
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose administrative
+                status is to be cleared.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_admin tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to ensure the user
+               named <command>tonyg</command> is not an administrator.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>list_users</command></cmdsynopsis></term>
           <listitem>
             <para>Lists users</para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_users</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to list all users.
+              This command instructs the RabbitMQ broker to list all
+              users. Each result row will contain the user name and
+              the administrator status of the user, in that order.
             </para>
           </listitem>
         </varlistentry>

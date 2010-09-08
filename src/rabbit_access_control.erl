@@ -35,8 +35,8 @@
 
 -export([check_login/2, user_pass_login/2,
          check_vhost_access/2, check_resource_access/3]).
--export([add_user/2, delete_user/1, change_password/2, list_users/0,
-         lookup_user/1]).
+-export([add_user/2, delete_user/1, change_password/2, set_admin/1,
+         clear_admin/1, list_users/0, lookup_user/1]).
 -export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, set_permissions/6, clear_permissions/2,
          list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
@@ -70,6 +70,8 @@
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
+-spec(set_admin/1 :: (username()) -> 'ok').
+-spec(clear_admin/1 :: (username()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
 -spec(lookup_user/1 ::
         (username()) -> rabbit_types:ok(rabbit_types:user())
@@ -215,7 +217,8 @@ add_user(Username, Password) ->
                       [] ->
                           ok = mnesia:write(rabbit_user,
                                             #user{username = Username,
-                                                  password = Password},
+                                                  password = Password,
+                                                  is_admin = false},
                                             write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
@@ -245,20 +248,39 @@ delete_user(Username) ->
     R.
 
 change_password(Username, Password) ->
-    R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    ok = mnesia:write(rabbit_user,
-                                      #user{username = Username,
-                                            password = Password},
-                                      write)
-            end)),
+    R = update_user(Username, fun(User) ->
+                                      User#user{password = Password}
+                              end),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
 
+set_admin(Username) ->
+    set_admin(Username, true).
+
+clear_admin(Username) ->
+    set_admin(Username, false).
+
+set_admin(Username, IsAdmin) ->
+    R = update_user(Username, fun(User) ->
+                                      User#user{is_admin = IsAdmin}
+                              end),
+    rabbit_log:info("Set user admin flag for user ~p to ~p~n",
+                    [Username, IsAdmin]),
+    R.
+
+update_user(Username, Fun) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_misc:with_user(
+        Username,
+        fun () ->
+                {ok, User} = lookup_user(Username),
+                ok = mnesia:write(rabbit_user, Fun(User), write)
+        end)).
+
 list_users() ->
-    mnesia:dirty_all_keys(rabbit_user).
+    [{Username, IsAdmin} ||
+        #user{username = Username, is_admin = IsAdmin} <-
+            mnesia:dirty_match_object(rabbit_user, #user{_ = '_'})].
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
