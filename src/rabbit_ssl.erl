@@ -64,7 +64,7 @@ ssl_issuer(Sock) ->
     ssl_info(fun(#'OTPCertificate' {
                     tbsCertificate = #'OTPTBSCertificate' {
                       issuer = Issuer }}) ->
-                     format_ssl_subject(extract_ssl_values(Issuer))
+                     format_rdn_sequence(Issuer)
              end, Sock).
 
 %% Return a string describing the certificate's subject, as per RFC4514.
@@ -72,22 +72,17 @@ ssl_subject(Sock) ->
     ssl_info(fun(#'OTPCertificate' {
                     tbsCertificate = #'OTPTBSCertificate' {
                       subject = Subject }}) ->
-                     format_ssl_subject(extract_ssl_values(Subject))
+                     format_rdn_sequence(Subject)
              end, Sock).
 
 %% Return a string describing the certificate's validity.
 ssl_validity(Sock) ->
     ssl_info(fun(#'OTPCertificate' {
                     tbsCertificate = #'OTPTBSCertificate' {
-                      validity = Validity }}) ->
-                     case extract_ssl_values(Validity) of
-                         {'Validity', Start, End} ->
-                             lists:flatten(
-                               io_lib:format("~s-~s", [format_ssl_value(Start),
-                                                       format_ssl_value(End)]));
-                         V ->
-                             io_lib:format("~p", [V])
-                     end
+                      validity = {'Validity', Start, End} }}) ->
+                     lists:flatten(
+                       io_lib:format("~s-~s", [format_ssl_value(Start),
+                                               format_ssl_value(End)]))
              end, Sock).
 
 %% Wrapper for applying a function to a socket's certificate.
@@ -116,36 +111,15 @@ ssl_info(F, Sock) ->
 
 
 %%--------------------------------------------------------------------------
-%% Functions for extracting information from OTPCertificates
-%%--------------------------------------------------------------------------
-
-%% Convert OTPCertificate fields to something easier to use.
-extract_ssl_values({rdnSequence, List}) ->
-    extract_ssl_values_list(List);
-extract_ssl_values(V) ->
-    V.
-
-%% Convert an rdnSequeuence list to a proplist.
-extract_ssl_values_list([[#'AttributeTypeAndValue'{type = T, value = V}]
-                         | Rest]) ->
-    [{T, V} | extract_ssl_values_list(Rest)];
-extract_ssl_values_list([V|_]) ->
-    throw({unknown_rdnSequence_element, V});
-extract_ssl_values_list([]) ->
-    [].
-
-
-%%--------------------------------------------------------------------------
 %% Formatting functions
 %%--------------------------------------------------------------------------
 
-%% Convert a proplist to a RFC4514 subject string.
-format_ssl_subject(RDNs) ->
+%% Format and rdnSequence as a RFC4514 subject string.
+format_rdn_sequence({rdnSequence, Seq}) ->
     lists:flatten(
       rabbit_misc:intersperse(
         ",", lists:reverse(
-               [escape_ssl_string(format_ssl_type_and_value(T, V), start)
-                || {T, V} <- RDNs]))).
+               [escape_ssl_string(format_rdn(RDN), start) || [RDN] <- Seq]))).
 
 %% Escape a string as per RFC4514.
 escape_ssl_string([], _) ->
@@ -169,10 +143,10 @@ escape_ssl_string([C | S], middle) ->
 escape_ssl_string([$  | S], ending) ->
     ["\\ " | escape_ssl_string(S, ending)].
 
-%% Format a type-value pair as an RDN.  If the type name is unknown,
-%% use the dotted decimal representation.  See RFC4514, section 2.3.
-format_ssl_type_and_value(Type, Value) ->
-    FV = format_ssl_value(Value),
+%% Format an RDN.  If the type name is unknown, use the dotted decimal
+%% representation.  See RFC4514, section 2.3.
+format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
+    FV = format_ssl_value(V),
     Fmts = [{?'id-at-surname'                , "SN"},
             {?'id-at-givenName'              , "GIVENNAME"},
             {?'id-at-initials'               , "INITIALS"},
@@ -189,21 +163,21 @@ format_ssl_type_and_value(Type, Value) ->
             {?'id-domainComponent'           , "DC"},
             {?'id-emailAddress'              , "EMAILADDRESS"},
             {?'street-address'               , "STREET"}],
-    case proplists:lookup(Type, Fmts) of
+    case proplists:lookup(T, Fmts) of
         {_, Fmt} ->
             io_lib:format(Fmt ++ "=~s", [FV]);
-        none when is_tuple(Type) ->
-            TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(Type)],
+        none when is_tuple(T) ->
+            TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(T)],
             io_lib:format("~s:~s", [rabbit_misc:intersperse(".", TypeL), FV]);
         none ->
-            io_lib:format("~p:~s", [Type, FV])
+            io_lib:format("~p:~s", [T, FV])
     end.
 
 %% Get the string representation of an OTPCertificate field.
 format_ssl_value({printableString, S}) ->
     S;
 format_ssl_value({utf8String, Bin}) ->
-    binary:bin_to_list(Bin);
+    binary_to_list(Bin);
 format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                             Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
