@@ -36,18 +36,21 @@
 
 -export([ssl_issuer/1, ssl_subject/1, ssl_validity/1, ssl_info/2]).
 
+-export_type([certificate/0]).
 
 %%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(ssl_info_fun() :: fun((#'OTPCertificate'{}) -> string())).
+-type(certificate() :: #'OTPCertificate'{}).
+
+-type(ssl_info_fun() :: fun((certificate()) -> string())).
 
 -spec(ssl_info/2 :: (ssl_info_fun(), #'sslsocket'{}) -> any()).
 
--spec(ssl_issuer/1 :: (#'OTPCertificate'{}) -> string()).
--spec(ssl_subject/1 :: (#'OTPCertificate'{}) -> string()).
--spec(ssl_validity/1 :: (#'OTPCertificate'{}) -> string()).
+-spec(ssl_issuer/1 :: (certificate()) -> string()).
+-spec(ssl_subject/1 :: (certificate()) -> string()).
+-spec(ssl_validity/1 :: (certificate()) -> string()).
 
 -endif. %% use_specs
 
@@ -59,16 +62,20 @@
 %% Wrapper for applying a function to a socket's certificate.
 ssl_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
-        nossl               -> nossl;
-        no_peer_certificate -> no_peer_certificate;
-        {ok, Cert}          ->
-            try F(Cert)  %% here be dragons; decompose an undocumented
-                         %% structure
-            catch
-                C:E ->
-                    rabbit_log:info("Problems while processing SSL info: ~p:~p~n",
-                                    [C, E]),
-                    unknown
+        {error, no_peercert} -> no_peer_certificate;
+        {ok, nossl}          -> nossl;
+        {ok, Cert}           ->
+            case public_key:pkix_decode_cert(Cert, otp) of
+                {ok, DecCert} ->
+                    try F(DecCert)  %% here be dragons; decompose an undocumented
+                                 %% structure
+                    catch
+                        C:E ->
+                            rabbit_log:info("Problems while processing SSL info: ~p:~p~n",
+                                            [C, E]),
+                            unknown
+                    end;
+                _ -> no_peer_certificate
             end
     end.
 

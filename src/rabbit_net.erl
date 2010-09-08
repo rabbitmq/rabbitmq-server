@@ -61,8 +61,8 @@
         -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
            error()).
 -spec(peercert/1 ::
-        (rabbit_types:ssl_socket()) -> rabbit_types:ok(any()) | error()).
-        %% any() should be x509_certificate()
+        (socket() | rabbit_types:ssl_socket())
+        -> rabbit_types:ok_or_error(no_ssl | rabbit_ssl:certificate())).
 -spec(sockname/1 ::
         (socket())
         -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
@@ -112,10 +112,7 @@ peername(Sock) when is_port(Sock) ->
     inet:peername(Sock).
 
 peercert(Sock) when ?IS_SSL(Sock) ->
-    case ssl:peercert(Sock#ssl_socket.ssl) of
-        {ok, Cert}           -> public_key:pkix_decode_cert(Cert, otp);
-        {error, no_peercert} -> no_peer_certificate
-    end;
+    ssl:peercert(Sock#ssl_socket.ssl);
 peercert(Sock) when is_port(Sock) ->
     nossl.
 
