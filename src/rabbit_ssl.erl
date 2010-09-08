@@ -63,7 +63,9 @@
 ssl_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         {error, no_peercert} -> no_peer_certificate;
-        {ok, nossl}          -> nossl;
+        {error, E}           -> rabbit_log:warning("Error getting cert: ~p~n", [E]),
+                                no_peer_certificate;
+        nossl                -> nossl;
         {ok, Cert}           ->
             case public_key:pkix_decode_cert(Cert, otp) of
                 {ok, DecCert} ->
@@ -75,7 +77,9 @@ ssl_info(F, Sock) ->
                                             [C, E]),
                             unknown
                     end;
-                _ -> no_peer_certificate
+                {error, E} ->
+                    rabbit_log:warning("Error decoding cert: ~p~n", [E]),
+                    no_peer_certificate
             end
     end.
 
