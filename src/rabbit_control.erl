@@ -339,16 +339,10 @@ format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
                      Value) when is_binary(TableEntryKey) andalso
                                  is_atom(TableEntryType) ->
     io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+format_info_item([C|_] = Value) when is_number(C), C >= 32, C =< 255 ->
+    Value;
 format_info_item(Value) ->
-    case is_string(Value) of
-        true  -> Value;
-        false -> io_lib:format("~w", [Value])
-    end.
-
-is_string([C|_]) when is_number(C), C >= 32, C < 127 ->
-    true;
-is_string(_) ->
-    false.
+    io_lib:format("~w", [Value]).
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) when is_binary(I) ->
