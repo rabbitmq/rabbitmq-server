@@ -82,8 +82,9 @@ ssl_validity(Sock) ->
                       validity = Validity }}) ->
                      case extract_ssl_values(Validity) of
                          {'Validity', Start, End} ->
-                             io_lib:format("~s to ~s", [format_ssl_value(Start),
-                                                        format_ssl_value(End)]);
+                             lists:flatten(
+                               io_lib:format("~s-~s", [format_ssl_value(Start),
+                                                       format_ssl_value(End)]));
                          V ->
                              io_lib:format("~p", [V])
                      end
@@ -100,7 +101,7 @@ ssl_info(F, Sock) ->
             case public_key:pkix_decode_cert(Cert, otp) of
                 {ok, DecCert} ->
                     try F(DecCert)  %% here be dragons; decompose an undocumented
-                                 %% structure
+                                    %% structure
                     catch
                         C:E ->
                             rabbit_log:info("Problems while processing SSL info: ~p:~p~n",
@@ -205,7 +206,7 @@ format_ssl_value({utf8String, Bin}) ->
     binary:bin_to_list(Bin);
 format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                             Min1, Min2, S1, S2, $Z]}) ->
-    io_lib:format("20~c~c-~c~c-~c~c ~c~c:~c~c:~c~c",
+    io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 format_ssl_value(V) ->
     io_lib:format("~p", [V]).
