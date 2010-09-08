@@ -118,7 +118,8 @@
 -type(binding() ::
       #binding{exchange_name    :: rabbit_exchange:name(),
                queue_name       :: rabbit_amqqueue:name(),
-               key              :: rabbit_exchange:binding_key()}).
+               key              :: rabbit_binding:key(),
+               args             :: rabbit_framing:amqp_table()}).
 
 -type(amqqueue() ::
       #amqqueue{name            :: rabbit_amqqueue:name(),

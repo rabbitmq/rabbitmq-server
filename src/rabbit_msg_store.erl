@@ -34,7 +34,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/2, client_terminate/1,
+         sync/3, client_init/2, client_terminate/2,
          client_delete_and_terminate/3, successfully_recovered_state/1]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
@@ -136,7 +136,7 @@
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
--spec(client_terminate/1 :: (client_msstate()) -> 'ok').
+-spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
 -spec(client_delete_and_terminate/3 ::
         (client_msstate(), server(), binary()) -> 'ok').
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
@@ -317,7 +317,7 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
     ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {gen_server2:cast(Server, {write, Guid, Msg}), CState}.
+    {gen_server2:cast(Server, {write, Guid}), CState}.
 
 read(Server, Guid,
      CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
@@ -363,7 +363,7 @@ set_maximum_since_use(Server, Age) ->
 client_init(Server, Ref) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
-        gen_server2:call(Server, {new_client_state, Ref}, infinity),
+        gen_server2:pcall(Server, 7, {new_client_state, Ref}, infinity),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
@@ -374,16 +374,16 @@ client_init(Server, Ref) ->
                       dedup_cache_ets    = DedupCacheEts,
                       cur_file_cache_ets = CurFileCacheEts }.
 
-client_terminate(CState) ->
+client_terminate(CState, Server) ->
     close_all_handles(CState),
-    ok.
+    ok = gen_server2:call(Server, client_terminate, infinity).
 
 client_delete_and_terminate(CState, Server, Ref) ->
-    ok = client_terminate(CState),
-    ok = gen_server2:call(Server, {delete_client, Ref}, infinity).
+    close_all_handles(CState),
+    ok = gen_server2:cast(Server, {client_delete, Ref}).
 
 successfully_recovered_state(Server) ->
-    gen_server2:call(Server, successfully_recovered_state, infinity).
+    gen_server2:pcall(Server, 7, successfully_recovered_state, infinity).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -607,16 +607,15 @@ handle_call({new_client_state, CRef}, _From,
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({delete_client, CRef}, _From,
-            State = #msstate { client_refs = ClientRefs }) ->
-    reply(ok,
-          State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
+handle_call(client_terminate, _From, State) ->
+    reply(ok, State).
 
-handle_cast({write, Guid, Msg},
+handle_cast({write, Guid},
             State = #msstate { sum_valid_data      = SumValid,
                                file_summary_ets    = FileSummaryEts,
                                cur_file_cache_ets  = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
+    [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case index_lookup(Guid, State) of
         not_found ->
             write_message(Guid, Msg, 1, State);
@@ -710,7 +709,12 @@ handle_cast({gc_done, Reclaimed, Src, Dst},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State).
+    noreply(State);
+
+handle_cast({client_delete, CRef},
+            State = #msstate { client_refs = ClientRefs }) ->
+    noreply(
+      State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));

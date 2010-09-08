@@ -35,9 +35,6 @@
 
 -export([all_tests/0, test_parsing/0]).
 
-%% Exported so the hook mechanism can call back
--export([handle_hook/3, bad_handle_hook/3, extra_arg_hook/5]).
-
 -import(lists).
 
 -include("rabbit.hrl").
@@ -55,6 +52,8 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    ok = file_handle_cache:set_limit(10),
+    passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
     passed = test_bpqueue(),
@@ -1020,7 +1019,8 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         <<"user">>, <<"/">>, self()),
+                                         <<"user">>, <<"/">>, self(),
+                                         fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1037,7 +1037,15 @@ test_server_status() ->
     ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
 
     %% list bindings
-    ok = control_action(list_bindings, []),
+    ok = info_action(list_bindings, rabbit_binding:info_keys(), true),
+    %% misc binding listing APIs
+    [_|_] = rabbit_binding:list_for_exchange(
+              rabbit_misc:r(<<"/">>, exchange, <<"">>)),
+    [_] = rabbit_binding:list_for_queue(
+              rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
+    [_] = rabbit_binding:list_for_exchange_and_queue(
+            rabbit_misc:r(<<"/">>, exchange, <<"">>),
+            rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
     %% list connections
     [#listener{host = H, port = P} | _] =
@@ -1061,67 +1069,23 @@ test_server_status() ->
 
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
+
+    unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
 
-    passed.
-
-test_hooks() ->
-    %% Firing of hooks calls all hooks in an isolated manner
-    rabbit_hooks:subscribe(test_hook, test, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:subscribe(test_hook, test2, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:subscribe(test_hook2, test2, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:trigger(test_hook, [arg1, arg2]),
-    [arg1, arg2] = get(test_hook_test_fired),
-    [arg1, arg2] = get(test_hook_test2_fired),
-    undefined = get(test_hook2_test2_fired),
-
-    %% Hook Deletion works
-    put(test_hook_test_fired, undefined),
-    put(test_hook_test2_fired, undefined),
-    rabbit_hooks:unsubscribe(test_hook, test),
-    rabbit_hooks:trigger(test_hook, [arg3, arg4]),
-    undefined = get(test_hook_test_fired),
-    [arg3, arg4] = get(test_hook_test2_fired),
-    undefined = get(test_hook2_test2_fired),
-
-    %% Catches exceptions from bad hooks
-    rabbit_hooks:subscribe(test_hook3, test, {rabbit_tests, bad_handle_hook, []}),
-    ok = rabbit_hooks:trigger(test_hook3, []),
-
-    %% Passing extra arguments to hooks
-    rabbit_hooks:subscribe(arg_hook, test, {rabbit_tests, extra_arg_hook, [1, 3]}),
-    rabbit_hooks:trigger(arg_hook, [arg1, arg2]),
-    {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
-
-    %% Invoking Pids
-    Remote = fun () ->
-        receive
-            {rabbitmq_hook,[remote_test,test,[],Target]} ->
-                Target ! invoked
-        end
-    end,
-    P = spawn(Remote),
-    rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
-    rabbit_hooks:trigger(remote_test, []),
-    receive
-       invoked -> ok
-    after 100 ->
-       io:format("Remote hook not invoked"),
-       throw(timeout)
-    end,
     passed.
 
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer, <<"guest">>,
-                                         <<"/">>, self()),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
+                                         <<"guest">>, <<"/">>, self(),
+                                         fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
-    MRef = erlang:monitor(process, Ch),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
-    {Writer, Ch, MRef}.
+    {Writer, Ch}.
 
 test_statistics_receiver(Pid) ->
     receive
@@ -1160,7 +1124,7 @@ test_statistics() ->
     %% by far the most complex code though.
 
     %% Set up a channel and queue
-    {_Writer, Ch, _MRef} = test_spawn(fun test_statistics_receiver/1),
+    {_Writer, Ch} = test_spawn(fun test_statistics_receiver/1),
     rabbit_channel:do(Ch, #'queue.declare'{}),
     QName = receive #'queue.declare_ok'{queue = Q0} ->
                     Q0
@@ -1404,16 +1368,34 @@ delete_log_handlers(Handlers) ->
         Handler <- Handlers],
     ok.
 
-handle_hook(HookName, Handler, Args) ->
-    A = atom_to_list(HookName) ++ "_" ++ atom_to_list(Handler) ++ "_fired",
-    put(list_to_atom(A), Args).
-bad_handle_hook(_, _, _) ->
-    exit(bad_handle_hook_called).
-extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
-    handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
-
 test_supervisor_delayed_restart() ->
     test_sup:test_supervisor_delayed_restart().
+
+test_file_handle_cache() ->
+    %% test copying when there is just one spare handle
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
+    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
+    Pid = spawn(fun () -> {ok, Hdl} = file_handle_cache:open(
+                                        filename:join(TmpDir, "file3"),
+                                        [write], []),
+                          receive close -> ok end,
+                          file_handle_cache:delete(Hdl)
+                end),
+    Src = filename:join(TmpDir, "file1"),
+    Dst = filename:join(TmpDir, "file2"),
+    Content = <<"foo">>,
+    ok = file:write_file(Src, Content),
+    {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
+    {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
+    Size = size(Content),
+    {ok, Size} = file_handle_cache:copy(SrcHdl, DstHdl, Size),
+    ok = file_handle_cache:delete(SrcHdl),
+    file_handle_cache:delete(DstHdl),
+    Pid ! close,
+    ok = file_handle_cache:set_limit(Limit),
+    passed.
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
@@ -1486,7 +1468,7 @@ msg_store_remove(Guids) ->
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
       lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref), L)).
+                  rabbit_msg_store:client_init(MsgStore, Ref), L), MsgStore).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1549,7 +1531,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:release(?PERSISTENT_MSG_STORE, Guids2ndHalf),
     %% read the second half again, just for fun (aka code coverage)
     MSCState7 = msg_store_read(Guids2ndHalf, MSCState6),
-    ok = rabbit_msg_store:client_terminate(MSCState7),
+    ok = rabbit_msg_store:client_terminate(MSCState7, ?PERSISTENT_MSG_STORE),
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
@@ -1574,7 +1556,7 @@ test_msg_store() ->
     {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
-           msg_store_read(Guids1stHalf, MSCState9)),
+           msg_store_read(Guids1stHalf, MSCState9), ?PERSISTENT_MSG_STORE),
     ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids1stHalf),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse guids
