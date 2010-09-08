@@ -38,22 +38,19 @@
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
 
--export_type([certificate/0, ssl_socket/0]).
-
 %%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(ssl_socket() :: #ssl_socket{}).
+-export_type([certificate/0]).
+
 -type(certificate() :: #'OTPCertificate'{}).
--type(a_socket() :: rabbit_networking:socket() | ssl_socket()).
 
--spec(peer_cert_issuer/1   :: (a_socket()) -> string()).
--spec(peer_cert_subject/1  :: (a_socket()) -> string()).
--spec(peer_cert_validity/1 :: (a_socket()) -> string()).
+-spec(peer_cert_issuer/1   :: (rabbit_net:socket()) -> string()).
+-spec(peer_cert_subject/1  :: (rabbit_net:socket()) -> string()).
+-spec(peer_cert_validity/1 :: (rabbit_net:socket()) -> string()).
 
--endif. %% use_specs
-
+-endif.
 
 %%--------------------------------------------------------------------------
 %% High-level functions used by reader
