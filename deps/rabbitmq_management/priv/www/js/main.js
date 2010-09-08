@@ -1,7 +1,7 @@
 var statistics_level;
 
 $(document).ready(function() {
-    var overview = jQuery.parseJSON(sync_get('/overview'));
+    var overview = JSON.parse(sync_get('/overview'));
     statistics_level = overview.statistics_level;
     app.run();
     var url = this.location.toString();
@@ -26,8 +26,8 @@ function dispatcher() {
                    '#/connections');
         });
     this.del('#/connections', function() {
-            sync_delete(this, '/connections/:name');
-            go_to('#/connections');
+            if (sync_delete(this, '/connections/:name'))
+                go_to('#/connections');
             return false;
         });
 
@@ -43,13 +43,13 @@ function dispatcher() {
                    '#/exchanges');
         });
     this.put('#/exchanges', function() {
-            sync_put(this, '/exchanges/:vhost/:name');
-            update();
+            if (sync_put(this, '/exchanges/:vhost/:name'))
+                update();
             return false;
         });
     this.del('#/exchanges', function() {
-            sync_delete(this, '/exchanges/:vhost/:name');
-            go_to('#/exchanges');
+            if (sync_delete(this, '/exchanges/:vhost/:name'))
+                go_to('#/exchanges');
             return false;
         });
 
@@ -60,24 +60,24 @@ function dispatcher() {
                     'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     this.put('#/queues', function() {
-            sync_put(this, '/queues/:vhost/:name');
-            update();
+            if (sync_put(this, '/queues/:vhost/:name'))
+                update();
             return false;
         });
     this.del('#/queues', function() {
-            sync_delete(this, '/queues/:vhost/:name');
-            go_to('#/queues');
+            if (sync_delete(this, '/queues/:vhost/:name'))
+                go_to('#/queues');
             return false;
         });
 
     this.post('#/bindings', function() {
-            sync_post(this, '/bindings/:vhost/:queue/:exchange');
-            update();
+            if (sync_post(this, '/bindings/:vhost/:queue/:exchange'))
+                update();
             return false;
         });
     this.del('#/bindings', function() {
-            sync_delete(this, '/bindings/:vhost/:queue/:exchange/:properties_key');
-            update();
+            if (sync_delete(this, '/bindings/:vhost/:queue/:exchange/:properties_key'))
+                update();
             return false;
         });
 
@@ -87,13 +87,13 @@ function dispatcher() {
                    '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            sync_put(this, '/vhosts/:name');
-            update();
+            if (sync_put(this, '/vhosts/:name'))
+                update();
             return false;
         });
     this.del('#/vhosts', function() {
-            sync_delete(this, '/vhosts/:name');
-            go_to('#/vhosts');
+            if (sync_delete(this, '/vhosts/:name'))
+                go_to('#/vhosts');
             return false;
         });
 
@@ -105,24 +105,24 @@ function dispatcher() {
                    '#/users');
         });
     this.put('#/users', function() {
-            sync_put(this, '/users/:username');
-            update();
+            if (sync_put(this, '/users/:username'))
+                update();
             return false;
         });
     this.del('#/users', function() {
-            sync_delete(this, '/users/:username');
-            go_to('#/users');
+            if (sync_delete(this, '/users/:username'))
+                go_to('#/users');
             return false;
         });
 
     this.put('#/permissions', function() {
-            sync_put(this, '/permissions/:vhost/:username');
-            update();
+            if (sync_put(this, '/permissions/:vhost/:username'))
+                update();
             return false;
         });
     this.del('#/permissions', function() {
-            sync_delete(this, '/permissions/:vhost/:username');
-            update();
+            if (sync_delete(this, '/permissions/:vhost/:username'))
+                update();
             return false;
         });
 }
@@ -153,6 +153,12 @@ function update() {
             postprocess();
             //timer = setInterval('update()', 5000);
         });
+}
+
+function error_popup(text) {
+    $('body').prepend('<div class="error-message">' + text + '</div>');
+    $('.error-message').center().fadeOut(10000)
+        .click( function() { $(this).stop().fadeOut('fast') } );
 }
 
 function postprocess() {
@@ -262,15 +268,15 @@ function sync_get(path) {
 }
 
 function sync_put(sammy, path_template) {
-    sync_req('PUT', sammy.params, path_template);
+    return sync_req('PUT', sammy.params, path_template);
 }
 
 function sync_delete(sammy, path_template) {
-    sync_req('DELETE', sammy.params, path_template);
+    return sync_req('DELETE', sammy.params, path_template);
 }
 
 function sync_post(sammy, path_template) {
-    sync_req('POST', sammy.params, path_template);
+    return sync_req('POST', sammy.params, path_template);
 }
 
 function sync_req(type, params, path_template) {
@@ -289,6 +295,11 @@ function sync_req(type, params, path_template) {
         }
     }
 
+    if (req.status == 400) {
+        error_popup(JSON.parse(req.responseText).reason);
+        return false;
+    }
+
     // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if (req.status >= 400 && req.status != 1223) {
@@ -296,7 +307,10 @@ function sync_req(type, params, path_template) {
               req.responseText);
     }
 
-    return req.responseText;
+    if (type == 'GET')
+        return req.responseText;
+    else
+        return true;
 }
 
 function fill_path_template(template, params) {
@@ -330,3 +344,15 @@ function xmlHttpRequest() {
     }
     return res;
 }
+
+(function($){
+    $.fn.extend({
+        center: function () {
+            return this.each(function() {
+                var top = ($(window).height() - $(this).outerHeight()) / 2;
+                var left = ($(window).width() - $(this).outerWidth()) / 2;
+                $(this).css({margin:0, top: (top > 0 ? top : 0)+'px', left: (left > 0 ? left : 0)+'px'});
+            });
+        }
+    });
+})(jQuery);
