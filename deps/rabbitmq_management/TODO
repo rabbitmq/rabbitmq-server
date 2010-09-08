@@ -7,7 +7,6 @@ Write more management:
 Add superuser bit (bug 22983).
   Tests for permissions.
 More user-friendly form submission errors.
-Make it work with fine stats turned off.
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.

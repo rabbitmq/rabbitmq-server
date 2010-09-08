@@ -6,7 +6,9 @@
   <tr>
    <th></th>
    <th colspan="5">Details</th>
+<% if (statistics_level == 'fine') { %>
    <th colspan="6">Message rates</th>
+<% } %>
   </tr>
   <tr>
    <th>Channel</th>
@@ -15,12 +17,14 @@
    <th>Transactional</th>
    <th>Prefetch</th>
    <th>Messages unacked</th>
+<% if (statistics_level == 'fine') { %>
    <th>publish</th>
    <th>deliver</th>
    <th>get</th>
    <th>deliver<sub>(noack)</sub></th>
    <th>get<sub>(noack)</sub></th>
    <th>ack</th>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -39,6 +43,7 @@
     </td>
     <td class="c"><%= channels[i].prefetch_count %></td>
     <td class="c"><%= channels[i].messages_unacknowledged %></td>
+<% if (statistics_level == 'fine') { %>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'publish') %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver') %></td>
     <td class="l"><%= fmt_rate(channels[i].message_stats, 'get') %></td>
@@ -47,6 +52,7 @@
     <td class="l">
       <%= fmt_rate(channels[i].message_stats, 'ack') %>
     </td>
+<% } %>
   </tr>
   <% } %>
  </tbody>

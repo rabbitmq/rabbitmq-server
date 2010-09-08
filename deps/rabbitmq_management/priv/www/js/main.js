@@ -1,4 +1,8 @@
+var statistics_level;
+
 $(document).ready(function() {
+    var overview = jQuery.parseJSON(sync_get('/overview'));
+    statistics_level = overview.statistics_level;
     app.run();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
@@ -142,6 +146,7 @@ function render(reqs, template, highlight) {
 function update() {
     //clearInterval(timer);
     with_reqs(current_reqs, [], function(json) {
+            json.statistics_level = statistics_level;
             var html = format(current_template, json);
             replace_content('main', html);
             update_status('ok');
@@ -252,25 +257,29 @@ function with_req(path, fun) {
     req.send(null);
 }
 
+function sync_get(path) {
+    return sync_req('GET', [], path);
+}
+
 function sync_put(sammy, path_template) {
-    sync_req('PUT', sammy, path_template);
+    sync_req('PUT', sammy.params, path_template);
 }
 
 function sync_delete(sammy, path_template) {
-    sync_req('DELETE', sammy, path_template);
+    sync_req('DELETE', sammy.params, path_template);
 }
 
 function sync_post(sammy, path_template) {
-    sync_req('POST', sammy, path_template);
+    sync_req('POST', sammy.params, path_template);
 }
 
-function sync_req(type, sammy, path_template) {
-    var path = fill_path_template(path_template, sammy.params);
+function sync_req(type, params, path_template) {
+    var path = fill_path_template(path_template, params);
     var req = xmlHttpRequest();
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
-        req.send(JSON.stringify(sammy.params));
+        req.send(JSON.stringify(params));
     }
     catch (e) {
         if (e.number == 0x80004004) {
@@ -286,6 +295,8 @@ function sync_req(type, sammy, path_template) {
         debug("Got response code " + req.status + " with body " +
               req.responseText);
     }
+
+    return req.responseText;
 }
 
 function fill_path_template(template, params) {

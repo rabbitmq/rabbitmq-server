@@ -32,7 +32,7 @@
 start(_Type, _StartArgs) ->
     io:format("starting ~-60s ...",
               [io_lib:format("~s", ["management plugin"])]),
-    application:set_env(rabbit, collect_statistics, fine),
+    ensure_statistics_enabled(),
     register_contexts(),
     Sup = rabbit_mgmt_sup:start_link(),
     io:format("done~n"),
@@ -49,6 +49,17 @@ start(_Type, _StartArgs) ->
 
 stop(_State) ->
     ok.
+
+ensure_statistics_enabled() ->
+    {ok, Level} = application:get_env(rabbit, collect_statistics),
+    case Level of
+        none ->
+            application:set_env(rabbit, collect_statistics, coarse),
+            rabbit_log:info("Management plugin upgraded statistics"
+                            ++ " from none to coarse.~n");
+        _ ->
+            ok
+    end.
 
 register_contexts() ->
     application:set_env(
@@ -82,7 +93,7 @@ log_startup() ->
     {ok, Hostname} = inet:gethostname(),
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(get_port()),
     rabbit_log:info(
-      "RabbitMQ Management plugin started.~n"
+      "Management plugin started.~n"
       ++ "HTTP API:       ~s/~s/~n"
       ++ "Management UI:  ~s/~s/~n",
       [URLPrefix, ?PREFIX, URLPrefix, ?UI_PREFIX]).

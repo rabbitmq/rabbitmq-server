@@ -1,5 +1,6 @@
 <h1>Overview</h1>
 
+<% if (statistics_level == 'fine') { %>
 <div class="section">
 <h2>Message Rates</h2>
 <div>
@@ -7,6 +8,7 @@
 <span class="br"></span>
 </div>
 </div>
+<% } %>
 
 <div class="section">
 <h2>System Information</h2>
@@ -18,10 +20,12 @@
   </tr>
   <tr>
     <th>Operating System PID</th>
-    <td><%= overview.os_pid %></td></tr>
+    <td><%= overview.os_pid %></td>
+  </tr>
   <tr>
     <th>Bound To</th>
-    <td><%= overview.bound_to %></td></tr>
+    <td><%= overview.bound_to %></td>
+  </tr>
   <tr>
     <th>File Descriptors</th>
     <td class="status">
@@ -49,6 +53,53 @@
       </div>
     </td>
   </tr>
+  <tr>
+    <th>Statistics Level</th>
+    <td><%= overview.statistics_level %></td>
+  </tr>
 </table>
 </div>
 </div>
+
+<% if (overview.statistics_level != 'fine') { %>
+<div class="section-hidden">
+<h2>Message Rates Disabled</h2>
+<div>
+<p>
+  The statistics level in this RabbitMQ server is currently set to
+  <code><%= overview.statistics_level %></code>. In order to see
+  message rates it must be set to <code>fine</code>. This will have a
+  performance impact on a CPU-bound server; typically message
+  throughput is reduced by 5-10%.
+</p>
+<p>
+  To do this, set the value of the <code>collect_statistics</code>
+  variable to <code>fine</code> in your configuration
+  file and restart RabbitMQ. The file can be found at:
+  <table class="facts">
+    <tr>
+      <th>Packaged / Generic Unix</th>
+      <td><code>/etc/rabbitmq/rabbitmq.config</code></td>
+    </tr>
+    <tr>
+      <th>Windows</th>
+      <td><code>%APPDATA%\RabbitMQ\rabbitmq.config</code></td>
+    </tr>
+    <tr>
+      <th>Macports</th>
+      <td><code>/opt/local/etc/rabbitmq/rabbitmq.config</code></td>
+    </tr>
+  </table>
+</p>
+<p>
+  A complete (minimal) example configuration file would look like:
+</p>
+<pre>[{rabbit, [{collect_statistics, fine}]}].</pre>
+<p>
+ <a href="http://www.rabbitmq.com/install.html#configfile">Further
+ information on the configuration file</a>.
+</p>
+<span class="br"></span>
+</div>
+</div>
+<% } %>
