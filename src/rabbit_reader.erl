@@ -861,7 +861,6 @@ i(client_properties, #v1{connection = #connection{
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
-
 %%--------------------------------------------------------------------------
 
 send_to_new_channel(Channel, AnalyzedFrame, State) ->
