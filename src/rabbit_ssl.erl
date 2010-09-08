@@ -81,8 +81,8 @@ ssl_validity(Sock) ->
                     tbsCertificate = #'OTPTBSCertificate' {
                       validity = {'Validity', Start, End} }}) ->
                      lists:flatten(
-                       io_lib:format("~s-~s", [format_ssl_value(Start),
-                                               format_ssl_value(End)]))
+                       io_lib:format("~s-~s", [format_asn1_value(Start),
+                                               format_asn1_value(End)]))
              end, Sock).
 
 %% Wrapper for applying a function to a socket's certificate.
@@ -119,30 +119,30 @@ format_rdn_sequence({rdnSequence, Seq}) ->
     lists:flatten(
       rabbit_misc:intersperse(
         ",", lists:reverse(
-               [escape_ssl_string(format_complex_rdn(RDN), start)
+               [escape_rdn_value(format_complex_rdn(RDN), start)
                 || RDN <- Seq]))).
 
 %% Escape a string as per RFC4514.
-escape_ssl_string([], _) ->
+escape_rdn_value([], _) ->
     [];
-escape_ssl_string([$  | S], start) ->
-    ["\\ " | escape_ssl_string(S, start)];
-escape_ssl_string([$# | S], start) ->
-    ["\\#" | escape_ssl_string(S, start)];
-escape_ssl_string(S, start) ->
-    escape_ssl_string(S, middle);
-escape_ssl_string([$  | S], middle) ->
+escape_rdn_value([$  | S], start) ->
+    ["\\ " | escape_rdn_value(S, start)];
+escape_rdn_value([$# | S], start) ->
+    ["\\#" | escape_rdn_value(S, start)];
+escape_rdn_value(S, start) ->
+    escape_rdn_value(S, middle);
+escape_rdn_value([$  | S], middle) ->
     case lists:filter(fun(C) -> C =/= $  end, S) of
-        []    -> escape_ssl_string([$  | S], ending);
-        [_|_] -> [" " | escape_ssl_string(S, middle)]
+        []    -> escape_rdn_value([$  | S], ending);
+        [_|_] -> [" " | escape_rdn_value(S, middle)]
     end;
-escape_ssl_string([C | S], middle) ->
+escape_rdn_value([C | S], middle) ->
     case lists:member(C, ",+\"\\<>;") of
-        false -> [C | escape_ssl_string(S, middle)];
-        true  -> ["\\", C | escape_ssl_string(S, middle)]
+        false -> [C | escape_rdn_value(S, middle)];
+        true  -> ["\\", C | escape_rdn_value(S, middle)]
     end;
-escape_ssl_string([$  | S], ending) ->
-    ["\\ " | escape_ssl_string(S, ending)].
+escape_rdn_value([$  | S], ending) ->
+    ["\\ " | escape_rdn_value(S, ending)].
 
 %% Format an RDN set.
 format_complex_rdn(RDNs) ->
@@ -151,7 +151,7 @@ format_complex_rdn(RDNs) ->
 %% Format an RDN.  If the type name is unknown, use the dotted decimal
 %% representation.  See RFC4514, section 2.3.
 format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
-    FV = format_ssl_value(V),
+    FV = format_asn1_value(V),
     Fmts = [{?'id-at-surname'                , "SN"},
             {?'id-at-givenName'              , "GIVENNAME"},
             {?'id-at-initials'               , "INITIALS"},
@@ -179,13 +179,13 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
     end.
 
 %% Get the string representation of an OTPCertificate field.
-format_ssl_value({printableString, S}) ->
+format_asn1_value({printableString, S}) ->
     S;
-format_ssl_value({utf8String, Bin}) ->
+format_asn1_value({utf8String, Bin}) ->
     binary_to_list(Bin);
-format_ssl_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
+format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                             Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
-format_ssl_value(V) ->
+format_asn1_value(V) ->
     io_lib:format("~p", [V]).
