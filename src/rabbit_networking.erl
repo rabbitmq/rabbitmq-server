@@ -121,7 +121,7 @@ boot_ssl() ->
                     fun ({_, rc4_128, _})   ->
                             false;
                         (S) when is_list(S) ->
-                            match =/= re:run(S, "RC4", [{capture, none}]);
+                            string:str(S, "RC4") =:= 0;
                         (_) ->
                             true
                     end,
