@@ -66,7 +66,8 @@
                           send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
-                              ssl_subject, ssl_issuer, ssl_validity,
+                              peer_cert_subject, peer_cert_issuer,
+                              peer_cert_validity,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
@@ -821,9 +822,9 @@ i(peer_address, #v1{sock = Sock}) ->
 i(peer_port, #v1{sock = Sock}) ->
     {ok, {_, P}} = rabbit_net:peername(Sock),
     P;
-i(ssl_issuer,   #v1{sock = Sock}) -> rabbit_ssl:ssl_issuer(Sock);
-i(ssl_subject,  #v1{sock = Sock}) -> rabbit_ssl:ssl_subject(Sock);
-i(ssl_validity, #v1{sock = Sock}) -> rabbit_ssl:ssl_validity(Sock);
+i(peer_cert_issuer,   #v1{sock = Sock}) -> rabbit_ssl:peer_cert_issuer(Sock);
+i(peer_cert_subject,  #v1{sock = Sock}) -> rabbit_ssl:peer_cert_subject(Sock);
+i(peer_cert_validity, #v1{sock = Sock}) -> rabbit_ssl:peer_cert_validity(Sock);
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;

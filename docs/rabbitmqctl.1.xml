@@ -922,6 +922,21 @@
                 <listitem><para>Peer port.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>peer_cert_subject</term>
+                <listitem><para>The subject of the peer's SSL
+                certificate.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_cert_issuer</term>
+                <listitem><para>The issuer of the peer's SSL
+                certificate.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_cert_validity</term>
+                <listitem><para>The period for which the peer's SSL
+                certificate is valid.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>state</term>
                 <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
                   <command>opening</command>, <command>running</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
@@ -974,21 +989,6 @@
               <varlistentry>
                 <term>send_pend</term>
                 <listitem><para>Send queue size.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>ssl_subject</term>
-                <listitem><para>The subject of the peer's SSL
-                certificate.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>ssl_issuer</term>
-                <listitem><para>The issuer of the peer's SSL
-                certificate.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>ssl_validity</term>
-                <listitem><para>The period for which the peer's SSL
-                certificate is valid.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

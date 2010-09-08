@@ -36,7 +36,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ssl/src/ssl_int.hrl").
 
--export([ssl_issuer/1, ssl_subject/1, ssl_validity/1]).
+-export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
 
 -export_type([certificate/0, ssl_socket/0]).
 
@@ -48,9 +48,9 @@
 -type(certificate() :: #'OTPCertificate'{}).
 -type(a_socket() :: rabbit_networking:socket() | ssl_socket()).
 
--spec(ssl_issuer/1   :: (a_socket()) -> string()).
--spec(ssl_subject/1  :: (a_socket()) -> string()).
--spec(ssl_validity/1 :: (a_socket()) -> string()).
+-spec(peer_cert_issuer/1   :: (a_socket()) -> string()).
+-spec(peer_cert_subject/1  :: (a_socket()) -> string()).
+-spec(peer_cert_validity/1 :: (a_socket()) -> string()).
 
 -endif. %% use_specs
 
@@ -60,33 +60,35 @@
 %%--------------------------------------------------------------------------
 
 %% Return a string describing the certificate's issuer.
-ssl_issuer(Sock) ->
-    ssl_info(fun(#'OTPCertificate' {
-                    tbsCertificate = #'OTPTBSCertificate' {
-                      issuer = Issuer }}) ->
-                     format_rdn_sequence(Issuer)
-             end, Sock).
+peer_cert_issuer(Sock) ->
+    cert_info(fun(#'OTPCertificate' {
+                     tbsCertificate = #'OTPTBSCertificate' {
+                       issuer = Issuer }}) ->
+                      format_rdn_sequence(Issuer)
+              end, Sock).
 
 %% Return a string describing the certificate's subject, as per RFC4514.
-ssl_subject(Sock) ->
-    ssl_info(fun(#'OTPCertificate' {
-                    tbsCertificate = #'OTPTBSCertificate' {
-                      subject = Subject }}) ->
-                     format_rdn_sequence(Subject)
-             end, Sock).
+peer_cert_subject(Sock) ->
+    cert_info(fun(#'OTPCertificate' {
+                     tbsCertificate = #'OTPTBSCertificate' {
+                       subject = Subject }}) ->
+                      format_rdn_sequence(Subject)
+              end, Sock).
 
 %% Return a string describing the certificate's validity.
-ssl_validity(Sock) ->
-    ssl_info(fun(#'OTPCertificate' {
-                    tbsCertificate = #'OTPTBSCertificate' {
-                      validity = {'Validity', Start, End} }}) ->
-                     lists:flatten(
-                       io_lib:format("~s - ~s", [format_asn1_value(Start),
-                                                 format_asn1_value(End)]))
-             end, Sock).
+peer_cert_validity(Sock) ->
+    cert_info(fun(#'OTPCertificate' {
+                     tbsCertificate = #'OTPTBSCertificate' {
+                       validity = {'Validity', Start, End} }}) ->
+                      lists:flatten(
+                        io_lib:format("~s - ~s", [format_asn1_value(Start),
+                                                  format_asn1_value(End)]))
+              end, Sock).
+
+%%--------------------------------------------------------------------------
 
 %% Wrapper for applying a function to a socket's certificate.
-ssl_info(F, Sock) ->
+cert_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         {error, no_peercert} -> no_peer_certificate;
         {error, E}           -> rabbit_log:warning("cannot obtain cert: "
@@ -111,7 +113,6 @@ ssl_info(F, Sock) ->
                     no_peer_certificate
             end
     end.
-
 
 %%--------------------------------------------------------------------------
 %% Formatting functions
