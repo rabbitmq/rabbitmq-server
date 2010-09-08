@@ -8,9 +8,6 @@ A summary:
     cd rabbitmq-public-umbrella
     make co
     make
-    hg clone http://hg.rabbitmq.com/rabbitmq-management/
-    cd rabbitmq-management
-    make
 
 After that in the directory 'rabbitmq-public-umbrella/rabbitmq-management' you
 should be able to see the plugins:
