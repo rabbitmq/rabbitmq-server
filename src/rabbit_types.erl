@@ -142,7 +142,8 @@
 
 -type(user() ::
       #user{username :: rabbit_access_control:username(),
-            password :: rabbit_access_control:password()}).
+            password :: rabbit_access_control:password(),
+            is_admin :: boolean()}).
 
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).
