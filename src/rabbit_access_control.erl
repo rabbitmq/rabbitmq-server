@@ -241,15 +241,9 @@ delete_user(Username) ->
     R.
 
 change_password(Username, Password) ->
-    R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    ok = mnesia:write(rabbit_user,
-                                      #user{username = Username,
-                                            password = Password},
-                                      write)
-            end)),
+    R = update_user(Username, fun(User) ->
+                                      User#user{password = Password}
+                              end),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
 
@@ -260,19 +254,21 @@ clear_admin(Username) ->
     set_admin(Username, false).
 
 set_admin(Username, IsAdmin) ->
-    R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    {ok, User} = lookup_user(Username),
-                    ok = mnesia:write(rabbit_user,
-                                      User#user{username = Username,
-                                                is_admin = IsAdmin},
-                                      write)
-            end)),
+    R = update_user(Username, fun(User) ->
+                                      User#user{is_admin = IsAdmin}
+                              end),
     rabbit_log:info("Set user admin flag for user ~p to ~p~n",
                     [Username, IsAdmin]),
     R.
+
+update_user(Username, Fun) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_misc:with_user(
+        Username,
+        fun () ->
+                {ok, User} = lookup_user(Username),
+                ok = mnesia:write(rabbit_user, Fun(User), write)
+        end)).
 
 list_users() ->
     [{Username, IsAdmin} ||
