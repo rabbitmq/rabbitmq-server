@@ -6,7 +6,6 @@ Write more management:
   Purge queues
 Add superuser bit (bug 22983).
   Tests for permissions.
-More user-friendly form submission errors.
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
