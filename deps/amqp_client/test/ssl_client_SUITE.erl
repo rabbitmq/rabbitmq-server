@@ -88,8 +88,8 @@ new_connection() ->
                       {verify, verify_peer},
                       {fail_if_no_peer_cert, true}]},
     case amqp_connection:start(network, Params) of
-        {ok, Conn} -> Conn;
-        Error      -> Error
+        {ok, Conn}         -> Conn;
+        {error, _} = Error -> Error
     end.
 
 test_coverage() ->

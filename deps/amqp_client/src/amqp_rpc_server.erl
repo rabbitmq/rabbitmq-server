@@ -73,7 +73,7 @@ stop(Pid) ->
 
 %% @private
 init([Connection, Q, Fun]) ->
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
     amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
     {ok, #rpc_s_state{channel = Channel, handler = Fun} }.

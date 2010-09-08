@@ -136,8 +136,8 @@ new_connection() ->
 
 new_connection(AmqpParams) ->
     case amqp_connection:start(network, AmqpParams) of
-        {ok, Conn} -> Conn;
-        Error      -> Error
+        {ok, Conn}             -> Conn;
+        {error, Error} = Error -> Error
     end.
 
 test_coverage() ->

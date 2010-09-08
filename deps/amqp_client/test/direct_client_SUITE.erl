@@ -104,8 +104,8 @@ channel_death_test() ->
 
 new_connection() ->
     case amqp_connection:start(direct) of
-        {ok, Conn} -> Conn;
-        Error      -> Error
+        {ok, Conn}         -> Conn;
+        {error, _} = Error -> Error
     end.
 
 test_coverage() ->

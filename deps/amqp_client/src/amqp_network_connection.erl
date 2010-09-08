@@ -121,10 +121,10 @@ handle_command({open_channel, ProposedNumber}, _From,
     try amqp_channel_util:open_channel(ProposedNumber, MaxChannel, network,
                                        {Sock, MainReader}, Channels) of
         {ChannelPid, NewChannels} ->
-            {reply, ChannelPid, State#nc_state{channels = NewChannels}}
+            {reply, {ok, ChannelPid}, State#nc_state{channels = NewChannels}}
     catch
         error:out_of_channel_numbers = Error ->
-            {reply, {Error, MaxChannel}, State}
+            {reply, {error, {Error, MaxChannel}}, State}
     end;
 
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
