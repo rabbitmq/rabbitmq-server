@@ -489,7 +489,7 @@ wait_for_channel_termination(0, TimerRef) ->
 
 wait_for_channel_termination(N, TimerRef) ->
     receive
-        {'EXIT', ChSupPid, Reason} ->
+        {'DOWN', _MRef, process, ChSupPid, Reason} ->
             case channel_cleanup(ChSupPid) of
                 undefined ->
                     exit({abnormal_dependent_exit, ChSupPid, Reason});
