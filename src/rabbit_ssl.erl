@@ -119,7 +119,8 @@ format_rdn_sequence({rdnSequence, Seq}) ->
     lists:flatten(
       rabbit_misc:intersperse(
         ",", lists:reverse(
-               [escape_ssl_string(format_rdn(RDN), start) || [RDN] <- Seq]))).
+               [escape_ssl_string(format_complex_rdn(RDN), start)
+                || RDN <- Seq]))).
 
 %% Escape a string as per RFC4514.
 escape_ssl_string([], _) ->
@@ -142,6 +143,10 @@ escape_ssl_string([C | S], middle) ->
     end;
 escape_ssl_string([$  | S], ending) ->
     ["\\ " | escape_ssl_string(S, ending)].
+
+%% Format an RDN set.
+format_complex_rdn(RDNs) ->
+    lists:flatten(rabbit_misc:intersperse("+", [format_rdn(RDN) || RDN <- RDNs])).
 
 %% Format an RDN.  If the type name is unknown, use the dotted decimal
 %% representation.  See RFC4514, section 2.3.
