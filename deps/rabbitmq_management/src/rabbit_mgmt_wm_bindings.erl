@@ -66,7 +66,7 @@ create_path(ReqData, Context) ->
 accept_content(ReqData, {_Mode, Context}) ->
     rabbit_mgmt_util:with_decode_vhost(
       [routing_key, arguments], ReqData, Context,
-      fun(VHost, [Key, Args]) ->
+      fun(VHost, [Key, _Args]) ->
               Exchange = rabbit_mgmt_util:id(exchange, ReqData),
               Queue = rabbit_mgmt_util:id(queue, ReqData),
               Res = rabbit_mgmt_util:amqp_request(

@@ -121,7 +121,7 @@ binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
            [{fun (Res) -> resource(exchange, Res) end, [exchange]}]).
 
 %% TODO
-pack_props(Key, Args) ->
+pack_props(Key, _Args) ->
     list_to_binary("key_" ++ mochiweb_util:quote_plus(binary_to_list(Key))).
 
 url(Fmt, Vals) ->
