@@ -325,7 +325,7 @@ read(Server, Guid,
                     Defer = fun() -> {gen_server2:pcall(
                                         Server, 2, {read, Guid}, infinity),
                                       CState} end,
-                    case index_lookup_positive_refcount(Guid, CState) of
+                    case index_lookup_positive_ref_count(Guid, CState) of
                         not_found   -> Defer();
                         MsgLocation -> client_read1(Server, MsgLocation, Defer,
                                                     CState)
@@ -817,7 +817,7 @@ add_to_file_summary(#file_summary { file             = File,
 
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->
-    case index_lookup_positive_refcount(Guid, State) of
+    case index_lookup_positive_ref_count(Guid, State) of
         not_found ->
             gen_server2:reply(From, not_found),
             State;
@@ -890,7 +890,7 @@ read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
     {Msg, State1}.
 
 contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
-    case index_lookup_positive_refcount(Guid, State) of
+    case index_lookup_positive_ref_count(Guid, State) of
         not_found ->
             gen_server2:reply(From, false),
             State;
@@ -910,7 +910,7 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                                         dedup_cache_ets  = DedupCacheEts }) ->
     #msg_location { ref_count = RefCount, file = File,
                     total_size = TotalSize } =
-        index_lookup_positive_refcount(Guid, State),
+        index_lookup_positive_ref_count(Guid, State),
     %% only update field, otherwise bad interaction with concurrent GC
     Dec = fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
     case RefCount of
@@ -1106,7 +1106,7 @@ decrement_cache(DedupCacheEts, Guid) ->
 %% index
 %%----------------------------------------------------------------------------
 
-index_lookup_positive_refcount(Key, State) ->
+index_lookup_positive_ref_count(Key, State) ->
     case index_lookup(Key, State) of
         not_found                       -> not_found;
         #msg_location { ref_count = 0 } -> not_found;
