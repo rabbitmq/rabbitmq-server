@@ -56,7 +56,7 @@ start_infrastructure_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
                                         [ChNumber, ChPid, ChPid, User, VHost,
                                          Collector, start_limiter_fun(Sup)]},
                        transient, ?MAX_WAIT, worker, [rabbit_channel]}),
-        {RabbitChannel}
+        {ok, RabbitChannel}
     end;
 start_infrastructure_fun(Sup, network, [Sock, MainReader], ChNumber) ->
     fun() ->
@@ -74,7 +74,7 @@ start_infrastructure_fun(Sup, network, [Sock, MainReader], ChNumber) ->
         %% This call will disappear as part of bug 23024
         amqp_main_reader:register_framing_channel(MainReader, ChNumber,
                                                   Framing),
-        {Writer}
+        {ok, Writer}
     end.
 
 start_limiter_fun(Sup) ->
