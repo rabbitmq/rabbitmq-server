@@ -112,7 +112,10 @@ handle_info(socket_closed, State) ->
     handle_socket_closed(State);
 %% DOWN signals from channels
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
-    handle_channel_exit(Pid, Reason, State).
+    handle_channel_exit(Pid, Reason, State);
+%% timeout from heartbeat receiver
+handle_info(timeout, State) ->
+    {stop, heartbeat_timeout, State}.
 
 terminate(_Reason, _State) ->
     ok.
