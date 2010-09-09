@@ -21,3 +21,8 @@ EXTRA_TARGETS=$(wildcard $(TEMPLATES_DIR)/*.ejs) \
     $(wildcard $(WEB_DIR)/img/*.png) \
 
 include ../include.mk
+
+test: cleantest
+
+cleantest:
+	rm -r tmp
