@@ -47,10 +47,10 @@ start_link(Type, AmqpParams, Link) ->
                                             [Type]},
                           intrinsic, infinity, supervisor,
                           [amqp_channel_sup_sup]}),
-    start_connection(Sup, Type, AmqpParams, ChSupSup,
-                     start_infrastructure_fun(Sup, Type)),
-    {ok, Sup}.
-    
+    {ok, Connection} = start_connection(Sup, Type, AmqpParams, ChSupSup,
+                                        start_infrastructure_fun(Sup, Type)),
+    {ok, Sup, Connection}.
+
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------

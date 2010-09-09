@@ -123,8 +123,8 @@ start_network_link(Params) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams, Link) ->
-    {ok, Sup} = amqp_connection_sup:start_link(Type, AmqpParams, Link),
-    [Connection] = supervisor2:find_child(Sup, connection),
+    {ok, Sup, Connection} =
+        amqp_connection_sup:start_link(Type, AmqpParams, Link),
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection
              end,
@@ -141,7 +141,7 @@ start(Type, AmqpParams, Link) ->
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
+%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;).
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
