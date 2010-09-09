@@ -159,13 +159,16 @@ amqp_request(VHost, ReqData, Context, Method) ->
                               password = Context#context.password,
                               virtual_host = VHost},
         Conn = amqp_connection:start_direct(Params),
+        true = is_pid(Conn),
         Ch = amqp_connection:open_channel(Conn),
         amqp_channel:call(Ch, Method),
         amqp_channel:close(Ch),
         amqp_connection:close(Conn),
         {true, ReqData, Context}
     %% See bug 23187
-    catch error:{badmatch,{error, #amqp_error{name = access_refused}}} ->
+    catch error:{badmatch,false} ->
+            not_authorised(not_authorised, ReqData, Context);
+          error:{badmatch,{error, #amqp_error{name = access_refused}}} ->
             not_authorised(not_authorised, ReqData, Context);
           error:{badmatch,{error, #amqp_error{name = {error, Error}}}} ->
             bad_request(Error, ReqData, Context);

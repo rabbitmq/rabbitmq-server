@@ -54,3 +54,4 @@ Add more OS-y, Erlang-y things to overview(?)
 Catch up if mgmt application is restarted.
 Queues with server generated names
 Backup / restore entire state (with messages) (sane?)
+
