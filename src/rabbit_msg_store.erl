@@ -619,8 +619,7 @@ handle_cast({write, Guid},
             case Locked of
                 true  -> ok = index_delete(Guid, State),
                          write_message(Guid, Msg, 1, State);
-                false -> ok = index_update_fields(
-                                Guid, {#msg_location.ref_count, 1}, State),
+                false -> ok = index_update_ref_count(Guid, 1, State),
                          ok = add_to_file_summary(Summary, TotalSize, FileSize,
                                                   State),
                          noreply(State #msstate {
@@ -629,9 +628,7 @@ handle_cast({write, Guid},
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
-            ok = index_update_fields(Guid,
-                                     {#msg_location.ref_count, RefCount + 1},
-                                     State),
+            ok = index_update_ref_count(Guid, RefCount + 1, State),
             noreply(State)
     end;
 
@@ -915,9 +912,7 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                     total_size = TotalSize } =
         index_lookup_positive_refcount(Guid, State),
     %% only update field, otherwise bad interaction with concurrent GC
-    Dec = fun () -> index_update_fields(
-                      Guid, {#msg_location.ref_count, RefCount - 1}, State)
-          end,
+    Dec = fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
     case RefCount of
         %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
         %% there may be further writes in the mailbox for the same
@@ -928,7 +923,7 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                  ets:lookup(FileSummaryEts, File),
              case Locked of
                  true  -> add_to_pending_gc_completion({remove, Guid}, State);
-                 false -> ok = Dec(),
+                 false -> Dec(),
                           true = ets:update_element(
                                    FileSummaryEts, File,
                                    [{#file_summary.valid_total_size,
@@ -1117,6 +1112,9 @@ index_lookup_positive_refcount(Key, State) ->
         #msg_location { ref_count = 0 } -> not_found;
         #msg_location {} = MsgLocation  -> MsgLocation
     end.
+
+index_update_ref_count(Key, RefCount, State) ->
+    index_update_fields(Key, {#msg_location.ref_count, RefCount}, State).
 
 index_lookup(Key, #client_msstate { index_module = Index,
                                     index_state  = State }) ->
