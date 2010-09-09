@@ -86,7 +86,7 @@
 %% Note that this data can go very out of date, by the client using
 %% the least recently used handle.
 %%
-%% When the limit is reached (i.e. the number of open file handles is
+%% When the limit is exceeded (i.e. the number of open file handles is
 %% at the limit and there are pending 'open' requests), the server
 %% calculates the average age of the last reported least recently used
 %% file handle of all the clients. It then tells all the clients to
