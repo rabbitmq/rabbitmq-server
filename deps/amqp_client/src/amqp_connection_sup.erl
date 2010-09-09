@@ -56,40 +56,42 @@ start_link(Type, AmqpParams, Link) ->
 %%---------------------------------------------------------------------------
 
 start_connection(Sup, network, AmqpParams, ChSupSup, SIF) ->
-    {ok, _} = supervisor2:start_child(Sup,
-                  {connection, {amqp_network_connection, start_link,
-                                [AmqpParams, ChSupSup, SIF]},
-                   intrinsic, brutal_kill, worker, [amqp_network_connection]});
+    {ok, _} = supervisor2:start_child(
+                Sup,
+                {connection, {amqp_network_connection, start_link,
+                              [AmqpParams, ChSupSup, SIF]},
+                 intrinsic, brutal_kill, worker, [amqp_network_connection]});
 start_connection(Sup, direct, AmqpParams, ChSupSup, SIF) ->
-    {ok, _} = supervisor2:start_child(Sup,
-                  {connection, {amqp_direct_connection, start_link,
-                                [AmqpParams, ChSupSup, SIF]},
-                   intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
+    {ok, _} = supervisor2:start_child(
+                Sup,
+                {connection, {amqp_direct_connection, start_link,
+                              [AmqpParams, ChSupSup, SIF]},
+                 intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
 
 start_infrastructure_fun(Sup, network) ->
-    fun(Sock) ->
-        Connection = self(),
-        {ok, CTSup} = supervisor2:start_child(Sup,
-                          {connection_type_sup, {amqp_connection_type_sup,
-                                                 start_link_network,
-                                                 [Sock, Connection]},
-                           intrinsic, infinity, supervisor,
-                           [amqp_connection_type_sup]}),
-        [MainReader] = supervisor2:find_child(CTSup, main_reader),
-        [Framing] = supervisor2:find_child(CTSup, framing),
-        [Writer] = supervisor2:find_child(CTSup, writer),
-        {MainReader, Framing, Writer,
-         amqp_connection_type_sup:start_heartbeat_fun(CTSup)}
+    fun (Sock) ->
+            Connection = self(),
+            {ok, CTSup, {MainReader, Framing, Writer}} =
+                supervisor2:start_child(
+                  Sup,
+                  {connection_type_sup,
+                   {amqp_connection_type_sup, start_link_network,
+                    [Sock, Connection]},
+                   intrinsic, infinity, supervisor,
+                   [amqp_connection_type_sup]}),
+            {ok, {MainReader, Framing, Writer,
+                  amqp_connection_type_sup:start_heartbeat_fun(CTSup)}}
     end;
 start_infrastructure_fun(Sup, direct) ->
-    fun() ->
-        {ok, CTSup} = supervisor2:start_child(Sup,
-                          {connection_type_sup, {amqp_connection_type_sup,
-                                                 start_link_direct, []},
-                           intrinsic, infinity, supervisor,
-                           [amqp_connection_type_sup]}),
-        [Collector] = supervisor2:find_child(CTSup, collector),
-        {Collector}
+    fun () ->
+            {ok, _CTSup, Collector} =
+                supervisor2:start_child(
+                  Sup,
+                  {connection_type_sup,
+                   {amqp_connection_type_sup, start_link_direct, []},
+                   intrinsic, infinity, supervisor,
+                   [amqp_connection_type_sup]}),
+            {ok, Collector}
     end.
 
 %%---------------------------------------------------------------------------

@@ -186,9 +186,8 @@ set_closing_state(ChannelCloseType, NewClosing,
 
 %% The all_channels_closed_event is called when all channels have been closed
 %% after the connection broadcasts a connection_closing message to all channels
-all_channels_closed_event(#state{sup = Sup, closing = Closing} = State) ->
-    [CTSup] = supervisor2:find_child(Sup, connection_type_sup),
-    [Collector] = supervisor2:find_child(CTSup, collector),
+all_channels_closed_event(#state{sup = Sup, closing = Closing,
+                                 collector = Collector} = State) ->
     rabbit_queue_collector:delete_all(Collector),
     case Closing#closing.from of
         none -> ok;
@@ -259,5 +258,5 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     State1#state{server_properties = ServerProperties}.
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
-    {Collector} = SIF(),
+    {ok, Collector} = SIF(),
     State#state{collector = Collector}.

@@ -362,7 +362,7 @@ handshake(State0 = #state{sock = Sock}) ->
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF,
                                     sock = Sock}) ->
-    {MainReader, Framing, Writer, SHF} = SIF(Sock),
+    {ok, {MainReader, Framing, Writer, SHF}} = SIF(Sock),
     State#state{main_reader = MainReader,
                 framing0 = Framing,
                 writer0 = Writer,
