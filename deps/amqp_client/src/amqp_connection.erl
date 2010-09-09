@@ -132,9 +132,9 @@ start(Type, AmqpParams, Link) ->
         ok -> Connection
     catch
         exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
-            {error, Reason};
+            throw({error, Reason});
         exit:Reason ->
-            {error, {auth_failure_likely, Reason}}
+            throw({error, {auth_failure_likely, Reason}})
     end.
 
 %%---------------------------------------------------------------------------

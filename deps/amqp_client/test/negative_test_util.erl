@@ -128,23 +128,18 @@ shortstr_overflow_field_test(Connection) ->
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},
-    assert_fail_start_with_params(Params).
+    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
 
 invalid_password_test() ->
     Params = #amqp_params{username = <<"guest">>,
                           password = test_util:uuid()},
-    assert_fail_start_with_params(Params).
+    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
 
 non_existent_vhost_test() ->
     Params = #amqp_params{virtual_host = test_util:uuid()},
-    assert_fail_start_with_params(Params).
+    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
 
 no_permission_test() ->
     Params = #amqp_params{username = <<"test_user_no_perm">>,
                           password = <<"test_user_no_perm">>},
-    assert_fail_start_with_params(Params).
-
-assert_fail_start_with_params(Params) ->
-    {error, {auth_failure_likely, _}} =
-        network_client_SUITE:new_connection(Params),
-    ok.
+    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
