@@ -76,7 +76,7 @@ protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
 timestamp(unknown) ->
     unknown;
 timestamp(Timestamp) ->
-    timer:now_diff(now(), {0,0,0}) div 1000.
+    timer:now_diff(Timestamp, {0,0,0}) div 1000.
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
