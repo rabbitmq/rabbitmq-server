@@ -77,15 +77,20 @@ http_users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, "flam"}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
-    http_put("/users/myuser", [{password, "password"}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, "myuser"},
+                               {administrator, false}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, "password"},
+                               {administrator, true}], ?NO_CONTENT),
     {struct,[{<<"name">>,<<"myuser">>},
-             {<<"password">>,<<"password">>}]} =
+             {<<"password">>,<<"password">>},
+             {<<"administrator">>, true}]} =
         http_get("/users/myuser"),
     [{struct,[{<<"name">>,<<"guest">>},
-              {<<"password">>,<<"guest">>}]},
+              {<<"password">>,<<"guest">>},
+              {<<"administrator">>, true}]},
      {struct,[{<<"name">>,<<"myuser">>},
-              {<<"password">>,<<"password">>}]}] =
+              {<<"password">>,<<"password">>},
+              {<<"administrator">>, true}]}] =
         http_get("/users"),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
@@ -119,8 +124,10 @@ http_permissions_list_test() ->
               {<<"scope">>,<<"client">>}]}] =
         http_get("/permissions"),
 
-    http_put("/users/myuser1", [{password, ""}], ?NO_CONTENT),
-    http_put("/users/myuser2", [{password, ""}], ?NO_CONTENT),
+    http_put("/users/myuser1", [{password, ""}, {administrator, true}],
+             ?NO_CONTENT),
+    http_put("/users/myuser2", [{password, ""}, {administrator, true}],
+             ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
 
@@ -141,7 +148,8 @@ http_permissions_list_test() ->
     ok.
 
 http_permissions_test() ->
-    http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, "myuser"}, {administrator, true}],
+             ?NO_CONTENT),
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
