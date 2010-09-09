@@ -67,9 +67,6 @@ is_authorized(ReqData, Context, Fun) ->
 now_ms() ->
     rabbit_mgmt_format:timestamp(now()).
 
-http_date() ->
-    httpd_util:rfc1123_date(erlang:universaltime()).
-
 vhost(ReqData) ->
     case id(vhost, ReqData) of
         none  -> none;
