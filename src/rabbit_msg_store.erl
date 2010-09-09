@@ -923,7 +923,7 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                  ets:lookup(FileSummaryEts, File),
              case Locked of
                  true  -> add_to_pending_gc_completion({remove, Guid}, State);
-                 false -> Dec(),
+                 false -> ok = Dec(),
                           true = ets:update_element(
                                    FileSummaryEts, File,
                                    [{#file_summary.valid_total_size,
