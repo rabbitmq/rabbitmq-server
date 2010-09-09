@@ -108,8 +108,9 @@ exchange(X) ->
                {fun table/1, [arguments]}]).
 
 user(User) ->
-    [{name,     User#user.username},
-     {password, User#user.password}].
+    [{name,          User#user.username},
+     {password,      User#user.password},
+     {administrator, User#user.is_admin}].
 
 binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
     format([{exchange,       X},

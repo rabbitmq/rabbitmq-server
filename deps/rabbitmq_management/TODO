@@ -42,6 +42,7 @@ DTRT with direct connections.
 Clustering management:
   One rabbit_event / rabbit_mgmt_db per cluster
   Per-node events to replace external_stats
+Make user editing rather clearer
 
 Less urgent
 ===========
