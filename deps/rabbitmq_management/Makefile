@@ -25,4 +25,4 @@ include ../include.mk
 test: cleantest
 
 cleantest:
-	rm -r tmp
+	rm -rf tmp
