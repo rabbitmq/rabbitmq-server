@@ -912,36 +912,35 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                                         file_summary_ets = FileSummaryEts,
                                         dedup_cache_ets  = DedupCacheEts }) ->
     #msg_location { ref_count = RefCount, file = File,
-                    total_size = TotalSize } = index_lookup(Guid, State),
+                    total_size = TotalSize } =
+        index_lookup_positive_refcount(Guid, State),
     %% only update field, otherwise bad interaction with concurrent GC
     Dec = fun () -> index_update_fields(
                       Guid, {#msg_location.ref_count, RefCount - 1}, State)
           end,
     case RefCount of
-        1 ->
-            %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
-            %% there may be further writes in the mailbox for the same
-            %% msg.
-            ok = remove_cache_entry(DedupCacheEts, Guid),
-            [#file_summary { valid_total_size = ValidTotalSize,
-                             locked           = Locked }] =
-                ets:lookup(FileSummaryEts, File),
-            case Locked of
-                true  -> add_to_pending_gc_completion({remove, Guid}, State);
-                false -> ok = Dec(),
-                         true = ets:update_element(
-                                  FileSummaryEts, File,
-                                  [{#file_summary.valid_total_size,
-                                    ValidTotalSize - TotalSize}]),
-                         delete_file_if_empty(
-                           File,
-                           State #msstate {
-                             sum_valid_data = SumValid - TotalSize })
-            end;
-        _ when 1 < RefCount ->
-            ok = decrement_cache(DedupCacheEts, Guid),
-            ok = Dec(),
-            State
+        %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
+        %% there may be further writes in the mailbox for the same
+        %% msg.
+        1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
+             [#file_summary { valid_total_size = ValidTotalSize,
+                              locked           = Locked }] =
+                 ets:lookup(FileSummaryEts, File),
+             case Locked of
+                 true  -> add_to_pending_gc_completion({remove, Guid}, State);
+                 false -> ok = Dec(),
+                          true = ets:update_element(
+                                   FileSummaryEts, File,
+                                   [{#file_summary.valid_total_size,
+                                     ValidTotalSize - TotalSize}]),
+                          delete_file_if_empty(
+                            File,
+                            State #msstate {
+                              sum_valid_data = SumValid - TotalSize })
+             end;
+        _ -> ok = decrement_cache(DedupCacheEts, Guid),
+             ok = Dec(),
+             State
     end.
 
 add_to_pending_gc_completion(
