@@ -311,11 +311,35 @@ http_bindings_post_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+http_permissions_administrator_test() ->
+    http_put("/users/notadmin", [{password, "notadmin"},
+                                 {administrator, false}],
+             ?NO_CONTENT),
+    Test =
+        fun(Path) ->
+                http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
+                http_get(Path, "guest", "guest", ?OK)
+        end,
+    Test("/vhosts"),
+    Test("/vhosts/%2f"),
+    Test("/users"),
+    Test("/users/guest"),
+    Test("/users/guest/permissions"),
+    Test("/permissions"),
+    Test("/permissions/%2f/guest"),
+    http_delete("/users/notadmin", ?NO_CONTENT),
+    ok.
+
 %%---------------------------------------------------------------------------
+http_get(Path) ->
+    http_get(Path, ?OK).
 
 http_get(Path, CodeExp) ->
+    http_get(Path, "guest", "guest", CodeExp).
+
+http_get(Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
-        req(get, Path, [auth_header()]),
+        req(get, Path, [auth_header(User, Pass)]),
     decode(CodeExp, Headers, ResBody).
 
 http_put(Path, List, CodeExp) ->
@@ -350,9 +374,6 @@ http_delete(Path, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
         req(delete, Path, [auth_header()]),
     decode(CodeExp, Headers, ResBody).
-
-http_get(Path) ->
-    http_get(Path, ?OK).
 
 req(Type, Path, Headers) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).

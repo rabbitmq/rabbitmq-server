@@ -22,8 +22,8 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, now_ms/0, vhost/1, vhost_exists/1]).
--export([bad_request/3, id/2, parse_bool/1]).
+-export([is_authorized/2, is_authorized_admin/2, vhost/1, vhost_exists/1]).
+-export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3]).
 
@@ -33,16 +33,29 @@
 %%--------------------------------------------------------------------
 
 is_authorized(ReqData, Context) ->
+    is_authorized(ReqData, Context, fun(_) -> true end).
+
+is_authorized_admin(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  fun(#user{is_admin = IsAdmin}) -> IsAdmin end).
+
+is_authorized(ReqData, Context, Fun) ->
     Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
                     ReqData, Context},
     case wrq:get_req_header("authorization", ReqData) of
         "Basic " ++ Base64 ->
             Str = base64:mime_decode_to_string(Base64),
-            [User, Pass] = [list_to_binary(S) || S <- string:tokens(Str, ":")],
-            case rabbit_access_control:lookup_user(User) of
-                {ok, #user{password = Pass1}} when Pass == Pass1  ->
-                    {true, ReqData, Context#context{username = User,
-                                                    password = Pass}};
+            [Username, Pass] =
+                [list_to_binary(S) || S <- string:tokens(Str, ":")],
+            case rabbit_access_control:lookup_user(Username) of
+                {ok, User = #user{password = Pass1}} when Pass == Pass1  ->
+                    case Fun(User) of
+                        true ->
+                            {true, ReqData, Context#context{username = Username,
+                                                            password = Pass}};
+                        _ ->
+                            Unauthorized
+                    end;
                 {ok, #user{}} ->
                     Unauthorized;
                 {error, _} ->

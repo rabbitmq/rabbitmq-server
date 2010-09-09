@@ -77,7 +77,7 @@ delete_resource(ReqData, Context) ->
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
