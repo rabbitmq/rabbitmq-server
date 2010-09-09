@@ -45,7 +45,7 @@
 -record(closing, {reason,
                   close = none, %% At least one of close and reply has to be
                   reply = none, %%     none at any given moment
-                  from = none}).
+                  from  = none}).
 
 -define(INFO_KEYS,
         (amqp_connection:info_keys() ++ [])).
@@ -65,9 +65,9 @@ connect(Pid) ->
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams, ChSupSup, SIF]) ->
-    {ok, #state{sup = Sup,
-                params = AmqpParams,
-                channel_sup_sup = ChSupSup,
+    {ok, #state{sup                      = Sup,
+                params                   = AmqpParams,
+                channel_sup_sup          = ChSupSup,
                 start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
@@ -105,12 +105,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% Command handling
 %%---------------------------------------------------------------------------
 
-handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{collector = Collector,
-                              channel_sup_sup = ChSupSup,
-                              params = #amqp_params{username = User,
-                                                    virtual_host = VHost},
-                              channels = Channels}) ->
+handle_command({open_channel, ProposedNumber}, _From, State =
+                   #state{collector       = Collector,
+                          channel_sup_sup = ChSupSup,
+                          params          = #amqp_params{username     = User,
+                                                         virtual_host = VHost},
+                          channels        = Channels}) ->
     try amqp_channel_util:open_channel(ChSupSup, ProposedNumber,
                                        ?MAX_CHANNEL_NUMBER,
                                        [User, VHost, Collector], Channels) of
@@ -123,8 +123,8 @@ handle_command({open_channel, ProposedNumber}, _From,
 
 handle_command({close, Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
-                                                close = Close,
-                                                from = From},
+                                                close  = Close,
+                                                from   = From},
                                 State)}.
 
 %%---------------------------------------------------------------------------
@@ -152,16 +152,14 @@ i(Item,             _State) -> throw({bad_argument, Item}).
 %% mentioned in the above list). We can rely on erlang's comparison of atoms
 %% for this.
 set_closing_state(ChannelCloseType, Closing,
-                  #state{closing = false,
-                         channels = Channels} = State) ->
+                  State = #state{closing  = false, channels = Channels}) ->
     amqp_channel_util:broadcast_to_channels(
         {connection_closing, ChannelCloseType, closing_to_reason(Closing)},
         Channels),
     check_trigger_all_channels_closed_event(State#state{closing = Closing});
 %% Already closing, override situation
 set_closing_state(ChannelCloseType, NewClosing,
-                  #state{closing = CurClosing,
-                         channels = Channels} = State) ->
+                  State = #state{closing  = CurClosing, channels = Channels}) ->
     %% Do not override reason in channels (because it might cause channels to
     %% to exit with different reasons) but do cause them to close abruptly
     %% if the new closing type requires it
@@ -186,8 +184,8 @@ set_closing_state(ChannelCloseType, NewClosing,
 
 %% The all_channels_closed_event is called when all channels have been closed
 %% after the connection broadcasts a connection_closing message to all channels
-all_channels_closed_event(#state{sup = Sup, closing = Closing,
-                                 collector = Collector} = State) ->
+all_channels_closed_event(State = #state{closing   = Closing,
+                                         collector = Collector}) ->
     rabbit_queue_collector:delete_all(Collector),
     case Closing#closing.from of
         none -> ok;
@@ -197,18 +195,18 @@ all_channels_closed_event(#state{sup = Sup, closing = Closing,
     State.
 
 closing_to_reason(#closing{reason = Reason,
-                           close = #'connection.close'{reply_code = Code,
-                                                       reply_text = Text},
-                           reply = none}) ->
+                           close  = #'connection.close'{reply_code = Code,
+                                                        reply_text = Text},
+                           reply  = none}) ->
     {Reason, Code, Text};
 closing_to_reason(#closing{reason = Reason,
-                           reply = {_, Code, Text},
-                           close = none}) ->
+                           reply  = {_, Code, Text},
+                           close  = none}) ->
     {Reason, Code, Text}.
 
 internal_error_closing() ->
     #closing{reason = internal_error,
-             reply = {internal_error, ?INTERNAL_ERROR, <<>>}}.
+             reply  = {internal_error, ?INTERNAL_ERROR, <<>>}}.
 
 %%---------------------------------------------------------------------------
 %% Channel utilities
@@ -219,10 +217,9 @@ unregister_channel(Pid, State = #state{channels = Channels}) ->
     NewState = State#state{channels = NewChannels},
     check_trigger_all_channels_closed_event(NewState).
 
-check_trigger_all_channels_closed_event(#state{closing = false} = State) ->
+check_trigger_all_channels_closed_event(State = #state{closing = false}) ->
     State;
-check_trigger_all_channels_closed_event(
-        #state{channels = Channels} = State) ->
+check_trigger_all_channels_closed_event(State = #state{channels = Channels}) ->
     case amqp_channel_util:is_channel_dict_empty(Channels) of
         true  -> all_channels_closed_event(State);
         false -> State
@@ -254,8 +251,7 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     rabbit_access_control:check_vhost_access(
             #user{username = User, password = Pass}, VHost),
     State1 = start_infrastructure(State0),
-    ServerProperties = rabbit_reader:server_properties(),
-    State1#state{server_properties = ServerProperties}.
+    State1#state{server_properties = rabbit_reader:server_properties()}.
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
     {ok, Collector} = SIF(),
