@@ -73,14 +73,14 @@ start_heartbeat_fun(Sup) ->
                   Sup,
                   {heartbeat_sender, {rabbit_heartbeat, start_heartbeat_sender,
                                       [Connection, Sock, Timeout]},
-                   intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                   transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
             {ok, Receiver} =
                 supervisor2:start_child(
                   Sup,
                   {heartbeat_receiver,
                    {rabbit_heartbeat, start_heartbeat_receiver,
                     [Connection, Sock, Timeout]},
-                   intrinsic, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                   transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
             {Sender, Receiver}
     end.
 
