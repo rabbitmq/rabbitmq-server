@@ -39,10 +39,11 @@
 start_link(Driver, InfraArgs, ChNumber) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     SIF = start_infrastructure_fun(Sup, Driver, InfraArgs, ChNumber),
-    {ok, _} = supervisor2:start_child(Sup,
-                  {channel, {amqp_channel, start_link, [Driver, ChNumber, SIF]},
-                   intrinsic, brutal_kill, worker, [amqp_channel]}),
-    {ok, Sup}.
+    {ok, ChPid} =
+        supervisor2:start_child(
+          Sup, {channel, {amqp_channel, start_link, [Driver, ChNumber, SIF]},
+                intrinsic, brutal_kill, worker, [amqp_channel]}),
+    {ok, Sup, ChPid}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing

@@ -42,9 +42,8 @@
 
 open_channel(ChSupSup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    {ok, ChannelSup} = amqp_channel_sup_sup:start_channel_sup(
-                           ChSupSup, InfraArgs, ChannelNumber),
-    [ChPid] = supervisor2:find_child(ChannelSup, channel),
+    {ok, ChannelSup, ChPid} = amqp_channel_sup_sup:start_channel_sup(
+                                ChSupSup, InfraArgs, ChannelNumber),
     #'channel.open_ok'{} = amqp_channel:call(ChPid, #'channel.open'{}),
     erlang:monitor(process, ChPid),
     NewChannels = register_channel(ChannelNumber, ChPid, Channels),
