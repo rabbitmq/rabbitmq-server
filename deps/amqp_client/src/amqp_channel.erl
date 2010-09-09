@@ -246,15 +246,13 @@ rpc_top_half(Method, Content, From,
     end.
 
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
-    case queue:out(RequestQueue) of
-        {{value, {From, _Method, _Content}}, NewRequestQueue} ->
-            case From of none -> ok;
-                         _    -> gen_server:reply(From, Reply)
-            end,
-            do_rpc(State#state{rpc_requests = NewRequestQueue});
-        {empty, _} ->
-            exit(empty_rpc_bottom_half)
-    end.
+    {{value, {From, _Method, _Content}}, RequestQueue1} =
+        queue:out(RequestQueue),
+    case From of
+        none -> ok;
+        _    -> gen_server:reply(From, Reply)
+    end,
+    do_rpc(State#state{rpc_requests = RequestQueue1}).
 
 do_rpc(State = #state{rpc_requests = RequestQueue,
                       closing      = Closing}) ->
@@ -373,19 +371,15 @@ handle_method(Method, Content, State = #state{closing = Closing}) ->
 handle_regular_method(
         #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk, none,
         #state{tagged_sub_requests = Tagged,
-               anon_sub_requests = Anon} = State) ->
-    {_From, Consumer, State0} =
+               anon_sub_requests   = Anon} = State) ->
+    {Consumer, State0} =
         case dict:find(ConsumerTag, Tagged) of
-            {ok, {F, C}} ->
-                NewTagged = dict:erase(ConsumerTag,Tagged),
-                {F, C, State#state{tagged_sub_requests = NewTagged}};
+            {ok, C} ->
+                NewTagged = dict:erase(ConsumerTag, Tagged),
+                {C, State#state{tagged_sub_requests = NewTagged}};
             error ->
-                case queue:out(Anon) of
-                    {empty, _} ->
-                        exit({anonymous_queue_empty, ConsumerTag});
-                    {{value, {F, C}}, NewAnon} ->
-                        {F, C, State#state{anon_sub_requests = NewAnon}}
-                end
+                {{value, C}, NewAnon} = queue:out(Anon),
+                {C, State#state{anon_sub_requests = NewAnon}}
         end,
     Consumer ! ConsumeOk,
     State1 = register_consumer(ConsumerTag, Consumer, State0),
@@ -447,9 +441,9 @@ start_link(Driver, ChannelNumber, SIF) ->
 
 %% @private
 init([Sup, Driver, ChannelNumber, SIF]) ->
-    {ok, #state{sup = Sup,
-                driver = Driver,
-                number = ChannelNumber,
+    {ok, #state{sup                      = Sup,
+                driver                   = Driver,
+                number                   = ChannelNumber,
                 start_infrastructure_fun = SIF}}.
 
 %% Standard implementation of the call/{2,3} command
@@ -478,16 +472,15 @@ handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer}
         ok ->
             {NewMethod, NewState} =
                 if Tag =:= undefined orelse size(Tag) == 0 ->
-                       NewAnon = queue:in({From,Consumer}, Anon),
+                       NewAnon = queue:in(Consumer, Anon),
                        {Method#'basic.consume'{consumer_tag = <<"">>},
                         State#state{anon_sub_requests = NewAnon}};
                    is_binary(Tag) ->
                        %% TODO test whether this tag already exists, either in
                        %% the pending tagged request map or in general as
                        %% already subscribed consumer
-                       NewTagged = dict:store(Tag,{From,Consumer}, Tagged),
-                       {Method,
-                        State#state{tagged_sub_requests = NewTagged}}
+                       NewTagged = dict:store(Tag, Consumer, Tagged),
+                       {Method, State#state{tagged_sub_requests = NewTagged}}
                 end,
             {noreply, rpc_top_half(NewMethod, none, From, NewState)};
         BlockReply ->
@@ -574,10 +567,6 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
-
-%% @private
-handle_info(shutdown, State) ->
-    {stop, normal, State};
 
 %% @private
 handle_info({shutdown, Reason}, State) ->
