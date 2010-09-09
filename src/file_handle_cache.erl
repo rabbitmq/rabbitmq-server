@@ -62,9 +62,9 @@
 %% 5) You can find out what the offset was when you last sync'd.
 %%
 %% There is also a server component which serves to limit the number
-%% of open file handles. This is a hard limit: the server component
-%% will ensure that clients do not have more file descriptors open
-%% than it's configured to allow.
+%% of open file descriptors. This is a hard limit: the server
+%% component will ensure that clients do not have more file
+%% descriptors open than it's configured to allow.
 %%
 %% On open, the client requests permission from the server to open the
 %% required number of file handles. The server may ask the client to
