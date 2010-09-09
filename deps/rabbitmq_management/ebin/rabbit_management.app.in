@@ -4,5 +4,5 @@
   {modules, []}, %% TODO generate automatically.
   {registered, []},
   {mod, {rabbit_mgmt_app, []}},
-  {env, []},
+  {env, [{force_fine_statistics, true}]},
   {applications, [kernel, stdlib, rabbit, rabbit_mochiweb]}]}.

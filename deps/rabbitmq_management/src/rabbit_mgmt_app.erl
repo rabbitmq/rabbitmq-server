@@ -51,14 +51,28 @@ stop(_State) ->
     ok.
 
 ensure_statistics_enabled() ->
-    {ok, Level} = application:get_env(rabbit, collect_statistics),
-    case Level of
-        none ->
-            application:set_env(rabbit, collect_statistics, coarse),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            ++ " from none to coarse.~n");
-        _ ->
-            ok
+    {ok, ForceStats} = application:get_env(
+                         rabbit_management, force_fine_statistics),
+    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
+    case ForceStats of
+        true ->
+            case StatsLevel of
+                fine ->
+                    ok;
+                _ ->
+                    application:set_env(rabbit, collect_statistics, fine),
+                    rabbit_log:info("Management plugin upgraded statistics"
+                                    ++ " to fine.~n")
+            end;
+        _    ->
+            case StatsLevel of
+                none ->
+                    application:set_env(rabbit, collect_statistics, coarse),
+                    rabbit_log:info("Management plugin upgraded statistics"
+                                    ++ " to coarse.~n");
+                _ ->
+                    ok
+            end
     end.
 
 register_contexts() ->

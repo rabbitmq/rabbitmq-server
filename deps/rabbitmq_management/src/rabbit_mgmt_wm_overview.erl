@@ -37,6 +37,8 @@ to_json(ReqData, Context) ->
     OSStats = rabbit_mgmt_external_stats:info(),
     Overview = rabbit_mgmt_db:get_overview(),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
+    {ok, ForceStats} =
+        application:get_env(rabbit_management, force_fine_statistics),
     rabbit_mgmt_util:reply(
       OSStats ++ Overview ++
           [{node,             node()},
