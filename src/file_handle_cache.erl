@@ -34,7 +34,9 @@
 %% A File Handle Cache
 %%
 %% This extends a subset of the functionality of the Erlang file
-%% module.
+%% module. In the below, we use "file handle" to specifically refer to
+%% file handles, and "file descriptor" to refer to descriptors which
+%% are not file handles, e.g. sockets.
 %%
 %% Some constraints
 %% 1) This supports one writer, multiple readers per file. Nothing
@@ -65,23 +67,23 @@
 %% than it's configured to allow.
 %%
 %% On open, the client requests permission from the server to open the
-%% required number of file descriptors. The server may ask the client
-%% to close other file descriptors that it has open, or it may queue
-%% the request and ask other clients to close file descriptors they
-%% have open in order to satisfy the request. Requests are always
-%% satisfied in the order they arrive, even if a latter request (for a
-%% small number of file descriptors) can be satisfied before an
-%% earlier request (for a larger number of file descriptors). On
-%% close, the client sends a message to the server. These messages
-%% allow the server to keep track of the number of open handles. The
-%% client also keeps a gb_tree which is updated on every use of a file
-%% handle, mapping the time at which the file handle was last used
-%% (timestamp) to the handle. Thus the smallest key in this tree maps
-%% to the file handle that has not been used for the longest amount of
-%% time. This smallest key is included in the messages to the
-%% server. As such, the server keeps track of when the least recently
-%% used file handle was used *at the point of the most recent open or
-%% close* by each client.
+%% required number of file handles. The server may ask the client to
+%% close other file handles that it has open, or it may queue the
+%% request and ask other clients to close file handles they have open
+%% in order to satisfy the request. Requests are always satisfied in
+%% the order they arrive, even if a latter request (for a small number
+%% of file handles) can be satisfied before an earlier request (for a
+%% larger number of file handles). On close, the client sends a
+%% message to the server. These messages allow the server to keep
+%% track of the number of open handles. The client also keeps a
+%% gb_tree which is updated on every use of a file handle, mapping the
+%% time at which the file handle was last used (timestamp) to the
+%% handle. Thus the smallest key in this tree maps to the file handle
+%% that has not been used for the longest amount of time. This
+%% smallest key is included in the messages to the server. As such,
+%% the server keeps track of when the least recently used file handle
+%% was used *at the point of the most recent open or close* by each
+%% client.
 %%
 %% Note that this data can go very out of date, by the client using
 %% the least recently used handle.
@@ -105,19 +107,19 @@
 %% communicated to the clients, the clients will close file handles.
 %% (In extreme cases, where it's very likely that all clients have
 %% used their open handles since they last sent in an update, which
-%% would mean that the average will never cause any file descriptor to
+%% would mean that the average will never cause any file handles to
 %% be closed, the server can send out an average age of 0, resulting
-%% in all available clients closing all their file descriptors.)
+%% in all available clients closing all their file handles.)
 %%
 %% Care is taken to ensure that (a) processes which are blocked
 %% waiting for file descriptors to become available are not sent
-%% requests to close file descriptors; and (b) given it is known how
-%% many file descriptors a process has open, when the average age is
-%% forced to 0, close messages are only sent to enough processes to
-%% release the correct number of file descriptors and the list of
-%% processes is randomly shuffled. This ensures we don't cause
-%% processes to needlessly close file descriptors, and ensures that we
-%% don't always make such requests of the same processes.
+%% requests to close file handles; and (b) given it is known how many
+%% file handles a process has open, when the average age is forced to
+%% 0, close messages are only sent to enough processes to release the
+%% correct number of file handles and the list of processes is
+%% randomly shuffled. This ensures we don't cause processes to
+%% needlessly close file handles, and ensures that we don't always
+%% make such requests of the same processes.
 %%
 %% The advantage of this scheme is that there is only communication
 %% from the client to the server on open, close, and when in the
@@ -138,7 +140,16 @@
 %% a file descriptor is available, at which point the requesting
 %% process is considered to 'own' one more descriptor. transfer/1
 %% transfers ownership of a file descriptor between processes. It is
-%% non-blocking.
+%% non-blocking. Obtain is used to obtain permission to accept file
+%% descriptors. Obtain has a lower limit, set by the ?OBTAIN_LIMIT/1
+%% macro. File handles can use the entire limit, but will be evicted
+%% by obtain calls up to the point at which no more obtain calls can
+%% be satisfied by the obtains limit. Thus there will always be some
+%% capacity available for file handles. Processes that use obtain are
+%% never asked to return them, and they are not managed in any way by
+%% the server. It is simply a mechanism to ensure that processes that
+%% need file descriptors such as sockets can do so in such a way that
+%% the overall number of open file descriptors is managed.
 %%
 %% The callers of register_callback/3, obtain/0, and the argument of
 %% transfer/1 are monitored, reducing the count of handles in use
