@@ -54,25 +54,19 @@ ensure_statistics_enabled() ->
     {ok, ForceStats} = application:get_env(
                          rabbit_management, force_fine_statistics),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    case ForceStats of
-        true ->
-            case StatsLevel of
-                fine ->
-                    ok;
-                _ ->
-                    application:set_env(rabbit, collect_statistics, fine),
-                    rabbit_log:info("Management plugin upgraded statistics"
-                                    ++ " to fine.~n")
-            end;
-        _    ->
-            case StatsLevel of
-                none ->
-                    application:set_env(rabbit, collect_statistics, coarse),
-                    rabbit_log:info("Management plugin upgraded statistics"
-                                    ++ " to coarse.~n");
-                _ ->
-                    ok
-            end
+    case {ForceStats, StatsLevel} of
+        {true,  fine} ->
+            ok;
+        {true,  _} ->
+            application:set_env(rabbit, collect_statistics, fine),
+            rabbit_log:info("Management plugin upgraded statistics"
+                            " to fine.~n");
+        {false, none} ->
+            application:set_env(rabbit, collect_statistics, coarse),
+            rabbit_log:info("Management plugin upgraded statistics"
+                            " to coarse.~n");
+        {_, _} ->
+            ok
     end.
 
 register_contexts() ->
