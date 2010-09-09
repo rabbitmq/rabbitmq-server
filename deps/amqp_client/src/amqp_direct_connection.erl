@@ -152,14 +152,14 @@ i(Item,             _State) -> throw({bad_argument, Item}).
 %% mentioned in the above list). We can rely on erlang's comparison of atoms
 %% for this.
 set_closing_state(ChannelCloseType, Closing,
-                  State = #state{closing  = false, channels = Channels}) ->
+                  State = #state{closing = false, channels = Channels}) ->
     amqp_channel_util:broadcast_to_channels(
         {connection_closing, ChannelCloseType, closing_to_reason(Closing)},
         Channels),
     check_trigger_all_channels_closed_event(State#state{closing = Closing});
 %% Already closing, override situation
 set_closing_state(ChannelCloseType, NewClosing,
-                  State = #state{closing  = CurClosing, channels = Channels}) ->
+                  State = #state{closing = CurClosing, channels = Channels}) ->
     %% Do not override reason in channels (because it might cause channels to
     %% to exit with different reasons) but do cause them to close abruptly
     %% if the new closing type requires it
@@ -226,7 +226,7 @@ check_trigger_all_channels_closed_event(State = #state{channels = Channels}) ->
     end.
 
 handle_channel_exit(Pid, Reason,
-            #state{channels = Channels, closing = Closing} = State) ->
+                    #state{channels = Channels, closing = Closing} = State) ->
     case amqp_channel_util:handle_exit(Pid, Reason, Channels, Closing) of
         stop   -> {stop, Reason, State};
         normal -> {noreply, unregister_channel(Pid, State)};
