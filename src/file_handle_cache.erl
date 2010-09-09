@@ -49,10 +49,10 @@
 %%
 %% Some benefits
 %% 1) You do not have to remember to call sync before close
-%% 2) Buffering is much more flexible than with plain file module, and
-%% you can control when the buffer gets flushed out. This means that
-%% you can rely on reads-after-writes working, without having to call
-%% the expensive sync.
+%% 2) Buffering is much more flexible than with the plain file module,
+%% and you can control when the buffer gets flushed out. This means
+%% that you can rely on reads-after-writes working, without having to
+%% call the expensive sync.
 %% 3) Unnecessary calls to position and sync get optimised out.
 %% 4) You can find out what your 'real' offset is, and what your
 %% 'virtual' offset is (i.e. where the hdl really is, and where it
@@ -86,15 +86,17 @@
 %% Note that this data can go very out of date, by the client using
 %% the least recently used handle.
 %%
-%% When the limit is reached, the server calculates the average age of
-%% the last reported least recently used file handle of all the
-%% clients. It then tells all the clients to close any handles not
-%% used for longer than this average, by invoking the callback the
-%% client registered. The client should receive this message and pass
-%% it into set_maximum_since_use/1. However, it is highly possible
-%% this age will be greater than the ages of all the handles the
-%% client knows of because the client has used its file handles in the
-%% mean time. Thus at this point the client reports to the server the
+%% When the limit is reached (i.e. the number of open file handles is
+%% at the limit and there are pending 'open' requests), the server
+%% calculates the average age of the last reported least recently used
+%% file handle of all the clients. It then tells all the clients to
+%% close any handles not used for longer than this average, by
+%% invoking the callback the client registered. The client should
+%% receive this message and pass it into
+%% set_maximum_since_use/1. However, it is highly possible this age
+%% will be greater than the ages of all the handles the client knows
+%% of because the client has used its file handles in the mean
+%% time. Thus at this point the client reports to the server the
 %% current timestamp at which its least recently used file handle was
 %% last used. The server will check two seconds later that either it
 %% is back under the limit, in which case all is well again, or if
@@ -107,11 +109,11 @@
 %% be closed, the server can send out an average age of 0, resulting
 %% in all available clients closing all their file descriptors.)
 %%
-%% Note that care is taken to ensure that (a) processes which are
-%% blocked waiting for file descriptors to become available are not
-%% sent requests to close file descriptors; and (b) given it is known
-%% how many file descriptors a process has open, when the average age
-%% is forced to 0, close messages are only sent to enough processes to
+%% Care is taken to ensure that (a) processes which are blocked
+%% waiting for file descriptors to become available are not sent
+%% requests to close file descriptors; and (b) given it is known how
+%% many file descriptors a process has open, when the average age is
+%% forced to 0, close messages are only sent to enough processes to
 %% release the correct number of file descriptors and the list of
 %% processes is randomly shuffled. This ensures we don't cause
 %% processes to needlessly close file descriptors, and ensures that we
@@ -133,8 +135,8 @@
 %% - reopening them when necessary is handled transparently.
 %%
 %% The server also supports obtain and transfer. obtain/0 blocks until
-%% a file descriptor is available. transfer/1 is transfers ownership
-%% of a file descriptor between processes. It is non-blocking.
+%% a file descriptor is available. transfer/1 transfers ownership of a
+%% file descriptor between processes. It is non-blocking.
 %%
 %% The callers of register_callback/3, obtain/0, and the argument of
 %% transfer/1 are monitored, reducing the count of handles in use
