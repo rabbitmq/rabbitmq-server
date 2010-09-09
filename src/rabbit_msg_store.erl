@@ -611,14 +611,14 @@ handle_cast({write, Guid},
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case index_lookup(Guid, State) of
         not_found ->
-            write_message(Guid, Msg, 1, State);
+            write_message(Guid, Msg, State);
         #msg_location { ref_count = 0, file = File, total_size = TotalSize } ->
             [#file_summary { locked    = Locked,
                              file_size = FileSize } = Summary] =
                 ets:lookup(FileSummaryEts, File),
             case Locked of
                 true  -> ok = index_delete(Guid, State),
-                         write_message(Guid, Msg, 1, State);
+                         write_message(Guid, Msg, State);
                 false -> ok = index_update_ref_count(Guid, 1, State),
                          ok = add_to_file_summary(Summary, TotalSize, FileSize,
                                                   State),
@@ -782,7 +782,7 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
               State1 #msstate { on_sync = [] }
     end.
 
-write_message(Guid, Msg, RefCount,
+write_message(Guid, Msg,
               State = #msstate { current_file_handle = CurHdl,
                                  current_file        = CurFile,
                                  sum_valid_data      = SumValid,
@@ -791,7 +791,7 @@ write_message(Guid, Msg, RefCount,
     {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
     {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
     ok = index_insert(
-           #msg_location { guid = Guid, ref_count = RefCount, file = CurFile,
+           #msg_location { guid = Guid, ref_count = 1, file = CurFile,
                            offset = CurOffset, total_size = TotalSize }, State),
     [#file_summary { right     = undefined,
                      locked    = false,
