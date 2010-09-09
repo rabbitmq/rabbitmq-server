@@ -135,8 +135,10 @@
 %% - reopening them when necessary is handled transparently.
 %%
 %% The server also supports obtain and transfer. obtain/0 blocks until
-%% a file descriptor is available. transfer/1 transfers ownership of a
-%% file descriptor between processes. It is non-blocking.
+%% a file descriptor is available, at which point the requesting
+%% process is considered to 'own' one more descriptor. transfer/1
+%% transfers ownership of a file descriptor between processes. It is
+%% non-blocking.
 %%
 %% The callers of register_callback/3, obtain/0, and the argument of
 %% transfer/1 are monitored, reducing the count of handles in use
