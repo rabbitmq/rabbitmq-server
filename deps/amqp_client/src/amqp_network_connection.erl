@@ -76,9 +76,9 @@ connect(Pid) ->
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams, ChSupSup, SIF]) ->
-    {ok, #state{sup = Sup,
-                params = AmqpParams,
-                channel_sup_sup = ChSupSup,
+    {ok, #state{sup                      = Sup,
+                params                   = AmqpParams,
+                channel_sup_sup          = ChSupSup,
                 start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
@@ -128,10 +128,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{sock = Sock,
-                              channels = Channels,
-                              max_channel = MaxChannel,
-                              main_reader = MainReader,
+               State = #state{sock            = Sock,
+                              channels        = Channels,
+                              max_channel     = MaxChannel,
+                              main_reader     = MainReader,
                               channel_sup_sup = ChSupSup}) ->
     try amqp_channel_util:open_channel(ChSupSup, ProposedNumber, MaxChannel,
                                        [Sock, MainReader], Channels) of
@@ -144,8 +144,8 @@ handle_command({open_channel, ProposedNumber}, _From,
 
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
-                                                close = Close,
-                                                from = From},
+                                                close  = Close,
+                                                from   = From},
                                 State)}.
 
 %%---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ handle_command({close, #'connection.close'{} = Close}, From, State) ->
 handle_method(#'connection.close'{} = Close, none, State) ->
     {noreply, set_closing_state(abrupt,
                                 #closing{reason = server_initiated_close,
-                                         close = Close},
+                                         close  = Close},
                                 State)};
 
 handle_method(#'connection.close_ok'{}, none,
@@ -287,8 +287,9 @@ internal_error_closing() ->
                                          class_id = 0,
                                          method_id = 0}}.
 
-handle_socket_closed(State = #state{closing =
-                         Closing = #closing{phase = wait_socket_close}}) ->
+handle_socket_closed(State = #state{
+                       closing = Closing = #closing{
+                                   phase = wait_socket_close}}) ->
     {stop, closing_to_reason(Closing), State};
 handle_socket_closed(State) ->
     {stop, socket_closed_unexpectedly, State}.
@@ -305,8 +306,8 @@ unregister_channel(Pid, State = #state{channels = Channels}) ->
 check_trigger_all_channels_closed_event(#state{closing = false} = State) ->
     State;
 check_trigger_all_channels_closed_event(#state{channels = Channels,
-                                               closing = Closing} = State) ->
-    #closing{phase = terminate_channels} = Closing, % assertion
+                                               closing  = Closing} = State) ->
+    #closing{phase = terminate_channels} = Closing, %% assertion
     case amqp_channel_util:is_channel_dict_empty(Channels) of
         true  -> all_channels_closed_event(State);
         false -> State
@@ -327,8 +328,8 @@ handle_channel_exit(Pid, Reason,
 %% Handshake
 %%---------------------------------------------------------------------------
 
-do_connect(State = #state{params = #amqp_params{host = Host,
-                                                port = Port,
+do_connect(State = #state{params = #amqp_params{host        = Host,
+                                                port        = Port,
                                                 ssl_options = none}}) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock}      -> handshake(State#state{sock = Sock});
@@ -336,8 +337,8 @@ do_connect(State = #state{params = #amqp_params{host = Host,
                                      [Reason]),
                            exit(Reason)
     end;
-do_connect(State = #state{params = #amqp_params{host = Host,
-                                                port = Port,
+do_connect(State = #state{params = #amqp_params{host        = Host,
+                                                port        = Port,
                                                 ssl_options = SslOpts}}) ->
     rabbit_misc:start_applications([crypto, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
@@ -366,9 +367,9 @@ handshake(State0 = #state{sock = Sock}) ->
 start_infrastructure(State = #state{start_infrastructure_fun = SIF,
                                     sock = Sock}) ->
     {ok, {MainReader, Framing, Writer, SHF}} = SIF(Sock),
-    State#state{main_reader = MainReader,
-                framing0 = Framing,
-                writer0 = Writer,
+    State#state{main_reader         = MainReader,
+                framing0            = Framing,
+                writer0             = Writer,
                 start_heartbeat_fun = SHF}.
 
 network_handshake(State = #state{writer0 = Writer, params = Params}) ->
@@ -389,13 +390,13 @@ network_handshake(State = #state{writer0 = Writer, params = Params}) ->
     ?LOG_INFO("Negotiated maximums: (Channel = ~p, Frame = ~p, "
               "Heartbeat = ~p)~n",
              [ChannelMax, FrameMax, Heartbeat]),
-    State#state{max_channel = ChannelMax,
-                heartbeat = Heartbeat,
+    State#state{max_channel       = ChannelMax,
+                heartbeat         = Heartbeat,
                 server_properties = ServerProperties}.
 
 start_heartbeat(#state{start_heartbeat_fun = SHF,
-                       sock = Sock,
-                       heartbeat = Heartbeat}) ->
+                       sock                = Sock,
+                       heartbeat           = Heartbeat}) ->
     SHF(Sock, Heartbeat).
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
@@ -424,8 +425,8 @@ negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
 negotiate_max_value(Client, Server) ->
     lists:min([Client, Server]).
 
-start_ok(#state{params = #amqp_params{username = Username,
-                                      password = Password,
+start_ok(#state{params = #amqp_params{username          = Username,
+                                      password          = Password,
                                       client_properties = UserProps}}) ->
     LoginTable = [{<<"LOGIN">>, longstr, Username},
                   {<<"PASSWORD">>, longstr, Password}],

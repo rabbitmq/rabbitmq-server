@@ -123,7 +123,7 @@ start_network_link(Params) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams, Link) ->
-    {ok, Sup, Connection} =
+    {ok, _Sup, Connection} =
         amqp_connection_sup:start_link(Type, AmqpParams, Link),
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection
