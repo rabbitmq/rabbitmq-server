@@ -459,12 +459,12 @@ loop(GS2State = #gs2_state { time          = hibernate,
                              timeout_state = undefined }) ->
     pre_hibernate(GS2State);
 loop(GS2State) ->
-    process_next_msg(GS2State #gs2_state { queue = drain(GS2State) }).
+    process_next_msg(drain(GS2State)).
 
-drain(GS2State = #gs2_state { queue = Queue }) ->
+drain(GS2State) ->
     receive
-        Input -> drain(GS2State #gs2_state { queue = in(Input, GS2State) })
-    after 0 -> Queue
+        Input -> drain(in(Input, GS2State))
+    after 0 -> GS2State
     end.
 
 process_next_msg(GS2State = #gs2_state { time          = Time,
@@ -493,11 +493,7 @@ process_next_msg(GS2State = #gs2_state { time          = Time,
                 Input ->
                     %% Time could be 'hibernate' here, so *don't* call loop
                     process_next_msg(
-                      GS2State #gs2_state {
-                        queue = drain(GS2State #gs2_state {
-                                        queue = in(Input,
-                                                   GS2State #gs2_state {
-                                                     queue = Queue1 })})})
+                      drain(in(Input, GS2State #gs2_state { queue = Queue1 })))
             after Time1 ->
                     case HibOnTimeout of
                         true ->
@@ -517,8 +513,8 @@ wake_hib(GS2State = #gs2_state { timeout_state = TS }) ->
                         {SleptAt, TimeoutState} ->
                             adjust_timeout_state(SleptAt, now(), TimeoutState)
                     end,
-    post_hibernate(GS2State #gs2_state { timeout_state = TimeoutState1,
-                                         queue         = drain(GS2State) }).
+    post_hibernate(
+      drain(GS2State #gs2_state { timeout_state = TimeoutState1 })).
 
 hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
     TS = case TimeoutState of
@@ -586,12 +582,17 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
 
 in({'$gen_cast', Msg}, GS2State = #gs2_state { prioritise_cast = PC,
                                                queue           = Queue }) ->
-    priority_queue:in({'$gen_cast', Msg}, PC(Msg, GS2State), Queue);
+    GS2State #gs2_state { queue = priority_queue:in(
+                                    {'$gen_cast', Msg},
+                                    PC(Msg, GS2State), Queue) };
 in({'$gen_call', From, Msg}, GS2State = #gs2_state { prioritise_call = PC,
                                                      queue           = Queue }) ->
-    priority_queue:in({'$gen_call', From, Msg}, PC(Msg, From, GS2State), Queue);
+    GS2State #gs2_state { queue = priority_queue:in(
+                                    {'$gen_call', From, Msg},
+                                    PC(Msg, From, GS2State), Queue) };
 in(Input, GS2State = #gs2_state { prioritise_info = PI, queue = Queue }) ->
-    priority_queue:in(Input, PI(Input, GS2State), Queue).
+    GS2State #gs2_state { queue = priority_queue:in(
+                                    Input, PI(Input, GS2State), Queue) }.
 
 process_msg(Msg,
             GS2State = #gs2_state { parent = Parent,
