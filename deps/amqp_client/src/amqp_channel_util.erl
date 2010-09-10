@@ -28,7 +28,6 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/5]).
--export([start_channel_infrastructure/3, terminate_channel_infrastructure/2]).
 -export([do/4]).
 -export([new_channel_dict/0, is_channel_dict_empty/1, num_channels/1,
          register_channel/3, unregister_channel_number/2,
@@ -41,43 +40,14 @@
 %% Opening channels
 %%---------------------------------------------------------------------------
 
-%% Spawns a new channel process linked to the calling process and registers it
-%% in the given Channels dict
-open_channel(ProposedNumber, MaxChannel, Driver, StartArgs, Channels) ->
+open_channel(ChSupSup, ProposedNumber, MaxChannel, InfraArgs, Channels) ->
     ChannelNumber = channel_number(ProposedNumber, Channels, MaxChannel),
-    {ok, ChannelPid} = gen_server:start_link(
-        amqp_channel, {self(), ChannelNumber, Driver, StartArgs}, []),
-    #'channel.open_ok'{} = amqp_channel:call(ChannelPid, #'channel.open'{}),
-    NewChannels = register_channel(ChannelNumber, ChannelPid, Channels),
-    {ChannelPid, NewChannels}.
-
-%%---------------------------------------------------------------------------
-%% Starting and terminating channel infrastructure
-%%---------------------------------------------------------------------------
-
-start_channel_infrastructure(network, ChannelNumber, {Sock, MainReader}) ->
-    {ok, FramingPid} = rabbit_framing_channel:start_link(
-                         fun(X) -> {ok, X} end, [self()], ?PROTOCOL),
-    {ok, WriterPid} = rabbit_writer:start_link(Sock, ChannelNumber,
-                                               ?FRAME_MIN_SIZE, ?PROTOCOL),
-    case MainReader of
-        none -> ok;
-        _    -> amqp_main_reader:register_framing_channel(
-                        MainReader, ChannelNumber, FramingPid)
-    end,
-    {FramingPid, WriterPid};
-start_channel_infrastructure(direct, ChannelNumber, {User, VHost, Collector}) ->
-    {ok, Peer} = rabbit_channel:start_link(ChannelNumber, self(), self(),
-                                           User, VHost, Collector),
-    {Peer, Peer}.
-
-terminate_channel_infrastructure(network, {FramingPid, WriterPid}) ->
-    rabbit_framing_channel:shutdown(FramingPid),
-    rabbit_writer:shutdown(WriterPid),
-    ok;
-terminate_channel_infrastructure(direct, {Peer, Peer})->
-    gen_server2:cast(Peer, terminate),
-    ok.
+    {ok, _ChannelSup, ChPid} = amqp_channel_sup_sup:start_channel_sup(
+                                 ChSupSup, InfraArgs, ChannelNumber),
+    #'channel.open_ok'{} = amqp_channel:call(ChPid, #'channel.open'{}),
+    erlang:monitor(process, ChPid),
+    NewChannels = register_channel(ChannelNumber, ChPid, Channels),
+    {ChPid, NewChannels}.
 
 %%---------------------------------------------------------------------------
 %% Do
@@ -85,22 +55,13 @@ terminate_channel_infrastructure(direct, {Peer, Peer})->
 
 do(network, Writer, Method, Content) ->
     case Content of
-        none -> rabbit_writer:send_command_and_signal_back(Writer, Method,
-                                                           self());
-        _    -> rabbit_writer:send_command_and_signal_back(Writer, Method,
-                                                           Content, self())
-    end,
-    receive_writer_send_command_signal(Writer);
-do(direct, Writer, Method, Content) ->
+        none -> rabbit_writer:send_command_sync(Writer, Method);
+        _    -> rabbit_writer:send_command_sync(Writer, Method, Content)
+    end;
+do(direct, RabbitChannel, Method, Content) ->
     case Content of
-        none -> rabbit_channel:do(Writer, Method);
-        _    -> rabbit_channel:do(Writer, Method, Content)
-    end.
-
-receive_writer_send_command_signal(Writer) ->
-    receive
-        rabbit_writer_send_command_signal   -> ok;
-        WriterExitMsg = {'EXIT', Writer, _} -> self() ! WriterExitMsg
+        none -> rabbit_channel:do(RabbitChannel, Method);
+        _    -> rabbit_channel:do(RabbitChannel, Method, Content)
     end.
 
 %%---------------------------------------------------------------------------
@@ -151,9 +112,13 @@ unregister_channel(Number, Pid, {TreeNP, DictPN}) ->
     DictPN1 = dict:erase(Pid, DictPN),
     {TreeNP1, DictPN1}.
 
-%% Get channel pid, given its number. Assumes number is registered
+%% Get channel pid, given its number. Returns undefined if channel number
+%% is not registered.
 resolve_channel_number(Number, _Channels = {TreeNP, _}) ->
-    gb_trees:get(Number, TreeNP).
+    case gb_trees:lookup(Number, TreeNP) of
+        {value, Pid} -> Pid;
+        none         -> undefined
+    end.
 
 %% Get channel number, given its pid. Assumes pid is registered
 resolve_channel_pid(Pid, _Channels = {_, DictPN}) ->
@@ -221,13 +186,12 @@ handle_exit(Pid, Reason, Channels, Closing) ->
     case is_channel_pid_registered(Pid, Channels) of
         true  -> handle_channel_exit(Pid, Reason, Closing);
         false -> ?LOG_WARN("Connection (~p) closing: received unexpected "
-                           "exit signal from (~p). Reason: ~p~n",
+                           "down signal from (~p). Reason: ~p~n",
                            [self(), Pid, Reason]),
                  other
     end.
 
 handle_channel_exit(_Pid, normal, _Closing) ->
-    %% Normal amqp_channel shutdown
     normal;
 handle_channel_exit(Pid, {server_initiated_close, Code, _Text}, false) ->
     %% Channel terminating (server sent 'channel.close')

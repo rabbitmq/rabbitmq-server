@@ -195,7 +195,6 @@ basic_return_test(Connection) ->
     Publish = #'basic.publish'{exchange = X, routing_key = Key, 
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
-    timer:sleep(200),
     receive
         {BasicReturn = #'basic.return'{}, Content} ->
             #'basic.return'{reply_code = ReplyCode,
@@ -303,7 +302,7 @@ basic_qos_test(Con) ->
     FudgeFactor = 2, %% account for timing variations
     ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor),
     amqp_connection:close(Con),
-    test_util:wait_for_death(Con).
+    wait_for_death(Con).
 
 basic_qos_test(Connection, Prefetch) ->
     Messages = 100,
@@ -330,7 +329,7 @@ basic_qos_test(Connection, Prefetch) ->
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
     amqp_channel:close(Chan),
-    test_util:wait_for_death(Chan),
+    wait_for_death(Chan),
     Res.
 
 sleeping_consumer(Channel, Sleep, Parent) ->
@@ -354,12 +353,12 @@ sleeping_consumer(Channel, Sleep, Parent) ->
 do_stop(Channel, Parent) ->
     Parent ! finished,
     amqp_channel:close(Channel),
-    test_util:wait_for_death(Channel),
+    wait_for_death(Channel),
     exit(normal).
 
 producer_loop(Channel, _RoutingKey, 0) ->
     amqp_channel:close(Channel),
-    test_util:wait_for_death(Channel),
+    wait_for_death(Channel),
     ok;
 
 producer_loop(Channel, RoutingKey, N) ->
@@ -587,7 +586,7 @@ rpc_test(Connection) ->
     amqp_rpc_client:stop(Client),
     amqp_rpc_server:stop(Server),
     amqp_connection:close(Connection),
-    test_util:wait_for_death(Connection),
+    wait_for_death(Connection),
     ok.
 
 %%---------------------------------------------------------------------------

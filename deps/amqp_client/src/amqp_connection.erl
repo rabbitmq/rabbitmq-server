@@ -86,23 +86,24 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams) ->
-    Module = case Type of network -> amqp_network_connection;
-                          direct  -> amqp_direct_connection
+    {ok, _Sup, Connection} = amqp_connection_sup:start_link(Type, AmqpParams),
+    Module = case Type of direct  -> amqp_direct_connection;
+                          network -> amqp_network_connection
              end,
-    case gen_server:start(Module, AmqpParams, []) of
-        {ok, Pid} ->
-            {ok, Pid};
-        {error, {protocol_version_mismatch, _, _}} = Err ->
-            Err;
-        Bad ->
-            {error, {auth_failure_likely, Bad}}
+    try Module:connect(Connection) of
+        ok -> {ok, Connection}
+    catch
+        exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
+            {error, Reason};
+        exit:Reason ->
+            {error, {auth_failure_likely, Reason}}
     end.
 
 %%---------------------------------------------------------------------------
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;). 
+%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;).
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
