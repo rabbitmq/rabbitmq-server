@@ -120,9 +120,6 @@ handle_frame(Type, Channel, Payload, State) ->
         %% Match heartbeats but don't do anything with them
         heartbeat ->
             heartbeat;
-        {method, Method = 'connection.close_ok', _FieldsBin} ->
-            pass_frame(Channel, {method, Method}, State),
-            closed_ok;
         AnalyzedFrame ->
             pass_frame(Channel, AnalyzedFrame, State)
     end.
