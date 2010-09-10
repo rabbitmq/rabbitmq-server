@@ -613,8 +613,7 @@ process_msg(Msg,
         _Msg ->
             Debug1 = sys:handle_debug(Debug, {?MODULE, print_event},
                                       Name, {in, Msg}),
-            handle_msg(Msg,
-                       GS2State #gs2_state { debug = Debug1 })
+            handle_msg(Msg, GS2State #gs2_state { debug = Debug1 })
     end.
 
 %%% ---------------------------------------------------
@@ -822,11 +821,10 @@ common_debug([] = _Debug, _Func, _Info, _Event) ->
 common_debug(Debug, Func, Info, Event) ->
     sys:handle_debug(Debug, Func, Info, Event).
 
-handle_msg({'$gen_call', From, Msg},
-           GS2State = #gs2_state { mod = Mod,
-                                   state = State,
-                                   name = Name,
-                                   debug = Debug }) ->
+handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
+                                                             state = State,
+                                                             name = Name,
+                                                             debug = Debug }) ->
     case catch Mod:handle_call(Msg, From, State) of
         {reply, Reply, NState} ->
             Debug1 = common_reply(Name, From, Reply, NState, Debug),
@@ -859,14 +857,12 @@ handle_msg({'$gen_call', From, Msg},
         Other ->
             handle_common_reply(Other, Msg, GS2State)
     end;
-handle_msg(Msg,
-           GS2State = #gs2_state { mod = Mod, state = State }) ->
+handle_msg(Msg, GS2State = #gs2_state { mod = Mod, state = State }) ->
     Reply = (catch dispatch(Msg, Mod, State)),
     handle_common_reply(Reply, Msg, GS2State).
 
-handle_common_reply(Reply, Msg,
-                    GS2State = #gs2_state { name  = Name,
-                                            debug = Debug}) ->
+handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
+                                                        debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
             Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
@@ -896,8 +892,8 @@ handle_common_termination(Reply, Msg, GS2State) ->
 
 reply(Name, {To, Tag}, Reply, State, Debug) ->
     reply({To, Tag}, Reply),
-    sys:handle_debug(Debug, {?MODULE, print_event}, Name,
-                     {out, Reply, To, State} ).
+    sys:handle_debug(
+      Debug, {?MODULE, print_event}, Name, {out, Reply, To, State}).
 
 
 %%-----------------------------------------------------------------
@@ -1139,13 +1135,11 @@ format_status(Opt, StatusData) ->
     Log = sys:get_debug(log, Debug, []),
     Specfic =
         case erlang:function_exported(Mod, format_status, 2) of
-            true ->
-                case catch Mod:format_status(Opt, [PDict, State]) of
-                    {'EXIT', _} -> [{data, [{"State", State}]}];
-                    Else -> Else
-                end;
-            _ ->
-                [{data, [{"State", State}]}]
+            true -> case catch Mod:format_status(Opt, [PDict, State]) of
+                        {'EXIT', _} -> [{data, [{"State", State}]}];
+                        Else        -> Else
+                    end;
+            _    -> [{data, [{"State", State}]}]
         end,
     [{header, Header},
      {data, [{"Status", SysState},
