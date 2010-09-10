@@ -957,21 +957,21 @@ terminate(Reason, Msg, #gs2_state { name  = Name,
                                     state = State,
                                     debug = Debug }) ->
     case catch Mod:terminate(Reason, State) of
-	{'EXIT', R} ->
-	    error_info(R, Reason, Name, Msg, State, Debug),
-	    exit(R);
-	_ ->
-	    case Reason of
-		normal ->
-		    exit(normal);
-		shutdown ->
-		    exit(shutdown);
-		{shutdown,_}=Shutdown ->
-		    exit(Shutdown);
-		_ ->
-		    error_info(Reason, undefined, Name, Msg, State, Debug),
-		    exit(Reason)
-	    end
+        {'EXIT', R} ->
+            error_info(R, Reason, Name, Msg, State, Debug),
+            exit(R);
+        _ ->
+            case Reason of
+                normal ->
+                    exit(normal);
+                shutdown ->
+                    exit(shutdown);
+                {shutdown,_}=Shutdown ->
+                    exit(Shutdown);
+                _ ->
+                    error_info(Reason, undefined, Name, Msg, State, Debug),
+                    exit(Reason)
+            end
     end.
 
 error_info(_Reason, _RootCause, application_controller, _Msg, _State, _Debug) ->
