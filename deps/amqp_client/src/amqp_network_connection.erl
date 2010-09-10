@@ -83,7 +83,7 @@ init([Sup, AmqpParams, ChSupSup, SIF]) ->
 
 handle_call({command, Command}, From, #state{closing = false} = State) ->
     handle_command(Command, From, State);
-handle_call({command, Command}, From, State) ->
+handle_call({command, _Command}, _From, State) ->
     {reply, closing, State};
 handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
