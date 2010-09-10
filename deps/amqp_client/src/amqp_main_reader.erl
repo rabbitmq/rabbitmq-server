@@ -97,12 +97,9 @@ handle_inet_async({inet_async, Sock, _, Msg},
                               end,
     case Msg of
         {ok, <<Payload:Length/binary, ?FRAME_END>>} ->
-            case handle_frame(Type, Channel, Payload, State) of
-                closed_ok -> {stop, normal, State};
-                _         -> {ok, _Ref} =
-                                 rabbit_net:async_recv(Sock, 7, infinity),
-                             {noreply, State#state{message = none}}
-            end;
+            handle_frame(Type, Channel, Payload, State),
+            {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
+            {noreply, State#state{message = none}};
         {ok, <<NewType:8, NewChannel:16, NewLength:32>>} ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
             {noreply, State#state{message={NewType, NewChannel, NewLength}}};
