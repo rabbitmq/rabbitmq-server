@@ -81,11 +81,10 @@ init([Sup, AmqpParams, ChSupSup, SIF]) ->
                 channel_sup_sup          = ChSupSup,
                 start_infrastructure_fun = SIF}}.
 
-handle_call({command, Command}, From, #state{closing = Closing} = State) ->
-    case Closing of
-        false -> handle_command(Command, From, State);
-        _     -> {reply, closing, State}
-    end;
+handle_call({command, Command}, From, #state{closing = false} = State) ->
+    handle_command(Command, From, State);
+handle_call({command, Command}, From, State) ->
+    {reply, closing, State};
 handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State) ->
