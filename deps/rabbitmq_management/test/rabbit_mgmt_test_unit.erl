@@ -170,7 +170,7 @@ http_permissions_test() ->
     ok.
 
 http_connections_test() ->
-    Conn = amqp_connection:start_network(),
+    {ok, Conn} = amqp_connection:start(network),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     Path = binary_to_list(
              rabbit_mgmt_format:print(

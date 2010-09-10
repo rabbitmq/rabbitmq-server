@@ -39,8 +39,8 @@ test() ->
 
 first_half(Test) ->
     io:format("Set up ~p... ", [Test]),
-    Conn = amqp_connection:start_network(),
-    Chan = amqp_connection:open_channel(Conn),
+    {ok, Conn} = amqp_connection:start(network),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
     Continuation = apply(rabbit_mgmt_test_db, Test, [Conn, Chan]),
     io:format("done.~n", []),
     {Test, Continuation, Conn, Chan}.
@@ -127,8 +127,8 @@ test_channels(Conn, Chan) ->
 
 %% TODO rethink this test
 %% test_aggregation(Conn, Chan) ->
-%%     Conn2 = amqp_connection:start_network(),
-%%     Chan2 = amqp_connection:open_channel(Conn2),
+%%     {ok, Conn2} = amqp_connection:start(network),
+%%     {ok, Chan2} = amqp_connection:open_channel(Conn2),
 
 %%     X = <<"aggregation">>,
 %%     declare_exchange(Chan, X),
