@@ -41,7 +41,6 @@ start_link(Name, Config) ->
 %%---------------------------
 
 init([Name, Config]) ->
-    process_flag(trap_exit, true),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, config = Config}}.
 
@@ -121,7 +120,15 @@ handle_info(#'channel.flow'{active = false},
             State = #state{inbound_ch = InboundChan}) ->
     ok = report_status(blocked, State),
     ok = channel_flow(InboundChan, false),
-    {noreply, State#state{blocked = true}}.
+    {noreply, State#state{blocked = true}};
+
+handle_info({'DOWN', _, process, InboundConn, Reason},
+            State = #state{inbound_conn = InboundConn}) ->
+    {stop, {inbound_conn_died, Reason}, State};
+
+handle_info({'DOWN', _, process, OutboundConn, Reason},
+            State = #state{outbound_conn = OutboundConn}) ->
+    {stop, {outbound_conn_died, Reason}, State}.
 
 terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
                          outbound_conn = undefined, outbound_ch = undefined,
@@ -129,10 +136,10 @@ terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
     rabbit_shovel_status:report(Name, {terminated, Reason}),
     ok;
 terminate(Reason, State) ->
-    amqp_channel:close(State#state.inbound_ch),
-    amqp_connection:close(State#state.inbound_conn),
-    amqp_channel:close(State#state.outbound_ch),
-    amqp_connection:close(State#state.outbound_conn),
+    catch amqp_channel:close(State#state.inbound_ch),
+    catch amqp_connection:close(State#state.inbound_conn),
+    catch amqp_channel:close(State#state.outbound_ch),
+    catch amqp_connection:close(State#state.outbound_conn),
     rabbit_shovel_status:report(State#state.name, {terminated, Reason}),
     ok.
 
@@ -197,11 +204,12 @@ channel_flow(Chan, Active) ->
 
 make_conn_and_chan(AmqpParams) ->
     AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
-    Conn = case AmqpParam#amqp_params.host of
-               undefined -> amqp_connection:start_direct_link(AmqpParam);
-               _         -> amqp_connection:start_network_link(AmqpParam)
-           end,
-    Chan = amqp_connection:open_channel(Conn),
+    {ok, Conn} = amqp_connection:start(
+                     case AmqpParam#amqp_params.host of undefined -> direct;
+                                                        _         -> network
+                     end, AmqpParam),
+    erlang:monitor(process, Conn),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, AmqpParam}.
 
 create_resources(Chan, Declarations) ->
