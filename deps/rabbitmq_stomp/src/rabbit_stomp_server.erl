@@ -131,6 +131,10 @@ mainloop(State) ->
             end;
         {send_command, Command} ->
             ?MODULE:mainloop(send_reply(Command, State));
+        {'$gen_call', From, {send_command_sync, Command}} ->
+            State1 = send_reply(Command, State),
+            gen_server:reply(From, ok),
+            ?MODULE:mainloop(State1);
         {send_command_and_notify, QPid, TxPid, Method, Content} ->
             State1 = send_reply(Method, Content, State),
             rabbit_amqqueue:notify_sent(QPid, TxPid),
@@ -381,7 +385,10 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
     {ok, ChPid} = rabbit_channel:start_link(?MODULE, self(), self(),
                                             U#user.username,
                                             list_to_binary(VirtualHost),
-                                            CollectorPid),
+                                            CollectorPid,
+                                            fun (_) ->
+                                                    exit(limiter_not_yet_supported_in_stomp)
+                                            end),
     {ok, #'channel.open_ok'{}, State1} =
         simple_method_sync_rpc(#'channel.open'{},
                                State#state{channel = ChPid,
