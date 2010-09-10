@@ -25,7 +25,7 @@
 
 -module(network_client_SUITE).
 
--export([test_coverage/0]).
+-export([test_coverage/0, new_connection/1]).
 
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -87,8 +87,7 @@ pub_and_close_test_() ->
         end}.
 
 channel_tune_negotiation_test() ->
-    amqp_connection:close(amqp_connection:start_network(
-                            #amqp_params{ channel_max = 10 })).
+    amqp_connection:close(new_connection(#amqp_params{ channel_max = 10 })).
 
 %%---------------------------------------------------------------------------
 %% Negative Tests
@@ -132,9 +131,11 @@ shortstr_overflow_field_test() ->
 repeat(Fun, Times) ->
     [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
 
-
 new_connection() ->
-    amqp_connection:start_network().
+    new_connection(#amqp_params{}).
+
+new_connection(Params) ->
+    amqp_connection:start_network(Params).
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

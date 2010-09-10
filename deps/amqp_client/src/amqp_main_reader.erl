@@ -29,11 +29,13 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, register_framing_channel/3, start_heartbeat/2]).
+-export([start_link/3, register_framing_channel/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
--record(state, {sock,
+-record(state, {sup,
+                sock,
+                connection,
                 message = none, %% none | {Type, Channel, Length}
                 framing_channels = amqp_channel_util:new_channel_dict()}).
 
@@ -41,36 +43,31 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Sock, Framing0Pid) ->
-    gen_server:start_link(?MODULE, [Sock, Framing0Pid], []).
+start_link(Sock, Framing0, Connection) ->
+    gen_server:start_link(?MODULE, [self(), Sock, Framing0, Connection], []).
 
 register_framing_channel(MainReaderPid, Number, FramingPid) ->
     gen_server:call(MainReaderPid,
                     {register_framing_channel, Number, FramingPid}, infinity).
 
-start_heartbeat(MainReaderPid, Heartbeat) ->
-    gen_server:cast(MainReaderPid, {heartbeat, Heartbeat}).
-
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sock, Framing0Pid]) ->
-    State0 = #state{sock = Sock},
-    State1 = internal_register_framing_channel(0, Framing0Pid, State0),
+init([Sup, Sock, Framing0, Connection]) ->
+    State0 = #state{sup = Sup, sock = Sock, connection = Connection},
+    State1 = internal_register_framing_channel(0, Framing0, State0),
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     {ok, State1}.
 
 terminate(Reason, #state{sock = Sock}) ->
-    Nice = case Reason of
-               normal        -> true;
-               shutdown      -> true;
-               {shutdown, _} -> true;
-               _             -> false
+    Nice = case Reason of normal        -> true;
+                          shutdown      -> true;
+                          {shutdown, _} -> true;
+                          _             -> false
            end,
-    ok = case Nice of
-             true  -> rabbit_net:close(Sock);
-             false -> ok
+    ok = case Nice of true  -> rabbit_net:close(Sock);
+                      false -> ok
          end.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -79,20 +76,15 @@ code_change(_OldVsn, State, _Extra) ->
 handle_call({register_framing_channel, Number, Pid}, _From, State) ->
     {reply, ok, internal_register_framing_channel(Number, Pid, State)}.
 
-handle_cast({heartbeat, Heartbeat}, State = #state{sock = Sock}) ->
-    rabbit_heartbeat:start_heartbeat(Sock, Heartbeat),
-    {noreply, State}.
+handle_cast(Cast, State) ->
+    {stop, {unexpected_cast, Cast}, State}.
 
 handle_info({inet_async, _, _, _} = InetAsync, State) ->
     handle_inet_async(InetAsync, State);
 handle_info({'DOWN', _, _, _, _} = Down, State) ->
     handle_down(Down, State);
-handle_info(timeout, State) ->
-    {stop, connection_timeout, State};
-handle_info(socket_closing_timeout, State) ->
-    {stop, socket_closing_timeout, State};
-handle_info(close, State) ->
-    {stop, normal, State}.
+handle_info({channel_exit, Ch, Reason}, State) ->
+    {stop, {channel_died, Ch, Reason}, State}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -100,9 +92,8 @@ handle_info(close, State) ->
 
 handle_inet_async({inet_async, Sock, _, Msg},
                   State = #state{sock = Sock, message = CurMessage}) ->
-    {Type, Channel, Length} = case CurMessage of
-                                  {T, C, L} -> {T, C, L};
-                                  none      -> {none, none, none}
+    {Type, Channel, Length} = case CurMessage of {T, C, L} -> {T, C, L};
+                                                 none      -> {none, none, none}
                               end,
     case Msg of
         {ok, <<Payload:Length/binary, ?FRAME_END>>} ->
@@ -116,7 +107,8 @@ handle_inet_async({inet_async, Sock, _, Msg},
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
             {noreply, State#state{message={NewType, NewChannel, NewLength}}};
         {error, closed} ->
-            {stop, socket_closed, State};
+            State#state.connection ! socket_closed,
+            {noreply, State};
         {error, Reason} ->
             {stop, {socket_error, Reason}, State}
     end.
@@ -125,14 +117,10 @@ handle_frame(Type, Channel, Payload, State) ->
     case rabbit_reader:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when Channel /= 0 ->
             rabbit_misc:die(frame_error);
-        trace when Channel /= 0 ->
-            rabbit_misc:die(frame_error);
-        %% Match heartbeats and trace frames, but don't do anything with them
+        %% Match heartbeats but don't do anything with them
         heartbeat ->
             heartbeat;
-        trace ->
-            trace;
-        {method, Method = 'connection.close_ok', none} ->
+        {method, Method = 'connection.close_ok', _FieldsBin} ->
             pass_frame(Channel, {method, Method}, State),
             closed_ok;
         AnalyzedFrame ->
@@ -152,12 +140,10 @@ pass_frame(Channel, Frame, #state{framing_channels = Channels}) ->
 handle_down({'DOWN', _MonitorRef, process, Pid, Info},
             State = #state{framing_channels = Channels}) ->
     case amqp_channel_util:is_channel_pid_registered(Pid, Channels) of
-        true ->
-            NewChannels =
-                amqp_channel_util:unregister_channel_pid(Pid, Channels),
-            {noreply, State#state{framing_channels = NewChannels}};
-        false ->
-            {stop, {unexpected_down, Pid, Info}, State}
+        true  -> NewChannels =
+                     amqp_channel_util:unregister_channel_pid(Pid, Channels),
+                 {noreply, State#state{framing_channels = NewChannels}};
+        false -> {stop, {unexpected_down, Pid, Info}, State}
     end.
 
 internal_register_framing_channel(
