@@ -103,7 +103,10 @@ channel_death_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    amqp_connection:start_direct().
+    case amqp_connection:start(direct) of
+        {ok, Conn}         -> Conn;
+        {error, _} = Error -> Error
+    end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),

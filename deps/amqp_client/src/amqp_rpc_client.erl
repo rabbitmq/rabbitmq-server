@@ -120,9 +120,9 @@ publish(Payload, From,
 %% Sets up a reply queue and consumer within an existing channel
 %% @private
 init([Connection, RoutingKey]) ->
-    Channel = amqp_connection:open_channel(Connection),
-    InitialState = #state{channel = Channel,
-                          exchange = <<>>,
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    InitialState = #state{channel     = Channel,
+                          exchange    = <<>>,
                           routing_key = RoutingKey},
     State = setup_reply_queue(InitialState),
     setup_consumer(State),

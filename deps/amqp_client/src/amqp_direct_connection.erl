@@ -115,10 +115,10 @@ handle_command({open_channel, ProposedNumber}, _From, State =
                                        ?MAX_CHANNEL_NUMBER,
                                        [User, VHost, Collector], Channels) of
         {ChannelPid, NewChannels} ->
-            {reply, ChannelPid, State#state{channels = NewChannels}}
+            {reply, {ok, ChannelPid}, State#state{channels = NewChannels}}
     catch
         error:out_of_channel_numbers = Error ->
-            {reply, {Error, ?MAX_CHANNEL_NUMBER}, State}
+            {reply, {error, {Error, ?MAX_CHANNEL_NUMBER}}, State}
     end;
 
 handle_command({close, Close}, From, State) ->
