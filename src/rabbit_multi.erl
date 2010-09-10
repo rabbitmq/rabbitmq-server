@@ -310,7 +310,8 @@ kill_wait(Pid, TimeLeft, Forceful) ->
 is_dead(Pid) ->
     PidS = integer_to_list(Pid),
     with_os([{unix, fun () ->
-                            os:cmd("kill -0 " ++ PidS) /= ""
+                            system("kill -0 " ++ PidS
+                                   ++ " >/dev/null 2>&1") /= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
@@ -320,6 +321,16 @@ is_dead(Pid) ->
                                  _     -> true
                              end
                      end}]).
+
+% Like system(3)
+system(Cmd) ->
+    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
+    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
+    receive {Port, {exit_status, Status}} -> Status end.
+
+% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
+escape_quotes(Cmd) ->
+    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
 
 call_all_nodes(Func) ->
     case read_pids_file() of
