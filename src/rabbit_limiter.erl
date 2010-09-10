@@ -35,7 +35,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
--export([start_link/2, shutdown/1]).
+-export([start_link/2]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1]).
 
@@ -47,7 +47,6 @@
 
 -spec(start_link/2 :: (pid(), non_neg_integer()) ->
                            rabbit_types:ok_pid_or_error()).
--spec(shutdown/1 :: (maybe_pid()) -> 'ok').
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
@@ -77,17 +76,10 @@
 start_link(ChPid, UnackedMsgCount) ->
     gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []).
 
-shutdown(undefined) ->
-    ok;
-shutdown(LimiterPid) ->
-    true = unlink(LimiterPid),
-    gen_server2:cast(LimiterPid, shutdown).
-
 limit(undefined, 0) ->
     ok;
 limit(LimiterPid, PrefetchCount) ->
-    unlink_on_stopped(LimiterPid,
-                      gen_server2:call(LimiterPid, {limit, PrefetchCount})).
+    gen_server2:call(LimiterPid, {limit, PrefetchCount}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -125,8 +117,7 @@ block(LimiterPid) ->
 unblock(undefined) ->
     ok;
 unblock(LimiterPid) ->
-    unlink_on_stopped(LimiterPid,
-                      gen_server2:call(LimiterPid, unblock, infinity)).
+    gen_server2:call(LimiterPid, unblock, infinity).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -167,9 +158,6 @@ handle_call(unblock, _From, State) ->
         {cont, State1} -> {reply, ok, State1};
         {stop, State1} -> {stop, normal, stopped, State1}
     end.
-
-handle_cast(shutdown, State) ->
-    {stop, normal, State};
 
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
@@ -250,9 +238,3 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             ok
     end,
     State#lim{queues = NewQueues}.
-
-unlink_on_stopped(LimiterPid, stopped) ->
-    ok = rabbit_misc:unlink_and_capture_exit(LimiterPid),
-    stopped;
-unlink_on_stopped(_LimiterPid, Result) ->
-    Result.

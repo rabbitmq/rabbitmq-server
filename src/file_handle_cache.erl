@@ -34,13 +34,15 @@
 %% A File Handle Cache
 %%
 %% This extends a subset of the functionality of the Erlang file
-%% module.
+%% module. In the below, we use "file handle" to specifically refer to
+%% file handles, and "file descriptor" to refer to descriptors which
+%% are not file handles, e.g. sockets.
 %%
 %% Some constraints
 %% 1) This supports one writer, multiple readers per file. Nothing
 %% else.
 %% 2) Do not open the same file from different processes. Bad things
-%% may happen.
+%% may happen, especially for writes.
 %% 3) Writes are all appends. You cannot write to the middle of a
 %% file, although you can truncate and then append if you want.
 %% 4) Although there is a write buffer, there is no read buffer. Feel
@@ -49,10 +51,10 @@
 %%
 %% Some benefits
 %% 1) You do not have to remember to call sync before close
-%% 2) Buffering is much more flexible than with plain file module, and
-%% you can control when the buffer gets flushed out. This means that
-%% you can rely on reads-after-writes working, without having to call
-%% the expensive sync.
+%% 2) Buffering is much more flexible than with the plain file module,
+%% and you can control when the buffer gets flushed out. This means
+%% that you can rely on reads-after-writes working, without having to
+%% call the expensive sync.
 %% 3) Unnecessary calls to position and sync get optimised out.
 %% 4) You can find out what your 'real' offset is, and what your
 %% 'virtual' offset is (i.e. where the hdl really is, and where it
@@ -60,14 +62,19 @@
 %% 5) You can find out what the offset was when you last sync'd.
 %%
 %% There is also a server component which serves to limit the number
-%% of open file handles in a "soft" way - the server will never
-%% prevent a client from opening a handle, but may immediately tell it
-%% to close the handle. Thus you can set the limit to zero and it will
-%% still all work correctly, it is just that effectively no caching
-%% will take place. The operation of limiting is as follows:
+%% of open file descriptors. This is a hard limit: the server
+%% component will ensure that clients do not have more file
+%% descriptors open than it's configured to allow.
 %%
-%% On open and close, the client sends messages to the server
-%% informing it of opens and closes. This allows the server to keep
+%% On open, the client requests permission from the server to open the
+%% required number of file handles. The server may ask the client to
+%% close other file handles that it has open, or it may queue the
+%% request and ask other clients to close file handles they have open
+%% in order to satisfy the request. Requests are always satisfied in
+%% the order they arrive, even if a latter request (for a small number
+%% of file handles) can be satisfied before an earlier request (for a
+%% larger number of file handles). On close, the client sends a
+%% message to the server. These messages allow the server to keep
 %% track of the number of open handles. The client also keeps a
 %% gb_tree which is updated on every use of a file handle, mapping the
 %% time at which the file handle was last used (timestamp) to the
@@ -81,21 +88,38 @@
 %% Note that this data can go very out of date, by the client using
 %% the least recently used handle.
 %%
-%% When the limit is reached, the server calculates the average age of
-%% the last reported least recently used file handle of all the
-%% clients. It then tells all the clients to close any handles not
-%% used for longer than this average, by invoking the callback the
-%% client registered. The client should receive this message and pass
-%% it into set_maximum_since_use/1. However, it is highly possible
-%% this age will be greater than the ages of all the handles the
-%% client knows of because the client has used its file handles in the
-%% mean time. Thus at this point the client reports to the server the
+%% When the limit is exceeded (i.e. the number of open file handles is
+%% at the limit and there are pending 'open' requests), the server
+%% calculates the average age of the last reported least recently used
+%% file handle of all the clients. It then tells all the clients to
+%% close any handles not used for longer than this average, by
+%% invoking the callback the client registered. The client should
+%% receive this message and pass it into
+%% set_maximum_since_use/1. However, it is highly possible this age
+%% will be greater than the ages of all the handles the client knows
+%% of because the client has used its file handles in the mean
+%% time. Thus at this point the client reports to the server the
 %% current timestamp at which its least recently used file handle was
 %% last used. The server will check two seconds later that either it
 %% is back under the limit, in which case all is well again, or if
 %% not, it will calculate a new average age. Its data will be much
 %% more recent now, and so it is very likely that when this is
 %% communicated to the clients, the clients will close file handles.
+%% (In extreme cases, where it's very likely that all clients have
+%% used their open handles since they last sent in an update, which
+%% would mean that the average will never cause any file handles to
+%% be closed, the server can send out an average age of 0, resulting
+%% in all available clients closing all their file handles.)
+%%
+%% Care is taken to ensure that (a) processes which are blocked
+%% waiting for file descriptors to become available are not sent
+%% requests to close file handles; and (b) given it is known how many
+%% file handles a process has open, when the average age is forced to
+%% 0, close messages are only sent to enough processes to release the
+%% correct number of file handles and the list of processes is
+%% randomly shuffled. This ensures we don't cause processes to
+%% needlessly close file handles, and ensures that we don't always
+%% make such requests of the same processes.
 %%
 %% The advantage of this scheme is that there is only communication
 %% from the client to the server on open, close, and when in the
@@ -103,11 +127,7 @@
 %% communication from the client to the server on normal file handle
 %% operations. This scheme forms a feed-back loop - the server does
 %% not care which file handles are closed, just that some are, and it
-%% checks this repeatedly when over the limit. Given the guarantees of
-%% now(), even if there is just one file handle open, a limit of 1,
-%% and one client, it is certain that when the client calculates the
-%% age of the handle, it will be greater than when the server
-%% calculated it, hence it should be closed.
+%% checks this repeatedly when over the limit.
 %%
 %% Handles which are closed as a result of the server are put into a
 %% "soft-closed" state in which the handle is closed (data flushed out
@@ -117,8 +137,19 @@
 %% - reopening them when necessary is handled transparently.
 %%
 %% The server also supports obtain and transfer. obtain/0 blocks until
-%% a file descriptor is available. transfer/1 is transfers ownership
-%% of a file descriptor between processes. It is non-blocking.
+%% a file descriptor is available, at which point the requesting
+%% process is considered to 'own' one more descriptor. transfer/1
+%% transfers ownership of a file descriptor between processes. It is
+%% non-blocking. Obtain is used to obtain permission to accept file
+%% descriptors. Obtain has a lower limit, set by the ?OBTAIN_LIMIT/1
+%% macro. File handles can use the entire limit, but will be evicted
+%% by obtain calls up to the point at which no more obtain calls can
+%% be satisfied by the obtains limit. Thus there will always be some
+%% capacity available for file handles. Processes that use obtain are
+%% never asked to return them, and they are not managed in any way by
+%% the server. It is simply a mechanism to ensure that processes that
+%% need file descriptors such as sockets can do so in such a way that
+%% the overall number of open file descriptors is managed.
 %%
 %% The callers of register_callback/3, obtain/0, and the argument of
 %% transfer/1 are monitored, reducing the count of handles in use
@@ -131,6 +162,7 @@
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
 -export([obtain/0, transfer/1, set_limit/1, get_limit/0]).
+-export([ulimit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -242,6 +274,7 @@
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
+-spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
 
 -endif.
 
@@ -781,7 +814,11 @@ init([]) ->
                                       Watermark > 0) ->
                     Watermark;
                 _ ->
-                    ulimit()
+                    case ulimit() of
+                        infinity -> infinity;
+                        unknown  -> ?FILE_HANDLES_LIMIT_OTHER;
+                        Lim      -> lists:max([2, Lim - ?RESERVED_FOR_OTHERS])
+                    end
             end,
     ObtainLimit = obtain_limit(Limit),
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
@@ -1131,7 +1168,7 @@ track_client(Pid, Clients) ->
 ulimit() ->
     case os:type() of
         {win32, _OsName} ->
-            ?FILE_HANDLES_LIMIT_WINDOWS - ?RESERVED_FOR_OTHERS;
+            ?FILE_HANDLES_LIMIT_WINDOWS;
         {unix, _OsName} ->
             %% Under Linux, Solaris and FreeBSD, ulimit is a shell
             %% builtin, not a command. In OS X, it's a command.
@@ -1141,16 +1178,14 @@ ulimit() ->
                 "unlimited" ->
                     infinity;
                 String = [C|_] when $0 =< C andalso C =< $9 ->
-                    Num = list_to_integer(
-                            lists:takewhile(
-                              fun (D) -> $0 =< D andalso D =< $9 end, String)) -
-                        ?RESERVED_FOR_OTHERS,
-                    lists:max([1, Num]);
+                    list_to_integer(
+                      lists:takewhile(
+                        fun (D) -> $0 =< D andalso D =< $9 end, String));
                 _ ->
                     %% probably a variant of
                     %% "/bin/sh: line 1: ulimit: command not found\n"
-                    ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+                    unknown
             end;
         _ ->
-            ?FILE_HANDLES_LIMIT_OTHER - ?RESERVED_FOR_OTHERS
+            unknown
     end.

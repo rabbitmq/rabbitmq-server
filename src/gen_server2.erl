@@ -957,53 +957,55 @@ terminate(Reason, Msg, #gs2_state { name  = Name,
                                     state = State,
                                     debug = Debug }) ->
     case catch Mod:terminate(Reason, State) of
-        {'EXIT', R} ->
-            error_info(R, Name, Msg, State, Debug),
-            exit(R);
-        _ ->
-            case Reason of
-                normal ->
-                    exit(normal);
-                shutdown ->
-                    exit(shutdown);
-                {shutdown,_}=Shutdown ->
-                    exit(Shutdown);
-                _ ->
-                    error_info(Reason, Name, Msg, State, Debug),
-                    exit(Reason)
-            end
+	{'EXIT', R} ->
+	    error_info(R, Reason, Name, Msg, State, Debug),
+	    exit(R);
+	_ ->
+	    case Reason of
+		normal ->
+		    exit(normal);
+		shutdown ->
+		    exit(shutdown);
+		{shutdown,_}=Shutdown ->
+		    exit(Shutdown);
+		_ ->
+		    error_info(Reason, undefined, Name, Msg, State, Debug),
+		    exit(Reason)
+	    end
     end.
 
-error_info(_Reason, application_controller, _Msg, _State, _Debug) ->
+error_info(_Reason, _RootCause, application_controller, _Msg, _State, _Debug) ->
     %% OTP-5811 Don't send an error report if it's the system process
     %% application_controller which is terminating - let init take care
     %% of it instead
     ok;
-error_info(Reason, Name, Msg, State, Debug) ->
-    Reason1 =
-        case Reason of
-            {undef,[{M,F,A}|MFAs]} ->
-                case code:is_loaded(M) of
-                    false ->
-                        {'module could not be loaded',[{M,F,A}|MFAs]};
-                    _ ->
-                        case erlang:function_exported(M, F, length(A)) of
-                            true ->
-                                Reason;
-                            false ->
-                                {'function not exported',[{M,F,A}|MFAs]}
-                        end
-                end;
-            _ ->
-                Reason
-        end,
-    format("** Generic server ~p terminating \n"
-           "** Last message in was ~p~n"
-           "** When Server state == ~p~n"
-           "** Reason for termination == ~n** ~p~n",
-           [Name, Msg, State, Reason1]),
+error_info(Reason, RootCause, Name, Msg, State, Debug) ->
+    Reason1 = error_reason(Reason),
+    Fmt =
+        "** Generic server ~p terminating~n"
+        "** Last message in was ~p~n"
+        "** When Server state == ~p~n"
+        "** Reason for termination == ~n** ~p~n",
+    case RootCause of
+        undefined -> format(Fmt, [Name, Msg, State, Reason1]);
+        _         -> format(Fmt ++ "** In 'terminate' callback "
+                            "with reason ==~n** ~p~n",
+                            [Name, Msg, State, Reason1,
+                             error_reason(RootCause)])
+    end,
     sys:print_log(Debug),
     ok.
+
+error_reason({undef,[{M,F,A}|MFAs]} = Reason) ->
+    case code:is_loaded(M) of
+        false -> {'module could not be loaded',[{M,F,A}|MFAs]};
+        _     -> case erlang:function_exported(M, F, length(A)) of
+                     true  -> Reason;
+                     false -> {'function not exported',[{M,F,A}|MFAs]}
+                 end
+    end;
+error_reason(Reason) ->
+    Reason.
 
 %%% ---------------------------------------------------
 %%% Misc. functions.
