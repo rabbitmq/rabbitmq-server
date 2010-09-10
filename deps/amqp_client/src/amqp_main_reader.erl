@@ -117,14 +117,10 @@ handle_frame(Type, Channel, Payload, State) ->
     case rabbit_reader:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when Channel /= 0 ->
             rabbit_misc:die(frame_error);
-        trace when Channel /= 0 ->
-            rabbit_misc:die(frame_error);
-        %% Match heartbeats and trace frames, but don't do anything with them
+        %% Match heartbeats but don't do anything with them
         heartbeat ->
             heartbeat;
-        trace ->
-            trace;
-        {method, Method = 'connection.close_ok', none} ->
+        {method, Method = 'connection.close_ok', _FieldsBin} ->
             pass_frame(Channel, {method, Method}, State),
             closed_ok;
         AnalyzedFrame ->
