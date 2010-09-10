@@ -176,6 +176,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = rabbit_event:init_stats_timer()},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+    internal_emit_stats(State),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
