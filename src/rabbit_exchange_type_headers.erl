@@ -57,16 +57,13 @@ description() ->
      {description, <<"AMQP headers exchange, as per the AMQP specification">>}].
 
 publish(#exchange{name = Name},
-        Delivery = #delivery{message = #basic_message{content = Content}}) ->
+        #delivery{message = #basic_message{content = Content}}) ->
     Headers = case (Content#content.properties)#'P_basic'.headers of
                   undefined -> [];
                   H         -> rabbit_misc:sort_field_table(H)
               end,
-    rabbit_router:deliver(rabbit_router:match_bindings(
-                            Name, fun (#binding{args = Spec}) ->
-                                          headers_match(Spec, Headers)
-                                  end),
-                          Delivery).
+    rabbit_router:match_bindings(
+      Name, fun (#binding{args = Spec}) -> headers_match(Spec, Headers) end).
 
 default_headers_match_kind() -> all.
 

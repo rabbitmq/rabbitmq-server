@@ -39,19 +39,19 @@
 
 -ifdef(use_specs).
 
--export_type([routing_key/0, routing_result/0]).
+-export_type([routing_key/0, routing_result/0, match_result/0]).
 
 -type(routing_key() :: binary()).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
--type(qpids() :: [pid()]).
+-type(match_result() :: {[rabbit_amqqueue:name()], [rabbit_exchange:name()]}).
 
 -spec(deliver/2 ::
-        (qpids(), rabbit_types:delivery()) -> {routing_result(), qpids()}).
+        ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
 -spec(match_bindings/2 :: (rabbit_exchange:name(),
                            fun ((rabbit_types:binding()) -> boolean())) ->
-    qpids()).
+    match_result()).
 -spec(match_routing_key/2 :: (rabbit_exchange:name(), routing_key() | '_') ->
-                                  qpids()).
+                                  match_result()).
 
 -endif.
 
@@ -84,29 +84,27 @@ deliver(QPids, Delivery) ->
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
 match_bindings(Name, Match) ->
-    Query = qlc:q([QName || #route{binding = Binding = #binding{
-                                               exchange_name = ExchangeName,
-                                               queue_name = QName}} <-
-                                mnesia:table(rabbit_route),
-                            ExchangeName == Name,
-                            Match(Binding)]),
-    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query])).
+    Query = qlc:q([Destination ||
+                      #route{binding = Binding = #binding{
+                                         exchange_name = ExchangeName,
+                                         destination = Destination}} <-
+                          mnesia:table(rabbit_route),
+                      ExchangeName == Name,
+                      Match(Binding)]),
+    partition_destinations(mnesia:async_dirty(fun qlc:e/1, [Query])).
 
 match_routing_key(Name, RoutingKey) ->
     MatchHead = #route{binding = #binding{exchange_name = Name,
-                                          queue_name = '$1',
+                                          destination = '$1',
                                           key = RoutingKey,
                                           _ = '_'}},
-    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
+    partition_destinations(
+      mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
 
-lookup_qpids(Queues) ->
-    lists:foldl(
-      fun (Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], lists:usort(Queues)).
+partition_destinations(Destinations) ->
+    lists:partition(
+      fun (DestinationName) -> DestinationName#resource.kind =:= queue end,
+      Destinations).
 
 %%--------------------------------------------------------------------
 

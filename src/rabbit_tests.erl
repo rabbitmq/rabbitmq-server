@@ -1043,9 +1043,9 @@ test_server_status() ->
     %% misc binding listing APIs
     [_|_] = rabbit_binding:list_for_exchange(
               rabbit_misc:r(<<"/">>, exchange, <<"">>)),
-    [_] = rabbit_binding:list_for_queue(
+    [_] = rabbit_binding:list_for_destination(
               rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
-    [_] = rabbit_binding:list_for_exchange_and_queue(
+    [_] = rabbit_binding:list_for_exchange_and_destination(
             rabbit_misc:r(<<"/">>, exchange, <<"">>),
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 

@@ -50,10 +50,9 @@ description() ->
     [{name, <<"direct">>},
      {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name}, Delivery =
+publish(#exchange{name = Name},
         #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:deliver(rabbit_router:match_routing_key(Name, RoutingKey),
-                          Delivery).
+    rabbit_router:match_routing_key(Name, RoutingKey).
 
 validate(_X) -> ok.
 create(_X) -> ok.

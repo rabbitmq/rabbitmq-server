@@ -900,10 +900,10 @@
                 escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>queue_name</term>
-                <listitem><para>The name of the queue to which the
-                binding is attached. with non-ASCII characters
-                escaped as in C.</para></listitem>
+                <term>destination</term>
+                <listitem><para>The type and name of the destination
+                to which the binding is attached. with non-ASCII
+                characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>routing_key</term>

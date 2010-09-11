@@ -58,13 +58,12 @@ description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name}, Delivery =
+publish(#exchange{name = Name},
         #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:deliver(rabbit_router:match_bindings(
-                            Name, fun (#binding{key = BindingKey}) ->
-                                          topic_matches(BindingKey, RoutingKey)
-                                  end),
-                          Delivery).
+    rabbit_router:match_bindings(Name,
+                                 fun (#binding{key = BindingKey}) ->
+                                         topic_matches(BindingKey, RoutingKey)
+                                 end).
 
 split_topic_key(Key) ->
     string:tokens(binary_to_list(Key), ".").
