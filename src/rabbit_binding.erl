@@ -90,7 +90,9 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [source, destination, routing_key, arguments]).
+-define(INFO_KEYS, [source_name, source_kind,
+                    destination_name, destination_kind,
+                    routing_key, arguments]).
 
 recover() ->
     rabbit_misc:table_fold(
@@ -209,10 +211,12 @@ map(VHostPath, F) ->
 
 infos(Items, B) -> [{Item, i(Item, B)} || Item <- Items].
 
-i(source,      #binding{source      = SrcName})    -> SrcName;
-i(destination, #binding{destination = DstName})    -> DstName;
-i(routing_key, #binding{key         = RoutingKey}) -> RoutingKey;
-i(arguments,   #binding{args        = Arguments})  -> Arguments;
+i(source_name,      #binding{source      = SrcName})    -> SrcName#resource.name;
+i(source_kind,      #binding{source      = SrcName})    -> SrcName#resource.kind;
+i(destination_name, #binding{destination = DstName})    -> DstName#resource.name;
+i(destination_kind, #binding{destination = DstName})    -> DstName#resource.kind;
+i(routing_key,      #binding{key         = RoutingKey}) -> RoutingKey;
+i(arguments,        #binding{args        = Arguments})  -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
 info(B = #binding{}) -> infos(?INFO_KEYS, B).

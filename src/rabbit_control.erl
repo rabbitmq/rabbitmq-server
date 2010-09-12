@@ -257,16 +257,12 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
 action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    FormatFun = fun (#resource{name = Name, kind = Kind}) ->
-                        "{" ++ format_info_item(Kind) ++ ": " ++
-                            format_info_item(Name) ++ "}"
-                end,
-    ArgAtoms = default_if_empty(Args, [source, destination,
+    ArgAtoms = default_if_empty(Args, [source_name, source_kind,
+                                       destination_name, destination_kind,
                                        routing_key, arguments]),
     display_info_list(rpc_call(Node, rabbit_binding, info_all,
                                [VHostArg, ArgAtoms]),
-                      ArgAtoms, [{source, FormatFun},
-                                 {destination, FormatFun}]);
+                      ArgAtoms);
 
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),
@@ -316,18 +312,14 @@ default_if_empty(List, Default) when is_list(List) ->
         [list_to_atom(X) || X <- List]
     end.
 
-display_info_list(Results, InfoItemKeys) ->
-    display_info_list(Results, InfoItemKeys, []).
-
-display_info_list(Results, InfoItemKeys, FormatFuns) when is_list(Results) ->
+display_info_list(Results, InfoItemKeys) when is_list(Results) ->
     lists:foreach(
       fun (Result) ->
-              display_row(
-                [(proplists:get_value(X, FormatFuns, fun format_info_item/1))(
-                   proplists:get_value(X, Result)) || X <- InfoItemKeys])
+              display_row([format_info_item(proplists:get_value(X, Result))
+                           || X <- InfoItemKeys])
       end, Results),
     ok;
-display_info_list(Other, _, _) ->
+display_info_list(Other, _) ->
     Other.
 
 display_row(Row) ->

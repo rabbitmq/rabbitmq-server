@@ -894,16 +894,29 @@
             </para>
             <variablelist>
               <varlistentry>
-                <term>source</term>
-                <listitem><para>The name and type of the source of
+                <term>source_name</term>
+                <listitem><para>The name of the source of messages to
+                which the binding is attached. With non-ASCII
+                characters escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>source_kind</term>
+                <listitem><para>The kind of the source of messages to
+                which the binding is attached. Currently always
+                queue. With non-ASCII characters escaped as in
+                C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>destination_name</term>
+                <listitem><para>The name of the destination of
                 messages to which the binding is attached. With
                 non-ASCII characters escaped as in
                 C.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>destination</term>
-                <listitem><para>The type and name of the destination
-                of messages to which the binding is attached. With
+                <term>destination_kind</term>
+                <listitem><para>The kind of the destination of
+                messages to which the binding is attached. With
                 non-ASCII characters escaped as in
                 C.</para></listitem>
               </varlistentry>
