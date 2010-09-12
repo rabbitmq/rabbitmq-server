@@ -727,10 +727,11 @@ handle_method(#'exchange.bind'{destination = DestinationNameBin,
 handle_method(#'exchange.unbind'{destination = DestinationNameBin,
                                  source = SourceNameBin,
                                  routing_key = RoutingKey,
+                                 nowait = NoWait,
                                  arguments = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:remove/2,
                    SourceNameBin, exchange, DestinationNameBin, RoutingKey,
-                   Arguments, #'exchange.unbind_ok'{}, false, State);
+                   Arguments, #'exchange.unbind_ok'{}, NoWait, State);
 
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
