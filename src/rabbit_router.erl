@@ -43,7 +43,7 @@
 
 -type(routing_key() :: binary()).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
--type(match_result() :: {[rabbit_amqqueue:name()], [rabbit_exchange:name()]}).
+-type(match_result() :: [rabbit_amqqueue:name() | rabbit_exchange:name()]).
 
 -spec(deliver/2 ::
         ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
@@ -91,20 +91,14 @@ match_bindings(SrcName, Match) ->
                           mnesia:table(rabbit_route),
                       SrcName == SrcName1,
                       Match(Binding)]),
-    partition_destinations(mnesia:async_dirty(fun qlc:e/1, [Query])).
+    mnesia:async_dirty(fun qlc:e/1, [Query]).
 
 match_routing_key(SrcName, RoutingKey) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = RoutingKey,
                                           _           = '_'}},
-    partition_destinations(
-      mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
-
-partition_destinations(Destinations) ->
-    lists:partition(
-      fun (DestinationName) -> DestinationName#resource.kind =:= queue end,
-      Destinations).
+    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]).
 
 %%--------------------------------------------------------------------
 

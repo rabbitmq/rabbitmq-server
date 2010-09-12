@@ -233,14 +233,15 @@ publish(X = #exchange{name = XName}, Delivery) ->
 find_qnames(Delivery, WorkList, SeenXs, QNames) ->
     case queue:out(WorkList) of
         {empty, _WorkList} ->
-            lists:usort(lists:flatten(QNames));
+            lists:usort(QNames);
         {{value, X = #exchange{type = Type}}, WorkList1} ->
-            {NewQNames, NewXNames} =
+            DstNames =
                 process_alternate(
                   X, ((type_to_module(Type)):publish(X, Delivery))),
-            {WorkList2, SeenXs1} =
+            {WorkList2, SeenXs1, QNames1} =
                 lists:foldl(
-                  fun (XName, {WorkListN, SeenXsN} = Acc) ->
+                  fun (XName = #resource{kind = exchange},
+                       {WorkListN, SeenXsN, QNamesN} = Acc) ->
                           case lists:member(XName, SeenXsN) of
                               true  -> Acc;
                               false -> {case lookup(XName) of
@@ -248,19 +249,19 @@ find_qnames(Delivery, WorkList, SeenXs, QNames) ->
                                                 queue:in(X1, WorkListN);
                                             {error, not_found} ->
                                                 WorkListN
-                                        end, [XName | SeenXsN]}
-                          end
-                  end, {WorkList1, SeenXs}, NewXNames),
-            find_qnames(Delivery, WorkList2, SeenXs1,
-                        [NewQNames | QNames])
+                                        end, [XName | SeenXsN], QNamesN}
+                          end;
+                      (QName = #resource{kind = queue},
+                       {WorkListN, SeenXsN, QNamesN})->
+                          {WorkListN, SeenXsN, [QName | QNamesN]}
+                  end, {WorkList1, SeenXs, QNames}, DstNames),
+            find_qnames(Delivery, WorkList2, SeenXs1, QNames1)
     end.
 
-process_alternate(#exchange{name = XName, arguments = Args}, {[], []}) ->
+process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
-        undefined ->
-            {[], []};
-        AName ->
-            {[], [AName]}
+        undefined -> [];
+        AName     -> [AName]
     end;
 process_alternate(_X, Results) ->
     Results.
