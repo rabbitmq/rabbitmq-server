@@ -60,8 +60,8 @@
 -record(route, {binding, value = const}).
 -record(reverse_route, {reverse_binding, value = const}).
 
--record(binding, {exchange_name, key, destination, args = []}).
--record(reverse_binding, {destination, key, exchange_name, args = []}).
+-record(binding, {source, key, destination, args = []}).
+-record(reverse_binding, {destination, key, source, args = []}).
 
 -record(listener, {node, protocol, host, port}).
 

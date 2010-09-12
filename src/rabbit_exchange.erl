@@ -99,11 +99,11 @@ recover() ->
            end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
     recover_with_bindings(
-      lists:keysort(#binding.exchange_name, Bs),
+      lists:keysort(#binding.source, Bs),
       lists:keysort(#exchange.name, Xs), []).
 
-recover_with_bindings([B = #binding{exchange_name = Name} | Rest],
-                      Xs = [#exchange{name = Name} | _],
+recover_with_bindings([B = #binding{source = XName} | Rest],
+                      Xs = [#exchange{name = XName} | _],
                       Bindings) ->
     recover_with_bindings(Rest, Xs, [B | Bindings]);
 recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
@@ -226,33 +226,33 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 publish(X = #exchange{name = XName}, Delivery) ->
-    QueueNames = find_queues(Delivery, queue:from_list([X]), [XName], []),
-    QueuePids = lookup_qpids(QueueNames),
-    rabbit_router:deliver(QueuePids, Delivery).
+    QNames = find_qnames(Delivery, queue:from_list([X]), [XName], []),
+    QPids = lookup_qpids(QNames),
+    rabbit_router:deliver(QPids, Delivery).
 
-find_queues(Delivery, WorkList, SeenExchanges, QueueNames) ->
+find_qnames(Delivery, WorkList, SeenXs, QNames) ->
     case queue:out(WorkList) of
         {empty, _WorkList} ->
-            lists:usort(lists:flatten(QueueNames));
+            lists:usort(lists:flatten(QNames));
         {{value, X = #exchange{type = Type}}, WorkList1} ->
-            {NewQueueNames, NewExchangeNames} =
+            {NewQNames, NewXNames} =
                 process_alternate(
                   X, ((type_to_module(Type)):publish(X, Delivery))),
-            {WorkList2, SeenExchanges1} =
+            {WorkList2, SeenXs1} =
                 lists:foldl(
-                  fun (XName, {WorkListN, SeenExchangesN} = Acc) ->
-                          case lists:member(XName, SeenExchangesN) of
+                  fun (XName, {WorkListN, SeenXsN} = Acc) ->
+                          case lists:member(XName, SeenXsN) of
                               true  -> Acc;
                               false -> {case lookup(XName) of
                                             {ok, X1} ->
                                                 queue:in(X1, WorkListN);
                                             {error, not_found} ->
                                                 WorkListN
-                                        end, [XName | SeenExchangesN]}
+                                        end, [XName | SeenXsN]}
                           end
-                  end, {WorkList1, SeenExchanges}, NewExchangeNames),
-            find_queues(Delivery, WorkList2, SeenExchanges1,
-                        [NewQueueNames | QueueNames])
+                  end, {WorkList1, SeenXs}, NewXNames),
+            find_qnames(Delivery, WorkList2, SeenXs1,
+                        [NewQNames | QNames])
     end.
 
 process_alternate(#exchange{name = XName, arguments = Args}, {[], []}) ->
@@ -265,14 +265,14 @@ process_alternate(#exchange{name = XName, arguments = Args}, {[], []}) ->
 process_alternate(_X, Results) ->
     Results.
 
-lookup_qpids(QueueNames) ->
+lookup_qpids(QNames) ->
     lists:foldl(
       fun (Key, Acc) ->
               case mnesia:dirty_read({rabbit_queue, Key}) of
                   [#amqqueue{pid = QPid}] -> [QPid | Acc];
                   []                      -> Acc
               end
-      end, [], QueueNames).
+      end, [], QNames).
 
 call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_transaction(

@@ -914,10 +914,10 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
         expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(#binding{exchange_name = ExchangeName,
-                      destination   = DestinationName,
-                      key           = ActualRoutingKey,
-                      args          = Arguments},
+    case Fun(#binding{source      = ExchangeName,
+                      destination = DestinationName,
+                      key         = ActualRoutingKey,
+                      args        = Arguments},
              fun (_X, Q = #amqqueue{}) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                      catch exit:Reason -> {error, Reason}
@@ -925,11 +925,11 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                  (_X, #exchange{}) ->
                      ok
              end) of
-        {error, exchange_not_found} ->
+        {error, source_not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, destination_not_found} ->
             rabbit_misc:not_found(DestinationName);
-        {error, exchange_and_destination_not_found} ->
+        {error, source_and_destination_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
                                              rabbit_misc:rs(DestinationName)]);

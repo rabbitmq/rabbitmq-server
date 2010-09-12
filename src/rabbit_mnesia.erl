@@ -212,12 +212,12 @@ table_definitions() ->
        {match, #amqqueue{name = queue_name_match(), _='_'}}]}].
 
 binding_match() ->
-    #binding{destination = binding_destination_match(),
-             exchange_name = exchange_name_match(),
+    #binding{source = exchange_name_match(),
+             destination = binding_destination_match(),
              _='_'}.
 reverse_binding_match() ->
     #reverse_binding{destination = binding_destination_match(),
-                     exchange_name = exchange_name_match(),
+                     source = exchange_name_match(),
                      _='_'}.
 binding_destination_match() ->
     resource_match('_').
