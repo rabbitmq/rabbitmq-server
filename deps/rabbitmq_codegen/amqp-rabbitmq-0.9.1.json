@@ -242,6 +242,7 @@
 				       {"type": "shortstr", "name": "destination"},
 				       {"type": "shortstr", "name": "source"},
 				       {"type": "shortstr", "name": "routing-key", "default-value": ""},
+				       {"type": "bit", "name": "nowait", "default-value": false},
 				       {"type": "table", "name": "arguments", "default-value": {}}],
 			 "name": "unbind",
 			 "synchronous" : true},
