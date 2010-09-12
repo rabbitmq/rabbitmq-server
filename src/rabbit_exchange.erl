@@ -92,15 +92,15 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
 
 recover() ->
-    Exs = rabbit_misc:table_fold(
-            fun (X, Acc) ->
-                    ok = mnesia:write(rabbit_exchange, X, write),
-                    [X | Acc]
-            end, [], rabbit_durable_exchange),
+    Xs = rabbit_misc:table_fold(
+           fun (X, Acc) ->
+                   ok = mnesia:write(rabbit_exchange, X, write),
+                   [X | Acc]
+           end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
     recover_with_bindings(
       lists:keysort(#binding.exchange_name, Bs),
-      lists:keysort(#exchange.name, Exs), []).
+      lists:keysort(#exchange.name, Xs), []).
 
 recover_with_bindings([B = #binding{exchange_name = Name} | Rest],
                       Xs = [#exchange{name = Name} | _],

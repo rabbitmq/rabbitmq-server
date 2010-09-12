@@ -83,18 +83,18 @@ deliver(QPids, Delivery) ->
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
-match_bindings(Name, Match) ->
-    Query = qlc:q([Destination ||
+match_bindings(XName, Match) ->
+    Query = qlc:q([DestinationName ||
                       #route{binding = Binding = #binding{
-                                         exchange_name = ExchangeName,
-                                         destination = Destination}} <-
+                                         exchange_name = XName1,
+                                         destination = DestinationName}} <-
                           mnesia:table(rabbit_route),
-                      ExchangeName == Name,
+                      XName == XName1,
                       Match(Binding)]),
     partition_destinations(mnesia:async_dirty(fun qlc:e/1, [Query])).
 
-match_routing_key(Name, RoutingKey) ->
-    MatchHead = #route{binding = #binding{exchange_name = Name,
+match_routing_key(XName, RoutingKey) ->
+    MatchHead = #route{binding = #binding{exchange_name = XName,
                                           destination = '$1',
                                           key = RoutingKey,
                                           _ = '_'}},

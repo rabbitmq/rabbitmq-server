@@ -130,8 +130,8 @@ add(Binding, InnerFun) ->
                            E
                    end
            end) of
-        {new, Exchange = #exchange{ type = Type }, B} ->
-            ok = (type_to_module(Type)):add_binding(Exchange, B),
+        {new, X = #exchange{ type = Type }, B} ->
+            ok = (type_to_module(Type)):add_binding(X, B),
             rabbit_event:notify(binding_created, info(B));
         {existing, _, _} ->
             ok;
@@ -180,8 +180,8 @@ list(VHostPath) ->
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
                                                            Route)].
 
-list_for_exchange(ExchangeName) ->
-    Route = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
+list_for_exchange(XName) ->
+    Route = #route{binding = #binding{exchange_name = XName, _ = '_'}},
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
                                                            Route)].
 
@@ -191,8 +191,8 @@ list_for_destination(DestinationName) ->
                                mnesia:dirty_match_object(rabbit_reverse_route,
                                                          reverse_route(Route))].
 
-list_for_exchange_and_destination(ExchangeName, DestinationName) ->
-    Route = #route{binding = #binding{exchange_name = ExchangeName,
+list_for_exchange_and_destination(XName, DestinationName) ->
+    Route = #route{binding = #binding{exchange_name = XName,
                                       destination   = DestinationName,
                                       _             = '_'}},
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
@@ -207,10 +207,10 @@ map(VHostPath, F) ->
 
 infos(Items, B) -> [{Item, i(Item, B)} || Item <- Items].
 
-i(exchange_name, #binding{exchange_name = XName})       -> XName;
-i(destination,   #binding{destination   = Destination}) -> Destination;
-i(routing_key,   #binding{key           = RoutingKey})  -> RoutingKey;
-i(arguments,     #binding{args          = Arguments})   -> Arguments;
+i(exchange_name, #binding{exchange_name = XName})           -> XName;
+i(destination,   #binding{destination   = DestinationName}) -> DestinationName;
+i(routing_key,   #binding{key           = RoutingKey})      -> RoutingKey;
+i(arguments,     #binding{args          = Arguments})       -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
 info(B = #binding{}) -> infos(?INFO_KEYS, B).
@@ -221,14 +221,14 @@ info_all(VHostPath) -> map(VHostPath, fun (B) -> info(B) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
 
-has_for_exchange(ExchangeName) ->
-    Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
+has_for_exchange(XName) ->
+    Match = #route{binding = #binding{exchange_name = XName, _ = '_'}},
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
     contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match).
 
-remove_for_exchange(ExchangeName) ->
+remove_for_exchange(XName) ->
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
@@ -236,7 +236,7 @@ remove_for_exchange(ExchangeName) ->
          Route#route.binding
      end || Route <- mnesia:match_object(
                        rabbit_route,
-                       #route{binding = #binding{exchange_name = ExchangeName,
+                       #route{binding = #binding{exchange_name = XName,
                                                  _ = '_'}},
                        write)].
 
@@ -254,11 +254,11 @@ are_endpoints_durable(#exchange{durable = A}, #amqqueue{durable = B}) ->
 are_endpoints_durable(#exchange{durable = A}, #exchange{durable = B}) ->
     A andalso B.
 
-binding_action(Binding = #binding{exchange_name = ExchangeName,
-                                  destination   = Destination,
+binding_action(Binding = #binding{exchange_name = XName,
+                                  destination   = DestinationName,
                                   args          = Arguments}, Fun) ->
     call_with_exchange_and_destination(
-      ExchangeName, Destination,
+      XName, DestinationName,
       fun (X, D) ->
               SortedArgs = rabbit_misc:sort_field_table(Arguments),
               Fun(X, D, Binding#binding{args = SortedArgs})
@@ -275,14 +275,14 @@ sync_binding(Binding, Durable, Fun) ->
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
 
-call_with_exchange_and_destination(Exchange, Destination, Fun) ->
-    DestTable = case Destination#resource.kind of
+call_with_exchange_and_destination(XName, DestinationName, Fun) ->
+    DestTable = case DestinationName#resource.kind of
                     queue    -> rabbit_queue;
                     exchange -> rabbit_exchange
                 end,
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> case {mnesia:read({rabbit_exchange, Exchange}),
-                      mnesia:read({DestTable, Destination})} of
+      fun () -> case {mnesia:read({rabbit_exchange, XName}),
+                      mnesia:read({DestTable, DestinationName})} of
                     {[X], [D]} -> Fun(X, D);
                     {[ ], [_]} -> {error, exchange_not_found};
                     {[_], [ ]} -> {error, destination_not_found};
@@ -337,16 +337,15 @@ remove_for_destination(DestinationName, FwdDeleteFun) ->
 group_bindings_and_auto_delete([], Acc) ->
     Acc;
 group_bindings_and_auto_delete(
-  [B = #binding{exchange_name = ExchangeName} | Bs], Acc) ->
-    group_bindings_and_auto_delete(ExchangeName, Bs, [B], Acc).
+  [B = #binding{exchange_name = XName} | Bs], Acc) ->
+    group_bindings_and_auto_delete(XName, Bs, [B], Acc).
 
 group_bindings_and_auto_delete(
-  ExchangeName, [B = #binding{exchange_name = ExchangeName} | Bs],
-  Bindings, Acc) ->
-    group_bindings_and_auto_delete(ExchangeName, Bs, [B | Bindings], Acc);
-group_bindings_and_auto_delete(ExchangeName, Removed, Bindings, Acc) ->
-    %% either Removed is [], or its head has a non-matching ExchangeName
-    [X] = mnesia:read({rabbit_exchange, ExchangeName}),
+  XName, [B = #binding{exchange_name = XName} | Bs], Bindings, Acc) ->
+    group_bindings_and_auto_delete(XName, Bs, [B | Bindings], Acc);
+group_bindings_and_auto_delete(XName, Removed, Bindings, Acc) ->
+    %% either Removed is [], or its head has a non-matching XName
+    [X] = mnesia:read({rabbit_exchange, XName}),
     NewAcc = [{{rabbit_exchange:maybe_auto_delete(X), X}, Bindings} | Acc],
     group_bindings_and_auto_delete(Removed, NewAcc).
 
@@ -369,20 +368,20 @@ reverse_route(#route{binding = Binding}) ->
 reverse_route(#reverse_route{reverse_binding = Binding}) ->
     #route{binding = reverse_binding(Binding)}.
 
-reverse_binding(#reverse_binding{exchange_name = Exchange,
-                                 destination   = Destination,
+reverse_binding(#reverse_binding{exchange_name = XName,
+                                 destination   = DestinationName,
                                  key           = Key,
                                  args          = Args}) ->
-    #binding{exchange_name = Exchange,
-             destination   = Destination,
+    #binding{exchange_name = XName,
+             destination   = DestinationName,
              key           = Key,
              args          = Args};
 
-reverse_binding(#binding{exchange_name = Exchange,
-                         destination   = Destination,
+reverse_binding(#binding{exchange_name = XName,
+                         destination   = DestinationName,
                          key           = Key,
                          args          = Args}) ->
-    #reverse_binding{exchange_name = Exchange,
-                     destination   = Destination,
+    #reverse_binding{exchange_name = XName,
+                     destination   = DestinationName,
                      key           = Key,
                      args          = Args}.
