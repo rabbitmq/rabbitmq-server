@@ -71,8 +71,7 @@ accept_content(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:amqp_request(
       rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
-      #'exchange.delete'{ exchange = id(ReqData) }),
-    {true, ReqData, Context}.
+      #'exchange.delete'{ exchange = id(ReqData) }).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

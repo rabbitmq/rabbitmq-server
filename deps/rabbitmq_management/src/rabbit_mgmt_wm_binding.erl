@@ -133,10 +133,7 @@ sync_resource(ReqData, Context, BindingToAMQPMethod) ->
     with_binding(
       ReqData, Context,
       fun(Binding) ->
-              case rabbit_mgmt_util:amqp_request(
-                     rabbit_mgmt_util:vhost(ReqData),
-                     ReqData, Context, BindingToAMQPMethod(Binding)) of
-                  ok  -> {true, ReqData, Context};
-                  Bad -> Bad
-              end
+              rabbit_mgmt_util:amqp_request(
+                rabbit_mgmt_util:vhost(ReqData),
+                ReqData, Context, BindingToAMQPMethod(Binding))
       end).

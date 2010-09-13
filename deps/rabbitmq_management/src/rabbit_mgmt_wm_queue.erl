@@ -72,8 +72,7 @@ delete_resource(ReqData, Context) ->
         rabbit_mgmt_util:amqp_request(
           rabbit_mgmt_util:vhost(ReqData),
           ReqData, Context,
-          #'queue.delete'{ queue = rabbit_mgmt_util:id(queue, ReqData) }),
-        {true, ReqData, Context}
+          #'queue.delete'{ queue = rabbit_mgmt_util:id(queue, ReqData) })
     catch {server_closed, Reason} ->
             rabbit_mgmt_util:bad_request(
               list_to_binary(Reason), ReqData, Context)
