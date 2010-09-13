@@ -2,6 +2,8 @@ This is a normal RabbitMQ plugin. For detailed installation instructions
 go to:
         http://www.rabbitmq.com/admin-guide.html#installing-plugins
 
+(NOTE: it seems to be problematic to build rabbitmq-mochiweb on Windows.)
+
 A summary:
 
     hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella/
