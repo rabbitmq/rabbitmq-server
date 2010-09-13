@@ -182,7 +182,7 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
 %%      Channel = pid()
 %%      ReturnHandler = pid()
 %% @doc This registers a handler to deal with returned messages. The
-%% registered process will receive #basic.return{} methods.
+%% registered process will receive #basic.return{} records.
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
 
@@ -191,7 +191,7 @@ register_return_handler(Channel, ReturnHandler) ->
 %%      Channel = pid()
 %%      FlowHandler = pid()
 %% @doc This registers a handler to deal with channel flow notifications.
-%% The registered process will receive #channel.flow{} method.
+%% The registered process will receive #channel.flow{} records.
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
