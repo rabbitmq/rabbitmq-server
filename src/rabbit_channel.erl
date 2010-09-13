@@ -157,6 +157,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
+    StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
@@ -174,9 +175,12 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 consumer_mapping        = dict:new(),
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = rabbit_event:init_stats_timer()},
+                stats_timer             = StatsTimer},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
-    internal_emit_stats(State),
+    case rabbit_event:stats_level(StatsTimer) of
+        none -> ok;
+        _    -> internal_emit_stats(State)
+    end,
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 

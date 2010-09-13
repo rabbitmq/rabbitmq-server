@@ -152,7 +152,8 @@ init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
 
 declare(Recover, From,
         State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
-                   backing_queue = BQ, backing_queue_state = undefined}) ->
+                   backing_queue = BQ, backing_queue_state = undefined,
+                   stats_timer = StatsTimer}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
         not_found -> {stop, normal, not_found, State};
         Q         -> gen_server2:reply(From, {new, Q}),
@@ -166,7 +167,10 @@ declare(Recover, From,
                      State1 = init_expires(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
-                     emit_stats(State1),
+                     case rabbit_event:stats_level(StatsTimer) of
+                         none -> ok;
+                         _    -> emit_stats(State1)
+                     end,
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.

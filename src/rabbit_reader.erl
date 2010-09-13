@@ -765,7 +765,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            connection = Connection = #connection{
                                           user = User,
                                           protocol = Protocol},
-                           sock = Sock}) ->
+                           sock = Sock,
+                           stats_timer = StatsTimer}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
@@ -775,7 +776,10 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                         connection = NewConnection}),
     rabbit_event:notify(connection_created,
                         infos(?CREATION_EVENT_KEYS, State1)),
-    internal_emit_stats(State1),
+    case rabbit_event:stats_level(StatsTimer) of
+        none -> ok;
+        _    -> internal_emit_stats(State1)
+    end,
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
