@@ -18,4 +18,4 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--record(context, {username, password}).
+-record(context, {username, password, is_admin}).

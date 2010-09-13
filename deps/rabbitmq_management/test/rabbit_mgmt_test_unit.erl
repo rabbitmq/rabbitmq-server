@@ -377,6 +377,47 @@ http_permissions_vhost_test() ->
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
+get_conn(Username, Password) ->
+    {ok, Conn} = amqp_connection:start(network, #amqp_params{
+                                        username = Username,
+                                        password = Password}),
+    LocalPort = rabbit_mgmt_test_db:local_port(Conn),
+    ConnPath = binary_to_list(
+                 rabbit_mgmt_format:print(
+                   "/connections/127.0.0.1%3A~w", [LocalPort])),
+    ChPath = binary_to_list(
+               rabbit_mgmt_format:print(
+                 "/channels/127.0.0.1%3A~w%3A1", [LocalPort])),
+    {Conn, ConnPath, ChPath}.
+
+http_permissions_connection_channel_test() ->
+    PermArgs = [{configure, ".*"}, {write, ".*"},
+                {read,      ".*"}, {scope, "client"}],
+    http_put("/users/user", [{password, "user"},
+                             {administrator, false}], ?NO_CONTENT),
+    http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
+    {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
+    {Conn2, ConnPath2, ChPath2} = get_conn("guest", "guest"),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    2 = length(http_get("/connections", ?OK)),
+    1 = length(http_get("/connections", "user", "user", ?OK)),
+    http_get(ConnPath1, ?OK),
+    http_get(ConnPath2, ?OK),
+    http_get(ConnPath1, "user", "user", ?OK),
+    http_get(ConnPath2, "user", "user", ?NOT_AUTHORISED),
+    2 = length(http_get("/channels", ?OK)),
+    1 = length(http_get("/channels", "user", "user", ?OK)),
+    http_get(ChPath1, ?OK),
+    http_get(ChPath2, ?OK),
+    http_get(ChPath1, "user", "user", ?OK),
+    http_get(ChPath2, "user", "user", ?NOT_AUTHORISED),
+
+    amqp_connection:close(Conn1),
+    amqp_connection:close(Conn2),
+    ok.
+
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->

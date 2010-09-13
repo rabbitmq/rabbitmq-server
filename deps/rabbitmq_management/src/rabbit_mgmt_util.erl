@@ -23,10 +23,11 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1, vhost_exists/1]).
--export([is_authorized_vhost/2]).
+-export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
+-export([filter_user/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -50,6 +51,13 @@ is_authorized_vhost(ReqData, Context) ->
                           end
                   end).
 
+is_authorized_user(ReqData, Context, Item) ->
+    is_authorized(
+      ReqData, Context,
+      fun(#user{username = Username, is_admin = IsAdmin}) ->
+              IsAdmin orelse Username == proplists:get_value(user, Item)
+      end).
+
 is_authorized(ReqData, Context, Fun) ->
     Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
                     ReqData, Context},
@@ -59,11 +67,14 @@ is_authorized(ReqData, Context, Fun) ->
             [Username, Pass] =
                 [list_to_binary(S) || S <- string:tokens(Str, ":")],
             case rabbit_access_control:lookup_user(Username) of
-                {ok, User = #user{password = Pass1}} when Pass == Pass1  ->
+                {ok, User = #user{password = Pass1,
+                                  is_admin = IsAdmin}} when Pass == Pass1  ->
                     case Fun(User) of
                         true ->
-                            {true, ReqData, Context#context{username = Username,
-                                                            password = Pass}};
+                            {true, ReqData,
+                             Context#context{username = Username,
+                                             password = Pass,
+                                             is_admin = IsAdmin}};
                         _ ->
                             Unauthorized
                     end;
@@ -215,3 +226,8 @@ filter_vhost(List, _ReqData, Context) ->
 vhosts(Username) ->
     [VHost || {VHost, _, _, _, _}
                   <- rabbit_access_control:list_user_permissions(Username)].
+
+filter_user(List, _ReqData, #context{is_admin = true}) ->
+    List;
+filter_user(List, _ReqData, #context{username = Username, is_admin = false}) ->
+    [I || I <- List, proplists:get_value(user, I) == Username].

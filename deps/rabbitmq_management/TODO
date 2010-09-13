@@ -4,7 +4,6 @@ Write more management:
   Exchange / queue arguments support
   Bindings arguments support
   Purge queues
-Enforce permissions around channels / connections.
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.

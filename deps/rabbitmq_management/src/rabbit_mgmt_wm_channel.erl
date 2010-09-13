@@ -44,7 +44,7 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply({struct, channel(ReqData)}, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_user(ReqData, Context, channel(ReqData)).
 
 %%--------------------------------------------------------------------
 
