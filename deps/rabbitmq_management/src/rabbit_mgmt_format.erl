@@ -76,7 +76,7 @@ protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
 timestamp(unknown) ->
     unknown;
 timestamp(Timestamp) ->
-    timer:now_diff(now(), {0,0,0}) div 1000.
+    timer:now_diff(Timestamp, {0,0,0}) div 1000.
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
@@ -108,8 +108,9 @@ exchange(X) ->
                {fun table/1, [arguments]}]).
 
 user(User) ->
-    [{name,     User#user.username},
-     {password, User#user.password}].
+    [{name,          User#user.username},
+     {password,      User#user.password},
+     {administrator, User#user.is_admin}].
 
 binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
     format([{exchange,       X},
@@ -120,7 +121,7 @@ binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
            [{fun (Res) -> resource(exchange, Res) end, [exchange]}]).
 
 %% TODO
-pack_props(Key, Args) ->
+pack_props(Key, _Args) ->
     list_to_binary("key_" ++ mochiweb_util:quote_plus(binary_to_list(Key))).
 
 url(Fmt, Vals) ->

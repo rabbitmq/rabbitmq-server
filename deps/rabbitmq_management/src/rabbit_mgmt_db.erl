@@ -365,17 +365,22 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     {ok, State}.
 
 handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
-    ChPid = id(Props),
-    Table = orddict:fetch(Type, Tables),
-    IdsStatsTS = [{Ids,
-                   Stats,
-                   lookup_element(Table, fine_stats_key(ChPid, Ids)),
-                   lookup_element(Table, fine_stats_key(ChPid, Ids), 3)} ||
-                     {Ids, Stats} <- pget(Type, Props)],
-    delete_fine_stats(Type, ChPid, State),
-    [handle_fine_stat(ChPid, Ids, Stats, Timestamp,
-                      OldStats, OldTimestamp, Table) ||
-        {Ids, Stats, OldStats, OldTimestamp} <- IdsStatsTS].
+    case pget(Type, Props) of
+        unknown ->
+            ok;
+        AllFineStats ->
+            ChPid = id(Props),
+            Table = orddict:fetch(Type, Tables),
+            IdsStatsTS = [{Ids,
+                           Stats,
+                           lookup_element(Table, fine_stats_key(ChPid, Ids)),
+                           lookup_element(Table, fine_stats_key(ChPid, Ids), 3)}
+                          || {Ids, Stats} <- AllFineStats],
+            delete_fine_stats(Type, ChPid, State),
+            [handle_fine_stat(ChPid, Ids, Stats, Timestamp,
+                              OldStats, OldTimestamp, Table) ||
+                {Ids, Stats, OldStats, OldTimestamp} <- IdsStatsTS]
+    end.
 
 handle_fine_stat(ChPid, Ids, Stats, Timestamp,
                  OldStats, OldTimestamp,

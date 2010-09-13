@@ -1,5 +1,6 @@
 <h1>Overview</h1>
 
+<% if (statistics_level == 'fine') { %>
 <div class="section">
 <h2>Message Rates</h2>
 <div>
@@ -7,6 +8,7 @@
 <span class="br"></span>
 </div>
 </div>
+<% } %>
 
 <div class="section">
 <h2>System Information</h2>
@@ -18,10 +20,12 @@
   </tr>
   <tr>
     <th>Operating System PID</th>
-    <td><%= overview.os_pid %></td></tr>
+    <td><%= overview.os_pid %></td>
+  </tr>
   <tr>
     <th>Bound To</th>
-    <td><%= overview.bound_to %></td></tr>
+    <td><%= overview.bound_to %></td>
+  </tr>
   <tr>
     <th>File Descriptors</th>
     <td class="status">
@@ -52,3 +56,24 @@
 </table>
 </div>
 </div>
+
+<% if (overview.statistics_level != 'fine') { %>
+<div class="section-hidden">
+<h2>Message Rates Disabled</h2>
+<div>
+<p>
+  The statistics level in this RabbitMQ server is currently set to
+  <code><%= overview.statistics_level %></code>. Message rates are therefore
+  disabled.
+</p>
+<p>
+  To re-enable message rates, edit your configuration file and either
+  set <code>collect_statistics</code> to <code>fine</code> in
+  the <code>rabbit</code> application, or
+  set <code>force_fine_statistics</code> to <code>true</code> in
+  the <code>rabbit_management</code> application
+</p>
+<span class="br"></span>
+</div>
+</div>
+<% } %>

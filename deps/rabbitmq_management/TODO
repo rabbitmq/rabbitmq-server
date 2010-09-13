@@ -1,27 +1,25 @@
-Before first release
-====================
-Write remaining management:
+Before first "proper" release
+=============================
+Write more management:
   Exchange / queue arguments support
   Bindings arguments support
-  Application list / start / stop
-  VM stop
-  Reset / rotate logs / cluster
+  Purge queues
 Add superuser bit (bug 22983).
   Tests for permissions.
-More user-friendly form submission errors.
-Make it work with fine stats turned off.
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
 Fix backing queue status breakage.
 Fix management plugin shutdown.
 Fix non-ASCII characters in names.
-Clustering management:
-  One rabbit_event / rabbit_mgmt_db per cluster
-  Per-node events to replace external_stats
+Document inets dependency.
 
 Then
 ====
+Write remaining management:
+  Application list / start / stop
+  Reset / rotate logs / cluster
+  VM stop
 Figure out something sensible to do with time series.
   Cope with e.g. channel going away, want to view exchange / queue stats in the
   past.
@@ -39,6 +37,11 @@ client-side column hiding for message rates.
 Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
 Backup / restore entire state (except messages).
+DTRT with direct connections.
+Clustering management:
+  One rabbit_event / rabbit_mgmt_db per cluster
+  Per-node events to replace external_stats
+Make user editing rather clearer
 
 Less urgent
 ===========
@@ -50,3 +53,4 @@ Add more OS-y, Erlang-y things to overview(?)
 Catch up if mgmt application is restarted.
 Queues with server generated names
 Backup / restore entire state (with messages) (sane?)
+

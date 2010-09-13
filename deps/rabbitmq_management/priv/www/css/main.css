@@ -10,6 +10,9 @@ body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 #main a { color: #444; }
 #menu a.selected { background-color: #F60; color:white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
 #status { border-top:1px solid #E4E4E4; }
+
+.error-message { position: fixed; text-align: center; font-size: 1.5em; background: yellow; padding: 20px; }
+
 h1 { font-size: 2em; }
 
 table { border-collapse: collapse; }

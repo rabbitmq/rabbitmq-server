@@ -46,8 +46,8 @@ rates_test() ->
 http_overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
-    {struct, Overview} = http_get("/overview"),
-    [<<"0.0.0.0:5672">>] = pget(<<"bound_to">>, Overview).
+    Overview = http_get("/overview"),
+    [<<"0.0.0.0:5672">>] = pget(bound_to, Overview).
 
 http_auth_test() ->
     test_auth(?NOT_AUTHORISED, []),
@@ -77,15 +77,20 @@ http_users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, "flam"}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
-    http_put("/users/myuser", [{password, "password"}], ?NO_CONTENT),
-    {struct,[{<<"name">>,<<"myuser">>},
-             {<<"password">>,<<"password">>}]} =
+    http_put("/users/myuser", [{password, "myuser"},
+                               {administrator, false}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, "password"},
+                               {administrator, true}], ?NO_CONTENT),
+    [{name,          <<"myuser">>},
+     {password,      <<"password">>},
+     {administrator, true}] =
         http_get("/users/myuser"),
-    [{struct,[{<<"name">>,<<"guest">>},
-              {<<"password">>,<<"guest">>}]},
-     {struct,[{<<"name">>,<<"myuser">>},
-              {<<"password">>,<<"password">>}]}] =
+    [[{name,<<"guest">>},
+      {password,<<"guest">>},
+      {administrator, true}],
+     [{name,          <<"myuser">>},
+      {password,      <<"password">>},
+      {administrator, true}]] =
         http_get("/users"),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
@@ -111,16 +116,18 @@ http_permissions_validation_test() ->
     ok.
 
 http_permissions_list_test() ->
-    [{struct,[{<<"vhost">>,<<"/">>},
-              {<<"user">>,<<"guest">>},
-              {<<"configure">>,<<".*">>},
-              {<<"write">>,<<".*">>},
-              {<<"read">>,<<".*">>},
-              {<<"scope">>,<<"client">>}]}] =
+    [[{vhost,<<"/">>},
+      {user,<<"guest">>},
+      {configure,<<".*">>},
+      {write,<<".*">>},
+      {read,<<".*">>},
+      {scope,<<"client">>}]] =
         http_get("/permissions"),
 
-    http_put("/users/myuser1", [{password, ""}], ?NO_CONTENT),
-    http_put("/users/myuser2", [{password, ""}], ?NO_CONTENT),
+    http_put("/users/myuser1", [{password, ""}, {administrator, true}],
+             ?NO_CONTENT),
+    http_put("/users/myuser2", [{password, ""}, {administrator, true}],
+             ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
 
@@ -141,18 +148,19 @@ http_permissions_list_test() ->
     ok.
 
 http_permissions_test() ->
-    http_put("/users/myuser", [{password, "myuser"}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, "myuser"}, {administrator, true}],
+             ?NO_CONTENT),
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
              [{configure, "foo"}, {write, "foo"},
               {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
 
-    {struct,[{<<"vhost">>,<<"myvhost">>},
-             {<<"configure">>,<<"foo">>},
-             {<<"write">>,<<"foo">>},
-             {<<"read">>,<<"foo">>},
-             {<<"scope">>,<<"client">>}]} =
+    [{vhost,<<"myvhost">>},
+     {configure,<<"foo">>},
+     {write,<<"foo">>},
+     {read,<<"foo">>},
+     {scope,<<"client">>}] =
         http_get("/permissions/myvhost/myuser"),
     http_delete("/permissions/myvhost/myuser", ?NO_CONTENT),
     http_get("/permissions/myvhost/myuser", ?NOT_FOUND),
@@ -187,12 +195,12 @@ http_exchanges_test() ->
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_get("/exchanges/%2f/foo", ?NOT_FOUND),
-    {struct,[{<<"name">>,<<"foo">>},
-             {<<"vhost">>,<<"myvhost">>},
-             {<<"type">>,<<"direct">>},
-             {<<"durable">>,true},
-             {<<"auto_delete">>,false},
-             {<<"arguments">>,{struct,[]}}]} =
+    [{name,<<"foo">>},
+     {vhost,<<"myvhost">>},
+     {type,<<"direct">>},
+     {durable,true},
+     {auto_delete,false},
+     {arguments,[]}] =
         http_get("/exchanges/myvhost/foo"),
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
@@ -215,7 +223,6 @@ http_exchanges_test() ->
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     ok.
 
-%% TODO this test could be more
 http_queues_test() ->
     Good = [{durable, "true"}, {auto_delete, false}, {arguments, ""}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
@@ -231,7 +238,28 @@ http_queues_test() ->
              [{durable, false}, {auto_delete, false}, {arguments, ""}],
              ?BAD_REQUEST),
 
+    http_put("/queues/%2f/baz", Good, ?NO_CONTENT),
+
+    Queues = http_get("/queues/%2f"),
+    Queue = http_get("/queues/%2f/foo"),
+    assert_list([[{name,        <<"foo">>},
+                  {vhost,       <<"/">>},
+                  {durable,     true},
+                  {auto_delete, false},
+                  {arguments,   []}],
+                 [{name,        <<"baz">>},
+                  {vhost,       <<"/">>},
+                  {durable,     true},
+                  {auto_delete, false},
+                  {arguments,   []}]], Queues),
+    assert_item([{name,        <<"foo">>},
+                 {vhost,       <<"/">>},
+                 {durable,     true},
+                 {auto_delete, false},
+                 {arguments,   []}], Queue),
+
     http_delete("/queues/%2f/foo", ?NO_CONTENT),
+    http_delete("/queues/%2f/baz", ?NO_CONTENT),
     http_delete("/queues/%2f/foo", ?NOT_FOUND),
     ok.
 
@@ -245,12 +273,12 @@ http_bindings_test() ->
     http_put("/bindings/%2f/myqueue/badexchange/key_routing", [], ?NOT_FOUND),
     http_put("/bindings/%2f/myqueue/myexchange/bad_routing", [], ?BAD_REQUEST),
     http_put("/bindings/%2f/myqueue/myexchange/key_routing", [], ?NO_CONTENT),
-    {struct,[{<<"exchange">>,<<"myexchange">>},
-             {<<"vhost">>,<<"/">>},
-             {<<"queue">>,<<"myqueue">>},
-             {<<"routing_key">>,<<"routing">>},
-             {<<"arguments">>,[]},
-             {<<"properties_key">>,<<"key_routing">>}]} =
+    [{exchange,<<"myexchange">>},
+     {vhost,<<"/">>},
+     {queue,<<"myqueue">>},
+     {routing_key,<<"routing">>},
+     {arguments,[]},
+     {properties_key,<<"key_routing">>}] =
         http_get("/bindings/%2f/myqueue/myexchange/key_routing", ?OK),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NOT_FOUND),
@@ -271,23 +299,47 @@ http_bindings_post_test() ->
     Headers = http_post("/bindings/%2f/myqueue/myexchange", BArgs, ?CREATED),
     "/api/bindings/%2F/myqueue/myexchange/key_routing" =
         pget("location", Headers),
-    {struct,[{<<"exchange">>,<<"myexchange">>},
-             {<<"vhost">>,<<"/">>},
-             {<<"queue">>,<<"myqueue">>},
-             {<<"routing_key">>,<<"routing">>},
-             {<<"arguments">>,[]},
-             {<<"properties_key">>,<<"key_routing">>}]} =
+    [{exchange,<<"myexchange">>},
+     {vhost,<<"/">>},
+     {queue,<<"myqueue">>},
+     {routing_key,<<"routing">>},
+     {arguments,[]},
+     {properties_key,<<"key_routing">>}] =
         http_get("/bindings/%2f/myqueue/myexchange/key_routing", ?OK),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NO_CONTENT),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+http_permissions_administrator_test() ->
+    http_put("/users/notadmin", [{password, "notadmin"},
+                                 {administrator, false}],
+             ?NO_CONTENT),
+    Test =
+        fun(Path) ->
+                http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
+                http_get(Path, "guest", "guest", ?OK)
+        end,
+    Test("/vhosts"),
+    Test("/vhosts/%2f"),
+    Test("/users"),
+    Test("/users/guest"),
+    Test("/users/guest/permissions"),
+    Test("/permissions"),
+    Test("/permissions/%2f/guest"),
+    http_delete("/users/notadmin", ?NO_CONTENT),
+    ok.
+
 %%---------------------------------------------------------------------------
+http_get(Path) ->
+    http_get(Path, ?OK).
 
 http_get(Path, CodeExp) ->
+    http_get(Path, "guest", "guest", CodeExp).
+
+http_get(Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
-        req(get, Path, [auth_header()]),
+        req(get, Path, [auth_header(User, Pass)]),
     decode(CodeExp, Headers, ResBody).
 
 http_put(Path, List, CodeExp) ->
@@ -323,9 +375,6 @@ http_delete(Path, CodeExp) ->
         req(delete, Path, [auth_header()]),
     decode(CodeExp, Headers, ResBody).
 
-http_get(Path) ->
-    http_get(Path, ?OK).
-
 req(Type, Path, Headers) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
 
@@ -335,9 +384,18 @@ req(Type, Path, Headers, Body) ->
 
 decode(Code, Headers, ResBody) ->
     case Code of
-        ?OK -> mochijson2:decode(ResBody);
+        ?OK -> cleanup(mochijson2:decode(ResBody));
         _   -> Headers
     end.
+
+cleanup(L) when is_list(L) ->
+    [cleanup(I) || I <- L];
+cleanup({struct, I}) ->
+    cleanup(I);
+cleanup({K, V}) when is_binary(K) ->
+    {list_to_atom(binary_to_list(K)), cleanup(V)};
+cleanup(I) ->
+    I.
 
 auth_header() ->
     auth_header("guest", "guest").
@@ -345,6 +403,36 @@ auth_header() ->
 auth_header(Username, Password) ->
     {"Authorization",
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
+
+%%---------------------------------------------------------------------------
+
+assert_list(Exp, Act) ->
+    Len = length(Exp),
+    Len = length(Act),
+    [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
+         1 -> ok;
+         N -> throw({found, N, ExpI, in, Act})
+     end
+     || ExpI <- Exp].
+
+assert_item(Exp, Act) ->
+    case test_item0(Exp, Act) of
+        [] -> ok;
+        Or -> throw(Or)
+    end.
+
+test_item(Exp, Act) ->
+    case test_item0(Exp, Act) of
+        [] -> true;
+        _  -> false
+    end.
+
+test_item0(Exp, Act) ->
+    lists:filter(fun (I) -> I =/= ok end,
+                 [case lists:member(ExpI, Act) of
+                      true  -> ok;
+                      false -> {did_not_find, ExpI, in, Act}
+                  end|| ExpI <- Exp]).
 
 %%---------------------------------------------------------------------------
 

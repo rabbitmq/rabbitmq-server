@@ -22,8 +22,8 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, now_ms/0, vhost/1, vhost_exists/1]).
--export([bad_request/3, id/2, parse_bool/1]).
+-export([is_authorized/2, is_authorized_admin/2, vhost/1, vhost_exists/1]).
+-export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3]).
 
@@ -33,16 +33,29 @@
 %%--------------------------------------------------------------------
 
 is_authorized(ReqData, Context) ->
+    is_authorized(ReqData, Context, fun(_) -> true end).
+
+is_authorized_admin(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  fun(#user{is_admin = IsAdmin}) -> IsAdmin end).
+
+is_authorized(ReqData, Context, Fun) ->
     Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
                     ReqData, Context},
     case wrq:get_req_header("authorization", ReqData) of
         "Basic " ++ Base64 ->
             Str = base64:mime_decode_to_string(Base64),
-            [User, Pass] = [list_to_binary(S) || S <- string:tokens(Str, ":")],
-            case rabbit_access_control:lookup_user(User) of
-                {ok, #user{password = Pass1}} when Pass == Pass1  ->
-                    {true, ReqData, Context#context{username = User,
-                                                    password = Pass}};
+            [Username, Pass] =
+                [list_to_binary(S) || S <- string:tokens(Str, ":")],
+            case rabbit_access_control:lookup_user(Username) of
+                {ok, User = #user{password = Pass1}} when Pass == Pass1  ->
+                    case Fun(User) of
+                        true ->
+                            {true, ReqData, Context#context{username = Username,
+                                                            password = Pass}};
+                        _ ->
+                            Unauthorized
+                    end;
                 {ok, #user{}} ->
                     Unauthorized;
                 {error, _} ->
@@ -53,9 +66,6 @@ is_authorized(ReqData, Context) ->
 
 now_ms() ->
     rabbit_mgmt_format:timestamp(now()).
-
-http_date() ->
-    httpd_util:rfc1123_date(erlang:universaltime()).
 
 vhost(ReqData) ->
     case id(vhost, ReqData) of
@@ -165,13 +175,15 @@ amqp_request(VHost, ReqData, Context, Method) ->
         amqp_connection:close(Conn),
         {true, ReqData, Context}
     %% See bug 23187
-    catch error:{badmatch,{error, #amqp_error{name = access_refused}}} ->
+    catch
+        throw:{error, {auth_failure_likely,
+                       {#amqp_error{name = access_refused}, _}}} ->
             not_authorised(not_authorised, ReqData, Context);
-          error:{badmatch,{error, #amqp_error{name = {error, Error}}}} ->
+        error:{badmatch,{error, #amqp_error{name = {error, Error}}}} ->
             bad_request(Error, ReqData, Context);
-          exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
+        exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
             not_found(list_to_binary(Reason), ReqData, Context);
-          exit:{{server_initiated_close, _Code, Reason}, _} ->
+        exit:{{server_initiated_close, _Code, Reason}, _} ->
             bad_request(list_to_binary(Reason), ReqData, Context)
     end.
 

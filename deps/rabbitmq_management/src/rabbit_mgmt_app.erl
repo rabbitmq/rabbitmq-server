@@ -39,7 +39,7 @@
                     {enables,     queue_sup_queue_recovery}]}).
 
 start(_Type, _StartArgs) ->
-    application:set_env(rabbit, collect_statistics, fine),
+    ensure_statistics_enabled(),
     register_contexts(),
     log_startup(),
     case ?SETUP_WM_LOGGING of
@@ -54,6 +54,25 @@ start(_Type, _StartArgs) ->
 
 stop(_State) ->
     ok.
+
+ensure_statistics_enabled() ->
+    {ok, ForceStats} = application:get_env(
+                         rabbit_management, force_fine_statistics),
+    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
+    case {ForceStats, StatsLevel} of
+        {true,  fine} ->
+            ok;
+        {true,  _} ->
+            application:set_env(rabbit, collect_statistics, fine),
+            rabbit_log:info("Management plugin upgraded statistics"
+                            " to fine.~n");
+        {false, none} ->
+            application:set_env(rabbit, collect_statistics, coarse),
+            rabbit_log:info("Management plugin upgraded statistics"
+                            " to coarse.~n");
+        {_, _} ->
+            ok
+    end.
 
 register_contexts() ->
     application:set_env(
@@ -87,7 +106,7 @@ log_startup() ->
     {ok, Hostname} = inet:gethostname(),
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(get_port()),
     rabbit_log:info(
-      "RabbitMQ Management plugin started.~n"
+      "Management plugin started.~n"
       ++ "HTTP API:       ~s/~s/~n"
       ++ "Management UI:  ~s/~s/~n",
       [URLPrefix, ?PREFIX, URLPrefix, ?UI_PREFIX]).
