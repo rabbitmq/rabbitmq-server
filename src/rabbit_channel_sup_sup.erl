@@ -53,9 +53,7 @@ start_link() ->
     supervisor2:start_link(?MODULE, []).
 
 start_channel(Pid, Args) ->
-    {ok, ChSupPid, _} = Result = supervisor2:start_child(Pid, [Args]),
-    erlang:monitor(process, ChSupPid),
-    Result.
+    supervisor2:start_child(Pid, [Args]).
 
 %%----------------------------------------------------------------------------
 
