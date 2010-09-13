@@ -42,10 +42,12 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Xs = [rabbit_mgmt_format:exchange(X) || X <- exchanges(ReqData)],
-    rabbit_mgmt_util:reply(Xs, ReqData, Context).
+    rabbit_mgmt_util:reply(
+      rabbit_mgmt_util:filter_vhost(Xs, ReqData, Context),
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
 

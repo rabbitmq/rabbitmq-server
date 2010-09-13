@@ -80,7 +80,7 @@ delete_resource(ReqData, Context) ->
     end.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
 

@@ -187,11 +187,12 @@ http_exchanges_test() ->
     Good = [{type, "direct"}, {durable, "true"}, {auto_delete, false},
             {arguments, ""}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
-    http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
+    http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
              [{configure, ".*"}, {write, ".*"},
               {read,      ".*"}, {scope, "client"}], ?NO_CONTENT),
+    http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_get("/exchanges/%2f/foo", ?NOT_FOUND),
@@ -313,8 +314,7 @@ http_bindings_post_test() ->
 
 http_permissions_administrator_test() ->
     http_put("/users/notadmin", [{password, "notadmin"},
-                                 {administrator, false}],
-             ?NO_CONTENT),
+                                 {administrator, false}], ?NO_CONTENT),
     Test =
         fun(Path) ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
@@ -329,6 +329,54 @@ http_permissions_administrator_test() ->
     Test("/permissions/%2f/guest"),
     http_delete("/users/notadmin", ?NO_CONTENT),
     ok.
+
+http_permissions_vhost_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    PermArgs = [{configure, ".*"}, {write, ".*"},
+                {read,      ".*"}, {scope, "client"}],
+    http_put("/users/myuser", [{password, "myuser"},
+                               {administrator, false}], ?NO_CONTENT),
+    http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
+    http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
+    http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
+    http_put("/permissions/myvhost1/guest", PermArgs, ?NO_CONTENT),
+    http_put("/permissions/myvhost2/guest", PermArgs, ?NO_CONTENT),
+    http_put("/queues/myvhost1/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/queues/myvhost2/myqueue", QArgs, ?NO_CONTENT),
+    Test1 =
+        fun(Path) ->
+                Results = http_get(Path, "myuser", "myuser", ?OK),
+                [case pget(vhost, Result) of
+                     <<"myvhost2">> ->
+                         throw({got_result_from_vhost2_in, Path, Result});
+                     R ->
+                         ok
+                 end || Result <- Results]
+        end,
+    Test2 =
+        fun(Path1, Path2) ->
+                http_get(Path1 ++ "/myvhost1/" ++ Path2, "myuser", "myuser",
+                         ?OK),
+                http_get(Path1 ++ "/myvhost2/" ++ Path2, "myuser", "myuser",
+                         ?NOT_AUTHORISED)
+        end,
+    Test1("/exchanges"),
+    Test2("/exchanges", ""),
+    Test2("/exchanges", "amq.direct"),
+    Test1("/queues"),
+    Test2("/queues", ""),
+    Test2("/queues", "myqueue"),
+    Test1("/bindings"),
+    Test2("/bindings", ""),
+    Test2("/queues", "myqueue/bindings"),
+    Test2("/exchanges", "amq.default/bindings"),
+    Test2("/bindings", "myqueue/amq.default"),
+    Test2("/bindings", "myqueue/amq.default/key_test"),
+    http_delete("/vhosts/myvhost1", ?NO_CONTENT),
+    http_delete("/vhosts/myvhost2", ?NO_CONTENT),
+    http_delete("/users/myuser", ?NO_CONTENT),
+    ok.
+
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->

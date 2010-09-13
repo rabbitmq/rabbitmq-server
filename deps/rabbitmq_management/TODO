@@ -4,8 +4,7 @@ Write more management:
   Exchange / queue arguments support
   Bindings arguments support
   Purge queues
-Add superuser bit (bug 22983).
-  Tests for permissions.
+Enforce permissions around channels / connections.
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
@@ -13,7 +12,6 @@ Fix backing queue status breakage.
 Fix management plugin shutdown.
 Fix non-ASCII characters in names.
 Start earlier in the boot sequence (before queue recovery).
-Document inets dependency.
 
 Then
 ====

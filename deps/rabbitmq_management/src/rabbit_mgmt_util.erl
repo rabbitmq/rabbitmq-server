@@ -23,9 +23,10 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1, vhost_exists/1]).
+-export([is_authorized_vhost/2]).
 -export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
--export([all_or_one_vhost/2, with_decode_vhost/4, reply/3]).
+-export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -38,6 +39,16 @@ is_authorized(ReqData, Context) ->
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   fun(#user{is_admin = IsAdmin}) -> IsAdmin end).
+
+is_authorized_vhost(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  fun(#user{username = Username}) ->
+                          case vhost(ReqData) of
+                              not_found -> true;
+                              none      -> true;
+                              V         -> lists:member(V, vhosts(Username))
+                          end
+                  end).
 
 is_authorized(ReqData, Context, Fun) ->
     Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
@@ -194,3 +205,11 @@ all_or_one_vhost(ReqData, Fun) ->
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
     end.
+
+filter_vhost(List, _ReqData, Context) ->
+    VHosts = vhosts(Context#context.username),
+    [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
+
+vhosts(Username) ->
+    [VHost || {VHost, _, _, _, _}
+                  <- rabbit_access_control:list_user_permissions(Username)].

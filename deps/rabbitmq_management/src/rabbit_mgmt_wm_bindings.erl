@@ -54,11 +54,11 @@ post_is_create(ReqData, {Mode, Context}) ->
 to_json(ReqData, {Mode, Context}) ->
     %% TODO call rabbit_binding:list* instead
     Route = #route{binding = binding_example(Mode, ReqData)},
-    Bs = [B || #route{binding = B} <-
-                   mnesia:dirty_match_object(rabbit_route, Route)],
-    rabbit_mgmt_util:reply(
-      [rabbit_mgmt_format:binding(B) || B <- Bs],
-      ReqData, {Mode, Context}).
+    Bs = [rabbit_mgmt_format:binding(B)
+          || #route{binding = B} <-
+                 mnesia:dirty_match_object(rabbit_route, Route)],
+    rabbit_mgmt_util:reply(rabbit_mgmt_util:filter_vhost(Bs, ReqData, Context),
+                           ReqData, {Mode, Context}).
 
 create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
@@ -90,7 +90,7 @@ accept_content(ReqData, {_Mode, Context}) ->
       end).
 
 is_authorized(ReqData, {Mode, Context}) ->
-    {Res, RD2, C2} = rabbit_mgmt_util:is_authorized(ReqData, Context),
+    {Res, RD2, C2} = rabbit_mgmt_util:is_authorized_vhost(ReqData, Context),
     {Res, RD2, {Mode, C2}}.
 
 %%--------------------------------------------------------------------
