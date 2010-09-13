@@ -25,8 +25,6 @@
 
 VERSION=0.0.0
 
-WEB_URL=http://www.rabbitmq.com/
-
 SOURCE_PACKAGE_DIR=$(PACKAGE)-$(VERSION)-src
 SOURCE_PACKAGE_TAR_GZ=$(SOURCE_PACKAGE_DIR).tar.gz
 
@@ -127,8 +125,7 @@ $(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST
 source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)
 	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)/
-	$(COPY) README.in $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/README
-	elinks -dump -no-references -no-numbering $(WEB_URL)build-erlang-client.html >> $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/README
+	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
 	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
 	sed 's/%%VSN%%/$(VERSION)/' Makefile.in > $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/Makefile
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(SOURCE_DIR)
