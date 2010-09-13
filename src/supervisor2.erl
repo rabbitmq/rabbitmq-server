@@ -34,7 +34,9 @@
 %% 4) Added an 'intrinsic' restart type. Like the transient type, this
 %%    type means the child should only be restarted if the child exits
 %%    abnormally. Unlike the transient type, if the child exits
-%%    normally, the supervisor itself also exits normally.
+%%    normally, the supervisor itself also exits normally. If the
+%%    child is a supervisor and it exits normally (i.e. with reason of
+%%    'shutdown') then the child's parent also exits normally.
 %%
 %% All modifications are (C) 2010 Rabbit Technologies Ltd.
 %%
@@ -544,6 +546,9 @@ do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(intrinsic, normal, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
+do_restart(intrinsic, shutdown, Child = #child{child_type = supervisor},
+           State) ->
     {shutdown, state_del_child(Child, State)};
 do_restart(_, normal, Child, State) ->
     NState = state_del_child(Child, State),

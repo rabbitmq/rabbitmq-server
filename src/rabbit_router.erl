@@ -85,10 +85,10 @@ deliver(QPids, Delivery) ->
 %% TODO: This causes a full scan for each entry with the same exchange
 match_bindings(Name, Match) ->
     Query = qlc:q([QName || #route{binding = Binding = #binding{
-                                               exchange_name = ExchangeName,
+                                               exchange_name = XName,
                                                queue_name = QName}} <-
                                 mnesia:table(rabbit_route),
-                            ExchangeName == Name,
+                            XName == Name,
                             Match(Binding)]),
     lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query])).
 

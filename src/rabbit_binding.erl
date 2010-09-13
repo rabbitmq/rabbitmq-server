@@ -32,7 +32,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/0, add/1, remove/1, add/2, remove/2, list/1]).
+-export([recover/0, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
 -export([list_for_exchange/1, list_for_queue/1, list_for_exchange_and_queue/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 %% these must all be run inside a mnesia tx
@@ -47,15 +47,17 @@
 
 -type(key() :: binary()).
 
--type(bind_res() :: rabbit_types:ok_or_error('queue_not_found' |
-                                             'exchange_not_found' |
-                                             'exchange_and_queue_not_found')).
+-type(bind_errors() :: rabbit_types:error('queue_not_found' |
+                                          'exchange_not_found' |
+                                          'exchange_and_queue_not_found')).
+-type(bind_res() :: 'ok' | bind_errors()).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(), queue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
+-spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
 -spec(add/1 :: (rabbit_types:binding()) -> bind_res()).
 -spec(remove/1 :: (rabbit_types:binding()) ->
                        bind_res() | rabbit_types:error('binding_not_found')).
@@ -96,6 +98,11 @@ recover() ->
               [B | Acc]
       end, [], rabbit_durable_route).
 
+exists(Binding) ->
+    binding_action(
+      Binding,
+      fun (_X, _Q, B) -> mnesia:read({rabbit_route, B}) /= [] end).
+
 add(Binding) -> add(Binding, fun (_X, _Q) -> ok end).
 
 remove(Binding) -> remove(Binding, fun (_X, _Q) -> ok end).
@@ -122,8 +129,8 @@ add(Binding, InnerFun) ->
                            E
                    end
            end) of
-        {new, Exchange = #exchange{ type = Type }, B} ->
-            ok = (type_to_module(Type)):add_binding(Exchange, B),
+        {new, X = #exchange{ type = Type }, B} ->
+            ok = (type_to_module(Type)):add_binding(X, B),
             rabbit_event:notify(binding_created, info(B));
         {existing, _, _} ->
             ok;
@@ -174,8 +181,8 @@ list(VHostPath) ->
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
                                                            Route)].
 
-list_for_exchange(ExchangeName) ->
-    Route = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
+list_for_exchange(XName) ->
+    Route = #route{binding = #binding{exchange_name = XName, _ = '_'}},
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
                                                            Route)].
 
@@ -185,8 +192,8 @@ list_for_queue(QueueName) ->
                                mnesia:dirty_match_object(rabbit_reverse_route,
                                                          reverse_route(Route))].
 
-list_for_exchange_and_queue(ExchangeName, QueueName) ->
-    Route = #route{binding = #binding{exchange_name = ExchangeName,
+list_for_exchange_and_queue(XName, QueueName) ->
+    Route = #route{binding = #binding{exchange_name = XName,
                                       queue_name    = QueueName,
                                       _             = '_'}},
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
@@ -215,14 +222,14 @@ info_all(VHostPath) -> map(VHostPath, fun (B) -> info(B) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
 
-has_for_exchange(ExchangeName) ->
-    Match = #route{binding = #binding{exchange_name = ExchangeName, _ = '_'}},
+has_for_exchange(XName) ->
+    Match = #route{binding = #binding{exchange_name = XName, _ = '_'}},
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
     contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match).
 
-remove_for_exchange(ExchangeName) ->
+remove_for_exchange(XName) ->
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
@@ -230,7 +237,7 @@ remove_for_exchange(ExchangeName) ->
          Route#route.binding
      end || Route <- mnesia:match_object(
                        rabbit_route,
-                       #route{binding = #binding{exchange_name = ExchangeName,
+                       #route{binding = #binding{exchange_name = XName,
                                                  _ = '_'}},
                        write)].
 
@@ -242,11 +249,11 @@ remove_transient_for_queue(QueueName) ->
 
 %%----------------------------------------------------------------------------
 
-binding_action(Binding = #binding{exchange_name = ExchangeName,
+binding_action(Binding = #binding{exchange_name = XName,
                                   queue_name    = QueueName,
                                   args          = Arguments}, Fun) ->
     call_with_exchange_and_queue(
-      ExchangeName, QueueName,
+      XName, QueueName,
       fun (X, Q) ->
               SortedArgs = rabbit_misc:sort_field_table(Arguments),
               Fun(X, Q, Binding#binding{args = SortedArgs})
@@ -263,10 +270,10 @@ sync_binding(Binding, Durable, Fun) ->
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
 
-call_with_exchange_and_queue(Exchange, Queue, Fun) ->
+call_with_exchange_and_queue(XName, QueueName, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> case {mnesia:read({rabbit_exchange, Exchange}),
-                      mnesia:read({rabbit_queue, Queue})} of
+      fun () -> case {mnesia:read({rabbit_exchange, XName}),
+                      mnesia:read({rabbit_queue, QueueName})} of
                    {[X], [Q]} -> Fun(X, Q);
                    {[ ], [_]} -> {error, exchange_not_found};
                    {[_], [ ]} -> {error, queue_not_found};
@@ -320,16 +327,15 @@ remove_for_queue(QueueName, FwdDeleteFun) ->
 group_bindings_and_auto_delete([], Acc) ->
     Acc;
 group_bindings_and_auto_delete(
-  [B = #binding{exchange_name = ExchangeName} | Bs], Acc) ->
-    group_bindings_and_auto_delete(ExchangeName, Bs, [B], Acc).
+  [B = #binding{exchange_name = XName} | Bs], Acc) ->
+    group_bindings_and_auto_delete(XName, Bs, [B], Acc).
 
 group_bindings_and_auto_delete(
-  ExchangeName, [B = #binding{exchange_name = ExchangeName} | Bs],
-  Bindings, Acc) ->
-    group_bindings_and_auto_delete(ExchangeName, Bs, [B | Bindings], Acc);
-group_bindings_and_auto_delete(ExchangeName, Removed, Bindings, Acc) ->
-    %% either Removed is [], or its head has a non-matching ExchangeName
-    [X] = mnesia:read({rabbit_exchange, ExchangeName}),
+  XName, [B = #binding{exchange_name = XName} | Bs], Bindings, Acc) ->
+    group_bindings_and_auto_delete(XName, Bs, [B | Bindings], Acc);
+group_bindings_and_auto_delete(XName, Removed, Bindings, Acc) ->
+    %% either Removed is [], or its head has a non-matching XName
+    [X] = mnesia:read({rabbit_exchange, XName}),
     NewAcc = [{{rabbit_exchange:maybe_auto_delete(X), X}, Bindings} | Acc],
     group_bindings_and_auto_delete(Removed, NewAcc).
 
@@ -352,20 +358,20 @@ reverse_route(#route{binding = Binding}) ->
 reverse_route(#reverse_route{reverse_binding = Binding}) ->
     #route{binding = reverse_binding(Binding)}.
 
-reverse_binding(#reverse_binding{exchange_name = Exchange,
-                                 queue_name    = Queue,
+reverse_binding(#reverse_binding{exchange_name = XName,
+                                 queue_name    = QueueName,
                                  key           = Key,
                                  args          = Args}) ->
-    #binding{exchange_name = Exchange,
-             queue_name    = Queue,
+    #binding{exchange_name = XName,
+             queue_name    = QueueName,
              key           = Key,
              args          = Args};
 
-reverse_binding(#binding{exchange_name = Exchange,
-                         queue_name    = Queue,
+reverse_binding(#binding{exchange_name = XName,
+                         queue_name    = QueueName,
                          key           = Key,
                          args          = Args}) ->
-    #reverse_binding{exchange_name = Exchange,
-                     queue_name    = Queue,
+    #reverse_binding{exchange_name = XName,
+                     queue_name    = QueueName,
                      key           = Key,
                      args          = Args}.
