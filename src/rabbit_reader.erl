@@ -690,11 +690,14 @@ refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
     throw(Exception).
 
-ensure_stats_timer(State = #v1{stats_timer = StatsTimer}) ->
+ensure_stats_timer(State = #v1{stats_timer = StatsTimer,
+                               connection_state = running}) ->
     Self = self(),
     State#v1{stats_timer = rabbit_event:ensure_stats_timer_after(
                              StatsTimer,
-                             fun() -> emit_stats(Self) end)}.
+                             fun() -> emit_stats(Self) end)};
+ensure_stats_timer(State) ->
+    State.
 
 %%--------------------------------------------------------------------------
 
