@@ -39,12 +39,12 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
 
--record(rpc_c_state, {channel,
-                      reply_queue,
-                      exchange,
-                      routing_key,
-                      continuations = dict:new(),
-                      correlation_id = 0}).
+-record(state, {channel,
+                reply_queue,
+                exchange,
+                routing_key,
+                continuations = dict:new(),
+                correlation_id = 0}).
 
 %%--------------------------------------------------------------------------
 %% API
@@ -83,26 +83,25 @@ call(RpcClient, Payload) ->
 %%--------------------------------------------------------------------------
 
 %% Sets up a reply queue for this client to listen on
-setup_reply_queue(State = #rpc_c_state{channel = Channel}) ->
+setup_reply_queue(State = #state{channel = Channel}) ->
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Channel, #'queue.declare'{}),
-    State#rpc_c_state{reply_queue = Q}.
+    State#state{reply_queue = Q}.
 
 %% Registers this RPC client instance as a consumer to handle rpc responses
-setup_consumer(#rpc_c_state{channel = Channel,
-                            reply_queue = Q}) ->
+setup_consumer(#state{channel = Channel, reply_queue = Q}) ->
     amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()).
 
 %% Publishes to the broker, stores the From address against
 %% the correlation id and increments the correlationid for
 %% the next request
 publish(Payload, From,
-        State = #rpc_c_state{channel = Channel,
-                             reply_queue = Q,
-                             exchange = X,
-                             routing_key = RoutingKey,
-                             correlation_id = CorrelationId,
-                             continuations = Continuations}) ->
+        State = #state{channel = Channel,
+                       reply_queue = Q,
+                       exchange = X,
+                       routing_key = RoutingKey,
+                       correlation_id = CorrelationId,
+                       continuations = Continuations}) ->
     Props = #'P_basic'{correlation_id = <<CorrelationId:64>>,
                        content_type = <<"application/octet-stream">>,
                        reply_to = Q},
@@ -111,9 +110,8 @@ publish(Payload, From,
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Props,
                                                   payload = Payload}),
-    State#rpc_c_state{correlation_id = CorrelationId + 1,
-                      continuations =
-                          dict:store(CorrelationId, From, Continuations)}.
+    State#state{correlation_id = CorrelationId + 1,
+                continuations = dict:store(CorrelationId, From, Continuations)}.
 
 %%--------------------------------------------------------------------------
 %% gen_server callbacks
@@ -122,17 +120,17 @@ publish(Payload, From,
 %% Sets up a reply queue and consumer within an existing channel
 %% @private
 init([Connection, RoutingKey]) ->
-    Channel = amqp_connection:open_channel(Connection),
-    InitialState = #rpc_c_state{channel = Channel,
-                                exchange = <<>>,
-                                routing_key = RoutingKey},
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    InitialState = #state{channel     = Channel,
+                          exchange    = <<>>,
+                          routing_key = RoutingKey},
     State = setup_reply_queue(InitialState),
     setup_consumer(State),
     {ok, State}.
 
 %% Closes the channel this gen_server instance started
 %% @private
-terminate(_Reason, #rpc_c_state{channel = Channel}) ->
+terminate(_Reason, #state{channel = Channel}) ->
     amqp_channel:close(Channel),
     ok.
 
@@ -162,11 +160,11 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
              #amqp_msg{props = #'P_basic'{correlation_id = <<Id:64>>},
                        payload = Payload}},
-            State = #rpc_c_state{continuations = Conts, channel = Channel}) ->
+            State = #state{continuations = Conts, channel = Channel}) ->
     From = dict:fetch(Id, Conts),
     gen_server:reply(From, Payload),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
-    {noreply, State#rpc_c_state{continuations = dict:erase(Id, Conts)}}.
+    {noreply, State#state{continuations = dict:erase(Id, Conts) }}.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

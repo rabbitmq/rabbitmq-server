@@ -33,7 +33,7 @@ non_existent_exchange_test(Connection) ->
     X = test_util:uuid(),
     RoutingKey = <<"a">>, 
     Payload = <<"foobar">>,
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     %% Deliberately mix up the routingkey and exchange arguments
     Publish = #'basic.publish'{exchange = RoutingKey, routing_key = X},
@@ -46,7 +46,7 @@ bogus_rpc_test(Connection) ->
     X = test_util:uuid(),
     Q = test_util:uuid(),
     R = test_util:uuid(),
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     %% Deliberately bind to a non-existent queue
     Bind = #'queue.bind'{exchange = X, queue = Q, routing_key = R},
@@ -61,7 +61,8 @@ bogus_rpc_test(Connection) ->
     amqp_connection:close(Connection).
 
 hard_error_test(Connection) ->
-    Channel = amqp_connection:open_channel(Connection),
+    unlink(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     Qos = #'basic.qos'{global = true},
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
@@ -76,30 +77,28 @@ hard_error_test(Connection) ->
 %% The death of the channel is caused by an error in generating the frames
 %% (writer dies) - only in the network case
 channel_writer_death_test(Connection) ->
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
-    ok = amqp_channel:call(Channel, Publish, Message),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    ?assertExit(_, amqp_channel:call(Channel, Publish, Message)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 %% An error in the channel process should result in the death of the entire
 %% connection. The death of the channel is caused by making a call with an
 %% invalid message to the channel process
 channel_death_test(Connection) ->
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, bogus_message)),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 %% Attempting to send a shortstr longer than 255 bytes in a property field
 %% should fail - this only applies to the network case
 shortstr_overflow_property_test(Connection) ->
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
     Payload = <<"foobar">>,
@@ -107,16 +106,15 @@ shortstr_overflow_property_test(Connection) ->
     Publish = #'basic.publish'{exchange = X, routing_key = Key},
     PBasic = #'P_basic'{content_type = SentString},
     AmqpMsg = #amqp_msg{payload = Payload, props = PBasic},
-    amqp_channel:call(Channel, Publish, AmqpMsg),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    ?assertExit(_, amqp_channel:call(Channel, Publish, AmqpMsg)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 %% Attempting to send a shortstr longer than 255 bytes in a method's field
 %% should fail - this only applies to the network case
 shortstr_overflow_field_test(Connection) ->
-    Channel = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
     test_util:setup_exchange(Channel, Q, X, Key),
@@ -124,26 +122,30 @@ shortstr_overflow_field_test(Connection) ->
                        Channel, #'basic.consume'{queue = Q, no_ack = true,
                                                   consumer_tag = SentString},
                        self())),
-    timer:sleep(300),
-    ?assertNot(is_process_alive(Channel)),
-    ?assertNot(is_process_alive(Connection)),
+    test_util:wait_for_death(Channel),
+    test_util:wait_for_death(Connection),
     ok.
 
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
 
 invalid_password_test() ->
     Params = #amqp_params{username = <<"guest">>,
                           password = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
 
 non_existent_vhost_test() ->
     Params = #amqp_params{virtual_host = test_util:uuid()},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
 
 no_permission_test() ->
     Params = #amqp_params{username = <<"test_user_no_perm">>,
                           password = <<"test_user_no_perm">>},
-    ?assertThrow({error, {auth_failure_likely, _}}, amqp_connection:start_network(Params)).
+    assert_fail_start_with_params(Params).
+
+assert_fail_start_with_params(Params) ->
+    {error, {auth_failure_likely, _}} =
+        amqp_connection:start(network, Params),
+    ok.

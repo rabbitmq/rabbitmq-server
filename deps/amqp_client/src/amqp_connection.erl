@@ -36,8 +36,7 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/1, open_channel/2]).
--export([start_direct/0, start_direct/1, start_direct_link/0, start_direct_link/1]).
--export([start_network/0, start_network/1, start_network_link/0, start_network_link/1]).
+-export([start/1, start/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
@@ -77,97 +76,41 @@
 %% Starting a connection
 %%---------------------------------------------------------------------------
 
-%% @spec () -> [Connection]
+%% @spec (Type) -> {ok, Connection} | {error, Error}
 %% where
+%%     Type = network | direct
 %%     Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space, and with a default
-%% set of amqp_params. If a different vhost or credential set is required,
-%% start_direct/1 should be used.
-start_direct() ->
-    start_direct(#amqp_params{}).
+%% @doc Starts a connection to an AMQP server. Use network type to connect
+%% to a remote AMQP server - default connection settings are used, meaning that
+%% the server is expected to be at localhost:5672, with a vhost of "/"
+%% authorising a user guest/guest. Use direct type for a direct connection to
+%% a RabbitMQ server, assuming that the server is running in the same process
+%% space, and with a default set of amqp_params. If a different host, port,
+%% vhost or credential set is required, start/2 should be used.
+start(Type) ->
+    start(Type, #amqp_params{}).
 
-%% @spec (amqp_params()) -> [Connection]
+%% @spec (Type, amqp_params()) -> {ok, Connection} | {error, Error}
 %% where
+%%      Type = network | direct
 %%      Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space.
-start_direct(Params) ->
-    start_direct_internal(Params, false).
-
-%% @spec () -> [Connection]
-%% where
-%%     Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space, and with a default
-%% set of amqp_params. If a different vhost or credential set is required,
-%% start_direct_link/1 should be used. The resulting
-%% process is linked to the invoking process.
-start_direct_link() ->
-    start_direct_link(#amqp_params{}).
-
-%% @spec (amqp_params()) -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a direct connection to a RabbitMQ server, assuming that
-%% the server is running in the same process space. The resulting process
-%% is linked to the invoking process.
-start_direct_link(Params) ->
-    start_direct_internal(Params, true).
-
-start_direct_internal(#amqp_params{} = Params, ProcLink) ->
-    {ok, Pid} = start_internal(Params, amqp_direct_connection, ProcLink),
-    Pid.
-
-%% @spec () -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked conection to a remote AMQP server. Default
-%% connection settings are used, meaning that the server is expected
-%% to be at localhost:5672, with a vhost of "/" authorising a user
-%% guest/guest.
-start_network() ->
-    start_network(#amqp_params{}).
-
-%% @spec (amqp_params()) -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked conection to a remote AMQP server.
-start_network(Params) ->
-    start_network_internal(Params, false).
-
-%% @spec () -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked conection to a remote AMQP server. Default
-%% connection settings are used, meaning that the server is expected
-%% to be at localhost:5672, with a vhost of "/" authorising a user
-%% guest/guest. The resulting process is linked to the invoking process.
-start_network_link() ->
-    start_network_link(#amqp_params{}).
-
-%% @spec (amqp_params()) -> [Connection]
-%% where
-%%      Connection = pid()
-%% @doc Starts a networked connection to a remote AMQP server. The resulting 
-%% process is linked to the invoking process.
-start_network_link(Params) ->
-    start_network_internal(Params, true).
-
-start_network_internal(#amqp_params{} = AmqpParams, ProcLink) ->
-    case start_internal(AmqpParams, amqp_network_connection, ProcLink) of
-        {ok, Pid} ->
-            Pid;
-        {error, {protocol_version_mismatch, _, _}} = Err ->
-            throw(Err);
-        Bad ->
-            throw({error, {auth_failure_likely, Bad}})
+%% @doc Starts a connection to an AMQP server. Use network type to connect
+%% to a remote AMQP server or direct type for a direct connection to
+%% a RabbitMQ server, assuming that the server is running in the same process
+%% space.
+start(Type, AmqpParams) ->
+    {ok, _Sup, Connection} = amqp_connection_sup:start_link(Type, AmqpParams),
+    Module = case Type of direct  -> amqp_direct_connection;
+                          network -> amqp_network_connection
+             end,
+    try Module:connect(Connection) of
+        ok -> {ok, Connection}
+    catch
+        exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
+            {error, Reason};
+        exit:Reason ->
+            {error, {auth_failure_likely, Reason}}
     end.
-
-start_internal(Params, Module, _Link = true) when is_atom(Module) ->
-    gen_server:start_link(Module, Params, []);
-start_internal(Params, Module, _Link = false) when is_atom(Module) ->
-    gen_server:start(Module, Params, []).
 
 %%---------------------------------------------------------------------------
 %% Commands
@@ -178,11 +121,10 @@ start_internal(Params, Module, _Link = false) when is_atom(Module) ->
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
 
-%% @spec (ConnectionPid, ChannelNumber) -> Result
+%% @spec (ConnectionPid, ChannelNumber) -> {ok, ChannelPid} | {error, Error}
 %% where
-%%      ChannelNumber = pos_integer()
+%%      ChannelNumber = pos_integer() | 'none'
 %%      ConnectionPid = pid()
-%%      Result = {ok, ChannelPid} | {error, term()}
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.<br/>
 %% This function assumes that an AMQP connection (networked or direct)
@@ -194,7 +136,7 @@ open_channel(ConnectionPid) ->
 open_channel(ConnectionPid, ChannelNumber) ->
     command(ConnectionPid, {open_channel, ChannelNumber}).
 
-%% @doc Invokes close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
+%% @doc Invokes close(ConnectionPid, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
@@ -236,6 +178,9 @@ close(ConnectionPid, Code, Text) ->
 %%      max_channel - returns the max_channel value negotiated with the server
 %%          (only for the network connection)
 %%      heartbeat - returns the heartbeat value negotiated with the server
+%%          (only for the network connection)
+%%      sock - returns the socket for the network connection (for use with
+%%             e.g. inet:sockname/1)
 %%          (only for the network connection)
 %%      any other value - throws an exception
 info(ConnectionPid, Items) ->

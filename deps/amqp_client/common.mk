@@ -63,14 +63,16 @@ endif
 
 ERL_PATH ?=
 
-DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
-                                 file:consult("rabbit_common.app"), \
-                                 [io:format("~p ",[M]) || M <- Mods], halt().')
-
 PACKAGE=amqp_client
-PACKAGE_NAME=$(PACKAGE).ez
-export COMMON_PACKAGE_DIR=rabbit_common
+PACKAGE_DIR=$(PACKAGE)$(if $(APPEND_VERSION),-$(VERSION),)
+PACKAGE_NAME_EZ=$(PACKAGE_DIR).ez
+COMMON_PACKAGE=rabbit_common
+export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)$(if $(APPEND_VERSION),-$(VERSION),)
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
+
+DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
+                                 file:consult("$(COMMON_PACKAGE).app"), \
+                                 [io:format("~p ",[M]) || M <- Mods], halt().')
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl)
@@ -78,7 +80,14 @@ TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(TEST_DIR)/%.beam, $(TEST_SOURCES))
 
-LIBS_PATH=ERL_LIBS=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
+LIBS_PATH_UNIX=$(DEPS_DIR):$(DIST_DIR)$(ERL_LIBS)
+IS_CYGWIN=$(shell if [ $(shell expr "$(shell uname -s)" : 'CYGWIN_NT') -gt 0 ]; then echo "true"; else echo "false"; fi)
+ifeq ($(IS_CYGWIN),true)
+    LIBS_PATH=ERL_LIBS="$(shell cygpath -wp $(LIBS_PATH_UNIX))"
+else
+    LIBS_PATH=ERL_LIBS=$(LIBS_PATH_UNIX)
+endif
+
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
 
 COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
@@ -137,18 +146,19 @@ run: compile $(EBIN_DIR)/$(PACKAGE).app
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME): $(DIST_DIR)/$(PACKAGE) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME) $(PACKAGE))
+$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(DIST_DIR)/$(PACKAGE_DIR) | $(DIST_DIR)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
-$(DIST_DIR)/$(PACKAGE): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
-	rm -rf $(DIST_DIR)/$(PACKAGE)
-	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
-	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
-	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE)/$(EBIN_DIR)
-	mkdir -p $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
-	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE)/$(INCLUDE_DIR)
+$(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+	rm -rf $(DIST_DIR)/$(PACKAGE_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	cp -r $(EBIN_DIR)/*.beam $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
+	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
+	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 
-package: $(DIST_DIR)/$(PACKAGE_NAME)
+package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 
 ###############################################################################
 ##  Internal targets
