@@ -25,9 +25,12 @@
 %% @doc This module is responsible for maintaining a connection to an AMQP
 %% broker and manages channels within the connection. This module is used to
 %% open and close connections to the broker as well as creating new channels
-%% within a connection. Each amqp_connection process maintains a mapping of
-%% the channels that were created by that connection process. Each resulting
-%% amqp_channel process is linked to the parent connection process.
+%% within a connection.<br/>
+%% The connections and channels created by this module are supervised under
+%% amqp_client's supervision tree. Please note that connections and channels
+%% do not get restarted automatically by the supervision tree in the case of a
+%% failure. If you need robust connections and channels, we recommend you use
+%% Erlang monitors on the returned connection and channel PID.
 -module(amqp_connection).
 
 -include("amqp_client.hrl").
@@ -57,10 +60,20 @@
 %%     defaults to "localhost"</li>
 %% <li>port :: integer() - The port the broker is listening on,
 %%     defaults to 5672</li>
+%% <li>channel_max :: non_neg_integer() - The channel_max handshake parameter,
+%%     defaults to 0</li>
+%% <li>frame_max :: non_neg_integer() - The frame_max handshake parameter,
+%%     defaults to 0</li>
+%% <li>heartbeat :: non_neg_integer() - The hearbeat interval in seconds,
+%%     defaults to 0 (turned off)</li>
+%% <li>ssl_options :: term() - The second parameter to be used with the
+%%     ssl:connect/2 function, defaults to 'none'</li>
+%% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
+%%     client properties to be sent to the server, defaults to []</li>
 %% </ul>
 
 %%---------------------------------------------------------------------------
-%% AMQP Connection API Methods
+%% Starting a connection
 %%---------------------------------------------------------------------------
 
 %% @spec (Type) -> {ok, Connection} | {error, Error}
@@ -103,26 +116,27 @@ start(Type, AmqpParams) ->
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;).
+%% @doc Invokes open_channel(ConnectionPid, none). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
 
 %% @spec (ConnectionPid, ChannelNumber) -> {ok, ChannelPid} | {error, Error}
 %% where
-%%      ChannelNumber = integer()
+%%      ChannelNumber = pos_integer() | 'none'
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
-%% @doc Opens an AMQP channel.
+%% @doc Opens an AMQP channel.<br/>
 %% This function assumes that an AMQP connection (networked or direct)
-%% has already been successfully established.
+%% has already been successfully established.<br/>
+%% ChannelNumber must be less than or equal to the negotiated max_channel value,
+%% or less than or equal to ?MAX_CHANNEL_NUMBER if the negotiated max_channel
+%% value is 0.<br/>
+%% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber) ->
     command(ConnectionPid, {open_channel, ChannelNumber}).
 
-%% @spec (ConnectionPid) -> ok | Error
-%% where
-%%      ConnectionPid = pid()
-%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+%% @doc Invokes close(ConnectionPid, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
