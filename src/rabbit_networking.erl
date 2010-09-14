@@ -123,9 +123,8 @@ boot_ssl() ->
             FilteredCipherSuites =
                 [C || C <- CipherSuites,
                       begin
-                          SuiteCode = case C of
-                                          T when is_tuple(C) -> ssl_cipher:suite(T);
-                                          S when is_list(C)  -> ssl_cipher:openssl_suite(S)
+                          SuiteCode = if is_tuple(C) -> ssl_cipher:suite(C);
+                                         is_list(C)  -> ssl_cipher:openssl_suite(C)
                                       end,
                           SP = ssl_cipher:security_parameters(SuiteCode,
                                                               #security_parameters{}),
