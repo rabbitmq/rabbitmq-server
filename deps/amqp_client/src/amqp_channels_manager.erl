@@ -112,13 +112,9 @@ handle_open_channel(ProposedNumber, InfraArgs,
                     State = #state{channel_sup_sup = ChSupSup}) ->
     case new_number(ProposedNumber, State) of
         {ok, Number} ->
-            {ok, ChSup} = amqp_channel_sup_sup:start_channel_sup(
-                              ChSupSup, InfraArgs, Number),
-            [Ch] = supervisor2:find_child(ChSup, channel),
-            Framing = case supervisor2:find_child(ChSup, framing) of
-                          [F] -> F;
-                          []  -> none
-                      end,
+            {ok, _ChSup, {Ch, Framing}} =
+                amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
+                                                       Number),
             NewState = internal_register(Number, Ch, Framing, State),
             erlang:monitor(process, Ch),
             {reply, {ok, Ch}, NewState};

@@ -44,8 +44,8 @@ start_link(Type, InfraArgs, ChNumber) ->
                                   start_writer_fun(Sup, Type, InfraArgs,
                                                    ChNumber)]},
                        intrinsic, brutal_kill, worker, [amqp_channel]}),
-    start_framing(Sup, Type, ChPid),
-    {ok, Sup}.
+    {ok, Framing} = start_framing(Sup, Type, ChPid),
+    {ok, Sup, {ChPid, Framing}}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
