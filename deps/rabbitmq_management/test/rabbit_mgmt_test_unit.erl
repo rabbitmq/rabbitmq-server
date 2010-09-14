@@ -274,13 +274,27 @@ http_bindings_test() ->
     http_put("/bindings/%2f/myqueue/badexchange/key_routing", [], ?NOT_FOUND),
     http_put("/bindings/%2f/myqueue/myexchange/bad_routing", [], ?BAD_REQUEST),
     http_put("/bindings/%2f/myqueue/myexchange/key_routing", [], ?NO_CONTENT),
-    [{exchange,<<"myexchange">>},
-     {vhost,<<"/">>},
-     {queue,<<"myqueue">>},
-     {routing_key,<<"routing">>},
-     {arguments,[]},
-     {properties_key,<<"key_routing">>}] =
-        http_get("/bindings/%2f/myqueue/myexchange/key_routing", ?OK),
+    Binding =
+        [{exchange,<<"myexchange">>},
+         {vhost,<<"/">>},
+         {queue,<<"myqueue">>},
+         {routing_key,<<"routing">>},
+         {arguments,[]},
+         {properties_key,<<"key_routing">>}],
+    DBinding =
+        [{exchange,<<"">>},
+         {vhost,<<"/">>},
+         {queue,<<"myqueue">>},
+         {routing_key,<<"myqueue">>},
+         {arguments,[]},
+         {properties_key,<<"key_myqueue">>}],
+    Binding = http_get("/bindings/%2f/myqueue/myexchange/key_routing"),
+    assert_list([Binding],
+                http_get("/bindings/%2f/myqueue/myexchange")),
+    assert_list([Binding, DBinding],
+                http_get("/queues/%2f/myqueue/bindings")),
+    assert_list([Binding],
+                http_get("/exchanges/%2f/myexchange/bindings")),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NOT_FOUND),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
@@ -503,8 +517,10 @@ auth_header(Username, Password) ->
 %%---------------------------------------------------------------------------
 
 assert_list(Exp, Act) ->
-    Len = length(Exp),
-    Len = length(Act),
+    case length(Exp) == length(Act) of
+        true -> ok;
+        _    -> throw({expected, Exp, actual, Act})
+    end,
     [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
          1 -> ok;
          N -> throw({found, N, ExpI, in, Act})

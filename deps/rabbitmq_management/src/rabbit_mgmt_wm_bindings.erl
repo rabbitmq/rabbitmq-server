@@ -52,11 +52,7 @@ post_is_create(ReqData, {Mode, Context}) ->
      end, ReqData, {Mode, Context}}.
 
 to_json(ReqData, {Mode, Context}) ->
-    %% TODO call rabbit_binding:list* instead
-    Route = #route{binding = binding_example(Mode, ReqData)},
-    Bs = [rabbit_mgmt_format:binding(B)
-          || #route{binding = B} <-
-                 mnesia:dirty_match_object(rabbit_route, Route)],
+    Bs = [rabbit_mgmt_format:binding(B) || B <- list_bindings(Mode, ReqData)],
     rabbit_mgmt_util:reply(rabbit_mgmt_util:filter_vhost(Bs, ReqData, Context),
                            ReqData, {Mode, Context}).
 
@@ -95,33 +91,20 @@ is_authorized(ReqData, {Mode, Context}) ->
 
 %%--------------------------------------------------------------------
 
-binding_example(all, _ReqData) ->
-    #binding{_ = '_'};
-binding_example(vhost, ReqData) ->
-    #binding{exchange_name = rabbit_misc:r(
-                               rabbit_mgmt_util:vhost(ReqData),
-                               exchange),
-             _             = '_'};
-binding_example(exchange, ReqData) ->
-    #binding{exchange_name = rabbit_misc:r(
-                               rabbit_mgmt_util:vhost(ReqData),
-                               exchange,
-                               rabbit_mgmt_util:id(exchange, ReqData)),
-             _             = '_'};
-binding_example(queue, ReqData) ->
-    #binding{queue_name = rabbit_misc:r(
-                            rabbit_mgmt_util:vhost(ReqData),
-                            queue,
-                            rabbit_mgmt_util:id(queue, ReqData)),
-             _          = '_'};
-binding_example(queue_exchange, ReqData) ->
-    #binding{exchange_name = rabbit_misc:r(
-                               rabbit_mgmt_util:vhost(ReqData),
-                               exchange,
-                               rabbit_mgmt_util:id(exchange, ReqData)),
-             queue_name    = rabbit_misc:r(
-                               rabbit_mgmt_util:vhost(ReqData),
-                               queue,
-                               rabbit_mgmt_util:id(queue, ReqData)),
-             _             = '_'}.
+list_bindings(all, ReqData) ->
+    rabbit_mgmt_util:all_or_one_vhost(ReqData,
+                                     fun (VHost) ->
+                                             rabbit_binding:list(VHost)
+                                     end);
+list_bindings(exchange, ReqData) ->
+    rabbit_binding:list_for_exchange(r(exchange, ReqData));
+list_bindings(queue, ReqData) ->
+    rabbit_binding:list_for_queue(r(queue, ReqData));
+list_bindings(queue_exchange, ReqData) ->
+    rabbit_binding:list_for_exchange_and_queue(r(exchange, ReqData),
+                                               r(queue,    ReqData)).
 
+r(Type, ReqData) ->
+    rabbit_misc:r(rabbit_mgmt_util:vhost(ReqData),
+                  Type,
+                  rabbit_mgmt_util:id(Type, ReqData)).
