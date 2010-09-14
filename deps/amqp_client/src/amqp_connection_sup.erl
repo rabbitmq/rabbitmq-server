@@ -38,14 +38,15 @@
 
 start_link(Type, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    unlink(Sup),
     {ok, ChSupSup} = supervisor2:start_child(Sup,
                          {channel_sup_sup, {amqp_channel_sup_sup, start_link,
                                             [Type]},
                           intrinsic, infinity, supervisor,
                           [amqp_channel_sup_sup]}),
-    start_connection(Sup, Type, AmqpParams,
-                     start_infrastructure_fun(Sup, Type, ChSupSup)),
-    {ok, Sup}.
+    {ok, Connection} = start_connection(Sup, Type, AmqpParams,
+                           start_infrastructure_fun(Sup, Type, ChSupSup)),
+    {ok, Sup, Connection}.
     
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -66,29 +67,25 @@ start_infrastructure_fun(Sup, network, ChSupSup) ->
     fun(Sock) ->
         Connection = self(),
         {ok, ChMgr} = start_channels_manager(Sup, Connection, ChSupSup),
-        {ok, CTSup} = supervisor2:start_child(Sup,
-                          {connection_type_sup, {amqp_connection_type_sup,
-                                                 start_link_network,
-                                                 [Sock, Connection, ChMgr]},
-                           transient, infinity, supervisor,
-                           [amqp_connection_type_sup]}),
-        [MainReader] = supervisor2:find_child(CTSup, main_reader),
-        [Framing] = supervisor2:find_child(CTSup, framing),
-        [Writer] = supervisor2:find_child(CTSup, writer),
-        {ChMgr, MainReader, Framing, Writer,
-         amqp_connection_type_sup:start_heartbeat_fun(CTSup)}
+        {ok, CTSup, {MainReader, Framing, Writer}} =
+            supervisor2:start_child(Sup,
+              {connection_type_sup, {amqp_connection_type_sup,
+                                     start_link_network,
+                                     [Sock, Connection, ChMgr]},
+               transient, infinity, supervisor, [amqp_connection_type_sup]}),
+        {ok, {ChMgr, MainReader, Framing, Writer,
+              amqp_connection_type_sup:start_heartbeat_fun(CTSup)}}
     end;
 start_infrastructure_fun(Sup, direct, ChSupSup) ->
     fun() ->
         Connection = self(),
         {ok, ChMgr} = start_channels_manager(Sup, Connection, ChSupSup),
-        {ok, CTSup} = supervisor2:start_child(Sup,
-                          {connection_type_sup, {amqp_connection_type_sup,
-                                                 start_link_direct, []},
-                           transient, infinity, supervisor,
-                           [amqp_connection_type_sup]}),
-        [Collector] = supervisor2:find_child(CTSup, collector),
-        {ChMgr, Collector}
+        {ok, _CTSup, Collector} =
+            supervisor2:start_child(Sup,
+              {connection_type_sup, {amqp_connection_type_sup,
+                                     start_link_direct, []},
+               transient, infinity, supervisor, [amqp_connection_type_sup]}),
+        {ok, {ChMgr, Collector}}
     end.
 
 start_channels_manager(Sup, Connection, ChSupSup) ->

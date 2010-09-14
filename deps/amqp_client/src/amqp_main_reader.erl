@@ -89,12 +89,9 @@ handle_inet_async({inet_async, Sock, _, Msg},
                               end,
     case Msg of
         {ok, <<Payload:Length/binary, ?FRAME_END>>} ->
-            case handle_frame(Type, Channel, Payload, State) of
-                closed_ok -> {stop, normal, State};
-                _         -> {ok, _Ref} =
-                                 rabbit_net:async_recv(Sock, 7, infinity),
-                             {noreply, State#state{message = none}}
-            end;
+            handle_frame(Type, Channel, Payload, State),
+            {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
+            {noreply, State#state{message = none}};
         {ok, <<NewType:8, NewChannel:16, NewLength:32>>} ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
             {noreply, State#state{message={NewType, NewChannel, NewLength}}};
@@ -109,16 +106,9 @@ handle_frame(Type, Channel, Payload, State) ->
     case rabbit_reader:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when Channel /= 0 ->
             rabbit_misc:die(frame_error);
-        trace when Channel /= 0 ->
-            rabbit_misc:die(frame_error);
-        %% Match heartbeats and trace frames, but don't do anything with them
+        %% Match heartbeats but don't do anything with them
         heartbeat ->
             heartbeat;
-        trace ->
-            trace;
-        {method, Method = 'connection.close_ok', none} ->
-            pass_frame(Channel, {method, Method}, State),
-            closed_ok;
         AnalyzedFrame ->
             pass_frame(Channel, AnalyzedFrame, State)
     end.

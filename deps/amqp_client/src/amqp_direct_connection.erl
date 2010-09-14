@@ -44,7 +44,7 @@
 -record(closing, {reason,
                   close = none, %% At least one of close and reply has to be
                   reply = none, %%     none at any given moment
-                  from = none}).
+                  from  = none}).
 
 -define(INFO_KEYS,
         (amqp_connection:info_keys() ++ [])).
@@ -217,9 +217,8 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
     rabbit_access_control:check_vhost_access(
             #user{username = User, password = Pass}, VHost),
     State1 = start_infrastructure(State0),
-    ServerProperties = rabbit_reader:server_properties(),
-    State1#state{server_properties = ServerProperties}.
+    State1#state{server_properties = rabbit_reader:server_properties()}.
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
-    {ChMgr, Collector} = SIF(),
+    {ok, {ChMgr, Collector}} = SIF(),
     State#state{channels_manager = ChMgr, collector = Collector}.

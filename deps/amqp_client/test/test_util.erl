@@ -46,8 +46,8 @@
 %%
 %% This is an example of how the client interaction should work
 %%
-%%   Connection = amqp_connection:start_network(),
-%%   Channel = amqp_connection:open_channel(Connection),
+%%   {ok, Connection} = amqp_connection:start(network),
+%%   {ok, Channel} = amqp_connection:open_channel(Connection),
 %%   %%...do something useful
 %%   amqp_channel:close(Channel),
 %%   amqp_connection:close(Connection).

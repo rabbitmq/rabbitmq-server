@@ -54,22 +54,20 @@ start_link(Type, InfraArgs, ChNumber) ->
 start_writer_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
     fun() ->
         ChPid = self(),
-        {ok, RabbitChannel} = supervisor2:start_child(Sup,
-                      {rabbit_channel, {rabbit_channel, start_link,
-                                        [ChNumber, ChPid, ChPid, User, VHost,
-                                         Collector, start_limiter_fun(Sup)]},
-                       transient, ?MAX_WAIT, worker, [rabbit_channel]}),
-        RabbitChannel
+        {ok, _} = supervisor2:start_child(Sup,
+                    {rabbit_channel, {rabbit_channel, start_link,
+                                      [ChNumber, ChPid, ChPid, User, VHost,
+                                       Collector, start_limiter_fun(Sup)]},
+                     transient, ?MAX_WAIT, worker, [rabbit_channel]}),
     end;
 start_writer_fun(Sup, network, [Sock], ChNumber) ->
     fun() ->
         ChPid = self(),
-        {ok, Writer} = supervisor2:start_child(Sup,
-                           {writer, {rabbit_writer, start_link,
-                                     [Sock, ChNumber, ?FRAME_MIN_SIZE,
-                                      ?PROTOCOL, ChPid]},
-                            transient, ?MAX_WAIT, worker, [rabbit_writer]}),
-        Writer
+        {ok, _} = supervisor2:start_child(Sup,
+                    {writer, {rabbit_writer, start_link,
+                              [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
+                               ChPid]},
+                     transient, ?MAX_WAIT, worker, [rabbit_writer]}),
     end.
 
 start_framing(_Sup, direct, _ChPid) ->
@@ -81,12 +79,13 @@ start_framing(Sup, network, ChPid) ->
                    transient, ?MAX_WAIT, worker, [rabbit_framing_channel]}).
 
 start_limiter_fun(Sup) ->
-    fun(UnackedCount) ->
-        Parent = self(),
-        {ok, _} = supervisor2:start_child(Sup,
-                      {limiter, {rabbit_limiter, start_link,
-                                 [Parent, UnackedCount]},
-                       transient, ?MAX_WAIT, worker, [rabbit_limiter]})
+    fun (UnackedCount) ->
+            Parent = self(),
+            {ok, _} = supervisor2:start_child(
+                        Sup,
+                        {limiter, {rabbit_limiter, start_link,
+                                   [Parent, UnackedCount]},
+                         transient, ?MAX_WAIT, worker, [rabbit_limiter]})
     end.
 
 %%---------------------------------------------------------------------------

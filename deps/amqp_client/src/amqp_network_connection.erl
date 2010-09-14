@@ -116,7 +116,9 @@ handle_info({channel_exit, Framing0, Reason},
             State = #state{framing0 = Framing0}) ->
     {stop, {channel0_died, Reason}, State};
 handle_info({channel_exit, 0, Reason},State) ->
-    {stop, {channel0_died, Reason}, State}.
+    {stop, {channel0_died, Reason}, State};
+handle_info(timeout, State) ->
+    {stop, heartbeat_timeout, State}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -267,8 +269,9 @@ internal_error_closing() ->
                                          class_id = 0,
                                          method_id = 0}}.
 
-handle_socket_closed(State = #state{closing =
-                         Closing = #closing{phase = wait_socket_close}}) ->
+handle_socket_closed(State = #state{
+                       closing = Closing = #closing{
+                                   phase = wait_socket_close}}) ->
     {stop, closing_to_reason(Closing), State};
 handle_socket_closed(State) ->
     {stop, socket_closed_unexpectedly, State}.
@@ -315,7 +318,7 @@ handshake(State0 = #state{sock = Sock}) ->
 
 start_infrastructure(State = #state{start_infrastructure_fun = SIF,
                                     sock = Sock}) ->
-    {ChMgr, MainReader, Framing, Writer, SHF} = SIF(Sock),
+    {ok, {ChMgr, MainReader, Framing, Writer, SHF}} = SIF(Sock),
     State#state{channels_manager = ChMgr,
                 main_reader = MainReader,
                 framing0 = Framing,
@@ -379,8 +382,8 @@ negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
 negotiate_max_value(Client, Server) ->
     lists:min([Client, Server]).
 
-start_ok(#state{params = #amqp_params{username = Username,
-                                      password = Password,
+start_ok(#state{params = #amqp_params{username          = Username,
+                                      password          = Password,
                                       client_properties = UserProps}}) ->
     LoginTable = [{<<"LOGIN">>, longstr, Username},
                   {<<"PASSWORD">>, longstr, Password}],

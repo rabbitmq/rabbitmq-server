@@ -25,7 +25,7 @@
 
 -module(network_client_SUITE).
 
--export([test_coverage/0]).
+-export([test_coverage/0, new_connection/1]).
 
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -41,10 +41,10 @@ basic_return_test() ->
 basic_qos_test() ->
     test_util:basic_qos_test(new_connection()).
 
-basic_recover_test() -> 
+basic_recover_test() ->
     test_util:basic_recover_test(new_connection()).
 
-basic_consume_test() -> 
+basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
 
 large_content_test() ->
@@ -98,7 +98,7 @@ channel_tune_negotiation_test() ->
 %%---------------------------------------------------------------------------
 %% Negative Tests
 
-non_existent_exchange_test() -> 
+non_existent_exchange_test() ->
     negative_test_util:non_existent_exchange_test(new_connection()).
 
 bogus_rpc_test() ->
@@ -130,20 +130,21 @@ shortstr_overflow_property_test() ->
 
 shortstr_overflow_field_test() ->
     negative_test_util:shortstr_overflow_field_test(new_connection()).
-    
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 
 repeat(Fun, Times) ->
     [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
 
-new_connection(Params) ->
-    {ok, Pid} = amqp_connection:start(network, Params),
-    Pid.
-
 new_connection() ->
-    {ok, Pid} = amqp_connection:start(network),
-    Pid.
+    new_connection(#amqp_params{}).
+
+new_connection(AmqpParams) ->
+    case amqp_connection:start(network, AmqpParams) of
+        {ok, Conn}            -> Conn;
+        {error, _Err} = Error -> Error
+    end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
