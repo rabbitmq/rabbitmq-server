@@ -167,6 +167,8 @@ declare(Recover, From,
                      State1 = init_expires(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
+                     rabbit_event:maybe(StatsTimer,
+                                        fun() -> emit_stats(State1) end),
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -267,13 +269,7 @@ ensure_stats_timer(State = #q{stats_timer = StatsTimer,
                               q = Q}) ->
     State#q{stats_timer = rabbit_event:ensure_stats_timer(
                             StatsTimer,
-                            fun() -> emit_stats(State) end,
                             fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
-
-stop_stats_timer(State = #q{stats_timer = StatsTimer}) ->
-    State#q{stats_timer = rabbit_event:stop_stats_timer(
-                            StatsTimer,
-                            fun() -> emit_stats(State) end)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -586,8 +582,9 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-emit_stats(State) ->
-    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
+emit_stats(State = #q{stats_timer = StatsTimer}) ->
+    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)),
+    State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}.
 
 %---------------------------------------------------------------------------
 
@@ -889,8 +886,9 @@ handle_cast(maybe_expire, State) ->
     end;
 
 handle_cast(emit_stats, State) ->
-    emit_stats(State),
-    noreply(State).
+    %% Do not invoke noreply as it would see no timer and create a new one.
+    State1 = emit_stats(State),
+    {noreply, State1}.
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -927,5 +925,5 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    {hibernate, stop_stats_timer(
+    {hibernate, emit_stats(
                   stop_rate_timer(State#q{backing_queue_state = BQS2}))}.

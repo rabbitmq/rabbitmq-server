@@ -177,6 +177,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = StatsTimer},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:maybe(StatsTimer, fun() -> internal_emit_stats(State) end),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -239,8 +240,8 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast(emit_stats, State) ->
-    internal_emit_stats(State),
-    {noreply, State}.
+    State1 = internal_emit_stats(State),
+    {noreply, State1}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
@@ -248,7 +249,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
-    {hibernate, stop_stats_timer(State)}.
+    {hibernate, internal_emit_stats(State)}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -278,13 +279,7 @@ ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
                              StatsTimer,
-                             fun() -> internal_emit_stats(State) end,
                              fun() -> emit_stats(ChPid) end)}.
-
-stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    State#ch{stats_timer = rabbit_event:stop_stats_timer(
-                             StatsTimer,
-                             fun() -> internal_emit_stats(State) end)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -1164,7 +1159,8 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
             rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
-    end.
+    end,
+    State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}.
 
 erase_queue_stats(QPid) ->
     erase({monitoring, QPid}),

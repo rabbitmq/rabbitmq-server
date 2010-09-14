@@ -369,10 +369,8 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                                    end),
             mainloop(Deb, State);
         {'$gen_cast', emit_stats} ->
-            internal_emit_stats(State),
-            mainloop(Deb, State#v1{stats_timer =
-                                       rabbit_event:reset_stats_timer_after(
-                                         State#v1.stats_timer)});
+            State1 = internal_emit_stats(State),
+            mainloop(Deb, State1);
         {system, From, Request} ->
             sys:handle_system_msg(Request, From,
                                   Parent, ?MODULE, Deb, State);
@@ -693,7 +691,7 @@ refuse_connection(Sock, Exception) ->
 ensure_stats_timer(State = #v1{stats_timer = StatsTimer,
                                connection_state = running}) ->
     Self = self(),
-    State#v1{stats_timer = rabbit_event:ensure_stats_timer_after(
+    State#v1{stats_timer = rabbit_event:ensure_stats_timer(
                              StatsTimer,
                              fun() -> emit_stats(Self) end)};
 ensure_stats_timer(State) ->
@@ -779,10 +777,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                         connection = NewConnection}),
     rabbit_event:notify(connection_created,
                         infos(?CREATION_EVENT_KEYS, State1)),
-    case rabbit_event:stats_level(StatsTimer) of
-        none -> ok;
-        _    -> internal_emit_stats(State1)
-    end,
+    rabbit_event:maybe(StatsTimer,
+                       fun() -> internal_emit_stats(State1) end),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
@@ -945,5 +941,6 @@ amqp_exception_explanation(Text, Expl) ->
        true                        -> CompleteTextBin
     end.
 
-internal_emit_stats(State) ->
-    rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)).
+internal_emit_stats(State = #v1{stats_timer = StatsTimer}) ->
+    rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
+    State#v1{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}.
