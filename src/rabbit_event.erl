@@ -84,7 +84,7 @@
 start_link() ->
     gen_event:start_link({local, ?MODULE}).
 
-%% The idea is, for each of channel, queue, connection:
+%% The idea is, for each stat-emitting object:
 %%
 %% On startup:
 %%   Timer = init_stats_timer()
