@@ -239,9 +239,8 @@ rpc_top_half(Method, Content, From,
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     {{value, {From, _Method, _Content}}, RequestQueue1} =
         queue:out(RequestQueue),
-    case From of
-        none -> ok;
-        _    -> gen_server:reply(From, Reply)
+    case From of none -> ok;
+                 _    -> gen_server:reply(From, Reply)
     end,
     do_rpc(State#state{rpc_requests = RequestQueue1}).
 
