@@ -34,10 +34,11 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Perms = rabbit_access_control:list_user_permissions(
-              rabbit_mgmt_util:id(user, ReqData)),
+    User = rabbit_mgmt_util:id(user, ReqData),
+    Perms = rabbit_access_control:list_user_permissions(User),
     rabbit_mgmt_util:reply(
-      [rabbit_mgmt_format:user_permissions(P) || P <- Perms],
+      [rabbit_mgmt_format:permissions({User, VHost, Conf, Write, Read, Scope})
+       || {VHost, Conf, Write, Read, Scope} <- Perms],
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->

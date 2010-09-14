@@ -50,7 +50,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
-      rabbit_mgmt_format:user_permissions(perms(ReqData)),
+      rabbit_mgmt_format:permissions(perms(ReqData)),
       ReqData, Context).
 
 accept_content(ReqData, Context) ->
@@ -89,11 +89,13 @@ perms(ReqData) ->
                 not_found ->
                     not_found;
                 VHost ->
-                    %% TODO call list_user_vhost_permissions instead
-                    Perms = rabbit_access_control:list_user_permissions(User),
-                    case [P || {V, _, _, _, _} = P <- Perms, V == VHost] of
-                        [Perm] -> Perm;
-                        []     -> none
+                    Perms = rabbit_access_control:list_user_vhost_permissions(
+                              User, VHost),
+                    case Perms of
+                        [{Configure, Write, Read, Scope}] ->
+                            {User, VHost, Configure, Write, Read, Scope};
+                        [] ->
+                            none
                     end
             end;
         {error, _} ->

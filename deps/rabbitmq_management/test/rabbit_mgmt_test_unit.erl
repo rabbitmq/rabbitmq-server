@@ -116,8 +116,8 @@ http_permissions_validation_test() ->
     ok.
 
 http_permissions_list_test() ->
-    [[{vhost,<<"/">>},
-      {user,<<"guest">>},
+    [[{user,<<"guest">>},
+      {vhost,<<"/">>},
       {configure,<<".*">>},
       {write,<<".*">>},
       {read,<<".*">>},
@@ -156,12 +156,21 @@ http_permissions_test() ->
              [{configure, "foo"}, {write, "foo"},
               {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
 
-    [{vhost,<<"myvhost">>},
-     {configure,<<"foo">>},
-     {write,<<"foo">>},
-     {read,<<"foo">>},
-     {scope,<<"client">>}] =
-        http_get("/permissions/myvhost/myuser"),
+    Permission = [{user,<<"myuser">>},
+                  {vhost,<<"myvhost">>},
+                  {configure,<<"foo">>},
+                  {write,<<"foo">>},
+                  {read,<<"foo">>},
+                  {scope,<<"client">>}],
+    Default = [{user,<<"guest">>},
+               {vhost,<<"/">>},
+               {configure,<<".*">>},
+               {write,<<".*">>},
+               {read,<<".*">>},
+               {scope,<<"client">>}],
+    Permission = http_get("/permissions/myvhost/myuser"),
+    assert_list([Permission, Default], http_get("/permissions")),
+    assert_list([Permission], http_get("/users/myuser/permissions")),
     http_delete("/permissions/myvhost/myuser", ?NO_CONTENT),
     http_get("/permissions/myvhost/myuser", ?NOT_FOUND),
 
