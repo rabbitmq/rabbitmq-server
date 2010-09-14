@@ -101,7 +101,7 @@ start(Type) ->
 start(Type, AmqpParams) ->
     amqp_client:start(),
     {ok, _Sup, Connection} =
-        amqp_sup:start_connection_sup(amqp_sup, Type, AmqpParams),
+        amqp_sup:start_connection_sup(Type, AmqpParams),
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection
              end,

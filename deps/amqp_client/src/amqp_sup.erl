@@ -29,7 +29,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_connection_sup/3]).
+-export([start_link/0, start_connection_sup/2]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -37,10 +37,10 @@
 %%---------------------------------------------------------------------------
 
 start_link() ->
-    supervisor2:start_link(?MODULE, []).
+    supervisor2:start_link({local, amqp_sup}, ?MODULE, []).
 
-start_connection_sup(Sup, Type, AmqpParams) ->
-    supervisor2:start_child(Sup, [Type, AmqpParams]).
+start_connection_sup(Type, AmqpParams) ->
+    supervisor2:start_child(amqp_sup, [Type, AmqpParams]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

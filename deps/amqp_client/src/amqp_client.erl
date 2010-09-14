@@ -28,7 +28,7 @@
 -behaviour(application).
 
 -export([start/0]).
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
@@ -42,9 +42,15 @@ start() ->
 %%---------------------------------------------------------------------------
 
 start(_StartType, _StartArgs) ->
-    {ok, AmqpSup} = amqp_sup:start_link(),
-    register(amqp_sup, AmqpSup),
-    {ok, AmqpSup}.
+    amqp_sup:start_link().
+
+prep_stop(State) ->
+    ConnectionSups = supervisor2:find_child(amqp_sup, undefined),
+    lists:foreach(fun(CSup) ->
+                      [Connection] = supervisor2:find_child(CSup, connection),
+                      amqp_connection:close(Connection)
+                  end, ConnectionSups),
+    State.
 
 stop(_State) ->
     ok.
