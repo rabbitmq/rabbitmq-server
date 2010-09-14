@@ -34,10 +34,11 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    %% TODO: combine these two comprehensions
-    Users0 = [rabbit_access_control:lookup_user(U)
+    Users = [begin
+                 {ok, User} = rabbit_access_control:lookup_user(U),
+                 rabbit_mgmt_format:user(User)
+             end
              || {U, _} <- rabbit_access_control:list_users()],
-    Users = [rabbit_mgmt_format:user(U) || {ok, U} <- Users0],
     rabbit_mgmt_util:reply(Users, ReqData, Context).
 
 is_authorized(ReqData, Context) ->

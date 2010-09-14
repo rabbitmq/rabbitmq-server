@@ -22,7 +22,7 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, is_authorized_admin/2, vhost/1, vhost_exists/1]).
+-export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
@@ -92,15 +92,11 @@ now_ms() ->
 vhost(ReqData) ->
     case id(vhost, ReqData) of
         none  -> none;
-        VHost -> case vhost_exists(VHost) of
+        VHost -> case rabbit_access_control:vhost_exists(VHost) of
                      true  -> VHost;
                      false -> not_found
                  end
     end.
-
-vhost_exists(VHostBin) ->
-    %% TODO call rabbit_access_control:vhost_exists/1 instead
-    lists:member(VHostBin, rabbit_access_control:list_vhosts()).
 
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
@@ -156,10 +152,7 @@ decode(Keys, ReqData) ->
         ok -> Results =
                   [get_or_missing(list_to_binary(atom_to_list(K)), Json)
                    || K <- Keys],
-              %% TODO use a list comprehension instead
-              case lists:filter(fun({key_missing, _}) -> true;
-                                   (_)                -> false
-                                end, Results) of
+              case [E || E = {key_missing, _} <- Results] of
                   []      -> Results;
                   Errors  -> {error, Errors}
               end;

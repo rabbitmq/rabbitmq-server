@@ -42,7 +42,7 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {rabbit_mgmt_util:vhost_exists(id(ReqData)), ReqData, Context}.
+    {rabbit_access_control:vhost_exists(id(ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
     VHost = id(ReqData),
@@ -50,7 +50,7 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     VHost = id(ReqData),
-    case rabbit_mgmt_util:vhost_exists(VHost) of
+    case rabbit_access_control:vhost_exists(VHost) of
         true  -> ok;
         false -> rabbit_access_control:add_vhost(VHost)
     end,
