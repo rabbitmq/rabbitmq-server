@@ -59,7 +59,7 @@ start_link_network(Sock, Connection, ChMgr) ->
     {ok, MainReader} =
         supervisor2:start_child(Sup,
           {main_reader, {amqp_main_reader, start_link,
-                         [Sock, Connection, ChMgr, Framing0]},
+                         [Sock, Connection, ChMgr, Framing]},
            transient, ?MAX_WAIT, worker, [amqp_main_reader]}),
     {ok, Sup, {MainReader, Framing, Writer}}.
 

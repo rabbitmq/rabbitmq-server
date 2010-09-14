@@ -127,9 +127,9 @@ cl_args() ->
      {amqp_channel, terminate, []}].
 
 m_args() ->
-    [{amqp_channel, do, [return_ms()]},
+    [{amqp_channel, do, return_ms()},
      {amqp_channel, handle_method, []},
-     {amqp_network_connection, do, [return_ms()]},
+     {amqp_network_connection, do, return_ms()},
      {amqp_network_connection, handle_method, []},
      {amqp_network_connection, handshake_recv, return_ms()}].
 

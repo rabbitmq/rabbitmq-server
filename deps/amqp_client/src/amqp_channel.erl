@@ -284,7 +284,7 @@ do(Method, Content, #state{driver = Driver, writer = W}) ->
           end.
 
 start_writer(State = #state{start_writer_fun = SWF}) ->
-    Writer = SWF(),
+    {ok, Writer} = SWF(),
     State#state{writer = Writer}.
 
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->

@@ -58,7 +58,7 @@ start_writer_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
                     {rabbit_channel, {rabbit_channel, start_link,
                                       [ChNumber, ChPid, ChPid, User, VHost,
                                        Collector, start_limiter_fun(Sup)]},
-                     transient, ?MAX_WAIT, worker, [rabbit_channel]}),
+                     transient, ?MAX_WAIT, worker, [rabbit_channel]})
     end;
 start_writer_fun(Sup, network, [Sock], ChNumber) ->
     fun() ->
@@ -67,7 +67,7 @@ start_writer_fun(Sup, network, [Sock], ChNumber) ->
                     {writer, {rabbit_writer, start_link,
                               [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
                                ChPid]},
-                     transient, ?MAX_WAIT, worker, [rabbit_writer]}),
+                     transient, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
 
 start_framing(_Sup, direct, _ChPid) ->

@@ -248,7 +248,7 @@ signal_channels(Msg, #state{map_pid_num = MapPN}) ->
     ok.
 
 signal_connection(_, #state{connection = undefined}) ->
-    ?LOG_WARN("No connection registered in channels manager (~p).~n", self());
+    ?LOG_WARN("No connection registered in channels manager (~p).~n", [self()]);
 signal_connection(Msg, #state{connection = Connection}) ->
     Connection ! Msg,
     ok.
