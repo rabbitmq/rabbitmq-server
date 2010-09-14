@@ -49,4 +49,4 @@ start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
 init([Type]) ->
     {ok, {{simple_one_for_one, 0, 1},
           [{channel_sup, {amqp_channel_sup, start_link, [Type]},
-           temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.
+            temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.
