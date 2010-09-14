@@ -339,7 +339,7 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             throw(E);
         {channel_exit, ChannelOrFrPid, Reason} ->
             mainloop(Deb, handle_channel_exit(ChannelOrFrPid, Reason, State));
-        {'EXIT', ChSupPid, Reason} ->
+        {'DOWN', _MRef, process, ChSupPid, Reason} ->
             mainloop(Deb, handle_dependent_exit(ChSupPid, Reason, State));
         terminate_connection ->
             State;
@@ -489,7 +489,7 @@ wait_for_channel_termination(0, TimerRef) ->
 
 wait_for_channel_termination(N, TimerRef) ->
     receive
-        {'EXIT', ChSupPid, Reason} ->
+        {'DOWN', _MRef, process, ChSupPid, Reason} ->
             case channel_cleanup(ChSupPid) of
                 undefined ->
                     exit({abnormal_dependent_exit, ChSupPid, Reason});
@@ -867,6 +867,7 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
                        self(), Username, VHost, Collector}),
+    erlang:monitor(process, ChSupPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
     put({ch_fr_pid, ChFrPid}, {channel, Channel}),
