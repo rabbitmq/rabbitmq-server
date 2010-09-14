@@ -10,7 +10,7 @@ Write more thorough unit tests, especially around listings.
 Fix backing queue status breakage.
 Fix management plugin shutdown.
 Fix non-ASCII characters in names.
-Start earlier in the boot sequence (before queue recovery).
+Document inets dependency.
 
 Then
 ====
