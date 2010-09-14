@@ -296,7 +296,7 @@ function sync_req(type, params, path_template) {
     }
 
     if (req.status == 400) {
-        error_popup(JSON.parse(req.responseText).reason);
+        error_popup(JSON.stringify(JSON.parse(req.responseText).reason));
         return false;
     }
 
