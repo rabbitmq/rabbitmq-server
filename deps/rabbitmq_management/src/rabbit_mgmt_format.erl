@@ -22,7 +22,7 @@
 
 -export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
 -export([protocol/1, resource/1, permissions/1, user_permissions/1]).
--export([exchange/1, user/1, binding/1, pack_props/2, url/2]).
+-export([exchange/1, user/1, binding/1, pack_props/2, url/2, application/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -126,3 +126,8 @@ pack_props(Key, _Args) ->
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
+
+application({Application, Description, Version}) ->
+    [{name, Application},
+     {description, list_to_binary(Description)},
+     {version, list_to_binary(Version)}].

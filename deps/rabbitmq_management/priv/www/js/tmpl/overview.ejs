@@ -57,6 +57,29 @@
 </div>
 </div>
 
+<div class="section-hidden">
+<h2>Applications</h2>
+<div>
+<table class="list">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Version</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% for (var i = 0; i < applications.length; i++) { %>
+       <tr<%= alt_rows(i)%>>
+         <td><abbr title="<%= applications[i].description %>"><%= applications[i].name %></abbr></td>
+         <td><%= applications[i].version %></td>
+       </tr>
+    <% } %>
+  </tbody>
+</table>
+<span class="br"></span>
+</div>
+</div>
+
 <% if (overview.statistics_level != 'fine') { %>
 <div class="section-hidden">
 <h2>Message Rates Disabled</h2>

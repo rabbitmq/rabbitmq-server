@@ -18,7 +18,7 @@ function dispatcher() {
                 render(r, t, p);
             });
     }
-    path('#/', {'overview': '/overview'}, 'overview');
+    path('#/', {'overview': '/overview', 'applications': '/applications'}, 'overview');
 
     path('#/connections', {'connections': '/connections/'}, 'connections');
     this.get('#/connections/:name', function() {
