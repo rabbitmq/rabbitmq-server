@@ -167,8 +167,8 @@ declare(Recover, From,
                      State1 = init_expires(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
-                     rabbit_event:maybe(StatsTimer,
-                                        fun() -> emit_stats(State1) end),
+                     rabbit_event:if_enabled(StatsTimer,
+                                             fun() -> emit_stats(State1) end),
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.

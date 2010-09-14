@@ -36,7 +36,7 @@
 -export([start_link/0]).
 -export([init_stats_timer/0, ensure_stats_timer/2]).
 -export([reset_stats_timer/1]).
--export([stats_level/1, maybe/2]).
+-export([stats_level/1, if_enabled/2]).
 -export([notify/2]).
 
 %%----------------------------------------------------------------------------
@@ -74,7 +74,7 @@
 -spec(ensure_stats_timer/2 :: (state(), timer_fun()) -> state()).
 -spec(reset_stats_timer/1 :: (state()) -> state()).
 -spec(stats_level/1 :: (state()) -> level()).
--spec(maybe/2 :: (state(), timer_fun()) -> 'ok').
+-spec(if_enabled/2 :: (state(), timer_fun()) -> 'ok').
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
 
 -endif.
@@ -126,9 +126,9 @@ stats_level(#state{level = Level}) ->
     Level.
 
 
-maybe(#state{level = none}, _Fun) ->
+if_enabled(#state{level = none}, _Fun) ->
     ok;
-maybe(_State, Fun) ->
+if_enabled(_State, Fun) ->
     Fun(),
     ok.
 
