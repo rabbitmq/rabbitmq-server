@@ -582,9 +582,8 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-emit_stats(State = #q{stats_timer = StatsTimer}) ->
-    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)),
-    State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}.
+emit_stats(State) ->
+    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
 
@@ -885,9 +884,10 @@ handle_cast(maybe_expire, State) ->
         false -> noreply(ensure_expiry_timer(State))
     end;
 
-handle_cast(emit_stats, State) ->
+handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     %% Do not invoke noreply as it would see no timer and create a new one.
-    State1 = emit_stats(State),
+    emit_stats(State),
+    State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     {noreply, State1}.
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},

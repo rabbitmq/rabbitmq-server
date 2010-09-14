@@ -101,7 +101,6 @@ start_link() ->
 %%
 %% Pre-hibernation:
 %%   internal_emit_stats
-%%   reset_stats_timer(Timer) - just bookkeeping
 %%
 %% internal_emit_stats:
 %%   notify(stats)

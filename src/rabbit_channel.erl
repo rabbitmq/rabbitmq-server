@@ -240,8 +240,9 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State) ->
-    State1 = internal_emit_stats(State),
+handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+    internal_emit_stats(State),
+    State1 = State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     {noreply, State1}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
@@ -1160,8 +1161,7 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
             rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
-    end,
-    State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}.
+    end.
 
 erase_queue_stats(QPid) ->
     erase({monitoring, QPid}),
