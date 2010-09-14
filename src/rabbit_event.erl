@@ -34,7 +34,7 @@
 -include("rabbit.hrl").
 
 -export([start_link/0]).
--export([init_stats_timer/0, ensure_stats_timer/2]).
+-export([init_stats_timer/0, ensure_stats_timer/2, stop_stats_timer/1]).
 -export([reset_stats_timer/1]).
 -export([stats_level/1, if_enabled/2]).
 -export([notify/2]).
@@ -72,6 +72,7 @@
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(init_stats_timer/0 :: () -> state()).
 -spec(ensure_stats_timer/2 :: (state(), timer_fun()) -> state()).
+-spec(stop_stats_timer/1 :: (state()) -> state()).
 -spec(reset_stats_timer/1 :: (state()) -> state()).
 -spec(stats_level/1 :: (state()) -> level()).
 -spec(if_enabled/2 :: (state(), timer_fun()) -> 'ok').
@@ -101,6 +102,7 @@ start_link() ->
 %%
 %% Pre-hibernation:
 %%   internal_emit_stats
+%%   stop_stats_timer(Timer)
 %%
 %% internal_emit_stats:
 %%   notify(stats)
@@ -117,6 +119,14 @@ ensure_stats_timer(State = #state{timer = undefined}, Fun) ->
     State#state{timer = TRef};
 ensure_stats_timer(State, _Fun) ->
     State.
+
+stop_stats_timer(State = #state{level = none}) ->
+    State;
+stop_stats_timer(State = #state{timer = undefined}) ->
+    State;
+stop_stats_timer(State = #state{timer = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State#state{timer = undefined}.
 
 reset_stats_timer(State) ->
     State#state{timer = undefined}.

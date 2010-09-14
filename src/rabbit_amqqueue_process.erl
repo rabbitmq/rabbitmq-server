@@ -919,11 +919,13 @@ handle_info(Info, State) ->
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
     {hibernate, State};
 handle_pre_hibernate(State = #q{backing_queue = BQ,
-                                backing_queue_state = BQS}) ->
+                                backing_queue_state = BQS,
+                                stats_timer = StatsTimer}) ->
     BQS1 = BQ:handle_pre_hibernate(BQS),
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    {hibernate, emit_stats(
-                  stop_rate_timer(State#q{backing_queue_state = BQS2}))}.
+    emit_stats(State),
+    State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)},
+    {hibernate, stop_rate_timer(State1#q{backing_queue_state = BQS2})}.

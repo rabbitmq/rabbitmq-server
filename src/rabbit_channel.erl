@@ -249,9 +249,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State)}.
 
-handle_pre_hibernate(State) ->
+handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    {hibernate, internal_emit_stats(State)}.
+    internal_emit_stats(State),
+    State1 = State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)},
+    {hibernate, State1}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
