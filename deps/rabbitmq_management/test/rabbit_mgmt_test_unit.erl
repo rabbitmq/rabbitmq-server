@@ -422,7 +422,7 @@ http_unicode_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
     http_get("/queues/%2f/♫♪♫♪", ?OK),
-    http_delete("/queues/%2f/♫♪♫♪", ?OK),
+    http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
 
