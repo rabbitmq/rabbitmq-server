@@ -4,7 +4,6 @@ TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_ZIP=rabbitmq-server-windows-$(VERSION)
 
 dist:
-	$(MAKE) -C ../.. VERSION=$(VERSION) srcdist
 	tar -zxvf ../../dist/$(SOURCE_DIR).tar.gz
 	$(MAKE) -C $(SOURCE_DIR)
 

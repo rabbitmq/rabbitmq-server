@@ -39,7 +39,6 @@
 -export([die/1, frame_error/2, amqp_error/4,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
--export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([table_lookup/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
@@ -108,10 +107,6 @@
                                     rabbit_framing:amqp_table(),
                                     rabbit_types:r(any()), [binary()]) ->
                                         'ok' | rabbit_types:connection_exit()).
--spec(get_config/1 ::
-        (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
--spec(get_config/2 :: (atom(), A) -> A).
--spec(set_config/2 :: (atom(), any()) -> 'ok').
 -spec(dirty_read/1 ::
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
@@ -239,21 +234,6 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
                            "required ~w, received ~w",
                            [Key, rabbit_misc:rs(Name), New1, Orig1])
     end.
-
-get_config(Key) ->
-    case dirty_read({rabbit_config, Key}) of
-        {ok, {rabbit_config, Key, V}} -> {ok, V};
-        Other -> Other
-    end.
-
-get_config(Key, DefaultValue) ->
-    case get_config(Key) of
-        {ok, V} -> V;
-        {error, not_found} -> DefaultValue
-    end.
-
-set_config(Key, Value) ->
-    ok = mnesia:dirty_write({rabbit_config, Key, Value}).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of

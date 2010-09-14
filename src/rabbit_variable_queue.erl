@@ -440,9 +440,10 @@ terminate(State) ->
         remove_pending_ack(true, tx_commit_index(State)),
     case MSCStateP of
         undefined -> ok;
-        _         -> rabbit_msg_store:client_terminate(MSCStateP)
+        _         -> rabbit_msg_store:client_terminate(
+                       MSCStateP, ?PERSISTENT_MSG_STORE)
     end,
-    rabbit_msg_store:client_terminate(MSCStateT),
+    rabbit_msg_store:client_terminate(MSCStateT, ?TRANSIENT_MSG_STORE),
     Terms = [{persistent_ref, PRef},
              {transient_ref, TRef},
              {persistent_count, PCount}],
@@ -465,8 +466,7 @@ delete_and_terminate(State) ->
     case MSCStateP of
         undefined -> ok;
         _         -> rabbit_msg_store:client_delete_and_terminate(
-                       MSCStateP, ?PERSISTENT_MSG_STORE, PRef),
-                     rabbit_msg_store:client_terminate(MSCStateP)
+                       MSCStateP, ?PERSISTENT_MSG_STORE, PRef)
     end,
     rabbit_msg_store:client_delete_and_terminate(
       MSCStateT, ?TRANSIENT_MSG_STORE, TRef),

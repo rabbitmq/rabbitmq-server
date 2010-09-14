@@ -153,13 +153,13 @@ init_queue_state(State) ->
 
 init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
-        {long, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
-        undefined       -> State
+        {_Type, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
+        undefined        -> State
     end.
 
 init_ttl(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-message-ttl">>) of
-        {long, Ttl} -> State#q{ttl=Ttl};
+        {_Type, Ttl} -> State#q{ttl=Ttl};
         undefined   -> State
     end.
 
@@ -176,10 +176,8 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
-                     rabbit_event:notify(
-                       queue_created,
-                       [{Item, i(Item, State)} ||
-                           Item <- ?CREATION_EVENT_KEYS]),
+                     rabbit_event:notify(queue_created,
+                                         infos(?CREATION_EVENT_KEYS, State)),
                      noreply(init_queue_state(State#q{backing_queue_state = BQS}));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -635,8 +633,7 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 emit_stats(State) ->
-    rabbit_event:notify(queue_stats,
-                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
+    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
 

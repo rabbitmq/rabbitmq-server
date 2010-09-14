@@ -237,7 +237,7 @@ distclean: clean
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
 	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	    xmlto man -o $(DOCS_DIR) $$opt $<.tmp && \
+	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
 	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
