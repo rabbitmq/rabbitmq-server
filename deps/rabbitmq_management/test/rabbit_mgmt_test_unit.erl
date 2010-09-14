@@ -349,7 +349,7 @@ http_permissions_vhost_test() ->
                 [case pget(vhost, Result) of
                      <<"myvhost2">> ->
                          throw({got_result_from_vhost2_in, Path, Result});
-                     R ->
+                     _ ->
                          ok
                  end || Result <- Results]
         end,
@@ -398,8 +398,8 @@ http_permissions_connection_channel_test() ->
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
     {Conn2, ConnPath2, ChPath2} = get_conn("guest", "guest"),
-    {ok, Ch1} = amqp_connection:open_channel(Conn1),
-    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    {ok, _Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, _Ch2} = amqp_connection:open_channel(Conn2),
 
     2 = length(http_get("/connections", ?OK)),
     1 = length(http_get("/connections", "user", "user", ?OK)),
@@ -416,6 +416,13 @@ http_permissions_connection_channel_test() ->
 
     amqp_connection:close(Conn1),
     amqp_connection:close(Conn2),
+    ok.
+
+http_unicode_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
+    http_get("/queues/%2f/♫♪♫♪", ?OK),
+    http_delete("/queues/%2f/♫♪♫♪", ?OK),
     ok.
 
 

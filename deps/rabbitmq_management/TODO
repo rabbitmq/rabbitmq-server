@@ -9,7 +9,6 @@ Fix refreshing.
 Write more thorough unit tests, especially around listings.
 Fix backing queue status breakage.
 Fix management plugin shutdown.
-Fix non-ASCII characters in names.
 Document inets dependency.
 
 Then
@@ -30,8 +29,8 @@ Add lots of uses of fine stats.
 Improve L+F.
 Write demo app.
 Do something sensible with non-amqp channels.
-Client side sorting / pagination / filtering.
-client-side column hiding for message rates.
+Sorting / pagination / filtering (client-side? server-side?)
+Client-side column hiding for e.g. message rates.
 Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
 Backup / restore entire state (except messages).
@@ -40,6 +39,7 @@ Clustering management:
   One rabbit_event / rabbit_mgmt_db per cluster
   Per-node events to replace external_stats
 Make user editing rather clearer
+Allow empty fields in PUT.
 
 Less urgent
 ===========
