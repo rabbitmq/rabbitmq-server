@@ -837,7 +837,7 @@ persistent_guids(Pubs) ->
 betas_from_index_entries(List, TransientThreshold, IndexState) ->
     {Filtered, Delivers, Acks} =
         lists:foldr(
-          fun ({Guid, MsgProperties, SeqId, IsPersistent, IsDelivered},
+          fun ({Guid, SeqId, MsgProperties, IsPersistent, IsDelivered},
                {Filtered1, Delivers1, Acks1}) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
@@ -850,7 +850,7 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
                                                  is_delivered  = IsDelivered,
                                                  msg_on_disk   = true,
                                                  index_on_disk = true,
-						 msg_properties = MsgProperties
+                                                 msg_properties = MsgProperties
                                                }) | Filtered1],
                                 Delivers1,
                                 Acks1}

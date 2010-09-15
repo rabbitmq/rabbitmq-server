@@ -1651,7 +1651,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{Guid, SeqId, Persistent, Delivered}|Read],
+                           [{Guid, SeqId, _Props, Persistent, Delivered}|Read],
                            [{SeqId, Guid}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
@@ -1786,11 +1786,12 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
       fun (_N, VQN) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
-                  rabbit_misc:r(<<>>, exchange, <<>>),
+                  rabbit_misc:r(<<>>, exchange, <<>>), 
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>), VQN)
+                                                   end}, <<>>), 
+                #msg_properties{}, VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
