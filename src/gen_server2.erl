@@ -1100,9 +1100,9 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
                           prioritise_cast = PrioriCast,
                           prioritise_info = PrioriInfo }.
 
-function_exported_or_default(Mod, Fun, Ar, Default) ->
-    case erlang:function_exported(Mod, Fun, Ar) of
-        true -> case Ar of
+function_exported_or_default(Mod, Fun, Arity, Default) ->
+    case erlang:function_exported(Mod, Fun, Arity) of
+        true -> case Arity of
                     2 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
                                  case catch Mod:Fun(Msg, State) of
                                      Res when is_integer(Res) ->
