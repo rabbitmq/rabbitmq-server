@@ -110,6 +110,8 @@ boot_ssl() ->
         {ok, SslListeners} ->
             ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
             {ok, SslOptsConfig} = application:get_env(ssl_options),
+            % unknown_ca errors are silently ignored  prior to R14B unless we
+            % supply this verify_fun - remove when at least R14B is required
             SslOpts =
                 case proplists:get_value(verify, SslOptsConfig, verify_none) of
                     verify_none -> SslOptsConfig;
