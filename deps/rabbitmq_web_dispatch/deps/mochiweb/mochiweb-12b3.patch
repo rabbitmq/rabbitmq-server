@@ -471,3 +471,22 @@ index 0d0b84b..d7586cb 100755
  
  error(E) ->
      io:fwrite("*** ~p~n", [E]),
+--- a/support/include.mk
++++ b/support/include.mk
+@@ -29,9 +29,15 @@
+ APP_FILES := $(wildcard *.app.src)
+ EBIN_FILES = $(ERL_OBJECTS) $(APP_FILES:%.app.src=../ebin/%.app)
+ MODULES = $(ERL_SOURCES:%.erl=%)
++IS_CYGWIN=$(shell if [ $(shell expr "$(shell uname -s)" : 'CYGWIN_NT') -gt 0 ]; then echo "true"; else echo "false"; fi)
++ifeq ($(IS_CYGWIN),true)
++    EMPTY_STRING=\"\"
++else
++    EMPTY_STRING=""
++endif
+
+ ../ebin/%.app: %.app.src
+-	../support/make_app.escript $< $@ "" "$(MODULES)"
++	../support/make_app.escript $< $@ $(EMPTY_STRING) "$(MODULES)"
+
+
+ $(EBIN_DIR)/%.$(EMULATOR): %.erl
