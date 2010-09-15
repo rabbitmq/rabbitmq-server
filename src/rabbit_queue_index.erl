@@ -427,6 +427,7 @@ init_dirty(CleanShutdown, ContainsCheckFun, State) ->
         %% find the number of unacked messages.
         lists:foldl(
           fun (Seg, {Segments2, CountAcc}) ->
+		  io:format("Recovering: ~p~n", [Seg]),
                   Segment = #segment { unacked = UnackedCount } =
                       recover_segment(ContainsCheckFun, CleanShutdown,
                                       segment_find_or_new(Seg, Dir, Segments2)),
@@ -584,6 +585,7 @@ maybe_flush_journal(State) ->
     State.
 
 flush_journal(State = #qistate { segments = Segments }) ->
+    io:format("Flushing journal~n"),
     Segments1 =
         segment_fold(
           fun (#segment { unacked = 0, path = Path }, SegmentsN) ->
@@ -709,7 +711,8 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
         {ok, Segment} -> Segment;
-        error         -> SegName = integer_to_list(Seg)  ++ ?SEGMENT_EXTENSION,
+        error         -> io:format("New Seg~n"),
+			 SegName = integer_to_list(Seg)  ++ ?SEGMENT_EXTENSION,
                          Path = filename:join(Dir, SegName),
                          #segment { num             = Seg,
                                     path            = Path,
@@ -805,8 +808,10 @@ segment_entries_foldr(Fun, Init,
 %%
 %% Does not do any combining with the journal at all.
 load_segment(KeepAcked, #segment { path = Path }) ->
+    io:format("path: ~p~n", [Path]),
     case filelib:is_file(Path) of
-        false -> {array_new(), 0};
+        false -> io:format("Creating new~n"),
+		 {array_new(), 0};
         true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  Res = load_segment_entries(KeepAcked, Hdl, array_new(), 0),
@@ -815,6 +820,7 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     end.
 
 load_segment_entries(KeepAcked, Hdl, SegEntries, UnackedCount) ->
+    io:format("Loading seg entries"),
     case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
               IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->

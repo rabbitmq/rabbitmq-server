@@ -370,6 +370,7 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
 init(QueueName, IsDurable, Recover) ->
+    io:format("Initing ~p ~p~n", [QueueName, Recover]),
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(
           QueueName, Recover,
@@ -377,6 +378,7 @@ init(QueueName, IsDurable, Recover) ->
           fun (Guid) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
           end),
+    io:format("Inited: ~p~n", [DeltaCount]),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {PRef, TRef, Terms1} =
@@ -956,6 +958,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
     PAcks = lists:append(SPAcks),
     Acks  = lists:append(SAcks),
     Pubs  = lists:append(lists:reverse(SPubs)),
+    io:format("Committing: ~p~n", [length(Pubs)]),
     {SeqIds, State1 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun ({Msg = #basic_message { is_persistent = IsPersistent }, MsgProperties},
