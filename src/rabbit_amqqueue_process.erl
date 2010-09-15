@@ -214,7 +214,7 @@ next_state(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_rate_timer(State),
     State2 = ensure_stats_timer(State1),
-    case BQ:needs_idle_timeout(BQS)of
+    case BQ:needs_idle_timeout(BQS) of
         true  -> {ensure_sync_timer(State2), 0};
         false -> {stop_sync_timer(State2), hibernate}
     end.

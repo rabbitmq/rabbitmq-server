@@ -46,6 +46,8 @@
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
+-include_lib("ssl/src/ssl_record.hrl").
+
 
 -define(RABBIT_TCP_OPTS, [
         binary,
@@ -116,7 +118,26 @@ boot_ssl() ->
                                                  end}
                                    | SslOptsConfig]
                 end,
-            [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+            % In R13B04 and R14A (at least), rc4 is incorrectly implemented.
+            CipherSuites = proplists:get_value(ciphers,
+                                               SslOpts,
+                                               ssl:cipher_suites()),
+            FilteredCipherSuites =
+                [C || C <- CipherSuites,
+                      begin
+                          SuiteCode =
+                              if is_tuple(C) -> ssl_cipher:suite(C);
+                                 is_list(C)  -> ssl_cipher:openssl_suite(C)
+                              end,
+                          SP = ssl_cipher:security_parameters(
+                              SuiteCode,
+                              #security_parameters{}),
+                          SP#security_parameters.bulk_cipher_algorithm =/= ?RC4
+                      end],
+            SslOpts1 = [{ciphers, FilteredCipherSuites}
+                        | [{K, V} || {K, V} <- SslOpts, K =/= ciphers]],
+            [start_ssl_listener(Host, Port, SslOpts1)
+                || {Host, Port} <- SslListeners],
             ok
     end.
 
