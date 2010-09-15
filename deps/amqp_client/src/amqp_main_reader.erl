@@ -124,4 +124,5 @@ pass_frame(Channel, Frame, State) ->
 resolve_channel_number(0, #state{framing0 = Framing0}) ->
     Framing0;
 resolve_channel_number(Number, #state{channels_manager = ChMgr}) ->
-    amqp_channels_manager:get_framing(ChMgr, Number).
+    {_, Framing} = amqp_channels_manager:get_pid_and_framing(ChMgr, Number),
+    Framing.
