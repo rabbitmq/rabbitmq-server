@@ -360,9 +360,10 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     Debug = debug_options(Name, Options),
     Queue = priority_queue:new(),
     Backoff1 = extend_backoff(Backoff),
-    loop(#gs2_state { parent = Parent, name = Name, state = State,
-                      mod = Mod, time = Timeout, timeout_state = Backoff1,
-                      queue = Queue, debug = Debug }).
+    loop(find_prioritisers(
+           #gs2_state { parent = Parent, name = Name, state = State,
+                        mod = Mod, time = Timeout, timeout_state = Backoff1,
+                        queue = Queue, debug = Debug })).
 
 %%%========================================================================
 %%% Gen-callback functions
