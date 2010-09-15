@@ -15,6 +15,7 @@
              rabbit_misc,
              rabbit_net,
              rabbit_heartbeat,
+             rabbit_msg_store_index,
              gen_server2,
              priority_queue,
              supervisor2
