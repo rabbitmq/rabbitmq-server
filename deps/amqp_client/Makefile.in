@@ -6,4 +6,4 @@ clean: common_clean
 
 test: compile
 	$(MAKE) -C test VERSION=$(VERSION)
-	$(LIBS_PATH) erl -pa ebin test -eval 'network_client_SUITE:test(), halt()'
+	$(LIBS_PATH) erl -pa ebin test -eval 'error_logger:tty(false), network_client_SUITE:test(), halt()'
