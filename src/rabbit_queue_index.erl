@@ -765,7 +765,7 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
                    Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
                           (bool_to_int(IsPersistent)):1,
                           RelSeq:?REL_SEQ_BITS>>,
-			  create_pub_record_body(Guid, MsgProperties)])
+                          create_pub_record_body(Guid, MsgProperties)])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
@@ -820,7 +820,7 @@ load_segment_entries(KeepAcked, Hdl, SegEntries, UnackedCount) ->
               IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
             %% because we specify /binary, and binaries are complete
             %% bytes, the size spec is in bytes, not bits.
-	    {Guid, MsgProperties} = read_pub_record_body(Hdl),
+            {Guid, MsgProperties} = read_pub_record_body(Hdl),
             Obj = {{Guid, MsgProperties, 1 == IsPersistentNum}, no_del, no_ack},
             SegEntries1 = array:set(RelSeq, Obj, SegEntries),
             load_segment_entries(KeepAcked, Hdl, SegEntries1,
