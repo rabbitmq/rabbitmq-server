@@ -113,8 +113,6 @@ dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
 		"rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\")." \
 		    -eval \
-		"rabbit_dialyzer:xref_dir(\"$(EBIN_DIR)\")." \
-		    -eval \
 		"init:stop()."
 
 
