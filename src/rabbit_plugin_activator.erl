@@ -52,13 +52,9 @@
 
 start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
-    %% Ensure Rabbit is loaded so we can access it's environment
-    application:load(rabbit),
 
     %% Determine our various directories
-    PluginDir         = get_env(plugins_dir,        ?DefaultPluginDir),
-    UnpackedPluginDir = get_env(plugins_expand_dir, ?DefaultUnpackedPluginDir),
-
+    [PluginDir, UnpackedPluginDir] = init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
