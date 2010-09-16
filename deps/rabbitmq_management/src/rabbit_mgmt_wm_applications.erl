@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_permissions).
+-module(rabbit_mgmt_wm_applications).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
@@ -34,10 +34,10 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Perms = rabbit_access_control:list_permissions(),
     rabbit_mgmt_util:reply(
-      [rabbit_mgmt_format:permissions(P) || P <- Perms],
+      [rabbit_mgmt_format:application(A) ||
+          A <- application:which_applications()],
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    rabbit_mgmt_util:is_authorized(ReqData, Context).

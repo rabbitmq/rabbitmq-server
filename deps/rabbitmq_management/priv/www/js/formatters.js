@@ -69,7 +69,7 @@ function alt_rows(i) {
 }
 
 function esc(str) {
-    return escape(str).replace(/\//g, '%2F').replace(/\+/g, '%2B');
+    return encodeURIComponent(str);
 }
 
 function link_conn(name) {

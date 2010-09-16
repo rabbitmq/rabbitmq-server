@@ -18,7 +18,7 @@ function dispatcher() {
                 render(r, t, p);
             });
     }
-    path('#/', {'overview': '/overview'}, 'overview');
+    path('#/', {'overview': '/overview', 'applications': '/applications'}, 'overview');
 
     path('#/connections', {'connections': '/connections/'}, 'connections');
     this.get('#/connections/:name', function() {
@@ -296,7 +296,7 @@ function sync_req(type, params, path_template) {
     }
 
     if (req.status == 400) {
-        error_popup(JSON.parse(req.responseText).reason);
+        error_popup(JSON.stringify(JSON.parse(req.responseText).reason));
         return false;
     }
 

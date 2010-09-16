@@ -109,13 +109,9 @@ result_or_error([]) -> error;
 result_or_error(S)  -> S.
 
 rates(Stats, Timestamp, OldStats, OldTimestamp, Keys) ->
-    %% TODO do the filtering as part of the comprehension
-    Stats ++ lists:filter(
-               fun (unknown) -> false;
-                   (_)       -> true
-               end,
-               [rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ||
-                   Key <- Keys]).
+    Stats ++ [R || Key <- Keys,
+                   R   <- [rate(Stats, Timestamp, OldStats, OldTimestamp, Key)],
+                   R =/= unknown].
 
 rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
     case OldTimestamp == [] orelse not proplists:is_defined(Key, OldStats) of

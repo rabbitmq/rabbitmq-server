@@ -116,8 +116,8 @@ http_permissions_validation_test() ->
     ok.
 
 http_permissions_list_test() ->
-    [[{vhost,<<"/">>},
-      {user,<<"guest">>},
+    [[{user,<<"guest">>},
+      {vhost,<<"/">>},
       {configure,<<".*">>},
       {write,<<".*">>},
       {read,<<".*">>},
@@ -156,12 +156,21 @@ http_permissions_test() ->
              [{configure, "foo"}, {write, "foo"},
               {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
 
-    [{vhost,<<"myvhost">>},
-     {configure,<<"foo">>},
-     {write,<<"foo">>},
-     {read,<<"foo">>},
-     {scope,<<"client">>}] =
-        http_get("/permissions/myvhost/myuser"),
+    Permission = [{user,<<"myuser">>},
+                  {vhost,<<"myvhost">>},
+                  {configure,<<"foo">>},
+                  {write,<<"foo">>},
+                  {read,<<"foo">>},
+                  {scope,<<"client">>}],
+    Default = [{user,<<"guest">>},
+               {vhost,<<"/">>},
+               {configure,<<".*">>},
+               {write,<<".*">>},
+               {read,<<".*">>},
+               {scope,<<"client">>}],
+    Permission = http_get("/permissions/myvhost/myuser"),
+    assert_list([Permission, Default], http_get("/permissions")),
+    assert_list([Permission], http_get("/users/myuser/permissions")),
     http_delete("/permissions/myvhost/myuser", ?NO_CONTENT),
     http_get("/permissions/myvhost/myuser", ?NOT_FOUND),
 
@@ -274,13 +283,27 @@ http_bindings_test() ->
     http_put("/bindings/%2f/myqueue/badexchange/key_routing", [], ?NOT_FOUND),
     http_put("/bindings/%2f/myqueue/myexchange/bad_routing", [], ?BAD_REQUEST),
     http_put("/bindings/%2f/myqueue/myexchange/key_routing", [], ?NO_CONTENT),
-    [{exchange,<<"myexchange">>},
-     {vhost,<<"/">>},
-     {queue,<<"myqueue">>},
-     {routing_key,<<"routing">>},
-     {arguments,[]},
-     {properties_key,<<"key_routing">>}] =
-        http_get("/bindings/%2f/myqueue/myexchange/key_routing", ?OK),
+    Binding =
+        [{exchange,<<"myexchange">>},
+         {vhost,<<"/">>},
+         {queue,<<"myqueue">>},
+         {routing_key,<<"routing">>},
+         {arguments,[]},
+         {properties_key,<<"key_routing">>}],
+    DBinding =
+        [{exchange,<<"">>},
+         {vhost,<<"/">>},
+         {queue,<<"myqueue">>},
+         {routing_key,<<"myqueue">>},
+         {arguments,[]},
+         {properties_key,<<"key_myqueue">>}],
+    Binding = http_get("/bindings/%2f/myqueue/myexchange/key_routing"),
+    assert_list([Binding],
+                http_get("/bindings/%2f/myqueue/myexchange")),
+    assert_list([Binding, DBinding],
+                http_get("/queues/%2f/myqueue/bindings")),
+    assert_list([Binding],
+                http_get("/exchanges/%2f/myexchange/bindings")),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NOT_FOUND),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
@@ -349,7 +372,7 @@ http_permissions_vhost_test() ->
                 [case pget(vhost, Result) of
                      <<"myvhost2">> ->
                          throw({got_result_from_vhost2_in, Path, Result});
-                     R ->
+                     _ ->
                          ok
                  end || Result <- Results]
         end,
@@ -398,8 +421,8 @@ http_permissions_connection_channel_test() ->
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
     {Conn2, ConnPath2, ChPath2} = get_conn("guest", "guest"),
-    {ok, Ch1} = amqp_connection:open_channel(Conn1),
-    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    {ok, _Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, _Ch2} = amqp_connection:open_channel(Conn2),
 
     2 = length(http_get("/connections", ?OK)),
     1 = length(http_get("/connections", "user", "user", ?OK)),
@@ -416,6 +439,13 @@ http_permissions_connection_channel_test() ->
 
     amqp_connection:close(Conn1),
     amqp_connection:close(Conn2),
+    ok.
+
+http_unicode_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
+    http_get("/queues/%2f/♫♪♫♪", ?OK),
+    http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
 
@@ -496,8 +526,10 @@ auth_header(Username, Password) ->
 %%---------------------------------------------------------------------------
 
 assert_list(Exp, Act) ->
-    Len = length(Exp),
-    Len = length(Act),
+    case length(Exp) == length(Act) of
+        true -> ok;
+        _    -> throw({expected, Exp, actual, Act})
+    end,
     [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
          1 -> ok;
          N -> throw({found, N, ExpI, in, Act})

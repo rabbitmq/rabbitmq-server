@@ -21,8 +21,8 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
--export([protocol/1, resource/1, permissions/1, user_permissions/1]).
--export([exchange/1, user/1, binding/1, pack_props/2, url/2]).
+-export([protocol/1, resource/1, permissions/1]).
+-export([exchange/1, user/1, binding/1, pack_props/2, url/2, application/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -86,18 +86,9 @@ resource(_, unknown) ->
 resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
 
-permissions({VHost, Perms}) ->
-    [{vhost, VHost}|permissions(Perms)];
-
-permissions({User, Conf, Write, Read, Scope}) ->
+permissions({User, VHost, Conf, Write, Read, Scope}) ->
     [{user,      User},
-     {configure, Conf},
-     {write,     Write},
-     {read,      Read},
-     {scope,     Scope}].
-
-user_permissions({VHost, Conf, Write, Read, Scope}) ->
-    [{vhost,     VHost},
+     {vhost,     VHost},
      {configure, Conf},
      {write,     Write},
      {read,      Read},
@@ -120,9 +111,14 @@ binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
             {properties_key, pack_props(Key, Args)}],
            [{fun (Res) -> resource(exchange, Res) end, [exchange]}]).
 
-%% TODO
+%% TODO arguments
 pack_props(Key, _Args) ->
     list_to_binary("key_" ++ mochiweb_util:quote_plus(binary_to_list(Key))).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
+
+application({Application, Description, Version}) ->
+    [{name, Application},
+     {description, list_to_binary(Description)},
+     {version, list_to_binary(Version)}].

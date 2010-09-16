@@ -106,11 +106,9 @@ binding(ReqData) ->
     end.
 
 exists(Binding) ->
-    %% TODO call rabbit_binding:exist/1 instead
-    case mnesia:dirty_match_object(rabbit_route,
-                                   #route{binding = Binding}) of
-        [] -> false;
-        _  -> true
+    case Binding of
+        {bad_request, _} -> false;
+        _                -> rabbit_binding:exists(Binding)
     end.
 
 %% TODO arguments

@@ -25,6 +25,7 @@
 dispatcher() ->
     [{[],                                          rabbit_mgmt_wm_help, []},
      {["overview"],                                rabbit_mgmt_wm_overview, []},
+     {["applications"],                            rabbit_mgmt_wm_applications, []},
      {["connections"],                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                 rabbit_mgmt_wm_connection, []},
      {["channels"],                                rabbit_mgmt_wm_channels, []},
@@ -38,7 +39,7 @@ dispatcher() ->
      {["queues", vhost, queue],                    rabbit_mgmt_wm_queue, []},
      {["queues", vhost, queue, "bindings"],        rabbit_mgmt_wm_bindings, [queue]},
      {["bindings"],                                rabbit_mgmt_wm_bindings, [all]},
-     {["bindings", vhost],                         rabbit_mgmt_wm_bindings, [vhost]},
+     {["bindings", vhost],                         rabbit_mgmt_wm_bindings, [all]},
      {["bindings", vhost, queue, exchange],        rabbit_mgmt_wm_bindings, [queue_exchange]},
      {["bindings", vhost, queue, exchange, props], rabbit_mgmt_wm_binding, []},
      {["vhosts"],                                  rabbit_mgmt_wm_vhosts, []},
