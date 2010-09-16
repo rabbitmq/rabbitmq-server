@@ -75,8 +75,8 @@
                                        rabbit_types:encoded_content()).
 -spec(clear_encoded_content/1 ::
         (rabbit_types:content()) -> rabbit_types:unencoded_content()).
--spec(map_exception/2 :: (non_neg_integer(), amqp_error()) ->
-        {bool(), non_neg_integer(), amqp_method()}).
+-spec(map_exception/2 :: (non_neg_integer(), rabbit_types:amqp_error()) ->
+        {boolean(), non_neg_integer(), rabbit_framing:amqp_method()}).
 
 -endif.
 
