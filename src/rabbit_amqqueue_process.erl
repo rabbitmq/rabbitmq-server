@@ -42,7 +42,8 @@
 -export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
+         prioritise_cast/2]).
 
 -import(queue).
 -import(erlang).
@@ -146,8 +147,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
-        {long, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
-        undefined       -> State
+        {_Type, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
+        undefined        -> State
     end.
 
 declare(Recover, From,
@@ -163,10 +164,8 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
-                     rabbit_event:notify(
-                       queue_created,
-                       [{Item, i(Item, State)} ||
-                           Item <- ?CREATION_EVENT_KEYS]),
+                     rabbit_event:notify(queue_created,
+                                         infos(?CREATION_EVENT_KEYS, State)),
                      noreply(init_expires(State#q{backing_queue_state = BQS}));
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -203,7 +202,7 @@ next_state(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_rate_timer(State),
     State2 = ensure_stats_timer(State1),
-    case BQ:needs_idle_timeout(BQS)of
+    case BQ:needs_idle_timeout(BQS) of
         true  -> {ensure_sync_timer(State2), 0};
         false -> {stop_sync_timer(State2), hibernate}
     end.
@@ -587,10 +586,32 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 emit_stats(State) ->
-    rabbit_event:notify(queue_stats,
-                        [{Item, i(Item, State)} || Item <- ?STATISTICS_KEYS]).
+    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
+
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info                                      -> 9;
+        {info, _Items}                            -> 9;
+        consumers                                 -> 9;
+        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
+        _                                         -> 0
+    end.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        update_ram_duration                  -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        maybe_expire                         -> 8;
+        emit_stats                           -> 7;
+        {ack, _Txn, _MsgIds, _ChPid}         -> 7;
+        {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
+        {notify_sent, _ChPid}                -> 7;
+        {unblock, _ChPid}                    -> 7;
+        _                                    -> 0
+    end.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -603,6 +624,7 @@ handle_call({init, Recover}, From,
                 declare(Recover, From, State);
         _    -> #q{q = #amqqueue{name = QName, durable = IsDurable},
                    backing_queue = BQ, backing_queue_state = undefined} = State,
+                gen_server2:reply(From, not_found),
                 case Recover of
                     true -> ok;
                     _    -> rabbit_log:warning(
@@ -610,7 +632,7 @@ handle_call({init, Recover}, From,
                 end,
                 BQS = BQ:init(QName, IsDurable, Recover),
                 %% Rely on terminate to delete the queue.
-                {stop, normal, not_found, State#q{backing_queue_state = BQS}}
+                {stop, normal, State#q{backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->

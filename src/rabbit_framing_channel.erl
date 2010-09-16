@@ -39,16 +39,9 @@
 
 %%--------------------------------------------------------------------
 
-start_link(StartFun, StartArgs, Protocol) ->
-    Parent = self(),
-    {ok, spawn_link(
-           fun () ->
-                   %% we trap exits so that a normal termination of
-                   %% the channel or reader process terminates us too.
-                   process_flag(trap_exit, true),
-                   {ok, ChannelPid} = apply(StartFun, StartArgs),
-                   mainloop(Parent, ChannelPid, Protocol)
-           end)}.
+start_link(Parent, ChannelPid, Protocol) ->
+    {ok, proc_lib:spawn_link(
+           fun () -> mainloop(Parent, ChannelPid, Protocol) end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},
@@ -62,12 +55,6 @@ shutdown(Pid) ->
 
 read_frame(ChannelPid) ->
     receive
-        %% converting the exit signal into one of our own ensures that
-        %% the reader sees the right pid (i.e. ours) when a channel
-        %% exits. Similarly in the other direction, though it is not
-        %% really relevant there since the channel is not specifically
-        %% watching out for reader exit signals.
-        {'EXIT', _Pid, Reason} -> exit(Reason);
         {frame, Frame}         -> Frame;
         terminate              -> rabbit_channel:shutdown(ChannelPid),
                                   read_frame(ChannelPid);

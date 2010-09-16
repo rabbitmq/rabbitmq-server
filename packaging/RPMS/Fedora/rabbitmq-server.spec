@@ -127,6 +127,12 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Tue Sep 14 2010 marek@rabbitmq.com 2.1.0-1
+- New Upstream Release
+
+* Mon Aug 23 2010 mikeb@rabbitmq.com 2.0.0-1
+- New Upstream Release
+
 * Wed Jul 14 2010 Emile Joubert <emile@rabbitmq.com> 1.8.1-1
 - New Upstream Release
 
