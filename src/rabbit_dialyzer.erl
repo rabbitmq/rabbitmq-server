@@ -32,7 +32,7 @@
 -module(rabbit_dialyzer).
 
 -export([create_basic_plt/1, add_to_plt/2, dialyze_files/2,
-         halt_with_code/1, xref_dir/1]).
+         halt_with_code/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,7 +41,6 @@
 -spec(create_basic_plt/1 :: (file:filename()) -> 'ok').
 -spec(add_to_plt/2 :: (file:filename(), string()) -> 'ok').
 -spec(dialyze_files/2 :: (file:filename(), string()) -> 'ok').
--spec(xref_dir/1 :: (file:filename()) -> 'ok').
 -spec(halt_with_code/1 :: (atom()) -> no_return()).
 
 -endif.
@@ -79,19 +78,6 @@ dialyze_files(PltPath, ModifiedFiles) ->
     end,
     ok.
 
-xref_dir(EbinDir) ->
-    XrefErrors = xref:d(EbinDir),
-    [case proplists:get_value(W, XrefErrors, []) of
-         []       -> ok;
-         Problems -> io:format("~p functions:~n", [W]),
-                     print_warnings(Problems, fun show_function/1)
-     end
-     || W <- [deprecated, undefined, unused]],
-    ok.
-
-show_function({{Mod,Fun,Ar},{PMod,PFun,PAr}}) ->
-    io_lib:format("~s:~s/~p called by ~s:~s/~p", [PMod, PFun, PAr,
-                                                  Mod, Fun, Ar]).
 print_warnings(Warnings, FormatFun) ->
     [io:format("~s~n", [FormatFun(W)]) || W <- Warnings],
     io:format("~n").
