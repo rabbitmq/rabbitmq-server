@@ -1971,7 +1971,6 @@ test_queue_recover() ->
                          sender = self(), message = Msg},
     [true = rabbit_amqqueue:deliver(QPid, Delivery) ||
         _ <- lists:seq(1, Count)],
-    io:format("Calling commit~n"),
     rabbit_amqqueue:commit_all([QPid], TxID, self()),
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
@@ -1979,7 +1978,6 @@ test_queue_recover() ->
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
     rabbit_amqqueue:stop(),
-    io:format("Restarting queue~n"),
     ok = rabbit_amqqueue:start(),
     rabbit_amqqueue:with_or_die(
       QName,

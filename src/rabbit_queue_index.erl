@@ -510,7 +510,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = #qistate { segments = Segments, dir = Dir } =
         recover_journal(blank_state(QueueName, false)),
     [ok = segment_entries_foldr(
-            fun (_RelSeq, {{Guid, true}, _IsDelivered, no_ack}, ok) ->
+            fun (_RelSeq, {{Guid, _MsgProps, true}, _IsDelivered, no_ack}, ok) ->
                     gatherer:in(Gatherer, {Guid, 1});
                 (_RelSeq, _Value, Acc) ->
                     Acc
@@ -535,7 +535,11 @@ read_pub_record_body(Hdl) ->
     {ok, Bin} = file_handle_cache:read(Hdl, ?GUID_BYTES + ?EXPIRY_BYTES),
     <<GuidNum:?GUID_BITS, Expiry:?EXPIRY_BITS>> = Bin,
     <<Guid:?GUID_BYTES/binary>> = <<GuidNum:?GUID_BITS>>,
-    {Guid, #msg_properties{expiry = Expiry}}.
+    Exp = case Expiry of
+            ?NO_EXPIRY -> undefined;
+            X -> X
+          end,
+    {Guid, #msg_properties{expiry = Exp}}.
 	    
 %%----------------------------------------------------------------------------
 %% journal manipulation
