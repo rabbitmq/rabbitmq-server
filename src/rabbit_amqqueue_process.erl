@@ -44,7 +44,8 @@
 -export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
+         prioritise_cast/2]).
 
 -import(queue).
 -import(erlang).
@@ -636,6 +637,29 @@ emit_stats(State) ->
     rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
+
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info                                      -> 9;
+        {info, _Items}                            -> 9;
+        consumers                                 -> 9;
+        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
+        _                                         -> 0
+    end.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        update_ram_duration                  -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        maybe_expire                         -> 8;
+        emit_stats                           -> 7;
+        {ack, _Txn, _MsgIds, _ChPid}         -> 7;
+        {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
+        {notify_sent, _ChPid}                -> 7;
+        {unblock, _ChPid}                    -> 7;
+        _                                    -> 0
+    end.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->

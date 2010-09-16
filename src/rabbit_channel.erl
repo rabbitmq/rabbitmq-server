@@ -41,7 +41,8 @@
 -export([emit_stats/1, flush/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
+         prioritise_cast/2]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
@@ -131,10 +132,10 @@ list() ->
 info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
-    gen_server2:pcall(Pid, 9, info, infinity).
+    gen_server2:call(Pid, info, infinity).
 
 info(Pid, Items) ->
-    case gen_server2:pcall(Pid, 9, {info, Items}, infinity) of
+    case gen_server2:call(Pid, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -146,7 +147,7 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 emit_stats(Pid) ->
-    gen_server2:pcast(Pid, 7, emit_stats).
+    gen_server2:cast(Pid, emit_stats).
 
 flush(Pid) ->
     gen_server2:call(Pid, flush).
@@ -178,6 +179,19 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info           -> 9;
+        {info, _Items} -> 9;
+        _              -> 0
+    end.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        emit_stats -> 7;
+        _          -> 0
+    end.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
