@@ -897,46 +897,5 @@ send_exception(State = #v1{connection = #connection{protocol = Protocol}},
            NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
     NewState.
 
-map_exception(Channel, Reason, Protocol) ->
-    {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason, Protocol),
-    ShouldClose = SuggestedClose or (Channel == 0),
-    {ClassId, MethodId} = case FailedMethod of
-                              {_, _} -> FailedMethod;
-                              none   -> {0, 0};
-                              _      -> Protocol:method_id(FailedMethod)
-                          end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true -> {0, #'connection.close'{reply_code = ReplyCode,
-                                            reply_text = ReplyText,
-                                            class_id = ClassId,
-                                            method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
-
-lookup_amqp_exception(#amqp_error{name        = Name,
-                                  explanation = Expl,
-                                  method      = Method},
-                      Protocol) ->
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
-    ExplBin = amqp_exception_explanation(Text, Expl),
-    {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other, Protocol) ->
-    rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
-    {ShouldClose, Code, Text, none}.
-
-amqp_exception_explanation(Text, Expl) ->
-    ExplBin = list_to_binary(Expl),
-    CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
-       true                        -> CompleteTextBin
-    end.
-
 internal_emit_stats(State) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)).

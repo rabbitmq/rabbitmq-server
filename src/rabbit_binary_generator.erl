@@ -47,7 +47,7 @@
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
--export([map_exception/2]).
+-export([map_exception/3]).
 
 -import(lists).
 
@@ -75,8 +75,9 @@
                                        rabbit_types:encoded_content()).
 -spec(clear_encoded_content/1 ::
         (rabbit_types:content()) -> rabbit_types:unencoded_content()).
--spec(map_exception/2 :: (non_neg_integer(), rabbit_types:amqp_error()) ->
-        {boolean(), non_neg_integer(), rabbit_framing:amqp_method()}).
+-spec(map_exception/3 :: (non_neg_integer(), rabbit_types:amqp_error(),
+                          rabbit_types:protocol()) ->
+          {boolean(), non_neg_integer(), rabbit_framing:amqp_method()}).
 
 -endif.
 
@@ -311,14 +312,14 @@ clear_encoded_content(Content = #content{}) ->
     Content#content{properties_bin = none, protocol = none}.
 
 %% NB: this function is also used by the Erlang client
-map_exception(Channel, Reason) ->
+map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason),
+        lookup_amqp_exception(Reason, Protocol),
     ShouldClose = SuggestedClose or (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none -> {0, 0};
-                              _ -> rabbit_framing:method_id(FailedMethod)
+                              _ -> Protocol:method_id(FailedMethod)
                           end,
     {CloseChannel, CloseMethod} =
         case ShouldClose of
@@ -333,22 +334,17 @@ map_exception(Channel, Reason) ->
         end,
     {ShouldClose, CloseChannel, CloseMethod}.
 
-%% FIXME: this clause can go when we move to AMQP spec >=8.1
-lookup_amqp_exception(#amqp_error{name        = precondition_failed,
-                                  explanation = Expl,
-                                  method      = Method}) ->
-    ExplBin = amqp_exception_explanation(<<"PRECONDITION_FAILED">>, Expl),
-    {false, 406, ExplBin, Method};
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
-                                  method      = Method}) ->
-    {ShouldClose, Code, Text} = rabbit_framing:lookup_amqp_exception(Name),
+                                  method      = Method},
+                      Protocol) ->
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other) ->
+lookup_amqp_exception(Other, Protocol) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
     {ShouldClose, Code, Text} =
-        rabbit_framing:lookup_amqp_exception(internal_error),
+        Protocol:lookup_amqp_exception(internal_error, Protocol),
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->
