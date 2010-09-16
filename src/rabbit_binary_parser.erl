@@ -163,11 +163,12 @@ parse_property(table, <<Len:32/unsigned, Table:Len/binary, Rest/binary>>) ->
     {parse_table(Table), Rest}.
 
 ensure_content_decoded(Content = #content{properties = Props})
-  when Props =/= 'none' ->
+  when Props =/= none ->
     Content;
-ensure_content_decoded(Content = #content{properties_bin = PropBin})
-  when is_binary(PropBin) ->
-    Content#content{properties = rabbit_framing:decode_properties(
+ensure_content_decoded(Content = #content{properties_bin = PropBin,
+                                          protocol = Protocol})
+  when PropBin =/= none ->
+    Content#content{properties = Protocol:decode_properties(
                                    Content#content.class_id, PropBin)}.
 
 clear_decoded_content(Content = #content{properties = none}) ->

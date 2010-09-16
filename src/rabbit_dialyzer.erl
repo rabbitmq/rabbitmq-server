@@ -56,7 +56,7 @@ create_basic_plt(BasicPltPath) ->
     ok.
 
 add_to_plt(PltPath, FilesString) ->
-    {ok, Files} = regexp:split(FilesString, " "),
+    Files = string:tokens(FilesString, " "),
     DialyzerWarnings = dialyzer:run([{analysis_type, plt_add},
                                      {init_plt, PltPath},
                                      {output_plt, PltPath},
@@ -65,7 +65,7 @@ add_to_plt(PltPath, FilesString) ->
     ok.
 
 dialyze_files(PltPath, ModifiedFiles) ->
-    {ok, Files} = regexp:split(ModifiedFiles, " "),
+    Files = string:tokens(ModifiedFiles, " "),
     DialyzerWarnings = dialyzer:run([{init_plt, PltPath},
                                      {files, Files}]),
     case DialyzerWarnings of

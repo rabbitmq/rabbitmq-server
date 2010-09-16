@@ -1,7 +1,7 @@
 Source: rabbitmq-server
 Section: net
 Priority: extra
-Maintainer: Tony Garnock-Jones <tonyg@rabbitmq.com>
+Maintainer: RabbitMQ Team <packaging@rabbitmq.com>
 Build-Depends: cdbs, debhelper (>= 5), erlang-dev, python-simplejson, xmlto, xsltproc
 Standards-Version: 3.8.0
 

@@ -43,7 +43,8 @@
                         rabbit_types:binding()) -> 'ok').
 -spec(remove_bindings/2 :: (rabbit_types:exchange(),
                             [rabbit_types:binding()]) -> 'ok').
--spec(assert_args_equivalence/2 :: (rabbit_types:exchange(),
-                                    rabbit_framing:amqp_table()) -> 'ok').
+-spec(assert_args_equivalence/2 ::
+        (rabbit_types:exchange(), rabbit_framing:amqp_table())
+        -> 'ok' | rabbit_types:connection_exit()).
 
 -endif.

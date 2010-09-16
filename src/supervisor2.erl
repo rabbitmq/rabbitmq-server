@@ -4,11 +4,41 @@
 %% 1) the module name is supervisor2
 %%
 %% 2) there is a new strategy called
-%% simple_one_for_one_terminate. This is exactly the same as for
-%% simple_one_for_one, except that children *are* explicitly
-%% terminated as per the shutdown component of the child_spec.
+%%    simple_one_for_one_terminate. This is exactly the same as for
+%%    simple_one_for_one, except that children *are* explicitly
+%%    terminated as per the shutdown component of the child_spec.
 %%
-%% All modifications are (C) 2010 LShift Ltd.
+%% 3) child specifications can contain, as the restart type, a tuple
+%%    {permanent, Delay} | {transient, Delay} where Delay >= 0. The
+%%    delay, in seconds, indicates what should happen if a child, upon
+%%    being restarted, exceeds the MaxT and MaxR parameters. Thus, if
+%%    a child exits, it is restarted as normal. If it exits
+%%    sufficiently quickly and often to exceed the boundaries set by
+%%    the MaxT and MaxR parameters, and a Delay is specified, then
+%%    rather than stopping the supervisor, the supervisor instead
+%%    continues and tries to start up the child again, Delay seconds
+%%    later.
+%%
+%%    Note that you can never restart more frequently than the MaxT
+%%    and MaxR parameters allow: i.e. you must wait until *both* the
+%%    Delay has passed *and* the MaxT and MaxR parameters allow the
+%%    child to be restarted.
+%%
+%%    Also note that the Delay is a *minimum*. There is no guarantee
+%%    that the child will be restarted within that time, especially if
+%%    other processes are dying and being restarted at the same time -
+%%    essentially we have to wait for the delay to have passed and for
+%%    the MaxT and MaxR parameters to permit the child to be
+%%    restarted. This may require waiting for longer than Delay.
+%%
+%% 4) Added an 'intrinsic' restart type. Like the transient type, this
+%%    type means the child should only be restarted if the child exits
+%%    abnormally. Unlike the transient type, if the child exits
+%%    normally, the supervisor itself also exits normally. If the
+%%    child is a supervisor and it exits normally (i.e. with reason of
+%%    'shutdown') then the child's parent also exits normally.
+%%
+%% All modifications are (C) 2010 Rabbit Technologies Ltd.
 %%
 %% %CopyrightBegin%
 %%
@@ -35,7 +65,7 @@
 -export([start_link/2,start_link/3,
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
-	 which_children/1,
+	 which_children/1, find_child/2,
 	 check_childspecs/1]).
 
 -export([behaviour_info/1]).
@@ -43,6 +73,7 @@
 %% Internal exports
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
 -export([handle_cast/2]).
+-export([delayed_restart/2]).
 
 -define(DICT, dict).
 
@@ -109,6 +140,10 @@ terminate_child(Supervisor, Name) ->
 which_children(Supervisor) ->
     call(Supervisor, which_children).
 
+find_child(Supervisor, Name) ->
+    [Pid || {Name1, Pid, _Type, _Modules} <- which_children(Supervisor),
+            Name1 =:= Name].
+
 call(Supervisor, Req) ->
     gen_server:call(Supervisor, Req, infinity).
 
@@ -118,6 +153,9 @@ check_childspecs(ChildSpecs) when is_list(ChildSpecs) ->
 	Error -> {error, Error}
     end;
 check_childspecs(X) -> {error, {badarg, X}}.
+
+delayed_restart(Supervisor, RestartDetails) ->
+    gen_server:cast(Supervisor, {delayed_restart, RestartDetails}).
 
 %%% ---------------------------------------------------
 %%% 
@@ -315,6 +353,20 @@ handle_call(which_children, _From, State) ->
     {reply, Resp, State}.
 
 
+handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
+  when ?is_simple(State) ->
+    {ok, NState} = do_restart(RestartType, Reason, Child, State),
+    {noreply, NState};
+handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
+  when not (?is_simple(State)) ->
+    case get_child(Child#child.name, State) of
+        {value, Child} ->
+            {ok, NState} = do_restart(RestartType, Reason, Child, State),
+            {noreply, NState};
+        _ ->
+            {noreply, State}
+    end;
+
 %%% Hopefully cause a function-clause as there is no API function
 %%% that utilizes cast.
 handle_cast(null, State) ->
@@ -480,16 +532,32 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
+do_restart({RestartType, Delay}, Reason, Child, State) ->
+    case restart1(Child, State) of
+        {ok, NState} ->
+            {ok, NState};
+        {terminate, NState} ->
+            {ok, _TRef} = timer:apply_after(
+                            trunc(Delay*1000), ?MODULE, delayed_restart,
+                            [self(), {{RestartType, Delay}, Reason, Child}]),
+            {ok, NState}
+    end;
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
+do_restart(intrinsic, normal, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
+do_restart(intrinsic, shutdown, Child = #child{child_type = supervisor},
+           State) ->
+    {shutdown, state_del_child(Child, State)};
 do_restart(_, normal, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
 do_restart(_, shutdown, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState};
-do_restart(transient, Reason, Child, State) ->
+do_restart(Type, Reason, Child, State) when Type =:= transient orelse
+                                            Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(temporary, Reason, Child, State) ->
@@ -500,14 +568,27 @@ do_restart(temporary, Reason, Child, State) ->
 restart(Child, State) ->
     case add_restart(State) of
 	{ok, NState} ->
-	    restart(NState#state.strategy, Child, NState);
+	    restart(NState#state.strategy, Child, NState, fun restart/2);
 	{terminate, NState} ->
 	    report_error(shutdown, reached_max_restart_intensity,
 			 Child, State#state.name),
-	    {shutdown, remove_child(Child, NState)}
+	    {shutdown, state_del_child(Child, NState)}
     end.
 
-restart(Strategy, Child, State)
+restart1(Child, State) ->
+    case add_restart(State) of
+	{ok, NState} ->
+	    restart(NState#state.strategy, Child, NState, fun restart1/2);
+	{terminate, _NState} ->
+            %% we've reached the max restart intensity, but the
+            %% add_restart will have added to the restarts
+            %% field. Given we don't want to die here, we need to go
+            %% back to the old restarts field otherwise we'll never
+            %% attempt to restart later.
+            {terminate, State}
+    end.
+
+restart(Strategy, Child, State, Restart)
   when Strategy =:= simple_one_for_one orelse
        Strategy =:= simple_one_for_one_terminate ->
     #child{mfa = {M, F, A}} = Child,
@@ -521,9 +602,9 @@ restart(Strategy, Child, State)
 	    {ok, NState};
 	{error, Error} ->
 	    report_error(start_error, Error, Child, State#state.name),
-	    restart(Child, State)
+	    Restart(Child, State)
     end;
-restart(one_for_one, Child, State) ->
+restart(one_for_one, Child, State, Restart) ->
     case do_start_child(State#state.name, Child) of
 	{ok, Pid} ->
 	    NState = replace_child(Child#child{pid = Pid}, State),
@@ -533,25 +614,25 @@ restart(one_for_one, Child, State) ->
 	    {ok, NState};
 	{error, Reason} ->
 	    report_error(start_error, Reason, Child, State#state.name),
-	    restart(Child, State)
+	    Restart(Child, State)
     end;
-restart(rest_for_one, Child, State) ->
+restart(rest_for_one, Child, State, Restart) ->
     {ChAfter, ChBefore} = split_child(Child#child.pid, State#state.children),
     ChAfter2 = terminate_children(ChAfter, State#state.name),
     case start_children(ChAfter2, State#state.name) of
 	{ok, ChAfter3} ->
 	    {ok, State#state{children = ChAfter3 ++ ChBefore}};
 	{error, ChAfter3} ->
-	    restart(Child, State#state{children = ChAfter3 ++ ChBefore})
+	    Restart(Child, State#state{children = ChAfter3 ++ ChBefore})
     end;
-restart(one_for_all, Child, State) ->
+restart(one_for_all, Child, State, Restart) ->
     Children1 = del_child(Child#child.pid, State#state.children),
     Children2 = terminate_children(Children1, State#state.name),
     case start_children(Children2, State#state.name) of
 	{ok, NChs} ->
 	    {ok, State#state{children = NChs}};
 	{error, NChs} ->
-	    restart(Child, State#state{children = NChs})
+	    Restart(Child, State#state{children = NChs})
     end.
 
 %%-----------------------------------------------------------------
@@ -577,14 +658,22 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
-    case shutdown(Child#child.pid,
-		  Child#child.shutdown) of
-	ok ->
-	    Child#child{pid = undefined};
-	{error, OtherReason} ->
-	    report_error(shutdown_error, OtherReason, Child, SupName),
-	    Child#child{pid = undefined}
-    end;
+    ReportError = fun (Reason) ->
+                          report_error(shutdown_error, Reason, Child, SupName)
+                  end,
+    case shutdown(Child#child.pid, Child#child.shutdown) of
+        ok ->
+            ok;
+        {error, normal} ->
+            case Child#child.restart_type of
+                permanent           -> ReportError(normal);
+                {permanent, _Delay} -> ReportError(normal);
+                _                   -> ok
+            end;
+        {error, OtherReason} ->
+            ReportError(OtherReason)
+    end,
+    Child#child{pid = undefined};
 do_terminate(Child, _SupName) ->
     Child.
 
@@ -769,7 +858,9 @@ supname(N,_)      -> N.
 %%%    {Name, Func, RestartType, Shutdown, ChildType, Modules}
 %%% where Name is an atom
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
-%%%       RestartType is permanent | temporary | transient
+%%%       RestartType is permanent | temporary | transient |
+%%%                      intrinsic | {permanent, Delay} |
+%%%                      {transient, Delay} where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
 %%%       Modules = [atom()] | dynamic
@@ -815,10 +906,18 @@ validFunc({M, F, A}) when is_atom(M),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
-validRestartType(permanent)   -> true;
-validRestartType(temporary)   -> true;
-validRestartType(transient)   -> true;
-validRestartType(RestartType) -> throw({invalid_restart_type, RestartType}).
+validRestartType(permanent)          -> true;
+validRestartType(temporary)          -> true;
+validRestartType(transient)          -> true;
+validRestartType(intrinsic)          -> true;
+validRestartType({permanent, Delay}) -> validDelay(Delay);
+validRestartType({transient, Delay}) -> validDelay(Delay);
+validRestartType(RestartType)        -> throw({invalid_restart_type,
+                                               RestartType}).
+
+validDelay(Delay) when is_number(Delay),
+                       Delay >= 0 -> true;
+validDelay(What)                  -> throw({invalid_delay, What}).
 
 validShutdown(Shutdown, _) 
   when is_integer(Shutdown), Shutdown > 0 -> true;

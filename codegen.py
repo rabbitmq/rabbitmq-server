@@ -320,9 +320,15 @@ def genErl(spec):
     methods = spec.allMethods()
 
     printFileHeader()
-    print """-module(rabbit_framing).
--include("rabbit_framing.hrl").
+    module = "rabbit_framing_amqp_%d_%d" % (spec.major, spec.minor)
+    if spec.revision != 0:
+        module = "%s_%d" % (module, spec.revision)
+    if module == "rabbit_framing_amqp_8_0":
+        module = "rabbit_framing_amqp_0_8"
+    print "-module(%s)." % module
+    print """-include("rabbit_framing.hrl").
 
+-export([version/0]).
 -export([lookup_method_name/1]).
 -export([lookup_class_name/1]).
 
@@ -401,13 +407,15 @@ def genErl(spec):
     print """
 %% Method signatures
 -ifdef(use_specs).
+-spec(version/0 :: () -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
 -spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
 -spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
 -spec(is_method_synchronous/1 :: (amqp_method_record()) -> boolean()).
 -spec(method_record/1 :: (amqp_method_name()) -> amqp_method_record()).
 -spec(method_fieldnames/1 :: (amqp_method_name()) -> [amqp_method_field_name()]).
--spec(decode_method_fields/2 :: (amqp_method_name(), binary()) -> amqp_method_record()).
+-spec(decode_method_fields/2 ::
+        (amqp_method_name(), binary()) -> amqp_method_record() | rabbit_types:connection_exit()).
 -spec(decode_properties/2 :: (non_neg_integer(), binary()) -> amqp_property_record()).
 -spec(encode_method_fields/1 :: (amqp_method_record()) -> binary()).
 -spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
@@ -419,6 +427,10 @@ bitvalue(true) -> 1;
 bitvalue(false) -> 0;
 bitvalue(undefined) -> 0.
 """
+    version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
+    if version == '{8, 0, 0}': version = '{0, 8, 0}'
+    print "version() -> %s." % (version)
+
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
 
@@ -480,8 +492,6 @@ def genHrl(spec):
     methods = spec.allMethods()
 
     printFileHeader()
-    print "-define(PROTOCOL_VERSION_MAJOR, %d)." % (spec.major)
-    print "-define(PROTOCOL_VERSION_MINOR, %d)." % (spec.minor)
     print "-define(PROTOCOL_PORT, %d)." % (spec.port)
 
     for (c,v,cls) in spec.constants:

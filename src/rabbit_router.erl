@@ -33,9 +33,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([deliver/2,
-         match_bindings/2,
-         match_routing_key/2]).
+-export([deliver/2, match_bindings/2, match_routing_key/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -45,9 +43,15 @@
 
 -type(routing_key() :: binary()).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
+-type(qpids() :: [pid()]).
 
 -spec(deliver/2 ::
-        ([pid()], rabbit_types:delivery()) -> {routing_result(), [pid()]}).
+        (qpids(), rabbit_types:delivery()) -> {routing_result(), qpids()}).
+-spec(match_bindings/2 :: (rabbit_exchange:name(),
+                           fun ((rabbit_types:binding()) -> boolean())) ->
+    qpids()).
+-spec(match_routing_key/2 :: (rabbit_exchange:name(), routing_key() | '_') ->
+                                  qpids()).
 
 -endif.
 
@@ -69,8 +73,8 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
 deliver(QPids, Delivery) ->
     {Success, _} =
         delegate:invoke(QPids,
-                        fun (Pid) -> 
-                                rabbit_amqqueue:deliver(Pid, Delivery) 
+                        fun (Pid) ->
+                                rabbit_amqqueue:deliver(Pid, Delivery)
                         end),
     {Routed, Handled} =
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
@@ -81,10 +85,10 @@ deliver(QPids, Delivery) ->
 %% TODO: This causes a full scan for each entry with the same exchange
 match_bindings(Name, Match) ->
     Query = qlc:q([QName || #route{binding = Binding = #binding{
-                                               exchange_name = ExchangeName,
+                                               exchange_name = XName,
                                                queue_name = QName}} <-
                                 mnesia:table(rabbit_route),
-                            ExchangeName == Name,
+                            XName == Name,
                             Match(Binding)]),
     lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query])).
 
