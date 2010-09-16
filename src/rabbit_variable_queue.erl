@@ -613,8 +613,8 @@ tx_commit(Txn, Fun, MsgPropsFun, State = #vqstate { durable = IsDurable }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     F = fun({Msg, MsgProperties}) ->
-		{Msg, MsgPropsFun(MsgProperties)}
-	end,
+        {Msg, MsgPropsFun(MsgProperties)}
+    end,
     PubsProcessed = lists:map(F, Pubs),
     PubsOrdered = lists:reverse(PubsProcessed),
     AckTags1 = lists:append(AckTags),
@@ -832,7 +832,8 @@ store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
 erase_tx(Txn) -> erase({txn, Txn}).
 
 persistent_guids(Pubs) ->
-    [Guid || #basic_message { guid = Guid, is_persistent = true } <- Pubs].
+    [Guid || 
+        {#basic_message { guid = Guid, is_persistent = true }, _MsgProps} <- Pubs].
 
 betas_from_index_entries(List, TransientThreshold, IndexState) ->
     {Filtered, Delivers, Acks} =
