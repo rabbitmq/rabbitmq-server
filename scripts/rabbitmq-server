@@ -98,6 +98,7 @@ if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
     then
 	RABBITMQ_BOOT_FILE="${RABBITMQ_MNESIA_DIR}/plugins-scratch/rabbit"
 	RABBITMQ_EBIN_PATH=""
+	[ "x" != "x$RABBITMQ_TEST_EBIN" ] && RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_TEST_EBIN}"
     else
 	exit 1
     fi
