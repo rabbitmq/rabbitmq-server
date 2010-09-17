@@ -77,7 +77,7 @@ hard_error_test(Connection) ->
                 {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _}, Reason);
         exit:Reason ->
             %% Direct case
-            ?assertMatch({{server_initiated_close, ?NOT_IMPLEMENTED, _}, _},
+            ?assertMatch({{server_initiated_hard_close, ?NOT_IMPLEMENTED, _}, _},
                          Reason)
     end,
     receive {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
@@ -146,6 +146,39 @@ shortstr_overflow_field_test(Connection) ->
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection),
     ok.
+
+%% Simulates a #'connection.open'{} method received on non-zero channel. The
+%% connection is expected to send a '#connection.close{}' to the server with
+%% reply code command_invalid
+command_invalid_over_channel_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    MonitorRef = erlang:monitor(process, Connection),
+    case amqp_connection:info(Connection, [type]) of
+        [{type, direct}]  -> Channel ! {send_command, #'connection.open'{}};
+        [{type, network}] -> gen_server:cast(Channel,
+                                 {method, #'connection.open'{}, none})
+    end,
+    assert_down_with_error(MonitorRef, command_invalid),
+    ?assertNot(is_process_alive(Channel)),
+    ok.
+
+%% Simulates a #'basic.ack'{} method received on channel zero. The connection
+%% is expected to send a '#connection.close{}' to the server with reply code
+%% command_invalid - this only applies to the network case
+command_invalid_over_channel0_test(Connection) ->
+    gen_server:cast(Connection, {method, #'basic.ack'{}, none}),
+    MonitorRef = erlang:monitor(process, Connection),
+    assert_down_with_error(MonitorRef, command_invalid),
+    ok.
+
+assert_down_with_error(MonitorRef, CodeAtom) ->
+    receive
+        {'DOWN', MonitorRef, process, _, Reason} ->
+            {error, Code, _} = Reason,
+            ?assertMatch(CodeAtom, ?PROTOCOL:amqp_exception(Code))
+    after 2000 ->
+        exit(did_not_die)
+    end.
 
 non_existent_user_test() ->
     Params = #amqp_params{username = test_util:uuid(),

@@ -163,17 +163,16 @@ handle_channel_down(Pid, Number, Reason, State) ->
 
 down_side_effect(_Pid, normal, _State) ->
     ok;
-down_side_effect(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
-    {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
-                            ?PROTOCOL:amqp_exception(Code)),
-    case IsHardError of
-        true  -> signal_connection({hard_error_in_channel, Pid, Reason}, State);
-        false -> ok
-    end;
 down_side_effect(_Pid, {app_initiated_close, _, _}, _State) ->
+    ok;
+down_side_effect(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
 down_side_effect(_Pid, {connection_closing, _}, _State) ->
     ok;
+down_side_effect(Pid, {server_initiated_hard_close, _, _} = Reason, State) ->
+    signal_connection({hard_error_in_channel, Pid, Reason}, State);
+down_side_effect(_Pid, {send_hard_error, AmqpError}, State) ->
+    signal_connection({send_hard_error, AmqpError}, State);
 down_side_effect(Pid, Other, State) ->
     signal_connection({channel_internal_error, Pid, Other}, State).
 
@@ -230,8 +229,5 @@ signal_channels(Msg, #state{map_pid_num = MapPN}) ->
     dict:map(fun(Pid, _) -> Pid ! Msg, ok end, MapPN),
     ok.
 
-signal_connection(_, #state{connection = undefined}) ->
-    ?LOG_WARN("No connection registered in channels manager (~p).~n", [self()]);
 signal_connection(Msg, #state{connection = Connection}) ->
-    Connection ! Msg,
-    ok.
+    Connection ! Msg.

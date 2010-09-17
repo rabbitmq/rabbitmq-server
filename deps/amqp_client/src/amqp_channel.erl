@@ -343,40 +343,56 @@ shutdown_with_reason({connection_closing, _} = Reason, State) ->
 shutdown_with_reason(Reason, State) ->
     {stop, Reason, State}.
 
+is_connection_method(Method) ->
+    {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
+    ?PROTOCOL:lookup_class_name(ClassId) == connection.
+
+send_error(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
+    {HardError, _, Close} =
+        rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL),
+    if HardError -> {stop, {send_hard_error, AmqpError}, State};
+       true      -> ?LOG_WARN("Channel (~p) flushing and closing due to soft "
+                              "error caused by the server ~p~n",
+                              [self(), AmqpError]),
+                    Self = self(),
+                    spawn(fun() -> call(Self, Close) end),
+                    {noreply, State}
+    end.
+
 %%---------------------------------------------------------------------------
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
 handle_method(Method, Content, State = #state{closing = Closing}) ->
-    case {Method, Content} of
-        %% Handle 'channel.close': send 'channel.close_ok' and stop channel.
-        {#'channel.close'{reply_code = ReplyCode,
-                          reply_text = ReplyText}, none} ->
-            do(#'channel.close_ok'{}, none, State),
-            {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
-        %% Handle 'channel.close_ok': stop channel
-        {CloseOk = #'channel.close_ok'{}, none} ->
-            {stop, normal, rpc_bottom_half(CloseOk, State)};
-        _ ->
-            case Closing of
-                %% Drop all incomming traffic except 'channel.close' and
-                %% 'channel.close_ok' when channel is closing (has sent
-                %% 'channel.close')
-                just_channel ->
-                    ?LOG_INFO("Channel (~p): dropping method ~p from server "
-                              "because channel is closing~n",
-                              [self(), {Method, Content}]),
-                    {noreply, State};
-                %% Standard handling of incoming method
-                _ ->
-                    handle_regular_method(Method, amqp_msg(Content), State)
-            end
+    case is_connection_method(Method) of
+        true -> send_error(#amqp_error{name        = command_invalid,
+                                       explanation = "connection method on "
+                                                     "non-zero channel",
+                                       method      = element(1, Method)},
+                           State);
+        false -> Drop = case {Closing, Method} of
+                            {just_channel, #'channel.close'{}}    -> false;
+                            {just_channel, #'channel.close_ok'{}} -> false;
+                            {just_channel, _}                     -> true;
+                            _                                     -> false
+                        end,
+                 if Drop -> ?LOG_INFO("Channel (~p): dropping method ~p from "
+                                      "server because channel is closing~n",
+                                      [self(), {Method, Content}]),
+                                      {noreply, State};
+                    true -> handle_method1(Method, amqp_msg(Content), State)
+                 end
     end.
 
-handle_regular_method(
-        #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk, none,
-        #state{tagged_sub_requests = Tagged,
-               anon_sub_requests   = Anon} = State) ->
+handle_method1(#'channel.close'{reply_code = Code, reply_text = Text}, none,
+               State) ->
+    do(#'channel.close_ok'{}, none, State),
+    {stop, {server_initiated_close, Code, Text}, State};
+handle_method1(#'channel.close_ok'{} = CloseOk, none, State) ->
+    {stop, normal, rpc_bottom_half(CloseOk, State)};
+handle_method1(#'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
+               none, State = #state{tagged_sub_requests = Tagged,
+                                    anon_sub_requests = Anon}) ->
     {Consumer, State0} =
         case dict:find(ConsumerTag, Tagged) of
             {ok, C} ->
@@ -389,35 +405,27 @@ handle_regular_method(
     Consumer ! ConsumeOk,
     State1 = register_consumer(ConsumerTag, Consumer, State0),
     {noreply, rpc_bottom_half(ConsumeOk, State1)};
-
-handle_regular_method(
-        #'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
-        #state{} = State) ->
+handle_method1(#'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
+               State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
     Consumer ! CancelOk,
     NewState = unregister_consumer(ConsumerTag, State),
     {noreply, rpc_bottom_half(CancelOk, NewState)};
-
-%% Handle 'channel.flow'
-%% If flow_control flag is defined, it informs the flow control handler to
-%% suspend submitting any content bearing methods
-handle_regular_method(#'channel.flow'{active = Active} = Flow, none,
-                      #state{flow_handler_pid = FlowHandler} = State) ->
-    case FlowHandler of
-        none -> ok;
-        _    -> FlowHandler ! Flow
+handle_method1(#'channel.flow'{active = Active} = Flow, none,
+               State = #state{flow_handler_pid = FlowHandler}) ->
+    case FlowHandler of none -> ok;
+                        _    -> FlowHandler ! Flow
     end,
     do(#'channel.flow_ok'{active = Active}, none, State),
+    %% TODO: change flow_control so that we don't have to invert meaning
     {noreply, State#state{flow_control = not(Active)}};
-
-handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
-                      AmqpMsg, State) ->
+handle_method1(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
+               State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
     Consumer ! {Deliver, AmqpMsg},
     {noreply, State};
-
-handle_regular_method(#'basic.return'{} = BasicReturn, AmqpMsg,
-                      #state{return_handler_pid = ReturnHandler} = State) ->
+handle_method1(#'basic.return'{} = BasicReturn, AmqpMsg,
+               State = #state{return_handler_pid = ReturnHandler}) ->
     case ReturnHandler of
         none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
                           "return handler registered~n",
@@ -425,11 +433,9 @@ handle_regular_method(#'basic.return'{} = BasicReturn, AmqpMsg,
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
     {noreply, State};
-
-handle_regular_method(Method, none, State) ->
+handle_method1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
-
-handle_regular_method(Method, Content, State) ->
+handle_method1(Method, Content, State) ->
     {noreply, rpc_bottom_half({Method, Content}, State)}.
 
 %%---------------------------------------------------------------------------
@@ -474,8 +480,8 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
 %% Standard implementation of the subscribe/3 command
 %% @private
 handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
-            From, #state{tagged_sub_requests = Tagged,
-                           anon_sub_requests = Anon} = State) ->
+            From, State = #state{tagged_sub_requests = Tagged,
+                                 anon_sub_requests = Anon}) ->
     case check_block(Method, none, State) of
         ok ->
             {NewMethod, NewState} =
@@ -581,12 +587,14 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 handle_info({channel_exit, _FrPidOrChNumber, Reason},
             State = #state{number = Number}) ->
     case Reason of
-        %% Sent by rabbit_channel in the direct case, due to a hard error
+        %% Sent by rabbit_channel in the direct case
         #amqp_error{name = ErrorName, explanation = Expl} ->
             ?LOG_WARN("Channel ~p closing: server sent error ~p~n",
                       [Number, Reason]),
-            {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
-            {stop, {server_initiated_close, Code, Expl}, State};
+            {IsHard, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
+            {stop, {if IsHard -> server_initiated_hard_close;
+                       true   -> server_initiated_close
+                    end, Code, Expl}, State};
         %% Unexpected death of a channel infrastructure process
         _ ->
             {stop, {infrastructure_died, Reason}, State}
@@ -656,8 +664,16 @@ handle_down(Other, Reason, State) ->
     {stop, {unexpected_down, Other, Reason}, State}.
 
 %% @private
-terminate(_Reason, _State) ->
-    ok.
+terminate(Reason, #state{rpc_requests = RpcQueue}) ->
+    case queue:is_empty(RpcQueue) of
+        false -> ?LOG_WARN("Channel (~p): RPC queue was not empty on "
+                           "terminate~n", [self()]),
+                 case Reason of
+                     normal -> exit(rpc_queue_not_empty_on_terminate);
+                     _      -> ok
+                 end;
+        true  -> ok
+    end.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->

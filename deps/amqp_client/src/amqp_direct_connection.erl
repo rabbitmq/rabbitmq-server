@@ -42,9 +42,8 @@
                 start_infrastructure_fun}).
 
 -record(closing, {reason,
-                  close = none, %% At least one of close and reply has to be
-                  reply = none, %%     none at any given moment
-                  from  = none}).
+                  close,
+                  from = none}).
 
 -define(INFO_KEYS,
         (amqp_connection:info_keys() ++ [])).
@@ -80,17 +79,17 @@ handle_call(info_keys, _From, State) ->
 handle_call(connect, _From, State) ->
     {reply, ok, do_connect(State)}.
 
-handle_cast(Message, State) ->
-    ?LOG_WARN("Connection (~p) closing: received unexpected cast ~p~n",
-              [self(), Message]),
-    {noreply, set_closing_state(abrupt, internal_error_closing(), State)}.
+handle_cast(Cast, State) ->
+    {stop, {unexpected_cast, Cast}, State}.
 
 handle_info({hard_error_in_channel, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: channel (~p) received hard error ~p "
               "from server~n", [self(), Pid, Reason]),
     {stop, Reason, State};
+handle_info({send_hard_error, AmqpError}, State) ->
+    {noreply, send_error(AmqpError, State)};
 handle_info({channel_internal_error, _Pid, _Reason}, State) ->
-    {noreply, set_closing_state(abrupt, internal_error_closing(), State)};
+    {noreply, send_error(#amqp_error{name = internal_error}, State)};
 handle_info(all_channels_terminated, State) ->
     handle_all_channels_terminated(State).
 
@@ -122,6 +121,7 @@ handle_command({close, Close}, From, State) ->
 %% Infos
 %%---------------------------------------------------------------------------
 
+i(type,              _)     -> direct;
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
@@ -139,7 +139,7 @@ i(Item, _State) ->
 %% ChannelCloseType can be flush or abrupt
 %%
 %% The precedence of the closing MainReason's is as follows:
-%%     app_initiated_close, internal_error, server_initiated_close
+%%     app_initiated_close, error, server_initiated_close
 %% (i.e.: a given reason can override the currently set one if it is later
 %% mentioned in the above list). We can rely on erlang's comparison of atoms
 %% for this.
@@ -183,24 +183,17 @@ handle_all_channels_terminated(State = #state{closing = Closing,
     end,
     {stop, closing_to_reason(Closing), State}.
 
-closing_to_reason(#closing{close = #'connection.close'{reply_code = 200},
-                           reply = none}) ->
+closing_to_reason(#closing{close = #'connection.close'{reply_code = 200}}) ->
     normal;
 closing_to_reason(#closing{reason = Reason,
                            close = #'connection.close'{reply_code = Code,
-                                                       reply_text = Text},
-                           reply = none}) ->
-    {Reason, Code, Text};
-closing_to_reason(#closing{reply = {_, 200, _}, close = none}) ->
-    normal;
-closing_to_reason(#closing{reason = Reason,
-                           reply = {_, Code, Text},
-                           close = none}) ->
+                                                       reply_text = Text}}) ->
     {Reason, Code, Text}.
 
-internal_error_closing() ->
-    #closing{reason = internal_error,
-             reply = {internal_error, ?INTERNAL_ERROR, <<>>}}.
+send_error(#amqp_error{} = AmqpError, State) ->
+    {true, 0, Close} =
+        rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
+    set_closing_state(abrupt, #closing{reason = error, close = Close}, State).
 
 %%---------------------------------------------------------------------------
 %% Connecting to the broker
