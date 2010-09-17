@@ -32,7 +32,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/1, delete_and_terminate/1,
-         purge/1, publish/3, publish_delivered/3, fetch/2, ack/2,
+         purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
@@ -495,9 +495,10 @@ publish(Msg, MsgProperties, State) ->
     {_SeqId, State1} = publish(Msg, MsgProperties, false, false, State),
     a(reduce_memory_use(State1)).
 
-publish_delivered(false, _Msg, State = #vqstate { len = 0 }) ->
+publish_delivered(false, _Msg, _MsgProps, State = #vqstate { len = 0 }) ->
     {blank_ack, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
+		  MsgProps,
                   State = #vqstate { len               = 0,
                                      next_seq_id       = SeqId,
                                      out_counter       = OutCount,
@@ -506,7 +507,7 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
                                      pending_ack       = PA,
                                      durable           = IsDurable }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, #msg_properties{}))
+    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
         #msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     PA1 = record_pending_ack(m(MsgStatus1), PA),
