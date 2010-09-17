@@ -1,19 +1,18 @@
 Before first "proper" release
 =============================
+Backup / restore entire state (except messages).
 Write more management:
-  Exchange / queue arguments support
-  Bindings arguments support
   Purge queues
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
-Fix backing queue status breakage.
-Fix management plugin shutdown.
 Document inets dependency.
 
 Then
 ====
 Write remaining management:
+  Exchange / queue arguments support
+  Bindings arguments support
   Application list / start / stop
   Reset / rotate logs / cluster
   VM stop
@@ -24,6 +23,8 @@ Figure out something sensible to do with time series.
   Make rates into averages - configurable?
   Add pretty graphs.
   Persist time series data over restarts?
+Fix backing queue status breakage.
+Fix management plugin shutdown.
 Refactor lots.
 Add lots of uses of fine stats.
 Improve L+F.
@@ -33,7 +34,6 @@ Sorting / pagination / filtering (client-side? server-side?)
 Client-side column hiding for e.g. message rates.
 Command-line / REPL client.
 Publish / get via HTTP, tie into simple messaging idea.
-Backup / restore entire state (except messages).
 DTRT with direct connections.
 Clustering management:
   One rabbit_event / rabbit_mgmt_db per cluster
