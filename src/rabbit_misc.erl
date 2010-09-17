@@ -32,14 +32,15 @@
 -module(rabbit_misc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+
 -include_lib("kernel/include/file.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4,
-         protocol_error/3, protocol_error/4]).
--export([not_found/1]).
--export([get_config/1, get_config/2, set_config/2]).
+         protocol_error/3, protocol_error/4, protocol_error/1]).
+-export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
+-export([table_lookup/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -60,7 +61,9 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, unlink_and_capture_exit/1]).
+-export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+         unlink_and_capture_exit/1]).
+-export([get_options/2]).
 
 -import(mnesia).
 -import(lists).
@@ -71,61 +74,91 @@
 
 -ifdef(use_specs).
 
--include_lib("kernel/include/inet.hrl").
+-export_type([resource_name/0]).
 
--type(ok_or_error() :: 'ok' | {'error', any()}).
+-type(ok_or_error() :: rabbit_types:ok_or_error(any())).
+-type(thunk(T) :: fun(() -> T)).
+-type(resource_name() :: binary()).
+-type(optdef() :: {flag, string()} | {option, string(), any()}).
+-type(channel_or_connection_exit()
+      :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 
--spec(method_record_type/1 :: (tuple()) -> atom()).
+-spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
+                              -> rabbit_framing:amqp_method_name()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
--spec(die/1 :: (atom()) -> no_return()).
--spec(frame_error/2 :: (atom(), binary()) -> no_return()).
--spec(amqp_error/4 :: (atom(), string(), [any()], atom()) -> amqp_error()).
--spec(protocol_error/3 :: (atom(), string(), [any()]) -> no_return()).
--spec(protocol_error/4 :: (atom(), string(), [any()], atom()) -> no_return()).
--spec(not_found/1 :: (r(atom())) -> no_return()).
--spec(get_config/1 :: (atom()) -> {'ok', any()} | not_found()).
--spec(get_config/2 :: (atom(), A) -> A).
--spec(set_config/2 :: (atom(), any()) -> 'ok').
--spec(dirty_read/1 :: ({atom(), any()}) -> {'ok', any()} | not_found()).
--spec(r/3 :: (vhost() | r(atom()), K, resource_name()) ->
-             r(K) when is_subtype(K, atom())).
--spec(r/2 :: (vhost(), K) -> #resource{virtual_host :: vhost(),
-                                       kind         :: K,
-                                       name         :: '_'}
-                                 when is_subtype(K, atom())).
--spec(r_arg/4 :: (vhost() | r(atom()), K, amqp_table(), binary()) ->
-             undefined | r(K)  when is_subtype(K, atom())).
--spec(rs/1 :: (r(atom())) -> string()).
+-spec(die/1 ::
+        (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
+-spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
+                       -> rabbit_types:connection_exit()).
+-spec(amqp_error/4 ::
+        (rabbit_framing:amqp_exception(), string(), [any()],
+         rabbit_framing:amqp_method_name())
+        -> rabbit_types:amqp_error()).
+-spec(protocol_error/3 :: (rabbit_framing:amqp_exception(), string(), [any()])
+                          -> channel_or_connection_exit()).
+-spec(protocol_error/4 ::
+        (rabbit_framing:amqp_exception(), string(), [any()],
+         rabbit_framing:amqp_method_name()) -> channel_or_connection_exit()).
+-spec(protocol_error/1 ::
+        (rabbit_types:amqp_error()) -> channel_or_connection_exit()).
+-spec(not_found/1 :: (rabbit_types:r(atom())) -> rabbit_types:channel_exit()).
+-spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
+                                    rabbit_framing:amqp_table(),
+                                    rabbit_types:r(any()), [binary()]) ->
+                                        'ok' | rabbit_types:connection_exit()).
+-spec(dirty_read/1 ::
+        ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
+-spec(table_lookup/2 ::
+        (rabbit_framing:amqp_table(), binary())
+         -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
+-spec(r/2 :: (rabbit_types:vhost(), K)
+             -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
+                    when is_subtype(K, atom())).
+-spec(r/3 ::
+        (rabbit_types:vhost() | rabbit_types:r(atom()), K, resource_name())
+        -> rabbit_types:r3(rabbit_types:vhost(), K, resource_name())
+               when is_subtype(K, atom())).
+-spec(r_arg/4 ::
+        (rabbit_types:vhost() | rabbit_types:r(atom()), K,
+         rabbit_framing:amqp_table(), binary())
+        -> undefined | rabbit_types:r(K)
+               when is_subtype(K, atom())).
+-spec(rs/1 :: (rabbit_types:r(atom())) -> string()).
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (file_path()) -> ok_or_error()).
--spec(report_cover/1 :: (file_path()) -> 'ok').
+-spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
+-spec(report_cover/1 :: (file:filename()) -> 'ok').
 -spec(throw_on_error/2 ::
-      (atom(), thunk({error, any()} | {ok, A} | A)) -> A).
+        (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(with_user/2 :: (username(), thunk(A)) -> A).
--spec(with_vhost/2 :: (vhost(), thunk(A)) -> A).
--spec(with_user_and_vhost/3 :: (username(), vhost(), thunk(A)) -> A).
+-spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
+-spec(with_vhost/2 :: (rabbit_types:vhost(), thunk(A)) -> A).
+-spec(with_user_and_vhost/3 ::
+        (rabbit_access_control:username(), rabbit_types:vhost(), thunk(A))
+        -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(makenode/1 :: ({string(), string()} | string()) -> erlang_node()).
--spec(nodeparts/1 :: (erlang_node() | string()) -> {string(), string()}).
+-spec(makenode/1 :: ({string(), string()} | string()) -> node()).
+-spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
--spec(tcp_name/3 :: (atom(), ip_address(), ip_port()) -> atom()).
+-spec(tcp_name/3 ::
+        (atom(), inet:ip_address(), rabbit_networking:ip_port())
+        -> atom()).
 -spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
--spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom()) ->
-             'ok' | 'aborted').
--spec(dirty_dump_log/1 :: (file_path()) -> ok_or_error()).
--spec(read_term_file/1 :: (file_path()) -> {'ok', [any()]} | {'error', any()}).
--spec(write_term_file/2 :: (file_path(), [any()]) -> ok_or_error()).
--spec(append_file/2 :: (file_path(), string()) -> ok_or_error()).
+-spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
+                             -> 'ok' | 'aborted').
+-spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
+-spec(read_term_file/1 ::
+        (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
+-spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
+-spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
@@ -133,16 +166,24 @@
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
--spec(sort_field_table/1 :: (amqp_table()) -> amqp_table()).
+-spec(sort_field_table/1 ::
+        (rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table()).
 -spec(pid_to_string/1 :: (pid()) -> string()).
 -spec(string_to_pid/1 :: (string()) -> pid()).
 -spec(version_compare/2 :: (string(), string()) -> 'lt' | 'eq' | 'gt').
--spec(version_compare/3 :: (string(), string(),
-                            ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean()).
--spec(recursive_delete/1 :: ([file_path()]) ->
-             'ok' | {'error', {file_path(), any()}}).
--spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(version_compare/3 ::
+        (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
+        -> boolean()).
+-spec(recursive_delete/1 ::
+        ([file:filename()])
+        -> rabbit_types:ok_or_error({file:filename(), any()})).
+-spec(dict_cons/3 :: (any(), any(), dict:dictionary()) ->
+                          dict:dictionary()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
+                             orddict:dictionary()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
+-spec(get_options/2 :: ([optdef()], [string()])
+                       -> {[string()], [{string(), any()}]}).
 
 -endif.
 
@@ -173,29 +214,37 @@ protocol_error(Name, ExplanationFormat, Params) ->
     protocol_error(Name, ExplanationFormat, Params, none).
 
 protocol_error(Name, ExplanationFormat, Params, Method) ->
-    exit(amqp_error(Name, ExplanationFormat, Params, Method)).
+    protocol_error(amqp_error(Name, ExplanationFormat, Params, Method)).
+
+protocol_error(#amqp_error{} = Error) ->
+    exit(Error).
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
-get_config(Key) ->
-    case dirty_read({rabbit_config, Key}) of
-        {ok, {rabbit_config, Key, V}} -> {ok, V};
-        Other -> Other
-    end.
+assert_args_equivalence(Orig, New, Name, Keys) ->
+    [assert_args_equivalence1(Orig, New, Name, Key) || Key <- Keys],
+    ok.
 
-get_config(Key, DefaultValue) ->
-    case get_config(Key) of
-        {ok, V} -> V;
-        {error, not_found} -> DefaultValue
+assert_args_equivalence1(Orig, New, Name, Key) ->
+    case {table_lookup(Orig, Key), table_lookup(New, Key)} of
+        {Same, Same}  -> ok;
+        {Orig1, New1} -> protocol_error(
+                           not_allowed,
+                           "inequivalent arg '~s' for ~s:  "
+                           "required ~w, received ~w",
+                           [Key, rabbit_misc:rs(Name), New1, Orig1])
     end.
-
-set_config(Key, Value) ->
-    ok = mnesia:dirty_write({rabbit_config, Key, Value}).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
         [Result] -> {ok, Result};
         []       -> {error, not_found}
+    end.
+
+table_lookup(Table, Key) ->
+    case lists:keysearch(Key, 1, Table) of
+        {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
+        false                           -> undefined
     end.
 
 r(#resource{virtual_host = VHostPath}, Kind, Name)
@@ -210,9 +259,9 @@ r(VHostPath, Kind) when is_binary(VHostPath) ->
 r_arg(#resource{virtual_host = VHostPath}, Kind, Table, Key) ->
     r_arg(VHostPath, Kind, Table, Key);
 r_arg(VHostPath, Kind, Table, Key) ->
-    case lists:keysearch(Key, 1, Table) of
-        {value, {_, longstr, NameBin}} -> r(VHostPath, Kind, NameBin);
-        false                          -> undefined
+    case table_lookup(Table, Key) of
+        {longstr, NameBin} -> r(VHostPath, Kind, NameBin);
+        undefined          -> undefined
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
@@ -555,7 +604,7 @@ string_to_pid(Str) ->
             binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
         nomatch ->
             throw(Err)
-    end. 
+    end.
 
 version_compare(A, B, lte) ->
     case version_compare(A, B) of
@@ -631,8 +680,44 @@ recursive_delete1(Path) ->
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
+orddict_cons(Key, Value, Dict) ->
+    orddict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
+
 unlink_and_capture_exit(Pid) ->
     unlink(Pid),
     receive {'EXIT', Pid, _} -> ok
     after 0 -> ok
     end.
+
+% Separate flags and options from arguments.
+% get_options([{flag, "-q"}, {option, "-p", "/"}],
+%             ["set_permissions","-p","/","guest",
+%              "-q",".*",".*",".*"])
+% == {["set_permissions","guest",".*",".*",".*"],
+%     [{"-q",true},{"-p","/"}]}
+get_options(Defs, As) ->
+    lists:foldl(fun(Def, {AsIn, RsIn}) ->
+                        {AsOut, Value} = case Def of
+                                             {flag, Key} ->
+                                                 get_flag(Key, AsIn);
+                                             {option, Key, Default} ->
+                                                 get_option(Key, Default, AsIn)
+                                         end,
+                        {AsOut, [{Key, Value} | RsIn]}
+                end, {As, []}, Defs).
+
+get_option(K, _Default, [K, V | As]) ->
+    {As, V};
+get_option(K, Default, [Nk | As]) ->
+    {As1, V} = get_option(K, Default, As),
+    {[Nk | As1], V};
+get_option(_, Default, As) ->
+    {As, Default}.
+
+get_flag(K, [K | As]) ->
+    {As, true};
+get_flag(K, [Nk | As]) ->
+    {As1, V} = get_flag(K, As),
+    {[Nk | As1], V};
+get_flag(_, []) ->
+    {[], false}.

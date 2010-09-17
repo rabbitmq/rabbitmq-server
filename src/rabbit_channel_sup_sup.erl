@@ -29,22 +29,35 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_tracer).
--export([start/0]).
+-module(rabbit_channel_sup_sup).
 
--import(erlang).
+-behaviour(supervisor2).
 
-start() ->
-    spawn(fun mainloop/0),
-    ok.
+-export([start_link/0, start_channel/2]).
 
-mainloop() ->
-    erlang:trace(new, true, [all]),
-    mainloop1().
+-export([init/1]).
 
-mainloop1() ->
-    receive
-        Msg ->
-            rabbit_log:info("TRACE: ~p~n", [Msg])
-    end,
-    mainloop1().
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
+                              {'ok', pid(), pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
+start_link() ->
+    supervisor2:start_link(?MODULE, []).
+
+start_channel(Pid, Args) ->
+    supervisor2:start_child(Pid, [Args]).
+
+%%----------------------------------------------------------------------------
+
+init([]) ->
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{channel_sup, {rabbit_channel_sup, start_link, []},
+            temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.

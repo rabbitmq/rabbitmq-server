@@ -29,51 +29,31 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_load).
-
--export([local_load/0, remote_loads/0, pick/0]).
-
--define(FUDGE_FACTOR, 0.98).
--define(TIMEOUT, 100).
+-include("rabbit_msg_store.hrl").
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(erlang_node() :: atom()).
--type(load() :: {{non_neg_integer(), integer() | 'unknown'}, erlang_node()}).
--spec(local_load/0 :: () -> load()).
--spec(remote_loads/0 :: () -> [load()]).
--spec(pick/0 :: () -> erlang_node()).
+-type(dir() :: any()).
+-type(index_state() :: any()).
+-type(keyvalue() :: any()).
+-type(fieldpos() :: non_neg_integer()).
+-type(fieldvalue() :: any()).
+
+-spec(new/1 :: (dir()) -> index_state()).
+-spec(recover/1 :: (dir()) -> rabbit_types:ok_or_error2(index_state(), any())).
+-spec(lookup/2 ::
+        (rabbit_guid:guid(), index_state()) -> ('not_found' | keyvalue())).
+-spec(insert/2 :: (keyvalue(), index_state()) -> 'ok').
+-spec(update/2 :: (keyvalue(), index_state()) -> 'ok').
+-spec(update_fields/3 :: (rabbit_guid:guid(), ({fieldpos(), fieldvalue()} |
+                                               [{fieldpos(), fieldvalue()}]),
+                          index_state()) -> 'ok').
+-spec(delete/2 :: (rabbit_guid:guid(), index_state()) -> 'ok').
+-spec(delete_by_file/2 :: (fieldvalue(), index_state()) -> 'ok').
+-spec(terminate/1 :: (index_state()) -> any()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
-
-local_load() ->
-    LoadAvg = case whereis(cpu_sup) of
-                  undefined -> unknown;
-                  _         -> case cpu_sup:avg1() of
-                                   L when is_integer(L) -> L;
-                                   {error, timeout}     -> unknown
-                               end
-              end,
-    {{statistics(run_queue), LoadAvg}, node()}.
-
-remote_loads() ->
-    {ResL, _BadNodes} =
-        rpc:multicall(nodes(), ?MODULE, local_load, [], ?TIMEOUT),
-    ResL.
-
-pick() ->
-    RemoteLoads = remote_loads(),
-    {{RunQ, LoadAvg}, Node} = local_load(),
-    %% add bias towards current node; we rely on Erlang's term order
-    %% of SomeFloat < local_unknown < unknown.
-    AdjustedLoadAvg = case LoadAvg of
-                          unknown -> local_unknown;
-                          _       -> LoadAvg * ?FUDGE_FACTOR
-                      end,
-    Loads = [{{RunQ, AdjustedLoadAvg}, Node} | RemoteLoads],
-    {_, SelectedNode} = lists:min(Loads),
-    SelectedNode.

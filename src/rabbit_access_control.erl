@@ -35,38 +35,68 @@
 
 -export([check_login/2, user_pass_login/2,
          check_vhost_access/2, check_resource_access/3]).
--export([add_user/2, delete_user/1, change_password/2, list_users/0,
-         lookup_user/1]).
--export([add_vhost/1, delete_vhost/1, list_vhosts/0]).
--export([set_permissions/5, clear_permissions/2,
-         list_vhost_permissions/1, list_user_permissions/1]).
+-export([add_user/2, delete_user/1, change_password/2, set_admin/1,
+         clear_admin/1, list_users/0, lookup_user/1]).
+-export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
+-export([set_permissions/5, set_permissions/6, clear_permissions/2,
+         list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
+         list_user_vhost_permissions/2]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(permission_atom() :: 'configure' | 'read' | 'write').
+-export_type([username/0, password/0]).
 
--spec(check_login/2 :: (binary(), binary()) -> user()).
--spec(user_pass_login/2 :: (username(), password()) -> user()).
--spec(check_vhost_access/2 :: (user(), vhost()) -> 'ok').
+-type(permission_atom() :: 'configure' | 'read' | 'write').
+-type(username() :: binary()).
+-type(password() :: binary()).
+-type(regexp() :: binary()).
+-type(scope() :: binary()).
+-type(scope_atom() :: 'client' | 'all').
+
+-spec(check_login/2 ::
+        (binary(), binary()) -> rabbit_types:user() |
+                                rabbit_types:channel_exit()).
+-spec(user_pass_login/2 ::
+        (username(), password())
+        -> rabbit_types:user() | rabbit_types:channel_exit()).
+-spec(check_vhost_access/2 ::
+        (rabbit_types:user(), rabbit_types:vhost())
+        -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
-      (username(), r(atom()), permission_atom()) -> 'ok').
+        (username(), rabbit_types:r(atom()), permission_atom())
+        -> 'ok' | rabbit_types:channel_exit()).
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
+-spec(set_admin/1 :: (username()) -> 'ok').
+-spec(clear_admin/1 :: (username()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
--spec(lookup_user/1 :: (username()) -> {'ok', user()} | not_found()).
--spec(add_vhost/1 :: (vhost()) -> 'ok').
--spec(delete_vhost/1 :: (vhost()) -> 'ok').
--spec(list_vhosts/0 :: () -> [vhost()]).
--spec(set_permissions/5 ::
-      (username(), vhost(), regexp(), regexp(), regexp()) -> 'ok').
--spec(clear_permissions/2 :: (username(), vhost()) -> 'ok').
+-spec(lookup_user/1 ::
+        (username()) -> rabbit_types:ok(rabbit_types:user())
+                            | rabbit_types:error('not_found')).
+-spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(vhost_exists/1 :: (rabbit_types:vhost()) -> boolean()).
+-spec(list_vhosts/0 :: () -> [rabbit_types:vhost()]).
+-spec(set_permissions/5 ::(username(), rabbit_types:vhost(), regexp(),
+                           regexp(), regexp()) -> 'ok').
+-spec(set_permissions/6 ::(scope(), username(), rabbit_types:vhost(),
+                           regexp(), regexp(), regexp()) -> 'ok').
+-spec(clear_permissions/2 :: (username(), rabbit_types:vhost()) -> 'ok').
+-spec(list_permissions/0 ::
+        () -> [{username(), rabbit_types:vhost(), regexp(), regexp(), regexp(),
+                scope_atom()}]).
 -spec(list_vhost_permissions/1 ::
-      (vhost()) -> [{username(), regexp(), regexp(), regexp()}]).
+        (rabbit_types:vhost()) -> [{username(), regexp(), regexp(), regexp(),
+                                    scope_atom()}]).
 -spec(list_user_permissions/1 ::
-      (username()) -> [{vhost(), regexp(), regexp(), regexp()}]).
+        (username()) -> [{rabbit_types:vhost(), regexp(), regexp(), regexp(),
+                          scope_atom()}]).
+-spec(list_user_vhost_permissions/2 ::
+        (username(), rabbit_types:vhost()) -> [{regexp(), regexp(), regexp(),
+                                                scope_atom()}]).
 
 -endif.
 
@@ -121,7 +151,7 @@ internal_lookup_vhost_access(Username, VHostPath) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({rabbit_user_permission,
-                                #user_vhost{username = Username,
+                                #user_vhost{username     = Username,
                                             virtual_host = VHostPath}}) of
                   [] -> not_found;
                   [R] -> {ok, R}
@@ -149,24 +179,29 @@ check_resource_access(Username,
     check_resource_access(Username,
                           R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(_Username,
-                      #resource{name = <<"amq.gen",_/binary>>},
-                      _Permission) ->
-    ok;
 check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
     Res = case mnesia:dirty_read({rabbit_user_permission,
-                                  #user_vhost{username = Username,
+                                  #user_vhost{username     = Username,
                                               virtual_host = VHostPath}}) of
               [] ->
                   false;
               [#user_permission{permission = P}] ->
-                  case regexp:match(
-                         binary_to_list(Name),
-                         binary_to_list(element(permission_index(Permission), P))) of
-                      {match, _, _} -> true;
-                      nomatch       -> false
+                  case {Name, P} of
+                      {<<"amq.gen",_/binary>>, #permission{scope = client}} ->
+                          true;
+                      _ ->
+                          PermRegexp =
+                              case element(permission_index(Permission), P) of
+                                  %% <<"^$">> breaks Emacs' erlang mode
+                                  <<"">> -> <<$^, $$>>;
+                                           RE     -> RE
+                              end,
+                          case re:run(Name, PermRegexp, [{capture, none}]) of
+                              match    -> true;
+                              nomatch  -> false
+                          end
                   end
           end,
     if Res  -> ok;
@@ -182,7 +217,8 @@ add_user(Username, Password) ->
                       [] ->
                           ok = mnesia:write(rabbit_user,
                                             #user{username = Username,
-                                                  password = Password},
+                                                  password = Password,
+                                                  is_admin = false},
                                             write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
@@ -212,20 +248,39 @@ delete_user(Username) ->
     R.
 
 change_password(Username, Password) ->
-    R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    ok = mnesia:write(rabbit_user,
-                                      #user{username = Username,
-                                            password = Password},
-                                      write)
-            end)),
+    R = update_user(Username, fun(User) ->
+                                      User#user{password = Password}
+                              end),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
 
+set_admin(Username) ->
+    set_admin(Username, true).
+
+clear_admin(Username) ->
+    set_admin(Username, false).
+
+set_admin(Username, IsAdmin) ->
+    R = update_user(Username, fun(User) ->
+                                      User#user{is_admin = IsAdmin}
+                              end),
+    rabbit_log:info("Set user admin flag for user ~p to ~p~n",
+                    [Username, IsAdmin]),
+    R.
+
+update_user(Username, Fun) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_misc:with_user(
+        Username,
+        fun () ->
+                {ok, User} = lookup_user(Username),
+                ok = mnesia:write(rabbit_user, Fun(User), write)
+        end)).
+
 list_users() ->
-    mnesia:dirty_all_keys(rabbit_user).
+    [{Username, IsAdmin} ||
+        #user{username = Username, is_admin = IsAdmin} <-
+            mnesia:dirty_match_object(rabbit_user, #user{_ = '_'})].
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
@@ -275,43 +330,57 @@ delete_vhost(VHostPath) ->
     R.
 
 internal_delete_vhost(VHostPath) ->
-    lists:foreach(fun (#exchange{name=Name}) ->
+    lists:foreach(fun (#exchange{name = Name}) ->
                           ok = rabbit_exchange:delete(Name, false)
                   end,
                   rabbit_exchange:list(VHostPath)),
-    lists:foreach(fun ({Username, _, _, _}) ->
+    lists:foreach(fun ({Username, _, _, _, _}) ->
                           ok = clear_permissions(Username, VHostPath)
                   end,
                   list_vhost_permissions(VHostPath)),
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
     ok.
 
+vhost_exists(VHostPath) ->
+    mnesia:dirty_read({rabbit_vhost, VHostPath}) /= [].
+
 list_vhosts() ->
     mnesia:dirty_all_keys(rabbit_vhost).
 
 validate_regexp(RegexpBin) ->
     Regexp = binary_to_list(RegexpBin),
-    case regexp:parse(Regexp) of
+    case re:compile(Regexp) of
         {ok, _}         -> ok;
         {error, Reason} -> throw({error, {invalid_regexp, Regexp, Reason}})
     end.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+    set_permissions(<<"client">>, Username, VHostPath, ConfigurePerm,
+                    WritePerm, ReadPerm).
+
+set_permissions(ScopeBin, Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
+    Scope = case ScopeBin of
+                <<"client">> -> client;
+                 <<"all">>    -> all;
+                _            -> throw({error, {invalid_scope, ScopeBin}})
+            end,
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath,
         fun () -> ok = mnesia:write(
                          rabbit_user_permission,
                          #user_permission{user_vhost = #user_vhost{
-                                            username = Username,
+                                            username     = Username,
                                             virtual_host = VHostPath},
                                           permission = #permission{
+                                            scope     = Scope,
                                             configure = ConfigurePerm,
-                                            write = WritePerm,
-                                            read = ReadPerm}},
+                                            write     = WritePerm,
+                                            read      = ReadPerm}},
                          write)
         end)).
+
 
 clear_permissions(Username, VHostPath) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -319,30 +388,42 @@ clear_permissions(Username, VHostPath) ->
         Username, VHostPath,
         fun () ->
                 ok = mnesia:delete({rabbit_user_permission,
-                                    #user_vhost{username = Username,
+                                    #user_vhost{username     = Username,
                                                 virtual_host = VHostPath}})
         end)).
 
+list_permissions() ->
+    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
+            list_permissions(match_user_vhost('_', '_'))].
+
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurePerm, WritePerm, ReadPerm} ||
-        {Username, _, ConfigurePerm, WritePerm, ReadPerm} <-
+    [{Username, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {Username, _, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
             list_permissions(rabbit_misc:with_vhost(
                                VHostPath, match_user_vhost('_', VHostPath)))].
 
 list_user_permissions(Username) ->
-    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
+    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
             list_permissions(rabbit_misc:with_user(
                                Username, match_user_vhost(Username, '_')))].
 
+list_user_vhost_permissions(Username, VHostPath) ->
+    [{ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        {_, _, ConfigurePerm, WritePerm, ReadPerm, Scope} <-
+            list_permissions(rabbit_misc:with_user_and_vhost(
+                               Username, VHostPath,
+                               match_user_vhost(Username, VHostPath)))].
+
 list_permissions(QueryThunk) ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        #user_permission{user_vhost = #user_vhost{username = Username,
+    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, Scope} ||
+        #user_permission{user_vhost = #user_vhost{username     = Username,
                                                   virtual_host = VHostPath},
-                         permission = #permission{
-                           configure = ConfigurePerm,
-                           write = WritePerm,
-                           read = ReadPerm}} <-
+                         permission = #permission{ scope     = Scope,
+                                                   configure = ConfigurePerm,
+                                                   write     = WritePerm,
+                                                   read      = ReadPerm}} <-
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
@@ -350,7 +431,7 @@ match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(
                 rabbit_user_permission,
                 #user_permission{user_vhost = #user_vhost{
-                                   username = Username,
+                                   username     = Username,
                                    virtual_host = VHostPath},
                                  permission = '_'},
                 read)

@@ -36,8 +36,8 @@
 
 -export([join/2, leave/2, get_members/1]).
 -export([sync/0]). %% intended for testing only; not part of official API
--export([start/0,start_link/0,init/1,handle_call/3,handle_cast/2,handle_info/2,
-         terminate/2]).
+-export([start/0, start_link/0, init/1, handle_call/3, handle_cast/2,
+         handle_info/2, terminate/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -45,8 +45,8 @@
 
 -type(name() :: term()).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', term()}).
--spec(start/0 :: () -> {'ok', pid()} | {'error', term()}).
+-spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(join/2 :: (name(), pid()) -> 'ok').
 -spec(leave/2 :: (name(), pid()) -> 'ok').
 -spec(get_members/1 :: (name()) -> [pid()]).

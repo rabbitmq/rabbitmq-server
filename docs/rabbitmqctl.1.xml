@@ -88,9 +88,6 @@
         </listitem>
       </varlistentry>
     </variablelist>
-    <para>
-      Flags must precede all other parameters to <command>rabbitmqctl</command>.
-    </para>
   </refsect1>
 
   <refsect1>
@@ -270,7 +267,7 @@
       <title>Cluster management</title>
 
       <variablelist>
-        <varlistentry>
+        <varlistentry id="cluster">
           <term><cmdsynopsis><command>cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -281,7 +278,8 @@
             </variablelist>
             <para>
               Instruct the node to become member of a cluster with the
-              specified nodes.
+              specified nodes.  To cluster with currently offline nodes,
+              use <link linkend="force_cluster"><command>force_cluster</command></link>.
             </para>
             <para>
               Cluster nodes can be of two types: disk or ram. Disk nodes
@@ -331,6 +329,29 @@
               cluster with nodes <command>rabbit@tanto</command> and
               <command>hare@elena</command>. If the node is one of these then
               it becomes a disk node, otherwise a ram node.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry id="force_cluster">
+          <term><cmdsynopsis><command>force_cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>clusternode</term>
+                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instruct the node to become member of a cluster with the
+              specified nodes.  This will succeed even if the specified nodes
+              are offline.  For a more detailed description, see
+              <link linkend="cluster"><command>cluster</command>.</link>
+            </para>
+            <para>
+              Note that this variant of the cluster command just
+              ignores the current status of the specified nodes.
+              Clustering may still fail for a variety of other
+              reasons.
             </para>
           </listitem>
         </varlistentry>
@@ -396,7 +417,8 @@
             <screen role="example">rabbitmqctl add_user tonyg changeit</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to create a
-              user named <command>tonyg</command> with (initial) password
+              (non-administrative) user named <command>tonyg</command> with
+              (initial) password
               <command>changeit</command>.
             </para>
           </listitem>
@@ -444,13 +466,57 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose administrative
+                status is to be set.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_admin tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to ensure the user
+               named <command>tonyg</command> is an administrator. This has no
+               effect when the user logs in via AMQP, but can be used to permit
+               the user to manage users, virtual hosts and permissions when the
+               user logs in via some other means (for example with the
+               management plugin).
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose administrative
+                status is to be cleared.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_admin tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to ensure the user
+               named <command>tonyg</command> is not an administrator.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>list_users</command></cmdsynopsis></term>
           <listitem>
             <para>Lists users</para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_users</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to list all users.
+              This command instructs the RabbitMQ broker to list all
+              users. Each result row will contain the user name and
+              the administrator status of the user, in that order.
             </para>
           </listitem>
         </varlistentry>
@@ -523,7 +589,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>configure</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">-s <replaceable>scope</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -531,11 +597,21 @@
                 <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>username</term>
+                <term>scope</term>
+                <listitem><para>Scope of the permissions: either
+                <command>client</command> (the default) or
+                <command>all</command>.  This determines whether
+                permissions are checked for server-generated resource
+                names (<command>all</command>) or only for
+                client-specified resource names
+                (<command>client</command>).</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>user</term>
                 <listitem><para>The name of the user to grant access to the specified virtual host.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>configure</term>
+                <term>conf</term>
                 <listitem><para>A regular expression matching resource names for which the user is granted configure permissions.</para></listitem>
               </varlistentry>
               <varlistentry>
@@ -603,10 +679,12 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_permissions -p /myvhost</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to list all the
-              users which have been granted access to the virtual host
-              called <command>/myvhost</command>, and the permissions they
-              have for operations on resources in that virtual host.
+              This command instructs the RabbitMQ broker to list all
+              the users which have been granted access to the virtual
+              host called <command>/myvhost</command>, and the
+              permissions they have for operations on resources in
+              that virtual host.  Note that an empty string means no
+              permissions granted.
             </para>
           </listitem>
         </varlistentry>
@@ -671,7 +749,7 @@
             <variablelist>
               <varlistentry>
                 <term>name</term>
-                <listitem><para>The name of the queue with non-ASCII characters URL-escaped.</para></listitem>
+                <listitem><para>The name of the queue with non-ASCII characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>durable</term>
@@ -762,7 +840,7 @@
             <variablelist>
               <varlistentry>
                 <term>name</term>
-                <listitem><para>The name of the exchange with non-ASCII characters URL-escaped.</para></listitem>
+                <listitem><para>The name of the exchange with non-ASCII characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>type</term>
@@ -797,22 +875,58 @@
             </para>
           </listitem>
         </varlistentry>
-      </variablelist>
 
-      <variablelist>
-        <varlistentry>
-          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>bindinginfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
-              By default the bindings for the <command>/</command> virtual
-              host are returned. The "-p" flag can be used to override
-              this default.  Each result row will contain an exchange
-              name, queue name, routing key and binding arguments, in
-              that order. Non-ASCII characters will be URL-encoded.
+              Returns binding details. By default the bindings for
+              the <command>/</command> virtual host are returned. The
+              "-p" flag can be used to override this default.
             </para>
-            <para role="usage">
-              The output format for "list_bindings" is a list of rows containing
-              exchange name, queue name, routing key and arguments, in that order.
+            <para>
+              The <command>bindinginfoitem</command> parameter is used
+              to indicate which binding information items to include
+              in the results. The column order in the results will
+              match the order of the parameters.
+              <command>bindinginfoitem</command> can take any value
+              from the list that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>exchange_name</term>
+                <listitem><para>The name of the exchange to which the
+                binding is attached. with non-ASCII characters
+                escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>queue_name</term>
+                <listitem><para>The name of the queue to which the
+                binding is attached. with non-ASCII characters
+                escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>routing_key</term>
+                <listitem><para>The binding's routing key, with
+                non-ASCII characters escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>arguments</term>
+                <listitem><para>The binding's arguments.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>bindinginfoitem</command>s are specified then
+              all above items are displayed.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl list_bindings -p /myvhost exchange_name queue_name</screen>
+            <para role="example">
+              This command displays the exchange name and queue name
+              of the bindings in the virtual host
+              named <command>/myvhost</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -862,12 +976,16 @@
                 <listitem><para>Number of channels using the connection.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>protocol</term>
+                <listitem><para>Version of the AMQP protocol in use (currently one of <command>{0,9,1}</command> or <command>{0,8,0}</command>). Note that if a client requests an AMQP 0-9 connection, we treat it as AMQP 0-9-1.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>user</term>
                 <listitem><para>Username associated with the connection.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>vhost</term>
-                <listitem><para>Virtual host name with non-ASCII characters URL-escaped.</para></listitem>
+                <listitem><para>Virtual host name with non-ASCII characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>timeout</term>

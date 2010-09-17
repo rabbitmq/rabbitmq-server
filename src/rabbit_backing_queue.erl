@@ -42,6 +42,11 @@ behaviour_info(callbacks) ->
      %% shared resources.
      {start, 1},
 
+     %% Called to tear down any state/resources. NB: Implementations
+     %% should not depend on this function being called on shutdown
+     %% and instead should hook into the rabbit supervision hierarchy.
+     {stop, 0},
+
      %% Initialise the backing queue and its state.
      {init, 3},
 
@@ -113,14 +118,15 @@ behaviour_info(callbacks) ->
      %% queue.
      {ram_duration, 1},
 
-     %% Should 'sync' be called as soon as the queue process can
-     %% manage (either on an empty mailbox, or when a timer fires)?
-     {needs_sync, 1},
+     %% Should 'idle_timeout' be called as soon as the queue process
+     %% can manage (either on an empty mailbox, or when a timer
+     %% fires)?
+     {needs_idle_timeout, 1},
 
-     %% Called (eventually) after needs_sync returns 'true'. Note this
-     %% may be called more than once for each 'true' returned from
-     %% needs_sync.
-     {sync, 1},
+     %% Called (eventually) after needs_idle_timeout returns
+     %% 'true'. Note this may be called more than once for each 'true'
+     %% returned from needs_idle_timeout.
+     {idle_timeout, 1},
 
      %% Called immediately before the queue hibernates.
      {handle_pre_hibernate, 1},

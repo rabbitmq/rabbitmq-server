@@ -44,8 +44,9 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()}).
--spec(invoke_no_result/2 :: (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
+-spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()} | {'error', any()}).
+-spec(invoke_no_result/2 ::
+        (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
 -spec(invoke/2 :: (pid() | [pid()], fun ((pid()) -> A)) -> A).
 
 -spec(process_count/0 :: () -> non_neg_integer()).

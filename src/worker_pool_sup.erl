@@ -41,9 +41,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | 'ignore' | {'error', any()}).
--spec(start_link/1 ::
-        (non_neg_integer()) -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()} | {'error', any()}).
 
 -endif.
 

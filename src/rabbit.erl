@@ -33,7 +33,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, rotate_logs/1]).
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+         rotate_logs/1]).
 
 -export([start/2, stop/1]).
 
@@ -82,9 +83,10 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
--rabbit_boot_step({rabbit_hooks,
-                   [{description, "internal event notification system"},
-                    {mfa,         {rabbit_hooks, start, []}},
+-rabbit_boot_step({rabbit_event,
+                   [{description, "statistics event manager"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_event]}},
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
@@ -183,18 +185,19 @@
 
 -ifdef(use_specs).
 
--type(log_location() :: 'tty' | 'undefined' | string()).
 -type(file_suffix() :: binary()).
+%% this really should be an abstract type
+-type(log_location() :: 'tty' | 'undefined' | file:filename()).
 
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> 'ok').
--spec(rotate_logs/1 :: (file_suffix()) -> 'ok' | {'error', any()}).
--spec(status/0 :: () ->
-             [{running_applications, [{atom(), string(), string()}]} |
-              {nodes, [{node_type(), [erlang_node()]}]} |
-              {running_nodes, [erlang_node()]}]).
+-spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(status/0 ::
+        () -> [{running_applications, [{atom(), string(), string()}]} |
+               {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
+               {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -endif.
@@ -202,8 +205,7 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers(),
-    ok = rabbit_mnesia:ensure_mnesia_dir().
+    ok = ensure_working_log_handlers().
 
 start() ->
     try
@@ -424,9 +426,9 @@ print_banner() ->
               "| ~s  +---+   |~n"
               "|                   |~n"
               "+-------------------+~n"
-              "AMQP ~p-~p~n~s~n~s~n~n",
+              "~s~n~s~n~s~n~n",
               [Product, string:right([$v|Version], ProductLen),
-               ?PROTOCOL_VERSION_MAJOR, ?PROTOCOL_VERSION_MINOR,
+               ?PROTOCOL_VERSION,
                ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},
@@ -487,11 +489,16 @@ maybe_insert_default_data() ->
 insert_default_data() ->
     {ok, DefaultUser} = application:get_env(default_user),
     {ok, DefaultPass} = application:get_env(default_pass),
+    {ok, DefaultAdmin} = application:get_env(default_user_is_admin),
     {ok, DefaultVHost} = application:get_env(default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
         application:get_env(default_permissions),
     ok = rabbit_access_control:add_vhost(DefaultVHost),
     ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
+    case DefaultAdmin of
+        true -> rabbit_access_control:set_admin(DefaultUser);
+        _    -> ok
+    end,
     ok = rabbit_access_control:set_permissions(DefaultUser, DefaultVHost,
                                                DefaultConfigurePerm,
                                                DefaultWritePerm,

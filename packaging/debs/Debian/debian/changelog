@@ -1,3 +1,21 @@
+rabbitmq-server (2.1.0-1) lucid; urgency=low
+
+  * New Upstream Release
+
+ -- Marek Majkowski <marek@rabbitmq.com>  Tue, 14 Sep 2010 14:20:17 +0100
+
+rabbitmq-server (2.0.0-1) karmic; urgency=low
+
+  * New Upstream Release
+
+ -- Michael Bridgen <mikeb@rabbitmq.com>  Mon, 23 Aug 2010 14:55:39 +0100
+
+rabbitmq-server (1.8.1-1) lucid; urgency=low
+
+  * New Upstream Release
+
+ -- Emile Joubert <emile@rabbitmq.com>  Wed, 14 Jul 2010 15:05:24 +0100
+
 rabbitmq-server (1.8.0-1) intrepid; urgency=low
 
   * New Upstream Release

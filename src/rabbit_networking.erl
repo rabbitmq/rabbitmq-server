@@ -46,6 +46,8 @@
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
+-include_lib("ssl/src/ssl_record.hrl").
+
 
 -define(RABBIT_TCP_OPTS, [
         binary,
@@ -63,25 +65,29 @@
 
 -ifdef(use_specs).
 
--type(host() :: ip_address() | string() | atom()).
--type(connection() :: pid()).
+-export_type([ip_port/0, hostname/0]).
 
 -spec(start/0 :: () -> 'ok').
--spec(start_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (host(), ip_port(), [info()]) -> 'ok').
--spec(stop_tcp_listener/2 :: (host(), ip_port()) -> 'ok').
--spec(active_listeners/0 :: () -> [listener()]).
--spec(node_listeners/1 :: (erlang_node()) -> [listener()]).
--spec(connections/0 :: () -> [connection()]).
--spec(connection_info_keys/0 :: () -> [info_key()]).
--spec(connection_info/1 :: (connection()) -> [info()]).
--spec(connection_info/2 :: (connection(), [info_key()]) -> [info()]).
--spec(connection_info_all/0 :: () -> [[info()]]).
--spec(connection_info_all/1 :: ([info_key()]) -> [[info()]]).
+-spec(start_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
+-spec(start_ssl_listener/3 :: (hostname(), ip_port(), [rabbit_types:info()])
+                              -> 'ok').
+-spec(stop_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
+-spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
+-spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
+-spec(connections/0 :: () -> [rabbit_types:connection()]).
+-spec(connection_info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(connection_info/1 ::
+        (rabbit_types:connection()) -> [rabbit_types:info()]).
+-spec(connection_info/2 ::
+        (rabbit_types:connection(), [rabbit_types:info_key()])
+        -> [rabbit_types:info()]).
+-spec(connection_info_all/0 :: () -> [[rabbit_types:info()]]).
+-spec(connection_info_all/1 ::
+        ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(on_node_down/1 :: (erlang_node()) -> 'ok').
--spec(check_tcp_listener_address/3 :: (atom(), host(), ip_port()) ->
-             {ip_address(), atom()}).
+-spec(on_node_down/1 :: (node()) -> 'ok').
+-spec(check_tcp_listener_address/3 ::
+        (atom(), hostname(), ip_port()) -> {inet:ip_address(), atom()}).
 
 -endif.
 
@@ -103,8 +109,37 @@ boot_ssl() ->
             ok;
         {ok, SslListeners} ->
             ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
-            {ok, SslOpts} = application:get_env(ssl_options),
-            [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+            {ok, SslOptsConfig} = application:get_env(ssl_options),
+            % unknown_ca errors are silently ignored  prior to R14B unless we
+            % supply this verify_fun - remove when at least R14B is required
+            SslOpts =
+                case proplists:get_value(verify, SslOptsConfig, verify_none) of
+                    verify_none -> SslOptsConfig;
+                    verify_peer -> [{verify_fun, fun([])    -> true;
+                                                    ([_|_]) -> false
+                                                 end}
+                                   | SslOptsConfig]
+                end,
+            % In R13B04 and R14A (at least), rc4 is incorrectly implemented.
+            CipherSuites = proplists:get_value(ciphers,
+                                               SslOpts,
+                                               ssl:cipher_suites()),
+            FilteredCipherSuites =
+                [C || C <- CipherSuites,
+                      begin
+                          SuiteCode =
+                              if is_tuple(C) -> ssl_cipher:suite(C);
+                                 is_list(C)  -> ssl_cipher:openssl_suite(C)
+                              end,
+                          SP = ssl_cipher:security_parameters(
+                              SuiteCode,
+                              #security_parameters{}),
+                          SP#security_parameters.bulk_cipher_algorithm =/= ?RC4
+                      end],
+            SslOpts1 = [{ciphers, FilteredCipherSuites}
+                        | [{K, V} || {K, V} <- SslOpts, K =/= ciphers]],
+            [start_ssl_listener(Host, Port, SslOpts1)
+                || {Host, Port} <- SslListeners],
             ok
     end.
 
@@ -114,7 +149,7 @@ start() ->
                {rabbit_tcp_client_sup,
                 {tcp_client_sup, start_link,
                  [{local, rabbit_tcp_client_sup},
-                  {rabbit_reader,start_link,[]}]},
+                  {rabbit_connection_sup,start_link,[]}]},
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok.
 
@@ -200,10 +235,10 @@ on_node_down(Node) ->
     ok = mnesia:dirty_delete(rabbit_listener, Node).
 
 start_client(Sock, SockTransform) ->
-    {ok, Child} = supervisor:start_child(rabbit_tcp_client_sup, []),
-    ok = rabbit_net:controlling_process(Sock, Child),
-    Child ! {go, Sock, SockTransform},
-    Child.
+    {ok, _Child, Reader} = supervisor:start_child(rabbit_tcp_client_sup, []),
+    ok = rabbit_net:controlling_process(Sock, Reader),
+    Reader ! {go, Sock, SockTransform},
+    Reader.
 
 start_client(Sock) ->
     start_client(Sock, fun (S) -> {ok, S} end).
@@ -226,8 +261,9 @@ start_ssl_client(SslOpts, Sock) ->
       end).
 
 connections() ->
-    [Pid || {_, Pid, _, _} <- supervisor:which_children(
-                                rabbit_tcp_client_sup)].
+    [rabbit_connection_sup:reader(ConnSup) ||
+        {_, ConnSup, supervisor, _}
+            <- supervisor:which_children(rabbit_tcp_client_sup)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
@@ -238,8 +274,7 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
-    case lists:any(fun ({_, ChildPid, _, _}) -> ChildPid =:= Pid end,
-                   supervisor:which_children(rabbit_tcp_client_sup)) of
+    case lists:member(Pid, connections()) of
         true  -> rabbit_reader:shutdown(Pid, Explanation);
         false -> throw({error, {not_a_connection_pid, Pid}})
     end.

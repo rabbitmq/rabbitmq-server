@@ -38,13 +38,13 @@
 -export([set_maximum_since_use/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, prioritise_cast/2]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (any()) -> {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/1 :: (any()) -> {'ok', pid()} | {'error', any()}).
 -spec(submit/2 :: (pid(), fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 -spec(submit_async/2 ::
       (pid(), fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
@@ -71,7 +71,7 @@ submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun}).
 
 set_maximum_since_use(Pid, Age) ->
-    gen_server2:pcast(Pid, 8, {set_maximum_since_use, Age}).
+    gen_server2:cast(Pid, {set_maximum_since_use, Age}).
 
 run({M, F, A}) ->
     apply(M, F, A);
@@ -87,6 +87,9 @@ init([WId]) ->
     put(worker_pool_worker, true),
     {ok, WId, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+prioritise_cast({set_maximum_since_use, _Age}, _State) -> 8;
+prioritise_cast(_Msg,                          _State) -> 0.
 
 handle_call({submit, Fun}, From, WId) ->
     gen_server2:reply(From, run(Fun)),

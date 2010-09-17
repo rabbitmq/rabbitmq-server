@@ -29,16 +29,16 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_reader_queue_collector).
+-module(rabbit_queue_collector).
 
 -behaviour(gen_server).
 
--export([start_link/0, register_exclusive_queue/2, delete_all/1, shutdown/1]).
+-export([start_link/0, register/2, delete_all/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {exclusive_queues}).
+-record(state, {queues}).
 
 -include("rabbit.hrl").
 
@@ -46,8 +46,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()}).
--spec(register_exclusive_queue/2 :: (pid(), amqqueue()) -> 'ok').
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(register/2 :: (pid(), rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -57,49 +57,41 @@
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
 
-register_exclusive_queue(CollectorPid, Q) ->
-    gen_server:call(CollectorPid, {register_exclusive_queue, Q}, infinity).
+register(CollectorPid, Q) ->
+    gen_server:call(CollectorPid, {register, Q}, infinity).
 
 delete_all(CollectorPid) ->
     gen_server:call(CollectorPid, delete_all, infinity).
 
-shutdown(CollectorPid) ->
-    gen_server:call(CollectorPid, shutdown, infinity).
-
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{exclusive_queues = dict:new()}}.
+    {ok, #state{queues = dict:new()}}.
 
 %%--------------------------------------------------------------------------
 
-handle_call({register_exclusive_queue, Q}, _From,
-            State = #state{exclusive_queues = Queues}) ->
+handle_call({register, Q}, _From,
+            State = #state{queues = Queues}) ->
     MonitorRef = erlang:monitor(process, Q#amqqueue.pid),
     {reply, ok,
-     State#state{exclusive_queues = dict:store(MonitorRef, Q, Queues)}};
+     State#state{queues = dict:store(MonitorRef, Q, Queues)}};
 
-handle_call(delete_all, _From,
-            State = #state{exclusive_queues = ExclusiveQueues}) ->
+handle_call(delete_all, _From, State = #state{queues = Queues}) ->
     [rabbit_misc:with_exit_handler(
        fun () -> ok end,
        fun () ->
                erlang:demonitor(MonitorRef),
                rabbit_amqqueue:delete(Q, false, false)
        end)
-     || {MonitorRef, Q} <- dict:to_list(ExclusiveQueues)],
-    {reply, ok, State};
+     || {MonitorRef, Q} <- dict:to_list(Queues)],
+    {reply, ok, State}.
 
-handle_call(shutdown, _From, State) ->
-    {stop, normal, ok, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(Msg, State) ->
+    {stop, {unhandled_cast, Msg}, State}.
 
 handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
-            State = #state{exclusive_queues = ExclusiveQueues}) ->
-    {noreply, State#state{exclusive_queues =
-                              dict:erase(MonitorRef, ExclusiveQueues)}}.
+            State = #state{queues = Queues}) ->
+    {noreply, State#state{queues = dict:erase(MonitorRef, Queues)}}.
 
 terminate(_Reason, _State) ->
     ok.

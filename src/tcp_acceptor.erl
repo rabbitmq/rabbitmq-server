@@ -55,6 +55,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(accept, State) ->
+    ok = file_handle_cache:obtain(),
     accept(State);
 
 handle_cast(_Msg, State) ->
@@ -83,7 +84,8 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
         %% is drained.
         gen_event:which_handlers(error_logger),
         %% handle
-        file_handle_cache:release_on_death(apply(M, F, A ++ [Sock]))
+        file_handle_cache:transfer(apply(M, F, A ++ [Sock])),
+        ok = file_handle_cache:obtain()
     catch {inet_error, Reason} ->
             gen_tcp:close(Sock),
             error_logger:error_msg("unable to accept TCP connection: ~p~n",
@@ -92,11 +94,13 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
 
     %% accept more
     accept(State);
+
 handle_info({inet_async, LSock, Ref, {error, closed}},
             State=#state{sock=LSock, ref=Ref}) ->
     %% It would be wrong to attempt to restart the acceptor when we
     %% know this will fail.
     {stop, normal, State};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -111,7 +115,6 @@ code_change(_OldVsn, State, _Extra) ->
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 accept(State = #state{sock=LSock}) ->
-    ok = file_handle_cache:obtain(),
     case prim_inet:async_accept(LSock, -1) of
         {ok, Ref} -> {noreply, State#state{ref=Ref}};
         Error     -> {stop, {cannot_accept, Error}, State}

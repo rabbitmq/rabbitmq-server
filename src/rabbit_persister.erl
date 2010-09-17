@@ -65,21 +65,28 @@
 
 -ifdef(use_specs).
 
--type(pmsg() :: {queue_name(), pkey()}).
+-type(pkey() :: rabbit_guid:guid()).
+-type(pmsg() :: {rabbit_amqqueue:name(), pkey()}).
+
 -type(work_item() ::
-      {publish, message(), pmsg()} |
+      {publish, rabbit_types:message(), pmsg()} |
       {deliver, pmsg()} |
       {ack, pmsg()}).
 
--spec(start_link/1 :: ([queue_name()]) ->
-                           {'ok', pid()} | 'ignore' | {'error', any()}).
+-spec(start_link/1 :: ([rabbit_amqqueue:name()]) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(transaction/1 :: ([work_item()]) -> 'ok').
--spec(extend_transaction/2 :: ({txn(), queue_name()}, [work_item()]) -> 'ok').
+-spec(extend_transaction/2 ::
+        ({rabbit_types:txn(), rabbit_amqqueue:name()}, [work_item()])
+        -> 'ok').
 -spec(dirty_work/1 :: ([work_item()]) -> 'ok').
--spec(commit_transaction/1 :: ({txn(), queue_name()}) -> 'ok').
--spec(rollback_transaction/1 :: ({txn(), queue_name()}) -> 'ok').
+-spec(commit_transaction/1 ::
+        ({rabbit_types:txn(), rabbit_amqqueue:name()}) -> 'ok').
+-spec(rollback_transaction/1 ::
+        ({rabbit_types:txn(), rabbit_amqqueue:name()}) -> 'ok').
 -spec(force_snapshot/0 :: () -> 'ok').
--spec(queue_content/1 :: (queue_name()) -> [{message(), boolean()}]).
+-spec(queue_content/1 ::
+        (rabbit_amqqueue:name()) -> [{rabbit_types:message(), boolean()}]).
 
 -endif.
 

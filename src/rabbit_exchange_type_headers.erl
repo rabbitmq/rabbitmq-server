@@ -36,8 +36,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, publish/2]).
--export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
+-export([validate/1, create/1, recover/2, delete/2, add_binding/2,
+         remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
@@ -48,7 +48,8 @@
                     {enables,     kernel_ready}]}).
 
 -ifdef(use_specs).
--spec(headers_match/2 :: (amqp_table(), amqp_table()) -> boolean()).
+-spec(headers_match/2 :: (rabbit_framing:amqp_table(),
+                          rabbit_framing:amqp_table()) -> boolean()).
 -endif.
 
 description() ->
@@ -78,8 +79,8 @@ parse_x_match(Other) ->
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
-%% (rabbit_misc:sort_field_table) that route/3 and
-%% rabbit_exchange:{add,delete}_binding/4 do.
+%% (rabbit_misc:sort_field_table) that publish/1 and
+%% rabbit_binding:{add,remove}/2 do.
 %%
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
