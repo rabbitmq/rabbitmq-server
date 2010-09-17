@@ -1414,7 +1414,7 @@ test_backing_queue() ->
             application:set_env(rabbit, msg_store_file_size_limit,
                                 FileSizeLimit, infinity),
             passed = test_queue_index(),
-	    passed = test_queue_index_props(),
+            passed = test_queue_index_props(),
             passed = test_variable_queue(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,

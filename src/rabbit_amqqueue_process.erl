@@ -402,9 +402,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
 deliver_from_queue_pred(IsEmpty, _State) ->
     not IsEmpty.
 
-deliver_from_queue_deliver(AckRequired, false,
-                           State = #q{backing_queue = BQ,
-                                      backing_queue_state = BQS}) ->
+deliver_from_queue_deliver(AckRequired, false, State) ->
     {{Message, IsDelivered, AckTag, Remaining}, State1} =
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
