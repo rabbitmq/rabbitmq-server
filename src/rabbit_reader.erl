@@ -808,18 +808,14 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid, #v1{}) ->
     self();
-i(address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:sockname(Sock),
-    A;
-i(port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:sockname(Sock),
-    P;
-i(peer_address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:peername(Sock),
-    A;
-i(peer_port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:peername(Sock),
-    P;
+i(address, State = #v1{sock = Sock}) ->
+    socket_info(1, fun rabbit_net:sockname/1, State);
+i(port, State = #v1{sock = Sock}) ->
+    socket_info(2, fun rabbit_net:sockname/1, State);
+i(peer_address, State = #v1{sock = Sock}) ->
+    socket_info(1, fun rabbit_net:peername/1, State);
+i(peer_port, State = #v1{sock = Sock}) ->
+    socket_info(2, fun rabbit_net:peername/1, State);
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
@@ -853,6 +849,13 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+socket_info(I, Fun, State = #v1 {sock = Sock}) ->
+    case {Fun(Sock), ?IS_RUNNING(State)} of
+        {{ok,    T}, _}     -> element(I, T);
+        {{error, E}, true}  -> throw({cannot_get_socket_stats, E});
+        {{error, E}, false} -> E
+    end.
 
 %%--------------------------------------------------------------------------
 
