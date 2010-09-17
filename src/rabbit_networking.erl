@@ -120,7 +120,8 @@ boot_ssl() ->
                                                  end}
                                    | SslOptsConfig]
                 end,
-            % In R13B04 and R14A (at least), rc4 is incorrectly implemented.
+            % filter that removes RC4 ciphers can be
+            % removed when at least R14B (SSL 4.0.1) is required
             CipherSuites = proplists:get_value(ciphers,
                                                SslOpts,
                                                ssl:cipher_suites()),
