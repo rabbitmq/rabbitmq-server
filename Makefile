@@ -111,7 +111,11 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	$(ERL_EBIN) -eval \
-		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
+		"rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\")." \
+		    -eval \
+		"init:stop()."
+
+
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
