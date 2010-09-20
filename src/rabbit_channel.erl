@@ -251,7 +251,9 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    internal_emit_stats(State),
+    rabbit_event:if_enabled(StatsTimer, fun () ->
+                                                internal_emit_stats(State)
+                                        end),
     State1 = State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)},
     {hibernate, State1}.
 

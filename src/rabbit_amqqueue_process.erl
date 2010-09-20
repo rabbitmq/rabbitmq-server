@@ -926,6 +926,6 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    emit_stats(State),
+    rabbit_event:if_enabled(StatsTimer, fun () -> emit_stats(State) end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)},
     {hibernate, stop_rate_timer(State1#q{backing_queue_state = BQS2})}.

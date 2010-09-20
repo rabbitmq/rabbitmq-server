@@ -90,18 +90,18 @@ start_link() ->
 %% On startup:
 %%   Timer = init_stats_timer()
 %%   notify(created event)
-%%   maybe(internal_emit_stats) - so we immediately send something
+%%   if_enabled(internal_emit_stats) - so we immediately send something
 %%
 %% On wakeup:
 %%   ensure_stats_timer(Timer, emit_stats)
 %%   (Note we can't emit stats immediately, the timer may have fired 1ms ago.)
 %%
 %% emit_stats:
-%%   internal_emit_stats
+%%   if_enabled(internal_emit_stats)
 %%   reset_stats_timer(Timer) - just bookkeeping
 %%
 %% Pre-hibernation:
-%%   internal_emit_stats
+%%   if_enabled(internal_emit_stats)
 %%   stop_stats_timer(Timer)
 %%
 %% internal_emit_stats:
