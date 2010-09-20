@@ -134,7 +134,6 @@ reset_stats_timer(State) ->
 stats_level(#state{level = Level}) ->
     Level.
 
-
 if_enabled(#state{level = none}, _Fun) ->
     ok;
 if_enabled(_State, Fun) ->

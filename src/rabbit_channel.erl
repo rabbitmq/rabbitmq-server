@@ -242,8 +242,8 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    State1 = State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-    {noreply, State1}.
+    {noreply,
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
@@ -252,8 +252,8 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
     internal_emit_stats(State),
-    State1 = State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)},
-    {hibernate, State1}.
+    {hibernate,
+     State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
