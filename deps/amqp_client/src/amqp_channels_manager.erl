@@ -196,15 +196,14 @@ handle_connection_closing(ChannelCloseType, Reason, State) ->
 %%---------------------------------------------------------------------------
 
 internal_register(Number, Pid, Framing,
-                  State = #state{map_num_pf  = MapNPF, map_pid_num = MapPN}) ->
+                  State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
     MapNPF1 = gb_trees:enter(Number, {Pid, Framing}, MapNPF),
     MapPN1 = dict:store(Pid, Number, MapPN),
     State#state{map_num_pf  = MapNPF1,
                 map_pid_num = MapPN1}.
 
 internal_unregister(Number, Pid,
-                    State = #state{map_num_pf  = MapNPF,
-                                   map_pid_num = MapPN}) ->
+                    State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
     MapNPF1 = gb_trees:delete(Number, MapNPF),
     MapPN1 = dict:erase(Pid, MapPN),
     State#state{map_num_pf  = MapNPF1,

@@ -75,8 +75,8 @@ connect(Pid) ->
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams, SIF]) ->
-    {ok, #state{sup = Sup,
-                params = AmqpParams,
+    {ok, #state{sup                      = Sup,
+                params                   = AmqpParams,
                 start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
@@ -136,8 +136,8 @@ handle_command({open_channel, ProposedNumber}, _From,
      State};
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
-                                                close = Close,
-                                                from = From},
+                                                close  = Close,
+                                                from   = From},
                                 State)}.
 
 %%---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ handle_command({close, #'connection.close'{} = Close}, From, State) ->
 handle_method(#'connection.close'{} = Close, none, State) ->
     {noreply, set_closing_state(abrupt,
                                 #closing{reason = server_initiated_close,
-                                         close = Close},
+                                         close  = Close},
                                 State)};
 handle_method(#'connection.close_ok'{}, none,
               State = #state{closing = Closing}) ->
@@ -171,10 +171,9 @@ i(amqp_params,       State) -> State#state.params;
 i(channel_max,       State) -> State#state.channel_max;
 i(heartbeat,         State) -> State#state.heartbeat;
 i(sock,              State) -> State#state.sock;
-i(num_channels,      State) ->
-    amqp_channels_manager:num_channels(State#state.channels_manager);
-i(Item, _State) ->
-    throw({bad_argument, Item}).
+i(num_channels,      State) -> amqp_channels_manager:num_channels(
+                                 State#state.channels_manager);
+i(Item,             _State) -> throw({bad_argument, Item}).
 
 %%---------------------------------------------------------------------------
 %% Closing
@@ -280,8 +279,8 @@ handle_socket_closed(State) ->
 %% Handshake
 %%---------------------------------------------------------------------------
 
-do_connect(State = #state{params = #amqp_params{host = Host,
-                                                port = Port,
+do_connect(State = #state{params = #amqp_params{host        = Host,
+                                                port        = Port,
                                                 ssl_options = none}}) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock}      -> handshake(State#state{sock = Sock});
@@ -289,8 +288,8 @@ do_connect(State = #state{params = #amqp_params{host = Host,
                                      [Reason]),
                            exit(Reason)
     end;
-do_connect(State = #state{params = #amqp_params{host = Host,
-                                                port = Port,
+do_connect(State = #state{params = #amqp_params{host        = Host,
+                                                port        = Port,
                                                 ssl_options = SslOpts}}) ->
     rabbit_misc:start_applications([crypto, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
@@ -319,10 +318,10 @@ handshake(State0 = #state{sock = Sock}) ->
 start_infrastructure(State = #state{start_infrastructure_fun = SIF,
                                     sock = Sock}) ->
     {ok, {ChMgr, MainReader, Framing, Writer, SHF}} = SIF(Sock),
-    State#state{channels_manager = ChMgr,
-                main_reader = MainReader,
-                framing0 = Framing,
-                writer0 = Writer,
+    State#state{channels_manager    = ChMgr,
+                main_reader         = MainReader,
+                framing0            = Framing,
+                writer0             = Writer,
                 start_heartbeat_fun = SHF}.
 
 network_handshake(State = #state{params = Params, channels_manager = ChMgr}) ->
@@ -352,8 +351,8 @@ network_handshake(State = #state{params = Params, channels_manager = ChMgr}) ->
                 server_properties = ServerProperties}.
 
 start_heartbeat(#state{start_heartbeat_fun = SHF,
-                       sock = Sock,
-                       heartbeat = Heartbeat}) ->
+                       sock                = Sock,
+                       heartbeat           = Heartbeat}) ->
     SHF(Sock, Heartbeat).
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,

@@ -74,7 +74,8 @@ hard_error_test(Connection) ->
         exit:{{connection_closing, _}, _} = Reason ->
             %% Network case
             ?assertMatch({{connection_closing,
-                {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _}, Reason);
+                           {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _},
+                         Reason);
         exit:Reason ->
             %% Direct case
             ?assertMatch({{server_initiated_close, ?NOT_IMPLEMENTED, _}, _},
@@ -86,9 +87,10 @@ hard_error_test(Connection) ->
             %% TODO fix error code in the direct case
             killed -> ok;
             %% Network case
-            _        -> ?assertMatch({connection_closing,
-                            {server_initiated_close, ?NOT_IMPLEMENTED, _}},
-                            OtherExit)
+            _      -> ?assertMatch(
+                         {connection_closing,
+                          {server_initiated_close, ?NOT_IMPLEMENTED, _}},
+                         OtherExit)
         end
     end,
     test_util:wait_for_death(Channel),
