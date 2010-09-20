@@ -29,7 +29,6 @@
 -define(RPC_SLEEP, 500).
 
 -export([test_coverage/0]).
--export([test_channel_flow/0]).
 
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -75,12 +74,6 @@ queue_unbind_test() ->
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
-
-%%---------------------------------------------------------------------------
-%% This must be kicked off manually because it can only be run after Rabbit
-%% has been running for 1 minute
-test_channel_flow() ->
-    test_util:channel_flow_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Negative Tests
