@@ -613,11 +613,10 @@ tx_rollback(Txn, State = #vqstate { durable = IsDurable }) ->
 tx_commit(Txn, Fun, MsgPropsFun, State = #vqstate { durable = IsDurable }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
-    F = fun({Msg, MsgProperties}) ->
-        {Msg, MsgPropsFun(MsgProperties)}
-    end,
-    PubsProcessed = lists:map(F, Pubs),
-    PubsOrdered = lists:reverse(PubsProcessed),
+    PubsOrdered = lists:foldl(
+                    fun ({Msg, MsgProps}, Acc) ->
+                            [{Msg, MsgPropsFun(MsgProps)} | Acc]
+                    end, [], Pubs),
     AckTags1 = lists:append(AckTags),
     PersistentGuids = persistent_guids(PubsOrdered),
     HasPersistentPubs = PersistentGuids =/= [],
@@ -848,13 +847,13 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
                       true  -> {Filtered1,
                                 cons_if(not IsDelivered, SeqId, Delivers1),
                                 [SeqId | Acks1]};
-                      false -> {[m(#msg_status { msg           = undefined,
-                                                 guid          = Guid,
-                                                 seq_id        = SeqId,
-                                                 is_persistent = IsPersistent,
-                                                 is_delivered  = IsDelivered,
-                                                 msg_on_disk   = true,
-                                                 index_on_disk = true,
+                      false -> {[m(#msg_status { msg            = undefined,
+                                                 guid           = Guid,
+                                                 seq_id         = SeqId,
+                                                 is_persistent  = IsPersistent,
+                                                 is_delivered   = IsDelivered,
+                                                 msg_on_disk    = true,
+                                                 index_on_disk  = true,
                                                  msg_properties = MsgProperties
                                                }) | Filtered1],
                                 Delivers1,

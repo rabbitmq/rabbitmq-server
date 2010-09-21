@@ -538,11 +538,14 @@ expiry_to_binary(Expiry) ->
 
 read_pub_record_body(Hdl) ->
     {ok, Bin} = file_handle_cache:read(Hdl, ?GUID_BYTES + ?EXPIRY_BYTES),
+ 
+    %% work around for binary data fragmentation. See
+    %% rabbit_msg_file:read_next/2
     <<GuidNum:?GUID_BITS, Expiry:?EXPIRY_BITS>> = Bin,
     <<Guid:?GUID_BYTES/binary>> = <<GuidNum:?GUID_BITS>>,
     Exp = case Expiry of
             ?NO_EXPIRY -> undefined;
-            X -> X
+            X          -> X
           end,
     {Guid, #msg_properties{expiry = Exp}}.
             
@@ -829,8 +832,6 @@ load_segment_entries(KeepAcked, Hdl, SegEntries, UnackedCount) ->
     case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
               IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
-            %% because we specify /binary, and binaries are complete
-            %% bytes, the size spec is in bytes, not bits.
             {Guid, MsgProperties} = read_pub_record_body(Hdl),
             Obj = {{Guid, MsgProperties, 1 == IsPersistentNum}, no_del, no_ack},
             SegEntries1 = array:set(RelSeq, Obj, SegEntries),
