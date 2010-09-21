@@ -242,8 +242,8 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    State1 = State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-    {noreply, State1}.
+    {noreply,
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
