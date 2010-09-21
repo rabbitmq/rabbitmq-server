@@ -329,9 +329,9 @@ check_integer_argument(undefined, _, _) ->
 check_integer_argument({Type, Val}, InvalidTypeError, _) when Val > 0 ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {InvalidTypeError, Type, Value}}
+        false -> {error, {InvalidTypeError, Type, Val}}
     end;
-check_message_ttl_argument({_Type, _Value}, _, ZeroOrLessError) ->
+check_integer_argument({_Type, _Val}, _, ZeroOrLessError) ->
     {error, ZeroOrLessError}.
   
 list(VHostPath) ->
