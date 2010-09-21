@@ -176,8 +176,8 @@ tx_commit(Txn, Fun, MsgPropsFun,
     PA1 = remove_acks(AckTags1, PA),
     {Q1, Len1} = lists:foldr(fun ({Msg, MsgProps}, {QN, LenN}) ->
                                      MsgProps1 = MsgPropsFun(MsgProps),
-                                     QN = enqueue(Msg, MsgProps1, false, Q),
-                                     {QN, LenN + 1}
+                                     QM = enqueue(Msg, MsgProps1, false, QN),
+                                     {QM, LenN + 1}
                              end, {Q, Len}, PubsRev),
     {AckTags1, State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }}.
 
@@ -203,8 +203,7 @@ requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA, queue = Q,
     State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }.
 
 enqueue(Msg, MsgProps, IsDelivered, Q) ->
-    I = {Msg, MsgProps, IsDelivered},
-    queue:in(I, Q).
+    queue:in({Msg, MsgProps, IsDelivered}, Q).
 
 len(#iv_state { len = Len }) -> Len.
 
@@ -280,7 +279,8 @@ persist_acks(QName, true, Txn, AckTags, PA) ->
     persist_work(Txn, QName,
                  [{ack, {QName, Guid}} || Guid <- AckTags,
                                           begin
-                                              {ok, Msg} = dict:find(Guid, PA),
+                                              {ok, {Msg, _MsgProps}} 
+                                                  = dict:find(Guid, PA),
                                               Msg #basic_message.is_persistent
                                           end]);
 persist_acks(_QName, _IsDurable, _Txn, _AckTags, _PA) ->
