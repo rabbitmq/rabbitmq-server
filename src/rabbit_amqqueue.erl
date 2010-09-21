@@ -56,8 +56,7 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(EXPIRES_TYPES, [byte, short, signedint, long]).
--define(TTL_TYPES, [byte, short, signedint, long]).
+-define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
 
 %%----------------------------------------------------------------------------
 
@@ -310,29 +309,30 @@ check_declare_arguments(QueueName, Args) ->
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1},
-                           {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
+     end || {Key, Fun} <- 
+                [{<<"x-expires">>, fun check_expires_argument/1},
+                 {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
     ok.
 
-check_expires_argument(undefined) ->
-    ok;
-check_expires_argument({Type, Expires}) when Expires > 0 ->
-    case lists:member(Type, ?EXPIRES_TYPES) of
-        true  -> ok;
-        false -> {error, {expires_not_of_acceptable_type, Type, Expires}}
-    end;
-check_expires_argument({_Type, _Expires}) ->
-    {error, expires_zero_or_less}.
+check_expires_argument(Val) ->
+    check_integer_argument(Val, 
+                           expires_not_of_acceptable_type, 
+                           expires_zero_or_less).
 
-check_message_ttl_argument(undefined) ->
+check_message_ttl_argument(Val) ->
+    check_integer_argument(Val, 
+                           ttl_not_of_acceptable_type, 
+                           ttl_zero_or_less).
+
+check_integer_argument(undefined, _, _) ->
     ok;
-check_message_ttl_argument({Type, TTL}) when TTL > 0 ->
-    case lists:member(Type, ?TTL_TYPES) of
+check_integer_argument({Type, Val}, InvalidTypeError, _) when Val > 0 ->
+    case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {ttl_not_of_acceptable_type, Type, TTL}}
+        false -> {error, {InvalidTypeError, Type, Value}}
     end;
-check_message_ttl_argument({_Type, _TTL}) ->
-    {error, ttl_zero_or_less}.
+check_message_ttl_argument({_Type, _Value}, _, ZeroOrLessError) ->
+    {error, ZeroOrLessError}.
   
 list(VHostPath) ->
     mnesia:dirty_match_object(
