@@ -254,8 +254,8 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     rabbit_event:if_enabled(StatsTimer, fun () ->
                                                 internal_emit_stats(State)
                                         end),
-    State1 = State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)},
-    {hibernate, State1}.
+    {hibernate,
+     State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
