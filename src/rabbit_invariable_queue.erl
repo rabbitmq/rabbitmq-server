@@ -104,7 +104,7 @@ publish(Msg, MsgProps, State = #iv_state { queue   = Q,
                                            qname   = QName, 
                                            durable = IsDurable,
                                            len     = Len }) ->
-    ok = persist_message(QName, IsDurable, none, Msg),
+    ok = persist_message(QName, IsDurable, none, Msg, MsgProps),
     Q1 = enqueue(Msg, MsgProps, false, Q),
     State #iv_state { queue = Q1, len = Len + 1 }.
 
@@ -114,7 +114,7 @@ publish_delivered(true, Msg = #basic_message { guid = Guid },
                   MsgProps,
                   State = #iv_state { qname = QName, durable = IsDurable,
                                       len = 0, pending_ack = PA }) ->
-    ok = persist_message(QName, IsDurable, none, Msg),
+    ok = persist_message(QName, IsDurable, none, Msg, MsgProps),
     ok = persist_delivery(QName, IsDurable, false, Msg),
     {Guid, State #iv_state { pending_ack = store_ack(Msg, MsgProps, PA) }}.
 
@@ -149,7 +149,7 @@ tx_publish(Txn, Msg, MsgProps, State = #iv_state { qname = QName,
                                          durable = IsDurable }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
-    ok = persist_message(QName, IsDurable, Txn, Msg),
+    ok = persist_message(QName, IsDurable, Txn, Msg, MsgProps),
     State.
 
 tx_ack(Txn, AckTags, State = #iv_state { qname = QName, durable = IsDurable,
@@ -263,14 +263,15 @@ do_if_persistent(F, Txn, QName) ->
 %%----------------------------------------------------------------------------
 
 persist_message(QName, true, Txn, Msg = #basic_message {
-                                    is_persistent = true }) ->
+                                    is_persistent = true }, MsgProps) ->
     Msg1 = Msg #basic_message {
              %% don't persist any recoverable decoded properties
              content = rabbit_binary_parser:clear_decoded_content(
                          Msg #basic_message.content)},
     persist_work(Txn, QName,
-                 [{publish, Msg1, {QName, Msg1 #basic_message.guid}}]);
-persist_message(_QName, _IsDurable, _Txn, _Msg) ->
+                 [{publish, Msg1, MsgProps, 
+		   {QName, Msg1 #basic_message.guid}}]);
+persist_message(_QName, _IsDurable, _Txn, _Msg, _MsgProps) ->
     ok.
 
 persist_delivery(QName, true, false, #basic_message { is_persistent = true,
