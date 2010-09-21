@@ -446,16 +446,16 @@ requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
       fun (BQS) -> BQ:requeue(AckTags, MsgPropsFun, BQS) end, State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS, 
-				  backing_queue = BQ}) ->
+                                  backing_queue = BQ}) ->
     case BQ:fetch(AckRequired, BQS) of
         {empty, BQS1} -> {empty, State#q{backing_queue_state = BQS1}};
         {{Message, MsgProperties, IsDelivered, AckTag, Remaining}, BQS1} ->
-	    case msg_expired(MsgProperties) of
-		true -> 
-		    fetch(AckRequired, State#q{backing_queue_state = BQS1});
-		false ->
-		    {{Message, IsDelivered, AckTag, Remaining}, State#q{backing_queue_state = BQS1}}
-	    end
+            case msg_expired(MsgProperties) of
+                true -> 
+                    fetch(AckRequired, State#q{backing_queue_state = BQS1});
+                false ->
+                    {{Message, IsDelivered, AckTag, Remaining}, State#q{backing_queue_state = BQS1}}
+            end
     end.
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
@@ -581,7 +581,7 @@ msg_expired(_MsgProperties = #msg_properties{expiry=Expiry}) ->
 
 reset_msg_expiry_fun(State) ->
     fun(MsgProps) ->
-	    MsgProps#msg_properties{expiry=calculate_msg_expiry(State)}
+            MsgProps#msg_properties{expiry=calculate_msg_expiry(State)}
     end.
 
 new_msg_properties(State) ->
@@ -591,7 +591,7 @@ calculate_msg_expiry(_State = #q{ttl = undefined}) ->
     undefined;
 calculate_msg_expiry(_State = #q{ttl = Ttl}) ->
     Now = timer:now_diff(now(), {0,0,0}),
-    Now + (Ttl * 1000).			
+    Now + (Ttl * 1000).                 
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 

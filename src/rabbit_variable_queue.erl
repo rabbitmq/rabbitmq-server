@@ -498,7 +498,7 @@ publish(Msg, MsgProperties, State) ->
 publish_delivered(false, _Msg, _MsgProps, State = #vqstate { len = 0 }) ->
     {blank_ack, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
-		  MsgProps,
+                  MsgProps,
                   State = #vqstate { len               = 0,
                                      next_seq_id       = SeqId,
                                      out_counter       = OutCount,
@@ -636,9 +636,9 @@ requeue(AckTags, MsgPropsFun, State) ->
     a(reduce_memory_use(
         ack(fun rabbit_msg_store:release/2,
             fun (#msg_status { msg = Msg, 
-			       msg_properties = MsgProperties }, State1) ->
+                               msg_properties = MsgProperties }, State1) ->
                     {_SeqId, State2} = 
-			publish(Msg, MsgPropsFun(MsgProperties), true, false, State1),
+                        publish(Msg, MsgPropsFun(MsgProperties), true, false, State1),
                     State2;
                 ({IsPersistent, Guid, MsgProperties}, State1) ->
                     #vqstate { msg_store_clients = MSCState } = State1,
@@ -646,7 +646,7 @@ requeue(AckTags, MsgPropsFun, State) ->
                         read_from_msg_store(MSCState, IsPersistent, Guid),
                     State2 = State1 #vqstate { msg_store_clients = MSCState1 },
                     {_SeqId, State3} = publish(Msg, MsgPropsFun(MsgProperties),
-					       true, true, State2),
+                                               true, true, State2),
                     State3
             end,
             AckTags, State))).
@@ -798,7 +798,7 @@ msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid }, MsgPropert
     #msg_status { seq_id = SeqId, guid = Guid, msg = Msg,
                   is_persistent = IsPersistent, is_delivered = false,
                   msg_on_disk = false, index_on_disk = false,
-		  msg_properties = MsgProperties }.
+                  msg_properties = MsgProperties }.
 
 find_msg_store(true)  -> ?PERSISTENT_MSG_STORE;
 find_msg_store(false) -> ?TRANSIENT_MSG_STORE.
@@ -1010,7 +1010,7 @@ remove_queue_entries1(
 %%----------------------------------------------------------------------------
 
 publish(Msg = #basic_message { is_persistent = IsPersistent },
-	MsgProperties, IsDelivered, MsgOnDisk,
+        MsgProperties, IsDelivered, MsgOnDisk,
         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
                            next_seq_id      = SeqId,
                            len              = Len,
@@ -1021,7 +1021,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProperties))
         #msg_status { is_delivered = IsDelivered, 
-		      msg_on_disk = MsgOnDisk},
+                      msg_on_disk = MsgOnDisk},
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = case bpqueue:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = queue:in(m(MsgStatus1), Q1) };
@@ -1060,18 +1060,18 @@ maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
     {MsgStatus, IndexState};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
-				   guid = Guid,
+                                   guid = Guid,
                                    seq_id = SeqId,
                                    is_persistent = IsPersistent,
                                    is_delivered = IsDelivered,
-				   msg_properties = MsgProperties},
-			  IndexState)
+                                   msg_properties = MsgProperties},
+                          IndexState)
   when Force orelse IsPersistent ->
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
     IndexState1 = rabbit_queue_index:publish(Guid, 
-					     SeqId, 
-					     MsgProperties,
-					     IsPersistent,
+                                             SeqId, 
+                                             MsgProperties,
+                                             IsPersistent,
                                              IndexState),
     {MsgStatus #msg_status { index_on_disk = true },
      maybe_write_delivered(IsDelivered, SeqId, IndexState1)};

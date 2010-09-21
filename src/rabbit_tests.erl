@@ -1661,11 +1661,11 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
 test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
-	      Guid = rabbit_guid:guid(),
-	      Props = #msg_properties{expiry=12345},
-	      Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
-	      {[{Guid, 1, Props, _, _}], Qi2} = rabbit_queue_index:read(1, 2, Qi1),
-	      Qi2
+              Guid = rabbit_guid:guid(),
+              Props = #msg_properties{expiry=12345},
+              Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
+              {[{Guid, 1, Props, _, _}], Qi2} = rabbit_queue_index:read(1, 2, Qi1),
+              Qi2
       end),
 
     ok = rabbit_variable_queue:stop(),
@@ -1814,7 +1814,7 @@ variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
-			  _Props, IsDelivered, AckTagN, Rem}, VQM} =
+                          _Props, IsDelivered, AckTagN, Rem}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).

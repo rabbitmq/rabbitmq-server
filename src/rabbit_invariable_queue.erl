@@ -111,7 +111,7 @@ publish(Msg, MsgProps, State = #iv_state { queue = Q,
 publish_delivered(false, _Msg, _MsgProps, State) ->
     {blank_ack, State};
 publish_delivered(true, Msg = #basic_message { guid = Guid },
-		  MsgProps,
+                  MsgProps,
                   State = #iv_state { qname = QName, durable = IsDurable,
                                       len = 0, pending_ack = PA }) ->
     ok = persist_message(QName, IsDurable, none, Msg),
@@ -165,7 +165,7 @@ tx_rollback(Txn, State = #iv_state { qname = QName }) ->
     {lists:flatten(AckTags), State}.
 
 tx_commit(Txn, Fun, MsgPropsFun, 
-	  State = #iv_state { qname = QName, pending_ack = PA,
+          State = #iv_state { qname = QName, pending_ack = PA,
                                         queue = Q, len = Len }) ->
     #tx { pending_acks = AckTags, pending_messages = PubsRev } = lookup_tx(Txn),
     ok = do_if_persistent(fun rabbit_persister:commit_transaction/1,
@@ -175,8 +175,8 @@ tx_commit(Txn, Fun, MsgPropsFun,
     AckTags1 = lists:flatten(AckTags),
     PA1 = remove_acks(AckTags1, PA),
     {Q1, Len1} = lists:foldr(fun ({Msg, MsgProps}, {QN, LenN}) ->
-				     MsgProps1 = MsgPropsFun(MsgProps),
-				     QN = enqueue(Msg, MsgProps1, false, Q),
+                                     MsgProps1 = MsgPropsFun(MsgProps),
+                                     QN = enqueue(Msg, MsgProps1, false, Q),
                                      {QN, LenN + 1}
                              end, {Q, Len}, PubsRev),
     {AckTags1, State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }}.
@@ -195,8 +195,8 @@ requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA, queue = Q,
     {Q1, Len1} = lists:foldl(
                    fun (Guid, {QN, LenN}) ->
                            {ok, {Msg = #basic_message {}, MsgProps}}
-			       = dict:find(Guid, PA),
-			   MsgProps1 = MsgPropsFun(MsgProps),
+                               = dict:find(Guid, PA),
+                           MsgProps1 = MsgPropsFun(MsgProps),
                            {enqueue(Msg, MsgProps1, true, QN), LenN + 1}
                    end, {Q, Len}, AckTags),
     PA1 = remove_acks(AckTags, PA),

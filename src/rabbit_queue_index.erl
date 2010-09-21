@@ -204,14 +204,14 @@
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/5 :: (rabbit_guid:guid(), seq_id(), msg_properties(),
-		       boolean(), qistate()) -> qistate()).
+                       boolean(), qistate()) -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_guid:guid(), seq_id(), msg_properties(), 
-			boolean(), boolean()}], qistate()}).
+                        boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
@@ -259,8 +259,8 @@ publish(Guid, SeqId, MsgProperties, IsPersistent, State)
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS, 
-			  SeqId:?SEQ_BITS>>,
-			  create_pub_record_body(Guid, MsgProperties)]),
+                          SeqId:?SEQ_BITS>>,
+                          create_pub_record_body(Guid, MsgProperties)]),
     maybe_flush_journal(add_to_journal(SeqId, {Guid, MsgProperties, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
@@ -540,7 +540,7 @@ read_pub_record_body(Hdl) ->
             X -> X
           end,
     {Guid, #msg_properties{expiry = Exp}}.
-	    
+            
 %%----------------------------------------------------------------------------
 %% journal manipulation
 %%----------------------------------------------------------------------------

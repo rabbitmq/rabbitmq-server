@@ -311,7 +311,7 @@ check_declare_arguments(QueueName, Args) ->
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1},
-			   {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
+                           {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
     ok.
 
 check_expires_argument(undefined) ->
