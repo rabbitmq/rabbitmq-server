@@ -100,10 +100,10 @@ purge(State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
     ok = persist_acks(QName, IsDurable, none, AckTags, PA),
     {Len, State #iv_state { len = 0, queue = queue:new() }}.
 
-publish(Msg, MsgProps, State = #iv_state { queue = Q, 
-                                                qname = QName, 
-                                                durable = IsDurable,
-                                                len = Len }) ->
+publish(Msg, MsgProps, State = #iv_state { queue   = Q, 
+                                           qname   = QName, 
+                                           durable = IsDurable,
+                                           len     = Len }) ->
     ok = persist_message(QName, IsDurable, none, Msg),
     Q1 = enqueue(Msg, MsgProps, false, Q),
     State #iv_state { queue = Q1, len = Len + 1 }.
@@ -120,8 +120,10 @@ publish_delivered(true, Msg = #basic_message { guid = Guid },
 
 fetch(_AckRequired, State = #iv_state { len = 0 }) ->
     {empty, State};
-fetch(AckRequired, State = #iv_state { len = Len, queue = Q, qname = QName,
-                                       durable = IsDurable,
+fetch(AckRequired, State = #iv_state { len         = Len, 
+                                       queue       = Q, 
+                                       qname       = QName,
+                                       durable     = IsDurable,
                                        pending_ack = PA }) ->
     {{value, {Msg = #basic_message { guid = Guid }, MsgProps, IsDelivered}}, 
         Q1} = queue:out(Q),
@@ -164,9 +166,10 @@ tx_rollback(Txn, State = #iv_state { qname = QName }) ->
     erase_tx(Txn),
     {lists:flatten(AckTags), State}.
 
-tx_commit(Txn, Fun, MsgPropsFun, 
-          State = #iv_state { qname = QName, pending_ack = PA,
-                                        queue = Q, len = Len }) ->
+tx_commit(Txn, Fun, MsgPropsFun, State = #iv_state { qname       = QName, 
+                                                     pending_ack = PA, 
+                                                     queue       = Q, 
+                                                     len         = Len }) ->
     #tx { pending_acks = AckTags, pending_messages = PubsRev } = lookup_tx(Txn),
     ok = do_if_persistent(fun rabbit_persister:commit_transaction/1,
                           Txn, QName),
@@ -175,14 +178,15 @@ tx_commit(Txn, Fun, MsgPropsFun,
     AckTags1 = lists:flatten(AckTags),
     PA1 = remove_acks(AckTags1, PA),
     {Q1, Len1} = lists:foldr(fun ({Msg, MsgProps}, {QN, LenN}) ->
-                                     MsgProps1 = MsgPropsFun(MsgProps),
-                                     QM = enqueue(Msg, MsgProps1, false, QN),
-                                     {QM, LenN + 1}
+                                     {enqueue(Msg, MsgPropsFun(MsgProps), 
+                                              false, QN), 
+                                      LenN + 1}
                              end, {Q, Len}, PubsRev),
     {AckTags1, State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }}.
 
-requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA, queue = Q,
-                                     len = Len }) ->
+requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA, 
+                                                  queue       = Q,
+                                                  len         = Len }) ->
     %% We don't need to touch the persister here - the persister will
     %% already have these messages published and delivered as
     %% necessary. The complication is that the persister's seq_id will
@@ -194,10 +198,10 @@ requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA, queue = Q,
     %% order to the last known state of our queue, prior to shutdown.
     {Q1, Len1} = lists:foldl(
                    fun (Guid, {QN, LenN}) ->
-                           {ok, {Msg = #basic_message {}, MsgProps}}
-                               = dict:find(Guid, PA),
-                           MsgProps1 = MsgPropsFun(MsgProps),
-                           {enqueue(Msg, MsgProps1, true, QN), LenN + 1}
+                           {Msg = #basic_message {}, MsgProps}
+                               = dict:fetch(Guid, PA),
+                           {enqueue(Msg, MsgPropsFun(MsgProps), true, QN), 
+                            LenN + 1}
                    end, {Q, Len}, AckTags),
     PA1 = remove_acks(AckTags, PA),
     State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }.
@@ -225,7 +229,7 @@ status(_State) -> [].
 
 remove_acks(AckTags, PA) -> lists:foldl(fun dict:erase/2, PA, AckTags).
 
-store_ack(Msg = #basic_message { guid = Guid}, MsgProps, PA) ->
+store_ack(Msg = #basic_message { guid = Guid }, MsgProps, PA) ->
     dict:store(Guid, {Msg, MsgProps}, PA).
 
 %%----------------------------------------------------------------------------

@@ -160,8 +160,8 @@ init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
 
 init_ttl(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-message-ttl">>) of
-        {_Type, Ttl} -> State#q{ttl=Ttl};
-        undefined   -> State
+        {_Type, Ttl} -> State#q{ttl = Ttl};
+        undefined    -> State
     end.
 
 declare(Recover, From,
@@ -444,9 +444,10 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
-    MsgPropsFun = reset_msg_expiry_fun(State),
     maybe_run_queue_via_backing_queue(
-      fun (BQS) -> BQ:requeue(AckTags, MsgPropsFun, BQS) end, State).
+      fun (BQS) -> 
+              BQ:requeue(AckTags, reset_msg_expiry_fun(State), BQS)
+      end, State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS, 
                                   backing_queue = BQ}) ->
@@ -454,7 +455,7 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
         {empty, BQS1} -> {empty, State#q{backing_queue_state = BQS1}};
         {{Message, MsgProperties, IsDelivered, AckTag, Remaining}, BQS1} ->
             case msg_expired(MsgProperties) of
-                true -> 
+                true  -> 
                     fetch(AckRequired, State#q{backing_queue_state = BQS1});
                 false ->
                     {{Message, IsDelivered, AckTag, Remaining}, 
@@ -748,11 +749,12 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
     case fetch(AckRequired, State1) of
-        {empty, State2} -> reply(empty, State2);
+        {empty, State2} -> 
+            reply(empty, State2);
         {{Message, IsDelivered, AckTag, Remaining}, State2} ->
             case AckRequired of
-                true ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                         store_ch_record(
+                true  ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
+                          store_ch_record(
                            C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
                 false -> ok
             end,
