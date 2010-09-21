@@ -158,6 +158,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
+    StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
@@ -175,8 +176,10 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 consumer_mapping        = dict:new(),
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = rabbit_event:init_stats_timer()},
+                stats_timer             = StatsTimer},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun() -> internal_emit_stats(State) end),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -251,17 +254,22 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State) ->
+handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    {noreply, State}.
+    {noreply,
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State)}.
 
-handle_pre_hibernate(State) ->
+handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    {hibernate, stop_stats_timer(State)}.
+    rabbit_event:if_enabled(StatsTimer, fun () ->
+                                                internal_emit_stats(State)
+                                        end),
+    {hibernate,
+     State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -291,13 +299,7 @@ ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
                              StatsTimer,
-                             fun() -> internal_emit_stats(State) end,
                              fun() -> emit_stats(ChPid) end)}.
-
-stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    State#ch{stats_timer = rabbit_event:stop_stats_timer(
-                             StatsTimer,
-                             fun() -> internal_emit_stats(State) end)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
