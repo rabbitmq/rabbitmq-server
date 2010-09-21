@@ -53,7 +53,7 @@
           <td>
             <select name="vhost">
               <% for (var i = 0; i < vhosts.length; i++) { %>
-              <option value="<%= vhosts[i] %>"><%= vhosts[i] %></option>
+              <option value="<%= vhosts[i].name %>"><%= vhosts[i].name %></option>
               <% } %>
             </select>
           </td>

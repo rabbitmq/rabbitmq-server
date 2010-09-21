@@ -6,7 +6,6 @@ Write more management:
 Do sensible things with vhosts in UI.
 Fix refreshing.
 Write more thorough unit tests, especially around listings.
-Document inets dependency.
 
 Then
 ====

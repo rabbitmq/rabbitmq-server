@@ -1,3 +1,4 @@
+
 %%   The contents of this file are subject to the Mozilla Public License
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
@@ -21,7 +22,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
--export([protocol/1, resource/1, permissions/1]).
+-export([protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, binding/1, pack_props/2, url/2, application/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -122,3 +123,20 @@ application({Application, Description, Version}) ->
     [{name, Application},
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
+
+queue(#amqqueue{name            = Name,
+                durable         = Durable,
+                auto_delete     = AutoDelete,
+                exclusive_owner = ExclusiveOwner,
+                arguments       = Arguments,
+                pid             = Pid }) ->
+    format(
+      [{name,        Name},
+       {durable,     Durable},
+       {auto_delete, AutoDelete},
+       {owner_pid,   ExclusiveOwner},
+       {arguments,   Arguments},
+       {pid,         Pid}],
+      [{fun pid/1,      [pid, owner_pid]},
+       {fun resource/1, [name]},
+       {fun table/1,    [arguments]}]).

@@ -67,7 +67,7 @@ Date: Tue, 31 Aug 2010 15:46:59 GMT
 Content-Type: application/json
 Content-Length: 5
 
-["/"]</pre>
+[{"name":"/"}]</pre>
       </li>
       <li>
         Create a new vhost:
@@ -137,6 +137,14 @@ Content-Length: 0</pre>
         <td></td>
         <td class="path"><a href="/api/applications">/api/applications</a></td>
         <td>All the running applications in the Erlang VM.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/api/all-configuration">/api/all-configuration</a></td>
+        <td>All the server configuration. Everything apart from messages.</td>
       </tr>
       <tr>
         <td>X</td>

@@ -21,6 +21,7 @@
 -module(rabbit_mgmt_wm_permissions).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([perms/0]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -34,10 +35,13 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Perms = rabbit_access_control:list_permissions(),
-    rabbit_mgmt_util:reply(
-      [rabbit_mgmt_format:permissions(P) || P <- Perms],
-      ReqData, Context).
+    rabbit_mgmt_util:reply(perms(), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+
+%%--------------------------------------------------------------------
+
+perms() ->
+    [rabbit_mgmt_format:permissions(P)
+        || P <- rabbit_access_control:list_permissions()].

@@ -207,7 +207,7 @@ init([]) ->
 
 handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    Qs1 = merge_created_stats([queue_to_list(Q) || Q <- Qs0], Table),
+    Qs1 = merge_created_stats([rabbit_mgmt_format:queue(Q) || Q <- Qs0], Table),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
@@ -435,23 +435,6 @@ extract_singleton_fine_stats(Dict) ->
         []            -> [];
         [{[], Stats}] -> Stats
     end.
-
-queue_to_list(#amqqueue{name            = Name,
-                        durable         = Durable,
-                        auto_delete     = AutoDelete,
-                        exclusive_owner = ExclusiveOwner,
-                        arguments       = Arguments,
-                        pid             = Pid }) ->
-    rabbit_mgmt_format:format(
-      [{name,        Name},
-       {durable,     Durable},
-       {auto_delete, AutoDelete},
-       {owner_pid,   ExclusiveOwner},
-       {arguments,   Arguments},
-       {pid,         Pid}],
-      [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
-       {fun rabbit_mgmt_format:resource/1, [name]},
-       {fun rabbit_mgmt_format:table/1,    [arguments]}]).
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 

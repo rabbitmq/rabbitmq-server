@@ -45,7 +45,7 @@ resource_exists(ReqData, Context) ->
     {rabbit_access_control:vhost_exists(id(ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    VHost = id(ReqData),
+    VHost = [{name, id(ReqData)}],
     rabbit_mgmt_util:reply(VHost, ReqData, Context).
 
 accept_content(ReqData, Context) ->

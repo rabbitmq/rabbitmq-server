@@ -23,6 +23,7 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([allowed_methods/2, post_is_create/2, create_path/2]).
 -export([content_types_accepted/2, accept_content/2]).
+-export([bindings/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -88,6 +89,11 @@ accept_content(ReqData, {_Mode, Context}) ->
 is_authorized(ReqData, {Mode, Context}) ->
     {Res, RD2, C2} = rabbit_mgmt_util:is_authorized_vhost(ReqData, Context),
     {Res, RD2, {Mode, C2}}.
+
+%%--------------------------------------------------------------------
+
+bindings(ReqData) ->
+    list_bindings(all, ReqData).
 
 %%--------------------------------------------------------------------
 

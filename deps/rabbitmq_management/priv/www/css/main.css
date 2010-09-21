@@ -65,3 +65,5 @@ table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; }
 table.form input { font: 1.1em Lucidatypewriter, Courier, monospace; width: 200px; }
 table.form select { width: 200px; }
+
+a.button { padding: 8px; background-color: #aaaaff; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; }
