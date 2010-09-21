@@ -261,7 +261,8 @@ publish(Guid, SeqId, MsgProperties, IsPersistent, State)
                            end):?JPREFIX_BITS, 
                           SeqId:?SEQ_BITS>>,
                           create_pub_record_body(Guid, MsgProperties)]),
-    maybe_flush_journal(add_to_journal(SeqId, {Guid, MsgProperties, IsPersistent}, State1)).
+    maybe_flush_journal(
+      add_to_journal(SeqId, {Guid, MsgProperties, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -457,7 +458,9 @@ recover_segment(ContainsCheckFun, CleanShutdown,
     {SegEntries1, UnackedCountDelta} =
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
-      fun (RelSeq, {{Guid, _MsgProperties, _IsPersistent}, Del, no_ack}, Segment1) ->
+      fun (RelSeq, 
+           {{Guid, _MsgProperties, _IsPersistent}, Del, no_ack}, 
+           Segment1) ->
               recover_message(ContainsCheckFun(Guid), CleanShutdown,
                               Del, RelSeq, Segment1)
       end,
@@ -510,7 +513,9 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = #qistate { segments = Segments, dir = Dir } =
         recover_journal(blank_state(QueueName, false)),
     [ok = segment_entries_foldr(
-            fun (_RelSeq, {{Guid, _MsgProps, true}, _IsDelivered, no_ack}, ok) ->
+            fun (_RelSeq, 
+                 {{Guid, _MsgProps, true}, _IsDelivered, no_ack}, 
+                 ok) ->
                     gatherer:in(Gatherer, {Guid, 1});
                 (_RelSeq, _Value, Acc) ->
                     Acc
@@ -789,7 +794,9 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
                      {Messages, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
     {segment_entries_foldr(
-       fun (RelSeq, {{Guid, MsgProperties, IsPersistent}, IsDelivered, no_ack}, Acc)
+       fun (RelSeq, 
+            {{Guid, MsgProperties, IsPersistent}, IsDelivered, no_ack}, 
+            Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
                [ {Guid, reconstruct_seq_id(StartSeg, RelSeq), MsgProperties,

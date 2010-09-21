@@ -89,8 +89,8 @@ purge(State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
     %% We do not purge messages pending acks.
     {AckTags, PA} =
         rabbit_misc:queue_fold(
-          fun ({#basic_message { is_persistent = false }, _MsgProps, _IsDelivered}, 
-               Acc) ->
+          fun ({#basic_message { is_persistent = false }, 
+                _MsgProps, _IsDelivered}, Acc) ->
                   Acc;
               ({Msg = #basic_message { guid = Guid }, MsgProps, IsDelivered},
                {AckTagsN, PAN}) ->

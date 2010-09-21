@@ -638,7 +638,8 @@ requeue(AckTags, MsgPropsFun, State) ->
             fun (#msg_status { msg = Msg, 
                                msg_properties = MsgProperties }, State1) ->
                     {_SeqId, State2} = 
-                        publish(Msg, MsgPropsFun(MsgProperties), true, false, State1),
+                        publish(Msg, MsgPropsFun(MsgProperties), true, 
+                                false, State1),
                     State2;
                 ({IsPersistent, Guid, MsgProperties}, State1) ->
                     #vqstate { msg_store_clients = MSCState } = State1,
@@ -794,7 +795,8 @@ one_if(false) -> 0.
 cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
-msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid }, MsgProperties) ->
+msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid }, 
+           MsgProperties) ->
     #msg_status { seq_id = SeqId, guid = Guid, msg = Msg,
                   is_persistent = IsPersistent, is_delivered = false,
                   msg_on_disk = false, index_on_disk = false,
@@ -834,7 +836,8 @@ erase_tx(Txn) -> erase({txn, Txn}).
 
 persistent_guids(Pubs) ->
     [Guid || 
-        {#basic_message { guid = Guid, is_persistent = true }, _MsgProps} <- Pubs].
+        {#basic_message { guid = Guid, is_persistent = true }, 
+          _MsgProps} <- Pubs].
 
 betas_from_index_entries(List, TransientThreshold, IndexState) ->
     {Filtered, Delivers, Acks} =
@@ -927,8 +930,9 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun,
         case IsDurable of
             true  -> [AckTag || AckTag <- AckTags,
                                 case dict:fetch(AckTag, PA) of
-                                    #msg_status {}        -> false;
-                                    {IsPersistent, _Guid, _MsgProperties} -> IsPersistent
+                                    #msg_status {}     -> false;
+                                    {IsPersistent, 
+                                     _Guid, _MsgProps} -> IsPersistent
                                 end];
             false -> []
         end,
@@ -960,10 +964,12 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
     Pubs  = lists:append(lists:reverse(SPubs)),
     {SeqIds, State1 = #vqstate { index_state = IndexState }} =
         lists:foldl(
-          fun ({Msg = #basic_message { is_persistent = IsPersistent }, MsgProperties},
+          fun ({Msg = #basic_message { is_persistent = IsPersistent }, 
+                MsgProperties},
                {SeqIdsAcc, State2}) ->
                   IsPersistent1 = IsDurable andalso IsPersistent,
-                  {SeqId, State3} = publish(Msg, MsgProperties, false, IsPersistent1, State2),
+                  {SeqId, State3} = 
+                      publish(Msg, MsgProperties, false, IsPersistent1, State2),
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
           end, {PAcks, ack(Acks, State)}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
@@ -1094,7 +1100,9 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 
 record_pending_ack(#msg_status { guid = Guid, seq_id = SeqId,
                                  is_persistent = IsPersistent,
-                                 msg_on_disk = MsgOnDisk, msg_properties = MsgProperties } = MsgStatus, PA) ->
+                                 msg_on_disk = MsgOnDisk, 
+                                 msg_properties = MsgProperties } = MsgStatus, 
+                   PA) ->
     AckEntry = case MsgOnDisk of
                    true  -> {IsPersistent, Guid, MsgProperties};
                    false -> MsgStatus
@@ -1149,7 +1157,9 @@ accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
                                      index_on_disk = false }, Acc) ->
     Acc;
-accumulate_ack(SeqId, {IsPersistent, Guid, _MsgProperties}, {SeqIdsAcc, Dict}) ->
+accumulate_ack(SeqId, 
+               {IsPersistent, Guid, _MsgProperties}, 
+               {SeqIdsAcc, Dict}) ->
     {cons_if(IsPersistent, SeqId, SeqIdsAcc),
      rabbit_misc:orddict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
 

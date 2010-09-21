@@ -1664,7 +1664,8 @@ test_queue_index_props() ->
               Guid = rabbit_guid:guid(),
               Props = #msg_properties{expiry=12345},
               Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
-              {[{Guid, 1, Props, _, _}], Qi2} = rabbit_queue_index:read(1, 2, Qi1),
+              {[{Guid, 1, Props, _, _}], Qi2} = 
+                  rabbit_queue_index:read(1, 2, Qi1),
               Qi2
       end),
 
@@ -1877,7 +1878,8 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
     VQ0;
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
-    {{_Msg, _MsgProps, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {{_Msg, _MsgProps, false, AckTag, Len}, VQ2} = 
+        rabbit_variable_queue:fetch(true, VQ1),
     publish_fetch_and_ack(N-1, Len, rabbit_variable_queue:ack([AckTag], VQ2)).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->

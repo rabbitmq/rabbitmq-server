@@ -427,7 +427,8 @@ attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
                                                  backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
     MsgProperties = new_msg_properties(State),
-    {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, MsgProperties, BQS)}}.
+    {true, State#q{backing_queue_state = 
+                       BQ:tx_publish(Txn, Message, MsgProperties, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
@@ -436,7 +437,9 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
             MsgProperties = new_msg_properties(State),
-            BQS = BQ:publish(Message, MsgProperties, State #q.backing_queue_state),
+            BQS = BQ:publish(Message, 
+                             MsgProperties, 
+                             State #q.backing_queue_state),
             {false, NewState#q{backing_queue_state = BQS}}
     end.
 
@@ -454,7 +457,8 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
                 true -> 
                     fetch(AckRequired, State#q{backing_queue_state = BQS1});
                 false ->
-                    {{Message, IsDelivered, AckTag, Remaining}, State#q{backing_queue_state = BQS1}}
+                    {{Message, IsDelivered, AckTag, Remaining}, 
+                      State#q{backing_queue_state = BQS1}}
             end
     end.
 
@@ -553,8 +557,10 @@ maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
 
 commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
                                                 backing_queue_state = BQS}) ->
-    {AckTags, BQS1} =
-        BQ:tx_commit(Txn, fun () -> gen_server2:reply(From, ok) end, reset_msg_expiry_fun(State), BQS),
+    {AckTags, BQS1} = BQ:tx_commit(Txn, 
+                                   fun () -> gen_server2:reply(From, ok) end, 
+                                   reset_msg_expiry_fun(State), 
+                                   BQS),
     %% ChPid must be known here because of the participant management
     %% by the channel.
     C = #cr{acktags = ChAckTags} = lookup_ch(ChPid),
