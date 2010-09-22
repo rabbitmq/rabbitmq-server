@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--record(user, {username, password}).
+-record(user, {username, password, is_admin}).
 -record(permission, {scope, configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).

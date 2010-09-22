@@ -30,7 +30,7 @@
         <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</code>.
       </p>
       <p>
-        <a href="manpages.html">See a list of all manual pages</a>.
+        <a href="../manpages.html">See a list of all manual pages</a>.
       </p>
       </xsl:when>
       <xsl:otherwise>

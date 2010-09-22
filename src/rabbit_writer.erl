@@ -114,41 +114,24 @@ mainloop1(ReaderPid, State) ->
             erlang:hibernate(?MODULE, mainloop, [ReaderPid, State])
     end.
 
-handle_message({send_command, MethodRecord},
-               State = #wstate{sock = Sock, channel = Channel,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
+handle_message({send_command, MethodRecord}, State) ->
+    ok = internal_send_command_async(MethodRecord, State),
     State;
-handle_message({send_command, MethodRecord, Content},
-               State = #wstate{sock = Sock,
-                               channel = Channel,
-                               frame_max = FrameMax,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax, Protocol),
+handle_message({send_command, MethodRecord, Content}, State) ->
+    ok = internal_send_command_async(MethodRecord, Content, State),
     State;
-handle_message({send_command_sync, From, MethodRecord},
-               State = #wstate{sock = Sock, channel = Channel,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord, Protocol),
+handle_message({'$gen_call', From, {send_command_sync, MethodRecord}}, State) ->
+    ok = internal_send_command_async(MethodRecord, State),
     gen_server:reply(From, ok),
     State;
-handle_message({send_command_sync, From, {MethodRecord, Content}},
-               State = #wstate{sock = Sock,
-                               channel = Channel,
-                               frame_max = FrameMax,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax, Protocol),
+handle_message({'$gen_call', From, {send_command_sync, MethodRecord, Content}},
+               State) ->
+    ok = internal_send_command_async(MethodRecord, Content, State),
     gen_server:reply(From, ok),
     State;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
-               State = #wstate{sock = Sock,
-                               channel = Channel,
-                               frame_max = FrameMax,
-                               protocol = Protocol}) ->
-    ok = internal_send_command_async(Sock, Channel, MethodRecord,
-                                     Content, FrameMax, Protocol),
+               State) ->
+    ok = internal_send_command_async(MethodRecord, Content, State),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
     State;
 handle_message({inet_reply, _, ok}, State) ->
@@ -169,10 +152,10 @@ send_command(W, MethodRecord, Content) ->
     ok.
 
 send_command_sync(W, MethodRecord) ->
-    call(W, send_command_sync, MethodRecord).
+    call(W, {send_command_sync, MethodRecord}).
 
 send_command_sync(W, MethodRecord, Content) ->
-    call(W, send_command_sync, {MethodRecord, Content}).
+    call(W, {send_command_sync, MethodRecord, Content}).
 
 send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
@@ -180,16 +163,16 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
 
 %---------------------------------------------------------------------------
 
-call(Pid, Label, Msg) ->
-    {ok, Res} = gen:call(Pid, Label, Msg, infinity),
+call(Pid, Msg) ->
+    {ok, Res} = gen:call(Pid, '$gen_call', Msg, infinity),
     Res.
 
 %---------------------------------------------------------------------------
 
 assemble_frames(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
-    rabbit_binary_generator:build_simple_method_frame(Channel, MethodRecord,
-                                                      Protocol).
+    rabbit_binary_generator:build_simple_method_frame(
+      Channel, MethodRecord, Protocol).
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, Content),
@@ -231,12 +214,18 @@ internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
 %% Also note that the port has bounded buffers and port_command blocks
 %% when these are full. So the fact that we process the result
 %% asynchronously does not impact flow control.
-internal_send_command_async(Sock, Channel, MethodRecord, Protocol) ->
+internal_send_command_async(MethodRecord,
+                            #wstate{sock      = Sock,
+                                    channel   = Channel,
+                                    protocol  = Protocol}) ->
     true = port_cmd(Sock, assemble_frames(Channel, MethodRecord, Protocol)),
     ok.
 
-internal_send_command_async(Sock, Channel, MethodRecord, Content, FrameMax,
-                            Protocol) ->
+internal_send_command_async(MethodRecord, Content,
+                            #wstate{sock      = Sock,
+                                    channel   = Channel,
+                                    frame_max = FrameMax,
+                                    protocol  = Protocol}) ->
     true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
                                           Content, FrameMax, Protocol)),
     ok.
