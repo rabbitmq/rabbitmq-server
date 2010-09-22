@@ -310,7 +310,7 @@
 				       {"type": "bit", "name": "no-ack", "default-value": false},
 				       {"type": "bit", "name": "exclusive", "default-value": false},
 				       {"type": "bit", "name": "nowait", "default-value": false},
-				       {"type": "table", "name": "filter", "default-value": {}}],
+				       {"type": "table", "name": "arguments", "default-value": {}}],
 			 "name": "consume",
 			 "synchronous" : true},
 			{"id": 21,
