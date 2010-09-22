@@ -203,14 +203,15 @@
              {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/5 :: (rabbit_guid:guid(), seq_id(), msg_properties(),
+-spec(publish/5 :: (rabbit_guid:guid(), seq_id(), rabbit_types:msg_properties(),
                        boolean(), qistate()) -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-                     {[{rabbit_guid:guid(), seq_id(), msg_properties(), 
+                     {[{rabbit_guid:guid(), seq_id(), 
+                        rabbit_types:msg_properties(), 
                         boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
@@ -537,17 +538,20 @@ expiry_to_binary(Expiry) ->
     <<Expiry:?EXPIRY_BITS>>.
 
 read_pub_record_body(Hdl) ->
-    {ok, Bin} = file_handle_cache:read(Hdl, ?GUID_BYTES + ?EXPIRY_BYTES),
- 
-    %% work around for binary data fragmentation. See
-    %% rabbit_msg_file:read_next/2
-    <<GuidNum:?GUID_BITS, Expiry:?EXPIRY_BITS>> = Bin,
-    <<Guid:?GUID_BYTES/binary>> = <<GuidNum:?GUID_BITS>>,
-    Exp = case Expiry of
-            ?NO_EXPIRY -> undefined;
-            X          -> X
-          end,
-    {Guid, #msg_properties{expiry = Exp}}.
+    case file_handle_cache:read(Hdl, ?GUID_BYTES + ?EXPIRY_BYTES) of
+        {ok, Bin} ->
+            %% work around for binary data fragmentation. See
+            %% rabbit_msg_file:read_next/2
+            <<GuidNum:?GUID_BITS, Expiry:?EXPIRY_BITS>> = Bin,
+            <<Guid:?GUID_BYTES/binary>> = <<GuidNum:?GUID_BITS>>,
+            Exp = case Expiry of
+                      ?NO_EXPIRY -> undefined;
+                      X          -> X
+                  end,
+            {Guid, #msg_properties{expiry = Exp}};
+        Error ->
+            Error
+    end.
             
 %%----------------------------------------------------------------------------
 %% journal manipulation
