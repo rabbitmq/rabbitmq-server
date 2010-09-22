@@ -1815,7 +1815,7 @@ variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
-                          _Props, IsDelivered, AckTagN, Rem}, VQM} =
+                          IsDelivered, AckTagN, Rem}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
@@ -1878,7 +1878,7 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
     VQ0;
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
-    {{_Msg, _MsgProps, false, AckTag, Len}, VQ2} = 
+    {{_Msg, false, AckTag, Len}, VQ2} = 
         rabbit_variable_queue:fetch(true, VQ1),
     publish_fetch_and_ack(N-1, Len, rabbit_variable_queue:ack([AckTag], VQ2)).
 
@@ -1943,7 +1943,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
     VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
-    {{_Msg1, _Props, true, _AckTag1, Count1}, VQ8} =
+    {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
     VQ9 = variable_queue_publish(false, 1, VQ8),
     VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
@@ -1989,7 +1989,7 @@ test_queue_recover() ->
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
               VQ1 = rabbit_variable_queue:init(QName, true, true),
-              {{_Msg1, _Props, true, _AckTag1, CountMinusOne}, VQ2} =
+              {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)

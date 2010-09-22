@@ -406,9 +406,10 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
-run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
             fun deliver_from_queue_deliver/3},
+    #q{backing_queue = BQ, backing_queue_state = BQS} = drop_expired_messages(State),
     IsEmpty = BQ:is_empty(BQS),
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
     State1.
@@ -451,16 +452,23 @@ requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
 fetch(AckRequired, State = #q{backing_queue_state = BQS, 
                                   backing_queue = BQ}) ->
     case BQ:fetch(AckRequired, BQS) of
-        {empty, BQS1} -> {empty, State#q{backing_queue_state = BQS1}};
-        {{Message, MsgProperties, IsDelivered, AckTag, Remaining}, BQS1} ->
-            case msg_expired(MsgProperties) of
-                true  -> 
-                    fetch(AckRequired, State#q{backing_queue_state = BQS1});
-                false ->
-                    {{Message, IsDelivered, AckTag, Remaining}, 
-                      State#q{backing_queue_state = BQS1}}
-            end
+        {empty, BQS1} -> 
+            {empty, State#q{backing_queue_state = BQS1}};
+        {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
+            {{Message, IsDelivered, AckTag, Remaining}, 
+               State#q{backing_queue_state = BQS1}}
     end.
+
+drop_expired_messages(State = #q{backing_queue_state = BQS, 
+                                  backing_queue = BQ}) ->
+    BQS1 = BQ:dropwhile(
+             fun (_Msg, _MsgProperties = #msg_properties{expiry = undefined}) ->
+                     false;
+                 (_Msg, _MsgProperties = #msg_properties{expiry=Expiry}) ->
+                     Now = timer:now_diff(os:timestamp(), {0,0,0}),
+                     Now > Expiry
+             end, BQS),
+    State #q{backing_queue_state = BQS1}.
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
@@ -578,12 +586,6 @@ rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
 
 subtract_acks(A, B) when is_list(B) ->
     lists:foldl(fun sets:del_element/2, A, B).
-
-msg_expired(_MsgProperties = #msg_properties{expiry = undefined}) ->
-    false;
-msg_expired(_MsgProperties = #msg_properties{expiry=Expiry}) ->
-    Now = timer:now_diff(now(), {0,0,0}),
-    Now > Expiry.
 
 reset_msg_expiry_fun(State) ->
     fun(MsgProps) ->
@@ -748,7 +750,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName}}) ->
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
-    case fetch(AckRequired, State1) of
+    case fetch(AckRequired, drop_expired_messages(State1)) of
         {empty, State2} -> 
             reply(empty, State2);
         {{Message, IsDelivered, AckTag, Remaining}, State2} ->

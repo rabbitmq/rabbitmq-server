@@ -34,7 +34,7 @@
 -export([init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1,
+         requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
          status/1]).
@@ -518,63 +518,89 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
                                 persistent_count  = PCount1,
                                 pending_ack       = PA1 })}.
 
-fetch(AckRequired, State = #vqstate { q4               = Q4,
-                                      ram_msg_count    = RamMsgCount,
-                                      out_counter      = OutCount,
-                                      index_state      = IndexState,
-                                      len              = Len,
-                                      persistent_count = PCount,
-                                      pending_ack      = PA }) ->
+    
+dropwhile(Pred, State) ->
+    case internal_queue_out(
+           fun(MsgStatus = #msg_status { msg = Msg, msg_properties = MsgProps },
+               Q4a, State1) ->
+                   case Pred(Msg, MsgProps) of
+                       true ->
+                           {_, State2} = internal_fetch(false, Q4a, 
+                                                      MsgStatus, State1), 
+                           dropwhile(Pred, State2); 
+                       false ->
+                           State1
+                   end
+           end, State) of
+        {empty, State2} -> State2;
+        State2 -> State2
+    end.
+
+fetch(AckRequired, State) ->
+    internal_queue_out(
+      fun(MsgStatus, Q4a, State1) -> 
+              internal_fetch(AckRequired, Q4a, MsgStatus, State1) 
+      end, State).
+
+internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
     case queue:out(Q4) of
         {empty, _Q4} ->
             case fetch_from_q3_to_q4(State) of
-                {empty, State1} = Result -> a(State1), Result;
-                {loaded, State1}         -> fetch(AckRequired, State1)
+                {empty, State1} = Result  -> a(State1), Result;
+                {loaded, State1} -> internal_queue_out(Fun, State1)
             end;
-        {{value, MsgStatus = #msg_status {
-                   msg = Msg, guid = Guid, seq_id = SeqId,
-                   is_persistent = IsPersistent, is_delivered = IsDelivered,
-                   msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk,
-                   msg_properties = MsgProperties }},
-         Q4a} ->
-
-            %% 1. Mark it delivered if necessary
-            IndexState1 = maybe_write_delivered(
-                            IndexOnDisk andalso not IsDelivered,
-                            SeqId, IndexState),
-
-            %% 2. Remove from msg_store and queue index, if necessary
-            MsgStore = find_msg_store(IsPersistent),
-            Rem = fun () -> ok = rabbit_msg_store:remove(MsgStore, [Guid]) end,
-            Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
-            IndexState2 =
-                case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
-                    {false, true, false,     _} -> Rem(), IndexState1;
-                    {false, true,  true,     _} -> Rem(), Ack();
-                    { true, true,  true, false} -> Ack();
-                    _                           -> IndexState1
-                end,
-
-            %% 3. If an ack is required, add something sensible to PA
-            {AckTag, PA1} = case AckRequired of
-                                true  -> PA2 = record_pending_ack(
-                                                 MsgStatus #msg_status {
-                                                   is_delivered = true }, PA),
-                                         {SeqId, PA2};
-                                false -> {blank_ack, PA}
-                            end,
-
-            PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
-            Len1 = Len - 1,
-            {{Msg, MsgProperties, IsDelivered, AckTag, Len1},
-             a(State #vqstate { q4               = Q4a,
-                                ram_msg_count    = RamMsgCount - 1,
-                                out_counter      = OutCount + 1,
-                                index_state      = IndexState2,
-                                len              = Len1,
-                                persistent_count = PCount1,
-                                pending_ack      = PA1 })}
+        {{value, Value}, Q4a} ->
+            %% don't automatically overwrite the state with the popped
+            %% queue because some callbacks choose to rollback the pop
+            %% of the message from the queue
+            Fun(Value, Q4a, State)
     end.
+
+internal_fetch(AckRequired, Q4a,
+             MsgStatus = #msg_status {
+               msg = Msg, guid = Guid, seq_id = SeqId, 
+               is_persistent = IsPersistent, is_delivered = IsDelivered,
+               msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk }, 
+             State = #vqstate { 
+               ram_msg_count = RamMsgCount, out_counter = OutCount, 
+               index_state = IndexState, len = Len, persistent_count = PCount, 
+               pending_ack = PA }) ->
+    %% 1. Mark it delivered if necessary
+    IndexState1 = maybe_write_delivered(
+                    IndexOnDisk andalso not IsDelivered,
+                    SeqId, IndexState),
+
+    %% 2. Remove from msg_store and queue index, if necessary
+    MsgStore = find_msg_store(IsPersistent),
+    Rem = fun () -> ok = rabbit_msg_store:remove(MsgStore, [Guid]) end,
+    Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
+    IndexState2 =
+        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
+            {false, true, false,     _} -> Rem(), IndexState1;
+            {false, true,  true,     _} -> Rem(), Ack();
+            { true, true,  true, false} -> Ack();
+            _                           -> IndexState1
+        end,
+
+    %% 3. If an ack is required, add something sensible to PA
+    {AckTag, PA1} = case AckRequired of
+                        true  -> PA2 = record_pending_ack(
+                                         MsgStatus #msg_status {
+                                           is_delivered = true }, PA),
+                                 {SeqId, PA2};
+                        false -> {blank_ack, PA}
+                    end,
+
+    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
+    Len1 = Len - 1,
+    {{Msg, IsDelivered, AckTag, Len1},
+     a(State #vqstate { q4               = Q4a,
+                        ram_msg_count    = RamMsgCount - 1,
+                        out_counter      = OutCount + 1,
+                        index_state      = IndexState2,
+                        len              = Len1,
+                        persistent_count = PCount1,
+                        pending_ack      = PA1 })}.
 
 ack(AckTags, State) ->
     a(ack(fun rabbit_msg_store:remove/2,

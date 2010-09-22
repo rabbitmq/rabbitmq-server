@@ -69,7 +69,7 @@
 -type(pmsg() :: {rabbit_amqqueue:name(), pkey()}).
 
 -type(work_item() ::
-      {publish, rabbit_types:message(), pmsg()} |
+      {publish, rabbit_types:message(), rabbit_types:msg_properties(), pmsg()} |
       {deliver, pmsg()} |
       {ack, pmsg()}).
 

@@ -30,9 +30,8 @@
 %%
 
 -type(fetch_result() ::
-                 %% Message,  MessageProperties, IsDelivered,  AckTag,  Remaining_Len
+                 %% Message, IsDelivered,  AckTag,  Remaining_Len
         ('empty'|{rabbit_types:basic_message(), 
-                  rabbit_types:msg_properties(), 
                   boolean(), ack(), 
                   non_neg_integer()})).
 -type(is_durable() :: boolean()).
@@ -54,6 +53,9 @@
 -spec(publish_delivered/4 ::
         (ack_required(), rabbit_types:basic_message(), 
          rabbit_types:msg_properties(), state()) -> {ack(), state()}).
+-spec(dropwhile/2 :: 
+        (fun ((rabbit_types:basic_message(), rabbit_types:msg_properties()) 
+              -> boolean()), state()) -> state()).                    
 -spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
 -spec(tx_publish/4 :: 
