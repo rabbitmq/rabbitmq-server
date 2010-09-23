@@ -49,5 +49,6 @@ dispatcher() ->
      {["users", user],                             rabbit_mgmt_wm_user, []},
      {["users", user, "permissions"],              rabbit_mgmt_wm_permissions_user, []},
      {["permissions"],                             rabbit_mgmt_wm_permissions, []},
-     {["permissions", vhost, user],                rabbit_mgmt_wm_permission, []}
+     {["permissions", vhost, user],                rabbit_mgmt_wm_permission, []},
+     {["aliveness-test", vhost],                   rabbit_mgmt_wm_aliveness_test, []}
     ].

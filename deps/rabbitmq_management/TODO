@@ -39,6 +39,7 @@ Clustering management:
   Per-node events to replace external_stats
 Make user editing rather clearer
 Allow empty fields in PUT.
+Activity log (to see things that flick in and out of existence quickly).
 
 Less urgent
 ===========

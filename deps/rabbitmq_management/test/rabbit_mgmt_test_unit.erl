@@ -448,6 +448,9 @@ http_unicode_test() ->
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
+http_aliveness_test() ->
+    [{status, <<"ok">>}] = http_get("/aliveness-test/%2f", ?OK),
+    http_get("/aliveness-test/foo", ?NOT_FOUND).
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->
