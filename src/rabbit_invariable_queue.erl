@@ -123,11 +123,11 @@ dropwhile(_Pred, State = #iv_state { len = 0 }) ->
 dropwhile(Pred, State = #iv_state { queue = Q }) ->
     {{value, {Msg, MsgProps, IsDelivered}}, Q1} = queue:out(Q),
     case Pred(Msg, MsgProps) of
-	true ->
-	    {_, State1} = fetch_internal(false, Q1, Msg, MsgProps, IsDelivered, State),
-	    dropwhile(Pred, State1);
-	false ->
-	    State
+        true ->
+            {_, State1} = fetch_internal(false, Q1, Msg, MsgProps, IsDelivered, State),
+            dropwhile(Pred, State1);
+        false ->
+            State
      end.
 
 fetch(_AckRequired, State = #iv_state { len = 0 }) ->
@@ -137,9 +137,9 @@ fetch(AckRequired, State = #iv_state { queue = Q }) ->
     fetch_internal(AckRequired, Q1, Msg, MsgProps, IsDelivered, State).
 
 fetch_internal(AckRequired, Q1, 
-	       Msg = #basic_message {guid = Guid}, 
-	       MsgProps, IsDelivered,
-	       State = #iv_state { len         = Len, 
+               Msg = #basic_message {guid = Guid}, 
+               MsgProps, IsDelivered,
+               State = #iv_state { len         = Len, 
                                    qname       = QName,
                                    durable     = IsDurable,
                                    pending_ack = PA }) ->
@@ -286,7 +286,7 @@ persist_message(QName, true, Txn, Msg = #basic_message {
                          Msg #basic_message.content)},
     persist_work(Txn, QName,
                  [{publish, Msg1, MsgProps, 
-		   {QName, Msg1 #basic_message.guid}}]);
+                   {QName, Msg1 #basic_message.guid}}]);
 persist_message(_QName, _IsDurable, _Txn, _Msg, _MsgProps) ->
     ok.
 

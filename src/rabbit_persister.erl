@@ -357,7 +357,7 @@ current_snapshot(_Snapshot = #psnapshot{transactions = Ts,
     %% Avoid infinite growth of the table by removing messages not
     %% bound to a queue anymore
     PKeys = ets:foldl(fun ({{_QName, PKey}, _Delivered, 
-			    _MsgProps, _SeqId}, S) ->
+                            _MsgProps, _SeqId}, S) ->
                               sets:add_element(PKey, S)
                       end, sets:new(), Queues),
     prune_table(Messages, fun (Key) -> sets:is_element(Key, PKeys) end),
