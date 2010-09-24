@@ -300,7 +300,7 @@ get_total_memory({unix, aix}) ->
     File = cmd("/usr/bin/vmstat -v"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_aix/1, Lines)),
-    dict:fetch('memory pages', Dict) * 4 * 1024;
+    dict:fetch('memory pages', Dict) * 4096;
 
 get_total_memory(_OsType) ->
     unknown.
