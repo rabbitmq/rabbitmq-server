@@ -1042,6 +1042,8 @@ test_user_management() ->
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
+    ok = control_action(set_admin, ["foo"]),
+    ok = control_action(clear_admin, ["foo"]),
     ok = control_action(list_users, []),
 
     %% vhost creation
@@ -1107,7 +1109,15 @@ test_server_status() ->
     ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
 
     %% list bindings
-    ok = control_action(list_bindings, []),
+    ok = info_action(list_bindings, rabbit_binding:info_keys(), true),
+    %% misc binding listing APIs
+    [_|_] = rabbit_binding:list_for_exchange(
+              rabbit_misc:r(<<"/">>, exchange, <<"">>)),
+    [_] = rabbit_binding:list_for_queue(
+              rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
+    [_] = rabbit_binding:list_for_exchange_and_queue(
+            rabbit_misc:r(<<"/">>, exchange, <<"">>),
+            rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
     %% list connections
     [#listener{host = H, port = P} | _] =

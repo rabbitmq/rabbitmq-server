@@ -209,6 +209,14 @@ action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
     Inform("Changing password for user ~p", [Username]),
     call(Node, {rabbit_access_control, change_password, Args});
 
+action(set_admin, Node, [Username], _Opts, Inform) ->
+    Inform("Setting administrative status for user ~p", [Username]),
+    call(Node, {rabbit_access_control, set_admin, [Username]});
+
+action(clear_admin, Node, [Username], _Opts, Inform) ->
+    Inform("Clearing administrative status for user ~p", [Username]),
+    call(Node, {rabbit_access_control, clear_admin, [Username]});
+
 action(list_users, Node, [], _Opts, Inform) ->
     Inform("Listing users", []),
     display_list(call(Node, {rabbit_access_control, list_users, []}));
@@ -246,14 +254,14 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
                                [VHostArg, ArgAtoms]),
                       ArgAtoms);
 
-action(list_bindings, Node, _Args, Opts, Inform) ->
+action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    InfoKeys = [exchange_name, queue_name, routing_key, args],
-    display_info_list(
-      [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_binding, list, [VHostArg])],
-      InfoKeys);
+    ArgAtoms = default_if_empty(Args, [exchange_name, queue_name,
+                                       routing_key, arguments]),
+    display_info_list(rpc_call(Node, rabbit_binding, info_all,
+                               [VHostArg, ArgAtoms]),
+                      ArgAtoms);
 
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),
@@ -304,9 +312,11 @@ default_if_empty(List, Default) when is_list(List) ->
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
-    lists:foreach(fun (Result) -> display_row([format_info_item(X, Result) ||
-                                                  X <- InfoItemKeys])
-                  end, Results),
+    lists:foreach(
+      fun (Result) -> display_row(
+                        [format_info_item(proplists:get_value(X, Result)) ||
+                            X <- InfoItemKeys])
+      end, Results),
     ok;
 display_info_list(Other, _) ->
     Other.
@@ -315,25 +325,30 @@ display_row(Row) ->
     io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
     io:nl().
 
-format_info_item(Key, Items) ->
-    case proplists:get_value(Key, Items) of
-        #resource{name = Name} ->
-            escape(Name);
-        Value when Key =:= address; Key =:= peer_address andalso
-                   is_tuple(Value) ->
-            inet_parse:ntoa(Value);
-        Value when is_pid(Value) ->
-            rabbit_misc:pid_to_string(Value);
-        Value when is_binary(Value) ->
-            escape(Value);
-        Value when is_atom(Value) ->
-            escape(atom_to_list(Value));
-        Value = [{TableEntryKey, TableEntryType, _TableEntryValue} | _]
-        when is_binary(TableEntryKey) andalso is_atom(TableEntryType) ->
-            io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
-        Value ->
-            io_lib:format("~w", [Value])
-    end.
+-define(IS_U8(X),  (X >= 0 andalso X =< 255)).
+-define(IS_U16(X), (X >= 0 andalso X =< 65535)).
+
+format_info_item(#resource{name = Name}) ->
+    escape(Name);
+format_info_item({N1, N2, N3, N4} = Value) when
+      ?IS_U8(N1), ?IS_U8(N2), ?IS_U8(N3), ?IS_U8(N4) ->
+    inet_parse:ntoa(Value);
+format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value) when
+      ?IS_U16(K1), ?IS_U16(K2), ?IS_U16(K3), ?IS_U16(K4),
+      ?IS_U16(K5), ?IS_U16(K6), ?IS_U16(K7), ?IS_U16(K8) ->
+    inet_parse:ntoa(Value);
+format_info_item(Value) when is_pid(Value) ->
+    rabbit_misc:pid_to_string(Value);
+format_info_item(Value) when is_binary(Value) ->
+    escape(Value);
+format_info_item(Value) when is_atom(Value) ->
+    escape(atom_to_list(Value));
+format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
+                     Value) when is_binary(TableEntryKey) andalso
+                                 is_atom(TableEntryType) ->
+    io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+format_info_item(Value) ->
+    io_lib:format("~w", [Value]).
 
 display_list(L) when is_list(L) ->
     lists:foreach(fun (I) when is_binary(I) ->

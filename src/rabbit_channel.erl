@@ -41,7 +41,8 @@
 -export([emit_stats/1, flush/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
+         prioritise_cast/2]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
@@ -131,10 +132,10 @@ list() ->
 info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
-    gen_server2:pcall(Pid, 9, info, infinity).
+    gen_server2:call(Pid, info, infinity).
 
 info(Pid, Items) ->
-    case gen_server2:pcall(Pid, 9, {info, Items}, infinity) of
+    case gen_server2:call(Pid, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -146,7 +147,7 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 emit_stats(Pid) ->
-    gen_server2:pcast(Pid, 7, emit_stats).
+    gen_server2:cast(Pid, emit_stats).
 
 flush(Pid) ->
     gen_server2:call(Pid, flush).
@@ -157,6 +158,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
+    StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
@@ -174,10 +176,25 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 consumer_mapping        = dict:new(),
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = rabbit_event:init_stats_timer()},
+                stats_timer             = StatsTimer},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun() -> internal_emit_stats(State) end),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info           -> 9;
+        {info, _Items} -> 9;
+        _              -> 0
+    end.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        emit_stats -> 7;
+        _          -> 0
+    end.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -237,17 +254,22 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State) ->
+handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    {noreply, State}.
+    {noreply,
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State)}.
 
-handle_pre_hibernate(State) ->
+handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    {hibernate, stop_stats_timer(State)}.
+    rabbit_event:if_enabled(StatsTimer, fun () ->
+                                                internal_emit_stats(State)
+                                        end),
+    {hibernate,
+     State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -277,13 +299,7 @@ ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
                              StatsTimer,
-                             fun() -> internal_emit_stats(State) end,
                              fun() -> emit_stats(ChPid) end)}.
-
-stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    State#ch{stats_timer = rabbit_event:stop_stats_timer(
-                             StatsTimer,
-                             fun() -> internal_emit_stats(State) end)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -805,7 +821,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:add/5,
+    binding_action(fun rabbit_binding:add/2,
                    ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                    #'queue.bind_ok'{}, NoWait, State);
 
@@ -813,7 +829,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               exchange = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:remove/5,
+    binding_action(fun rabbit_binding:remove/2,
                    ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                    #'queue.unbind_ok'{}, false, State);
 
@@ -893,7 +909,10 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
-    case Fun(ExchangeName, QueueName, ActualRoutingKey, Arguments,
+    case Fun(#binding{exchange_name = ExchangeName,
+                      queue_name    = QueueName,
+                      key           = ActualRoutingKey,
+                      args          = Arguments},
              fun (_X, Q) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                      catch exit:Reason -> {error, Reason}
