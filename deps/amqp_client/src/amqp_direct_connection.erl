@@ -64,8 +64,8 @@ connect(Pid) ->
 %%---------------------------------------------------------------------------
 
 init([Sup, AmqpParams, SIF]) ->
-    {ok, #state{sup = Sup,
-                params = AmqpParams,
+    {ok, #state{sup                      = Sup,
+                params                   = AmqpParams,
                 start_infrastructure_fun = SIF}}.
 
 handle_call({command, Command}, From, #state{closing = Closing} = State) ->
@@ -104,18 +104,18 @@ code_change(_OldVsn, State, _Extra) ->
 %% Command handling
 %%---------------------------------------------------------------------------
 
-handle_command({open_channel, ProposedNumber}, _From,
-               State = #state{collector = Collector,
-                              channels_manager = ChMgr,
-                              params = #amqp_params{username = User,
-                                                    virtual_host = VHost}}) ->
+handle_command({open_channel, ProposedNumber}, _From, State =
+                   #state{collector        = Collector,
+                          params           = #amqp_params{virtual_host = VHost,
+                                                          username = User},
+                          channels_manager = ChMgr}) ->
     {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber,
                                                [User, VHost, Collector]),
      State};
 handle_command({close, Close}, From, State) ->
     {noreply, set_closing_state(flush, #closing{reason = app_initiated_close,
-                                                close = Close,
-                                                from = From},
+                                                close  = Close,
+                                                from   = From},
                                 State)}.
 
 %%---------------------------------------------------------------------------
@@ -125,10 +125,9 @@ handle_command({close, Close}, From, State) ->
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
-i(num_channels,      State) ->
-    amqp_channels_manager:num_channels(State#state.channels_manager);
-i(Item, _State) ->
-    throw({bad_argument, Item}).
+i(num_channels,      State) -> amqp_channels_manager:num_channels(
+                                 State#state.channels_manager);
+i(Item,             _State) -> throw({bad_argument, Item}).
 
 %%---------------------------------------------------------------------------
 %% Closing

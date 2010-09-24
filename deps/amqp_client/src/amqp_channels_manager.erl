@@ -30,17 +30,16 @@
 -behaviour(gen_server).
 
 -export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
-         num_channels/1, get_pid/2, get_framing/2,
-         signal_connection_closing/3]).
+         num_channels/1, pass_frame/3, signal_connection_closing/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
 -record(state, {connection,
                 channel_sup_sup,
-                map_num_pid = gb_trees:empty(), %% Number -> {Pid, Framing}
-                map_pid_num = dict:new(),       %% Pid -> Number
-                channel_max = ?MAX_CHANNEL_NUMBER,
-                closing = false}).
+                map_num_pf      = gb_trees:empty(), %% Number -> {Pid, Framing}
+                map_pid_num     = dict:new(),       %% Pid -> Number
+                channel_max     = ?MAX_CHANNEL_NUMBER,
+                closing         = false}).
 
 %%---------------------------------------------------------------------------
 %% Interface
@@ -49,27 +48,23 @@
 start_link(Connection, ChSupSup) ->
     gen_server:start_link(?MODULE, [Connection, ChSupSup], []).
 
-open_channel(Manager, ProposedNumber, InfraArgs) ->
-    gen_server:call(Manager, {open_channel, ProposedNumber, InfraArgs},
-                    infinity).
+open_channel(ChMgr, ProposedNumber, InfraArgs) ->
+    gen_server:call(ChMgr, {open_channel, ProposedNumber, InfraArgs}, infinity).
 
-set_channel_max(Manager, ChannelMax) ->
-    gen_server:cast(Manager, {set_channel_max, ChannelMax}).
+set_channel_max(ChMgr, ChannelMax) ->
+    gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
 
-is_empty(Manager) ->
-    gen_server:call(Manager, is_empty, infinity).
+is_empty(ChMgr) ->
+    gen_server:call(ChMgr, is_empty, infinity).
 
-num_channels(Manager) ->
-    gen_server:call(Manager, num_channels, infinity).
+num_channels(ChMgr) ->
+    gen_server:call(ChMgr, num_channels, infinity).
 
-get_pid(Manager, ChannelNumber) ->
-    gen_server:call(Manager, {get_pid, ChannelNumber}, infinity).
+pass_frame(ChMgr, ChNumber, Frame) ->
+    gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).
 
-get_framing(Manager, ChannelNumber) ->
-    gen_server:call(Manager, {get_framing, ChannelNumber}, infinity).
-
-signal_connection_closing(Manager, ChannelCloseType, Reason) ->
-    gen_server:cast(Manager, {connection_closing, ChannelCloseType, Reason}).
+signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
+    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -90,14 +85,13 @@ handle_call({open_channel, ProposedNumber, InfraArgs}, _,
 handle_call(is_empty, _, State) ->
     {reply, internal_is_empty(State), State};
 handle_call(num_channels, _, State) ->
-    {reply, internal_num_channels(State), State};
-handle_call({get_pid, Number}, _, State) ->
-    {reply, internal_lookup_np(Number, State), State};
-handle_call({get_framing, Number}, _, State) ->
-    {reply, internal_lookup_nf(Number, State), State}.
+    {reply, internal_num_channels(State), State}.
 
 handle_cast({set_channel_max, ChannelMax}, State) ->
     {noreply, State#state{channel_max = ChannelMax}};
+handle_cast({pass_frame, ChNumber, Frame}, State) ->
+    internal_pass_frame(ChNumber, Frame, State),
+    {noreply, State};
 handle_cast({connection_closing, ChannelCloseType, Reason}, State) ->
     handle_connection_closing(ChannelCloseType, Reason, State).
 
@@ -122,36 +116,36 @@ handle_open_channel(ProposedNumber, InfraArgs,
             {reply, Error, State}
     end.
 
-new_number(none, #state{channel_max = ChannelMax, map_num_pid = MapNP}) ->
-    case gb_trees:is_empty(MapNP) of
+new_number(none, #state{channel_max = ChannelMax, map_num_pf = MapNPF}) ->
+    case gb_trees:is_empty(MapNPF) of
         true  -> {ok, 1};
-        false -> {Smallest, _} = gb_trees:smallest(MapNP),
+        false -> {Smallest, _} = gb_trees:smallest(MapNPF),
                  if Smallest > 1 ->
                         {ok, Smallest - 1};
                     true ->
-                        {Largest, _} = gb_trees:largest(MapNP),
+                        {Largest, _} = gb_trees:largest(MapNPF),
                         if Largest < ChannelMax -> {ok, Largest + 1};
-                           true                 -> find_free(MapNP)
+                           true                 -> find_free(MapNPF)
                         end
                  end
     end;
 new_number(Proposed, State = #state{channel_max = ChannelMax,
-                                    map_num_pid = MapNP}) ->
+                                    map_num_pf  = MapNPF}) ->
     IsValid = Proposed > 0 andalso Proposed =< ChannelMax andalso
-        not gb_trees:is_defined(Proposed, MapNP),
-    if IsValid -> {ok, Proposed};
-       true    -> new_number(none, State)
+        not gb_trees:is_defined(Proposed, MapNPF),
+    case IsValid of true  -> {ok, Proposed};
+                    false -> new_number(none, State)
     end.
 
-find_free(MapNP) ->
-    find_free(gb_trees:iterator(MapNP), 1).
+find_free(MapNPF) ->
+    find_free(gb_trees:iterator(MapNPF), 1).
 
 find_free(It, Candidate) ->
     case gb_trees:next(It) of
-        {Number, _, It1} -> if Number > Candidate   -> {ok, Number - 1};
-                               Number =:= Candidate -> find_free(It1,
-                                                                 Candidate + 1);
-                               true                 -> exit(unexpected)
+        {Number, _, It1} -> if Number > Candidate ->
+                                   {ok, Number - 1};
+                               Number =:= Candidate ->
+                                   find_free(It1, Candidate + 1)
                             end;
         none             -> {error, out_of_channel_numbers}
     end.
@@ -163,25 +157,25 @@ handle_down(Pid, Reason, State) ->
     end.
 
 handle_channel_down(Pid, Number, Reason, State) ->
-    down_side_effect(Pid, Reason, State),
+    maybe_report_down(Pid, Reason, State),
     NewState = internal_unregister(Number, Pid, State),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
 
-down_side_effect(_Pid, normal, _State) ->
+maybe_report_down(_Pid, normal, _State) ->
     ok;
-down_side_effect(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
+maybe_report_down(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
     {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
                             ?PROTOCOL:amqp_exception(Code)),
     case IsHardError of
         true  -> signal_connection({hard_error_in_channel, Pid, Reason}, State);
         false -> ok
     end;
-down_side_effect(_Pid, {app_initiated_close, _, _}, _State) ->
+maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
-down_side_effect(_Pid, {connection_closing, _}, _State) ->
+maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
-down_side_effect(Pid, Other, State) ->
+maybe_report_down(Pid, Other, State) ->
     signal_connection({channel_internal_error, Pid, Other}, State).
 
 check_all_channels_terminated(#state{closing = false}) ->
@@ -202,36 +196,36 @@ handle_connection_closing(ChannelCloseType, Reason, State) ->
 
 %%---------------------------------------------------------------------------
 
+internal_pass_frame(Number, Frame, State) ->
+    case internal_lookup_npf(Number, State) of
+        undefined    -> ?LOG_INFO("Dropping frame ~p for invalid or closed "
+                                  "channel number ~p~n", [Frame, Number]);
+        {_, Framing} -> rabbit_framing_channel:process(Framing, Frame)
+    end.
+
 internal_register(Number, Pid, Framing,
-                  State = #state{map_num_pid = MapNP,
-                                 map_pid_num = MapPN}) ->
-    MapNP1 = gb_trees:enter(Number, {Pid, Framing}, MapNP),
+                  State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
+    MapNPF1 = gb_trees:enter(Number, {Pid, Framing}, MapNPF),
     MapPN1 = dict:store(Pid, Number, MapPN),
-    State#state{map_num_pid = MapNP1,
+    State#state{map_num_pf  = MapNPF1,
                 map_pid_num = MapPN1}.
 
 internal_unregister(Number, Pid,
-                    State = #state{map_num_pid = MapNP,
-                                   map_pid_num = MapPN}) ->
-    MapNP1 = gb_trees:delete(Number, MapNP),
+                    State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
+    MapNPF1 = gb_trees:delete(Number, MapNPF),
     MapPN1 = dict:erase(Pid, MapPN),
-    State#state{map_num_pid = MapNP1,
+    State#state{map_num_pf  = MapNPF1,
                 map_pid_num = MapPN1}.
 
-internal_is_empty(#state{map_num_pid = MapNP}) ->
-    gb_trees:is_empty(MapNP).
+internal_is_empty(#state{map_num_pf = MapNPF}) ->
+    gb_trees:is_empty(MapNPF).
 
-internal_num_channels(#state{map_num_pid = MapNP}) ->
-    gb_trees:size(MapNP).
+internal_num_channels(#state{map_num_pf = MapNPF}) ->
+    gb_trees:size(MapNPF).
 
-internal_lookup_np(Number, #state{map_num_pid = MapNP}) ->
-    case gb_trees:lookup(Number, MapNP) of {value, {Pid, _}} -> Pid;
-                                           none              -> undefined
-    end.
-
-internal_lookup_nf(Number, #state{map_num_pid = MapNP}) ->
-    case gb_trees:lookup(Number, MapNP) of {value, {_, Framing}} -> Framing;
-                                           none                  -> undefined
+internal_lookup_npf(Number, #state{map_num_pf = MapNPF}) ->
+    case gb_trees:lookup(Number, MapNPF) of {value, PF} -> PF;
+                                            none        -> undefined
     end.
 
 internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
@@ -240,11 +234,7 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
     end.
 
 signal_channels(Msg, #state{map_pid_num = MapPN}) ->
-    dict:map(fun(Pid, _) -> Pid ! Msg, ok end, MapPN),
-    ok.
+    dict:fold(fun(Pid, _, _) -> Pid ! Msg end, none, MapPN).
 
-signal_connection(_, #state{connection = undefined}) ->
-    ?LOG_WARN("No connection registered in channels manager (~p).~n", [self()]);
 signal_connection(Msg, #state{connection = Connection}) ->
-    Connection ! Msg,
-    ok.
+    Connection ! Msg.

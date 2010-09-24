@@ -684,4 +684,3 @@ latch_loop(Latch) ->
 uuid() ->
     {A, B, C} = now(),
     <<A:32, B:32, C:32>>.
-
