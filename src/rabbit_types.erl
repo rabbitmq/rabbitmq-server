@@ -38,7 +38,7 @@
 -export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, vhost/0, ctag/0,
-              amqp_error/0, r/1, r2/2, r3/3, ssl_socket/0, listener/0,
+              amqp_error/0, r/1, r2/2, r3/3, listener/0,
               binding/0, amqqueue/0, exchange/0, connection/0, protocol/0,
               user/0, ok/1, error/1, ok_or_error/1, ok_or_error2/2,
               ok_pid_or_error/0, channel_exit/0, connection_exit/0]).
@@ -107,8 +107,6 @@
                   kind         :: Kind,
                   name         :: Name}).
 
--type(ssl_socket() :: #ssl_socket{}).
-
 -type(listener() ::
       #listener{node     :: node(),
                 protocol :: atom(),
@@ -142,7 +140,8 @@
 
 -type(user() ::
       #user{username :: rabbit_access_control:username(),
-            password :: rabbit_access_control:password()}).
+            password :: rabbit_access_control:password(),
+            is_admin :: boolean()}).
 
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).

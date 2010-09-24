@@ -972,6 +972,8 @@ test_user_management() ->
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
+    ok = control_action(set_admin, ["foo"]),
+    ok = control_action(clear_admin, ["foo"]),
     ok = control_action(list_users, []),
 
     %% vhost creation
