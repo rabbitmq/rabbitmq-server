@@ -36,13 +36,17 @@ non_existent_exchange_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, OtherChannel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
+    
     %% Deliberately mix up the routingkey and exchange arguments
     Publish = #'basic.publish'{exchange = RoutingKey, routing_key = X},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     test_util:wait_for_death(Channel),
-    timer:sleep(300),
-    ?assertMatch(true, is_process_alive(Connection)),
-    ?assertMatch(true, is_process_alive(OtherChannel)),
+
+    %% Make sure Connection and OtherChannel still serve us and are not dead
+    {ok, _} = amqp_connection:open_channel(Connection),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(OtherChannel,
+                          #'exchange.declare'{exchange = test_util:uuid()}),
     amqp_connection:close(Connection).
 
 bogus_rpc_test(Connection) ->

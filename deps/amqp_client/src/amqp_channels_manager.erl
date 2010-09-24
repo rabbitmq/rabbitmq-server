@@ -132,8 +132,8 @@ new_number(Proposed, State = #state{channel_max = ChannelMax,
                                     map_num_pf  = MapNPF}) ->
     IsValid = Proposed > 0 andalso Proposed =< ChannelMax andalso
         not gb_trees:is_defined(Proposed, MapNPF),
-    if IsValid -> {ok, Proposed};
-       true    -> new_number(none, State)
+    case IsValid of true  -> {ok, Proposed};
+                    false -> new_number(none, State)
     end.
 
 find_free(MapNPF) ->
@@ -141,10 +141,10 @@ find_free(MapNPF) ->
 
 find_free(It, Candidate) ->
     case gb_trees:next(It) of
-        {Number, _, It1} -> if Number > Candidate   -> {ok, Number - 1};
-                               Number =:= Candidate -> find_free(It1,
-                                                                 Candidate + 1);
-                               true                 -> exit(unexpected)
+        {Number, _, It1} -> if Number > Candidate ->
+                                   {ok, Number - 1};
+                               Number =:= Candidate ->
+                                   find_free(It1, Candidate + 1)
                             end;
         none             -> {error, out_of_channel_numbers}
     end.
@@ -156,25 +156,25 @@ handle_down(Pid, Reason, State) ->
     end.
 
 handle_channel_down(Pid, Number, Reason, State) ->
-    down_side_effect(Pid, Reason, State),
+    maybe_report_down(Pid, Reason, State),
     NewState = internal_unregister(Number, Pid, State),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
 
-down_side_effect(_Pid, normal, _State) ->
+maybe_report_down(_Pid, normal, _State) ->
     ok;
-down_side_effect(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
+maybe_report_down(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
     {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
                             ?PROTOCOL:amqp_exception(Code)),
     case IsHardError of
         true  -> signal_connection({hard_error_in_channel, Pid, Reason}, State);
         false -> ok
     end;
-down_side_effect(_Pid, {app_initiated_close, _, _}, _State) ->
+maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
-down_side_effect(_Pid, {connection_closing, _}, _State) ->
+maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
-down_side_effect(Pid, Other, State) ->
+maybe_report_down(Pid, Other, State) ->
     signal_connection({channel_internal_error, Pid, Other}, State).
 
 check_all_channels_terminated(#state{closing = false}) ->
@@ -226,11 +226,7 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
     end.
 
 signal_channels(Msg, #state{map_pid_num = MapPN}) ->
-    dict:map(fun(Pid, _) -> Pid ! Msg, ok end, MapPN),
-    ok.
+    dict:fold(fun(Pid, _, _) -> Pid ! Msg end, none, MapPN).
 
-signal_connection(_, #state{connection = undefined}) ->
-    ?LOG_WARN("No connection registered in channels manager (~p).~n", [self()]);
 signal_connection(Msg, #state{connection = Connection}) ->
-    Connection ! Msg,
-    ok.
+    Connection ! Msg.
