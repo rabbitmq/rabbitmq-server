@@ -353,10 +353,10 @@ parse_line_aix(Line) ->
     [Value | NameWords] = string:tokens(Line, " "),
     Name = string:join(NameWords, " "),
     {list_to_atom(Name),
-        case lists:member($., Value) of
-            true -> trunc(list_to_float(Value));
-            _    -> list_to_integer(Value)
-        end}.
+     case lists:member($., Value) of
+         true  -> trunc(list_to_float(Value));
+         false -> list_to_integer(Value)
+     end}.
 
 freebsd_sysctl(Def) ->
     list_to_integer(cmd("/sbin/sysctl -n " ++ Def) -- "\n").
