@@ -85,9 +85,7 @@ handle_call({open_channel, ProposedNumber, InfraArgs}, _,
 handle_call(is_empty, _, State) ->
     {reply, internal_is_empty(State), State};
 handle_call(num_channels, _, State) ->
-    {reply, internal_num_channels(State), State};
-handle_call({get_pid_and_framing, Number}, _, State) ->
-    {reply, internal_lookup_npf(Number, State), State}.
+    {reply, internal_num_channels(State), State}.
 
 handle_cast({set_channel_max, ChannelMax}, State) ->
     {noreply, State#state{channel_max = ChannelMax}};
