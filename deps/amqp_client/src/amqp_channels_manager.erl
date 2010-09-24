@@ -30,7 +30,7 @@
 -behaviour(gen_server).
 
 -export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
-         num_channels/1, get_pid_and_framing/2, signal_connection_closing/3]).
+         num_channels/1, pass_frame/3, signal_connection_closing/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -60,8 +60,8 @@ is_empty(ChMgr) ->
 num_channels(ChMgr) ->
     gen_server:call(ChMgr, num_channels, infinity).
 
-get_pid_and_framing(ChMgr, ChannelNumber) ->
-    gen_server:call(ChMgr, {get_pid_and_framing, ChannelNumber}, infinity).
+pass_frame(ChMgr, ChNumber, Frame) ->
+    gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).
 
 signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
     gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
@@ -91,6 +91,9 @@ handle_call({get_pid_and_framing, Number}, _, State) ->
 
 handle_cast({set_channel_max, ChannelMax}, State) ->
     {noreply, State#state{channel_max = ChannelMax}};
+handle_cast({pass_frame, ChNumber, Frame}, State) ->
+    internal_pass_frame(ChNumber, Frame, State),
+    {noreply, State};
 handle_cast({connection_closing, ChannelCloseType, Reason}, State) ->
     handle_connection_closing(ChannelCloseType, Reason, State).
 
@@ -194,6 +197,13 @@ handle_connection_closing(ChannelCloseType, Reason, State) ->
     {noreply, State#state{closing = true}}.
 
 %%---------------------------------------------------------------------------
+
+internal_pass_frame(Number, Frame, State) ->
+    case internal_lookup_npf(Number, State) of
+        undefined    -> ?LOG_INFO("Dropping frame ~p for invalid or closed "
+                                  "channel number ~p~n", [Frame, Number]);
+        {_, Framing} -> rabbit_framing_channel:process(Framing, Frame)
+    end.
 
 internal_register(Number, Pid, Framing,
                   State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
