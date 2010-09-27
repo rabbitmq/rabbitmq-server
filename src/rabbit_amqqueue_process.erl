@@ -150,7 +150,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 init_queue_state(State) ->
-    init_expires(init_ttl(State)).
+    lists:foldr(fun(F, S) -> F(S) end, State, 
+                [fun init_expires/1, fun init_ttl/1]).
 
 init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
