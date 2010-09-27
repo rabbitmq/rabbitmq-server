@@ -176,10 +176,10 @@ remove(Binding, InnerFun) ->
     end.
 
 list(VHostPath) ->
-    Route = #route{binding = #binding{
-                     source      = rabbit_misc:r(VHostPath, exchange),
-                     destination = rabbit_misc:r(VHostPath, '_'),
-                     _           = '_'},
+    VHostResource = rabbit_misc:r(VHostPath, '_'),
+    Route = #route{binding = #binding{source      = VHostResource,
+                                      destination = VHostResource,
+                                      _           = '_'},
                    _       = '_'},
     [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
                                                            Route)].
