@@ -69,7 +69,7 @@
 -type(pmsg() :: {rabbit_amqqueue:name(), pkey()}).
 
 -type(work_item() ::
-      {publish, rabbit_types:message(), pmsg()} |
+      {publish, rabbit_types:message(), rabbit_types:msg_properties(), pmsg()} |
       {deliver, pmsg()} |
       {ack, pmsg()}).
 
@@ -173,9 +173,9 @@ handle_call(force_snapshot, _From, State) ->
 handle_call({queue_content, QName}, _From,
             State = #pstate{snapshot = #psnapshot{messages = Messages,
                                                   queues   = Queues}}) ->
-    MatchSpec= [{{{QName,'$1'}, '$2', '$3'}, [], [{{'$3', '$1', '$2'}}]}],
-    do_reply([{ets:lookup_element(Messages, K, 2), D} ||
-                 {_, K, D} <- lists:sort(ets:select(Queues, MatchSpec))],
+    MatchSpec= [{{{QName,'$1'}, '$2', '$3', '$4'}, [], [{{'$4', '$1', '$2', '$3'}}]}],
+    do_reply([{ets:lookup_element(Messages, K, 2), MP, D} ||
+                 {_, K, D, MP} <- lists:sort(ets:select(Queues, MatchSpec))],
              State);
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -243,9 +243,9 @@ log_work(CreateWorkUnit, MessageList,
            snapshot = Snapshot = #psnapshot{messages = Messages}}) ->
     Unit = CreateWorkUnit(
              rabbit_misc:map_in_order(
-               fun (M = {publish, Message, QK = {_QName, PKey}}) ->
+               fun (M = {publish, Message, MsgProps, QK = {_QName, PKey}}) ->
                        case ets:lookup(Messages, PKey) of
-                           [_] -> {tied, QK};
+                           [_] -> {tied, MsgProps, QK};
                            []  -> ets:insert(Messages, {PKey, Message}),
                                   M
                        end;
@@ -356,7 +356,8 @@ current_snapshot(_Snapshot = #psnapshot{transactions = Ts,
                                         next_seq_id  = NextSeqId}) ->
     %% Avoid infinite growth of the table by removing messages not
     %% bound to a queue anymore
-    PKeys = ets:foldl(fun ({{_QName, PKey}, _Delivered, _SeqId}, S) ->
+    PKeys = ets:foldl(fun ({{_QName, PKey}, _Delivered, 
+                            _MsgProps, _SeqId}, S) ->
                               sets:add_element(PKey, S)
                       end, sets:new(), Queues),
     prune_table(Messages, fun (Key) -> sets:is_element(Key, PKeys) end),
@@ -474,14 +475,14 @@ perform_work(MessageList, Messages, Queues, SeqId) ->
                         perform_work_item(Item, Messages, Queues, NextSeqId)
                 end, SeqId, MessageList).
 
-perform_work_item({publish, Message, QK = {_QName, PKey}},
+perform_work_item({publish, Message, MsgProps, QK = {_QName, PKey}},
                   Messages, Queues, NextSeqId) ->
     true = ets:insert(Messages, {PKey, Message}),
-    true = ets:insert(Queues, {QK, false, NextSeqId}),
+    true = ets:insert(Queues, {QK, false, MsgProps, NextSeqId}),
     NextSeqId + 1;
 
-perform_work_item({tied, QK}, _Messages, Queues, NextSeqId) ->
-    true = ets:insert(Queues, {QK, false, NextSeqId}),
+perform_work_item({tied, MsgProps, QK}, _Messages, Queues, NextSeqId) ->
+    true = ets:insert(Queues, {QK, false, MsgProps, NextSeqId}),
     NextSeqId + 1;
 
 perform_work_item({deliver, QK}, _Messages, Queues, NextSeqId) ->

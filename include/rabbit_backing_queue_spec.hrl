@@ -30,12 +30,16 @@
 %%
 
 -type(fetch_result() ::
-                 %% Message,  IsDelivered,  AckTag,  Remaining_Len
-        ('empty'|{rabbit_types:basic_message(), boolean(), ack(), non_neg_integer()})).
+                 %% Message, IsDelivered,  AckTag,  Remaining_Len
+        ('empty'|{rabbit_types:basic_message(), 
+                  boolean(), ack(), 
+                  non_neg_integer()})).
 -type(is_durable() :: boolean()).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
 -type(ack_required() :: boolean()).
+-type(msg_properties_transformer() :: 
+        fun ((rabbit_types:msg_properties()) -> rabbit_types:msg_properties())).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -43,16 +47,26 @@
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
--spec(publish/2 :: (rabbit_types:basic_message(), state()) -> state()).
--spec(publish_delivered/3 ::
-        (ack_required(), rabbit_types:basic_message(), state()) -> {ack(), state()}).
+-spec(publish/3 :: 
+        (rabbit_types:basic_message(), rabbit_types:msg_properties(), state()) 
+        -> state()).
+-spec(publish_delivered/4 ::
+        (ack_required(), rabbit_types:basic_message(), 
+         rabbit_types:msg_properties(), state()) -> {ack(), state()}).
+-spec(dropwhile/2 :: 
+        (fun ((rabbit_types:basic_message(), rabbit_types:msg_properties()) 
+              -> boolean()), state()) -> state()).                    
 -spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
--spec(tx_publish/3 :: (rabbit_types:txn(), rabbit_types:basic_message(), state()) -> state()).
+-spec(tx_publish/4 :: 
+        (rabbit_types:txn(), rabbit_types:basic_message(), 
+         rabbit_types:msg_properties(), state()) -> state()).
 -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
--spec(tx_commit/3 :: (rabbit_types:txn(), fun (() -> any()), state()) -> {[ack()], state()}).
--spec(requeue/2 :: ([ack()], state()) -> state()).
+-spec(tx_commit/4 :: 
+        (rabbit_types:txn(), fun (() -> any()), 
+         msg_properties_transformer(), state()) -> {[ack()], state()}).
+-spec(requeue/3 :: ([ack()], msg_properties_transformer(), state()) -> state()).
 -spec(len/1 :: (state()) -> non_neg_integer()).
 -spec(is_empty/1 :: (state()) -> boolean()).
 -spec(set_ram_duration_target/2 ::

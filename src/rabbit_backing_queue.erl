@@ -62,12 +62,16 @@ behaviour_info(callbacks) ->
      {purge, 1},
 
      %% Publish a message.
-     {publish, 2},
+     {publish, 3},
 
      %% Called for messages which have already been passed straight
      %% out to a client. The queue will be empty for these calls
      %% (i.e. saves the round trip through the backing queue).
-     {publish_delivered, 3},
+     {publish_delivered, 4},
+
+     %% Drop messages in the queue while the supplied predicate
+     %% returns true and return the new state.
+     {dropwhile, 2},
 
      %% Produce the next message.
      {fetch, 2},
@@ -77,7 +81,7 @@ behaviour_info(callbacks) ->
      {ack, 2},
 
      %% A publish, but in the context of a transaction.
-     {tx_publish, 3},
+     {tx_publish, 4},
 
      %% Acks, but in the context of a transaction.
      {tx_ack, 3},
@@ -89,11 +93,11 @@ behaviour_info(callbacks) ->
      %% Commit a transaction. The Fun passed in must be called once
      %% the messages have really been commited. This CPS permits the
      %% possibility of commit coalescing.
-     {tx_commit, 3},
+     {tx_commit, 4},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.
-     {requeue, 2},
+     {requeue, 3},
 
      %% How long is my queue?
      {len, 1},
