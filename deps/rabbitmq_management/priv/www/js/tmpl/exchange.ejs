@@ -5,6 +5,7 @@
   <div>
     <table class="facts">
       <tr><th>Virtual host</th><td><%= exchange.vhost %></td></tr>
+      <tr><th>Type</th><td><%= exchange.type %></td></tr>
       <tr><th>Durable</th><td><%= fmt_boolean(exchange.durable) %></td></tr>
       <tr><th>Auto delete</th><td><%= fmt_boolean(exchange.auto_delete) %></td></tr>
       <tr>

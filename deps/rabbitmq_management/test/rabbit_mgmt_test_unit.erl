@@ -450,10 +450,38 @@ http_unicode_test() ->
 
 http_all_configuration_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
-    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     AllConfig = http_get("/all-configuration", ?OK),
-    http_put("/all-configuration", AllConfig, ?NO_CONTENT),
-    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    ExtraConfig =
+        [{users,       []},
+         {vhosts,      []},
+         {permissions, []},
+         {queues,       [[{name,        <<"another-queue">>},
+                          {vhost,       <<"/">>},
+                          {durable,     true},
+                          {auto_delete, false},
+                          {arguments,   []}
+                         ]]},
+         {exchanges,   []},
+         {bindings,    []}],
+    BrokenConfig =
+        [{users,       []},
+         {vhosts,      []},
+         {permissions, []},
+         {queues,      []},
+         {exchanges,   [[{name,        <<"amq.direct">>},
+                         {vhost,       <<"/">>},
+                         {type,        <<"definitely not direct">>},
+                         {durable,     true},
+                         {auto_delete, false},
+                         {arguments,   []}
+                        ]]},
+         {bindings,    []}],
+    http_post("/all-configuration", ExtraConfig, ?NO_CONTENT),
+    http_post("/all-configuration", BrokenConfig, ?BAD_REQUEST),
+    http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
+    http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
     ok.
 
 http_aliveness_test() ->

@@ -140,11 +140,27 @@ Content-Length: 0</pre>
       </tr>
       <tr>
         <td>X</td>
+        <td></td>
+        <td></td>
         <td>X</td>
-        <td></td>
-        <td></td>
         <td class="path"><a href="/api/all-configuration">/api/all-configuration</a></td>
-        <td>All the server configuration. Everything apart from messages.</td>
+        <td>
+          All the server configuration. Everything apart from
+          messages. POST to upload an existing configuration. Note
+          that:
+          <ul>
+            <li>Configuration is merged. Anything already existing is
+            untouched.</li>
+            <li>Conflicts will cause an error.</li>
+            <li>In the event of an error you will be left with a
+            part-applied configuration.</li>
+          </ul>
+          For convenience you may upload a file from a browser to this
+          URI (i.e. you can use <code>multipart/form-data</code> as
+          well as <code>application/json</code>) in which case the
+          configuration should be uploaded as a form field named
+          "file".
+        </td>
       </tr>
       <tr>
         <td>X</td>

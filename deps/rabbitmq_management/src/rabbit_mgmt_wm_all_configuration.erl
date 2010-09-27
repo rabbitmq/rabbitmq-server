@@ -21,7 +21,8 @@
 -module(rabbit_mgmt_wm_all_configuration).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([content_types_accepted/2, allowed_methods/2, accept_content/2]).
+-export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
+-export([post_is_create/2, create_path/2, accept_multipart/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -39,10 +40,17 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{"application/json", accept_content}], ReqData, Context}.
+   {[{"application/json", accept_json},
+     {"multipart/form-data", accept_multipart}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'PUT'], ReqData, Context}.
+    {['HEAD', 'GET', 'POST'], ReqData, Context}.
+
+post_is_create(ReqData, Context) ->
+    {true, ReqData, Context}.
+
+create_path(ReqData, Context) ->
+    {"dummy", ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
@@ -65,21 +73,56 @@ to_json(ReqData, Context) ->
       end,
       Context).
 
-accept_content(ReqData, Context) ->
+accept_json(ReqData, Context) ->
+    accept(wrq:req_body(ReqData), ReqData, Context).
+
+accept_multipart(ReqData, Context) ->
+    Parts = webmachine_multipart:get_all_parts(
+              wrq:req_body(ReqData),
+              webmachine_multipart:find_boundary(ReqData)),
+    Redirect = get_part("redirect", Parts),
+    Json = get_part("file", Parts),
+    Resp = {Res, _, _} = accept(Json, ReqData, Context),
+    case Res of
+        true ->
+            ReqData1 =
+                case Redirect of
+                    unknown -> ReqData;
+                    _       -> rabbit_mgmt_util:redirect(Redirect, ReqData)
+                end,
+            {true, ReqData1, Context};
+        _ ->
+            Resp
+    end.
+
+accept(Body, ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [users, vhosts, permissions, queues, exchanges, bindings],
-      ReqData, Context,
+      Body, ReqData, Context,
       fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings]) ->
               rabbit_access_control:add_user(?MAGIC_USER, ?MAGIC_PASSWORD),
-              for_all(Users,       fun add_user/1),
-              for_all(VHosts,      fun add_vhost/1),
-              for_all(Permissions, fun add_permission/1),
-              for_all(Queues,      fun add_queue/1),
-              for_all(Exchanges,   fun add_exchange/1),
-              for_all(Bindings,    fun add_binding/1),
+              [allow_magic(V) || V <- rabbit_access_control:list_vhosts()],
+              Res = rabbit_mgmt_util:with_amqp_error_handling(
+                      ReqData, Context,
+                      fun() ->
+                              for_all(Users,       fun add_user/1),
+                              for_all(VHosts,      fun add_vhost/1),
+                              for_all(Permissions, fun add_permission/1),
+                              for_all(Queues,      fun add_queue/1),
+                              for_all(Exchanges,   fun add_exchange/1),
+                              for_all(Bindings,    fun add_binding/1),
+                              {true, ReqData, Context}
+                      end),
               rabbit_access_control:delete_user(?MAGIC_USER),
-              {true, ReqData, Context}
+              Res
       end).
+
+get_part(Name, Parts) ->
+    Filtered = [Value || {N, _Meta, Value} <- Parts, N == Name],
+    case Filtered of
+        []  -> unknown;
+        [F] -> F
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
@@ -106,10 +149,18 @@ filter_item(Item, Allowed) ->
 %%--------------------------------------------------------------------
 
 for_all(List, Fun) ->
-    [Fun(atomise_names(I)) || {struct, I} <- List].
+    [Fun([{atomise_name(K), clean_value(V)} || {K, V} <- I]) ||
+        {struct, I} <- List].
 
-atomise_names(I) ->
-    [{list_to_atom(binary_to_list(K)), V} || {K, V} <- I].
+atomise_name(N) ->
+    list_to_atom(binary_to_list(N)).
+
+clean_value({struct, L}) -> L;
+clean_value(A)           -> A.
+
+allow_magic(VHost) ->
+    rabbit_access_control:set_permissions(
+      <<"client">>, ?MAGIC_USER, VHost, <<".*">>, <<".*">>, <<".*">>).
 
 %%--------------------------------------------------------------------
 
@@ -121,8 +172,7 @@ add_user(User) ->
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
     rabbit_mgmt_wm_vhost:put_vhost(VHostName),
-    rabbit_access_control:set_permissions(
-      <<"client">>, ?MAGIC_USER, VHostName, <<".*">>, <<".*">>, <<".*">>).
+    allow_magic(VHostName).
 
 add_permission(Permission) ->
     rabbit_access_control:set_permissions(pget(scope,     Permission),

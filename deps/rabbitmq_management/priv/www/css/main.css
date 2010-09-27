@@ -63,7 +63,11 @@ input, select { padding: 0.2em; }
 
 table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; }
-table.form input { font: 1.1em Lucidatypewriter, Courier, monospace; width: 200px; }
+table.form input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; width: 200px; }
 table.form select { width: 200px; }
 
 a.button { padding: 8px; background-color: #aaaaff; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; }
+
+div.horizontal-split { display: block !important; width: 48%; float: left; }
+h3 { padding: 0 0 2px 0; margin: 0 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; }
+h3 + p { margin-top: 2em; }

@@ -81,9 +81,39 @@
 </div>
 
 <div class="section-hidden">
-<h2>Backup / Restore</h2>
+<h2>Import / Export Configuration</h2>
 <div>
-<p><a class="button" href="/api/all-configuration?mode=download">Download broker configuration</a></p>
+  <p>
+    The configuration consists of users, virtual hosts, permissions,
+    exchanges, queues and bindings. It does not include the contents of
+    queues.
+  </p>
+  <div class="horizontal-split">
+    <h3>Export</h3>
+    <p>
+      <a class="button" href="/api/all-configuration?mode=download">Download broker configuration</a>
+    </p>
+  </div>
+
+  <div class="horizontal-split">
+    <h3>Import</h3>
+    <form action="/api/all-configuration" method="post" enctype="multipart/form-data" target="upload">
+      <p>
+        <label>Configuration file:</label>
+        <input type="file" name="file"/>
+      </p>
+      <p>
+        Note: The configuration that is imported will be merged with
+        the current configuration. If an error occurs during import,
+        any configuration changes made will not be rolled back.
+      </p>
+      <p>
+        <input type="hidden" name="redirect" value="/mgmt/#/import-succeeded"/>
+        <input type="submit" value="Upload broker configuration"/>
+      </p>
+    </form>
+  </div>
+  <span class="br"></span>
 </div>
 </div>
 

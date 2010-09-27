@@ -125,6 +125,9 @@ function dispatcher() {
                 update();
             return false;
         });
+    this.get('#/import-succeeded', function() {
+            render({}, 'import-succeeded', '#/overview');
+        });
 }
 
 function go_to(url) {
