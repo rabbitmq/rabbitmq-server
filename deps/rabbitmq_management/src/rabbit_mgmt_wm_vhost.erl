@@ -23,7 +23,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2]).
+         delete_resource/2, put_vhost/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -45,15 +45,11 @@ resource_exists(ReqData, Context) ->
     {rabbit_access_control:vhost_exists(id(ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    VHost = id(ReqData),
+    VHost = [{name, id(ReqData)}],
     rabbit_mgmt_util:reply(VHost, ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    VHost = id(ReqData),
-    case rabbit_access_control:vhost_exists(VHost) of
-        true  -> ok;
-        false -> rabbit_access_control:add_vhost(VHost)
-    end,
+    put_vhost(id(ReqData)),
     {true, ReqData, Context}.
 
 delete_resource(ReqData, Context) ->
@@ -68,3 +64,9 @@ is_authorized(ReqData, Context) ->
 
 id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
+
+put_vhost(VHost) ->
+    case rabbit_access_control:vhost_exists(VHost) of
+        true  -> ok;
+        false -> rabbit_access_control:add_vhost(VHost)
+    end.

@@ -21,7 +21,7 @@
 -module(rabbit_mgmt_wm_queues).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2]).
+         resource_exists/2, queues/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").

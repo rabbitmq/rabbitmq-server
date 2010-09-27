@@ -132,22 +132,36 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
 %%                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
 group_sum(GroupBy, List) ->
-    lists:foldl(fun ({Ids, New}, Acc) ->
+    lists:foldl(fun ({Ids, Item0}, Acc) ->
                         Id = [{G, pget(G, Ids)} || G <- GroupBy],
-                        dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
-                                    New, Acc)
+                        dict:update(Id, fun(Item1) ->
+                                                gs_update(Item0, Item1)
+                                        end,
+                                    Item0, Acc)
                 end, dict:new(), List).
 
-gs_update(Cur, New) ->
-    [{Key, gs_update_add(Key, Val, pget(Key, Cur, 0))} || {Key, Val} <- New].
+gs_update(Item0, Item1) ->
+    Keys = sets:to_list(sets:from_list(
+                          [K || {K, _} <- Item0 ++ Item1])),
+    [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))}
+     || Key <- Keys].
 
-gs_update_add(Key, Old, New) ->
+gs_update_add(Key, Item0, Item1) ->
     case is_details(Key) of
-        true  -> [{rate,       pget(rate, Old) + pget(rate, New)},
-                  {last_event, erlang:max(pget(last_event, Old),
-                                          pget(last_event, New))}];
-        false -> Old + New
+        true  ->
+            I0 = if_unknown(Item0, []),
+            I1 = if_unknown(Item1, []),
+            [{rate,       pget(rate, I0, 0) + pget(rate, I1, 0)},
+             {last_event, erlang:max(pget(last_event, I0, 0),
+                                     pget(last_event, I1, 0))}];
+        false ->
+            I0 = if_unknown(Item0, 0),
+            I1 = if_unknown(Item1, 0),
+            I0 + I1
     end.
+
+if_unknown(unknown, Def) -> Def;
+if_unknown(Val,    _Def) -> Val.
 
 %%----------------------------------------------------------------------------
 
@@ -207,7 +221,7 @@ init([]) ->
 
 handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    Qs1 = merge_created_stats([queue_to_list(Q) || Q <- Qs0], Table),
+    Qs1 = merge_created_stats([rabbit_mgmt_format:queue(Q) || Q <- Qs0], Table),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
@@ -435,23 +449,6 @@ extract_singleton_fine_stats(Dict) ->
         []            -> [];
         [{[], Stats}] -> Stats
     end.
-
-queue_to_list(#amqqueue{name            = Name,
-                        durable         = Durable,
-                        auto_delete     = AutoDelete,
-                        exclusive_owner = ExclusiveOwner,
-                        arguments       = Arguments,
-                        pid             = Pid }) ->
-    rabbit_mgmt_format:format(
-      [{name,        Name},
-       {durable,     Durable},
-       {auto_delete, AutoDelete},
-       {owner_pid,   ExclusiveOwner},
-       {arguments,   Arguments},
-       {pid,         Pid}],
-      [{fun rabbit_mgmt_format:pid/1,      [pid, owner_pid]},
-       {fun rabbit_mgmt_format:resource/1, [name]},
-       {fun rabbit_mgmt_format:table/1,    [arguments]}]).
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 

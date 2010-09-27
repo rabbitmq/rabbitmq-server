@@ -23,7 +23,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2]).
+         delete_resource/2, put_user/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -56,16 +56,7 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [password, administrator], ReqData, Context,
       fun([Password, IsAdmin]) ->
-              case rabbit_access_control:lookup_user(User) of
-                  {ok, _} ->
-                      rabbit_access_control:change_password(User, Password),
-                      case rabbit_mgmt_util:parse_bool(IsAdmin) of
-                          true ->  rabbit_access_control:set_admin(User);
-                          false -> rabbit_access_control:clear_admin(User)
-                      end;
-                  {error, not_found} ->
-                      rabbit_access_control:add_user(User, Password)
-              end,
+              put_user(User, Password, IsAdmin),
               {true, ReqData, Context}
       end).
 
@@ -81,3 +72,15 @@ is_authorized(ReqData, Context) ->
 
 user(ReqData) ->
     rabbit_access_control:lookup_user(rabbit_mgmt_util:id(user, ReqData)).
+
+put_user(User, Password, IsAdmin) ->
+    case rabbit_access_control:lookup_user(User) of
+        {ok, _} ->
+            rabbit_access_control:change_password(User, Password),
+            case rabbit_mgmt_util:parse_bool(IsAdmin) of
+                true ->  rabbit_access_control:set_admin(User);
+                false -> rabbit_access_control:clear_admin(User)
+            end;
+        {error, not_found} ->
+            rabbit_access_control:add_user(User, Password)
+    end.
