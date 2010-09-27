@@ -7,14 +7,7 @@ TEST_COMMANDS=eunit:test(rabbit_mgmt_test_unit,[verbose]) rabbit_mgmt_test_db:te
 
 EXTRA_PACKAGE_DIRS:=$(PACKAGE_DIR)/priv
 
-WEB_DIR:=$(EXTRA_PACKAGE_DIRS)/www
-JAVASCRIPT_DIR:=$(WEB_DIR)/js
-TEMPLATES_DIR:=$(JAVASCRIPT_DIR)/tmpl
-EXTRA_TARGETS:=$(wildcard $(TEMPLATES_DIR)/*.ejs) \
-    $(wildcard $(JAVASCRIPT_DIR)/*.js) \
-    $(wildcard $(WEB_DIR)/*.html) \
-    $(wildcard $(WEB_DIR)/css/*.css) \
-    $(wildcard $(WEB_DIR)/img/*.png) \
+EXTRA_TARGETS:=$(shell find $(EXTRA_PACKAGE_DIRS) -type f)
 
 test: cleantest
 
