@@ -1,1 +1,8 @@
+syntax: glob
 \.beam$
+
+syntax: regexp
+^dist/
+^build/
+^ebin/
+^tmp/

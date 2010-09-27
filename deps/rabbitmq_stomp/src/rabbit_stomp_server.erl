@@ -38,11 +38,10 @@
          listener_started/2, listener_stopped/2, start_client/1,
          start_link/0, init/1, mainloop/1]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, collector, parse_state}).
+-record(state, {socket, session_id, channel, connection, collector, parse_state}).
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
@@ -116,59 +115,27 @@ mainloop(State) ->
     receive
         {'EXIT', Pid, Reason} ->
             handle_exit(Pid, Reason, State);
-        {channel_exit, ChannelId, Reason} ->
-            handle_exit(ChannelId, Reason, State);
         {tcp, Sock, Bytes} ->
             inet:setopts(Sock, [{active, once}]),
             process_received_bytes(Bytes, State);
         {tcp_closed, _Sock} ->
-            case State#state.channel of
-                none ->
-                    done;
-                ChPid ->
-                    rabbit_channel:shutdown(ChPid),
-                    ?MODULE:mainloop(State)
-            end;
-        {send_command, Command} ->
-            ?MODULE:mainloop(send_reply(Command, State));
-        {'$gen_call', From, {send_command_sync, Command}} ->
-            State1 = send_reply(Command, State),
-            gen_server:reply(From, ok),
-            ?MODULE:mainloop(State1);
-        {send_command_and_notify, QPid, TxPid, Method, Content} ->
-            State1 = send_reply(Method, Content, State),
-            rabbit_amqqueue:notify_sent(QPid, TxPid),
-            ?MODULE:mainloop(State1);
-        {send_command_and_shutdown, Command} ->
-            send_reply(Command, State),
+            shutdown_channel_and_connection(State),
             done;
-        shutdown ->
-            %% This is the channel telling the writer to shut down. We
-            %% ignore this, as the channel will exit itself shortly,
-            %% which event we do respond to.
-            ?MODULE:mainloop(State);
+        #'basic.consume_ok'{} ->
+            %% just being notified that we got made a successful
+            %% subscription.
+            mainloop(State);
+        {Delivery = #'basic.deliver'{}, 
+         #amqp_msg{props = Props, payload = Payload}} ->
+             mainloop(send_delivery(Delivery, Props, Payload, State));
         Data ->
+            io:format("Data~p~n", [Data]),
             send_priv_error("Error", "Internal error in mainloop\n",
                             Data, State),
             done
     end.
 
-simple_method_sync_rpc(Method, State0) ->
-    State = send_method(Method, State0),
-    receive
-        {'EXIT', Pid, Reason} ->
-            handle_exit(Pid, Reason, State);
-        {send_command, Reply} ->
-            {ok, Reply, State}
-    end.
-
-handle_exit(_Who, normal, _State = #state{collector = CollectorPid}) ->
-    %% Normal exits (it'll be the channel we're linked to in our roles
-    %% as reader and writer) are fine
-    case CollectorPid of
-        none -> ok;
-        _ -> ok = rabbit_queue_collector:delete_all(CollectorPid)
-    end,
+handle_exit(_Who, normal, _State) ->
     done;
 handle_exit(_Who, AmqpError = #amqp_error{}, State) ->
     explain_amqp_death(AmqpError, State),
@@ -212,12 +179,6 @@ explain_amqp_death(#amqp_error{name = ErrorName,
     send_error(atom_to_list(ErrorName), "~s~nMethod was ~p\n",
                [Explanation, Method], State).
 
-send_reply(#'channel.close_ok'{}, State) ->
-    State;
-send_reply(Command, State) ->
-    error_logger:error_msg("STOMP Reply command unhandled: ~p~n", [Command]),
-    State.
-
 maybe_header(_Key, undefined) ->
     [];
 maybe_header(Key, Value) when is_binary(Value) ->
@@ -227,23 +188,20 @@ maybe_header(Key, Value) when is_integer(Value) ->
 maybe_header(_Key, _Value) ->
     [].
 
-send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
+send_delivery(#'basic.deliver'{consumer_tag = ConsumerTag,
                             delivery_tag = DeliveryTag,
-                            exchange = Exchange,
-                            routing_key = RoutingKey},
-           Content,
-           State = #state{session_id = SessionId}) ->
-    #content{properties = #'P_basic'{headers          = Headers,
-                                     content_type     = ContentType,
-                                     content_encoding = ContentEncoding,
-                                     delivery_mode    = DeliveryMode,
-                                     priority         = Priority,
-                                     correlation_id   = CorrelationId,
-                                     reply_to         = ReplyTo,
-                                     message_id       = MessageId},
-             payload_fragments_rev = BodyFragmentsRev} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    send_frame(
+                            exchange     = Exchange,
+                            routing_key  = RoutingKey},
+              #'P_basic'{headers          = Headers,
+                         content_type     = ContentType,
+                         content_encoding = ContentEncoding,
+                         delivery_mode    = DeliveryMode,
+                         priority         = Priority,
+                         correlation_id   = CorrelationId,
+                         reply_to         = ReplyTo,
+                         message_id       = MessageId},
+              Body, State = #state{session_id = SessionId}) ->
+   send_frame(
       "MESSAGE",
       [{"destination", binary_to_list(RoutingKey)},
        {"exchange", binary_to_list(Exchange)},
@@ -266,12 +224,8 @@ send_reply(#'basic.deliver'{consumer_tag = ConsumerTag,
       ++ maybe_header("correlation-id", CorrelationId)
       ++ maybe_header("reply-to", ReplyTo)
       ++ maybe_header("amqp-message-id", MessageId),
-      lists:reverse(BodyFragmentsRev),
-      State);
-send_reply(Command, Content, State) ->
-    error_logger:error_msg("STOMP Reply command unhandled: ~p~n~p~n",
-                           [Command, Content]),
-    State.
+      Body,
+      State).
 
 adhoc_convert_headers(Headers) ->
     lists:foldr(fun ({K, longstr, V}, Acc) ->
@@ -323,6 +277,11 @@ send_error(Message, Detail, State) ->
 send_error(Message, Format, Args, State) ->
     send_priv_error(Message, Format, Args, none, State).
 
+shutdown_channel_and_connection(State) ->
+    amqp_channel:close(State#state.channel),
+    amqp_connection:close(State#state.connection),
+    State#state{channel = none, connection = none}.
+
 process_frame("CONNECT", Frame, State = #state{channel = none}) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     {ok, State1} = do_login(rabbit_stomp_frame:header(Frame, "login"),
@@ -330,19 +289,16 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
                             rabbit_stomp_frame:header(Frame, "virtual-host",
                                                binary_to_list(DefaultVHost)),
                             State),
-    State2 = case rabbit_stomp_frame:integer_header(Frame, "prefetch") of
-                 {ok, PrefetchCount} ->
-                     {ok, #'basic.qos_ok'{}, S} =
-                         simple_method_sync_rpc(
-                           #'basic.qos'{prefetch_size = 0,
-                                        prefetch_count = PrefetchCount,
-                                        global = false},
-                           State1),
-                     S;
-                 not_found -> State1
-             end,
-    {ok, State2};
-process_frame("DISCONNECT", _Frame, _State = #state{channel = none}) ->
+    case rabbit_stomp_frame:integer_header(Frame, "prefetch") of
+        {ok, PrefetchCount} ->
+            send_method(#'basic.qos'{prefetch_size = 0,
+                                     prefetch_count = PrefetchCount,
+                                     global = false}, State1);
+        not_found -> ok
+    end,
+    {ok, State1};
+process_frame("DISCONNECT", Frame, State) ->
+    receipt_if_necessary(Frame, shutdown_channel_and_connection(State)),
     stop;
 process_frame(_Command, _Frame, State = #state{channel = none}) ->
     {ok, send_error("Illegal command",
@@ -350,54 +306,40 @@ process_frame(_Command, _Frame, State = #state{channel = none}) ->
                     State)};
 process_frame(Command, Frame, State) ->
     case process_command(Command, Frame, State) of
-        {ok, State1} ->
-            {ok, case rabbit_stomp_frame:header(Frame, "receipt") of
-                     {ok, Id} ->
-                         send_frame("RECEIPT", [{"receipt-id", Id}], "",
-                                    State1);
-                     not_found ->
-                         State1
-                 end};
-        stop ->
-            stop
+        {ok, State1} -> {ok, receipt_if_necessary(Frame, State1)};
+        stop         -> stop
     end.
 
-send_method(Method, State = #state{channel = ChPid}) ->
-    ok = rabbit_channel:do(ChPid, Method),
+receipt_if_necessary(Frame, State) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
+        not_found -> State
+    end.
+
+send_method(Method, State = #state{channel = Channel}) ->
+    amqp_channel:call(Channel, Method),
     State.
 
-send_method(Method, Properties, BodyFragments, State = #state{channel = ChPid}) ->
-    ok = rabbit_channel:do(
-           ChPid,
-           Method,
-           #content{class_id = 60, %% basic
-                    properties = Properties,
-                    properties_bin = none,
-                    payload_fragments_rev = lists:reverse(BodyFragments)}),
+send_method(Method, Properties, BodyFragments, State = #state{channel = Channel}) ->
+    amqp_channel:call(Channel,Method, #amqp_msg{
+                                props = Properties,
+                                payload = lists:reverse(BodyFragments)}),
     State.
 
 do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
-    U = rabbit_access_control:user_pass_login(list_to_binary(Login),
-                                              list_to_binary(Passcode)),
-    ok = rabbit_access_control:check_vhost_access(U,
-                                                  list_to_binary(VirtualHost)),
-    {ok, CollectorPid} = rabbit_queue_collector:start_link(),
-    {ok, ChPid} = rabbit_channel:start_link(?MODULE, self(), self(),
-                                            U#user.username,
-                                            list_to_binary(VirtualHost),
-                                            CollectorPid,
-                                            fun (_) ->
-                                                    exit(limiter_not_yet_supported_in_stomp)
-                                            end),
-    {ok, #'channel.open_ok'{}, State1} =
-        simple_method_sync_rpc(#'channel.open'{},
-                               State#state{channel = ChPid,
-                                           collector = CollectorPid}),
+    {ok, Connection} = amqp_connection:start(direct, #amqp_params{
+					       username		= list_to_binary(Login),
+					       password		= list_to_binary(Passcode),
+					       virtual_host	= list_to_binary(VirtualHost)}),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    io:format("~p ~p ~n", [self(), Channel]),
     SessionId = rabbit_guid:string_guid("session"),
     {ok, send_frame("CONNECTED",
                     [{"session", SessionId}],
                     "",
-                    State1#state{session_id = SessionId})};
+                    State#state{session_id	= SessionId, 
+				channel		= Channel, 
+				connection	= Connection})};
 do_login(_, _, _, State) ->
     {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n",
                     State)}.
@@ -539,7 +481,7 @@ process_command("ABORT", Frame, State) ->
     transactional_action(Frame, "ABORT", fun abort_transaction/2, State);
 process_command("SUBSCRIBE",
                 Frame = #stomp_frame{headers = Headers},
-                State) ->
+                State = #state{channel = Channel}) ->
     AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
                   "auto" -> auto;
                   "client" -> client
@@ -565,14 +507,13 @@ process_command("SUBSCRIBE",
                            arguments   = [longstr_field(K, V) ||
                                              {"X-Q-" ++ K, V} <- Headers]},
                        State),
-            State2 = send_method(#'basic.consume'{queue = Queue,
+            #'basic.consume_ok'{} = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Queue,
                                                   consumer_tag = ConsumerTag,
                                                   no_local = false,
                                                   no_ack = (AckMode == auto),
-                                                  exclusive = false,
-                                                  nowait = true},
-                                 State1),
-            State3 = case rabbit_stomp_frame:header(Frame, "exchange") of
+                                                  exclusive = false},
+                                 self()),
+            State2 = case rabbit_stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
                              Exchange = list_to_binary(ExchangeStr),
                              RoutingKey = list_to_binary(
@@ -586,10 +527,10 @@ process_command("SUBSCRIBE",
                                    nowait = true,
                                    arguments = [longstr_field(K, V) ||
                                                    {"X-B-" ++ K, V} <- Headers]},
-                               State2);
-                         not_found -> State2
+                               State1);
+                         not_found -> State1
                      end,
-            {ok, State3};
+            {ok, State2};
         not_found ->
             {ok, send_error("Missing destination",
                             "SUBSCRIBE must include a 'destination' header\n",
@@ -618,9 +559,6 @@ process_command("UNSUBSCRIBE", Frame, State) ->
                                              nowait = true},
                             State)}
     end;
-process_command("DISCONNECT", _Frame, State) ->
-    {ok, send_method(#'channel.close'{reply_code = 200, reply_text = <<"">>,
-                                      class_id = 0, method_id = 0}, State)};
 process_command(Command, _Frame, State) ->
     {ok, send_error("Bad command",
                     "Could not interpret command " ++ Command ++ "\n",
