@@ -399,7 +399,7 @@ deliver_from_queue_deliver(AckRequired, false,
     {{Message, IsDelivered, AckTag}, 0 == Remaining,
      State #q { backing_queue_state = BQS1 }}.
 
-confirm_messages_internal(Guids, State) ->
+confirm_messages_internal(Guids, State) when is_list(Guids) ->
     lists:foldl(fun(Guid, State0) ->
                         confirm_message_internal(Guid, State0)
                 end, State, Guids).
