@@ -459,13 +459,13 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
                State#q{backing_queue_state = BQS1}}
     end.
 
+drop_expired_messages(State = #q{ttl = undefined}) ->
+    State;
 drop_expired_messages(State = #q{backing_queue_state = BQS, 
                                   backing_queue = BQ}) ->
+    Now = timer:now_diff(now(), {0,0,0}),
     BQS1 = BQ:dropwhile(
-             fun (_Msg, _MsgProperties = #msg_properties{expiry = undefined}) ->
-                     false;
-                 (_Msg, _MsgProperties = #msg_properties{expiry=Expiry}) ->
-                     Now = timer:now_diff(os:timestamp(), {0,0,0}),
+             fun (_Msg, _MsgProperties = #msg_properties{expiry=Expiry}) ->
                      Now > Expiry
              end, BQS),
     State #q{backing_queue_state = BQS1}.
