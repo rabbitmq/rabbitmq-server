@@ -1842,9 +1842,65 @@ test_variable_queue() ->
         F <- [fun test_variable_queue_dynamic_duration_change/1,
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
-              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1]],
+              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_dropwhile/1,
+              fun test_peek/1]],
     passed.
 
+test_dropwhile(VQ0) ->
+    Count = 10,
+
+    %% add messages with sequential expiry
+    VQ1 = lists:foldl(
+      fun (N, VQN) ->
+              rabbit_variable_queue:publish(
+                rabbit_basic:message(
+                  rabbit_misc:r(<<>>, exchange, <<>>), 
+                  <<>>, #'P_basic'{}, <<>>), 
+                #msg_properties{expiry = N}, VQN)
+      end, VQ0, lists:seq(1, Count)),
+
+    %% drop the first 5 messages
+    VQ2 = rabbit_variable_queue:dropwhile(
+      fun(_Msg, #msg_properties { expiry = Expiry }) ->
+              Expiry =< 5
+      end, VQ1),
+
+    %% fetch five now
+    VQ3 = lists:foldl(fun (_N, VQN) ->
+                                   {{#basic_message{}, _, _, _}, VQM} =
+                                       rabbit_variable_queue:fetch(false, VQN),
+                                   VQM
+                           end, VQ2, lists:seq(1, 5)),
+
+    %% should be empty now
+    {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
+
+    VQ4.
+    
+test_peek(VQ0) ->
+    Expiry = 123,
+    Body = <<"test">>,
+
+    %% publish message
+    VQ1 = rabbit_variable_queue:publish(rabbit_basic:message(
+                                          rabbit_misc:r(<<>>, exchange, <<>>),
+                                          <<>>, #'P_basic'{}, Body),
+                                        #msg_properties{ expiry = Expiry },
+                                        VQ0),
+    
+    %% take a peek
+    {{#basic_message{ content = Content }, 
+      #msg_properties { expiry = Expiry}}, VQ2} = 
+        rabbit_variable_queue:peek(VQ1),
+    
+    {_, Body} = rabbit_basic:from_content(Content),
+
+    %% should be able to fetch still
+    {{_Msg, _, _, _}, VQ3} = rabbit_variable_queue:fetch(false, VQ2),
+
+    VQ3.
+    
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
 

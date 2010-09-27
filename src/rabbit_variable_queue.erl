@@ -34,7 +34,7 @@
 -export([init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1, dropwhile/2,
+         requeue/3, len/1, is_empty/1, dropwhile/2, peek/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
          status/1]).
@@ -518,7 +518,14 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
                                 persistent_count  = PCount1,
                                 pending_ack       = PA1 })}.
 
-    
+peek(State) ->    
+    internal_queue_out(
+      fun(MsgStatus = #msg_status { msg = Msg, msg_properties = MsgProps }, 
+          _, State1) ->
+              {{Msg, MsgProps}, State1}
+      end, State).
+              
+
 dropwhile(Pred, State) ->
     case internal_queue_out(
            fun(MsgStatus = #msg_status { msg = Msg, msg_properties = MsgProps },
@@ -601,7 +608,7 @@ internal_fetch(AckRequired, Q4a,
                         len              = Len1,
                         persistent_count = PCount1,
                         pending_ack      = PA1 })}.
-
+    
 ack(AckTags, State) ->
     a(ack(fun rabbit_msg_store:remove/2,
           fun (_AckEntry, State1) -> State1 end,

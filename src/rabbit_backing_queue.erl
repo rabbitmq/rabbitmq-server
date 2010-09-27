@@ -73,6 +73,9 @@ behaviour_info(callbacks) ->
      %% returns true and return the new state.
      {dropwhile, 2},
 
+     %% Peek at the next message.
+     {peek, 1},
+
      %% Produce the next message.
      {fetch, 2},
 
