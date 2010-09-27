@@ -239,7 +239,7 @@
           rates,
           msgs_on_disk,
           msg_indices_on_disk,
-          need_acking
+          need_confirming
         }).
 
 -record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
@@ -328,7 +328,7 @@
              rates                :: rates(),
              msgs_on_disk         :: gb_set(),
              msg_indices_on_disk  :: gb_set(),
-             need_acking          :: gb_set()}).
+             need_confirming      :: gb_set()}).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -447,7 +447,7 @@ init(QueueName, IsDurable, Recover) ->
                                       timestamp   = Now },
       msgs_on_disk         = gb_sets:new(),
       msg_indices_on_disk  = gb_sets:new(),
-      need_acking          = gb_sets:new()},
+      need_confirming      = gb_sets:new()},
     a(maybe_deltas_to_betas(State)).
 
 terminate(State) ->
@@ -537,10 +537,10 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                 in_counter        = InCount  + 1,
                 persistent_count  = PCount1,
                 pending_ack       = PA1,
-                need_acking       =
+                need_confirming   =
                     case NeedsConfirming of
-                        true -> gb_sets:insert(Guid, State1#vqstate.need_acking);
-                        false -> State1#vqstate.need_acking
+                        true -> gb_sets:insert(Guid, State1#vqstate.need_confirming);
+                        false -> State1#vqstate.need_confirming
                     end })}.
 
 fetch(AckRequired, State = #vqstate { q4               = Q4,
@@ -1051,10 +1051,10 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
               in_counter       = InCount + 1,
               persistent_count = PCount1,
               ram_msg_count    = RamMsgCount + 1,
-              need_acking      =
+              need_confirming  =
                   case NeedsConfirming of
-                      true -> gb_sets:add(Guid, State2#vqstate.need_acking);
-                      false -> State2#vqstate.need_acking
+                      true -> gb_sets:add(Guid, State2#vqstate.need_confirming);
+                      false -> State2#vqstate.need_confirming
                   end }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
@@ -1179,34 +1179,34 @@ accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-msgs_confirmed(Guids, State = #vqstate { msgs_on_disk = MOD,
+msgs_confirmed(Guids, State = #vqstate { msgs_on_disk        = MOD,
                                          msg_indices_on_disk = MIOD,
-                                         need_acking = NA }) ->
+                                         need_confirming     = NC }) ->
     GuidSet = gb_sets:from_list(Guids),
     State #vqstate {
       msgs_on_disk =
           gb_sets:difference(MOD, GuidSet),
       msg_indices_on_disk =
           gb_sets:difference(MIOD, GuidSet),
-      need_acking =
-          gb_sets:difference(NA, GuidSet) }.
+      need_confirming =
+          gb_sets:difference(NC, GuidSet) }.
 
 msgs_written_to_disk(QPid, Guids) ->
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                      QPid,
-                     fun(State = #vqstate { msgs_on_disk = MOD,
+                     fun(State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
-                                            need_acking = NA }) ->
+                                            need_confirming     = NC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
-                             MOD1 = gb_sets:intersection(gb_sets:union(MOD, GuidSet), NA),
+                             MOD1 = gb_sets:intersection(gb_sets:union(MOD, GuidSet), NC),
                              { State #vqstate {
                                  msgs_on_disk =
                                      gb_sets:difference(MOD1, ToConfirmMsgs),
                                  msg_indices_on_disk =
                                      gb_sets:difference(MIOD, ToConfirmMsgs),
-                                 need_acking =
-                                     gb_sets:difference(NA, ToConfirmMsgs) },
+                                 need_confirming =
+                                     gb_sets:difference(NC, ToConfirmMsgs) },
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
           end).
@@ -1215,20 +1215,20 @@ msg_indices_written_to_disk(Guids) ->
     Self = self(),
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                      Self,
-                     fun(State = #vqstate { msgs_on_disk = MOD,
+                     fun(State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
-                                            need_acking = NA }) ->
+                                            need_confirming     = NC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
                              MIOD1 =
-                                 gb_sets:intersection(gb_sets:union(MIOD, GuidSet), NA),
+                                 gb_sets:intersection(gb_sets:union(MIOD, GuidSet), NC),
                              { State #vqstate {
                                  msgs_on_disk =
                                      gb_sets:difference(MOD, ToConfirmMsgs),
                                  msg_indices_on_disk =
                                      gb_sets:difference(MIOD1, ToConfirmMsgs),
-                                 need_acking =
-                                     gb_sets:difference(NA, ToConfirmMsgs) },
+                                 need_confirming =
+                                     gb_sets:difference(NC, ToConfirmMsgs) },
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
           end).
