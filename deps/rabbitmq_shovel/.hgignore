@@ -6,3 +6,4 @@
 ^toke$
 ^priv$
 ^build/
+^ebin/rabbit_shovel.app$
