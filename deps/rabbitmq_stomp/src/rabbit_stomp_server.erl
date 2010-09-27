@@ -129,16 +129,12 @@ mainloop(State) ->
          #amqp_msg{props = Props, payload = Payload}} ->
              mainloop(send_delivery(Delivery, Props, Payload, State));
         Data ->
-            io:format("Data~p~n", [Data]),
             send_priv_error("Error", "Internal error in mainloop\n",
                             Data, State),
             done
     end.
 
 handle_exit(_Who, normal, _State) ->
-    done;
-handle_exit(_Who, AmqpError = #amqp_error{}, State) ->
-    explain_amqp_death(AmqpError, State),
     done;
 handle_exit(Who, Reason, State) ->
     send_priv_error("Error", "~p exited\n", [Who], Reason, State),
@@ -154,10 +150,12 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             PS = rabbit_stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
                                      State#state{parse_state = PS}) of
-                {'EXIT', AmqpError = #amqp_error{}} ->
-                    explain_amqp_death(AmqpError, State),
+                {'EXIT', 
+                 {{server_initiated_close, ReplyCode, Explanation}, _}} ->
+                    explain_amqp_death(ReplyCode, Explanation, State),
                     done;
                 {'EXIT', Reason} ->
+                    io:format("~p~n", [Reason]),
                     send_priv_error("Processing error", "Processing error\n",
                                     Reason, State),
                     done;
@@ -172,12 +170,10 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             done
     end.
 
-explain_amqp_death(#amqp_error{name = ErrorName,
-                               explanation = Explanation,
-                               method = Method},
-                   State) ->
-    send_error(atom_to_list(ErrorName), "~s~nMethod was ~p\n",
-               [Explanation, Method], State).
+explain_amqp_death(ReplyCode, Explanation, State) ->
+    ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
+    send_error(atom_to_list(ErrorName), "~s\n",
+               [Explanation], State).
 
 maybe_header(_Key, undefined) ->
     [];
@@ -332,7 +328,6 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
 					       password		= list_to_binary(Passcode),
 					       virtual_host	= list_to_binary(VirtualHost)}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    io:format("~p ~p ~n", [self(), Channel]),
     SessionId = rabbit_guid:string_guid("session"),
     {ok, send_frame("CONNECTED",
                     [{"session", SessionId}],
@@ -503,7 +498,6 @@ process_command("SUBSCRIBE",
                            durable     = BoolH("durable", false),
                            exclusive   = BoolH("exclusive", false),
                            auto_delete = BoolH("auto-delete", true),
-                           nowait      = true,
                            arguments   = [longstr_field(K, V) ||
                                              {"X-Q-" ++ K, V} <- Headers]},
                        State),
@@ -524,7 +518,6 @@ process_command("SUBSCRIBE",
                                    queue = Queue,
                                    exchange = Exchange,
                                    routing_key = RoutingKey,
-                                   nowait = true,
                                    arguments = [longstr_field(K, V) ||
                                                    {"X-B-" ++ K, V} <- Headers]},
                                State1);
