@@ -123,7 +123,7 @@ add(Binding, InnerFun) ->
                        ok ->
                            case mnesia:read({rabbit_route, B}) of
                                []  -> ok = sync_binding(
-                                             B, are_endpoints_durable(Src, Dst),
+                                             B, all_durable([Src, Dst]),
                                              fun mnesia:write/3),
                                       {new, Src, B};
                                [_] -> {existing, Src, B}
@@ -153,7 +153,7 @@ remove(Binding, InnerFun) ->
                            case InnerFun(Src, Dst) of
                                ok ->
                                    ok = sync_binding(
-                                          B, are_endpoints_durable(Src, Dst),
+                                          B, all_durable([Src, Dst]),
                                           fun mnesia:delete_object/3),
                                    Deleted =
                                        rabbit_exchange:maybe_auto_delete(Src),
@@ -254,10 +254,10 @@ remove_transient_for_destination(DstName) ->
 
 %%----------------------------------------------------------------------------
 
-are_endpoints_durable(#exchange{durable = A}, #amqqueue{durable = B}) ->
-    A andalso B;
-are_endpoints_durable(#exchange{durable = A}, #exchange{durable = B}) ->
-    A andalso B.
+all_durable(Resources) ->
+    lists:all(fun (#exchange{durable = D}) -> D;
+                  (#amqqueue{durable = D}) -> D
+              end, Resources).
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,
