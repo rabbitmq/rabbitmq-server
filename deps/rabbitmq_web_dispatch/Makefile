@@ -1,4 +1,4 @@
-DEPS:=mochiweb
+DEPS:=mochiweb-wrapper
 TEST_APPS=crypto inets mochiweb rabbit_mochiweb rabbit_mochiweb_test
 TEST_COMMANDS=rabbit_mochiweb_test:test()
 
