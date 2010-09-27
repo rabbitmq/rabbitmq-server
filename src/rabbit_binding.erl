@@ -53,7 +53,8 @@
                                           'source_and_destination_not_found')).
 -type(bind_res() :: 'ok' | bind_errors()).
 -type(inner_fun() ::
-        fun((rabbit_types:exchange(), queue()) ->
+        fun((rabbit_types:exchange(),
+             rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
 
