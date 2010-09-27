@@ -1,4 +1,4 @@
-DEPS:=rabbitmq-mochiweb webmachine rabbitmq-server rabbitmq-erlang-client
+DEPS:=rabbitmq-mochiweb webmachine-wrapper rabbitmq-server rabbitmq-erlang-client
 
 TEST_APPS=crypto inets mochiweb rabbit_mochiweb rabbit_management amqp_client
 TEST_ARGS=-rabbit_mochiweb port 55672
