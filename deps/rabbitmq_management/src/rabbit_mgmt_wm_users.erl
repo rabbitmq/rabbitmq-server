@@ -46,5 +46,4 @@ users() ->
     [begin
          {ok, User} = rabbit_access_control:lookup_user(U),
          rabbit_mgmt_format:user(User)
-     end
-     || {U, _} <- rabbit_access_control:list_users()].
+     end || {U, _} <- rabbit_access_control:list_users()].

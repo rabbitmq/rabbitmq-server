@@ -70,20 +70,19 @@ is_authorized(ReqData, Context, Fun) ->
                 {ok, User = #user{password = Pass1,
                                   is_admin = IsAdmin}} when Pass == Pass1  ->
                     case Fun(User) of
-                        true ->
-                            {true, ReqData,
-                             Context#context{username = Username,
-                                             password = Pass,
-                                             is_admin = IsAdmin}};
-                        _ ->
-                            Unauthorized
+                        true  -> {true, ReqData,
+                                  Context#context{username = Username,
+                                                  password = Pass,
+                                                  is_admin = IsAdmin}};
+                        false -> Unauthorized
                     end;
                 {ok, #user{}} ->
                     Unauthorized;
                 {error, _} ->
                     Unauthorized
             end;
-        _ -> Unauthorized
+        _ ->
+            Unauthorized
     end.
 
 now_ms() ->

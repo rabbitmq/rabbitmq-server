@@ -506,11 +506,8 @@ req(Type, Path, Headers, Body) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
                   [], []).
 
-decode(Code, Headers, ResBody) ->
-    case Code of
-        ?OK -> cleanup(mochijson2:decode(ResBody));
-        _   -> Headers
-    end.
+decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
+decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
@@ -532,14 +529,13 @@ auth_header(Username, Password) ->
 
 assert_list(Exp, Act) ->
     case length(Exp) == length(Act) of
-        true -> ok;
-        _    -> throw({expected, Exp, actual, Act})
+        true  -> ok;
+        false -> throw({expected, Exp, actual, Act})
     end,
     [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
          1 -> ok;
          N -> throw({found, N, ExpI, in, Act})
-     end
-     || ExpI <- Exp].
+     end || ExpI <- Exp].
 
 assert_item(Exp, Act) ->
     case test_item0(Exp, Act) of
@@ -554,11 +550,8 @@ test_item(Exp, Act) ->
     end.
 
 test_item0(Exp, Act) ->
-    lists:filter(fun (I) -> I =/= ok end,
-                 [case lists:member(ExpI, Act) of
-                      true  -> ok;
-                      false -> {did_not_find, ExpI, in, Act}
-                  end|| ExpI <- Exp]).
+    [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
+                                      not lists:member(ExpI, Act)].
 
 %%---------------------------------------------------------------------------
 

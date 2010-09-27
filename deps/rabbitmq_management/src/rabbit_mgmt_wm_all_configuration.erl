@@ -45,7 +45,8 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT'], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    All =
+    rabbit_mgmt_util:reply(
+      filter(
         [{users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      [[{name, N}]
                         || N <- rabbit_access_control:list_vhosts()]},
@@ -55,15 +56,14 @@ to_json(ReqData, Context) ->
          {exchanges,   [rabbit_mgmt_format:exchange(X)
                         || X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData)]},
          {bindings,    [rabbit_mgmt_format:binding(B)
-                        || B <- rabbit_mgmt_wm_bindings:bindings(ReqData)]}],
-    ReqData1 =
-        case wrq:get_qs_value("mode", ReqData) of
-            "download" -> wrq:set_resp_header(
-                            "Content-disposition",
-                            "attachment; filename=rabbit.json", ReqData);
-            _          -> ReqData
-        end,
-    rabbit_mgmt_util:reply(filter(All), ReqData1, Context).
+                        || B <- rabbit_mgmt_wm_bindings:bindings(ReqData)]}]),
+      case wrq:get_qs_value("mode", ReqData) of
+          "download" -> wrq:set_resp_header(
+                          "Content-disposition",
+                          "attachment; filename=rabbit.json", ReqData);
+          _          -> ReqData
+      end,
+      Context).
 
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
@@ -168,4 +168,4 @@ props_to_method(Method, Props) ->
     Res.
 
 map_name(K, Props) ->
-    [{K, pget(name, Props)}|Props].
+    [{K, pget(name, Props)} | Props].

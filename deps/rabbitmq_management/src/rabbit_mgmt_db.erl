@@ -160,10 +160,8 @@ gs_update_add(Key, Item0, Item1) ->
             I0 + I1
     end.
 
-if_unknown(Val, Def) ->
-    if Val == unknown -> Def;
-       true           -> Val
-    end.
+if_unknown(unknown, Def) -> Def;
+if_unknown(Val,    _Def) -> Val.
 
 %%----------------------------------------------------------------------------
 
