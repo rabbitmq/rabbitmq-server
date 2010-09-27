@@ -67,11 +67,11 @@
                        bind_res() | rabbit_types:error('binding_not_found')).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
 -spec(list_for_source/1 :: (rabbit_exchange:name()) -> bindings()).
--spec(list_for_destination/1 ::
-        (rabbit_amqqueue:name()|rabbit_exchange:name()) -> bindings()).
+-spec(list_for_destination/1 :: (rabbit_types:binding_destination()) ->
+                                     bindings()).
 -spec(list_for_source_and_destination/2 ::
-        (rabbit_exchange:name(),
-         rabbit_amqqueue:name() | rabbit_exchange:name()) -> bindings()).
+        (rabbit_exchange:name(), rabbit_types:binding_destination()) ->
+                                                bindings()).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (rabbit_types:binding()) -> [rabbit_types:info()]).
 -spec(info/2 :: (rabbit_types:binding(), [rabbit_types:info_key()]) ->
@@ -82,9 +82,9 @@
 -spec(has_for_exchange/1 :: (rabbit_exchange:name()) -> boolean()).
 -spec(remove_for_exchange/1 :: (rabbit_exchange:name()) -> bindings()).
 -spec(remove_for_destination/1 ::
-        (rabbit_amqqueue:name() | rabbit_exchange:name()) -> fun (() -> any())).
+        (rabbit_types:binding_destination()) -> fun (() -> any())).
 -spec(remove_transient_for_destination/1 ::
-        (rabbit_amqqueue:name() | rabbit_exchange:name()) -> fun (() -> any())).
+        (rabbit_types:binding_destination()) -> fun (() -> any())).
 
 -endif.
 
