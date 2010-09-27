@@ -159,7 +159,7 @@
 
 -define(PUB, {_, _}). %% {Guid, IsPersistent}
 
--define(READ_MODE, [binary, raw, read, {read_ahead, ?SEGMENT_TOTAL_SIZE}]).
+-define(READ_MODE, [binary, raw, read]).
 
 %%----------------------------------------------------------------------------
 
@@ -785,7 +785,8 @@ segment_entries_foldr(Fun, Init,
 load_segment(KeepAcked, #segment { path = Path }) ->
     case filelib:is_file(Path) of
         false -> {array_new(), 0};
-        true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_MODE, []),
+        true  -> Mode = [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE],
+                 {ok, Hdl} = file_handle_cache:open(Path, Mode, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  Res = load_segment_entries(KeepAcked, Hdl, array_new(), 0),
                  ok = file_handle_cache:close(Hdl),
