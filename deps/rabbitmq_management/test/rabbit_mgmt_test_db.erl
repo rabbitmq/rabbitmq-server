@@ -25,32 +25,47 @@
 
 -compile([export_all]).
 
--define(TESTS, [test_queues, test_connections, test_channels, test_overview]).
+-define(TESTS, [test_queues, test_connections, test_channels, test_overview,
+                test_rates]).
 
 -define(X, <<"">>).
 
 test() ->
     io:format("~n*** Statistics DB tests ***~n", []),
-    SecondHalves = [first_half(Test) || Test <- ?TESTS],
-    io:format("Waiting for statistics...~n", []),
-    timer:sleep(?STATS_INTERVAL + 1000),
-    [second_half(Half) || Half <- SecondHalves],
+    ContinuationLists = [setup(Test) || Test <- ?TESTS],
+    apply_continuations(1, ContinuationLists),
+    [teardown(Conn, Chan) || {_, _, Conn, Chan} <- ContinuationLists],
     io:format("All tests passed.~n", []).
 
-first_half(Test) ->
+setup(Test) ->
     io:format("Set up ~p... ", [Test]),
     {ok, Conn} = amqp_connection:start(network),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    Continuation = apply(rabbit_mgmt_test_db, Test, [Conn, Chan]),
+    Continuations = apply(rabbit_mgmt_test_db, Test, [Conn, Chan]),
     io:format("done.~n", []),
-    {Test, Continuation, Conn, Chan}.
+    {Test, Continuations, Conn, Chan}.
 
-second_half({Test, Continuation, Conn, Chan}) ->
+teardown(Conn, Chan) ->
+    amqp_channel:close(Chan),
+    amqp_connection:close(Conn).
+
+apply_continuations(_, []) ->
+    ok;
+
+apply_continuations(Count, Lists) ->
+    io:format("~nRound ~p, ~p tests remain...~n", [Count, length(Lists)]),
+    timer:sleep(?STATS_INTERVAL + 10),
+    NewLists = [New ||
+                   List <- Lists,
+                   New = {_, Rest, _, _} <- [apply_continuation(List)],
+                   Rest =/= []],
+    apply_continuations(Count + 1, NewLists).
+
+apply_continuation({Test, [Continuation|Rest], Conn, Chan}) ->
     io:format("Run ~p... ", [Test]),
     Continuation(),
     io:format("passed.~n", []),
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn).
+    {Test, Rest, Conn, Chan}.
 
 %%---------------------------------------------------------------------------
 
@@ -61,46 +76,46 @@ test_queues(_Conn, Chan) ->
     basic_get(Chan, Q1, true, false),
     basic_get(Chan, Q1, false, false),
 
-    fun() ->
-            Qs = rabbit_mgmt_db:get_queues(rabbit_amqqueue:list(<<"/">>)),
-            Q1Info = find_by_name(Q1, Qs),
-            Q2Info = find_by_name(Q2, Qs),
+    [fun() ->
+             Qs = rabbit_mgmt_db:get_queues(rabbit_amqqueue:list(<<"/">>)),
+             Q1Info = find_by_name(Q1, Qs),
+             Q2Info = find_by_name(Q2, Qs),
 
-            3 = pget(messages, Q1Info),
-            2 = pget(messages_ready, Q1Info),
-            1 = pget(messages_unacknowledged, Q1Info),
+             3 = pget(messages, Q1Info),
+             2 = pget(messages_ready, Q1Info),
+             1 = pget(messages_unacknowledged, Q1Info),
 
-            0 = pget(messages, Q2Info),
-            0 = pget(messages_ready, Q2Info),
-            0 = pget(messages_unacknowledged, Q2Info)
-    end.
+             0 = pget(messages, Q2Info),
+             0 = pget(messages_ready, Q2Info),
+             0 = pget(messages_unacknowledged, Q2Info)
+     end].
 
 test_connections(Conn, Chan) ->
     Q = declare_queue(Chan),
     publish(Chan, ?X, Q, 10),
 
-    fun() ->
-            Port = local_port(Conn),
-            Conns = rabbit_mgmt_db:get_connections(),
-            ConnInfo = find_conn_by_local_port(Port, Conns),
-            %% There's little we can actually test - just retrieve and check
-            %% equality.
-            Name = pget(name, ConnInfo),
-            ConnInfo2 = rabbit_mgmt_db:get_connection(Name),
-            [assert_equal(Item, ConnInfo, ConnInfo2) ||
-                Item <- rabbit_reader:info_keys()]
-    end.
+    [fun() ->
+             Port = local_port(Conn),
+             Conns = rabbit_mgmt_db:get_connections(),
+             ConnInfo = find_conn_by_local_port(Port, Conns),
+             %% There's little we can actually test - just retrieve and check
+             %% equality.
+             Name = pget(name, ConnInfo),
+             ConnInfo2 = rabbit_mgmt_db:get_connection(Name),
+             [assert_equal(Item, ConnInfo, ConnInfo2) ||
+                 Item <- rabbit_reader:info_keys()]
+     end].
 
 test_overview(_Conn, Chan) ->
     Q = declare_queue(Chan),
     publish(Chan, ?X, Q, 10),
 
-    fun() ->
-            %% Very noddy, but at least we test we can get it
-            Overview = rabbit_mgmt_db:get_overview(),
-            0 < pget(recv_oct, Overview),
-            0 < pget(send_oct, Overview)
-    end.
+    [fun() ->
+             %% Very noddy, but at least we test we can get it
+             Overview = rabbit_mgmt_db:get_overview(),
+             0 < pget(recv_oct, Overview),
+             0 < pget(send_oct, Overview)
+     end].
 
 test_channels(Conn, Chan) ->
     Q = declare_queue(Chan),
@@ -110,20 +125,48 @@ test_channels(Conn, Chan) ->
     consume(Chan, Q, 1, true, false),
     consume(Chan, Q, 1, false, true),
 
-    fun() ->
-            Channels = rabbit_mgmt_db:get_channels(),
-            Port = local_port(Conn),
+    [fun() ->
+             Channels = rabbit_mgmt_db:get_channels(),
+             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
+             1 = pget(get, Stats),
+             1 = pget(get_no_ack, Stats),
+             2 = pget(ack, Stats),
+             1 = pget(deliver, Stats),
+             7 = pget(deliver_no_ack, Stats), % Since 2nd consume ate
+                                              % everything
+             10 = pget(publish, Stats)
+    end].
 
-            Stats = pget(message_stats,
-                         find_channel_by_local_port(Port, Channels)),
-            1 = pget(get, Stats),
-            1 = pget(get_no_ack, Stats),
-            2 = pget(ack, Stats),
-            1 = pget(deliver, Stats),
-            7 = pget(deliver_no_ack, Stats), % Since 2nd consume ate
-                                             % everything
-            10 = pget(publish, Stats)
-    end.
+test_rates(Conn, Chan) ->
+    Q = declare_queue(Chan),
+    X2 = <<"rates-exch">>,
+    declare_exchange(Chan, X2),
+    bind_queue(Chan, X2, Q),
+    publish(Chan, ?X, Q, 5),
+
+    [fun() ->
+             publish(Chan, ?X, Q, 5),
+             publish(Chan, X2, Q, 5)
+     end,
+     fun() ->
+             publish(Chan, ?X, Q, 5),
+             publish(Chan, X2, Q, 5),
+             Channels = rabbit_mgmt_db:get_channels(),
+             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
+             assert_close(1, pget(rate, pget(publish_details, Stats)))
+     end,
+     fun() ->
+             publish(Chan, X2, Q, 5),
+             Channels = rabbit_mgmt_db:get_channels(),
+             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
+             assert_close(2, pget(rate, pget(publish_details, Stats)))
+     end,
+     fun() ->
+             Channels = rabbit_mgmt_db:get_channels(),
+             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
+             assert_close(1, pget(rate, pget(publish_details, Stats))),
+             30 = pget(publish, Stats)
+     end].
 
 %% TODO rethink this test
 %% test_aggregation(Conn, Chan) ->
@@ -219,12 +262,14 @@ find_conn_by_local_port(Port, Items) ->
                end, Items),
     Conn.
 
-find_channel_by_local_port(Port, Items) ->
+find_channel(C, Number, Items) ->
+    Port = local_port(C),
     [Chan] = lists:filter(
                fun(Chan) ->
                        Conn = pget(connection_details, Chan),
                        pget(peer_port, Conn) == Port andalso
-                           pget(peer_address, Conn) == <<"127.0.0.1">>
+                           pget(peer_address, Conn) == <<"127.0.0.1">> andalso
+                           pget(number, Chan) == Number
                end, Items),
     Chan.
 
@@ -233,14 +278,14 @@ declare_queue(Chan) ->
         amqp_channel:call(Chan, #'queue.declare'{ exclusive = true }),
     Q.
 
-%% declare_exchange(Chan, X) ->
-%%     amqp_channel:call(Chan, #'exchange.declare'{ exchange = X,
-%%                                                  type = <<"direct">>,
-%%                                                  auto_delete = true}).
-%% bind_queue(Chan, X, Q) ->
-%%     amqp_channel:call(Chan, #'queue.bind'{ queue = Q,
-%%                                            exchange = X,
-%%                                            routing_key = Q}).
+declare_exchange(Chan, X) ->
+    amqp_channel:call(Chan, #'exchange.declare'{ exchange = X,
+                                                 type = <<"direct">>,
+                                                 auto_delete = true}).
+bind_queue(Chan, X, Q) ->
+    amqp_channel:call(Chan, #'queue.bind'{ queue = Q,
+                                           exchange = X,
+                                           routing_key = Q}).
 
 publish(Chan, X, Q) ->
     amqp_channel:call(Chan, #'basic.publish' { exchange    = X,
@@ -289,3 +334,9 @@ local_port(Conn) ->
 assert_equal(Item, PList1, PList2) ->
     Expected = pget(Item, PList1),
     Expected = pget(Item, PList2).
+
+assert_close(Exp, Act) ->
+    case abs(Exp - Act) < 0.5 of
+        true -> ok;
+        _    -> throw({expected, Exp, got, Act})
+    end.

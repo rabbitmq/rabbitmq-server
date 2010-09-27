@@ -132,21 +132,37 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
 %%                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
 
 group_sum(GroupBy, List) ->
-    lists:foldl(fun ({Ids, New}, Acc) ->
+    lists:foldl(fun ({Ids, Item0}, Acc) ->
                         Id = [{G, pget(G, Ids)} || G <- GroupBy],
-                        dict:update(Id, fun(Cur) -> gs_update(Cur, New) end,
-                                    New, Acc)
+                        dict:update(Id, fun(Item1) ->
+                                                gs_update(Item0, Item1)
+                                        end,
+                                    Item0, Acc)
                 end, dict:new(), List).
 
-gs_update(Cur, New) ->
-    [{Key, gs_update_add(Key, Val, pget(Key, Cur, 0))} || {Key, Val} <- New].
+gs_update(Item0, Item1) ->
+    Keys = sets:to_list(sets:from_list(
+                          [K || {K, _} <- Item0 ++ Item1])),
+    [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))}
+     || Key <- Keys].
 
-gs_update_add(Key, Old, New) ->
+gs_update_add(Key, Item0, Item1) ->
     case is_details(Key) of
-        true  -> [{rate,       pget(rate, Old) + pget(rate, New)},
-                  {last_event, erlang:max(pget(last_event, Old),
-                                          pget(last_event, New))}];
-        false -> Old + New
+        true  ->
+            I0 = if_unknown(Item0, []),
+            I1 = if_unknown(Item1, []),
+            [{rate,       pget(rate, I0, 0) + pget(rate, I1, 0)},
+             {last_event, erlang:max(pget(last_event, I0, 0),
+                                     pget(last_event, I1, 0))}];
+        false ->
+            I0 = if_unknown(Item0, 0),
+            I1 = if_unknown(Item1, 0),
+            I0 + I1
+    end.
+
+if_unknown(Val, Def) ->
+    if Val == unknown -> Def;
+       true           -> Val
     end.
 
 %%----------------------------------------------------------------------------
