@@ -638,9 +638,8 @@ handle_call({client_terminate, #client_msstate { client_ref = CRef }},
             _From,
             State = #msstate { client_ondisk_callback = CODC,
                                cref_to_guids          = CTG }) ->
-    reply(ok,
-          State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
-                           cref_to_guids          = dict:erase(CRef, CTG) }).
+    reply(ok, State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
+                               cref_to_guids          = dict:erase(CRef, CTG) }).
 
 handle_cast({write, CRef, Guid},
             State = #msstate { current_file_handle    = CurHdl,

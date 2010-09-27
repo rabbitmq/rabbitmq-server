@@ -37,7 +37,7 @@
          requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1]).
+         status/1, seqids_to_guids/2]).
 
 -export([start/1, stop/0]).
 
@@ -766,13 +766,15 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
       {avg_egress_rate      , AvgEgressRate},
       {avg_ingress_rate     , AvgIngressRate} ].
 
+seqids_to_guids(SeqIds, #vqstate{ pending_ack = PA }) ->
+    lists:foldl(fun(SeqId, Guids) ->
+                        {ok, #msg_status { msg = Msg }} = dict:find(SeqId, PA),
+                        [Msg#basic_message.guid | Guids]
+                end, [], SeqIds).
+
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
-
-a({State, _} = I) ->
-    a(State),
-    I;
 
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                      len                  = Len,
@@ -1140,7 +1142,7 @@ remove_pending_ack(KeepPersistent,
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
-    {State, {confirm, []}};
+    State;
 ack(MsgStoreFun, Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
@@ -1155,16 +1157,13 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
-    AckdGuids = lists:append([Guids ||
-                                 {_Store, Guids} <- orddict:to_list(GuidsByStore)]),
-    State2 = msgs_confirmed(AckdGuids, State1),
+    State2 = msgs_confirmed(seqids_to_guids(AckTags, State), State1),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
                            error       -> 0;
                            {ok, Guids} -> length(Guids)
                        end,
-    {State2 #vqstate { index_state      = IndexState1,
-                       persistent_count = PCount1 },
-     {confirm, AckdGuids}}.
+    State2 #vqstate { index_state      = IndexState1,
+                      persistent_count = PCount1 }.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
@@ -1271,9 +1270,6 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, State) ->
                         _                   -> {Reduce, State1}
                     end
     end.
-
-reduce_memory_use({State, Other}) ->
-    {reduce_memory_use(State), Other};
 
 reduce_memory_use(State) ->
     {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
