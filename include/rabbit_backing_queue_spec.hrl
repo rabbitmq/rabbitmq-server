@@ -34,6 +34,8 @@
         ('empty'|{rabbit_types:basic_message(), 
                   boolean(), ack(), 
                   non_neg_integer()})).
+-type(peek_result() :: ('empty'|{rabbit_types:basic_message(), 
+                                 rabbit_types:msg_properties()})).
 -type(is_durable() :: boolean()).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
@@ -55,7 +57,8 @@
          rabbit_types:msg_properties(), state()) -> {ack(), state()}).
 -spec(dropwhile/2 :: 
         (fun ((rabbit_types:basic_message(), rabbit_types:msg_properties()) 
-              -> boolean()), state()) -> state()).                    
+              -> boolean()), state()) -> state()).
+-spec(peek/1 :: (state()) -> {peek_result(), state()}).
 -spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
 -spec(tx_publish/4 :: 

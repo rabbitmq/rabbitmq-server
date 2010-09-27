@@ -1899,7 +1899,10 @@ test_peek(VQ0) ->
     %% should be able to fetch still
     {{_Msg, _, _, _}, VQ3} = rabbit_variable_queue:fetch(false, VQ2),
 
-    VQ3.
+    %% should be empty now
+    {empty, VQ4} = rabbit_variable_queue:peek(VQ3),
+
+    VQ4.
     
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
