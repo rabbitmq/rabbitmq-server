@@ -133,8 +133,7 @@ trie_match(X, Node, [W | RestW] = Words) ->
 trie_match_skip_any(X, Node, []) ->
     trie_match(X, Node, []);
 trie_match_skip_any(X, Node, [_ | RestW] = Words) ->
-    trie_match(X, Node, Words) ++
-        trie_match_skip_any(X, Node, RestW).
+    trie_match(X, Node, Words) ++ trie_match_skip_any(X, Node, RestW).
 
 follow_down(X, Words) ->
     follow_down(X, root, Words).
@@ -148,15 +147,13 @@ follow_down(X, CurNode, [W | RestW]) ->
 
 follow_down_create(X, Words) ->
     case follow_down(X, Words) of
-        {ok, FinalNode} ->
-            FinalNode;
-        {error, Node, RestW} ->
-            lists:foldl(
-                fun(W, CurNode) ->
-                    NewNode = new_node(),
-                    trie_add_edge(X, CurNode, NewNode, W),
-                    NewNode
-                end, Node, RestW)
+        {ok, FinalNode}      -> FinalNode;
+        {error, Node, RestW} -> lists:foldl(
+                                  fun(W, CurNode) ->
+                                         NewNode = new_node(),
+                                         trie_add_edge(X, CurNode, NewNode, W),
+                                         NewNode
+                                  end, Node, RestW)
     end.
 
 follow_down_get_path(X, Words) ->
@@ -271,7 +268,7 @@ trie_remove_all_bindings(X) ->
         qlc:e(Query)).
 
 new_node() ->
-    now(). % UUID
+    rabbit_guid:guid().
 
 split_topic_key(Key) ->
     string:tokens(binary_to_list(Key), ".").
