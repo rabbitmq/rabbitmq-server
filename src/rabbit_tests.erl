@@ -1608,8 +1608,7 @@ init_test_queue() ->
       test_queue(), true, false,
       fun (Guid) ->
               rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
-      end,
-      fun (_Guids) -> ok end).
+      end).
 
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
@@ -1976,5 +1975,3 @@ test_queue_recover() ->
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
-
-nop(_) -> ok.
