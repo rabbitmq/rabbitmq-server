@@ -37,7 +37,7 @@
          list_for_source_and_destination/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 %% these must all be run inside a mnesia tx
--export([has_for_exchange/1, remove_for_exchange/1,
+-export([has_for_source/1, remove_for_source/1,
          remove_for_destination/1, remove_transient_for_destination/1]).
 
 %%----------------------------------------------------------------------------
@@ -79,8 +79,8 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
 -spec(info_all/2 ::(rabbit_types:vhost(), [rabbit_types:info_key()])
                     -> [[rabbit_types:info()]]).
--spec(has_for_exchange/1 :: (rabbit_exchange:name()) -> boolean()).
--spec(remove_for_exchange/1 :: (rabbit_exchange:name()) -> bindings()).
+-spec(has_for_source/1 :: (rabbit_exchange:name()) -> boolean()).
+-spec(remove_for_source/1 :: (rabbit_exchange:name()) -> bindings()).
 -spec(remove_for_destination/1 ::
         (rabbit_types:binding_destination()) -> fun (() -> any())).
 -spec(remove_transient_for_destination/1 ::
@@ -227,14 +227,14 @@ info_all(VHostPath) -> map(VHostPath, fun (B) -> info(B) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
 
-has_for_exchange(XName) ->
-    Match = #route{binding = #binding{source = XName, _ = '_'}},
+has_for_source(SrcName) ->
+    Match = #route{binding = #binding{source = SrcName, _ = '_'}},
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
     contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match).
 
-remove_for_exchange(XName) ->
+remove_for_source(SrcName) ->
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
@@ -242,7 +242,7 @@ remove_for_exchange(XName) ->
          Route#route.binding
      end || Route <- mnesia:match_object(
                        rabbit_route,
-                       #route{binding = #binding{source = XName,
+                       #route{binding = #binding{source = SrcName,
                                                  _      = '_'}},
                        write)].
 
