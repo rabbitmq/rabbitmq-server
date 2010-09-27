@@ -1,4 +1,4 @@
-DEPS=rabbitmq-server rabbitmq-erlang-client
+DEPS:=rabbitmq-server rabbitmq-erlang-client
 
 START_RABBIT_IN_TESTS=true
 TEST_APPS=rabbit_stomp
