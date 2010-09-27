@@ -248,8 +248,7 @@
 			 "synchronous" : true},
 			{"id": 51,
 			 "arguments": [],
-			 "name": "unbind-ok"}
-                       ],
+			 "name": "unbind-ok"}],
 	    "name": "exchange"
 	},
 	{
