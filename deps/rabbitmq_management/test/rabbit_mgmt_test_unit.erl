@@ -76,10 +76,10 @@ http_vhosts_test() ->
 http_users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
-    http_put("/users/myuser", [{flim, "flam"}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{password, "myuser"},
+    http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
+    http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
-    http_put("/users/myuser", [{password, "password"},
+    http_put("/users/myuser", [{password, <<"password">>},
                                {administrator, true}], ?NO_CONTENT),
     [{name,          <<"myuser">>},
      {password,      <<"password">>},
@@ -99,19 +99,19 @@ http_users_test() ->
     ok.
 
 http_permissions_validation_test() ->
-    Good = [{configure, ".*"}, {write, ".*"},
-            {read,      ".*"}, {scope, "client"}],
+    Good = [{configure, <<".*">>}, {write, <<".*">>},
+            {read,      <<".*">>}, {scope, <<"client">>}],
     http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/wrong", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/guest",
-             [{configure, ".*"}, {write, ".*"},
-              {read,      ".*"}], ?BAD_REQUEST),
+             [{configure, <<".*">>}, {write, <<".*">>},
+              {read,      <<".*">>}], ?BAD_REQUEST),
     http_put("/permissions/%2f/guest",
-             [{configure, ".*"}, {write, ".*"},
-              {read,      ".*"}, {scope, "wrong"}], ?BAD_REQUEST),
+             [{configure, <<".*">>}, {write, <<".*">>},
+              {read,      <<".*">>}, {scope, <<"wrong">>}], ?BAD_REQUEST),
     http_put("/permissions/%2f/guest",
-             [{configure, "["}, {write, ".*"},
-              {read,      ".*"}, {scope, "client"}], ?BAD_REQUEST),
+             [{configure, <<"[">>},  {write, <<".*">>},
+              {read,      <<".*">>}, {scope, <<"client">>}], ?BAD_REQUEST),
     http_put("/permissions/%2f/guest", Good, ?NO_CONTENT),
     ok.
 
@@ -124,15 +124,15 @@ http_permissions_list_test() ->
       {scope,<<"client">>}]] =
         http_get("/permissions"),
 
-    http_put("/users/myuser1", [{password, ""}, {administrator, true}],
+    http_put("/users/myuser1", [{password, <<"">>}, {administrator, true}],
              ?NO_CONTENT),
-    http_put("/users/myuser2", [{password, ""}, {administrator, true}],
+    http_put("/users/myuser2", [{password, <<"">>}, {administrator, true}],
              ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
 
-    Perms = [{configure, "foo"}, {write, "foo"},
-             {read,      "foo"}, {scope, "client"}],
+    Perms = [{configure, <<"foo">>}, {write, <<"foo">>},
+             {read,      <<"foo">>}, {scope, <<"client">>}],
     http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost2/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser2", Perms, ?NO_CONTENT),
@@ -148,13 +148,13 @@ http_permissions_list_test() ->
     ok.
 
 http_permissions_test() ->
-    http_put("/users/myuser", [{password, "myuser"}, {administrator, true}],
+    http_put("/users/myuser", [{password, <<"myuser">>}, {administrator, true}],
              ?NO_CONTENT),
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
-             [{configure, "foo"}, {write, "foo"},
-              {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
+             [{configure, <<"foo">>}, {write, <<"foo">>},
+              {read,      <<"foo">>}, {scope, <<"client">>}], ?NO_CONTENT),
 
     Permission = [{user,<<"myuser">>},
                   {vhost,<<"myvhost">>},
@@ -193,14 +193,14 @@ test_auth(Code, Headers) ->
 
 http_exchanges_test() ->
     %% Can pass booleans or strings
-    Good = [{type, "direct"}, {durable, "true"}, {auto_delete, false},
-            {arguments, ""}],
+    Good = [{type, <<"direct">>}, {durable, <<"true">>}, {auto_delete, false},
+            {arguments, <<"">>}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
-             [{configure, ".*"}, {write, ".*"},
-              {read,      ".*"}, {scope, "client"}], ?NO_CONTENT),
+             [{configure, <<".*">>}, {write, <<".*">>},
+              {read,      <<".*">>}, {scope, <<"client">>}], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
@@ -215,16 +215,16 @@ http_exchanges_test() ->
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/exchanges/myvhost/bar",
-             [{type, "bad_exchange_type"},
-              {durable, true}, {auto_delete, false}, {arguments, ""}],
+             [{type, <<"bad_exchange_type">>},
+              {durable, true}, {auto_delete, false}, {arguments, <<"">>}],
              ?BAD_REQUEST),
     http_put("/exchanges/myvhost/bar",
-             [{type, "direct"},
-              {durable, "troo"}, {auto_delete, false}, {arguments, ""}],
+             [{type, <<"direct">>},
+              {durable, <<"troo">>}, {auto_delete, false}, {arguments, <<"">>}],
              ?BAD_REQUEST),
     http_put("/exchanges/myvhost/foo",
-             [{type, "direct"},
-              {durable, false}, {auto_delete, false}, {arguments, ""}],
+             [{type, <<"direct">>},
+              {durable, false}, {auto_delete, false}, {arguments, <<"">>}],
              ?BAD_REQUEST),
 
     http_delete("/exchanges/myvhost/foo", ?NO_CONTENT),
@@ -234,7 +234,7 @@ http_exchanges_test() ->
     ok.
 
 http_queues_test() ->
-    Good = [{durable, "true"}, {auto_delete, false}, {arguments, ""}],
+    Good = [{durable, true}, {auto_delete, false}, {arguments, <<"">>}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
@@ -242,10 +242,10 @@ http_queues_test() ->
 
     http_put("/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/queues/%2f/bar",
-             [{durable, "troo"}, {auto_delete, false}, {arguments, ""}],
+             [{durable, <<"troo">>}, {auto_delete, false}, {arguments, <<"">>}],
              ?BAD_REQUEST),
     http_put("/queues/%2f/foo",
-             [{durable, false}, {auto_delete, false}, {arguments, ""}],
+             [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
              ?BAD_REQUEST),
 
     http_put("/queues/%2f/baz", Good, ?NO_CONTENT),
@@ -274,9 +274,9 @@ http_queues_test() ->
     ok.
 
 http_bindings_test() ->
-    XArgs = [{type, "direct"}, {durable, false}, {auto_delete, false},
-             {arguments, ""}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
+             {arguments, <<"">>}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_put("/bindings/%2f/badqueue/myexchange/key_routing", [], ?NOT_FOUND),
@@ -311,10 +311,10 @@ http_bindings_test() ->
     ok.
 
 http_bindings_post_test() ->
-    XArgs = [{type, "direct"}, {durable, false}, {auto_delete, false},
-             {arguments, ""}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
-    BArgs = [{routing_key, "routing"}, {arguments, ""}],
+    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
+             {arguments, <<"">>}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+    BArgs = [{routing_key, <<"routing">>}, {arguments, <<"">>}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_post("/bindings/%2f/badqueue/myexchange", BArgs, ?NOT_FOUND),
@@ -336,7 +336,7 @@ http_bindings_post_test() ->
     ok.
 
 http_permissions_administrator_test() ->
-    http_put("/users/notadmin", [{password, "notadmin"},
+    http_put("/users/notadmin", [{password, <<"notadmin">>},
                                  {administrator, false}], ?NO_CONTENT),
     Test =
         fun(Path) ->
@@ -354,10 +354,10 @@ http_permissions_administrator_test() ->
     ok.
 
 http_permissions_vhost_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
-    PermArgs = [{configure, ".*"}, {write, ".*"},
-                {read,      ".*"}, {scope, "client"}],
-    http_put("/users/myuser", [{password, "myuser"},
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
+                {read,      <<".*">>}, {scope, <<"client">>}],
+    http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
@@ -414,9 +414,9 @@ get_conn(Username, Password) ->
     {Conn, ConnPath, ChPath}.
 
 http_permissions_connection_channel_test() ->
-    PermArgs = [{configure, ".*"}, {write, ".*"},
-                {read,      ".*"}, {scope, "client"}],
-    http_put("/users/user", [{password, "user"},
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
+                {read,      <<".*">>}, {scope, <<"client">>}],
+    http_put("/users/user", [{password, <<"user">>},
                              {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
@@ -442,10 +442,18 @@ http_permissions_connection_channel_test() ->
     ok.
 
 http_unicode_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
     http_get("/queues/%2f/♫♪♫♪", ?OK),
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
+    ok.
+
+http_all_configuration_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    AllConfig = http_get("/all-configuration", ?OK),
+    http_put("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
 http_aliveness_test() ->
@@ -471,13 +479,7 @@ http_post(Path, List, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), CodeExp).
 
 format_for_upload(List) ->
-    L2 = [{K, format_for_upload_item(V)} || {K, V} <- List],
-    iolist_to_binary(mochijson2:encode({struct, L2})).
-
-format_for_upload_item(V) when is_list(V) ->
-    list_to_binary(V);
-format_for_upload_item(V) ->
-    V.
+    iolist_to_binary(mochijson2:encode({struct, List})).
 
 http_put_raw(Path, Body, CodeExp) ->
     http_upload_raw(put, Path, Body, CodeExp).
