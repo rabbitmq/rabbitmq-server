@@ -48,11 +48,11 @@
 
 -spec(deliver/2 ::
         (qpids(), rabbit_types:delivery()) -> {routing_result(), qpids()}).
--spec(match_bindings/2 :: (rabbit_exchange:name(),
+-spec(match_bindings/2 :: (rabbit_types:binding_source(),
                            fun ((rabbit_types:binding()) -> boolean())) ->
     match_result()).
--spec(match_routing_key/2 :: (rabbit_exchange:name(), routing_key() | '_') ->
-                                  match_result()).
+-spec(match_routing_key/2 :: (rabbit_types:binding_source(),
+                              routing_key() | '_') -> match_result()).
 
 -endif.
 
@@ -83,7 +83,7 @@ deliver(QPids, Delivery) ->
                    {Routed, Handled}).
 
 %% TODO: Maybe this should be handled by a cursor instead.
-%% TODO: This causes a full scan for each entry with the same exchange
+%% TODO: This causes a full scan for each entry with the same source
 match_bindings(SrcName, Match) ->
     Query = qlc:q([DestinationName ||
                       #route{binding = Binding = #binding{

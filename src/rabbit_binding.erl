@@ -67,11 +67,12 @@
 -spec(remove/2 :: (rabbit_types:binding(), inner_fun()) ->
                        bind_res() | rabbit_types:error('binding_not_found')).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
--spec(list_for_source/1 :: (rabbit_exchange:name()) -> bindings()).
--spec(list_for_destination/1 :: (rabbit_types:binding_destination()) ->
-                                     bindings()).
+-spec(list_for_source/1 ::
+        (rabbit_types:binding_source()) -> bindings()).
+-spec(list_for_destination/1 ::
+        (rabbit_types:binding_destination()) -> bindings()).
 -spec(list_for_source_and_destination/2 ::
-        (rabbit_exchange:name(), rabbit_types:binding_destination()) ->
+        (rabbit_types:binding_source(), rabbit_types:binding_destination()) ->
                                                 bindings()).
 -spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
 -spec(info/1 :: (rabbit_types:binding()) -> [rabbit_types:info()]).
@@ -80,8 +81,8 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
 -spec(info_all/2 ::(rabbit_types:vhost(), [rabbit_types:info_key()])
                     -> [[rabbit_types:info()]]).
--spec(has_for_source/1 :: (rabbit_exchange:name()) -> boolean()).
--spec(remove_for_source/1 :: (rabbit_exchange:name()) -> bindings()).
+-spec(has_for_source/1 :: (rabbit_types:binding_source()) -> boolean()).
+-spec(remove_for_source/1 :: (rabbit_types:binding_source()) -> bindings()).
 -spec(remove_for_destination/1 ::
         (rabbit_types:binding_destination()) -> fun (() -> any())).
 -spec(remove_transient_for_destination/1 ::
@@ -282,12 +283,10 @@ sync_binding(Binding, Durable, Fun) ->
     ok.
 
 call_with_source_and_destination(SrcName, DstName, Fun) ->
-    DstTable = case DstName#resource.kind of
-                   queue    -> rabbit_queue;
-                   exchange -> rabbit_exchange
-               end,
+    SrcTable = table_for_resource(SrcName),
+    DstTable = table_for_resource(DstName),
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> case {mnesia:read({rabbit_exchange, SrcName}),
+      fun () -> case {mnesia:read({SrcTable, SrcName}),
                       mnesia:read({DstTable, DstName})} of
                     {[Src], [Dst]} -> Fun(Src, Dst);
                     {[],    [_]  } -> {error, source_not_found};
@@ -295,6 +294,9 @@ call_with_source_and_destination(SrcName, DstName, Fun) ->
                     {[],    []   } -> {error, source_and_destination_not_found}
                 end
       end).
+
+table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
+table_for_resource(#resource{kind = queue})    -> rabbit_queue.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
