@@ -32,7 +32,7 @@
 -module(rabbit_variable_queue).
 
 -export([init/3, terminate/1, delete_and_terminate/1,
-         purge/1, publish/2, publish_delivered/3, fetch/2, ack/2,
+         purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/3, tx_ack/3, tx_rollback/2, tx_commit/3,
          requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
@@ -509,14 +509,15 @@ purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len }) ->
                               ram_index_count  = 0,
                               persistent_count = 0 })}.
 
-publish(Msg, State) ->
-    {_SeqId, State1} = publish(Msg, false, false, State),
+publish(Msg, NeedsConfirming, State) ->
+    {_SeqId, State1} = publish(Msg, false, false, NeedsConfirming, State),
     a(reduce_memory_use(State1)).
 
-publish_delivered(false, _Msg, State = #vqstate { len = 0 }) ->
+publish_delivered(false, _Msg, _NC, State = #vqstate { len = 0 }) ->
     {blank_ack, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid          = Guid },
+                  NeedsConfirming,
                   State = #vqstate { len               = 0,
                                      next_seq_id       = SeqId,
                                      out_counter       = OutCount,
@@ -530,12 +531,17 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     PA1 = record_pending_ack(m(MsgStatus1), PA),
     PCount1 = PCount + one_if(IsPersistent1),
-    {SeqId, a(State1 #vqstate { next_seq_id       = SeqId    + 1,
-                                out_counter       = OutCount + 1,
-                                in_counter        = InCount  + 1,
-                                persistent_count  = PCount1,
-                                pending_ack       = PA1,
-                                need_acking       = gb_sets:insert(Guid, State1#vqstate.need_acking)})}.
+    {SeqId, a(State1 #vqstate {
+                next_seq_id       = SeqId    + 1,
+                out_counter       = OutCount + 1,
+                in_counter        = InCount  + 1,
+                persistent_count  = PCount1,
+                pending_ack       = PA1,
+                need_acking       =
+                    case NeedsConfirming of
+                        true -> gb_sets:insert(Guid, State1#vqstate.need_acking);
+                        false -> State1#vqstate.need_acking
+                    end })}.
 
 fetch(AckRequired, State = #vqstate { q4               = Q4,
                                       ram_msg_count    = RamMsgCount,
@@ -649,14 +655,14 @@ requeue(AckTags, State) ->
     a(reduce_memory_use(
         ack(fun rabbit_msg_store:release/2,
             fun (#msg_status { msg = Msg }, State1) ->
-                    {_SeqId, State2} = publish(Msg, true, false, State1),
+                    {_SeqId, State2} = publish(Msg, true, false, false, State1),
                     State2;
                 ({IsPersistent, Guid}, State1) ->
                     #vqstate { msg_store_clients = MSCState } = State1,
                     {{ok, Msg = #basic_message{}}, MSCState1} =
                         read_from_msg_store(MSCState, IsPersistent, Guid),
                     State2 = State1 #vqstate { msg_store_clients = MSCState1 },
-                    {_SeqId, State3} = publish(Msg, true, true, State2),
+                    {_SeqId, State3} = publish(Msg, true, true, false, State2),
                     State3
             end,
             AckTags, State))).
@@ -974,7 +980,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
           fun (Msg = #basic_message { is_persistent = IsPersistent },
                {SeqIdsAcc, State2}) ->
                   IsPersistent1 = IsDurable andalso IsPersistent,
-                  {SeqId, State3} = publish(Msg, false, IsPersistent1, State2),
+                  {SeqId, State3} = publish(Msg, false, IsPersistent1, false, State2),
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
           end, {PAcks, element(1, ack(Acks, State))}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
@@ -1022,7 +1028,7 @@ remove_queue_entries1(
 
 publish(Msg = #basic_message { is_persistent = IsPersistent,
                                guid          = Guid },
-        IsDelivered, MsgOnDisk,
+        IsDelivered, MsgOnDisk, NeedsConfirming,
         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
                            next_seq_id      = SeqId,
                            len              = Len,
@@ -1039,12 +1045,17 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
                  true  -> State1 #vqstate { q4 = queue:in(m(MsgStatus1), Q4) }
              end,
     PCount1 = PCount + one_if(IsPersistent1),
-    {SeqId, State2 #vqstate { next_seq_id      = SeqId   + 1,
-                              len              = Len     + 1,
-                              in_counter       = InCount + 1,
-                              persistent_count = PCount1,
-                              ram_msg_count    = RamMsgCount + 1,
-                              need_acking      = gb_sets:add(Guid, State2#vqstate.need_acking) }}.
+    {SeqId, State2 #vqstate {
+              next_seq_id      = SeqId   + 1,
+              len              = Len     + 1,
+              in_counter       = InCount + 1,
+              persistent_count = PCount1,
+              ram_msg_count    = RamMsgCount + 1,
+              need_acking      =
+                  case NeedsConfirming of
+                      true -> gb_sets:add(Guid, State2#vqstate.need_acking);
+                      false -> State2#vqstate.need_acking
+                  end }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, MSCState) ->

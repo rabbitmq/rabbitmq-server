@@ -634,7 +634,7 @@ handle_call({register_sync_callback, ClientRef, Fun}, _From,
     reply(ok, State #msstate { client_ondisk_callback =
                                    dict:store(ClientRef, Fun, CODC) });
 
-handle_call({client_terminate, CState = #client_msstate { client_ref = CRef }},
+handle_call({client_terminate, #client_msstate { client_ref = CRef }},
             _From,
             State = #msstate { client_ondisk_callback = CODC,
                                cref_to_guids          = CTG }) ->

@@ -427,28 +427,30 @@ run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
     State1.
 
-attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
+attempt_delivery(none, _ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
                 {AckTag, BQS1} =
-                    BQ:publish_delivered(AckRequired, Message, BQS),
+                    BQ:publish_delivered(AckRequired, Message,
+                                         MsgSeqNo =/= undefined, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
-                                                 backing_queue_state = BQS}) ->
+attempt_delivery(Txn, ChPid, Message, _MSN, State = #q{backing_queue = BQ,
+                                                       backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
     {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
-deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
-    case attempt_delivery(Txn, ChPid, Message, State) of
+deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}) ->
+    case attempt_delivery(Txn, ChPid, Message, MsgSeqNo, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            BQS = BQ:publish(Message, State #q.backing_queue_state),
+            BQS = BQ:publish(Message, MsgSeqNo =/= undefined,
+                             State #q.backing_queue_state),
             {false, NewState#q{backing_queue_state = BQS}}
     end.
 
@@ -698,14 +700,13 @@ handle_call({deliver_immediately, Txn, Message, MsgSeqNo, ChPid}, _From, State) 
     %% queues discarding the message?
     %%
     State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
-    {Delivered, State2} = attempt_delivery(Txn, ChPid, Message, State1
-),
+    {Delivered, State2} = attempt_delivery(Txn, ChPid, Message, MsgSeqNo, State1),
     reply(Delivered, State2);
 
 handle_call({deliver, Txn, Message, MsgSeqNo, ChPid}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
     State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
-    {Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, State1),
+    {Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State1),
     reply(Delivered, State2);
 
 handle_call({commit, Txn, ChPid}, From, State) ->
@@ -855,7 +856,7 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_cast({deliver, Txn, Message, MsgSeqNo, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
-    {_Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, State1),
+    {_Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State1),
     noreply(State2);
 
 handle_cast({ack, Txn, AckTags, ChPid},
