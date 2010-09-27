@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/1, delete_and_terminate/1,
+-export([init/5, init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/3, tx_ack/3, tx_rollback/2, tx_commit/3,
          requeue/2, len/1, is_empty/1,
@@ -375,6 +375,15 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
 init(QueueName, IsDurable, Recover) ->
+    Self = self(),
+    init(QueueName, IsDurable, Recover,
+         fun (Guids) ->
+              msgs_written_to_disk(Self, Guids)
+         end,
+         fun msg_indices_written_to_disk/1).
+
+init(QueueName, IsDurable, Recover,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
     {DeltaCount, Terms, IndexState} =
         rabbit_queue_index:init(
           QueueName, Recover,
@@ -382,7 +391,7 @@ init(QueueName, IsDurable, Recover) ->
           fun (Guid) ->
                   rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
           end,
-          fun msg_indices_written_to_disk/1),
+          MsgIdxOnDiskFun),
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {PRef, TRef, Terms1} =
@@ -406,13 +415,10 @@ init(QueueName, IsDurable, Recover) ->
             false -> undefined
         end,
 
-    Self = self(),
     rabbit_msg_store:register_sync_callback(
       ?PERSISTENT_MSG_STORE,
       PRef,
-      fun (Guids) ->
-              msgs_written_to_disk(Self, Guids)
-      end),
+      MsgOnDiskFun),
 
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {

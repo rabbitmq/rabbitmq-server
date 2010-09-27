@@ -681,7 +681,7 @@ handle_cast({write, CRef, Guid},
                               cref_to_guids =
                                   case dict:find(CRef, CODC) of
                                       {ok, _} -> rabbit_misc:dict_cons(CRef, Guid, CTG);
-                                      error   -> CRef
+                                      error   -> CTG
                                   end}));
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
