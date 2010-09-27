@@ -417,8 +417,8 @@ maybe_record_confirm_message(undefined, _, _, State) ->
 maybe_record_confirm_message(MsgSeqNo,
                              #basic_message { guid = Guid },
                              ChPid, State) ->
-       State #q { guid_to_channel =
-                      dict:store(Guid, {ChPid, MsgSeqNo}, State#q.guid_to_channel) }.
+    State #q { guid_to_channel =
+                   dict:store(Guid, {ChPid, MsgSeqNo}, State#q.guid_to_channel) }.
 
 run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -549,8 +549,9 @@ qname(#q{q = #amqqueue{name = QName}}) -> QName.
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
     case Fun(BQS) of
         {BQS1, {confirm, Guids}} ->
-            confirm_messages_internal(Guids,
-                                      State #q { backing_queue_state = BQS1 });
+            run_message_queue(
+              confirm_messages_internal(Guids,
+                                        State #q { backing_queue_state = BQS1 }));
         BQS1 ->
             run_message_queue(State#q{backing_queue_state = BQS1})
     end.
@@ -868,10 +869,11 @@ handle_cast({ack, Txn, AckTags, ChPid},
                     none ->
                         ChAckTags1 = subtract_acks(ChAckTags, AckTags),
                         NewC = C#cr{acktags = ChAckTags1},
-                        {NewBQS, AckdGuids} =  BQ:ack(AckTags, BQS),
+                        {NewBQS, {confirm, AckdGuids}} =  BQ:ack(AckTags, BQS),
                         NewState =
                             confirm_messages_internal(AckdGuids,
-                                                      State #q { backing_queue_state = NewBQS }),
+                                                      State #q { backing_queue_state =
+                                                                     NewBQS }),
                         {NewC, NewState};
                     _    ->
                         {C#cr{txn = Txn},
@@ -891,9 +893,10 @@ handle_cast({reject, AckTags, Requeue, ChPid},
             store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> {BQS1, AckdGuids} = BQ:ack(AckTags, BQS),
-                                 confirm_messages_internal(AckdGuids,
-                                                           State #q { backing_queue_state = BQS1 })
+                        false -> {BQS1, {confirm, AckdGuids}} = BQ:ack(AckTags, BQS),
+                                 confirm_messages_internal(
+                                   AckdGuids,
+                                   State #q { backing_queue_state = BQS1 })
                     end)
     end;
 

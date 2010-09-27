@@ -1129,7 +1129,7 @@ remove_pending_ack(KeepPersistent,
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
-    {State, []};
+    {State, {confirm, []}};
 ack(MsgStoreFun, Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
@@ -1153,7 +1153,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                        end,
     {State2 #vqstate { index_state      = IndexState1,
                        persistent_count = PCount1 },
-     AckdGuids}.
+     {confirm, AckdGuids}}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,

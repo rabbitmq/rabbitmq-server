@@ -376,6 +376,7 @@ client_init(Server, Ref) ->
                       client_ref         = Ref}.
 
 client_terminate(CState, Server) ->
+    close_all_handles(CState),
     ok = gen_server2:call(Server, {client_terminate, CState}, infinity).
 
 client_delete_and_terminate(CState, Server, Ref) ->
@@ -637,7 +638,6 @@ handle_call({client_terminate, CState = #client_msstate { client_ref = CRef }},
             _From,
             State = #msstate { client_ondisk_callback = CODC,
                                cref_to_guids          = CTG }) ->
-    ok = close_all_handles(CState),
     reply(ok,
           State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
                            cref_to_guids          = dict:erase(CRef, CTG) }).
