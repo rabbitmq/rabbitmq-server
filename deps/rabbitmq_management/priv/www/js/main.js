@@ -176,7 +176,8 @@ function postprocess() {
                            "after deletion.");
         });
     $('div.section h2, div.section-hidden h2').click(function() {
-            $(this).next().toggle(100);
+            $(this).next().slideToggle(100);
+            $(this).toggleClass("toggled");
         });
     $('label').map(function() {
             if ($(this).attr('for') == '') {

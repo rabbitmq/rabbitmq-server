@@ -1,4 +1,4 @@
-<h1>Queue: <%= queue.name %></h1>
+<h1>Queue <b><%= queue.name %></b></h1>
 
 <div class="section">
   <h2>Overview</h2>
@@ -119,7 +119,7 @@
     <form action="#/queues" method="delete" class="confirm">
       <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
       <input type="hidden" name="name" value="<%= queue.name %>"/>
-      <input type="submit" value="Delete"/>
+      <input type="submit" value="Delete" />
     </form>
   </div>
 </div>
