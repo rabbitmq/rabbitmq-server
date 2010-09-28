@@ -173,7 +173,8 @@ handle_call(force_snapshot, _From, State) ->
 handle_call({queue_content, QName}, _From,
             State = #pstate{snapshot = #psnapshot{messages = Messages,
                                                   queues   = Queues}}) ->
-    MatchSpec= [{{{QName,'$1'}, '$2', '$3', '$4'}, [], [{{'$4', '$1', '$2', '$3'}}]}],
+    MatchSpec= [{{{QName,'$1'}, '$2', '$3', '$4'}, [], 
+                 [{{'$4', '$1', '$2', '$3'}}]}],
     do_reply([{ets:lookup_element(Messages, K, 2), MP, D} ||
                  {_, K, D, MP} <- lists:sort(ets:select(Queues, MatchSpec))],
              State);

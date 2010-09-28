@@ -130,7 +130,8 @@ dropwhile(Pred, State = #iv_state { queue = Q }) ->
     {{value, {Msg, MsgProps, IsDelivered}}, Q1} = queue:out(Q),
     case Pred(Msg, MsgProps) of
         true ->
-            {_, State1} = fetch_internal(false, Q1, Msg, MsgProps, IsDelivered, State),
+            {_, State1} = 
+                fetch_internal(false, Q1, Msg, MsgProps, IsDelivered, State),
             dropwhile(Pred, State1);
         false ->
             State
