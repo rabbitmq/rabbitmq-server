@@ -45,7 +45,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, prioritise_info/2]).
 
 -import(queue).
 -import(erlang).
@@ -667,6 +667,7 @@ prioritise_call(Msg, _From, _State) ->
         info                                      -> 9;
         {info, _Items}                            -> 9;
         consumers                                 -> 9;
+        delete_exclusive                          -> 8;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
         _                                         -> 0
     end.
@@ -684,6 +685,10 @@ prioritise_cast(Msg, _State) ->
         {unblock, _ChPid}                    -> 7;
         _                                    -> 0
     end.
+
+prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+                #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
+prioritise_info(_Msg, _State)                                 -> 0.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -856,6 +861,16 @@ handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
     reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+
+handle_call(delete_exclusive, _From,
+            State = #q{ backing_queue_state = BQS,
+                        backing_queue       = BQ,
+                        q                   = #amqqueue{exclusive_owner = Owner}
+                      }) when Owner =/= none ->
+    {stop, normal, {ok, BQ:len(BQS)}, State};
+
+handle_call(delete_exclusive, _From, State) ->
+    reply({error, not_exclusive}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
