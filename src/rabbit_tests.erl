@@ -581,19 +581,6 @@ sequence_with_content(Sequence) ->
                   rabbit_framing_amqp_0_9_1),
                 Sequence).
 
-test_topic_expect_match(#exchange{name = XName}, List) ->
-    lists:foreach(
-        fun({Key, Expected}) ->
-            Res = rabbit_exchange_type_topic:which_matches(
-                XName, list_to_binary(Key)),
-            ExpectedRes = lists:map(
-                fun(Q) -> #resource{virtual_host = <<"/">>,
-                                    kind = queue,
-                                    name = list_to_binary(Q)}
-                end, Expected),
-            true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
-        end, List).
-
 test_topic_matching() ->
     XName = #resource{virtual_host = <<"/">>,
                       kind = exchange,
@@ -631,27 +618,37 @@ test_topic_matching() ->
               {"",              "t17"},
               {"*.*.*",         "t18"},
               {"vodka.martini", "t19"},
-              {"a.b.c",         "t20"}]),
+              {"a.b.c",         "t20"},
+              {"*.#",           "t21"},
+              {"#.*.#",         "t22"},
+              {"*.#.#",         "t23"},
+              {"#.#.#",         "t24"},
+              {"*",             "t25"}]),
     lists:foreach(fun(B) -> rabbit_exchange_type_topic:add_binding(X, B) end,
                   Bindings),
 
     %% test some matches
     test_topic_expect_match(X,
-        [{"a.b.c", ["t1", "t2", "t5", "t6", "t10", "t11", "t12", "t18", "t20"]},
-         {"a.b", ["t3", "t5", "t6", "t7", "t8", "t9", "t11", "t12", "t15"]},
-         {"a.b.b", ["t3", "t5", "t6", "t7", "t11", "t12", "t14", "t18"]},
-         {"", ["t5", "t6", "t17"]},
-         {"b.c.c", ["t5", "t6", "t18"]},
-         {"a.a.a.a.a", ["t5", "t6", "t11", "t12"]},
-         {"vodka.gin", ["t5", "t6", "t8"]},
-         {"vodka.martini", ["t5", "t6", "t8", "t19"]},
-         {"b.b.c", ["t5", "t6", "t10", "t13", "t18"]},
-         {"nothing.here.at.all", ["t5", "t6"]},
-         {"un_der_sc.ore", ["t5", "t6", "t8"]}]),
+        [{"a.b.c", ["t1", "t2", "t5", "t6", "t10", "t11", "t12", "t18", "t20",
+                    "t21", "t22", "t23", "t24"]},
+         {"a.b", ["t3", "t5", "t6", "t7", "t8", "t9", "t11", "t12", "t15",
+                  "t21", "t22", "t23", "t24"]},
+         {"a.b.b", ["t3", "t5", "t6", "t7", "t11", "t12", "t14", "t18", "t21",
+                    "t22", "t23", "t24"]},
+         {"", ["t5", "t6", "t17", "t24"]},
+         {"b.c.c", ["t5", "t6", "t18", "t21", "t22", "t23", "t24"]},
+         {"a.a.a.a.a", ["t5", "t6", "t11", "t12", "t21", "t22", "t23", "t24"]},
+         {"vodka.gin", ["t5", "t6", "t8", "t21", "t22", "t23", "t24"]},
+         {"vodka.martini", ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
+                            "t24"]},
+         {"b.b.c", ["t5", "t6", "t10", "t13", "t18", "t21", "t22", "t23",
+                    "t24"]},
+         {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
+         {"oneword", ["t5", "t6", "t21", "t22", "t23", "t24", "t25"]}]),
 
     %% remove some bindings
     RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
-                       lists:nth(11, Bindings)],
+                       lists:nth(11, Bindings), lists:nth(21, Bindings)],
     rabbit_exchange_type_topic:remove_bindings(X, RemovedBindings),
     RemainingBindings = ordsets:to_list(
                           ordsets:subtract(ordsets:from_list(Bindings),
@@ -659,23 +656,41 @@ test_topic_matching() ->
 
     %% test some matches
     test_topic_expect_match(X,
-        [{"a.b.c", ["t2", "t6", "t10", "t12", "t18", "t20"]},
-         {"a.b", ["t3", "t6", "t7", "t8", "t9", "t12", "t15"]},
-         {"a.b.b", ["t3", "t6", "t7", "t12", "t14", "t18"]},
-         {"", ["t6", "t17"]},
-         {"b.c.c", ["t6", "t18"]},
-         {"a.a.a.a.a", ["t6", "t12"]},
-         {"vodka.gin", ["t6", "t8"]},
-         {"vodka.martini", ["t6", "t8", "t19"]},
-         {"b.b.c", ["t6", "t10", "t13", "t18"]},
-         {"nothing.here.at.all", ["t6"]},
-         {"un_der_sc.ore", ["t6", "t8"]}]),
+        [{"a.b.c", ["t2", "t6", "t10", "t12", "t18", "t20", "t22", "t23",
+                    "t24"]},
+         {"a.b", ["t3", "t6", "t7", "t8", "t9", "t12", "t15", "t22", "t23",
+                  "t24"]},
+         {"a.b.b", ["t3", "t6", "t7", "t12", "t14", "t18", "t22", "t23",
+                    "t24"]},
+         {"", ["t6", "t17", "t24"]},
+         {"b.c.c", ["t6", "t18", "t22", "t23", "t24"]},
+         {"a.a.a.a.a", ["t6", "t12", "t22", "t23", "t24"]},
+         {"vodka.gin", ["t6", "t8", "t22", "t23", "t24"]},
+         {"vodka.martini", ["t6", "t8", "t19", "t22", "t23", "t24"]},
+         {"b.b.c", ["t6", "t10", "t13", "t18", "t22", "t23", "t24"]},
+         {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
+         {"oneword", ["t6", "t22", "t23", "t24", "t25"]}]),
 
     %% remove the entire exchange
     rabbit_exchange_type_topic:delete(X, RemainingBindings),
     %% none should match now
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),    
     passed.
+
+test_topic_expect_match(#exchange{name = XName}, List) ->
+    lists:foreach(
+        fun({Key, Expected}) ->
+            io:format("~p ~p~n", [Key, Expected]),
+            Res = rabbit_exchange_type_topic:which_matches(
+                    XName, list_to_binary(Key)),
+            io:format("Res: ~p~n", [Res]),
+            ExpectedRes = lists:map(
+                fun(Q) -> #resource{virtual_host = <<"/">>,
+                                    kind = queue,
+                                    name = list_to_binary(Q)}
+                end, Expected),
+            true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
+        end, List).
 
 test_app_management() ->
     %% starting, stopping, status

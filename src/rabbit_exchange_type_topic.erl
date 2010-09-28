@@ -108,6 +108,7 @@ which_matches(X, Key) ->
 
 trie_match(X, Words) ->
     trie_match(X, root, Words).
+
 trie_match(X, Node, []) ->
     FinalRes = trie_bindings(X, Node),
     HashRes = case trie_child(X, Node, "#") of
@@ -137,6 +138,7 @@ trie_match_skip_any(X, Node, [_ | RestW] = Words) ->
 
 follow_down(X, Words) ->
     follow_down(X, root, Words).
+
 follow_down(_X, CurNode, []) ->
     {ok, CurNode};
 follow_down(X, CurNode, [W | RestW]) ->
@@ -158,6 +160,7 @@ follow_down_create(X, Words) ->
 
 follow_down_get_path(X, Words) ->
     follow_down_get_path(X, root, Words, [{root, none}]).
+
 follow_down_get_path(_, _, [], PathAcc) ->
     PathAcc;
 follow_down_get_path(X, CurNode, [W | RestW], PathAcc) ->
@@ -198,8 +201,10 @@ trie_bindings(X, Node) ->
 
 trie_add_edge(X, FromNode, ToNode, W) ->
     trie_edge_op(X, FromNode, ToNode, W, fun mnesia:write/3).
+
 trie_remove_edge(X, FromNode, ToNode, W) ->
     trie_edge_op(X, FromNode, ToNode, W, fun mnesia:delete_object/3).
+
 trie_edge_op(X, FromNode, ToNode, W, Op) ->
     ok = Op(rabbit_topic_trie_edge,
             #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
@@ -210,8 +215,10 @@ trie_edge_op(X, FromNode, ToNode, W, Op) ->
 
 trie_add_binding(X, Node, Q) ->
     trie_binding_op(X, Node, Q, fun mnesia:write/3).
+
 trie_remove_binding(X, Node, Q) ->
     trie_binding_op(X, Node, Q, fun mnesia:delete_object/3).
+
 trie_binding_op(X, Node, Q, Op) ->
     ok = Op(rabbit_topic_trie_binding,
             #topic_trie_binding{trie_binding = #trie_binding{exchange_name = X,
@@ -271,4 +278,13 @@ new_node() ->
     rabbit_guid:guid().
 
 split_topic_key(Key) ->
-    string:tokens(binary_to_list(Key), ".").
+    split_topic_key(Key, [], []).
+
+split_topic_key(<<>>, [], []) ->
+    [];
+split_topic_key(<<>>, RevWordAcc, RevResAcc) ->
+    lists:reverse([lists:reverse(RevWordAcc) | RevResAcc]);
+split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
+    split_topic_key(Rest, [], [lists:reverse(RevWordAcc) | RevResAcc]);
+split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
+    split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
