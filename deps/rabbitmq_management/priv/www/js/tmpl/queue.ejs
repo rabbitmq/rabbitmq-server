@@ -68,7 +68,7 @@
            <tr<%= alt_rows(i)%>>
              <td><%= link_exchange(bindings[i].vhost, bindings[i].exchange) %></td>
              <td><%= bindings[i].routing_key %></td>
-             <td><%= bindings[i].arguments %></td>
+             <td></td>
              <td class="c">
                <form action="#/bindings" method="delete" class="confirm">
                  <input type="hidden" name="vhost" value="<%= bindings[i].vhost %>"/>
