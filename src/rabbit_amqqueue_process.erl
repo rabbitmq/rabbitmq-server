@@ -598,7 +598,7 @@ prioritise_call(Msg, _From, _State) ->
         info                                      -> 9;
         {info, _Items}                            -> 9;
         consumers                                 -> 9;
-        delete                                    -> 9;
+        delete_exclusive                          -> 8;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
         _                                         -> 0
     end.
@@ -618,10 +618,8 @@ prioritise_cast(Msg, _State) ->
     end.
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
-                #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
-    9;
-prioritise_info(_Msg, _State) ->
-    0.
+                #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
+prioritise_info(_Msg, _State) -> 0.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -792,9 +790,15 @@ handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     active_consumers = ActiveConsumers}) ->
     reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
 
-handle_call(delete, _From, State = #q{ backing_queue_state = BQS,
-                                       backing_queue       = BQ }) ->
+handle_call(delete_exclusive, _From,
+            State = #q{ backing_queue_state = BQS,
+                        backing_queue       = BQ,
+                        q                   = #amqqueue{exclusive_owner = Owner} })
+  when Owner =/= none ->
     {stop, normal, {ok, BQ:len(BQS)}, State};
+
+handle_call(delete_exclusive, _From, State) ->
+    reply({error, not_exclusive}, State);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
