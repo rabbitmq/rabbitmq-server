@@ -52,7 +52,6 @@
                     {enables,     queue_sup_queue_recovery}]}).
 
 start(_Type, _StartArgs) ->
-    ensure_statistics_enabled(),
     register_contexts(),
     log_startup(),
     case ?SETUP_WM_LOGGING of
@@ -67,25 +66,6 @@ start(_Type, _StartArgs) ->
 
 stop(_State) ->
     ok.
-
-ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(
-                         rabbit_management, force_fine_statistics),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    case {ForceStats, StatsLevel} of
-        {true,  fine} ->
-            ok;
-        {true,  _} ->
-            application:set_env(rabbit, collect_statistics, fine),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to fine.~n");
-        {false, none} ->
-            application:set_env(rabbit, collect_statistics, coarse),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to coarse.~n");
-        {_, _} ->
-            ok
-    end.
 
 register_contexts() ->
     application:set_env(
