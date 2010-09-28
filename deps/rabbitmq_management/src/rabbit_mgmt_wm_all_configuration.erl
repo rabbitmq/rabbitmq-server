@@ -65,7 +65,7 @@ to_json(ReqData, Context) ->
       filter(
         [{users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      rabbit_mgmt_wm_vhosts:vhosts()},
-         {permissions, rabbit_mgmt_wm_permissions:perms()},
+         {permissions, rabbit_mgmt_wm_permissions:permissions()},
          {queues,      Queues},
          {exchanges,   [rabbit_mgmt_format:exchange(X) ||
                            X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
