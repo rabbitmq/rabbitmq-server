@@ -339,7 +339,7 @@ do_connect(State = #state{params = #amqp_params{host        = Host,
 do_connect(State = #state{params = #amqp_params{host        = Host,
                                                 port        = Port,
                                                 ssl_options = SslOpts}}) ->
-    rabbit_misc:start_applications([crypto, ssl]),
+    rabbit_misc:start_applications([crypto, public_key, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
             case ssl:connect(Sock, SslOpts) of
