@@ -152,8 +152,8 @@ decode(Keys, Body) ->
                   end,
     case Res of
         ok -> Results =
-                  [get_or_missing(list_to_binary(atom_to_list(K)), Json)
-                   || K <- Keys],
+                  [get_or_missing(list_to_binary(atom_to_list(K)), Json) ||
+                      K <- Keys],
               case [E || E = {key_missing, _} <- Results] of
                   []      -> Results;
                   Errors  -> {error, Errors}

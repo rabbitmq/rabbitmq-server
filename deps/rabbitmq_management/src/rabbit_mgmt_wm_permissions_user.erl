@@ -37,8 +37,9 @@ to_json(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     Perms = rabbit_access_control:list_user_permissions(User),
     rabbit_mgmt_util:reply(
-      [rabbit_mgmt_format:permissions({User, VHost, Conf, Write, Read, Scope})
-       || {VHost, Conf, Write, Read, Scope} <- Perms],
+      [rabbit_mgmt_format:permissions({User, VHost,
+                                       Conf, Write, Read, Scope}) ||
+          {VHost, Conf, Write, Read, Scope} <- Perms],
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->

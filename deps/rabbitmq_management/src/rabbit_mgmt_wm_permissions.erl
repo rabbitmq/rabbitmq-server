@@ -43,5 +43,5 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 perms() ->
-    [rabbit_mgmt_format:permissions(P)
-        || P <- rabbit_access_control:list_permissions()].
+    [rabbit_mgmt_format:permissions(P) ||
+        P <- rabbit_access_control:list_permissions()].

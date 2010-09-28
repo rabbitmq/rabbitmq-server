@@ -54,25 +54,25 @@ create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Queues = [rabbit_mgmt_format:queue(Q)
-              || Q <- rabbit_mgmt_wm_queues:queues(ReqData), export_queue(Q)],
-    Exclusives = [Q#amqqueue.name
-                  || Q <- rabbit_mgmt_wm_queues:queues(ReqData),
+    Queues = [rabbit_mgmt_format:queue(Q) ||
+                 Q <- rabbit_mgmt_wm_queues:queues(ReqData), export_queue(Q)],
+    Exclusives = [Q#amqqueue.name ||
+                     Q <- rabbit_mgmt_wm_queues:queues(ReqData),
                      not export_queue(Q)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
       [{rabbit_version, Vsn}] ++
       filter(
         [{users,       rabbit_mgmt_wm_users:users()},
-         {vhosts,      [[{name, N}]
-                        || N <- rabbit_access_control:list_vhosts()]},
+         {vhosts,      [[{name, N}] ||
+                           N <- rabbit_access_control:list_vhosts()]},
          {permissions, rabbit_mgmt_wm_permissions:perms()},
          {queues,      Queues},
-         {exchanges,   [rabbit_mgmt_format:exchange(X)
-                        || X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
+         {exchanges,   [rabbit_mgmt_format:exchange(X) ||
+                           X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
                            export_exchange(X)]},
-         {bindings,    [rabbit_mgmt_format:binding(B)
-                        || B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
+         {bindings,    [rabbit_mgmt_format:binding(B) ||
+                           B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
                            export_binding(B, Exclusives)]}]),
       case wrq:get_qs_value("mode", ReqData) of
           "download" -> wrq:set_resp_header(
@@ -116,8 +116,8 @@ accept(Body, ReqData,
       Body, ReqData, Context,
       fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings]) ->
               rabbit_access_control:add_user(Username, Password),
-              [allow_user(Username, V)
-               || V <- rabbit_access_control:list_vhosts()],
+              [allow_user(Username, V) ||
+                  V <- rabbit_access_control:list_vhosts()],
               Res =
                   rabbit_mgmt_util:with_amqp_error_handling(
                     ReqData, Context,

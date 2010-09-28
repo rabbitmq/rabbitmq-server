@@ -163,8 +163,8 @@ group_sum(GroupBy, List) ->
 gs_update(Item0, Item1) ->
     Keys = sets:to_list(sets:from_list(
                           [K || {K, _} <- Item0 ++ Item1])),
-    [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))}
-     || Key <- Keys].
+    [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))} ||
+        Key <- Keys].
 
 gs_update_add(Key, Item0, Item1) ->
     case is_details(Key) of
@@ -401,11 +401,12 @@ handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
         AllFineStats ->
             ChPid = id(Props),
             Table = orddict:fetch(Type, Tables),
-            IdsStatsTS = [{Ids,
-                           Stats,
-                           lookup_element(Table, fine_stats_key(ChPid, Ids)),
-                           lookup_element(Table, fine_stats_key(ChPid, Ids), 3)}
-                          || {Ids, Stats} <- AllFineStats],
+            IdsStatsTS =
+                [{Ids,
+                  Stats,
+                  lookup_element(Table, fine_stats_key(ChPid, Ids)),
+                  lookup_element(Table, fine_stats_key(ChPid, Ids), 3)} ||
+                    {Ids, Stats} <- AllFineStats],
             delete_fine_stats(Type, ChPid, State),
             [handle_fine_stat(ChPid, Ids, Stats, Timestamp,
                               OldStats, OldTimestamp, Table) ||

@@ -34,8 +34,8 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Conns = [{struct, C}
-             || C <- rabbit_mgmt_util:filter_user(
+    Conns = [{struct, C} ||
+                C <- rabbit_mgmt_util:filter_user(
                        rabbit_mgmt_db:get_connections(), ReqData, Context)],
     rabbit_mgmt_util:reply(Conns, ReqData, Context).
 
