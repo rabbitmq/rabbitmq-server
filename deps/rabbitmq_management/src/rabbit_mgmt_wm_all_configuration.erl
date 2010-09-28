@@ -141,24 +141,23 @@ get_part(Name, Parts) ->
         [F] -> F
     end.
 
-export_queue(#amqqueue{ exclusive_owner = none }) ->
-    true;
+export_queue(#amqqueue{ name = QName, exclusive_owner = none }) ->
+    export_name(QName);
 export_queue(_) ->
     false.
 
-export_binding(#binding { exchange_name = #resource{ name = Exchange },
-                          queue_name = Queue }, ExclusiveQueues) ->
-    not lists:member(Queue, ExclusiveQueues) andalso
-        export_exchange_name(Exchange).
+export_binding(#binding { exchange_name = #resource{ name = XName },
+                          queue_name = QName }, ExclusiveQueues) ->
+    not lists:member(QName, ExclusiveQueues) andalso
+        export_name(XName).
 
 export_exchange(Exchange) ->
-    R = proplists:get_value(name, Exchange),
-    Name = R#resource.name,
-    export_exchange_name(Name).
+    #resource{ name = XName } = proplists:get_value(name, Exchange),
+    export_name(XName).
 
-export_exchange_name(Name) ->
-    not lists:prefix("amq.", binary_to_list(Name)) andalso
-        Name =/= <<>>.
+export_name(<<>>)                 -> false;
+export_name(<<"amq.", _/binary>>) -> false;
+export_name(_Name)                -> true.
 
 %%--------------------------------------------------------------------
 
