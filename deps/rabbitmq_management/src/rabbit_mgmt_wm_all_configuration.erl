@@ -28,13 +28,14 @@
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(MAGIC_USER, <<"!!magic_user!!">>).
--define(MAGIC_PASSWORD, ?MAGIC_USER).
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_Config) ->
+    MagicUsername = rabbit_guid:binstring_guid("magic_user_"),
+    MagicPassword = rabbit_guid:binstring_guid("magic_password_"),
+    {ok, #context{extra = {MagicUsername, MagicPassword}}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
@@ -95,25 +96,28 @@ accept_multipart(ReqData, Context) ->
             Resp
     end.
 
-accept(Body, ReqData, Context) ->
+accept(Body, ReqData,
+       Context = #context{extra = {Username, Password}}) ->
     rabbit_mgmt_util:with_decode(
       [users, vhosts, permissions, queues, exchanges, bindings],
       Body, ReqData, Context,
       fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings]) ->
-              rabbit_access_control:add_user(?MAGIC_USER, ?MAGIC_PASSWORD),
-              [allow_magic(V) || V <- rabbit_access_control:list_vhosts()],
-              Res = rabbit_mgmt_util:with_amqp_error_handling(
-                      ReqData, Context,
-                      fun() ->
-                              for_all(Users,       fun add_user/1),
-                              for_all(VHosts,      fun add_vhost/1),
-                              for_all(Permissions, fun add_permission/1),
-                              for_all(Queues,      fun add_queue/1),
-                              for_all(Exchanges,   fun add_exchange/1),
-                              for_all(Bindings,    fun add_binding/1),
-                              {true, ReqData, Context}
+              rabbit_access_control:add_user(Username, Password),
+              [allow_user(Username, V)
+               || V <- rabbit_access_control:list_vhosts()],
+              Res =
+                  rabbit_mgmt_util:with_amqp_error_handling(
+                    ReqData, Context,
+                    fun() ->
+                            for_all(Users,       fun add_user/2,       Context),
+                            for_all(VHosts,      fun add_vhost/2,      Context),
+                            for_all(Permissions, fun add_permission/2, Context),
+                            for_all(Queues,      fun add_queue/2,      Context),
+                            for_all(Exchanges,   fun add_exchange/2,   Context),
+                            for_all(Bindings,    fun add_binding/2,    Context),
+                            {true, ReqData, Context}
                       end),
-              rabbit_access_control:delete_user(?MAGIC_USER),
+              rabbit_access_control:delete_user(Username),
               Res
       end).
 
@@ -148,8 +152,8 @@ filter_item(Item, Allowed) ->
 
 %%--------------------------------------------------------------------
 
-for_all(List, Fun) ->
-    [Fun([{atomise_name(K), clean_value(V)} || {K, V} <- I]) ||
+for_all(List, Fun, Context) ->
+    [Fun([{atomise_name(K), clean_value(V)} || {K, V} <- I], Context) ||
         {struct, I} <- List].
 
 atomise_name(N) ->
@@ -158,23 +162,23 @@ atomise_name(N) ->
 clean_value({struct, L}) -> L;
 clean_value(A)           -> A.
 
-allow_magic(VHost) ->
+allow_user(Username, VHost) ->
     rabbit_access_control:set_permissions(
-      <<"client">>, ?MAGIC_USER, VHost, <<".*">>, <<".*">>, <<".*">>).
+      <<"client">>, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
 
 %%--------------------------------------------------------------------
 
-add_user(User) ->
+add_user(User, _Context) ->
     rabbit_mgmt_wm_user:put_user(pget(name,          User),
                                  pget(password,      User),
                                  pget(administrator, User)).
 
-add_vhost(VHost) ->
+add_vhost(VHost, #context{ extra = {Username, _} }) ->
     VHostName = pget(name, VHost),
     rabbit_mgmt_wm_vhost:put_vhost(VHostName),
-    allow_magic(VHostName).
+    allow_user(Username, VHostName).
 
-add_permission(Permission) ->
+add_permission(Permission, _Context) ->
     rabbit_access_control:set_permissions(pget(scope,     Permission),
                                           pget(user,      Permission),
                                           pget(vhost,     Permission),
@@ -182,21 +186,21 @@ add_permission(Permission) ->
                                           pget(write,     Permission),
                                           pget(read,      Permission)).
 
-add_queue(Queue) ->
-    amqp_request('queue.declare', map_name(queue, Queue)).
+add_queue(Queue, Context) ->
+    amqp_request('queue.declare', map_name(queue, Queue), Context).
 
-add_exchange(Exchange) ->
-    amqp_request('exchange.declare', map_name(exchange, Exchange)).
+add_exchange(Exchange, Context) ->
+    amqp_request('exchange.declare', map_name(exchange, Exchange), Context).
 
-add_binding(Binding) ->
-    amqp_request('queue.bind', Binding).
+add_binding(Binding, Context) ->
+    amqp_request('queue.bind', Binding, Context).
 
 pget(Key, List) ->
     proplists:get_value(Key, List).
 
-amqp_request(MethodName, Props) ->
-    Params = #amqp_params{username = ?MAGIC_USER,
-                          password = ?MAGIC_PASSWORD,
+amqp_request(MethodName, Props, #context{ extra = {Username, Password} }) ->
+    Params = #amqp_params{username = Username,
+                          password = Password,
                           virtual_host = pget(vhost, Props)},
     {ok, Conn} = amqp_connection:start(direct, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
