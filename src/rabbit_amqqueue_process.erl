@@ -619,6 +619,7 @@ prioritise_cast(Msg, _State) ->
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
                 #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
+
 prioritise_info(_Msg, _State) -> 0.
 
 handle_call({init, Recover}, From,
