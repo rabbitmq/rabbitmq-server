@@ -56,32 +56,6 @@ update() ->
 
 %%--------------------------------------------------------------------
 
-get_total_fd_ulimit() ->
-    {MaxFds, _} = string:to_integer(os:cmd("ulimit -n")),
-    MaxFds.
-
-%% TODO replace with call to file_handle_cache:ulimit/0
-get_total_fd() ->
-    get_total_fd(os:type()).
-
-get_total_fd({unix, Os}) when Os =:= linux   orelse
-                              Os =:= darwin  orelse
-                              Os =:= freebsd orelse
-                              Os =:= sunos ->
-    get_total_fd_ulimit();
-
-%% According to
-%% http://stackoverflow.com/questions/870173/is-there-a-limit-on-number-of-open-files-in-windows
-%% the limit using the POSIX API is 2048, or 512 using libc. It's
-%% unlimited using the win32 API ironically. I did a test with MM and
-%% ran out just after 500 connections, so I guess Erlang uses libc.
-get_total_fd({win32, _}) ->
-    512;
-
-get_total_fd(_) ->
-    unknown.
-
-
 get_used_fd_lsof() ->
     Lsof = os:cmd("lsof -d \"0-9999999\" -lna -p " ++ os:getpid()),
     string:words(Lsof, $\n).
@@ -172,7 +146,7 @@ init([]) ->
     BoundTo = lists:flatten(
                 [rabbit_mgmt_format:print("~s:~p", [Addr,Port]) ||
                     {Addr, Port} <- Binds]),
-    State = #state{fd_total   = get_total_fd(),
+    State = #state{fd_total   = file_handle_cache:ulimit(),
                    mem_total  = get_total_memory(),
                    proc_total = erlang:system_info(process_limit),
                    bound_to   = BoundTo},
