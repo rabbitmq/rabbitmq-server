@@ -54,18 +54,26 @@ create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
 
 to_json(ReqData, Context) ->
+    Queues = [rabbit_mgmt_format:queue(Q)
+              || Q <- rabbit_mgmt_wm_queues:queues(ReqData), export_queue(Q)],
+    Exclusives = [Q#amqqueue.name
+                  || Q <- rabbit_mgmt_wm_queues:queues(ReqData),
+                     not export_queue(Q)],
+    {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
+      [{rabbit_version, Vsn}] ++
       filter(
         [{users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      [[{name, N}]
                         || N <- rabbit_access_control:list_vhosts()]},
          {permissions, rabbit_mgmt_wm_permissions:perms()},
-         {queues,      [rabbit_mgmt_format:queue(Q)
-                        || Q <- rabbit_mgmt_wm_queues:queues(ReqData)]},
+         {queues,      Queues},
          {exchanges,   [rabbit_mgmt_format:exchange(X)
-                        || X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData)]},
+                        || X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
+                           export_exchange(X)]},
          {bindings,    [rabbit_mgmt_format:binding(B)
-                        || B <- rabbit_mgmt_wm_bindings:bindings(ReqData)]}]),
+                        || B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
+                           export_binding(B, Exclusives)]}]),
       case wrq:get_qs_value("mode", ReqData) of
           "download" -> wrq:set_resp_header(
                           "Content-disposition",
@@ -95,6 +103,11 @@ accept_multipart(ReqData, Context) ->
         _ ->
             Resp
     end.
+
+is_authorized(ReqData, Context) ->
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+
+%%--------------------------------------------------------------------
 
 accept(Body, ReqData,
        Context = #context{extra = {Username, Password}}) ->
@@ -128,8 +141,24 @@ get_part(Name, Parts) ->
         [F] -> F
     end.
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+export_queue(#amqqueue{ exclusive_owner = none }) ->
+    true;
+export_queue(_) ->
+    false.
+
+export_binding(#binding { exchange_name = #resource{ name = Exchange },
+                          queue_name = Queue }, ExclusiveQueues) ->
+    not lists:member(Queue, ExclusiveQueues) andalso
+        export_exchange_name(Exchange).
+
+export_exchange(Exchange) ->
+    R = proplists:get_value(name, Exchange),
+    Name = R#resource.name,
+    export_exchange_name(Name).
+
+export_exchange_name(Name) ->
+    not lists:prefix("amq.", binary_to_list(Name)) andalso
+        Name =/= <<>>.
 
 %%--------------------------------------------------------------------
 

@@ -449,10 +449,20 @@ http_unicode_test() ->
     ok.
 
 http_all_configuration_test() ->
+    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
+             {arguments, <<"">>}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
+    http_put("/bindings/%2f/my-queue/my-exchange/key_routing", [], ?NO_CONTENT),
     AllConfig = http_get("/all-configuration", ?OK),
+    http_delete("/bindings/%2f/my-queue/my-exchange/key_routing", ?NO_CONTENT),
+    http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
+    http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
     http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_delete("/bindings/%2f/my-queue/my-exchange/key_routing", ?NO_CONTENT),
+    http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
+    http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
     ExtraConfig =
         [{users,       []},
          {vhosts,      []},
@@ -480,8 +490,21 @@ http_all_configuration_test() ->
          {bindings,    []}],
     http_post("/all-configuration", ExtraConfig, ?NO_CONTENT),
     http_post("/all-configuration", BrokenConfig, ?BAD_REQUEST),
-    http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
+    ok.
+
+http_all_configuration_remove_things_test() ->
+    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-exclusive">>,
+                                            exclusive = true }),
+    http_get("/queues/%2f/my-exclusive", ?OK),
+    AllConfig = http_get("/all-configuration", ?OK),
+    [] = pget(queues, AllConfig),
+    [] = pget(exchanges, AllConfig),
+    [] = pget(bindings, AllConfig),
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
     ok.
 
 http_aliveness_test() ->
