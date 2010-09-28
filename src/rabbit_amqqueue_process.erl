@@ -64,7 +64,8 @@
             rate_timer_ref,
             expiry_timer_ref,
             stats_timer,
-            ttl
+            ttl,
+            ttl_timer_ref
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -441,7 +442,7 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
             BQS = BQ:publish(Message, 
                              msg_properties(State), 
                              State #q.backing_queue_state),
-            {false, NewState#q{backing_queue_state = BQS}}
+            {false, ensure_ttl_timer(NewState#q{backing_queue_state = BQS})}
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
@@ -459,17 +460,6 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
             {{Message, IsDelivered, AckTag, Remaining}, 
                State#q{backing_queue_state = BQS1}}
     end.
-
-drop_expired_messages(State = #q{ttl = undefined}) ->
-    State;
-drop_expired_messages(State = #q{backing_queue_state = BQS, 
-                                  backing_queue = BQ}) ->
-    Now = timer:now_diff(now(), {0,0,0}),
-    BQS1 = BQ:dropwhile(
-             fun (_Msg, _MsgProperties = #msg_properties{expiry=Expiry}) ->
-                     Now > Expiry
-             end, BQS),
-    State #q{backing_queue_state = BQS1}.
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
@@ -602,6 +592,33 @@ calculate_msg_expiry(_State = #q{ttl = Ttl}) ->
     Now = timer:now_diff(now(), {0,0,0}),
     Now + (Ttl * 1000).                 
 
+drop_expired_messages(State = #q{ttl = undefined}) ->
+    State;
+drop_expired_messages(State = #q{backing_queue_state = BQS, 
+                                  backing_queue = BQ}) ->
+    Now = timer:now_diff(now(), {0,0,0}),
+    BQS1 = BQ:dropwhile(
+             fun (_Msg, _MsgProperties = #msg_properties{expiry=Expiry}) ->
+                     Now > Expiry
+             end, BQS),
+    ensure_ttl_timer(State #q{backing_queue_state = BQS1}).
+
+ensure_ttl_timer(State = #q{backing_queue       = BQ, 
+                            backing_queue_state = BQS, 
+                            ttl                 = Ttl, 
+                            ttl_timer_ref       = undefined}) 
+  when Ttl =/= undefined->
+    case BQ:is_empty(BQS) of
+        true ->
+            State;
+        false ->
+            State#q{ttl_timer_ref = 
+                        timer:send_after(Ttl, self(), drop_expired)}
+    end;
+ensure_ttl_timer(State) ->
+    State.
+            
+    
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
@@ -992,6 +1009,9 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State = #q{backing_queue = BQ}) ->
     noreply(maybe_run_queue_via_backing_queue(
               fun (BQS) -> BQ:idle_timeout(BQS) end, State));
+
+handle_info(drop_expired, State) ->
+    noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
