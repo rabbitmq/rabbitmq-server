@@ -28,7 +28,7 @@
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2]).
--export([with_amqp_error_handling/3]).
+-export([with_amqp_error_handling/3, args/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -237,3 +237,7 @@ redirect(Location, ReqData) ->
     wrq:do_redirect(true,
                     wrq:set_resp_header("Location",
                                         binary_to_list(Location), ReqData)).
+args({struct, L}) ->
+    args(L);
+args(L) ->
+    [{K, rabbit_mgmt_format:args_type(V), V} || {K, V} <- L].

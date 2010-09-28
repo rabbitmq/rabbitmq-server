@@ -129,7 +129,7 @@ accept(Body, ReqData,
                             for_all(Exchanges,   fun add_exchange/2,   Context),
                             for_all(Bindings,    fun add_binding/2,    Context),
                             {true, ReqData, Context}
-                      end),
+                    end),
               rabbit_access_control:delete_user(Username),
               Res
       end).
@@ -238,10 +238,11 @@ amqp_request(MethodName, Props, #context{ extra = {Username, Password} }) ->
     amqp_connection:close(Conn).
 
 props_to_method(Method, Props) ->
+    Props1 = add_args_types(Props),
     FieldNames = ?FRAMING:method_fieldnames(Method),
     {Res, _Idx} = lists:foldl(
                     fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props) of
+                            NewR = case proplists:get_value(K, Props1) of
                                        undefined -> R;
                                        V         -> setelement(Idx, R, V)
                                    end,
@@ -252,3 +253,8 @@ props_to_method(Method, Props) ->
 
 map_name(K, Props) ->
     [{K, pget(name, Props)} | Props].
+
+add_args_types(Props) ->
+    Args = proplists:get_value(arguments, Props),
+    [{arguments, rabbit_mgmt_util:args(Args)}|
+     proplists:delete(arguments, Props)].

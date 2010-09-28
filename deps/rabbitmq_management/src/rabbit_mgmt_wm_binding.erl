@@ -92,7 +92,7 @@ binding(ReqData) ->
         VHost     -> Q = rabbit_mgmt_util:id(queue, ReqData),
                      X = rabbit_mgmt_util:id(exchange, ReqData),
                      Props = rabbit_mgmt_util:id(props, ReqData),
-                     case unpack_props(binary_to_list(Props)) of
+                     case rabbit_mgmt_format:unpack_binding_props(Props) of
                          {bad_request, Str} ->
                              {bad_request, Str};
                          {Key, Args} ->
@@ -109,13 +109,9 @@ exists(Binding) ->
     case Binding of
         {bad_request, _} -> false;
         _                -> rabbit_binding:exists(Binding)
+                            %% TODO does this work? Seems to match even when
+                            %% args differ
     end.
-
-%% TODO arguments
-unpack_props("key_" ++ Key) ->
-    {list_to_binary(mochiweb_util:unquote(Key)), []};
-unpack_props(Str) ->
-    {bad_request, Str}.
 
 with_binding(ReqData, Context, Fun) ->
     case binding(ReqData) of

@@ -56,7 +56,7 @@ accept_content(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(exchange, ReqData),
     rabbit_mgmt_util:with_decode_vhost(
       [type, durable, auto_delete, arguments], ReqData, Context,
-      fun(VHost, [Type, Durable, AutoDelete, _Arguments]) ->
+      fun(VHost, [Type, Durable, AutoDelete, Args]) ->
               Durable1    = rabbit_mgmt_util:parse_bool(Durable),
               AutoDelete1 = rabbit_mgmt_util:parse_bool(AutoDelete),
               rabbit_mgmt_util:amqp_request(
@@ -65,7 +65,7 @@ accept_content(ReqData, Context) ->
                                      type        = Type,
                                      durable     = Durable1,
                                      auto_delete = AutoDelete1,
-                                     arguments   = [] }) %% TODO
+                                     arguments   = rabbit_mgmt_util:args(Args)})
       end).
 
 delete_resource(ReqData, Context) ->

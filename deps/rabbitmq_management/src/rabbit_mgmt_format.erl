@@ -23,7 +23,9 @@
 
 -export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
 -export([protocol/1, resource/1, permissions/1, queue/1]).
--export([exchange/1, user/1, binding/1, pack_props/2, url/2, application/1]).
+-export([exchange/1, user/1, binding/1, url/2, application/1]).
+-export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
+-export([args_type/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -109,12 +111,67 @@ binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
             {queue,          Q#resource.name},
             {routing_key,    Key},
             {arguments,      Args},
-            {properties_key, pack_props(Key, Args)}],
-           [{fun (Res) -> resource(exchange, Res) end, [exchange]}]).
+            {properties_key, pack_binding_props(Key, Args)}],
+           [{fun (Res) -> resource(exchange, Res) end, [exchange]},
+            {fun table/1,                              [arguments]}]).
 
-%% TODO arguments
-pack_props(Key, _Args) ->
-    list_to_binary("key_" ++ mochiweb_util:quote_plus(binary_to_list(Key))).
+pack_binding_props(Key, Args) ->
+    Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
+    ArgsKeys = lists:sort(dict:fetch_keys(Dict)),
+    PackedArgs =
+        string:join(
+          [quote_binding(K) ++ "_" ++
+               quote_binding(dict:fetch(K, Dict)) || K <- ArgsKeys],
+          "_"),
+    %% TODO can we eliminate the key_ here?
+    list_to_binary("key_" ++ quote_binding(Key) ++
+                       case PackedArgs of
+                           "" -> "";
+                           _  -> "_" ++ PackedArgs
+                       end).
+
+quote_binding(Name) ->
+    binary_to_list(
+      iolist_to_binary(
+        re:replace(mochiweb_util:quote_plus(Name), "_", "%5F"))).
+
+unpack_binding_props(B) when is_binary(B) ->
+    unpack_binding_props(binary_to_list(B));
+unpack_binding_props(Str) ->
+    unpack_binding_props0(tokenise(Str)).
+
+unpack_binding_props0(["key", Key | Args]) ->
+    {unquote_binding(Key), unpack_binding_args(Args)};
+unpack_binding_props0(Tokens) ->
+    {bad_request, Tokens}.
+
+unpack_binding_args([]) ->
+    [];
+unpack_binding_args([K, V | Rest]) ->
+    Value = unquote_binding(V),
+    [{unquote_binding(K), args_type(Value), Value} | unpack_binding_args(Rest)].
+
+unquote_binding(Name) ->
+    list_to_binary(mochiweb_util:unquote(Name)).
+
+%% Unfortunately string:tokens("foo__bar", "_"). -> ["foo","bar"], we lose
+%% the fact that there's a double _.
+tokenise("") ->
+    [];
+tokenise(Str) ->
+    Count = string:cspan(Str, "_"),
+    case length(Str) of
+        Count -> [Str];
+        _     -> [string:sub_string(Str, 1, Count)|
+                  tokenise(string:sub_string(Str, Count + 2))]
+    end.
+
+args_type(X) when is_binary(X) ->
+    longstr;
+args_type(X) when is_number(X) ->
+    long;
+args_type(X) ->
+    throw({unhandled_type, X}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).

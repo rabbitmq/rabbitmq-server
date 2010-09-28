@@ -288,6 +288,7 @@ function sync_req(type, params, path_template) {
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
+        if (params["arguments"] == "") params["arguments"] = []; // TODO
         req.send(JSON.stringify(params));
     }
     catch (e) {

@@ -182,7 +182,7 @@ test_auth(Code, Headers) ->
 exchanges_test() ->
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>}, {auto_delete, false},
-            {arguments, <<"">>}],
+            {arguments, []}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
@@ -204,15 +204,15 @@ exchanges_test() ->
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/exchanges/myvhost/bar",
              [{type, <<"bad_exchange_type">>},
-              {durable, true}, {auto_delete, false}, {arguments, <<"">>}],
+              {durable, true}, {auto_delete, false}, {arguments, []}],
              ?BAD_REQUEST),
     http_put("/exchanges/myvhost/bar",
              [{type, <<"direct">>},
-              {durable, <<"troo">>}, {auto_delete, false}, {arguments, <<"">>}],
+              {durable, <<"troo">>}, {auto_delete, false}, {arguments, []}],
              ?BAD_REQUEST),
     http_put("/exchanges/myvhost/foo",
              [{type, <<"direct">>},
-              {durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+              {durable, false}, {auto_delete, false}, {arguments, []}],
              ?BAD_REQUEST),
 
     http_delete("/exchanges/myvhost/foo", ?NO_CONTENT),
@@ -222,7 +222,7 @@ exchanges_test() ->
     ok.
 
 queues_test() ->
-    Good = [{durable, true}, {auto_delete, false}, {arguments, <<"">>}],
+    Good = [{durable, true}, {auto_delete, false}, {arguments, []}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
@@ -230,10 +230,10 @@ queues_test() ->
 
     http_put("/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/queues/%2f/bar",
-             [{durable, <<"troo">>}, {auto_delete, false}, {arguments, <<"">>}],
+             [{durable, <<"troo">>}, {auto_delete, false}, {arguments, []}],
              ?BAD_REQUEST),
     http_put("/queues/%2f/foo",
-             [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+             [{durable, false}, {auto_delete, false}, {arguments, []}],
              ?BAD_REQUEST),
 
     http_put("/queues/%2f/baz", Good, ?NO_CONTENT),
@@ -263,8 +263,8 @@ queues_test() ->
 
 bindings_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, <<"">>}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+             {arguments, []}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_put("/bindings/%2f/badqueue/myexchange/key_routing", [], ?NOT_FOUND),
@@ -300,9 +300,9 @@ bindings_test() ->
 
 bindings_post_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, <<"">>}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
-    BArgs = [{routing_key, <<"routing">>}, {arguments, <<"">>}],
+             {arguments, []}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_post("/bindings/%2f/badqueue/myexchange", BArgs, ?NOT_FOUND),
@@ -342,7 +342,7 @@ permissions_administrator_test() ->
     ok.
 
 permissions_vhost_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
                 {read,      <<".*">>}, {scope, <<"client">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
@@ -430,7 +430,7 @@ permissions_connection_channel_test() ->
     ok.
 
 unicode_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
     http_get("/queues/%2f/♫♪♫♪", ?OK),
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
@@ -438,8 +438,8 @@ unicode_test() ->
 
 all_configuration_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, <<"">>}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
+             {arguments, []}],
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
     http_put("/bindings/%2f/my-queue/my-exchange/key_routing", [], ?NO_CONTENT),
@@ -498,6 +498,34 @@ all_configuration_remove_things_test() ->
 aliveness_test() ->
     [{status, <<"ok">>}] = http_get("/aliveness-test/%2f", ?OK),
     http_get("/aliveness-test/foo", ?NOT_FOUND).
+
+arguments_test() ->
+    XArgs = [{type, <<"headers">>}, {durable, false}, {auto_delete, false},
+             {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
+    QArgs = [{durable, false}, {auto_delete, false},
+             {arguments, [{'x-expires', 1800000}]}],
+    BArgs = [{routing_key, <<"">>},
+             {arguments, [{'x-match', <<"all">>},
+                          {foo, <<"bar">>}]}],
+    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_post("/bindings/%2f/myqueue/myexchange", BArgs, ?CREATED),
+    AllConfig = http_get("/all-configuration", ?OK),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    [{'alternate-exchange', <<"amq.direct">>}] =
+        pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
+    [{'x-expires', 1800000}] =
+        pget(arguments, http_get("/queues/%2f/myqueue", ?OK)),
+    [{foo, <<"bar">>}, {'x-match', <<"all">>}] =
+        pget(arguments,
+             http_get("/bindings/%2f/myqueue/myexchange/" ++
+                          "key__foo_bar_x-match_all", ?OK)),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->

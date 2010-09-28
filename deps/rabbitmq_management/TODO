@@ -12,8 +12,7 @@ Write more thorough unit tests, especially around:
 Then
 ====
 Write remaining management:
-  Exchange / queue arguments support
-  Bindings arguments support
+  Exchange / queue / binding arguments support (UI)
   Application list / start / stop
   Reset / rotate logs / cluster
   VM stop
