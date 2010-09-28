@@ -160,6 +160,8 @@
 -define(PUB, {_, _}). %% {Guid, IsPersistent}
 
 -define(READ_MODE, [binary, raw, read]).
+-define(READ_AHEAD_MODE, [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE]).
+-define(WRITE_MODE, [write | ?READ_MODE]).
 
 %%----------------------------------------------------------------------------
 
@@ -580,7 +582,7 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
                                      path = Path } = Segment) ->
     case array:sparse_size(JEntries) of
         0 -> Segment;
-        _ -> {ok, Hdl} = file_handle_cache:open(Path, [write | ?READ_MODE],
+        _ -> {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
                                                 [{write_buffer, infinity}]),
              array:sparse_foldl(fun write_entry_to_segment/3, Hdl, JEntries),
              ok = file_handle_cache:close(Hdl),
@@ -591,7 +593,7 @@ get_journal_handle(State = #qistate { journal_handle = undefined,
                                       dir = Dir }) ->
     Path = filename:join(Dir, ?JOURNAL_FILENAME),
     ok = filelib:ensure_dir(Path),
-    {ok, Hdl} = file_handle_cache:open(Path, [write | ?READ_MODE],
+    {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
                                        [{write_buffer, infinity}]),
     {Hdl, State #qistate { journal_handle = Hdl }};
 get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
@@ -788,8 +790,7 @@ segment_entries_foldr(Fun, Init,
 load_segment(KeepAcked, #segment { path = Path }) ->
     case filelib:is_file(Path) of
         false -> {array_new(), 0};
-        true  -> Mode = [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE],
-                 {ok, Hdl} = file_handle_cache:open(Path, Mode, []),
+        true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  Res = load_segment_entries(KeepAcked, Hdl, array_new(), 0),
                  ok = file_handle_cache:close(Hdl),
