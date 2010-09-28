@@ -32,7 +32,7 @@
 -module(rabbit_invariable_queue).
 
 -export([init/3, terminate/1, delete_and_terminate/1, purge/1, publish/3,
-         publish_delivered/4, fetch/2, ack/2, tx_publish/4, tx_ack/3, peek/1,
+         publish_delivered/4, fetch/2, ack/2, tx_publish/4, tx_ack/3,
          dropwhile/2, tx_rollback/2, tx_commit/4, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
          idle_timeout/1, handle_pre_hibernate/1, status/1]).
@@ -118,17 +118,11 @@ publish_delivered(true, Msg = #basic_message { guid = Guid },
     ok = persist_delivery(QName, IsDurable, false, Msg),
     {Guid, State #iv_state { pending_ack = store_ack(Msg, MsgProps, PA) }}.
 
-peek(State = #iv_state { len = 0 }) ->
-    {empty, State};
-peek(State = #iv_state { queue = Q}) ->
-    {value, {Msg, MsgProps, _IsDelivered}} = queue:peek(Q),
-    {{Msg, MsgProps}, State}.
-
 dropwhile(_Pred, State = #iv_state { len = 0 }) ->
     State;
 dropwhile(Pred, State = #iv_state { queue = Q }) ->
     {{value, {Msg, MsgProps, IsDelivered}}, Q1} = queue:out(Q),
-    case Pred(Msg, MsgProps) of
+    case Pred(MsgProps) of
         true ->
             {_, State1} = 
                 fetch_internal(false, Q1, Msg, MsgProps, IsDelivered, State),

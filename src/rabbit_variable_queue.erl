@@ -34,7 +34,7 @@
 -export([init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1, dropwhile/2, peek/1,
+         requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
          status/1]).
@@ -517,53 +517,71 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
                                 in_counter        = InCount  + 1,
                                 persistent_count  = PCount1,
                                 pending_ack       = PA1 })}.
-
-peek(State) ->    
-    internal_queue_out(
-      fun(MsgStatus = #msg_status { msg = Msg, msg_properties = MsgProps }, 
-          _, State1) ->
-              {{Msg, MsgProps}, State1}
-      end, State).
               
-
 dropwhile(Pred, State) ->
     case internal_queue_out(
-           fun(MsgStatus = #msg_status { msg = Msg, msg_properties = MsgProps },
-               Q4a, State1) ->
-                   case Pred(Msg, MsgProps) of
+           fun(MsgStatus = #msg_status { msg_properties = MsgProps },
+               State1) ->
+                   case Pred(MsgProps) of
                        true ->
-                           {_, State2} = internal_fetch(false, Q4a, 
-                                                      MsgStatus, State1), 
+                           {_, State2} = internal_fetch(false, 
+                                                        MsgStatus, State1),
                            dropwhile(Pred, State2); 
                        false ->
-                           State1
+                           %% message needs to go back into Q4 (or
+                           %% maybe go in for the first time if it was
+                           %% loaded from Q3). Also the msg contents
+                           %% might not be in RAM, so read them in now
+                           {MsgStatus1, State2 = #vqstate { q4 = Q4 }} = 
+                               read_msg(MsgStatus, State1),
+                           State2 #vqstate {q4 = queue:in_r(MsgStatus1, Q4)}
                    end
            end, State) of
-        {empty, State2} -> State2;
-        State2 -> State2
+        {empty, StateR} -> StateR;
+        StateR -> StateR
     end.
 
 fetch(AckRequired, State) ->
     internal_queue_out(
-      fun(MsgStatus, Q4a, State1) -> 
-              internal_fetch(AckRequired, Q4a, MsgStatus, State1) 
+      fun(MsgStatus, State1) -> 
+              %% it's possible that the message wasn't read from disk
+              %% at this point, so read it in.
+              {MsgStatus1, State2} = read_msg(MsgStatus, State1),
+              internal_fetch(AckRequired, MsgStatus1, State2) 
       end, State).
 
 internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
     case queue:out(Q4) of
         {empty, _Q4} ->
-            case fetch_from_q3_to_q4(State) of
-                {empty, State1} = Result  -> a(State1), Result;
-                {loaded, State1} -> internal_queue_out(Fun, State1)
+            case fetch_from_q3(State) of
+                {empty, State1} = Result      -> a(State1), Result;
+                {loaded, {MsgStatus, State1}} -> Fun(MsgStatus, State1)
             end;
-        {{value, Value}, Q4a} ->
-            %% don't automatically overwrite the state with the popped
-            %% queue because some callbacks choose to rollback the pop
-            %% of the message from the queue
-            Fun(Value, Q4a, State)
+        {{value, MsgStatus}, Q4a} ->
+            Fun(MsgStatus, State #vqstate { q4 = Q4a })
     end.
 
-internal_fetch(AckRequired, Q4a,
+read_msg(MsgStatus = #msg_status { msg           = undefined, 
+                                   guid          = Guid, 
+                                   index_on_disk = IndexOnDisk,
+                                   is_persistent = IsPersistent }, 
+         State = #vqstate { ram_msg_count    = RamMsgCount, 
+                            ram_index_count  = RamIndexCount, 
+                            msg_store_clients = MSCState}) ->
+    {{ok, Msg = #basic_message {}}, MSCState1} = 
+        read_from_msg_store(MSCState, IsPersistent, Guid),
+
+    RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
+    true = RamIndexCount1 >= 0, %% ASSERTION
+
+    {MsgStatus #msg_status { msg = Msg }, 
+     State #vqstate { ram_msg_count     = RamMsgCount + 1,
+                      ram_index_count   = RamIndexCount1,
+                      msg_store_clients = MSCState1 }};
+read_msg(MsgStatus, State) ->
+    {MsgStatus, State}.
+
+internal_fetch(AckRequired,
              MsgStatus = #msg_status {
                msg = Msg, guid = Guid, seq_id = SeqId, 
                is_persistent = IsPersistent, is_delivered = IsDelivered,
@@ -601,8 +619,7 @@ internal_fetch(AckRequired, Q4a,
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
     Len1 = Len - 1,
     {{Msg, IsDelivered, AckTag, Len1},
-     a(State #vqstate { q4               = Q4a,
-                        ram_msg_count    = RamMsgCount - 1,
+     a(State #vqstate { ram_msg_count    = RamMsgCount - 1,
                         out_counter      = OutCount + 1,
                         index_state      = IndexState2,
                         len              = Len1,
@@ -1288,40 +1305,31 @@ chunk_size(Current, Permitted)
 chunk_size(Current, Permitted) ->
     lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
 
-fetch_from_q3_to_q4(State = #vqstate {
+fetch_from_q3(State = #vqstate {
                       q1                = Q1,
                       q2                = Q2,
                       delta             = #delta { count = DeltaCount },
                       q3                = Q3,
-                      q4                = Q4,
-                      ram_msg_count     = RamMsgCount,
-                      ram_index_count   = RamIndexCount,
-                      msg_store_clients = MSCState }) ->
+                      q4                = Q4 }) ->
     case bpqueue:out(Q3) of
         {empty, _Q3} ->
             {empty, State};
-        {{value, IndexOnDisk, MsgStatus = #msg_status {
-                                msg = undefined, guid = Guid,
-                                is_persistent = IsPersistent }}, Q3a} ->
-            {{ok, Msg = #basic_message {}}, MSCState1} =
-                read_from_msg_store(MSCState, IsPersistent, Guid),
-            Q4a = queue:in(m(MsgStatus #msg_status { msg = Msg }), Q4),
-            RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
-            true = RamIndexCount1 >= 0, %% ASSERTION
-            State1 = State #vqstate { q3                = Q3a,
-                                      q4                = Q4a,
-                                      ram_msg_count     = RamMsgCount + 1,
-                                      ram_index_count   = RamIndexCount1,
-                                      msg_store_clients = MSCState1 },
+        {{value, _IndexOnDisk, MsgStatus}, Q3a} ->
+
+            State1 = State #vqstate { q3 = Q3a},
+
             State2 =
                 case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
                     {true, true} ->
                         %% q3 is now empty, it wasn't before; delta is
-                        %% still empty. So q2 must be empty, and q1
-                        %% can now be joined onto q4
+                        %% still empty. So q2 must be empty, and we
+                        %% know q4 is empty otherwise we wouldn't be
+                        %% loading from q3. As such, we can just set
+                        %% q4 to Q1.
                         true = bpqueue:is_empty(Q2), %% ASSERTION
+                        true = queue:is_empty(Q4), %% ASSERTION
                         State1 #vqstate { q1 = queue:new(),
-                                          q4 = queue:join(Q4a, Q1) };
+                                          q4 = Q1 };
                     {true, false} ->
                         maybe_deltas_to_betas(State1);
                     {false, _} ->
@@ -1330,7 +1338,7 @@ fetch_from_q3_to_q4(State = #vqstate {
                         %% delta and q3 are maintained
                         State1
                 end,
-            {loaded, State2}
+            {loaded, {MsgStatus, State2}}
     end.
 
 maybe_deltas_to_betas(State = #vqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
