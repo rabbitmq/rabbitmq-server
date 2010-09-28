@@ -120,7 +120,7 @@ find_files_line([]) ->
 find_files_line(["  File " ++ Rest | _T]) ->
     [Files] = string:tokens(Rest, ": "),
     list_to_integer(Files);
-find_files_line([_H|T]) ->
+find_files_line([_H | T]) ->
     find_files_line(T).
 
 get_total_memory() ->

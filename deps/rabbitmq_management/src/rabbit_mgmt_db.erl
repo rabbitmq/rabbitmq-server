@@ -102,7 +102,7 @@ pget(Key, List, Default) ->
     proplists:get_value(Key, List, Default).
 
 pset(Key, Value, List) ->
-    [{Key, Value}|proplists:delete(Key, List)].
+    [{Key, Value} | proplists:delete(Key, List)].
 
 id(Pid) when is_pid(Pid) -> rabbit_mgmt_format:pid(Pid);
 id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
@@ -321,7 +321,7 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
              [rabbit_mgmt_format:ip(pget(peer_address, Stats)),
               pget(peer_port, Stats)]),
     handle_created(
-      connection_stats, [{name, Name}|Stats],
+      connection_stats, [{name, Name} | Stats],
       [{fun rabbit_mgmt_format:ip/1,       [address, peer_address]},
        {fun rabbit_mgmt_format:pid/1,      [pid]},
        {fun rabbit_mgmt_format:protocol/1, [protocol]},
@@ -453,7 +453,7 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
 
 merge_fine_stats(Stats, []) ->
     Stats;
-merge_fine_stats(Stats, [Dict|Dicts]) ->
+merge_fine_stats(Stats, [Dict | Dicts]) ->
     merge_fine_stats([merge_fine_stats0(Props, Dict) || Props <- Stats], Dicts).
 
 merge_fine_stats0(Props, Dict) ->

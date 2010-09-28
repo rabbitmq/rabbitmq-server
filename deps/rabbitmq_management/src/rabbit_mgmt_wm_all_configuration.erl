@@ -256,5 +256,5 @@ map_name(K, Props) ->
 
 add_args_types(Props) ->
     Args = proplists:get_value(arguments, Props),
-    [{arguments, rabbit_mgmt_util:args(Args)}|
+    [{arguments, rabbit_mgmt_util:args(Args)} |
      proplists:delete(arguments, Props)].

@@ -37,7 +37,7 @@ format(Stats, Fs) ->
 
 format_item(Stat, []) ->
     [Stat];
-format_item({Name, Value}, [{Fun, Names}|Fs]) ->
+format_item({Name, Value}, [{Fun, Names} | Fs]) ->
     case lists:member(Name, Names) of
         true  -> case Fun(Value) of
                      List when is_list(List) -> List;
@@ -158,7 +158,7 @@ tokenise(Str) ->
     Count = string:cspan(Str, "_"),
     case length(Str) of
         Count -> [Str];
-        _     -> [string:sub_string(Str, 1, Count)|
+        _     -> [string:sub_string(Str, 1, Count) |
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 

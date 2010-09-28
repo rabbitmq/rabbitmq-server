@@ -70,7 +70,7 @@ stop(_State) ->
 register_contexts() ->
     application:set_env(
       webmachine, dispatch_list,
-      [{[?PREFIX|Path], F, A} ||
+      [{[?PREFIX | Path], F, A} ||
           {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()]),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     rabbit_mochiweb:register_static_context(?UI_PREFIX, ?MODULE, "priv/www",
