@@ -165,8 +165,8 @@ handle_call(unblock, _From, State) ->
         {stop, State1} -> {stop, normal, stopped, State1}
     end;
 
-handle_call(is_blocked, _From, State = #lim{blocked = Blocked}) ->
-    {reply, Blocked, State}.
+handle_call(is_blocked, _From, State) ->
+    {reply, blocked(State), State}.
 
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
@@ -195,8 +195,8 @@ code_change(_, State, _) ->
 %%----------------------------------------------------------------------------
 
 maybe_notify(OldState, NewState) ->
-    case (limit_reached(OldState) orelse internal_is_blocked(OldState)) andalso
-        not (limit_reached(NewState) orelse internal_is_blocked(NewState)) of
+    case (limit_reached(OldState) orelse blocked(OldState)) andalso
+        not (limit_reached(NewState) orelse blocked(NewState)) of
         true  -> NewState1 = notify_queues(NewState),
                  {case NewState1#lim.prefetch_count of
                       0 -> stop;
@@ -208,7 +208,7 @@ maybe_notify(OldState, NewState) ->
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
 
-internal_is_blocked(#lim{blocked = Blocked}) -> Blocked.
+blocked(#lim{blocked = Blocked}) -> Blocked.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of

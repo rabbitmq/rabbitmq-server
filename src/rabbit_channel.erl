@@ -59,7 +59,7 @@
          messages_unacknowledged,
          acks_uncommitted,
          prefetch_count,
-         blocked_channelflow]).
+         client_flow_blocked]).
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -1126,7 +1126,7 @@ i(acks_uncommitted, #ch{uncommitted_ack_q = UAQ}) ->
     queue:len(UAQ);
 i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
-i(blocked_channelflow, #ch{limiter_pid = LimiterPid}) ->
+i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:is_blocked(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
