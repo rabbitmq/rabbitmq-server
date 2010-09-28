@@ -31,32 +31,20 @@
 %%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
 -define(PREFIX, "http://localhost:55672/api").
 
-rates_test() ->
-    Previous = [{foo, 1}, {bar, 100}, {baz, 3}],
-    PreviousTS = {0, 0, 0},
-    New = [{foo, 2}, {bar, 200}, {bash, 100}, {baz, 3}],
-    NewTS = {0, 10, 0},
-    WithRates = rabbit_mgmt_db:rates(New, NewTS, Previous, PreviousTS,
-                                     [foo, bar, bash]),
-    equals(0.1, pget(rate, pget(foo_details, WithRates))),
-    equals(10, pget(rate, pget(bar_details, WithRates))),
-    undefined = pget(bash_details, WithRates),
-    undefined = pget(baz_details, WithRates).
-
-http_overview_test() ->
+overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
     Overview = http_get("/overview"),
     [<<"0.0.0.0:5672">>] = pget(bound_to, Overview).
 
-http_auth_test() ->
+auth_test() ->
     test_auth(?NOT_AUTHORISED, []),
     test_auth(?NOT_AUTHORISED, [auth_header("guest", "gust")]),
     test_auth(?OK, [auth_header("guest", "guest")]).
 
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
-http_vhosts_test() ->
+vhosts_test() ->
     [[{name, <<"/">>}]] = http_get("/vhosts"),
     %% Create a new one
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
@@ -73,7 +61,7 @@ http_vhosts_test() ->
     http_get("/vhosts/myvhost", ?NOT_FOUND),
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
-http_users_test() ->
+users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
@@ -98,7 +86,7 @@ http_users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     ok.
 
-http_permissions_validation_test() ->
+permissions_validation_test() ->
     Good = [{configure, <<".*">>}, {write, <<".*">>},
             {read,      <<".*">>}, {scope, <<"client">>}],
     http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
@@ -115,7 +103,7 @@ http_permissions_validation_test() ->
     http_put("/permissions/%2f/guest", Good, ?NO_CONTENT),
     ok.
 
-http_permissions_list_test() ->
+permissions_list_test() ->
     [[{user,<<"guest">>},
       {vhost,<<"/">>},
       {configure,<<".*">>},
@@ -147,7 +135,7 @@ http_permissions_list_test() ->
     http_delete("/vhosts/myvhost2", ?NO_CONTENT),
     ok.
 
-http_permissions_test() ->
+permissions_test() ->
     http_put("/users/myuser", [{password, <<"myuser">>}, {administrator, true}],
              ?NO_CONTENT),
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
@@ -178,7 +166,7 @@ http_permissions_test() ->
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     ok.
 
-http_connections_test() ->
+connections_test() ->
     {ok, Conn} = amqp_connection:start(network),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     Path = binary_to_list(
@@ -191,7 +179,7 @@ http_connections_test() ->
 test_auth(Code, Headers) ->
     {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).
 
-http_exchanges_test() ->
+exchanges_test() ->
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>}, {auto_delete, false},
             {arguments, <<"">>}],
@@ -233,7 +221,7 @@ http_exchanges_test() ->
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     ok.
 
-http_queues_test() ->
+queues_test() ->
     Good = [{durable, true}, {auto_delete, false}, {arguments, <<"">>}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
@@ -273,7 +261,7 @@ http_queues_test() ->
     http_delete("/queues/%2f/foo", ?NOT_FOUND),
     ok.
 
-http_bindings_test() ->
+bindings_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
              {arguments, <<"">>}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
@@ -310,7 +298,7 @@ http_bindings_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
-http_bindings_post_test() ->
+bindings_post_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
              {arguments, <<"">>}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
@@ -335,7 +323,7 @@ http_bindings_post_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
-http_permissions_administrator_test() ->
+permissions_administrator_test() ->
     http_put("/users/notadmin", [{password, <<"notadmin">>},
                                  {administrator, false}], ?NO_CONTENT),
     Test =
@@ -353,7 +341,7 @@ http_permissions_administrator_test() ->
     http_delete("/users/notadmin", ?NO_CONTENT),
     ok.
 
-http_permissions_vhost_test() ->
+permissions_vhost_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
                 {read,      <<".*">>}, {scope, <<"client">>}],
@@ -413,7 +401,7 @@ get_conn(Username, Password) ->
                  "/channels/127.0.0.1%3A~w%3A1", [LocalPort])),
     {Conn, ConnPath, ChPath}.
 
-http_permissions_connection_channel_test() ->
+permissions_connection_channel_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
                 {read,      <<".*">>}, {scope, <<"client">>}],
     http_put("/users/user", [{password, <<"user">>},
@@ -441,14 +429,14 @@ http_permissions_connection_channel_test() ->
     amqp_connection:close(Conn2),
     ok.
 
-http_unicode_test() ->
+unicode_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
     http_get("/queues/%2f/♫♪♫♪", ?OK),
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
-http_all_configuration_test() ->
+all_configuration_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
              {arguments, <<"">>}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, <<"">>}],
@@ -493,7 +481,7 @@ http_all_configuration_test() ->
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
     ok.
 
-http_all_configuration_remove_things_test() ->
+all_configuration_remove_things_test() ->
     {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-exclusive">>,
@@ -507,7 +495,7 @@ http_all_configuration_remove_things_test() ->
     amqp_connection:close(Conn),
     ok.
 
-http_aliveness_test() ->
+aliveness_test() ->
     [{status, <<"ok">>}] = http_get("/aliveness-test/%2f", ?OK),
     http_get("/aliveness-test/foo", ?NOT_FOUND).
 
