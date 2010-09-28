@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_test_unit).
+-module(rabbit_mgmt_test_http).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
