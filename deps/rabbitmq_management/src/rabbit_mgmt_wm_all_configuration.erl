@@ -64,8 +64,7 @@ to_json(ReqData, Context) ->
       [{rabbit_version, Vsn}] ++
       filter(
         [{users,       rabbit_mgmt_wm_users:users()},
-         {vhosts,      [[{name, N}] ||
-                           N <- rabbit_access_control:list_vhosts()]},
+         {vhosts,      rabbit_mgmt_wm_vhosts:vhosts()},
          {permissions, rabbit_mgmt_wm_permissions:perms()},
          {queues,      Queues},
          {exchanges,   [rabbit_mgmt_format:exchange(X) ||
