@@ -31,13 +31,9 @@
 
 %%--------------------------------------------------------------------
 
-%% TODO rewrite using lists:concat([<filtering-list-comprehension>])
-format([], _Fs) ->
-    [];
-format([{_Name, unknown}|Stats], Fs) ->
-    format(Stats, Fs);
-format([Stat|Stats], Fs) ->
-    format_item(Stat, Fs) ++ format(Stats, Fs).
+format(Stats, Fs) ->
+    lists:concat([format_item(Stat, Fs) || {_Name, Value} = Stat <- Stats,
+                                           Value =/= unknown]).
 
 format_item(Stat, []) ->
     [Stat];
