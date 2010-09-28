@@ -46,6 +46,7 @@ to_json(ReqData, Context) ->
     Params = #amqp_params{username = Context#context.username,
                           password = Context#context.password,
                           virtual_host = rabbit_mgmt_util:vhost(ReqData)},
+    %% TODO use network connection (need to check what we're bound to)
     {ok, Conn} = amqp_connection:start(direct, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch, #'queue.declare'{ queue = ?QUEUE }),
