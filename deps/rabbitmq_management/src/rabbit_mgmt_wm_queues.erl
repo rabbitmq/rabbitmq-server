@@ -52,4 +52,6 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 queues(ReqData) ->
-    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).
+    [rabbit_mgmt_format:queue(Q) ||
+        Q <- rabbit_mgmt_util:all_or_one_vhost(ReqData,
+                                               fun rabbit_amqqueue:list/1)].

@@ -77,7 +77,9 @@ test_queues(_Conn, Chan) ->
     basic_get(Chan, Q1, false, false),
 
     [fun() ->
-             Qs = rabbit_mgmt_db:get_queues(rabbit_amqqueue:list(<<"/">>)),
+             Qs = rabbit_mgmt_db:get_queues(
+                    [rabbit_mgmt_format:queue(Q) ||
+                        Q <- rabbit_amqqueue:list(<<"/">>)]),
              Q1Info = find_by_name(Q1, Qs),
              Q2Info = find_by_name(Q2, Qs),
 

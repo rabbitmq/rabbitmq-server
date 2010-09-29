@@ -93,7 +93,8 @@ is_authorized(ReqData, {Mode, Context}) ->
 %%--------------------------------------------------------------------
 
 bindings(ReqData) ->
-    list_bindings(all, ReqData).
+    [rabbit_mgmt_format:binding(B) ||
+        B <- list_bindings(all, ReqData)].
 
 %%--------------------------------------------------------------------
 

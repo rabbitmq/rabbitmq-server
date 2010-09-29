@@ -241,7 +241,7 @@ init([]) ->
 
 handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    Qs1 = merge_created_stats([rabbit_mgmt_format:queue(Q) || Q <- Qs0], Table),
+    Qs1 = merge_created_stats(Qs0, Table),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||

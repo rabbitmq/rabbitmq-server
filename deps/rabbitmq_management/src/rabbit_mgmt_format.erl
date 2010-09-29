@@ -93,23 +93,10 @@ permissions({User, VHost, Conf, Write, Read, Scope}) ->
      {read,      Read},
      {scope,     Scope}].
 
-exchange(X) ->
-    format(X, [{fun resource/1, [name]},
-               {fun table/1, [arguments]}]).
-
 user(User) ->
     [{name,          User#user.username},
      {password,      User#user.password},
      {administrator, User#user.is_admin}].
-
-binding(#binding{exchange_name = X, key = Key, queue_name = Q, args = Args}) ->
-    format([{exchange,       X},
-            {queue,          Q#resource.name},
-            {routing_key,    Key},
-            {arguments,      Args},
-            {properties_key, pack_binding_props(Key, Args)}],
-           [{fun (Res) -> resource(exchange, Res) end, [exchange]},
-            {fun table/1,                              [arguments]}]).
 
 pack_binding_props(Key, Args) ->
     Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
@@ -177,6 +164,13 @@ application({Application, Description, Version}) ->
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
 
+exchange(X) ->
+    format(X, [{fun resource/1, [name]},
+               {fun table/1,    [arguments]}]).
+
+%% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
+%% the latter wakes up each queue. Therefore we have a record rather than a
+%% proplist to deal with.
 queue(#amqqueue{name            = Name,
                 durable         = Durable,
                 auto_delete     = AutoDelete,
@@ -193,3 +187,19 @@ queue(#amqqueue{name            = Name,
       [{fun pid/1,      [pid, owner_pid]},
        {fun resource/1, [name]},
        {fun table/1,    [arguments]}]).
+
+%% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
+%% there are no per-exchange / queue / etc variants for the latter. Therefore
+%% we have a record rather than a proplist to deal with.
+binding(#binding{exchange_name = X,
+                 key           = Key,
+                 queue_name    = Q,
+                 args          = Args}) ->
+    format(
+      [{exchange,       X},
+       {queue,          Q#resource.name},
+       {routing_key,    Key},
+       {arguments,      Args},
+       {properties_key, pack_binding_props(Key, Args)}],
+      [{fun (Res) -> resource(exchange, Res) end, [exchange]},
+       {fun table/1,                              [arguments]}]).

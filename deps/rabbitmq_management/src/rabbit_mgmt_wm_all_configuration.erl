@@ -50,11 +50,14 @@ create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Queues = [rabbit_mgmt_format:queue(Q) ||
-                 Q <- rabbit_mgmt_wm_queues:queues(ReqData), export_queue(Q)],
-    Exclusives = [Q#amqqueue.name ||
-                     Q <- rabbit_mgmt_wm_queues:queues(ReqData),
-                     not export_queue(Q)],
+    Xs = [X || X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
+               export_exchange(X)],
+    Qs = [Q || Q <- rabbit_mgmt_wm_queues:queues(ReqData),
+               export_queue(Q)],
+    XNames = [{pget(name, X), pget(vhost, X)} || X <- Xs],
+    QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
+    Bs = [B || B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
+               export_binding(B, XNames, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
       [{rabbit_version, Vsn}] ++
@@ -62,13 +65,9 @@ to_json(ReqData, Context) ->
         [{users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      rabbit_mgmt_wm_vhosts:vhosts()},
          {permissions, rabbit_mgmt_wm_permissions:permissions()},
-         {queues,      Queues},
-         {exchanges,   [rabbit_mgmt_format:exchange(X) ||
-                           X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
-                           export_exchange(X)]},
-         {bindings,    [rabbit_mgmt_format:binding(B) ||
-                           B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
-                           export_binding(B, Exclusives)]}]),
+         {queues,      Qs},
+         {exchanges,   Xs},
+         {bindings,    Bs}]),
       case wrq:get_qs_value("mode", ReqData) of
           "download" -> wrq:set_resp_header(
                           "Content-disposition",
@@ -130,19 +129,15 @@ get_part(Name, Parts) ->
         [F] -> F
     end.
 
-export_queue(#amqqueue{ name = QName, exclusive_owner = none }) ->
-    true;
-export_queue(_) ->
-    false.
+export_queue(Queue) ->
+    pget(owner_pid, Queue) == none.
 
-export_binding(#binding { exchange_name = #resource{ name = XName },
-                          queue_name = QName }, ExclusiveQueues) ->
-    not lists:member(QName, ExclusiveQueues) andalso
-        export_name(XName).
+export_binding(Binding, Xs, Qs) ->
+    lists:member({pget(exchange, Binding), pget(vhost, Binding)}, Xs) andalso
+        lists:member({pget(queue, Binding), pget(vhost, Binding)}, Qs).
 
 export_exchange(Exchange) ->
-    #resource{ name = XName } = proplists:get_value(name, Exchange),
-    export_name(XName).
+    export_name(pget(name, Exchange)).
 
 export_name(<<>>)                 -> false;
 export_name(<<"amq.", _/binary>>) -> false;

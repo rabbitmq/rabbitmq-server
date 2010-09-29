@@ -90,7 +90,7 @@ queue(ReqData) ->
         VHost     -> Name = rabbit_misc:r(VHost, queue,
                                           rabbit_mgmt_util:id(queue, ReqData)),
                      case rabbit_amqqueue:lookup(Name) of
-                         {ok, X}            -> X;
+                         {ok, Q}            -> rabbit_mgmt_format:queue(Q);
                          {error, not_found} -> not_found
                      end
     end.
