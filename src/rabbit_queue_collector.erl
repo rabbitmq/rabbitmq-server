@@ -77,13 +77,14 @@ handle_call({register, Q}, _From,
      State#state{queues = dict:store(MonitorRef, Q, Queues)}};
 
 handle_call(delete_all, _From, State = #state{queues = Queues}) ->
-    [rabbit_misc:with_exit_handler(
-       fun () -> ok end,
-       fun () ->
-               erlang:demonitor(MonitorRef),
-               rabbit_amqqueue:delete_exclusive(Q)
-       end)
-     || {MonitorRef, Q} <- dict:to_list(Queues)],
+    Qs = dict:to_list(Queues),
+    [erlang:demonitor(MonitorRef) || {MonitorRef, _} <- Qs],
+    scatter(fun({_, Q}) ->
+                    rabbit_misc:with_exit_handler(
+                      fun () -> ok end,
+                      fun () -> rabbit_amqqueue:delete_exclusive(Q) end)
+            end, delete_done, Qs),
+    gather(delete_done, dict:size(Queues)),
     {reply, ok, State}.
 
 handle_cast(Msg, State) ->
@@ -98,3 +99,19 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%--------------------------------------------------------------------------
+
+%% scatter(Fun, Tag, Xs): run Fun(X) for each X in Xs concurrently;
+%% when a job finishes, send back Tag
+scatter(Fun, Tag, Xs) ->
+    Self = self(),
+    [spawn(fun() -> Fun(X),
+                    Self ! Tag
+           end) || X <- Xs].
+
+%% gather(MsgAtom, N): gather N messages like MsgAtom
+gather(_MsgAtom, 0) -> ok;
+gather(MsgAtom, N)  -> receive
+                           MsgAtom -> gather(MsgAtom, N-1)
+                       end.
