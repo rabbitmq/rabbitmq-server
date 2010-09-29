@@ -404,7 +404,7 @@ confirm_messages_internal(Guids, State) when is_list(Guids) ->
                         confirm_message_internal(Guid, State0)
                 end, State, Guids).
 
-confirm_message_internal(Guid, State = #q { guid_to_channel = GTC }) ->
+confirm_message_internal(Guid, State = #q{guid_to_channel = GTC}) ->
     case dict:find(Guid, GTC) of
         {ok, {_    , undefined}} -> ok;
         {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
@@ -412,11 +412,11 @@ confirm_message_internal(Guid, State = #q { guid_to_channel = GTC }) ->
     end,
     State #q { guid_to_channel     = dict:erase(Guid, GTC) }.
 
-maybe_record_confirm_message(undefined, _, _, State) ->
+maybe_record_confirm_message(#delivery{msg_seq_no = undefined }, State) ->
     State;
-maybe_record_confirm_message(MsgSeqNo,
-                             #basic_message { guid = Guid },
-                             ChPid, State) ->
+maybe_record_confirm_message(#delivery{sender     = ChPid,
+                                       message    = #basic_message{guid = Guid},
+                                       msg_seq_no = MsgSeqNo}, State) ->
     State #q { guid_to_channel =
                    dict:store(Guid, {ChPid, MsgSeqNo}, State#q.guid_to_channel) }.
 
@@ -427,7 +427,10 @@ run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
     State1.
 
-attempt_delivery(none, _ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}) ->
+attempt_delivery(#delivery{txn        = none,
+                           message    = Message,
+                           msg_seq_no = MsgSeqNo},
+                 State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
@@ -438,13 +441,20 @@ attempt_delivery(none, _ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}
                  State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, _MSN, State = #q{backing_queue = BQ,
-                                                       backing_queue_state = BQS}) ->
+attempt_delivery(#delivery{txn     = Txn,
+                           sender  = ChPid,
+                           message = Message},
+                 State = #q{backing_queue = BQ,
+                            backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
     {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
-deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}) ->
-    case attempt_delivery(Txn, ChPid, Message, MsgSeqNo, State) of
+deliver_or_enqueue(Delivery = #delivery{txn        = Txn,
+                                        sender     = ChPid,
+                                        message    = Message,
+                                        msg_seq_no = MsgSeqNo},
+                   State = #q{backing_queue = BQ}) ->
+    case attempt_delivery(Delivery, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
@@ -690,7 +700,7 @@ handle_call(consumers, _From,
                     [{ChPid, ConsumerTag, AckRequired} | Acc]
             end, [], queue:join(ActiveConsumers, BlockedConsumers)), State);
 
-handle_call({deliver_immediately, Txn, Message, MsgSeqNo, ChPid}, _From, State) ->
+handle_call({deliver_immediately, Delivery}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
     %% FIXME: Is this correct semantics?
@@ -704,14 +714,14 @@ handle_call({deliver_immediately, Txn, Message, MsgSeqNo, ChPid}, _From, State) 
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
-    {Delivered, State2} = attempt_delivery(Txn, ChPid, Message, MsgSeqNo, State1),
+    State1 = maybe_record_confirm_message(Delivery, State),
+    {Delivered, State2} = attempt_delivery(Delivery, State1),
     reply(Delivered, State2);
 
-handle_call({deliver, Txn, Message, MsgSeqNo, ChPid}, _From, State) ->
+handle_call({deliver, Delivery}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
-    State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
-    {Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State1),
+    State1 = maybe_record_confirm_message(Delivery, State),
+    {Delivered, State2} = deliver_or_enqueue(Delivery, State1),
     reply(Delivered, State2);
 
 handle_call({commit, Txn, ChPid}, From, State) ->
@@ -868,10 +878,10 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
 
-handle_cast({deliver, Txn, Message, MsgSeqNo, ChPid}, State) ->
+handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
-    {_Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State1),
+    State1 = maybe_record_confirm_message(Delivery, State),
+    {_Delivered, State2} = deliver_or_enqueue(Delivery, State1),
     noreply(State2);
 
 handle_cast({ack, Txn, AckTags, ChPid},

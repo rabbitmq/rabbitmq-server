@@ -1164,7 +1164,8 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
-    State2 = msgs_confirmed(gb_sets:from_list(seqids_to_guids(AckTags, State1)),
+    %% the AckTags were removed from State1, so use State in seqids_to_guids
+    State2 = msgs_confirmed(gb_sets:from_list(seqids_to_guids(AckTags, State)),
                             State1),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
                            error       -> 0;

@@ -370,19 +370,13 @@ delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
 
 purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
 
-deliver(QPid, #delivery{immediate = true,
-                        txn = Txn, sender = ChPid, message = Message,
-                        msg_seq_no = MsgSeqNo}) ->
-    gen_server2:call(QPid, {deliver_immediately, Txn, Message, MsgSeqNo, ChPid},
-                     infinity);
-deliver(QPid, #delivery{mandatory = true,
-                        txn = Txn, sender = ChPid, message = Message,
-                        msg_seq_no = MsgSeqNo}) ->
-    gen_server2:call(QPid, {deliver, Txn, Message, MsgSeqNo, ChPid}, infinity),
+deliver(QPid, Delivery = #delivery{immediate = true}) ->
+    gen_server2:call(QPid, {deliver_immediately, Delivery}, infinity);
+deliver(QPid, Delivery = #delivery{mandatory = true}) ->
+    gen_server2:call(QPid, {deliver, Delivery}, infinity),
     true;
-deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message,
-                        msg_seq_no = MsgSeqNo}) ->
-    gen_server2:cast(QPid, {deliver, Txn, Message, MsgSeqNo, ChPid}),
+deliver(QPid, Delivery) ->
+    gen_server2:cast(QPid, {deliver, Delivery}),
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
