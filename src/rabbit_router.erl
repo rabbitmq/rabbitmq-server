@@ -58,8 +58,7 @@
 %%----------------------------------------------------------------------------
 
 deliver(QPids, Delivery = #delivery{mandatory = false,
-                                    immediate = false,
-                                    msg_seq_no = MsgSeqNo}) ->
+                                    immediate = false}) ->
     %% optimisation: when Mandatory = false and Immediate = false,
     %% rabbit_amqqueue:deliver will deliver the message to the queue
     %% process asynchronously, and return true, which means all the
@@ -69,10 +68,9 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% case below.
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
-    maybe_inform_channel(MsgSeqNo, QPids),
     {routed, QPids};
 
-deliver(QPids, Delivery = #delivery{msg_seq_no = MsgSeqNo}) ->
+deliver(QPids, Delivery) ->
     {Success, _} =
         delegate:invoke(QPids,
                         fun (Pid) ->
@@ -82,11 +80,8 @@ deliver(QPids, Delivery = #delivery{msg_seq_no = MsgSeqNo}) ->
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     case check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
                         {Routed, Handled}) of
-        {routed, Qs} ->
-            maybe_inform_channel(MsgSeqNo, Qs),
-            {routed, Qs};
-        O ->
-            O
+        {routed, Qs} -> {routed, Qs};
+        O            -> O
     end.
 
 %% TODO: Maybe this should be handled by a cursor instead.
@@ -125,8 +120,3 @@ fold_deliveries({_,  false},{_, Handled}) -> {true, Handled}.
 check_delivery(true, _   , {false, []}) -> {unroutable, []};
 check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
-
-maybe_inform_channel(undefined, _) ->
-    ok;
-maybe_inform_channel(MsgSeqNo, QPids) ->
-    gen_server2:cast(self(), {msg_sent_to_queues, MsgSeqNo, QPids}).

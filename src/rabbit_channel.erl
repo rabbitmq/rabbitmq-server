@@ -287,13 +287,7 @@ handle_cast(flush_multiple_acks,
                        confirm_tref  = undefined}};
 
 handle_cast({confirm, MsgSeqNo}, State) ->
-    {noreply, send_or_enqueue_ack(MsgSeqNo, State)};
-
-handle_cast({msg_sent_to_queues, MsgSeqNo, QPids}, State) ->
-    {noreply, lists:foldl(fun (QPid, State0) ->
-                                  msg_sent_to_queues(MsgSeqNo, QPid, State0)
-                          end, State, QPids)}.
-
+    {noreply, send_or_enqueue_ack(MsgSeqNo, State)}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{qpid_to_msgs = QTM}) ->
@@ -484,7 +478,9 @@ send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
                           qpid_to_msgs = QTM1})
       end).
 
-msg_sent_to_queues(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
+msg_sent_to_queue(undefined, _QPid, State) ->
+    State;
+msg_sent_to_queue(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
     case dict:find(QPid, QTM) of
         {ok, Msgs} ->
             State#ch{
@@ -527,9 +523,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                routing_key = RoutingKey,
                                mandatory   = Mandatory,
                                immediate   = Immediate},
-              Content, State = #ch{virtual_host   = VHostPath,
-                                   transaction_id = TxnKey,
-                                   writer_pid     = WriterPid}) ->
+              Content, State = #ch{virtual_host    = VHostPath,
+                                   transaction_id  = TxnKey,
+                                   writer_pid      = WriterPid,
+                                   confirm_enabled = ConfirmEnabled}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -538,7 +535,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1}
-        = case State#ch.confirm_enabled of
+        = case ConfirmEnabled of
               false ->
                   {undefined, State};
               true  ->
@@ -566,7 +563,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                  routed        ->
                      case {IsPersistent, DeliveredQPids} of
                          {_, []}    -> send_or_enqueue_ack(MsgSeqNo, State1);
-                         {true, _}  -> State1;
+                         {true, _}  ->
+                             lists:foldl(fun (QPid, State0) ->
+                                                 msg_sent_to_queue(MsgSeqNo, QPid, State0)
+                                         end, State1, DeliveredQPids);
                          {false, _} -> send_or_enqueue_ack(MsgSeqNo, State1)
                      end;
                  %% Confirm after basic.returns
