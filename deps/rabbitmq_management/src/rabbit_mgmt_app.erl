@@ -40,7 +40,6 @@
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 -define(SETUP_WM_TRACE, false).
--define(SETUP_WM_LOGGING, false).
 
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
@@ -52,12 +51,9 @@
                     {enables,     queue_sup_queue_recovery}]}).
 
 start(_Type, _StartArgs) ->
-    register_contexts(),
     log_startup(),
-    case ?SETUP_WM_LOGGING of
-        true -> setup_wm_logging(".");
-        _    -> ok
-    end,
+    setup_wm_logging(),
+    register_contexts(),
     case ?SETUP_WM_TRACE of
         true -> setup_wm_trace_app();
         _    -> ok
@@ -78,12 +74,16 @@ register_contexts() ->
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
                                              "HTTP API").
-
-setup_wm_logging(LogDir) ->
-    application:set_env(webmachine, webmachine_logger_module,
-                        webmachine_logger),
-    webmachine_sup:start_link(), %% Seems odd.
-    webmachine_sup:start_logger(LogDir).
+setup_wm_logging() ->
+    {ok, LogDir} = application:get_env(rabbit_management, http_log_dir),
+    case LogDir of
+        none ->
+            ok;
+        _ ->
+            application:set_env(webmachine, webmachine_logger_module,
+                                webmachine_logger),
+            webmachine_sup:start_logger(LogDir)
+    end.
 
 %% This doesn't *entirely* seem to work. It fails to load a non-existent
 %% image which seems to partly break it, but some stuff is usable.
