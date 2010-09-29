@@ -1003,8 +1003,6 @@ handle_method(#'confirm.select'{}, _, #ch{transaction_id = TxId})
 handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
               _,
               State = #ch{confirm_enabled = false}) ->
-    rabbit_log:info("got confirm.select{multiple = ~p, nowait = ~p}~n",
-                    [Multiple, NoWait]),
     State1 = State#ch{confirm_enabled = true,
                       confirm_multiple = Multiple},
     case NoWait of

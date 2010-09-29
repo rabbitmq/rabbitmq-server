@@ -848,12 +848,9 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
                        lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
                        State1 #msstate { on_sync = [] }
              end,
-    dict:map(fun(CRef, Guids) ->
-                     case dict:find(CRef, CODC) of
-                         {ok, Fun} -> Fun(Guids);
-                         error     -> ok        %% shouldn't happen
-                     end
-             end, CTG),
+    dict:map(fun(CRef, Guids) -> Fun = dict:fetch(CRef, CODC),
+                                 Fun(Guids) end,
+             CTG),
     State2 #msstate { cref_to_guids = dict:new() }.
 
 

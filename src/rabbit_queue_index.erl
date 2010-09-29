@@ -256,17 +256,17 @@ delete_and_terminate(State) ->
     ok = rabbit_misc:recursive_delete([Dir]),
     State1.
 
-publish(Guid, SeqId, IsPersistent, State) when is_binary(Guid) ->
+publish(Guid, SeqId, IsPersistent,
+        State = #qistate { unsynced_guids = UnsyncedGuids }) when is_binary(Guid) ->
     ?GUID_BYTES = size(Guid),
-    {JournalHdl, State1} = get_journal_handle(State),
+    {JournalHdl, State1} =
+        get_journal_handle(State #qistate { unsynced_guids = [Guid | UnsyncedGuids] }),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Guid]),
-    State2 = State1 #qistate { unsynced_guids =
-                                   [Guid | State1#qistate.unsynced_guids] },
-    maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State2)).
+    maybe_flush_journal(add_to_journal(SeqId, {Guid, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -278,8 +278,7 @@ sync([], State) ->
     State;
 sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
     State;
-sync(_SeqIds, State = #qistate { journal_handle = JournalHdl,
-                                 on_sync = OnSyncFun }) ->
+sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
     %% The SeqIds here contains the SeqId of every publish and ack in
     %% the transaction. Ideally we should go through these seqids and
     %% only sync the journal if the pubs or acks appear in the
@@ -289,8 +288,7 @@ sync(_SeqIds, State = #qistate { journal_handle = JournalHdl,
     %% seqids not being in the journal, provided the transaction isn't
     %% emptied (handled above anyway).
     ok = file_handle_cache:sync(JournalHdl),
-    OnSyncFun(State#qistate.unsynced_guids),
-    State#qistate { unsynced_guids = [] }.
+    notify_sync(State).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
@@ -570,9 +568,7 @@ maybe_flush_journal(State = #qistate { dirty_count = DCount,
 maybe_flush_journal(State) ->
     State.
 
-flush_journal(State = #qistate { segments = Segments,
-                                 on_sync = OnSyncFun,
-                                 unsynced_guids = UGs }) ->
+flush_journal(State = #qistate { segments = Segments }) ->
     Segments1 =
         segment_fold(
           fun (#segment { unacked = 0, path = Path }, SegmentsN) ->
@@ -587,8 +583,7 @@ flush_journal(State = #qistate { segments = Segments,
     {JournalHdl, State1} =
         get_journal_handle(State #qistate { segments = Segments1 }),
     ok = file_handle_cache:clear(JournalHdl),
-    OnSyncFun(UGs),
-    State1 #qistate { dirty_count = 0, unsynced_guids = [] }.
+    notify_sync(State1 #qistate { dirty_count = 0 }).
 
 append_journal_to_segment(#segment { journal_entries = JEntries,
                                      path = Path } = Segment) ->
@@ -947,3 +942,12 @@ journal_minus_segment1({no_pub, del, ack},         {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0};
 journal_minus_segment1({no_pub, del, ack},         {?PUB, del, ack}) ->
     {undefined, -1}.
+
+%%----------------------------------------------------------------------------
+%% misc
+%%----------------------------------------------------------------------------
+
+notify_sync(State = #qistate { unsynced_guids = UG,
+                               on_sync        = OnSyncFun }) ->
+    OnSyncFun(UG),
+    State #qistate { unsynced_guids = [] }.
