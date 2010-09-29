@@ -282,7 +282,7 @@ handle_cast(flush_multiple_acks,
             State = #ch{writer_pid      = WriterPid,
                         held_confirms   = As,
                         need_confirming = NA}) ->
-    handle_multiple_flush(WriterPid, As, NA),
+    flush_multiple(WriterPid, As, NA),
     {noreply, State#ch{held_confirms = gb_sets:new(),
                        confirm_tref  = undefined}};
 
@@ -314,7 +314,7 @@ handle_pre_hibernate(State = #ch{writer_pid      = WriterPid,
                                  stats_timer     = StatsTimer,
                                  need_confirming = NA}) ->
     ok = clear_permission_cache(),
-    handle_multiple_flush(WriterPid, As, NA),
+    flush_multiple(WriterPid, As, NA),
     rabbit_event:if_enabled(StatsTimer, fun() ->
                                                internal_emit_stats(State)
                                         end),
@@ -1366,27 +1366,23 @@ stop_ack_timer(State = #ch{confirm_tref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#ch{confirm_tref = undefined}.
 
-handle_multiple_flush(WriterPid, As, NA) ->
+flush_multiple(WriterPid, As, NA) ->
     case gb_sets:is_empty(As) of
         true -> ok;
-        false -> flush_multiple(As, WriterPid, case gb_sets:is_empty(NA) of
-                                                   false -> gb_sets:smallest(NA);
-                                                   true  -> gb_sets:largest(As)+1
-                                               end)
-    end.
+        false -> SmallestNotAcked = case gb_sets:is_empty(NA) of
+                                        false -> gb_sets:smallest(NA);
+                                        true  -> gb_sets:largest(As)+1
+                                    end,
+                 [First | Rest] = gb_sets:to_list(As),
+                 Remaining =
+                     case Rest of
+                         [] -> [First];
+                         _  -> flush_multiple(First, Rest, WriterPid, SmallestNotAcked)
+                     end,
+                 [rabbit_writer:send_command(WriterPid, #'basic.ack'{delivery_tag = A})
+                  || A <- Remaining]
+end.
 
-
-flush_multiple(Acks, WriterPid, SmallestNotAcked) ->
-    [First | Rest] = gb_sets:to_list(Acks),
-    Remaining = case Rest of
-                    [] -> [First];
-                    _  -> flush_multiple(First, Rest, WriterPid, SmallestNotAcked)
-                end,
-    lists:foreach(fun(A) ->
-                          ok = rabbit_writer:send_command(
-                                 WriterPid,
-                                 #'basic.ack'{delivery_tag = A})
-                  end, Remaining).
 
 flush_multiple(Prev, [Cur | Rest], WriterPid, SNA) ->
     ExpNext = Prev+1,
