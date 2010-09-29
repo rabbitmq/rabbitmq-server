@@ -1,5 +1,7 @@
 <h1>User: <b><%= user.name %></b></h1>
 
+<p>Administrator: <%= fmt_boolean(user.administrator) %></p>
+
 <%= format('permissions', {'mode': 'user', 'permissions': permissions, 'vhosts': vhosts, 'parent': user}) %>
 
 <div class="section-hidden">

@@ -147,7 +147,7 @@ function set_timer_interval(interval) {
     timer_interval = interval;
     clearInterval(timer);
     if (timer_interval != null) {
-        timer = setInterval('update()', timer_interval);
+        timer = setInterval('partial_update()', timer_interval);
     }
 }
 
@@ -155,10 +155,10 @@ function render(reqs, template, highlight) {
     current_template = template;
     current_reqs = reqs;
     current_highlight = highlight;
-    render0();
+    update();
 }
 
-function render0() {
+function update() {
     clearInterval(timer);
     with_update(current_reqs, [], function(html) {
             replace_content('main', html);
@@ -167,7 +167,7 @@ function render0() {
         });
 }
 
-function update() {
+function partial_update() {
     if ($('.updatable').length > 0) {
         with_update(current_reqs, [], function(html) {
             replace_content('scratch', html);
