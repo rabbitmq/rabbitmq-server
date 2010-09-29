@@ -35,7 +35,8 @@
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
          sync/3, client_init/2, client_terminate/2,
-         client_delete_and_terminate/3, successfully_recovered_state/1]).
+         client_delete_and_terminate/3, successfully_recovered_state/1,
+         register_sync_callback/3]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
@@ -82,7 +83,9 @@
           cur_file_cache_ets,     %% tid of current file cache table
           client_refs,            %% set of references of all registered clients
           successfully_recovered, %% boolean: did we recover state?
-          file_size_limit         %% how big are our files allowed to get?
+          file_size_limit,        %% how big are our files allowed to get?
+          client_ondisk_callback, %% client ref to callback function mapping
+          cref_to_guids           %% client ref to synced messages mapping
          }).
 
 -record(client_msstate,
@@ -94,7 +97,8 @@
           file_handles_ets,
           file_summary_ets,
           dedup_cache_ets,
-          cur_file_cache_ets
+          cur_file_cache_ets,
+          client_ref
          }).
 
 -record(file_summary,
@@ -115,7 +119,8 @@
                       file_handles_ets   :: ets:tid(),
                       file_summary_ets   :: ets:tid(),
                       dedup_cache_ets    :: ets:tid(),
-                      cur_file_cache_ets :: ets:tid() }).
+                      cur_file_cache_ets :: ets:tid(),
+                      client_ref         :: rabbit_guid:guid()}).
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
          A}).
@@ -123,8 +128,9 @@
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
          startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
--spec(write/4 :: (server(), rabbit_guid:guid(), msg(), client_msstate()) ->
-                      rabbit_types:ok(client_msstate())).
+-spec(write/4 :: (server(), rabbit_guid:guid(),
+                  msg(), client_msstate())
+                 -> rabbit_types:ok(client_msstate())).
 -spec(read/3 :: (server(), rabbit_guid:guid(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (server(), rabbit_guid:guid()) -> boolean()).
@@ -134,10 +140,10 @@
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(client_init/2 :: (server(), binary()) -> client_msstate()).
+-spec(client_init/2 :: (server(), rabbit_guid:guid()) -> client_msstate()).
 -spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
 -spec(client_delete_and_terminate/3 ::
-        (client_msstate(), server(), binary()) -> 'ok').
+        (client_msstate(), server(), rabbit_guid:guid()) -> 'ok').
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
@@ -309,9 +315,10 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
                            [{timeout, infinity}]).
 
 write(Server, Guid, Msg,
-      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
+                                 client_ref         = CRef }) ->
     ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {gen_server2:cast(Server, {write, Guid}), CState}.
+    {gen_server2:cast(Server, {write, CRef, Guid}), CState}.
 
 read(Server, Guid,
      CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
@@ -365,11 +372,12 @@ client_init(Server, Ref) ->
                       file_handles_ets   = FileHandlesEts,
                       file_summary_ets   = FileSummaryEts,
                       dedup_cache_ets    = DedupCacheEts,
-                      cur_file_cache_ets = CurFileCacheEts }.
+                      cur_file_cache_ets = CurFileCacheEts,
+                      client_ref         = Ref}.
 
 client_terminate(CState, Server) ->
     close_all_handles(CState),
-    ok = gen_server2:call(Server, client_terminate, infinity).
+    ok = gen_server2:call(Server, {client_terminate, CState}, infinity).
 
 client_delete_and_terminate(CState, Server, Ref) ->
     close_all_handles(CState),
@@ -377,6 +385,9 @@ client_delete_and_terminate(CState, Server, Ref) ->
 
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
+
+register_sync_callback(Server, ClientRef, Fun) ->
+    gen_server2:call(Server, {register_sync_callback, ClientRef, Fun}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -553,7 +564,9 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        cur_file_cache_ets     = CurFileCacheEts,
                        client_refs            = ClientRefs1,
                        successfully_recovered = CleanShutdown,
-                       file_size_limit        = FileSizeLimit
+                       file_size_limit        = FileSizeLimit,
+                       client_ondisk_callback = dict:new(),
+                       cref_to_guids          = dict:new()
                       },
 
     %% If we didn't recover the msg location index then we need to
@@ -616,16 +629,28 @@ handle_call({new_client_state, CRef}, _From,
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call(client_terminate, _From, State) ->
-    reply(ok, State).
+handle_call({register_sync_callback, ClientRef, Fun}, _From,
+            State = #msstate { client_ondisk_callback = CODC }) ->
+    reply(ok, State #msstate { client_ondisk_callback =
+                                   dict:store(ClientRef, Fun, CODC) });
 
-handle_cast({write, Guid},
-            State = #msstate { current_file_handle = CurHdl,
-                               current_file        = CurFile,
-                               sum_valid_data      = SumValid,
-                               sum_file_size       = SumFileSize,
-                               file_summary_ets    = FileSummaryEts,
-                               cur_file_cache_ets  = CurFileCacheEts }) ->
+handle_call({client_terminate, #client_msstate { client_ref = CRef }},
+            _From,
+            State = #msstate { client_ondisk_callback = CODC,
+                               cref_to_guids          = CTG }) ->
+    reply(ok, State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
+                               cref_to_guids          = dict:erase(CRef, CTG) }).
+
+handle_cast({write, CRef, Guid},
+            State = #msstate { current_file_handle    = CurHdl,
+                               current_file           = CurFile,
+                               sum_valid_data         = SumValid,
+                               sum_file_size          = SumFileSize,
+                               file_summary_ets       = FileSummaryEts,
+                               cur_file_cache_ets     = CurFileCacheEts,
+                               client_ondisk_callback = CODC,
+                               cref_to_guids          = CTG}) ->
+
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case index_lookup(Guid, State) of
@@ -652,7 +677,12 @@ handle_cast({write, Guid},
               maybe_roll_to_new_file(
                 NextOffset, State #msstate {
                               sum_valid_data = SumValid + TotalSize,
-                              sum_file_size  = SumFileSize + TotalSize }));
+                              sum_file_size  = SumFileSize + TotalSize,
+                              cref_to_guids =
+                                  case dict:find(CRef, CODC) of
+                                      {ok, _} -> rabbit_misc:dict_cons(CRef, Guid, CTG);
+                                      error   -> CTG
+                                  end}));
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
@@ -783,14 +813,19 @@ reply(Reply, State) ->
     {State1, Timeout} = next_state(State),
     {reply, Reply, State1, Timeout}.
 
-next_state(State = #msstate { on_sync = [], sync_timer_ref = undefined }) ->
-    {State, hibernate};
-next_state(State = #msstate { sync_timer_ref = undefined }) ->
-    {start_sync_timer(State), 0};
-next_state(State = #msstate { on_sync = [] }) ->
-    {stop_sync_timer(State), hibernate};
-next_state(State) ->
-    {State, 0}.
+next_state(State = #msstate { sync_timer_ref = undefined,
+                              on_sync = OS,
+                              cref_to_guids = CTG }) ->
+    case {OS, dict:size(CTG)} of
+        {[], 0} -> {State, hibernate};
+        _       -> {start_sync_timer(State), 0}
+    end;
+next_state(State = #msstate { on_sync = OS,
+                              cref_to_guids = CTG }) ->
+    case {OS, dict:size(CTG)} of
+        {[], 0} -> {stop_sync_timer(State), hibernate};
+        _       -> {State, 0}
+    end.
 
 start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
     {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, sync, [self()]),
@@ -803,14 +838,24 @@ stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
     State #msstate { sync_timer_ref = undefined }.
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
-                                 on_sync = Syncs }) ->
+                                 on_sync = Syncs,
+                                 client_ondisk_callback = CODC,
+                                 cref_to_guids = CTG }) ->
     State1 = stop_sync_timer(State),
-    case Syncs of
-        [] -> State1;
-        _  -> ok = file_handle_cache:sync(CurHdl),
-              lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-              State1 #msstate { on_sync = [] }
-    end.
+    State2 = case Syncs of
+                 [] -> State1;
+                 _  -> ok = file_handle_cache:sync(CurHdl),
+                       lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
+                       State1 #msstate { on_sync = [] }
+             end,
+    dict:map(fun(CRef, Guids) ->
+                     case dict:find(CRef, CODC) of
+                         {ok, Fun} -> Fun(Guids);
+                         error     -> ok        %% shouldn't happen
+                     end
+             end, CTG),
+    State2 #msstate { cref_to_guids = dict:new() }.
+
 
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->

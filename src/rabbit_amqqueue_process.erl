@@ -61,7 +61,8 @@
             sync_timer_ref,
             rate_timer_ref,
             expiry_timer_ref,
-            stats_timer
+            stats_timer,
+            guid_to_channel
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -123,7 +124,8 @@ init(Q) ->
             sync_timer_ref      = undefined,
             rate_timer_ref      = undefined,
             expiry_timer_ref    = undefined,
-            stats_timer         = rabbit_event:init_stats_timer()}, hibernate,
+            stats_timer         = rabbit_event:init_stats_timer(),
+            guid_to_channel     = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -341,11 +343,13 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), AckTag, IsDelivered, Message}),
-                    ChAckTags1 = case AckRequired of
-                                     true  -> sets:add_element(
-                                                AckTag, ChAckTags);
-                                     false -> ChAckTags
-                                 end,
+                    {State2, ChAckTags1} =
+                        case AckRequired of
+                            true  -> {State1, sets:add_element(AckTag, ChAckTags)};
+                            false -> {confirm_message_internal(
+                                        Message#basic_message.guid,
+                                        State1), ChAckTags}
+                        end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
                     store_ch_record(NewC),
@@ -361,10 +365,10 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                                 {ActiveConsumers1,
                                  queue:in(QEntry, BlockedConsumers1)}
                         end,
-                    State2 = State1#q{
+                    State3 = State2#q{
                                active_consumers = NewActiveConsumers,
                                blocked_consumers = NewBlockedConsumers},
-                    deliver_msgs_to_consumers(Funs, FunAcc1, State2);
+                    deliver_msgs_to_consumers(Funs, FunAcc1, State3);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
                     store_ch_record(C#cr{is_limit_active = true}),
@@ -395,6 +399,27 @@ deliver_from_queue_deliver(AckRequired, false,
     {{Message, IsDelivered, AckTag}, 0 == Remaining,
      State #q { backing_queue_state = BQS1 }}.
 
+confirm_messages_internal(Guids, State) when is_list(Guids) ->
+    lists:foldl(fun(Guid, State0) ->
+                        confirm_message_internal(Guid, State0)
+                end, State, Guids).
+
+confirm_message_internal(Guid, State = #q { guid_to_channel = GTC }) ->
+    case dict:find(Guid, GTC) of
+        {ok, {_    , undefined}} -> ok;
+        {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
+        _                        -> ok
+    end,
+    State #q { guid_to_channel     = dict:erase(Guid, GTC) }.
+
+maybe_record_confirm_message(undefined, _, _, State) ->
+    State;
+maybe_record_confirm_message(MsgSeqNo,
+                             #basic_message { guid = Guid },
+                             ChPid, State) ->
+    State #q { guid_to_channel =
+                   dict:store(Guid, {ChPid, MsgSeqNo}, State#q.guid_to_channel) }.
+
 run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Funs = {fun deliver_from_queue_pred/2,
             fun deliver_from_queue_deliver/3},
@@ -402,28 +427,30 @@ run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
     State1.
 
-attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
+attempt_delivery(none, _ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
                 {AckTag, BQS1} =
-                    BQ:publish_delivered(AckRequired, Message, BQS),
+                    BQ:publish_delivered(AckRequired, Message,
+                                         MsgSeqNo =/= undefined, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
-                                                 backing_queue_state = BQS}) ->
+attempt_delivery(Txn, ChPid, Message, _MSN, State = #q{backing_queue = BQ,
+                                                       backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
     {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
 
-deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
-    case attempt_delivery(Txn, ChPid, Message, State) of
+deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State = #q{backing_queue = BQ}) ->
+    case attempt_delivery(Txn, ChPid, Message, MsgSeqNo, State) of
         {true, NewState} ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            BQS = BQ:publish(Message, State #q.backing_queue_state),
+            BQS = BQ:publish(Message, MsgSeqNo =/= undefined,
+                             State #q.backing_queue_state),
             {false, NewState#q{backing_queue_state = BQS}}
     end.
 
@@ -522,7 +549,14 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
-    run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
+    case Fun(BQS) of
+        {BQS1, {confirm, Guids}} ->
+            run_message_queue(
+              confirm_messages_internal(Guids,
+                                        State #q { backing_queue_state = BQS1 }));
+        BQS1 ->
+            run_message_queue(State#q{backing_queue_state = BQS1})
+    end.
 
 commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
                                                 backing_queue_state = BQS}) ->
@@ -656,7 +690,7 @@ handle_call(consumers, _From,
                     [{ChPid, ConsumerTag, AckRequired} | Acc]
             end, [], queue:join(ActiveConsumers, BlockedConsumers)), State);
 
-handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
+handle_call({deliver_immediately, Txn, Message, MsgSeqNo, ChPid}, _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
     %% FIXME: Is this correct semantics?
@@ -670,13 +704,15 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, NewState} = attempt_delivery(Txn, ChPid, Message, State),
-    reply(Delivered, NewState);
+    State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
+    {Delivered, State2} = attempt_delivery(Txn, ChPid, Message, MsgSeqNo, State1),
+    reply(Delivered, State2);
 
-handle_call({deliver, Txn, Message, ChPid}, _From, State) ->
+handle_call({deliver, Txn, Message, MsgSeqNo, ChPid}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
-    {Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
-    reply(Delivered, NewState);
+    State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
+    {Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State1),
+    reply(Delivered, State2);
 
 handle_call({commit, Txn, ChPid}, From, State) ->
     NewState = commit_transaction(Txn, From, ChPid, State),
@@ -701,14 +737,18 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     case BQ:fetch(AckRequired, BQS) of
         {empty, BQS1} -> reply(empty, State1#q{backing_queue_state = BQS1});
         {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
-            case AckRequired of
-                true ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                         store_ch_record(
-                           C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
-                false -> ok
-            end,
+            State2 = case AckRequired of
+                         true ->
+                             C = #cr{acktags = ChAckTags} = ch_record(ChPid),
+                             store_ch_record(
+                               C#cr{acktags = sets:add_element(AckTag, ChAckTags)}),
+                             State1;
+                         false ->
+                             confirm_message_internal(Message#basic_message.guid,
+                                                      State1)
+                     end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
-            reply({ok, Remaining, Msg}, State1#q{backing_queue_state = BQS1})
+            reply({ok, Remaining, Msg}, State2#q{backing_queue_state = BQS1})
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid,
@@ -827,10 +867,12 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
-handle_cast({deliver, Txn, Message, ChPid}, State) ->
+
+handle_cast({deliver, Txn, Message, MsgSeqNo, ChPid}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    {_Delivered, NewState} = deliver_or_enqueue(Txn, ChPid, Message, State),
-    noreply(NewState);
+    State1 = maybe_record_confirm_message(MsgSeqNo, Message, ChPid, State),
+    {_Delivered, State2} = deliver_or_enqueue(Txn, ChPid, Message, MsgSeqNo, State1),
+    noreply(State2);
 
 handle_cast({ack, Txn, AckTags, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -838,14 +880,23 @@ handle_cast({ack, Txn, AckTags, ChPid},
         not_found ->
             noreply(State);
         C = #cr{acktags = ChAckTags} ->
-            {C1, BQS1} =
+            {C1, State1} =
                 case Txn of
-                    none -> ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-                            {C#cr{acktags = ChAckTags1}, BQ:ack(AckTags, BQS)};
-                    _    -> {C#cr{txn = Txn}, BQ:tx_ack(Txn, AckTags, BQS)}
+                    none ->
+                        ChAckTags1 = subtract_acks(ChAckTags, AckTags),
+                        NewC = C#cr{acktags = ChAckTags1},
+                        AckdGuids = BQ:seqids_to_guids(AckTags, BQS),
+                        NewBQS = BQ:ack(AckTags, BQS),
+                        NewState = confirm_messages_internal(
+                                     AckdGuids,
+                                     State #q { backing_queue_state = NewBQS }),
+                        {NewC, NewState};
+                    _    ->
+                        {C#cr{txn = Txn},
+                         State #q { backing_queue_state = BQ:tx_ack(Txn, AckTags, BQS) }}
                 end,
             store_ch_record(C1),
-            noreply(State#q{backing_queue_state = BQS1})
+            noreply(State1)
     end;
 
 handle_cast({reject, AckTags, Requeue, ChPid},
@@ -858,8 +909,11 @@ handle_cast({reject, AckTags, Requeue, ChPid},
             store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> BQS1 = BQ:ack(AckTags, BQS),
-                                 State #q { backing_queue_state = BQS1 }
+                        false -> AckdGuids = BQ:seqids_to_guids(AckTags, BQS),
+                                 BQS1 = BQ:ack(AckTags, BQS),
+                                 confirm_messages_internal(
+                                   AckdGuids,
+                                   State #q { backing_queue_state = BQS1 })
                     end)
     end;
 
