@@ -98,7 +98,8 @@
          durable,
          auto_delete,
          arguments,
-         owner_pid
+         owner_pid,
+         ttl
         ]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
@@ -162,7 +163,7 @@ init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
 
 init_ttl(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-message-ttl">>) of
-        {_Type, Ttl} -> State#q{ttl = Ttl};
+        {_Type, TTL} -> State#q{ttl = TTL};
         undefined    -> State
     end.
 
@@ -589,8 +590,8 @@ msg_properties(State) ->
 
 calculate_msg_expiry(_State = #q{ttl = undefined}) ->
     undefined;
-calculate_msg_expiry(_State = #q{ttl = Ttl}) ->
-    now_millis() + (Ttl * 1000).                 
+calculate_msg_expiry(_State = #q{ttl = TTL}) ->
+    now_millis() + (TTL * 1000).                 
 
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
@@ -605,15 +606,15 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
 
 ensure_ttl_timer(State = #q{backing_queue       = BQ, 
                             backing_queue_state = BQS, 
-                            ttl                 = Ttl, 
+                            ttl                 = TTL, 
                             ttl_timer_ref       = undefined}) 
-  when Ttl =/= undefined->
+  when TTL =/= undefined->
     case BQ:is_empty(BQS) of
         true ->
             State;
         false ->
             State#q{ttl_timer_ref = 
-                        timer:send_after(Ttl, self(), drop_expired)}
+                        timer:send_after(TTL, self(), drop_expired)}
     end;
 ensure_ttl_timer(State) ->
     State.
@@ -656,6 +657,8 @@ i(memory, _) ->
     M;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
+i(ttl, #q{ttl = TTL}) ->
+    TTL;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
