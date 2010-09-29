@@ -22,7 +22,6 @@ Figure out something sensible to do with time series.
   Make rates into averages - configurable?
   Add pretty graphs.
   Persist time series data over restarts?
-Make bindings and permissions symmetrical.
 Fix backing queue status breakage.
 Fix management plugin shutdown.
 Refactor lots.

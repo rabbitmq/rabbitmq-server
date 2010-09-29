@@ -45,6 +45,7 @@ dispatcher() ->
      {["bindings", vhost, queue, exchange, props], rabbit_mgmt_wm_binding, []},
      {["vhosts"],                                  rabbit_mgmt_wm_vhosts, []},
      {["vhosts", vhost],                           rabbit_mgmt_wm_vhost, []},
+     {["vhosts", vhost, "permissions"],            rabbit_mgmt_wm_permissions_vhost, []},
      {["users"],                                   rabbit_mgmt_wm_users, []},
      {["users", user],                             rabbit_mgmt_wm_user, []},
      {["users", user, "permissions"],              rabbit_mgmt_wm_permissions_user, []},

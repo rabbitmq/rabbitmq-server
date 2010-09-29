@@ -39,8 +39,9 @@ function dispatcher() {
 
     path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
     this.get('#/exchanges/:vhost/:name', function() {
-            render({'exchange': '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name'])}, 'exchange',
-                   '#/exchanges');
+            var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
+            render({'exchange': path,
+                    'bindings': path + '/bindings'}, 'exchange', '#/exchanges');
         });
     this.put('#/exchanges', function() {
             if (sync_put(this, '/exchanges/:vhost/:name'))
@@ -83,8 +84,10 @@ function dispatcher() {
 
     path('#/vhosts', {'vhosts': '/vhosts/'}, 'vhosts');
     this.get('#/vhosts/:id', function() {
-            render({'vhost': '/vhosts/' + esc(this.params['id'])}, 'vhost',
-                   '#/vhosts');
+            render({'vhost': '/vhosts/' + esc(this.params['id']),
+                    'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
+                    'users': '/users/'},
+                'vhost', '#/vhosts');
         });
     this.put('#/vhosts', function() {
             if (sync_put(this, '/vhosts/:name'))

@@ -1,5 +1,7 @@
 <h1>Virtual Host: <b><%= vhost.name %></b></h1>
 
+<%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
+
 <div class="section-hidden">
 <h2>Delete this vhost</h2>
 <div>
