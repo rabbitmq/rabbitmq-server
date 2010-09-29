@@ -1,5 +1,8 @@
 <h1>Exchanges</h1>
-
+<div class="section">
+  <h2>All exchanges</h2>
+  <div>
+<%= maybe_truncate(exchanges) %>
 <table class="list">
  <thead>
   <tr>
@@ -12,22 +15,27 @@
   </tr>
  </thead>
  <tbody>
-  <% for (var i = 0; i < exchanges.length; i++) { %>
+<%
+  for (var i = 0; i < exchanges.length; i++) {
+    var exchange = exchanges[i];
+%>
   <tr<%= alt_rows(i)%>>
-   <td><%= link_vhost(exchanges[i].vhost) %></td>
-   <td><%= link_exchange(exchanges[i].vhost, exchanges[i].name) %></td>
-   <td><%= exchanges[i].type %></td>
-   <td class="c"><%= fmt_boolean(exchanges[i].durable) %></td>
-   <td class="c"><%= fmt_boolean(exchanges[i].auto_delete) %></td>
+   <td><%= link_vhost(exchange.vhost) %></td>
+   <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
+   <td><%= exchange.type %></td>
+   <td class="c"><%= fmt_boolean(exchange.durable) %></td>
+   <td class="c"><%= fmt_boolean(exchange.auto_delete) %></td>
    <td>
-     <% for (var j = 0; j < exchanges[i].arguments.length; j++) { %>
-       <%= exchanges[i].arguments[j] %>
+     <% for (var j = 0; j < exchange.arguments.length; j++) { %>
+       <%= exchange.arguments[j] %>
      <% } %>
    </td>
   </tr>
   <% } %>
  </tbody>
 </table>
+  </div>
+</div>
 
 <div class="section-hidden">
   <h2>Add a new exchange</h2>

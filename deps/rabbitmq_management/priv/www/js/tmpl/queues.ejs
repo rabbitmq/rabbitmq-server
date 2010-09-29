@@ -1,4 +1,8 @@
 <h1>Queues</h1>
+<div class="section">
+  <h2>All queues</h2>
+  <div>
+<%= maybe_truncate(queues) %>
 <% if (queues.length > 0) { %>
 <table class="list">
  <thead>
@@ -14,23 +18,26 @@
   </tr>
  </thead>
  <tbody>
-  <% for (var i = 0; i < queues.length; i++) { %>
-  <tr<%= alt_rows(i)%>>
-   <td><%= link_vhost(queues[i].vhost) %></td>
-   <td><%= link_queue(queues[i].vhost, queues[i].name) %></td>
-   <td class="r"><%= fmt_string(queues[i].messages_ready) %></td>
-   <td class="r"><%= fmt_string(queues[i].messages_unacknowledged) %></td>
-   <td class="r"><%= fmt_string(queues[i].messages) %></td>
-   <td class="c"><%= fmt_boolean(queues[i].durable) %></td>
-   <td class="c"><%= fmt_boolean(queues[i].auto_delete) %></td>
+<%
+  for (var i = 0; i < queues.length; i++) {
+    var queue = queues[i];
+%>
+  <tr<%= alt_rows(i) %>>
+   <td><%= link_vhost(queue.vhost) %></td>
+   <td><%= link_queue(queue.vhost, queue.name) %></td>
+   <td class="r"><%= fmt_string(queue.messages_ready) %></td>
+   <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>
+   <td class="r"><%= fmt_string(queue.messages) %></td>
+   <td class="c"><%= fmt_boolean(queue.durable) %></td>
+   <td class="c"><%= fmt_boolean(queue.auto_delete) %></td>
    <td class="c">
-     <% if (queues[i].owner_pid != 'none') { %>
-     <%= link_conn(queues[i].owner_pid_details.name) %>
+     <% if (queue.owner_pid != 'none') { %>
+     <%= link_conn(queue.owner_pid_details.name) %>
      <% } %>
    </td>
    <td>
-     <% for (var j = 0; j < queues[i].arguments.length; j++) { %>
-       <%= queues[i].arguments[j] %>
+     <% for (var j = 0; j < queue.arguments.length; j++) { %>
+       <%= queue.arguments[j] %>
      <% } %>
    </td>
   </tr>
@@ -40,6 +47,8 @@
 <% } else { %>
   <p>... no queues ...</p>
 <% } %>
+  </div>
+</div>
 
 <div class="section-hidden">
   <h2>Add a new queue</h2>

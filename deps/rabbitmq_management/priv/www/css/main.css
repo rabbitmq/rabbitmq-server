@@ -82,3 +82,5 @@ table.two-col-layout td { width: 50%; vertical-align: top; }
 input[type=submit], button { padding: 8px; background-color: #aaf; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; cursor: pointer; border: none; font-weight: bold; }
 
 h3 { padding: 0 0 2px 0; margin: 0 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; }
+
+p.warning { font-weight: bold; background: #ff8; border: 2px solid #880; margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; }

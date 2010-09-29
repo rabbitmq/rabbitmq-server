@@ -130,3 +130,16 @@ function message_rates(stats) {
 
     return res;
 }
+
+function maybe_truncate(items) {
+    var maximum = 500;
+    var str = '';
+
+    if (items.length > maximum) {
+        str = '<p class="warning">Only ' + maximum + ' of ' +
+            items.length + ' items are shown.</p>';
+        items.length = maximum;
+    }
+
+    return str;
+}

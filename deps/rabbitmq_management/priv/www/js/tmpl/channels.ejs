@@ -1,5 +1,5 @@
 <h1>Channels</h1>
-
+<%= maybe_truncate(channels) %>
 <% if (channels.length > 0) { %>
 <table class="list">
  <thead>
@@ -28,29 +28,32 @@
   </tr>
  </thead>
  <tbody>
-  <% for (var i = 0; i < channels.length; i++) { %>
+<%
+  for (var i = 0; i < channels.length; i++) {
+    var channel = channels[i];
+%>
   <tr<%= alt_rows(i)%>>
     <td>
-      <%= link_channel(channels[i].name) %>
+      <%= link_channel(channel.name) %>
     </td>
-    <td class="c"><%= link_vhost(channels[i].vhost) %></td>
-    <td class="c"><%= link_user(channels[i].user) %></td>
+    <td class="c"><%= link_vhost(channel.vhost) %></td>
+    <td class="c"><%= link_user(channel.user) %></td>
     <td class="c">
-      <%= fmt_boolean(channels[i].transactional) %>
-      <% if (channels[i].transactional) { %>
-      <sub><%= channels[i].acks_uncommitted %> uncommitted acks</sub>
+      <%= fmt_boolean(channel.transactional) %>
+      <% if (channel.transactional) { %>
+      <sub><%= channel.acks_uncommitted %> uncommitted acks</sub>
       <% } %>
     </td>
-    <td class="c"><%= channels[i].prefetch_count %></td>
-    <td class="c"><%= channels[i].messages_unacknowledged %></td>
+    <td class="c"><%= channel.prefetch_count %></td>
+    <td class="c"><%= channel.messages_unacknowledged %></td>
 <% if (statistics_level == 'fine') { %>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'publish') %></td>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver') %></td>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'get') %></td>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'deliver_no_ack') %></td>
-    <td class="l"><%= fmt_rate(channels[i].message_stats, 'get_no_ack') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'publish') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'deliver') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'get') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'deliver_no_ack') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'get_no_ack') %></td>
     <td class="l">
-      <%= fmt_rate(channels[i].message_stats, 'ack') %>
+      <%= fmt_rate(channel.message_stats, 'ack') %>
     </td>
 <% } %>
   </tr>
