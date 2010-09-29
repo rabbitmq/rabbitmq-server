@@ -31,7 +31,8 @@
 -define(TIMEOUT,     1000).
 
 test() ->
-    ok = application:stop(rabbit_shovel),
+    %% it may already be running. Stop if possible
+    application:stop(rabbit_shovel),
 
     %% shovel can be started with zero shovels configured
     ok = application:start(rabbit_shovel),
