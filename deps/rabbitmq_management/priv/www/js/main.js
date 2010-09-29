@@ -290,7 +290,10 @@ function sync_req(type, params, path_template) {
     req.setRequestHeader('content-type', 'application/json');
     try {
         if (params["arguments"] == "") params["arguments"] = []; // TODO
-        req.send(JSON.stringify(params));
+        if (type == 'GET')
+            req.send(null);
+        else
+            req.send(JSON.stringify(params));
     }
     catch (e) {
         if (e.number == 0x80004004) {
