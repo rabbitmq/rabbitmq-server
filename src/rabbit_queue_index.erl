@@ -228,13 +228,11 @@
 init(Name, false, _MsgStoreRecovered, _ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     false = filelib:is_file(Dir), %% is_file == is file or dir
-    {0, [], State #qistate { on_sync        = OnSyncFun,
-                             unsynced_guids = []}};
+    {0, [], State #qistate { on_sync = OnSyncFun }};
 
 init(Name, true, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
-    State1 = State #qistate { on_sync        = OnSyncFun,
-                              unsynced_guids = [] },
+    State1 = State #qistate { on_sync = OnSyncFun },
     Terms = case read_shutdown_terms(Dir) of
                 {error, _}   -> [];
                 {ok, Terms1} -> Terms1
@@ -381,7 +379,8 @@ blank_state(QueueName) ->
                segments            = segments_new(),
                journal_handle      = undefined,
                dirty_count         = 0,
-               max_journal_entries = MaxJournal }.
+               max_journal_entries = MaxJournal,
+               unsynced_guids      = [] }.
 
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
