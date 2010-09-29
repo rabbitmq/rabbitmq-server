@@ -411,11 +411,11 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
             fun deliver_from_queue_deliver/3},
-    #q{backing_queue = BQ, backing_queue_state = BQS} = 
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} = 
         drop_expired_messages(State),
     IsEmpty = BQ:is_empty(BQS),
-    {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
-    State1.
+    {_IsEmpty1, State2} = deliver_msgs_to_consumers(Funs, IsEmpty, State1),
+    State2.
 
 attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,

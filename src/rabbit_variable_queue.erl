@@ -618,8 +618,13 @@ internal_fetch(AckRequired,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
     Len1 = Len - 1,
+
+    RamMsgCount1 = case Msg =:= undefined of
+                       true  -> RamMsgCount;
+                       false -> RamMsgCount - 1
+                   end,
     {{Msg, IsDelivered, AckTag, Len1},
-     a(State #vqstate { ram_msg_count    = RamMsgCount - 1,
+     a(State #vqstate { ram_msg_count    = RamMsgCount1,
                         out_counter      = OutCount + 1,
                         index_state      = IndexState2,
                         len              = Len1,
