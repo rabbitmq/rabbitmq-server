@@ -673,16 +673,14 @@ test_topic_matching() ->
     %% remove the entire exchange
     rabbit_exchange_type_topic:delete(X, RemainingBindings),
     %% none should match now
-    test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),    
+    test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
 test_topic_expect_match(#exchange{name = XName}, List) ->
     lists:foreach(
         fun({Key, Expected}) ->
-            io:format("~p ~p~n", [Key, Expected]),
             Res = rabbit_exchange_type_topic:which_matches(
                     XName, list_to_binary(Key)),
-            io:format("Res: ~p~n", [Res]),
             ExpectedRes = lists:map(
                 fun(Q) -> #resource{virtual_host = <<"/">>,
                                     kind = queue,

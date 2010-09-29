@@ -178,18 +178,11 @@ remove_path_if_empty(X, [{Node, W} | [{Parent, _} | _] = RestPath]) ->
     end.
 
 trie_child(X, Node, Word) ->
-    Query = qlc:q([NextNode ||
-        #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X1,
-                                                node_id = Node1,
-                                                word = Word1},
-                         node_id = NextNode}
-            <- mnesia:table(rabbit_topic_trie_edge),
-        X1 == X,
-        Node1 == Node,
-        Word1 == Word]),
-    case qlc:e(Query) of
-        [NextNode] -> {ok, NextNode};
-        []         -> error
+    case mnesia:read(rabbit_topic_trie_edge, #trie_edge{exchange_name = X,
+                                                        node_id = Node,
+                                                        word = Word}) of
+        [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
+        []                                     -> error
     end.
 
 trie_bindings(X, Node) ->
