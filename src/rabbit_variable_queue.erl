@@ -415,10 +415,8 @@ init(QueueName, IsDurable, Recover,
             false -> undefined
         end,
 
-    rabbit_msg_store:register_sync_callback(
-      ?PERSISTENT_MSG_STORE,
-      PRef,
-      MsgOnDiskFun),
+    rabbit_msg_store:register_sync_callback(?PERSISTENT_MSG_STORE, PRef,
+                                            MsgOnDiskFun),
 
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
@@ -773,13 +771,13 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
       {avg_ingress_rate     , AvgIngressRate} ].
 
 seqids_to_guids(SeqIds, #vqstate{ pending_ack = PA }) ->
-    lists:foldl(fun(SeqId, Guids) ->
-                        {ok, AckEntry} = dict:find(SeqId, PA),
-                        [case AckEntry of
-                             #msg_status { msg = Msg } -> Msg#basic_message.guid;
-                             {_, Guid} -> Guid
-                         end | Guids]
-                end, [], SeqIds).
+    lists:foldl(
+      fun(SeqId, Guids) ->
+              [case dict:fetch(SeqId, PA) of
+                   #msg_status { msg = Msg } -> Msg#basic_message.guid;
+                   {_, Guid}                 -> Guid
+               end | Guids]
+      end, [], SeqIds).
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -1166,7 +1164,8 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
-    State2 = msgs_confirmed(seqids_to_guids(AckTags, State), State1),
+    State2 = msgs_confirmed(gb_sets:from_list(seqids_to_guids(AckTags, State1)),
+                            State1),
     PCount1 = PCount - case orddict:find(?PERSISTENT_MSG_STORE, GuidsByStore) of
                            error       -> 0;
                            {ok, Guids} -> length(Guids)
@@ -1187,17 +1186,12 @@ accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-msgs_confirmed(Guids, State = #vqstate { msgs_on_disk        = MOD,
-                                         msg_indices_on_disk = MIOD,
-                                         need_confirming     = NC }) ->
-    GuidSet = gb_sets:from_list(Guids),
-    State #vqstate {
-      msgs_on_disk =
-          gb_sets:difference(MOD, GuidSet),
-      msg_indices_on_disk =
-          gb_sets:difference(MIOD, GuidSet),
-      need_confirming =
-          gb_sets:difference(NC, GuidSet) }.
+msgs_confirmed(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
+                                           msg_indices_on_disk = MIOD,
+                                           need_confirming     = NC }) ->
+    State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  GuidSet),
+                     msg_indices_on_disk = gb_sets:difference(MIOD, GuidSet),
+                     need_confirming     = gb_sets:difference(NC,   GuidSet) }.
 
 msgs_written_to_disk(QPid, Guids) ->
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
@@ -1207,14 +1201,9 @@ msgs_written_to_disk(QPid, Guids) ->
                                             need_confirming     = NC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
-                             MOD1 = gb_sets:intersection(gb_sets:union(MOD, GuidSet), NC),
-                             { State #vqstate {
-                                 msgs_on_disk =
-                                     gb_sets:difference(MOD1, ToConfirmMsgs),
-                                 msg_indices_on_disk =
-                                     gb_sets:difference(MIOD, ToConfirmMsgs),
-                                 need_confirming =
-                                     gb_sets:difference(NC, ToConfirmMsgs) },
+                             State1 = State #vqstate { msgs_on_disk =
+                                                           gb_sets:intersection(gb_sets:union(MOD, GuidSet), NC) },
+                             { msgs_confirmed(ToConfirmMsgs, State1),
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
           end).
@@ -1228,15 +1217,9 @@ msg_indices_written_to_disk(Guids) ->
                                             need_confirming     = NC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
-                             MIOD1 =
-                                 gb_sets:intersection(gb_sets:union(MIOD, GuidSet), NC),
-                             { State #vqstate {
-                                 msgs_on_disk =
-                                     gb_sets:difference(MOD, ToConfirmMsgs),
-                                 msg_indices_on_disk =
-                                     gb_sets:difference(MIOD1, ToConfirmMsgs),
-                                 need_confirming =
-                                     gb_sets:difference(NC, ToConfirmMsgs) },
+                             State1 = State #vqstate { msg_indices_on_disk =
+                                                           gb_sets:intersection(gb_sets:union(MIOD, GuidSet), NC) },
+                             { msgs_confirmed(ToConfirmMsgs, State1),
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
           end).

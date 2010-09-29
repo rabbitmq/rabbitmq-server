@@ -814,15 +814,15 @@ reply(Reply, State) ->
     {reply, Reply, State1, Timeout}.
 
 next_state(State = #msstate { sync_timer_ref = undefined,
-                              on_sync = OS,
-                              cref_to_guids = CTG }) ->
-    case {OS, dict:size(CTG)} of
+                              on_sync        = Syncs,
+                              cref_to_guids  = CTG }) ->
+    case {Syncs, dict:size(CTG)} of
         {[], 0} -> {State, hibernate};
         _       -> {start_sync_timer(State), 0}
     end;
-next_state(State = #msstate { on_sync = OS,
+next_state(State = #msstate { on_sync       = Syncs,
                               cref_to_guids = CTG }) ->
-    case {OS, dict:size(CTG)} of
+    case {Syncs, dict:size(CTG)} of
         {[], 0} -> {stop_sync_timer(State), hibernate};
         _       -> {State, 0}
     end.
@@ -837,10 +837,10 @@ stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
     State #msstate { sync_timer_ref = undefined }.
 
-internal_sync(State = #msstate { current_file_handle = CurHdl,
-                                 on_sync = Syncs,
+internal_sync(State = #msstate { current_file_handle    = CurHdl,
+                                 on_sync                = Syncs,
                                  client_ondisk_callback = CODC,
-                                 cref_to_guids = CTG }) ->
+                                 cref_to_guids          = CTG }) ->
     State1 = stop_sync_timer(State),
     State2 = case Syncs of
                  [] -> State1;

@@ -460,30 +460,29 @@ send_or_enqueue_ack(undefined, State) ->
     State;
 send_or_enqueue_ack(_, State = #ch{confirm_enabled = false}) ->
     State;
-send_or_enqueue_ack(MsgSeqNo,
-                    State = #ch{confirm_multiple = false}) ->
-    do_if_not_dup(MsgSeqNo, State,
-                  fun(MSN, S = #ch{writer_pid = WriterPid,
-                                   qpid_to_msgs = QTM}) ->
-                          ok = rabbit_writer:send_command(
-                                 WriterPid, #'basic.ack'{delivery_tag = MSN}),
-                          S #ch { qpid_to_msgs =
-                                      dict:map(fun (_, Msgs) ->
-                                                       gb_sets:delete_any(MsgSeqNo, Msgs)
-                                               end, QTM) }
-                  end);
+send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = false}) ->
+    do_if_not_dup(
+      MsgSeqNo, State,
+      fun(MSN, State1 = #ch{writer_pid = WriterPid, qpid_to_msgs = QTM}) ->
+              ok = rabbit_writer:send_command(
+                     WriterPid, #'basic.ack'{delivery_tag = MSN}),
+              QTM1 = dict:map(fun (_, Msgs) ->
+                                      gb_sets:delete_any(MsgSeqNo, Msgs)
+                              end, QTM),
+              State1#ch{qpid_to_msgs = QTM1}
+      end);
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
-    do_if_not_dup(MsgSeqNo, State,
-                  fun(MSN, S = #ch{qpid_to_msgs = QTM}) ->
-                          State1 = start_ack_timer(S),
-                          State1 #ch { held_confirms =
-                                           gb_sets:add(MSN, State1#ch.held_confirms),
-                                       qpid_to_msgs =
-                                           dict:map(fun (_, Msgs) ->
-                                                            gb_sets:delete_any(MsgSeqNo,
-                                                                               Msgs)
-                                                    end, QTM) }
-                  end).
+    do_if_not_dup(
+      MsgSeqNo, State,
+      fun(MSN, State1 = #ch{qpid_to_msgs = QTM}) ->
+              QTM1 = dict:map(fun (_, Msgs) ->
+                                      gb_sets:delete_any(MsgSeqNo, Msgs)
+                              end, QTM),
+              start_ack_timer(
+                State1#ch{held_confirms =
+                              gb_sets:add(MSN, State1#ch.held_confirms),
+                          qpid_to_msgs = QTM1})
+      end).
 
 msg_sent_to_queues(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
     case dict:find(QPid, QTM) of
