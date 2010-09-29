@@ -1,4 +1,3 @@
-
 TMPDIR ?= /tmp
 
 RABBITMQ_NODENAME ?= rabbit
