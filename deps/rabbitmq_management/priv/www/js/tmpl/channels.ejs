@@ -1,5 +1,6 @@
 <h1>Channels</h1>
 <%= maybe_truncate(channels) %>
+<div class="updatable">
 <% if (channels.length > 0) { %>
 <table class="list">
  <thead>
@@ -63,3 +64,4 @@
 <% } else { %>
   <p>... no channels ...</p>
 <% } %>
+</div>

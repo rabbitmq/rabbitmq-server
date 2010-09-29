@@ -137,24 +137,55 @@ function go_to(url) {
 var current_template;
 var current_reqs;
 var current_highlight;
-//var timer;
+var timer;
+var timer_interval;
+
+function set_timer_interval(interval) {
+    timer_interval = interval;
+    clearInterval(timer);
+    if (timer_interval != null) {
+        timer = setInterval('update()', timer_interval);
+    }
+}
 
 function render(reqs, template, highlight) {
     current_template = template;
     current_reqs = reqs;
     current_highlight = highlight;
-    update();
+    render0();
+}
+
+function render0() {
+    clearInterval(timer);
+    with_update(current_reqs, [], function(html) {
+            replace_content('main', html);
+            postprocess();
+            set_timer_interval(5000);
+        });
 }
 
 function update() {
-    //clearInterval(timer);
+    if ($('.updatable').length > 0) {
+        with_update(current_reqs, [], function(html) {
+            replace_content('scratch', html);
+            var befores = $('#main .updatable');
+            var afters = $('#scratch .updatable');
+            if (befores.length != afters.length) {
+                throw("before/after mismatch");
+            }
+            for (var i = 0; i < befores.length; i++) {
+                befores[i].innerHTML = afters[i].innerHTML;
+            }
+        });
+    }
+}
+
+function with_update(reqs, acc, fun) {
     with_reqs(current_reqs, [], function(json) {
             json.statistics_level = statistics_level;
             var html = format(current_template, json);
-            replace_content('main', html);
+            fun(html);
             update_status('ok');
-            postprocess();
-            //timer = setInterval('update()', 5000);
         });
 }
 
@@ -167,10 +198,6 @@ function error_popup(text) {
 function postprocess() {
     $('a').removeClass('selected');
     $('a[href="' + current_highlight + '"]').addClass('selected');
-    // $('input').focus(function() {
-    //         clearInterval(timer);
-    //         update_status('paused');
-    //     });
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
@@ -194,6 +221,11 @@ function postprocess() {
                 esc($('#download-filename').val());
             window.location = path;
             return false;
+        });
+    $('#update-every').change(function() {
+            var interval = $(this).val();
+            if (interval == '') interval = null;
+            set_timer_interval(interval);
         });
 }
 
@@ -224,7 +256,7 @@ function format(template, json) {
         var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs'});
         return tmpl.render(json);
     } catch (err) {
-        //clearInterval(timer);
+        clearInterval(timer);
         debug(err['name'] + ": " + err['message']);
     }
 }
@@ -233,12 +265,10 @@ function update_status(status) {
     var text;
     if (status == 'ok')
         text = "Last update: " + new Date();
-    else if (status == 'timeout')
-        text = "Warning: server reported busy at " + new Date();
     else if (status == 'error')
         text = "Error: could not connect to server at " + new Date();
-    //else if (status == 'paused')
-    //    text = "Updating halted due to form interaction.";
+    else
+        throw("Unknown status " + status);
 
     var html = format('status', {status: status, text: text});
     replace_content('status', html);
@@ -268,7 +298,7 @@ function with_req(path, fun) {
             }
             else {
                 debug("Got response code " + req.status);
-                //clearInterval(timer);
+                clearInterval(timer);
             }
         }
     };

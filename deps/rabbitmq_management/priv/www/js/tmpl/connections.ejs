@@ -1,5 +1,6 @@
 <h1>Connections</h1>
 <%= maybe_truncate(connections) %>
+<div class="updatable">
 <% if (connections.length > 0) { %>
 <table class="list">
  <thead>
@@ -32,3 +33,4 @@
 <% } else { %>
   <p>... no connections ...</p>
 <% } %>
+</div>
