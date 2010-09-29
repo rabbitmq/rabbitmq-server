@@ -64,6 +64,12 @@ function fmt_exchange_url(name) {
     return name == '' ? 'amq.default' : name;
 }
 
+function fmt_download_filename(host) {
+    var now = new Date();
+    return host + "_" + now.getFullYear() + "-" + (now.getMonth() + 1) + "-" +
+        now.getDate() + ".json";
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt"' : '';
 }

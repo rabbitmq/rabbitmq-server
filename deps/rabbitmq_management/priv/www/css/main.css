@@ -69,16 +69,16 @@ div.section h2, div.section-hidden h2.toggled { background: #eee;  border: 1px s
 
 form { margin: 0; }
 input, select { padding: 0.2em; }
+input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; }
+input[type=text].wide { width: 300px; }
 
 table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; }
-table.form input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; width: 200px; }
+table.form input[type=text] { width: 200px; }
 table.form select { width: 200px; }
 
 table.two-col-layout td { width: 50%; vertical-align: top; }
 
-a.button, input[type=submit]  { padding: 8px; background-color: #aaf; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; }
-a.button { display: block; float: left; }
-input[type=submit] { cursor: pointer; border: none; font-weight: bold; }
+input[type=submit], button { padding: 8px; background-color: #aaf; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; cursor: pointer; border: none; font-weight: bold; }
 
 h3 { padding: 0 0 2px 0; margin: 0 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; }

@@ -94,13 +94,17 @@
         <td>
           <h3>Export</h3>
           <p>
+            <label for="download-filename">Filename for download:</label><br/>
+            <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
+          </p>
+          <p>
             Note: exclusive queues will not be exported.
           </p>
         </td>
         <td>
           <h3>Import</h3>
           <p>
-            <label>Configuration file:</label>
+            <label>Configuration file:</label><br/>
             <input type="file" name="file"/>
           </p>
           <p>
@@ -113,8 +117,7 @@
       <tr>
         <td>
           <p>
-            <a class="button" href="/api/all-configuration?mode=download">Download broker configuration</a>
-            <span class="br"></span>
+            <button id="download-configuration">Download broker configuration</button>
           </p>
         </td>
         <td>

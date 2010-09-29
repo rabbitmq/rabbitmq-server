@@ -68,11 +68,12 @@ to_json(ReqData, Context) ->
          {queues,      Qs},
          {exchanges,   Xs},
          {bindings,    Bs}]),
-      case wrq:get_qs_value("mode", ReqData) of
-          "download" -> wrq:set_resp_header(
-                          "Content-disposition",
-                          "attachment; filename=rabbit.json", ReqData);
-          _          -> ReqData
+      case wrq:get_qs_value("download", ReqData) of
+          undefined -> ReqData;
+          Filename  -> wrq:set_resp_header(
+                         "Content-disposition",
+                         "attachment; filename=" ++
+                             mochiweb_util:unquote(Filename), ReqData)
       end,
       Context).
 

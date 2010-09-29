@@ -182,10 +182,18 @@ function postprocess() {
     $('label').map(function() {
             if ($(this).attr('for') == '') {
                 var id = 'auto-label-' + Math.floor(Math.random()*1000000000);
-                $(this).attr('for', id);
                 var input = $(this).parents('tr').first().find('input, select');
-                input.attr('id', id);
+                if (input.attr('id') == '') {
+                    $(this).attr('for', id);
+                    input.attr('id', id);
+                }
             }
+        });
+    $('#download-configuration').click(function() {
+            var path = '/api/all-configuration?download=' +
+                esc($('#download-filename').val());
+            window.location = path;
+            return false;
         });
 }
 
