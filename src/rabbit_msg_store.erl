@@ -34,9 +34,8 @@
 -behaviour(gen_server2).
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/2, client_terminate/2,
-         client_delete_and_terminate/3, successfully_recovered_state/1,
-         register_sync_callback/3]).
+         sync/3, client_init/3, client_terminate/2,
+         client_delete_and_terminate/3, successfully_recovered_state/1]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
@@ -124,6 +123,7 @@
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
          A}).
+-type(guid_fun() :: fun (([rabbit_guid:guid()]) -> any())).
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
@@ -140,7 +140,7 @@
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(client_init/2 :: (server(), rabbit_guid:guid()) -> client_msstate()).
+-spec(client_init/3 :: (server(), rabbit_guid:guid(), guid_fun()) -> client_msstate()).
 -spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
 -spec(client_delete_and_terminate/3 ::
         (client_msstate(), server(), rabbit_guid:guid()) -> 'ok').
@@ -360,10 +360,11 @@ gc_done(Server, Reclaimed, Source, Destination) ->
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
 
-client_init(Server, Ref) ->
+client_init(Server, Ref, MsgOnDiskFun) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
         gen_server2:call(Server, {new_client_state, Ref}, infinity),
+    register_sync_callback(Server, Ref, MsgOnDiskFun),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
@@ -629,6 +630,8 @@ handle_call({new_client_state, CRef}, _From,
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
+handle_call({register_sync_callback, _        , undefined}, _From, State) ->
+    reply(ok, State);
 handle_call({register_sync_callback, ClientRef, Fun}, _From,
             State = #msstate { client_ondisk_callback = CODC }) ->
     reply(ok, State #msstate { client_ondisk_callback =

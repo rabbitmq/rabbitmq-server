@@ -377,10 +377,8 @@ stop_msg_store() ->
 init(QueueName, IsDurable, Recover) ->
     Self = self(),
     init(QueueName, IsDurable, Recover,
-         fun (Guids) ->
-              msgs_written_to_disk(Self, Guids)
-         end,
-         fun msg_indices_written_to_disk/1).
+         fun (Guids) -> msgs_written_to_disk(Self, Guids) end,
+         fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
 
 init(QueueName, IsDurable, Recover,
      MsgOnDiskFun, MsgIdxOnDiskFun) ->
@@ -409,16 +407,16 @@ init(QueueName, IsDurable, Recover,
                                   end_seq_id   = NextSeqId }
             end,
     Now = now(),
+
     PersistentClient =
         case IsDurable of
-            true  -> rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, PRef);
+            true  -> rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, PRef,
+                                                  MsgOnDiskFun);
             false -> undefined
         end,
+    TransientClient  =
+        rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef, undefined),
 
-    rabbit_msg_store:register_sync_callback(?PERSISTENT_MSG_STORE, PRef,
-                                            MsgOnDiskFun),
-
-    TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
       q1                   = queue:new(),
       q2                   = bpqueue:new(),
@@ -528,24 +526,25 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                      in_counter        = InCount,
                                      persistent_count  = PCount,
                                      pending_ack       = PA,
-                                     durable           = IsDurable }) ->
+                                     durable           = IsDurable,
+                                     need_confirming   = NeedConfirming }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     PA1 = record_pending_ack(m(MsgStatus1), PA),
     PCount1 = PCount + one_if(IsPersistent1),
+    NeedConfirming1 = case NeedsConfirming of
+                        true -> gb_sets:add(Guid, NeedConfirming);
+                        false -> NeedConfirming
+                    end,
     {SeqId, a(State1 #vqstate {
                 next_seq_id       = SeqId    + 1,
                 out_counter       = OutCount + 1,
                 in_counter        = InCount  + 1,
                 persistent_count  = PCount1,
                 pending_ack       = PA1,
-                need_confirming   =
-                    case NeedsConfirming of
-                        true -> gb_sets:insert(Guid, State1#vqstate.need_confirming);
-                        false -> State1#vqstate.need_confirming
-                    end })}.
+                need_confirming   = NeedConfirming1 })}.
 
 fetch(AckRequired, State = #vqstate { q4               = Q4,
                                       ram_msg_count    = RamMsgCount,
@@ -1044,7 +1043,8 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
                            in_counter       = InCount,
                            persistent_count = PCount,
                            durable          = IsDurable,
-                           ram_msg_count    = RamMsgCount }) ->
+                           ram_msg_count    = RamMsgCount,
+                           need_confirming  = NeedConfirming}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk },
@@ -1054,17 +1054,17 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
                  true  -> State1 #vqstate { q4 = queue:in(m(MsgStatus1), Q4) }
              end,
     PCount1 = PCount + one_if(IsPersistent1),
+    NeedConfirming1 = case NeedsConfirming of
+                          true -> gb_sets:add(Guid, NeedConfirming);
+                          false -> NeedConfirming
+                      end,
     {SeqId, State2 #vqstate {
               next_seq_id      = SeqId   + 1,
               len              = Len     + 1,
               in_counter       = InCount + 1,
               persistent_count = PCount1,
               ram_msg_count    = RamMsgCount + 1,
-              need_confirming  =
-                  case NeedsConfirming of
-                      true -> gb_sets:add(Guid, State2#vqstate.need_confirming);
-                      false -> State2#vqstate.need_confirming
-                  end }}.
+              need_confirming  = NeedConfirming1 }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, MSCState) ->
@@ -1202,28 +1202,34 @@ msgs_written_to_disk(QPid, Guids) ->
                                             need_confirming     = NC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
-                             State1 = State #vqstate { msgs_on_disk =
-                                                           gb_sets:intersection(gb_sets:union(MOD, GuidSet), NC) },
+                             State1 =
+                                 State #vqstate {
+                                   msgs_on_disk =
+                                       gb_sets:intersection(
+                                         gb_sets:union(MOD, GuidSet), NC) },
                              { msgs_confirmed(ToConfirmMsgs, State1),
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
           end).
 
-msg_indices_written_to_disk(Guids) ->
-    Self = self(),
+msg_indices_written_to_disk(QPid, Guids) ->
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                     Self,
+                     QPid,
                      fun(State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
                                             need_confirming     = NC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
-                             State1 = State #vqstate { msg_indices_on_disk =
-                                                           gb_sets:intersection(gb_sets:union(MIOD, GuidSet), NC) },
+                             State1 =
+                                 State #vqstate {
+                                   msg_indices_on_disk =
+                                       gb_sets:intersection(
+                                         gb_sets:union(MIOD, GuidSet), NC) },
                              { msgs_confirmed(ToConfirmMsgs, State1),
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
           end).
+
 
 %%----------------------------------------------------------------------------
 %% Phase changes

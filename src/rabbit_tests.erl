@@ -1469,7 +1469,7 @@ msg_store_remove(Guids) ->
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
       lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref), L), MsgStore).
+                  rabbit_msg_store:client_init(MsgStore, Ref, undefined), L), MsgStore).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1479,7 +1479,7 @@ test_msg_store() ->
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, Guids),
     Ref = rabbit_guid:guid(),
-    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref, undefined),
     %% publish the first half
     {ok, MSCState1} = msg_store_write(Guids1stHalf, MSCState),
     %% sync on the first half
@@ -1553,7 +1553,7 @@ test_msg_store() ->
     %% check we don't contain any of the msgs
     false = msg_store_contains(false, Guids),
     %% publish the first half again
-    MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref, undefined),
     {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
@@ -1645,7 +1645,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
                                                            Guid, MSCStateN),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
-          end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
+          end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref, undefined)}, SeqIds),
     ok = rabbit_msg_store:client_delete_and_terminate(
            MSCStateEnd, MsgStore, Ref),
     {A, B}.
