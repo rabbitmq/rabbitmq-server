@@ -590,14 +590,13 @@ msg_properties(State) ->
 calculate_msg_expiry(_State = #q{ttl = undefined}) ->
     undefined;
 calculate_msg_expiry(_State = #q{ttl = Ttl}) ->
-    Now = timer:now_diff(now(), {0,0,0}),
-    Now + (Ttl * 1000).                 
+    now_millis() + (Ttl * 1000).                 
 
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
 drop_expired_messages(State = #q{backing_queue_state = BQS, 
                                   backing_queue = BQ}) ->
-    Now = timer:now_diff(now(), {0,0,0}),
+    Now = now_millis(),
     BQS1 = BQ:dropwhile(
              fun (_MsgProperties = #msg_properties{expiry=Expiry}) ->
                      Now > Expiry
@@ -618,6 +617,9 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
     end;
 ensure_ttl_timer(State) ->
     State.
+
+now_millis() ->
+    timer:now_diff(now(), {0,0,0}).
             
     
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
