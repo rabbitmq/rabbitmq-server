@@ -1,6 +1,5 @@
 Before first "proper" release
 =============================
-Backup / restore entire state (except messages).
 Write more management:
   Purge queues
 Do sensible things with vhosts in UI.
@@ -41,6 +40,7 @@ Clustering management:
 Make user editing rather clearer
 Allow empty fields in PUT.
 Activity log (to see things that flick in and out of existence quickly).
+Aggregate connection / channel info over hosts.
 
 Less urgent
 ===========

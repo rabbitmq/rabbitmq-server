@@ -131,7 +131,7 @@ get_part(Name, Parts) ->
     end.
 
 export_queue(#amqqueue{ name = QName, exclusive_owner = none }) ->
-    export_name(QName);
+    true;
 export_queue(_) ->
     false.
 

@@ -495,6 +495,23 @@ all_configuration_remove_things_test() ->
     amqp_connection:close(Conn),
     ok.
 
+all_configuration_server_named_queue_test() ->
+    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{ queue = QName } =
+        amqp_channel:call(Ch, #'queue.declare'{}),
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
+    http_get(Path, ?OK),
+    AllConfig = http_get("/all-configuration", ?OK),
+    http_delete(Path, ?NO_CONTENT),
+    http_get(Path, ?NOT_FOUND),
+    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_get(Path, ?OK),
+    http_delete(Path, ?NO_CONTENT),
+    ok.
+
 aliveness_test() ->
     [{status, <<"ok">>}] = http_get("/aliveness-test/%2f", ?OK),
     http_get("/aliveness-test/foo", ?NOT_FOUND).
@@ -624,6 +641,3 @@ test_item0(Exp, Act) ->
 
 pget(K, L) ->
      proplists:get_value(K, L).
-
-equals(F1, F2) ->
-    true = (abs(F1 - F2) < 0.001).
