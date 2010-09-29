@@ -31,11 +31,7 @@
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 
 %%--------------------------------------------------------------------
-
-init(_Config) ->
-    MagicUsername = rabbit_guid:binstring_guid("magic_user_"),
-    MagicPassword = rabbit_guid:binstring_guid("magic_password_"),
-    {ok, #context{extra = {MagicUsername, MagicPassword}}}.
+init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
@@ -108,29 +104,23 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-accept(Body, ReqData,
-       Context = #context{extra = {Username, Password}}) ->
+accept(Body, ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [users, vhosts, permissions, queues, exchanges, bindings],
       Body, ReqData, Context,
       fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings]) ->
-              rabbit_access_control:add_user(Username, Password),
-              [allow_user(Username, V) ||
-                  V <- rabbit_access_control:list_vhosts()],
-              Res =
-                  rabbit_mgmt_util:with_amqp_error_handling(
-                    ReqData, Context,
-                    fun() ->
-                            for_all(Users,       fun add_user/2,       Context),
-                            for_all(VHosts,      fun add_vhost/2,      Context),
-                            for_all(Permissions, fun add_permission/2, Context),
-                            for_all(Queues,      fun add_queue/2,      Context),
-                            for_all(Exchanges,   fun add_exchange/2,   Context),
-                            for_all(Bindings,    fun add_binding/2,    Context),
-                            {true, ReqData, Context}
-                    end),
-              rabbit_access_control:delete_user(Username),
-              Res
+              try
+                  for_all(Users,       fun add_user/1),
+                  for_all(VHosts,      fun add_vhost/1),
+                  for_all(Permissions, fun add_permission/1),
+                  for_all(Queues,      fun add_queue/1),
+                  for_all(Exchanges,   fun add_exchange/1),
+                  for_all(Bindings,    fun add_binding/1),
+                  {true, ReqData, Context}
+              catch
+                  exit:E ->
+                      rabbit_mgmt_util:bad_request(E, ReqData, Context)
+              end
       end).
 
 get_part(Name, Parts) ->
@@ -179,8 +169,8 @@ filter_item(Item, Allowed) ->
 
 %%--------------------------------------------------------------------
 
-for_all(List, Fun, Context) ->
-    [Fun([{atomise_name(K), clean_value(V)} || {K, V} <- I], Context) ||
+for_all(List, Fun) ->
+    [Fun([{atomise_name(K), clean_value(V)} || {K, V} <- I]) ||
         {struct, I} <- List].
 
 atomise_name(N) ->
@@ -189,23 +179,18 @@ atomise_name(N) ->
 clean_value({struct, L}) -> L;
 clean_value(A)           -> A.
 
-allow_user(Username, VHost) ->
-    rabbit_access_control:set_permissions(
-      <<"client">>, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
-
 %%--------------------------------------------------------------------
 
-add_user(User, _Context) ->
+add_user(User) ->
     rabbit_mgmt_wm_user:put_user(pget(name,          User),
                                  pget(password,      User),
                                  pget(administrator, User)).
 
-add_vhost(VHost, #context{ extra = {Username, _} }) ->
+add_vhost(VHost) ->
     VHostName = pget(name, VHost),
-    rabbit_mgmt_wm_vhost:put_vhost(VHostName),
-    allow_user(Username, VHostName).
+    rabbit_mgmt_wm_vhost:put_vhost(VHostName).
 
-add_permission(Permission, _Context) ->
+add_permission(Permission) ->
     rabbit_access_control:set_permissions(pget(scope,     Permission),
                                           pget(user,      Permission),
                                           pget(vhost,     Permission),
@@ -213,46 +198,47 @@ add_permission(Permission, _Context) ->
                                           pget(write,     Permission),
                                           pget(read,      Permission)).
 
-add_queue(Queue, Context) ->
-    amqp_request('queue.declare', map_name(queue, Queue), Context).
+add_queue(Queue) ->
+    rabbit_amqqueue:declare(r(queue,                              Queue),
+                            pget(durable,                         Queue),
+                            pget(auto_delete,                     Queue),
+                            rabbit_mgmt_util:args(pget(arguments, Queue)),
+                            none).
 
-add_exchange(Exchange, Context) ->
-    amqp_request('exchange.declare', map_name(exchange, Exchange), Context).
+add_exchange(Exchange) ->
+    rabbit_exchange:declare(r(exchange,                           Exchange),
+                            rabbit_exchange:check_type(pget(type, Exchange)),
+                            pget(durable,                         Exchange),
+                            pget(auto_delete,                     Exchange),
+                            rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
-add_binding(Binding, Context) ->
-    amqp_request('queue.bind', Binding, Context).
+add_binding(Binding) ->
+    rabbit_binding:add(
+      #binding{exchange_name = r(exchange, exchange,                Binding),
+               queue_name    = r(queue, queue,                      Binding),
+               key           = pget(routing_key,                    Binding),
+               args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
 
 pget(Key, List) ->
     proplists:get_value(Key, List).
 
-amqp_request(MethodName, Props, #context{ extra = {Username, Password} }) ->
-    Params = #amqp_params{username = Username,
-                          password = Password,
-                          virtual_host = pget(vhost, Props)},
-    {ok, Conn} = amqp_connection:start(direct, Params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    amqp_channel:call(Ch, props_to_method(MethodName, Props)),
-    amqp_channel:close(Ch),
-    amqp_connection:close(Conn).
+%% TODO use this elsewhere
+%% props_to_method(Method, Props) ->
+%%     Props1 = add_args_types(Props),
+%%     FieldNames = ?FRAMING:method_fieldnames(Method),
+%%     {Res, _Idx} = lists:foldl(
+%%                     fun (K, {R, Idx}) ->
+%%                             NewR = case proplists:get_value(K, Props1) of
+%%                                        undefined -> R;
+%%                                        V         -> setelement(Idx, R, V)
+%%                                    end,
+%%                             {NewR, Idx + 1}
+%%                     end, {?FRAMING:method_record(Method), 2},
+%%                     FieldNames),
+%%     Res.
 
-props_to_method(Method, Props) ->
-    Props1 = add_args_types(Props),
-    FieldNames = ?FRAMING:method_fieldnames(Method),
-    {Res, _Idx} = lists:foldl(
-                    fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props1) of
-                                       undefined -> R;
-                                       V         -> setelement(Idx, R, V)
-                                   end,
-                            {NewR, Idx + 1}
-                    end, {?FRAMING:method_record(Method), 2},
-                    FieldNames),
-    Res.
+r(Type, Props) ->
+    r(Type, name, Props).
 
-map_name(K, Props) ->
-    [{K, pget(name, Props)} | Props].
-
-add_args_types(Props) ->
-    Args = proplists:get_value(arguments, Props),
-    [{arguments, rabbit_mgmt_util:args(Args)} |
-     proplists:delete(arguments, Props)].
+r(Type, Name, Props) ->
+    rabbit_misc:r(pget(vhost, Props), Type, pget(Name, Props)).
