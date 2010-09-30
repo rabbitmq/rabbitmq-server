@@ -222,20 +222,20 @@ trie_binding_op(X, Node, Q, Op) ->
 trie_has_any_children(X, Node) ->
     MatchHead = #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
                                                         node_id = Node,
-                                                        word = '$1'},
+                                                        _='_'},
                                  _='_'},
     Select = mnesia:select(rabbit_topic_trie_edge,
-                           [{MatchHead, [], ['$1']}], 1, read),
+                           [{MatchHead, [], ['$_']}], 1, read),
     select_while_no_result(Select) /= '$end_of_table'.
 
 trie_has_any_bindings(X, Node) ->
     MatchHead = #topic_trie_binding{
                     trie_binding = #trie_binding{exchange_name = X,
                                                  node_id = Node,
-                                                 queue_name = '$1'},
+                                                 _='_'},
                     _='_'},
     Select = mnesia:select(rabbit_topic_trie_binding,
-                           [{MatchHead, [], ['$1']}], 1, read),
+                           [{MatchHead, [], ['$_']}], 1, read),
     select_while_no_result(Select) /= '$end_of_table'.
 
 select_while_no_result({[], Cont}) ->
