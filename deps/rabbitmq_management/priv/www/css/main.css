@@ -13,8 +13,6 @@ body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 #main a { color: #444; font-weight: bold; text-decoration: none; color: black; }
 #menu a.selected { background-color: #F60; color:white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
 
-.error-message { position: fixed; text-align: center; font-size: 1.5em; background: yellow; padding: 20px; }
-
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
 h1 b { color: black; font-weight: normal; }
 
@@ -52,9 +50,10 @@ td.c { text-align: center; }
 td.r { text-align: right; }
 
 p.status-ok { color: #888; }
-p.status-error { background: #f44; border: 2px solid #800; color: white; }
-p.warning { background: #ff8; border: 2px solid #880; }
-p.status-error, p.warning { font-weight: bold; margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; }
+p.status-error { background: #f44; border: 2px solid #800; color: white; margin-top: 50px !important; }
+p.warning, div.form-error { background: #ff8; border: 2px solid #880; }
+p.status-error, p.warning, div.form-error { font-weight: bold; margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; }
+div.form-error { position: fixed; }
 p#update-form { float: right; margin: 0; padding: 0; }
 
 .highlight, .highlight-right { width: 150px; font-size: 150%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 20px 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }

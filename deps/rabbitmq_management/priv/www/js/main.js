@@ -196,8 +196,8 @@ function with_update(reqs, acc, fun) {
 }
 
 function error_popup(text) {
-    $('body').prepend('<div class="error-message">' + text + '</div>');
-    $('.error-message').center().fadeOut(10000)
+    $('body').prepend('<div class="form-error">' + text + '</div>');
+    $('.form-error').center().fadeOut(5000)
         .click( function() { $(this).stop().fadeOut('fast') } );
 }
 
