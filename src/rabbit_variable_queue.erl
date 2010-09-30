@@ -472,21 +472,23 @@ delete_and_terminate(State) ->
     a(State2 #vqstate { index_state       = IndexState1,
                         msg_store_clients = undefined }).
 
-purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len,
+purge(State = #vqstate { q4               = Q4,
+                         index_state      = IndexState,
+                         len              = Len,
                          persistent_count = PCount }) ->
     %% TODO: when there are no pending acks, which is a common case,
     %% we could simply wipe the qi instead of issuing delivers and
     %% acks for all the messages.
-    {LensByStore, IndexState1} =
-        remove_queue_entries(fun rabbit_misc:queue_fold/3, Q4,
-                             orddict:new(), IndexState),
+    {LensByStore, IndexState1} = remove_queue_entries(
+                                   fun rabbit_misc:queue_fold/3, Q4,
+                                   orddict:new(), IndexState),
     {LensByStore1, State1 = #vqstate { q1 = Q1, index_state = IndexState2 }} =
         purge_betas_and_deltas(LensByStore,
                                State #vqstate { q4          = queue:new(),
                                                 index_state = IndexState1 }),
-    {LensByStore2, IndexState3} =
-        remove_queue_entries(fun rabbit_misc:queue_fold/3, Q1,
-                             LensByStore1, IndexState2),
+    {LensByStore2, IndexState3} = remove_queue_entries(
+                                    fun rabbit_misc:queue_fold/3, Q1,
+                                    LensByStore1, IndexState2),
     PCount1 = PCount - find_persistent_count(LensByStore2),
     {Len, a(State1 #vqstate { q1               = queue:new(),
                               index_state      = IndexState3,
@@ -962,18 +964,19 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
     reduce_memory_use(
       State1 #vqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }).
 
-purge_betas_and_deltas(LensByStore, State = #vqstate { index_state = IndexState,
-                                                       q3          = Q3 }) ->
+purge_betas_and_deltas(LensByStore,
+                       State = #vqstate { q3          = Q3,
+                                          index_state = IndexState }) ->
     case bpqueue:is_empty(Q3) of
         true  -> {LensByStore, State};
-        false -> {LensByStore1, IndexState1} =
-                     remove_queue_entries(fun beta_fold/3, Q3, LensByStore,
-                                          IndexState),
+        false -> {LensByStore1, IndexState1} = remove_queue_entries(
+                                                 fun beta_fold/3, Q3,
+                                                 LensByStore, IndexState),
                  purge_betas_and_deltas(LensByStore1,
                                         maybe_deltas_to_betas(
                                           State #vqstate {
-                                            index_state = IndexState1,
-                                            q3          = bpqueue:new() }))
+                                            q3          = bpqueue:new(),
+                                            index_state = IndexState1 }))
     end.
 
 remove_queue_entries(Fold, Q, LensByStore, IndexState) ->
