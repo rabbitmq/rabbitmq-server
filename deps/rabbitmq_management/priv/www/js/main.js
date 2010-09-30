@@ -233,7 +233,11 @@ function postprocess() {
     $('#download-configuration').click(function() {
             var path = '/api/all-configuration?download=' +
                 esc($('#download-filename').val());
-            window.open(path, 'Download');
+            if ($.browser.msie) {
+                window.location = path;
+            } else {
+                window.open(path, 'Download');
+            }
             return false;
         });
     $('#update-every').change(function() {
