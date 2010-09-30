@@ -41,7 +41,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, connection, collector, parse_state}).
+-record(state, {socket, session_id, channel, connection, parse_state}).
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
@@ -103,7 +103,6 @@ init(_Parent) ->
             try
                 ?MODULE:mainloop(#state{socket = Sock,
                                         channel = none,
-                                        collector = none,
                                         parse_state = ParseState})
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
@@ -155,7 +154,6 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
                     explain_amqp_death(ReplyCode, Explanation, State),
                     done;
                 {'EXIT', Reason} ->
-                    io:format("~p~n", [Reason]),
                     send_priv_error("Processing error", "Processing error\n",
                                     Reason, State),
                     done;
@@ -316,7 +314,8 @@ send_method(Method, State = #state{channel = Channel}) ->
     amqp_channel:call(Channel, Method),
     State.
 
-send_method(Method, Properties, BodyFragments, State = #state{channel = Channel}) ->
+send_method(Method, Properties, BodyFragments, 
+            State = #state{channel = Channel}) ->
     amqp_channel:call(Channel,Method, #amqp_msg{
                                 props = Properties,
                                 payload = lists:reverse(BodyFragments)}),
@@ -490,7 +489,8 @@ process_command("SUBSCRIBE",
                                   list_to_binary("Q_" ++ QueueStr)
                           end,
             Queue = list_to_binary(QueueStr),
-            BoolH = fun(K, V) -> rabbit_stomp_frame:boolean_header(Frame, K, V) end,
+            BoolH = fun(K, V) -> 
+                            rabbit_stomp_frame:boolean_header(Frame, K, V) end,
             State1 = send_method(
                        #'queue.declare'{
                            queue       = Queue,
@@ -501,11 +501,13 @@ process_command("SUBSCRIBE",
                            arguments   = [longstr_field(K, V) ||
                                              {"X-Q-" ++ K, V} <- Headers]},
                        State),
-            #'basic.consume_ok'{} = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Queue,
-                                                  consumer_tag = ConsumerTag,
-                                                  no_local = false,
-                                                  no_ack = (AckMode == auto),
-                                                  exclusive = false},
+            amqp_channel:subscribe(Channel, 
+                                   #'basic.consume'{
+                                     queue        = Queue, 
+                                     consumer_tag = ConsumerTag,
+                                     no_local     = false,
+                                     no_ack       = (AckMode == auto),
+                                     exclusive    = false},
                                  self()),
             State2 = case rabbit_stomp_frame:header(Frame, "exchange") of
                          {ok, ExchangeStr } ->
@@ -515,10 +517,10 @@ process_command("SUBSCRIBE",
                                               Frame, "routing_key", "")),
                              send_method(
                                #'queue.bind'{
-                                   queue = Queue,
-                                   exchange = Exchange,
+                                   queue       = Queue,
+                                   exchange    = Exchange,
                                    routing_key = RoutingKey,
-                                   arguments = [longstr_field(K, V) ||
+                                   arguments   = [longstr_field(K, V) ||
                                                    {"X-B-" ++ K, V} <- Headers]},
                                State1);
                          not_found -> State1

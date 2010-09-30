@@ -138,10 +138,9 @@ class TestConnected(unittest.TestCase):
         resp = ('ERROR\n'
                 'message:not_found\n'
                 'content-type:text/plain\n'
-                'content-length:55\n'
+                'content-length:31\n'
                 '\n'
-                "no exchange 'foo' in vhost '/'\n"
-                "Method was 'queue.bind'\n\x00")
+                "no exchange 'foo' in vhost '/'\n\x00")
         self.match(resp, self.cd.recv(4096))
 
 
