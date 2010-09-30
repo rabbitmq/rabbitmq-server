@@ -884,7 +884,8 @@ handle_method(#'channel.flow'{active = false}, _,
     Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
     ok = rabbit_amqqueue:flush_all(QPids, self()),
     case Queues of
-        [] -> {reply, #'channel.flow_ok'{active = false}, State};
+        [] -> {reply, #'channel.flow_ok'{active = false},
+               State#ch{limiter_pid = LimiterPid1}};
         _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
                                  blocking = dict:from_list(Queues)}}
     end;
