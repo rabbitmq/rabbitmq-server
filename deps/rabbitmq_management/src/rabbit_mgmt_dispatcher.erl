@@ -49,6 +49,7 @@ dispatcher() ->
      {["users"],                                   rabbit_mgmt_wm_users, []},
      {["users", user],                             rabbit_mgmt_wm_user, []},
      {["users", user, "permissions"],              rabbit_mgmt_wm_permissions_user, []},
+     {["whoami"],                                  rabbit_mgmt_wm_whoami, []},
      {["permissions"],                             rabbit_mgmt_wm_permissions, []},
      {["permissions", vhost, user],                rabbit_mgmt_wm_permission, []},
      {["aliveness-test", vhost],                   rabbit_mgmt_wm_aliveness_test, []}

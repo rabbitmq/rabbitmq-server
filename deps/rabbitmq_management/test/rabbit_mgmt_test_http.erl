@@ -62,6 +62,9 @@ vhosts_test() ->
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 users_test() ->
+    assert_item([{name, <<"guest">>},
+                 {password, <<"guest">>},
+                 {administrator, true}], http_get("/whoami", ?OK)),
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),

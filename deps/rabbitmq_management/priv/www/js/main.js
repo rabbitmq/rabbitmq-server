@@ -1,8 +1,11 @@
 var statistics_level;
+var user_administrator;
 
 $(document).ready(function() {
-    var overview = JSON.parse(sync_get('/overview'));
-    statistics_level = overview.statistics_level;
+    statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
+    var user = JSON.parse(sync_get('/whoami'));
+    replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
+    user_administrator = user.administrator;
     app.run();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
@@ -230,6 +233,9 @@ function postprocess() {
             if (interval == '') interval = null;
             set_timer_interval(interval);
         });
+    if (! user_administrator) {
+        $('.administrator-only').remove();
+    }
 }
 
 function with_reqs(reqs, acc, fun) {

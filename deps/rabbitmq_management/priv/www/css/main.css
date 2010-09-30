@@ -1,6 +1,9 @@
 body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 .br { clear: both; display: block; }
 #logo { width: 204px; height: 37px; margin-bottom: 20px; background: url(../img/rabbitmqlogo.png); }
+#login { float: right; color: #444; }
+#login p { padding: 0; margin: 0; }
+#login b { color: black; font-weight: normal; }
 #menu ul { float: left; padding: 0; margin: 0; }
 #menu li { float: left; list-style-type: none; padding: 0 2em 0 0; }
 #menu li a { display: block; padding: 0.5em; }
