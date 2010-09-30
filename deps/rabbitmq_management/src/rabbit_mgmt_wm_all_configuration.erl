@@ -60,7 +60,7 @@ to_json(ReqData, Context) ->
                export_binding(B, XNames, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
-      [{rabbit_version, Vsn}] ++
+      [{rabbit_version, list_to_binary(Vsn)}] ++
       filter(
         [{users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      rabbit_mgmt_wm_vhosts:vhosts()},
@@ -71,7 +71,7 @@ to_json(ReqData, Context) ->
       case wrq:get_qs_value("download", ReqData) of
           undefined -> ReqData;
           Filename  -> wrq:set_resp_header(
-                         "Content-disposition",
+                         "Content-Disposition",
                          "attachment; filename=" ++
                              mochiweb_util:unquote(Filename), ReqData)
       end,
