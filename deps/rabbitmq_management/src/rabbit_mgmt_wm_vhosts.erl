@@ -34,13 +34,21 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(vhosts(), ReqData, Context).
+to_json(ReqData, Context = #context{username = Username,
+                                    is_admin = IsAdmin}) ->
+    VHosts = case IsAdmin of
+                 true  -> vhosts();
+                 false -> format(rabbit_mgmt_util:vhosts(Username))
+             end,
+    rabbit_mgmt_util:reply(VHosts, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
 vhosts() ->
-    [[{name, N}] || N <- rabbit_access_control:list_vhosts()].
+    format(rabbit_access_control:list_vhosts()).
+
+format(Vs) ->
+    [[{name, N}] || N <- Vs].

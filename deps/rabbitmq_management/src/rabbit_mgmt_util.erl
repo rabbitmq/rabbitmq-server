@@ -27,7 +27,7 @@
 -export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
 -export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
--export([filter_user/3, with_decode/5, redirect/2, args/1]).
+-export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").

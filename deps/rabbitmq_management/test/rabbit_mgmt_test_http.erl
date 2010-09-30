@@ -331,8 +331,10 @@ permissions_administrator_test() ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
                 http_get(Path, "guest", "guest", ?OK)
         end,
-    Test("/vhosts"),
+    %% All users can get a list of vhosts. It may be filtered.
+    %%Test("/vhosts"),
     Test("/vhosts/%2f"),
+    Test("/vhosts/%2f/permissions"),
     Test("/users"),
     Test("/users/guest"),
     Test("/users/guest/permissions"),
@@ -352,6 +354,11 @@ permissions_vhost_test() ->
     http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
     http_put("/permissions/myvhost1/guest", PermArgs, ?NO_CONTENT),
     http_put("/permissions/myvhost2/guest", PermArgs, ?NO_CONTENT),
+    assert_list([[{name, <<"/">>}],
+                 [{name, <<"myvhost1">>}],
+                 [{name, <<"myvhost2">>}]], http_get("/vhosts", ?OK)),
+    assert_list([[{name, <<"myvhost1">>}]],
+                http_get("/vhosts", "myuser", "myuser", ?OK)),
     http_put("/queues/myvhost1/myqueue", QArgs, ?NO_CONTENT),
     http_put("/queues/myvhost2/myqueue", QArgs, ?NO_CONTENT),
     Test1 =
@@ -424,9 +431,9 @@ permissions_connection_channel_test() ->
     http_get(ChPath2, ?OK),
     http_get(ChPath1, "user", "user", ?OK),
     http_get(ChPath2, "user", "user", ?NOT_AUTHORISED),
-
     amqp_connection:close(Conn1),
     amqp_connection:close(Conn2),
+    http_delete("/users/user", ?NO_CONTENT),
     ok.
 
 unicode_test() ->
