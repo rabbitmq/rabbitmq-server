@@ -82,8 +82,9 @@
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
                               rabbit_types:error('in_use')).
--spec(maybe_auto_delete/1:: (rabbit_types:exchange()) ->
-                                 'not_deleted' | 'auto_deleted').
+-spec(maybe_auto_delete/1::
+        (rabbit_types:exchange())
+        -> 'not_deleted' | {'auto_deleted', fun (() -> any())}).
 
 -endif.
 
@@ -289,8 +290,9 @@ delete(XName, IfUnused) ->
               false -> fun unconditional_delete/1
           end,
     case call_with_exchange(XName, Fun) of
-        {deleted, X = #exchange{type = Type}, Bs} ->
+        {deleted, X = #exchange{type = Type}, Bs, Fun1} ->
             (type_to_module(Type)):delete(X, Bs),
+            Fun1(),
             ok;
         Error = {error, _InUseOrNotFound} ->
             Error
@@ -300,8 +302,8 @@ maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
 maybe_auto_delete(#exchange{auto_delete = true} = X) ->
     case conditional_delete(X) of
-        {error, in_use}  -> not_deleted;
-        {deleted, X, []} -> auto_deleted
+        {error, in_use}       -> not_deleted;
+        {deleted, X, [], Fun} -> {auto_deleted, Fun}
     end.
 
 conditional_delete(X = #exchange{name = XName}) ->
@@ -315,4 +317,4 @@ unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
     rabbit_event:notify(exchange_deleted, [{name, XName}]),
-    {deleted, X, Bindings}.
+    {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.

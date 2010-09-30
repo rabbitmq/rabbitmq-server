@@ -167,12 +167,8 @@ remove(Binding, InnerFun) ->
            end) of
         {error, _} = Err ->
             Err;
-        {{IsDeleted, Src = #exchange{ type = Type }}, B} ->
-            Module = type_to_module(Type),
-            case IsDeleted of
-                auto_deleted -> ok = Module:delete(Src, [B]);
-                not_deleted  -> ok = Module:remove_bindings(Src, [B])
-            end,
+        {{IsDeleted, Src}, B} ->
+            ok = post_binding_removal(IsDeleted, Src, [B]),
             rabbit_event:notify(binding_deleted, info(B)),
             ok
     end.
@@ -330,13 +326,18 @@ remove_for_destination(DstName, FwdDeleteFun) ->
                 lists:keysort(#binding.source, DeletedBindings), []),
     fun () ->
             lists:foreach(
-              fun ({{IsDeleted, Src = #exchange{ type = Type }}, Bs}) ->
-                      Module = type_to_module(Type),
-                      case IsDeleted of
-                          auto_deleted -> Module:delete(Src, Bs);
-                          not_deleted  -> Module:remove_bindings(Src, Bs)
-                      end
+              fun ({{IsDeleted, Src}, Bs}) ->
+                      ok = post_binding_removal(IsDeleted, Src, Bs)
               end, Grouped)
+    end.
+
+post_binding_removal(IsDeleted, Src = #exchange{ type = Type }, Bs) ->
+    Module = type_to_module(Type),
+    case IsDeleted of
+        {auto_deleted, Fun} -> ok = Module:delete(Src, Bs),
+                               Fun(),
+                               ok;
+        not_deleted         -> ok = Module:remove_bindings(Src, Bs)
     end.
 
 %% Requires that its input binding list is sorted in exchange-name
