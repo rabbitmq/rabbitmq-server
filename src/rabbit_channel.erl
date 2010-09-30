@@ -879,15 +879,14 @@ handle_method(#'channel.flow'{active = false}, _,
                       undefined -> start_limiter(State);
                       Other     -> Other
                   end,
+    State1 = State#ch{limiter_pid = LimiterPid1},
     ok = rabbit_limiter:block(LimiterPid1),
-    QPids = consumer_queues(Consumers),
-    Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
-    ok = rabbit_amqqueue:flush_all(QPids, self()),
-    case Queues of
-        [] -> {reply, #'channel.flow_ok'{active = false},
-               State#ch{limiter_pid = LimiterPid1}};
-        _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
-                                 blocking = dict:from_list(Queues)}}
+    case consumer_queues(Consumers) of
+        []    -> {reply, #'channel.flow_ok'{active = false}, State1};
+        QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
+                              QPid <- QPids],
+                 ok = rabbit_amqqueue:flush_all(QPids, self()),
+                 {noreply, State1#ch{blocking = dict:from_list(Queues)}}
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->
