@@ -464,6 +464,7 @@ send_or_enqueue_ack(_, State = #ch{confirm_enabled = false}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo,
                     State = #ch{confirm_multiple = false}) ->
+    maybe_incr_stats([{channel_stats, 1}], confirm, State),
     do_if_not_dup(MsgSeqNo, State,
                   fun(MSN, S = #ch{writer_pid = WriterPid,
                                    qpid_to_msgs = QTM}) ->
@@ -475,6 +476,7 @@ send_or_enqueue_ack(MsgSeqNo,
                                                end, QTM) }
                   end);
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
+    maybe_incr_stats([{channel_stats, 1}], confirm, State),
     do_if_not_dup(MsgSeqNo, State,
                   fun(MSN, S = #ch{qpid_to_msgs = QTM}) ->
                           State1 = start_ack_timer(S),
@@ -1322,6 +1324,8 @@ incr_stats({QPid, _} = QX, Inc, Measure) ->
 incr_stats(QPid, Inc, Measure) when is_pid(QPid) ->
     maybe_monitor(QPid),
     update_measures(queue_stats, QPid, Inc, Measure);
+incr_stats(channel_stats, Inc, Measure) ->
+    update_measures(channel_stats, self(), Inc, Measure);
 incr_stats(X, Inc, Measure) ->
     update_measures(exchange_stats, X, Inc, Measure).
 
@@ -1355,6 +1359,8 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                   [{QPid, Stats} || {{queue_stats, QPid}, Stats} <- get()]},
                  {channel_exchange_stats,
                   [{X, Stats} || {{exchange_stats, X}, Stats} <- get()]},
+                 {channel_channel_stats,
+                  [Stats || {{channel_stats, _}, Stats} <- get()]},
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
