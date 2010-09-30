@@ -553,6 +553,29 @@ arguments_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+queue_purge_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Publish = fun() ->
+                      amqp_channel:call(
+                        Ch, #'basic.publish'{exchange = <<"">>,
+                                             routing_key = <<"myqueue">>},
+                        #amqp_msg{payload = <<"message">>})
+              end,
+    Publish(),
+    Publish(),
+    {#'basic.get_ok'{}, _} =
+        amqp_channel:call(Ch, #'basic.get'{queue = <<"myqueue">>}),
+    http_delete("/queues/%2f/myqueue/contents", ?NO_CONTENT),
+    http_delete("/queues/%2f/badqueue/contents", ?NOT_FOUND),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = <<"myqueue">>}),
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->

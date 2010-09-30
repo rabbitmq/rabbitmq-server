@@ -39,6 +39,7 @@ dispatcher() ->
      {["queues", vhost],                           rabbit_mgmt_wm_queues, []},
      {["queues", vhost, queue],                    rabbit_mgmt_wm_queue, []},
      {["queues", vhost, queue, "bindings"],        rabbit_mgmt_wm_bindings, [queue]},
+     {["queues", vhost, queue, "contents"],        rabbit_mgmt_wm_queue_purge, []},
      {["bindings"],                                rabbit_mgmt_wm_bindings, [all]},
      {["bindings", vhost],                         rabbit_mgmt_wm_bindings, [all]},
      {["bindings", vhost, queue, exchange],        rabbit_mgmt_wm_bindings, [queue_exchange]},

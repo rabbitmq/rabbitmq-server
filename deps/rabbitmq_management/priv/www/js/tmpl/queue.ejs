@@ -53,11 +53,24 @@
 <%= format('bindings', {'mode': 'queue', 'bindings': bindings, 'parent': queue}) %>
 
 <div class="section-hidden">
+  <h2>Purge This Queue</h2>
+  <div>
+    <form action="#/queues" method="delete">
+      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="mode" value="purge"/>
+      <input type="submit" value="Purge" />
+    </form>
+  </div>
+</div>
+
+<div class="section-hidden">
   <h2>Delete This Queue</h2>
   <div>
     <form action="#/queues" method="delete" class="confirm">
       <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
       <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="mode" value="delete"/>
       <input type="submit" value="Delete" />
     </form>
   </div>
