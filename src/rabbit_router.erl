@@ -46,8 +46,8 @@
 -type(qpids() :: [pid()]).
 -type(match_result() :: [rabbit_types:binding_destination()]).
 
--spec(deliver/2 ::
-        (qpids(), rabbit_types:delivery()) -> {routing_result(), qpids()}).
+-spec(deliver/2 :: ([rabbit_amqqueue:name()], rabbit_types:delivery()) ->
+                        {routing_result(), qpids()}).
 -spec(match_bindings/2 :: (rabbit_types:binding_source(),
                            fun ((rabbit_types:binding()) -> boolean())) ->
     match_result()).
@@ -58,8 +58,8 @@
 
 %%----------------------------------------------------------------------------
 
-deliver(QPids, Delivery = #delivery{mandatory = false,
-                                    immediate = false}) ->
+deliver(QNames, Delivery = #delivery{mandatory = false,
+                                     immediate = false}) ->
     %% optimisation: when Mandatory = false and Immediate = false,
     %% rabbit_amqqueue:deliver will deliver the message to the queue
     %% process asynchronously, and return true, which means all the
@@ -67,11 +67,13 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
     %% fire-and-forget cast here and return the QPids - the semantics
     %% is preserved. This scales much better than the non-immediate
     %% case below.
+    QPids = lookup_qpids(QNames),
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
-deliver(QPids, Delivery) ->
+deliver(QNames, Delivery) ->
+    QPids = lookup_qpids(QNames),
     {Success, _} =
         delegate:invoke(QPids,
                         fun (Pid) ->
@@ -81,6 +83,15 @@ deliver(QPids, Delivery) ->
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
                    {Routed, Handled}).
+
+lookup_qpids(QNames) ->
+    lists:foldl(
+      fun (Key, Acc) ->
+              case mnesia:dirty_read({rabbit_queue, Key}) of
+                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
+                  []                      -> Acc
+              end
+      end, [], QNames).
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source

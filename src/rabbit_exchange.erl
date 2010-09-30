@@ -229,8 +229,7 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 publish(X = #exchange{name = XName}, Delivery) ->
     QNames = find_qnames(Delivery, queue:from_list([X]),
                          sets:from_list([XName]), []),
-    QPids = lookup_qpids(QNames),
-    rabbit_router:deliver(QPids, Delivery).
+    rabbit_router:deliver(QNames, Delivery).
 
 find_qnames(Delivery, WorkList, SeenXs, QNames) ->
     case queue:out(WorkList) of
@@ -269,15 +268,6 @@ process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     end;
 process_alternate(_X, Results) ->
     Results.
-
-lookup_qpids(QNames) ->
-    lists:foldl(
-      fun (Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], QNames).
 
 call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
