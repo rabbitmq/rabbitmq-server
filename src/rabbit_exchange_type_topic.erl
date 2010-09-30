@@ -30,7 +30,7 @@
 %%
 
 -module(rabbit_exchange_type_topic).
--include_lib("stdlib/include/qlc.hrl").
+
 -include("rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).
@@ -152,7 +152,7 @@ follow_down_create(X, Words) ->
         {ok, FinalNode}      -> FinalNode;
         {error, Node, RestW} -> lists:foldl(
                                   fun(W, CurNode) ->
-                                         NewNode = new_node(),
+                                         NewNode = new_node_id(),
                                          trie_add_edge(X, CurNode, NewNode, W),
                                          NewNode
                                   end, Node, RestW)
@@ -244,30 +244,23 @@ select_while_no_result(Other) ->
     Other.
 
 trie_remove_all_edges(X) ->
-    Query = qlc:q([Entry ||
-                   Entry = #topic_trie_edge{
-                               trie_edge = #trie_edge{exchange_name = X1,
-                                                      _='_'},
-                               _='_'}
-                       <- mnesia:table(rabbit_topic_trie_edge),
-                   X1 == X]),
+    MatchHead = #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
+                                                        _='_'},
+                                 _='_'},
     lists:foreach(
-        fun(O) -> mnesia:delete_object(rabbit_topic_trie_edge, O, write) end,
-        qlc:e(Query)).
-
+        fun(R) -> mnesia:delete_object(rabbit_topic_trie_edge, R, write) end,
+        mnesia:select(rabbit_topic_trie_edge, [{MatchHead, [], ['$_']}])).
+    
 trie_remove_all_bindings(X) ->
-    Query = qlc:q([Entry ||
-                   Entry = #topic_trie_binding{
-                               trie_binding = #trie_binding{exchange_name = X1,
-                                                            _='_'},
-                               _='_'}
-                       <- mnesia:table(rabbit_topic_trie_binding),
-                   X1 == X]),
+    MatchHead = #topic_trie_binding{trie_binding =
+                                        #trie_binding{exchange_name = X,
+                                                      _='_'},
+                                    _='_'},
     lists:foreach(
-        fun(O) -> mnesia:delete_object(rabbit_topic_trie_binding, O, write) end,
-        qlc:e(Query)).
+        fun(R) -> mnesia:delete_object(rabbit_topic_trie_binding, R, write) end,
+        mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$_']}])).
 
-new_node() ->
+new_node_id() ->
     rabbit_guid:guid().
 
 split_topic_key(Key) ->
