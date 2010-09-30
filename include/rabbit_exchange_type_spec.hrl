@@ -32,7 +32,7 @@
 
 -spec(description/0 :: () -> [{atom(), any()}]).
 -spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                   -> {rabbit_router:routing_result(), [pid()]}).
+                   -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
 -spec(create/1 :: (rabbit_types:exchange()) -> 'ok').
 -spec(recover/2 :: (rabbit_types:exchange(),

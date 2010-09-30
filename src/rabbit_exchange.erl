@@ -99,11 +99,11 @@ recover() ->
            end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
     recover_with_bindings(
-      lists:keysort(#binding.exchange_name, Bs),
+      lists:keysort(#binding.source, Bs),
       lists:keysort(#exchange.name, Xs), []).
 
-recover_with_bindings([B = #binding{exchange_name = Name} | Rest],
-                      Xs = [#exchange{name = Name} | _],
+recover_with_bindings([B = #binding{source = XName} | Rest],
+                      Xs = [#exchange{name = XName} | _],
                       Bindings) ->
     recover_with_bindings(Rest, Xs, [B | Bindings]);
 recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
@@ -225,37 +225,55 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X, Delivery) ->
-    publish(X, [], Delivery).
+publish(X = #exchange{name = XName}, Delivery) ->
+    QNames = find_qnames(Delivery, queue:from_list([X]), [XName], []),
+    QPids = lookup_qpids(QNames),
+    rabbit_router:deliver(QPids, Delivery).
 
-publish(X = #exchange{type = Type}, Seen, Delivery) ->
-    case (type_to_module(Type)):publish(X, Delivery) of
-        {_, []} = R ->
-            #exchange{name = XName, arguments = Args} = X,
-            case rabbit_misc:r_arg(XName, exchange, Args,
-                                   <<"alternate-exchange">>) of
-                undefined ->
-                    R;
-                AName ->
-                    NewSeen = [XName | Seen],
-                    case lists:member(AName, NewSeen) of
-                        true  -> R;
-                        false -> case lookup(AName) of
-                                     {ok, AX} ->
-                                         publish(AX, NewSeen, Delivery);
-                                     {error, not_found} ->
-                                         rabbit_log:warning(
-                                           "alternate exchange for ~s "
-                                           "does not exist: ~s",
-                                           [rabbit_misc:rs(XName),
-                                            rabbit_misc:rs(AName)]),
-                                         R
-                                 end
-                    end
-            end;
-        R ->
-            R
+find_qnames(Delivery, WorkList, SeenXs, QNames) ->
+    case queue:out(WorkList) of
+        {empty, _WorkList} ->
+            lists:usort(QNames);
+        {{value, X = #exchange{type = Type}}, WorkList1} ->
+            DstNames =
+                process_alternate(
+                  X, ((type_to_module(Type)):publish(X, Delivery))),
+            {WorkList2, SeenXs1, QNames1} =
+                lists:foldl(
+                  fun (XName = #resource{kind = exchange},
+                       {WorkListN, SeenXsN, QNamesN} = Acc) ->
+                          case lists:member(XName, SeenXsN) of
+                              true  -> Acc;
+                              false -> {case lookup(XName) of
+                                            {ok, X1} ->
+                                                queue:in(X1, WorkListN);
+                                            {error, not_found} ->
+                                                WorkListN
+                                        end, [XName | SeenXsN], QNamesN}
+                          end;
+                      (QName = #resource{kind = queue},
+                       {WorkListN, SeenXsN, QNamesN})->
+                          {WorkListN, SeenXsN, [QName | QNamesN]}
+                  end, {WorkList1, SeenXs, QNames}, DstNames),
+            find_qnames(Delivery, WorkList2, SeenXs1, QNames1)
     end.
+
+process_alternate(#exchange{name = XName, arguments = Args}, []) ->
+    case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
+        undefined -> [];
+        AName     -> [AName]
+    end;
+process_alternate(_X, Results) ->
+    Results.
+
+lookup_qpids(QNames) ->
+    lists:foldl(
+      fun (Key, Acc) ->
+              case mnesia:dirty_read({rabbit_queue, Key}) of
+                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
+                  []                      -> Acc
+              end
+      end, [], QNames).
 
 call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -287,13 +305,13 @@ maybe_auto_delete(#exchange{auto_delete = true} = X) ->
     end.
 
 conditional_delete(X = #exchange{name = XName}) ->
-    case rabbit_binding:has_for_exchange(XName) of
+    case rabbit_binding:has_for_source(XName) of
         false  -> unconditional_delete(X);
         true   -> {error, in_use}
     end.
 
 unconditional_delete(X = #exchange{name = XName}) ->
-    Bindings = rabbit_binding:remove_for_exchange(XName),
+    Bindings = rabbit_binding:remove_for_source(XName),
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
     rabbit_event:notify(exchange_deleted, [{name, XName}]),

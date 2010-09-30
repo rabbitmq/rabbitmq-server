@@ -50,8 +50,8 @@ description() ->
     [{name, <<"fanout">>},
      {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name}, Delivery) ->
-    rabbit_router:deliver(rabbit_router:match_routing_key(Name, '_'), Delivery).
+publish(#exchange{name = Name}, _Delivery) ->
+    rabbit_router:match_routing_key(Name, '_').
 
 validate(_X) -> ok.
 create(_X) -> ok.

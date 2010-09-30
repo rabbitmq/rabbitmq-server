@@ -39,19 +39,20 @@
 
 -ifdef(use_specs).
 
--export_type([routing_key/0, routing_result/0]).
+-export_type([routing_key/0, routing_result/0, match_result/0]).
 
 -type(routing_key() :: binary()).
 -type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
 -type(qpids() :: [pid()]).
+-type(match_result() :: [rabbit_types:binding_destination()]).
 
 -spec(deliver/2 ::
         (qpids(), rabbit_types:delivery()) -> {routing_result(), qpids()}).
--spec(match_bindings/2 :: (rabbit_exchange:name(),
+-spec(match_bindings/2 :: (rabbit_types:binding_source(),
                            fun ((rabbit_types:binding()) -> boolean())) ->
-    qpids()).
--spec(match_routing_key/2 :: (rabbit_exchange:name(), routing_key() | '_') ->
-                                  qpids()).
+    match_result()).
+-spec(match_routing_key/2 :: (rabbit_types:binding_source(),
+                              routing_key() | '_') -> match_result()).
 
 -endif.
 
@@ -82,31 +83,23 @@ deliver(QPids, Delivery) ->
                    {Routed, Handled}).
 
 %% TODO: Maybe this should be handled by a cursor instead.
-%% TODO: This causes a full scan for each entry with the same exchange
-match_bindings(Name, Match) ->
-    Query = qlc:q([QName || #route{binding = Binding = #binding{
-                                               exchange_name = XName,
-                                               queue_name = QName}} <-
-                                mnesia:table(rabbit_route),
-                            XName == Name,
-                            Match(Binding)]),
-    lookup_qpids(mnesia:async_dirty(fun qlc:e/1, [Query])).
+%% TODO: This causes a full scan for each entry with the same source
+match_bindings(SrcName, Match) ->
+    Query = qlc:q([DestinationName ||
+                      #route{binding = Binding = #binding{
+                                         source      = SrcName1,
+                                         destination = DestinationName}} <-
+                          mnesia:table(rabbit_route),
+                      SrcName == SrcName1,
+                      Match(Binding)]),
+    mnesia:async_dirty(fun qlc:e/1, [Query]).
 
-match_routing_key(Name, RoutingKey) ->
-    MatchHead = #route{binding = #binding{exchange_name = Name,
-                                          queue_name = '$1',
-                                          key = RoutingKey,
-                                          _ = '_'}},
-    lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
-
-lookup_qpids(Queues) ->
-    lists:foldl(
-      fun (Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], lists:usort(Queues)).
+match_routing_key(SrcName, RoutingKey) ->
+    MatchHead = #route{binding = #binding{source      = SrcName,
+                                          destination = '$1',
+                                          key         = RoutingKey,
+                                          _           = '_'}},
+    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]).
 
 %%--------------------------------------------------------------------
 
