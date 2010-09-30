@@ -244,21 +244,20 @@ select_while_no_result(Other) ->
     Other.
 
 trie_remove_all_edges(X) ->
-    MatchHead = #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
-                                                        _='_'},
-                                 _='_'},
+    Pattern = #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
+                                                      _='_'},
+                               _='_'},
     lists:foreach(
         fun(R) -> mnesia:delete_object(rabbit_topic_trie_edge, R, write) end,
-        mnesia:select(rabbit_topic_trie_edge, [{MatchHead, [], ['$_']}])).
+        mnesia:match_object(rabbit_topic_trie_edge, Pattern, write)).
     
 trie_remove_all_bindings(X) ->
-    MatchHead = #topic_trie_binding{trie_binding =
-                                        #trie_binding{exchange_name = X,
-                                                      _='_'},
-                                    _='_'},
+    Pattern = #topic_trie_binding{trie_binding = #trie_binding{exchange_name =X,
+                                                               _='_'},
+                                  _='_'},
     lists:foreach(
         fun(R) -> mnesia:delete_object(rabbit_topic_trie_binding, R, write) end,
-        mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$_']}])).
+        mnesia:match_object(rabbit_topic_trie_binding, Pattern, write)).
 
 new_node_id() ->
     rabbit_guid:guid().
