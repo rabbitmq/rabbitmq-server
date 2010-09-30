@@ -124,9 +124,13 @@ find_files_line([_H | T]) ->
     find_files_line(T).
 
 get_total_memory() ->
-    vm_memory_monitor:get_vm_memory_high_watermark() *
-	vm_memory_monitor:get_total_memory().
-
+    {ok, MemoryWatermark} =
+        application:get_env(rabbit, vm_memory_high_watermark),
+    case MemoryWatermark == 0 of
+        true  -> memory_monitoring_disabled;
+        false -> vm_memory_monitor:get_vm_memory_high_watermark() *
+                     vm_memory_monitor:get_total_memory()
+    end.
 
 %%--------------------------------------------------------------------
 
