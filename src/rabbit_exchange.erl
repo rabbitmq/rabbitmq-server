@@ -227,7 +227,8 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 publish(X = #exchange{name = XName}, Delivery) ->
-    QNames = find_qnames(Delivery, queue:from_list([X]), [XName], []),
+    QNames = find_qnames(Delivery, queue:from_list([X]),
+                         sets:from_list([XName]), []),
     QPids = lookup_qpids(QNames),
     rabbit_router:deliver(QPids, Delivery).
 
@@ -243,14 +244,16 @@ find_qnames(Delivery, WorkList, SeenXs, QNames) ->
                 lists:foldl(
                   fun (XName = #resource{kind = exchange},
                        {WorkListN, SeenXsN, QNamesN} = Acc) ->
-                          case lists:member(XName, SeenXsN) of
+                          case sets:is_element(XName, SeenXsN) of
                               true  -> Acc;
                               false -> {case lookup(XName) of
                                             {ok, X1} ->
                                                 queue:in(X1, WorkListN);
                                             {error, not_found} ->
                                                 WorkListN
-                                        end, [XName | SeenXsN], QNamesN}
+                                        end,
+                                        sets:add_element(XName, SeenXsN),
+                                        QNamesN}
                           end;
                       (QName = #resource{kind = queue},
                        {WorkListN, SeenXsN, QNamesN})->
