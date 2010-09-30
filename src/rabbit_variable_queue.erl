@@ -239,7 +239,7 @@
           rates,
           msgs_on_disk,
           msg_indices_on_disk,
-          need_confirming
+          unconfirmed
         }).
 
 -record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
@@ -328,7 +328,7 @@
              rates                :: rates(),
              msgs_on_disk         :: gb_set(),
              msg_indices_on_disk  :: gb_set(),
-             need_confirming      :: gb_set()}).
+             unconfirmed          :: gb_set()}).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -449,7 +449,7 @@ init(QueueName, IsDurable, Recover,
                                       timestamp   = Now },
       msgs_on_disk         = gb_sets:new(),
       msg_indices_on_disk  = gb_sets:new(),
-      need_confirming      = gb_sets:new()},
+      unconfirmed          = gb_sets:new()},
     a(maybe_deltas_to_betas(State)).
 
 terminate(State) ->
@@ -527,24 +527,24 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                      persistent_count  = PCount,
                                      pending_ack       = PA,
                                      durable           = IsDurable,
-                                     need_confirming   = NeedConfirming }) ->
+                                     unconfirmed       = Unconfirmed }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     PA1 = record_pending_ack(m(MsgStatus1), PA),
     PCount1 = PCount + one_if(IsPersistent1),
-    NeedConfirming1 = case NeedsConfirming of
-                        true -> gb_sets:add(Guid, NeedConfirming);
-                        false -> NeedConfirming
-                    end,
+    Unconfirmed1 = case NeedsConfirming of
+                       true  -> gb_sets:add(Guid, Unconfirmed);
+                       false -> Unconfirmed
+                   end,
     {SeqId, a(State1 #vqstate {
                 next_seq_id       = SeqId    + 1,
                 out_counter       = OutCount + 1,
                 in_counter        = InCount  + 1,
                 persistent_count  = PCount1,
                 pending_ack       = PA1,
-                need_confirming   = NeedConfirming1 })}.
+                unconfirmed       = Unconfirmed1 })}.
 
 fetch(AckRequired, State = #vqstate { q4               = Q4,
                                       ram_msg_count    = RamMsgCount,
@@ -1044,7 +1044,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
                            persistent_count = PCount,
                            durable          = IsDurable,
                            ram_msg_count    = RamMsgCount,
-                           need_confirming  = NeedConfirming}) ->
+                           unconfirmed      = Unconfirmed}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk },
@@ -1054,17 +1054,17 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
                  true  -> State1 #vqstate { q4 = queue:in(m(MsgStatus1), Q4) }
              end,
     PCount1 = PCount + one_if(IsPersistent1),
-    NeedConfirming1 = case NeedsConfirming of
-                          true -> gb_sets:add(Guid, NeedConfirming);
-                          false -> NeedConfirming
-                      end,
+    Unconfirmed1 = case NeedsConfirming of
+                       true  -> gb_sets:add(Guid, Unconfirmed);
+                       false -> Unconfirmed
+                   end,
     {SeqId, State2 #vqstate {
               next_seq_id      = SeqId   + 1,
               len              = Len     + 1,
               in_counter       = InCount + 1,
               persistent_count = PCount1,
               ram_msg_count    = RamMsgCount + 1,
-              need_confirming  = NeedConfirming1 }}.
+              unconfirmed      = Unconfirmed1 }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, MSCState) ->
@@ -1189,24 +1189,24 @@ accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
 
 msgs_confirmed(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                                            msg_indices_on_disk = MIOD,
-                                           need_confirming     = NC }) ->
+                                           unconfirmed         = UC }) ->
     State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  GuidSet),
                      msg_indices_on_disk = gb_sets:difference(MIOD, GuidSet),
-                     need_confirming     = gb_sets:difference(NC,   GuidSet) }.
+                     unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
 
 msgs_written_to_disk(QPid, Guids) ->
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                      QPid,
                      fun(State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
-                                            need_confirming     = NC }) ->
+                                            unconfirmed         = UC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
                              State1 =
                                  State #vqstate {
                                    msgs_on_disk =
                                        gb_sets:intersection(
-                                         gb_sets:union(MOD, GuidSet), NC) },
+                                         gb_sets:union(MOD, GuidSet), UC) },
                              { msgs_confirmed(ToConfirmMsgs, State1),
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)
@@ -1217,14 +1217,14 @@ msg_indices_written_to_disk(QPid, Guids) ->
                      QPid,
                      fun(State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
-                                            need_confirming     = NC }) ->
+                                            unconfirmed         = UC }) ->
                              GuidSet = gb_sets:from_list(Guids),
                              ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
                              State1 =
                                  State #vqstate {
                                    msg_indices_on_disk =
                                        gb_sets:intersection(
-                                         gb_sets:union(MIOD, GuidSet), NC) },
+                                         gb_sets:union(MIOD, GuidSet), UC) },
                              { msgs_confirmed(ToConfirmMsgs, State1),
                                {confirm, gb_sets:to_list(ToConfirmMsgs)} }
                      end)

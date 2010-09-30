@@ -50,7 +50,7 @@
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
              confirm_enabled, published_count, confirm_multiple, confirm_tref,
-             held_confirms, need_confirming, qpid_to_msgs}).
+             held_confirms, unconfirmed, qpid_to_msgs}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -194,7 +194,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                  published_count         = 0,
                  confirm_multiple        = false,
                  held_confirms           = gb_sets:new(),
-                 need_confirming         = gb_sets:new(),
+                 unconfirmed             = gb_sets:new(),
                  qpid_to_msgs            = dict:new() },
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
@@ -281,8 +281,8 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
 handle_cast(flush_multiple_acks,
             State = #ch{writer_pid      = WriterPid,
                         held_confirms   = As,
-                        need_confirming = NA}) ->
-    flush_multiple(WriterPid, As, NA),
+                        unconfirmed     = UC}) ->
+    flush_multiple(WriterPid, As, UC),
     {noreply, State#ch{held_confirms = gb_sets:new(),
                        confirm_tref  = undefined}};
 
@@ -306,9 +306,9 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
 handle_pre_hibernate(State = #ch{writer_pid      = WriterPid,
                                  held_confirms   = As,
                                  stats_timer     = StatsTimer,
-                                 need_confirming = NA}) ->
+                                 unconfirmed     = UC}) ->
     ok = clear_permission_cache(),
-    flush_multiple(WriterPid, As, NA),
+    flush_multiple(WriterPid, As, UC),
     rabbit_event:if_enabled(StatsTimer, fun() ->
                                                internal_emit_stats(State)
                                         end),
@@ -491,11 +491,11 @@ msg_sent_to_queue(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
               qpid_to_msgs = dict:store(QPid, gb_sets:add(MsgSeqNo, gb_sets:new()), QTM)}
     end.
 
-do_if_not_dup(MsgSeqNo, State = #ch{need_confirming = NA}, Fun) ->
-    case gb_sets:is_element(MsgSeqNo, NA) of
+do_if_not_dup(MsgSeqNo, State = #ch{unconfirmed = UC}, Fun) ->
+    case gb_sets:is_element(MsgSeqNo, UC) of
         true ->
             State1 = Fun(MsgSeqNo, State),
-            State1 #ch { need_confirming = gb_sets:delete(MsgSeqNo, NA) };
+            State1#ch{unconfirmed = gb_sets:delete(MsgSeqNo, UC)};
         false ->
             State
     end.
@@ -542,8 +542,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                   Count = State#ch.published_count,
                   {Count,
                    State#ch{published_count = Count + 1,
-                            need_confirming =
-                                gb_sets:add(Count, State#ch.need_confirming) }}
+                            unconfirmed =
+                                gb_sets:add(Count, State#ch.unconfirmed) }}
           end,
     Message = #basic_message{exchange_name  = ExchangeName,
                              routing_key    = RoutingKey,
