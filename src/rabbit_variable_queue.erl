@@ -487,7 +487,7 @@ purge(State = #vqstate { q4 = Q4, index_state = IndexState, len = Len,
     {LensByStore2, IndexState3} =
         remove_queue_entries(fun rabbit_misc:queue_fold/3, Q1,
                              LensByStore1, IndexState2),
-    PCount1 = PCount - find_persistent_count(fun (X) -> X end, LensByStore2),
+    PCount1 = PCount - find_persistent_count(LensByStore2),
     {Len, a(State1 #vqstate { q1               = queue:new(),
                               index_state      = IndexState3,
                               len              = 0,
@@ -1001,8 +1001,8 @@ remove_queue_entries1(
 
 sum_guids_by_store_to_len(LensByStore, GuidsByStore) ->
     orddict:fold(
-      fun (MsgStore, Guids, Acc) ->
-              orddict:update_counter(MsgStore, length(Guids), LensByStore)
+      fun (MsgStore, Guids, LensByStore1) ->
+              orddict:update_counter(MsgStore, length(Guids), LensByStore1)
       end, LensByStore, GuidsByStore).
 
 %%----------------------------------------------------------------------------
@@ -1131,7 +1131,8 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
-    PCount1 = PCount - find_persistent_count(fun erlang:length/1, GuidsByStore),
+    PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
+                                               orddict:new(), GuidsByStore)),
     State1 #vqstate { index_state      = IndexState1,
                       persistent_count = PCount1 }.
 
@@ -1143,10 +1144,10 @@ accumulate_ack(SeqId, {IsPersistent, Guid}, {SeqIdsAcc, Dict}) ->
     {cons_if(IsPersistent, SeqId, SeqIdsAcc),
      rabbit_misc:orddict_cons(find_msg_store(IsPersistent), Guid, Dict)}.
 
-find_persistent_count(Fun, ByStore) ->
-    case orddict:find(?PERSISTENT_MSG_STORE, ByStore) of
-        error       -> 0;
-        {ok, Value} -> Fun(Value)
+find_persistent_count(LensByStore) ->
+    case orddict:find(?PERSISTENT_MSG_STORE, LensByStore) of
+        error     -> 0;
+        {ok, Len} -> Len
     end.
 
 %%----------------------------------------------------------------------------
