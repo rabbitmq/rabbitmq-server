@@ -1,7 +1,5 @@
-syntax: glob
-\.beam$
-
 syntax: regexp
+\.beam$
 ^dist/
 ^build/
 ^ebin/
