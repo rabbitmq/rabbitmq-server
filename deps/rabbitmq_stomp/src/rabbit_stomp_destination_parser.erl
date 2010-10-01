@@ -38,22 +38,22 @@
 -define(EXCHANGE_PREFIX, "/exchange").
 
 parse_destination(?QUEUE_PREFIX ++ Rest) ->
-    parse_simple_destination(queue, Rest, invalid_queue_destination);
+    parse_simple_destination(queue, Rest);
 parse_destination(?TOPIC_PREFIX ++ Rest) ->
-    parse_simple_destination(topic, Rest, invalid_topic_destination);
+    parse_simple_destination(topic, Rest);
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
         [Name] -> {exchange, {Name, undefined}};
         [Name, Pattern] -> {exchange, {Name, Pattern}};
-        _ -> {error, {invalid_exchange_destination, Rest}}
+        _ -> {error, {invalid_destination, exchange, Rest}}
     end;
 parse_destination(_) ->
     {error, unknown_destination}.
 
-parse_simple_destination(Type, Content, InvalidNameError) ->
+parse_simple_destination(Type, Content) ->
     case parse_content(Content) of
         [Name] -> {Type, Name};
-        _      -> {error, {InvalidNameError, Content}}
+        _      -> {error, {invalid_destination, Type, Content}}
     end.
 
 parse_content(Content)->

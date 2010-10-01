@@ -14,5 +14,8 @@ include ../include.mk
 test: unittest
 
 unittest: $(TARGETS) $(TEST_TARGETS)
-	ERL_LIBS=$(LIBS_PATH) $(ERL) $(TEST_LOAD_PATH) $(foreach CMD,$(UNIT_TEST_COMMANDS),-eval '$(CMD)')
+	ERL_LIBS=$(LIBS_PATH) $(ERL) $(TEST_LOAD_PATH) \
+		$(foreach CMD,$(UNIT_TEST_COMMANDS),-eval '$(CMD)') \
+		-eval 'init:stop()' | tee $(TMPDIR)/rabbit-stomp-unittest-output |\
+			egrep "passed" >/dev/null
 

@@ -25,5 +25,34 @@
 valid_queue_test() ->
     {queue, "test"} = parse_destination("/queue/test").
 
+valid_topic_test() ->
+    {topic, "test"} = parse_destination("/topic/test").
+
+valid_exchange_test() ->
+    {exchange, {"test", undefined}} = parse_destination("/exchange/test").
+
+valid_exchange_with_pattern_test() ->
+    {exchange, {"test", "pattern"}} = 
+        parse_destination("/exchange/test/pattern").
+
+queue_with_no_name_test() ->
+    {error, {invalid_destination, queue, ""}} = parse_destination("/queue").
+
+topic_with_no_name_test() ->
+    {error, {invalid_destination, topic, ""}} = parse_destination("/topic").
+
+exchange_with_no_name_test() ->
+    {error, {invalid_destination, exchange, ""}} = 
+        parse_destination("/exchange").
+
+queue_with_no_name_slash_test() ->
+    {error, {invalid_destination, queue, "/"}} = parse_destination("/queue/").
+
+topic_with_no_name_slash_test() ->
+    {error, {invalid_destination, topic, "/"}} = parse_destination("/topic/").
+
+exchange_with_no_name_slash_test() ->
+    {error, {invalid_destination, exchange, "/"}} = parse_destination("/exchange/").
+
 parse_destination(Destination) ->
     rabbit_stomp_destination_parser:parse_destination(Destination).
