@@ -23,16 +23,16 @@
 -include_lib("eunit/include/eunit.hrl").
 
 valid_queue_test() ->
-    {queue, "test"} = parse_destination("/queue/test").
+    {ok, {queue, "test"}} = parse_destination("/queue/test").
 
 valid_topic_test() ->
-    {topic, "test"} = parse_destination("/topic/test").
+    {ok, {topic, "test"}} = parse_destination("/topic/test").
 
 valid_exchange_test() ->
-    {exchange, {"test", undefined}} = parse_destination("/exchange/test").
+    {ok, {exchange, {"test", undefined}}} = parse_destination("/exchange/test").
 
 valid_exchange_with_pattern_test() ->
-    {exchange, {"test", "pattern"}} = 
+    {ok, {exchange, {"test", "pattern"}}} = 
         parse_destination("/exchange/test/pattern").
 
 queue_with_no_name_test() ->
@@ -52,7 +52,23 @@ topic_with_no_name_slash_test() ->
     {error, {invalid_destination, topic, "/"}} = parse_destination("/topic/").
 
 exchange_with_no_name_slash_test() ->
-    {error, {invalid_destination, exchange, "/"}} = parse_destination("/exchange/").
+    {error, {invalid_destination, exchange, "/"}} = 
+        parse_destination("/exchange/").
+
+queue_with_invalid_name_test() ->
+    {error, {invalid_destination, queue, "/foo/bar"}} = 
+        parse_destination("/queue/foo/bar").
+
+topic_with_invalid_name_test() ->
+    {error, {invalid_destination, topic, "/foo/bar"}} = 
+        parse_destination("/topic/foo/bar").
+
+exchange_with_invalid_name_test() ->
+    {error, {invalid_destination, exchange, "/foo/bar/baz"}} = 
+        parse_destination("/exchange/foo/bar/baz").
+
+unknown_destination_test() ->
+    {error, unknown_destination} = parse_destination("/blah/boo").
 
 parse_destination(Destination) ->
     rabbit_stomp_destination_parser:parse_destination(Destination).

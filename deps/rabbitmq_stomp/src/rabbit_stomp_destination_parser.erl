@@ -43,8 +43,8 @@ parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
-        [Name] -> {exchange, {Name, undefined}};
-        [Name, Pattern] -> {exchange, {Name, Pattern}};
+        [Name] -> {ok, {exchange, {Name, undefined}}};
+        [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
         _ -> {error, {invalid_destination, exchange, Rest}}
     end;
 parse_destination(_) ->
@@ -52,7 +52,7 @@ parse_destination(_) ->
 
 parse_simple_destination(Type, Content) ->
     case parse_content(Content) of
-        [Name] -> {Type, Name};
+        [Name] -> {ok, {Type, Name}};
         _      -> {error, {invalid_destination, Type, Content}}
     end.
 
