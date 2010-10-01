@@ -1128,7 +1128,8 @@ function_exported_or_default(Mod, Fun, Arity, Default) ->
 %%-----------------------------------------------------------------
 format_status(Opt, StatusData) ->
     [PDict, SysState, Parent, Debug,
-     [Name, State, Mod, _Time, _TimeoutState, Queue]] = StatusData,
+     #gs2_state{name = Name, state = State, mod = Mod, queue = Queue}] =
+        StatusData,
     NameTag = if is_pid(Name) ->
                       pid_to_list(Name);
                  is_atom(Name) ->
