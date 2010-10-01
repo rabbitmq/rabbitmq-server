@@ -2,6 +2,8 @@
 
 This document outlines proposed changes to the way in which the STOMP adapter handles destinations and routing.
 
+IMPORTANT: Support for all existing custom headers will be removed. 
+
 ## Destinations 
 
 In the current STOMP adapter, much of the destination configuration is handled by custom headers, including `routing_key` and `exchange`. 
@@ -26,9 +28,9 @@ For `SEND` frames, a destination of the form `/exchange/<name>[/<routing-key>]` 
 
 For simple queue destinations with round-robin delivery semantics, destinations of the form `/queue/<name>` can be used.
 
-For both `SEND` and `SUBSCRIBE` frames, these destinations will create the queue `<name>` and bind it to the `amq.direct` exchange with routing key `<name>`.
+For both `SEND` and `SUBSCRIBE` frames, these destinations will create the queue `<name>`.
 
-For `SEND` frames, the message will be sent to the `amq.direct` exchange with the routing key `<name>`. For `SUBSCRIBE` frames, a subscription against the queue `<name>` will be created for the current STOMP session.
+For `SEND` frames, the message will be sent to the default exchange with the routing key `<name>`. For `SUBSCRIBE` frames, a subscription against the queue `<name>` will be created for the current STOMP session.
 
 Given that both `SEND` and `SUBSCRIBE` frames cause the queue to be created, the ordering constraint, client codes doesn't need to worry about creating a subscription before sending messages. Furthermore, the created queues are set to `auto-delete=false` so they will last until they are deleted by the user. 
 
