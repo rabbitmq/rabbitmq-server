@@ -1116,6 +1116,14 @@
                 <term>prefetch_count</term>
                 <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>client_flow_blocked</term>
+                <listitem><para>True if the client issued a
+                    <command>channel.flow{active=false}</command>
+                    command, blocking the server from delivering
+                    messages to the channel's consumers.
+                    </para></listitem>
+              </varlistentry>
             </variablelist>
             <para>
               If no <command>channelinfoitem</command>s are specified then pid,

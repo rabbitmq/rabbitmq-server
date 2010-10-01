@@ -92,15 +92,15 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
 
 recover() ->
-    Exs = rabbit_misc:table_fold(
-            fun (Exchange, Acc) ->
-                    ok = mnesia:write(rabbit_exchange, Exchange, write),
-                    [Exchange | Acc]
-            end, [], rabbit_durable_exchange),
+    Xs = rabbit_misc:table_fold(
+           fun (X, Acc) ->
+                   ok = mnesia:write(rabbit_exchange, X, write),
+                   [X | Acc]
+           end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
     recover_with_bindings(
       lists:keysort(#binding.exchange_name, Bs),
-      lists:keysort(#exchange.name, Exs), []).
+      lists:keysort(#exchange.name, Xs), []).
 
 recover_with_bindings([B = #binding{exchange_name = Name} | Rest],
                       Xs = [#exchange{name = Name} | _],
@@ -112,30 +112,30 @@ recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
 recover_with_bindings([], [], []) ->
     ok.
 
-declare(ExchangeName, Type, Durable, AutoDelete, Args) ->
-    Exchange = #exchange{name        = ExchangeName,
-                         type        = Type,
-                         durable     = Durable,
-                         auto_delete = AutoDelete,
-                         arguments   = Args},
+declare(XName, Type, Durable, AutoDelete, Args) ->
+    X = #exchange{name        = XName,
+                  type        = Type,
+                  durable     = Durable,
+                  auto_delete = AutoDelete,
+                  arguments   = Args},
     %% We want to upset things if it isn't ok; this is different from
     %% the other hooks invocations, where we tend to ignore the return
     %% value.
     TypeModule = type_to_module(Type),
-    ok = TypeModule:validate(Exchange),
+    ok = TypeModule:validate(X),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   case mnesia:wread({rabbit_exchange, ExchangeName}) of
+                   case mnesia:wread({rabbit_exchange, XName}) of
                        [] ->
-                           ok = mnesia:write(rabbit_exchange, Exchange, write),
+                           ok = mnesia:write(rabbit_exchange, X, write),
                            ok = case Durable of
                                     true ->
                                         mnesia:write(rabbit_durable_exchange,
-                                                     Exchange, write);
+                                                     X, write);
                                     false ->
                                         ok
                            end,
-                           {new, Exchange};
+                           {new, X};
                        [ExistingX] ->
                            {existing, ExistingX}
                    end
@@ -257,20 +257,20 @@ publish(X = #exchange{type = Type}, Seen, Delivery) ->
             R
     end.
 
-call_with_exchange(Exchange, Fun) ->
+call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> case mnesia:read({rabbit_exchange, Exchange}) of
+      fun () -> case mnesia:read({rabbit_exchange, XName}) of
                    []  -> {error, not_found};
                    [X] -> Fun(X)
                end
       end).
 
-delete(ExchangeName, IfUnused) ->
+delete(XName, IfUnused) ->
     Fun = case IfUnused of
               true  -> fun conditional_delete/1;
               false -> fun unconditional_delete/1
           end,
-    case call_with_exchange(ExchangeName, Fun) of
+    case call_with_exchange(XName, Fun) of
         {deleted, X = #exchange{type = Type}, Bs} ->
             (type_to_module(Type)):delete(X, Bs),
             ok;
@@ -280,21 +280,21 @@ delete(ExchangeName, IfUnused) ->
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
-maybe_auto_delete(#exchange{auto_delete = true} = Exchange) ->
-    case conditional_delete(Exchange) of
-        {error, in_use}         -> not_deleted;
-        {deleted, Exchange, []} -> auto_deleted
+maybe_auto_delete(#exchange{auto_delete = true} = X) ->
+    case conditional_delete(X) of
+        {error, in_use}  -> not_deleted;
+        {deleted, X, []} -> auto_deleted
     end.
 
-conditional_delete(Exchange = #exchange{name = ExchangeName}) ->
-    case rabbit_binding:has_for_exchange(ExchangeName) of
-        false  -> unconditional_delete(Exchange);
+conditional_delete(X = #exchange{name = XName}) ->
+    case rabbit_binding:has_for_exchange(XName) of
+        false  -> unconditional_delete(X);
         true   -> {error, in_use}
     end.
 
-unconditional_delete(Exchange = #exchange{name = ExchangeName}) ->
-    Bindings = rabbit_binding:remove_for_exchange(ExchangeName),
-    ok = mnesia:delete({rabbit_durable_exchange, ExchangeName}),
-    ok = mnesia:delete({rabbit_exchange, ExchangeName}),
-    rabbit_event:notify(exchange_deleted, [{name, ExchangeName}]),
-    {deleted, Exchange, Bindings}.
+unconditional_delete(X = #exchange{name = XName}) ->
+    Bindings = rabbit_binding:remove_for_exchange(XName),
+    ok = mnesia:delete({rabbit_durable_exchange, XName}),
+    ok = mnesia:delete({rabbit_exchange, XName}),
+    rabbit_event:notify(exchange_deleted, [{name, XName}]),
+    {deleted, X, Bindings}.
