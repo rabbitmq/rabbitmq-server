@@ -44,7 +44,7 @@
 
 -export_type([certificate/0]).
 
--type(certificate() :: #'OTPCertificate'{}).
+-type(certificate() :: binary()).
 
 -spec(peer_cert_issuer/1   :: (certificate()) -> string()).
 -spec(peer_cert_subject/1  :: (certificate()) -> string()).
