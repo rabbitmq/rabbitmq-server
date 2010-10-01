@@ -210,6 +210,37 @@ basic_return_test(Connection) ->
     end,
     teardown(Connection, Channel).
 
+channel_repeat_open_close_test(Connection) ->
+    lists:foreach(
+        fun(_) ->
+            {ok, Ch} = amqp_connection:open_channel(Connection),
+            ok = amqp_channel:close(Ch)
+        end, lists:seq(1, 50)),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
+
+channel_multi_open_close_test(Connection) ->
+    [spawn_link(
+        fun() ->
+            try amqp_connection:open_channel(Connection) of
+                {ok, Ch}           -> try amqp_channel:close(Ch) of
+                                          ok                 -> ok;
+                                          connection_closing -> ok
+                                      catch
+                                          exit:{normal, _} -> ok;
+                                          exit:{noproc, _} -> ok
+                                      end;
+                closing            -> ok;
+                connection_closing -> ok
+            catch
+                exit:{normal, _} -> ok;
+                exit:{noproc, _} -> ok
+            end
+        end) || _ <- lists:seq(1, 50)],
+    erlang:yield(),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
+
 basic_ack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
@@ -234,8 +265,8 @@ basic_consume_test(Connection) ->
     Parent = self(),
     [spawn(
         fun() ->
-            consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>) end)
-        || Tag <- lists:seq(1, ?Latch)],
+            consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>)
+        end) || Tag <- lists:seq(1, ?Latch)],
     timer:sleep(?Latch * 20),
     Publish = #'basic.publish'{exchange = X, routing_key = RoutingKey},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
@@ -323,8 +354,9 @@ basic_qos_test(Connection, Prefetch) ->
                 sleeping_consumer(Channel, Sleep, Parent)
             end) || Sleep <- Workers],
     latch_loop(length(Kids)),
-    spawn(fun() -> {ok, Ch} = amqp_connection:open_channel(Connection),
-                   producer_loop(Ch, Q, Messages) end),
+    spawn(fun() -> {ok, Channel} = amqp_connection:open_channel(Connection),
+                   producer_loop(Channel, Q, Messages)
+          end),
     {Res, ok} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
@@ -565,4 +597,3 @@ latch_loop(Latch) ->
 uuid() ->
     {A, B, C} = now(),
     <<A:32, B:32, C:32>>.
-

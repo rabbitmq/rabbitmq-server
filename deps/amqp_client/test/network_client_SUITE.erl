@@ -56,6 +56,12 @@ lifecycle_test() ->
 nowait_exchange_declare_test() ->
     test_util:nowait_exchange_declare_test(new_connection()).
 
+channel_repeat_open_close_test() ->
+    test_util:channel_repeat_open_close_test(new_connection()).
+
+channel_multi_open_close_test() ->
+    test_util:channel_multi_open_close_test(new_connection()).
+
 basic_ack_test() ->
     test_util:basic_ack_test(new_connection()).
 

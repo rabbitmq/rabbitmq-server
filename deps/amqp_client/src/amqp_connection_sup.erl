@@ -39,57 +39,69 @@
 start_link(Type, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     unlink(Sup),
-    {ok, ChSupSup} = supervisor2:start_child(Sup,
-                         {channel_sup_sup, {amqp_channel_sup_sup, start_link,
-                                            [Type]},
-                          intrinsic, infinity, supervisor,
-                          [amqp_channel_sup_sup]}),
-    {ok, Connection} = start_connection(Sup, Type, AmqpParams, ChSupSup,
-                                        start_infrastructure_fun(Sup, Type)),
+    {ok, ChSupSup} = supervisor2:start_child(
+                       Sup,
+                       {channel_sup_sup, {amqp_channel_sup_sup, start_link,
+                                          [Type]},
+                        intrinsic, infinity, supervisor,
+                        [amqp_channel_sup_sup]}),
+    {ok, Connection} =
+        start_connection(Sup, Type, AmqpParams,
+                         start_infrastructure_fun(Sup, Type, ChSupSup)),
     {ok, Sup, Connection}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_connection(Sup, network, AmqpParams, ChSupSup, SIF) ->
+start_connection(Sup, network, AmqpParams, SIF) ->
     {ok, _} = supervisor2:start_child(
                 Sup,
                 {connection, {amqp_network_connection, start_link,
-                              [AmqpParams, ChSupSup, SIF]},
+                              [AmqpParams, SIF]},
                  intrinsic, brutal_kill, worker, [amqp_network_connection]});
-start_connection(Sup, direct, AmqpParams, ChSupSup, SIF) ->
+start_connection(Sup, direct, AmqpParams, SIF) ->
     {ok, _} = supervisor2:start_child(
                 Sup,
                 {connection, {amqp_direct_connection, start_link,
-                              [AmqpParams, ChSupSup, SIF]},
+                              [AmqpParams, SIF]},
                  intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
 
-start_infrastructure_fun(Sup, network) ->
+start_infrastructure_fun(Sup, network, ChSupSup) ->
     fun (Sock) ->
             Connection = self(),
+            {ok, ChMgr} = start_channels_manager(Sup, Connection, ChSupSup),
             {ok, CTSup, {MainReader, Framing, Writer}} =
                 supervisor2:start_child(
                   Sup,
-                  {connection_type_sup,
-                   {amqp_connection_type_sup, start_link_network,
-                    [Sock, Connection]},
-                   intrinsic, infinity, supervisor,
+                  {connection_type_sup, {amqp_connection_type_sup,
+                                         start_link_network,
+                                         [Sock, Connection, ChMgr]},
+                   transient, infinity, supervisor,
                    [amqp_connection_type_sup]}),
-            {ok, {MainReader, Framing, Writer,
+            {ok, {ChMgr, MainReader, Framing, Writer,
                   amqp_connection_type_sup:start_heartbeat_fun(CTSup)}}
     end;
-start_infrastructure_fun(Sup, direct) ->
+start_infrastructure_fun(Sup, direct, ChSupSup) ->
     fun () ->
+            Connection = self(),
+            {ok, ChMgr} = start_channels_manager(Sup, Connection, ChSupSup),
             {ok, _CTSup, Collector} =
                 supervisor2:start_child(
                   Sup,
-                  {connection_type_sup,
-                   {amqp_connection_type_sup, start_link_direct, []},
-                   intrinsic, infinity, supervisor,
+                  {connection_type_sup, {amqp_connection_type_sup,
+                                         start_link_direct, []},
+                   transient, infinity, supervisor,
                    [amqp_connection_type_sup]}),
-            {ok, Collector}
+            {ok, {ChMgr, Collector}}
     end.
+
+start_channels_manager(Sup, Connection, ChSupSup) ->
+    {ok, _} = supervisor2:start_child(
+                Sup,
+                {channels_manager, {amqp_channels_manager, start_link,
+                                    [Connection, ChSupSup]},
+                 transient, ?MAX_WAIT, worker, [amqp_channels_manager]}).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

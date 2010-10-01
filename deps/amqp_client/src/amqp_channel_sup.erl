@@ -36,50 +36,50 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Driver, InfraArgs, ChNumber) ->
+start_link(Type, InfraArgs, ChNumber) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
-    SIF = start_infrastructure_fun(Sup, Driver, InfraArgs, ChNumber),
-    {ok, ChPid} =
-        supervisor2:start_child(
-          Sup, {channel, {amqp_channel, start_link, [Driver, ChNumber, SIF]},
-                intrinsic, brutal_kill, worker, [amqp_channel]}),
-    {ok, Sup, ChPid}.
+    {ok, ChPid} = supervisor2:start_child(
+                    Sup, {channel, {amqp_channel, start_link,
+                                    [Type, ChNumber,
+                                     start_writer_fun(Sup, Type, InfraArgs,
+                                                      ChNumber)]},
+                          intrinsic, brutal_kill, worker, [amqp_channel]}),
+    {ok, Framing} = start_framing(Sup, Type, ChPid),
+    {ok, Sup, {ChPid, Framing}}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_infrastructure_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
-    fun () ->
-            ChPid = self(),
-            supervisor2:start_child(
-              Sup,
-              {rabbit_channel, {rabbit_channel, start_link,
-                                [ChNumber, ChPid, ChPid, User, VHost,
-                                 Collector, start_limiter_fun(Sup)]},
-               transient, ?MAX_WAIT, worker, [rabbit_channel]})
+start_writer_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
+    fun() ->
+        ChPid = self(),
+        {ok, _} = supervisor2:start_child(
+                    Sup,
+                    {rabbit_channel, {rabbit_channel, start_link,
+                                      [ChNumber, ChPid, ChPid, User, VHost,
+                                       Collector, start_limiter_fun(Sup)]},
+                     transient, ?MAX_WAIT, worker, [rabbit_channel]})
     end;
-start_infrastructure_fun(Sup, network, [Sock, MainReader], ChNumber) ->
-    fun () ->
-            ChPid = self(),
-            {ok, Framing} =
-                supervisor2:start_child(
-                  Sup,
-                  {framing, {rabbit_framing_channel, start_link,
-                             [Sup, ChPid, ?PROTOCOL]},
-                   intrinsic, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
-            {ok, Writer} =
-                supervisor2:start_child(
-                  Sup,
-                  {writer, {rabbit_writer, start_link,
-                            [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
-                             MainReader]},
-                   intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
-            %% This call will disappear as part of bug 23024
-            amqp_main_reader:register_framing_channel(MainReader, ChNumber,
-                                                      Framing),
-            {ok, Writer}
+start_writer_fun(Sup, network, [Sock], ChNumber) ->
+    fun() ->
+        ChPid = self(),
+        {ok, _} = supervisor2:start_child(
+                    Sup,
+                    {writer, {rabbit_writer, start_link,
+                              [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
+                               ChPid]},
+                     transient, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
+
+start_framing(_Sup, direct, _ChPid) ->
+    {ok, none};
+start_framing(Sup, network, ChPid) ->
+    {ok, _} = supervisor2:start_child(
+                Sup,
+                {framing, {rabbit_framing_channel, start_link,
+                           [ChPid, ChPid, ?PROTOCOL]},
+                 transient, ?MAX_WAIT, worker, [rabbit_framing_channel]}).
 
 start_limiter_fun(Sup) ->
     fun (UnackedCount) ->
