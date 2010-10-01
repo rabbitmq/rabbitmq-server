@@ -85,8 +85,10 @@ peer_cert_validity(Cert) ->
 %%--------------------------------------------------------------------------
 
 cert_info(F, Cert) ->
-    {ok, DecCert} = public_key:pkix_decode_cert(Cert, otp),
-    F(DecCert).
+    F(case public_key:pkix_decode_cert(Cert, otp) of
+          {ok, DecCert} -> DecCert;
+          DecCert       -> DecCert
+      end).
 
 %%--------------------------------------------------------------------------
 %% Formatting functions
@@ -158,9 +160,11 @@ escape_rdn_value([C | S], middle) ->
 
 %% Get the string representation of an OTPCertificate field.
 format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
-                                ST =:= universalString; ST =:= utf8string;
+                                ST =:= universalString; ST =:= utf8String;
                                 ST =:= bmpString ->
-    S;
+    if is_binary(S) -> binary_to_list(S);
+       true         -> S
+    end;
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                             Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
