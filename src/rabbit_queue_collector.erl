@@ -81,7 +81,7 @@ handle_call(delete_all, _From, State = #state{queues = Queues}) ->
        fun () -> ok end,
        fun () ->
                erlang:demonitor(MonitorRef),
-               rabbit_amqqueue:delete(Q, false, false)
+               rabbit_amqqueue:delete_exclusive(Q)
        end)
      || {MonitorRef, Q} <- dict:to_list(Queues)],
     {reply, ok, State}.

@@ -1171,7 +1171,7 @@ ulimit() ->
             ?FILE_HANDLES_LIMIT_WINDOWS;
         {unix, _OsName} ->
             %% Under Linux, Solaris and FreeBSD, ulimit is a shell
-            %% builtin, not a command. In OS X, it's a command.
+            %% builtin, not a command. In OS X and AIX it's a command.
             %% Fortunately, os:cmd invokes the cmd in a shell env, so
             %% we're safe in all cases.
             case os:cmd("ulimit -n") of
