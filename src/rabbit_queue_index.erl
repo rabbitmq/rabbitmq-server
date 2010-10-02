@@ -257,10 +257,12 @@ delete_and_terminate(State) ->
     State1.
 
 publish(Guid, SeqId, IsPersistent,
-        State = #qistate { unsynced_guids = UnsyncedGuids }) when is_binary(Guid) ->
+        State = #qistate { unsynced_guids = UnsyncedGuids })
+  when is_binary(Guid) ->
     ?GUID_BYTES = size(Guid),
-    {JournalHdl, State1} =
-        get_journal_handle(State #qistate { unsynced_guids = [Guid | UnsyncedGuids] }),
+    {JournalHdl, State1} = get_journal_handle(
+                             State #qistate {
+                               unsynced_guids = [Guid | UnsyncedGuids] }),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
@@ -675,6 +677,10 @@ deliver_or_ack(Kind, SeqIds, State) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
 
+notify_sync(State = #qistate { unsynced_guids = UG, on_sync = OnSyncFun }) ->
+    OnSyncFun(UG),
+    State #qistate { unsynced_guids = [] }.
+
 %%----------------------------------------------------------------------------
 %% segment manipulation
 %%----------------------------------------------------------------------------
@@ -942,12 +948,3 @@ journal_minus_segment1({no_pub, del, ack},         {?PUB, del, no_ack}) ->
     {{no_pub, no_del, ack}, 0};
 journal_minus_segment1({no_pub, del, ack},         {?PUB, del, ack}) ->
     {undefined, -1}.
-
-%%----------------------------------------------------------------------------
-%% misc
-%%----------------------------------------------------------------------------
-
-notify_sync(State = #qistate { unsynced_guids = UG,
-                               on_sync        = OnSyncFun }) ->
-    OnSyncFun(UG),
-    State #qistate { unsynced_guids = [] }.

@@ -34,10 +34,10 @@
 -export([init/5, init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/3, tx_ack/3, tx_rollback/2, tx_commit/3,
-         requeue/2, len/1, is_empty/1,
+         requeue/2, len/1, is_empty/1, seqids_to_guids/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, seqids_to_guids/2]).
+         status/1]).
 
 -export([start/1, stop/0]).
 
@@ -449,7 +449,7 @@ init(QueueName, IsDurable, Recover,
                                       timestamp   = Now },
       msgs_on_disk         = gb_sets:new(),
       msg_indices_on_disk  = gb_sets:new(),
-      unconfirmed          = gb_sets:new()},
+      unconfirmed          = gb_sets:new() },
     a(maybe_deltas_to_betas(State)).
 
 terminate(State) ->
@@ -681,6 +681,15 @@ len(#vqstate { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
 
+seqids_to_guids(SeqIds, #vqstate{ pending_ack = PA }) ->
+    lists:foldl(
+      fun(SeqId, Guids) ->
+              [case dict:fetch(SeqId, PA) of
+                   #msg_status { msg = Msg } -> Msg#basic_message.guid;
+                   {_, Guid}                 -> Guid
+               end | Guids]
+      end, [], SeqIds).
+
 set_ram_duration_target(DurationTarget,
                         State = #vqstate {
                           rates = #rates { avg_egress  = AvgEgressRate,
@@ -775,15 +784,6 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
       {persistent_count     , PersistentCount},
       {avg_egress_rate      , AvgEgressRate},
       {avg_ingress_rate     , AvgIngressRate} ].
-
-seqids_to_guids(SeqIds, #vqstate{ pending_ack = PA }) ->
-    lists:foldl(
-      fun(SeqId, Guids) ->
-              [case dict:fetch(SeqId, PA) of
-                   #msg_status { msg = Msg } -> Msg#basic_message.guid;
-                   {_, Guid}                 -> Guid
-               end | Guids]
-      end, [], SeqIds).
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -1182,8 +1182,8 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
     %% the AckTags were removed from State1, so use State in seqids_to_guids
-    State2 = msgs_confirmed(gb_sets:from_list(seqids_to_guids(AckTags, State)),
-                            State1),
+    State2 = remove_confirms(
+               gb_sets:from_list(seqids_to_guids(AckTags, State)), State1),
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
     State2 #vqstate { index_state      = IndexState1,
@@ -1207,12 +1207,15 @@ find_persistent_count(LensByStore) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-msgs_confirmed(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
-                                           msg_indices_on_disk = MIOD,
-                                           unconfirmed         = UC }) ->
+remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
+                                            msg_indices_on_disk = MIOD,
+                                            unconfirmed         = UC }) ->
     State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  GuidSet),
                      msg_indices_on_disk = gb_sets:difference(MIOD, GuidSet),
                      unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
+
+msgs_confirmed(GuidSet, State) ->
+    {remove_confirms(GuidSet, State), {confirm, gb_sets:to_list(GuidSet)}}.
 
 msgs_written_to_disk(QPid, Guids) ->
     spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
@@ -1221,14 +1224,12 @@ msgs_written_to_disk(QPid, Guids) ->
                                             msg_indices_on_disk = MIOD,
                                             unconfirmed         = UC }) ->
                              GuidSet = gb_sets:from_list(Guids),
-                             ToConfirmMsgs = gb_sets:intersection(GuidSet, MIOD),
-                             State1 =
-                                 State #vqstate {
-                                   msgs_on_disk =
-                                       gb_sets:intersection(
-                                         gb_sets:union(MOD, GuidSet), UC) },
-                             { msgs_confirmed(ToConfirmMsgs, State1),
-                               {confirm, gb_sets:to_list(ToConfirmMsgs)} }
+                             msgs_confirmed(
+                               gb_sets:intersection(GuidSet, MIOD),
+                               State #vqstate {
+                                 msgs_on_disk =
+                                     gb_sets:intersection(
+                                       gb_sets:union(MOD, GuidSet), UC) })
                      end)
           end).
 
@@ -1239,14 +1240,12 @@ msg_indices_written_to_disk(QPid, Guids) ->
                                             msg_indices_on_disk = MIOD,
                                             unconfirmed         = UC }) ->
                              GuidSet = gb_sets:from_list(Guids),
-                             ToConfirmMsgs = gb_sets:intersection(GuidSet, MOD),
-                             State1 =
-                                 State #vqstate {
-                                   msg_indices_on_disk =
-                                       gb_sets:intersection(
-                                         gb_sets:union(MIOD, GuidSet), UC) },
-                             { msgs_confirmed(ToConfirmMsgs, State1),
-                               {confirm, gb_sets:to_list(ToConfirmMsgs)} }
+                             msgs_confirmed(
+                               gb_sets:intersection(GuidSet, MOD),
+                               State #vqstate {
+                                 msg_indices_on_disk =
+                                     gb_sets:intersection(
+                                       gb_sets:union(MIOD, GuidSet), UC) })
                      end)
           end).
 

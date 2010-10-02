@@ -637,12 +637,11 @@ handle_call({register_sync_callback, ClientRef, Fun}, _From,
     reply(ok, State #msstate { client_ondisk_callback =
                                    dict:store(ClientRef, Fun, CODC) });
 
-handle_call({client_terminate, #client_msstate { client_ref = CRef }},
-            _From,
+handle_call({client_terminate, #client_msstate { client_ref = CRef }}, _From,
             State = #msstate { client_ondisk_callback = CODC,
                                cref_to_guids          = CTG }) ->
     reply(ok, State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
-                               cref_to_guids          = dict:erase(CRef, CTG) }).
+                               cref_to_guids          = dict:erase(CRef, CTG)}).
 
 handle_cast({write, CRef, Guid},
             State = #msstate { current_file_handle    = CurHdl,
@@ -652,7 +651,7 @@ handle_cast({write, CRef, Guid},
                                file_summary_ets       = FileSummaryEts,
                                cur_file_cache_ets     = CurFileCacheEts,
                                client_ondisk_callback = CODC,
-                               cref_to_guids          = CTG}) ->
+                               cref_to_guids          = CTG }) ->
 
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
@@ -676,16 +675,15 @@ handle_cast({write, CRef, Guid},
                      [{#file_summary.valid_total_size, ValidTotalSize1},
                       {#file_summary.file_size,        FileSize + TotalSize}]),
             NextOffset = CurOffset + TotalSize,
-            noreply(
-              maybe_roll_to_new_file(
-                NextOffset, State #msstate {
-                              sum_valid_data = SumValid + TotalSize,
-                              sum_file_size  = SumFileSize + TotalSize,
-                              cref_to_guids =
-                                  case dict:find(CRef, CODC) of
-                                      {ok, _} -> rabbit_misc:dict_cons(CRef, Guid, CTG);
-                                      error   -> CTG
-                                  end}));
+            CTG1 = case dict:find(CRef, CODC) of
+                       {ok, _} -> rabbit_misc:dict_cons(CRef, Guid, CTG);
+                       error   -> CTG
+                   end,
+            noreply(maybe_roll_to_new_file(
+                      NextOffset, State #msstate {
+                                    sum_valid_data = SumValid + TotalSize,
+                                    sum_file_size  = SumFileSize + TotalSize,
+                                    cref_to_guids  = CTG1 }));
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
@@ -852,8 +850,8 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
                        State1 #msstate { on_sync = [] }
              end,
     dict:map(fun(CRef, Guids) -> Fun = dict:fetch(CRef, CODC),
-                                 Fun(Guids) end,
-             CTG),
+                                 Fun(Guids)
+             end, CTG),
     State2 #msstate { cref_to_guids = dict:new() }.
 
 
