@@ -80,6 +80,7 @@
           file_summary_ets,       %% tid of the file summary table
           dedup_cache_ets,        %% tid of dedup cache table
           cur_file_cache_ets,     %% tid of current file cache table
+          dying_clients_ets,      %% tid of the dying clients table
           client_refs,            %% set of references of all registered clients
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit         %% how big are our files allowed to get?
@@ -311,7 +312,7 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
     ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {gen_server2:cast(Server, {write, Guid}), CState}.
+    {gen_server2:cast(Server, {write, Guid, self()}), CState}.
 
 read(Server, Guid,
      CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
@@ -341,7 +342,7 @@ read(Server, Guid,
 
 contains(Server, Guid) -> gen_server2:call(Server, {contains, Guid}, infinity).
 remove(_Server, [])    -> ok;
-remove(Server, Guids)  -> gen_server2:cast(Server, {remove, Guids}).
+remove(Server, Guids)  -> gen_server2:cast(Server, {remove, Guids, self()}).
 release(_Server, [])   -> ok;
 release(Server, Guids) -> gen_server2:cast(Server, {release, Guids}).
 sync(Server, Guids, K) -> gen_server2:cast(Server, {sync, Guids, K}).
@@ -373,7 +374,8 @@ client_terminate(CState, Server) ->
 
 client_delete_and_terminate(CState, Server, Ref) ->
     close_all_handles(CState),
-    ok = gen_server2:cast(Server, {client_delete, Ref}).
+    ok = gen_server2:cast(Server, {client_dying, self()}),
+    ok = gen_server2:cast(Server, {client_delete, Ref, self()}).
 
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
@@ -532,6 +534,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                               [ordered_set, public]),
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
 
+    DyingClientsEts = ets:new(rabbit_msg_store_terminal, [set]),
+
     {ok, FileSizeLimit} = application:get_env(msg_store_file_size_limit),
 
     State = #msstate { dir                    = Dir,
@@ -551,6 +555,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        file_summary_ets       = FileSummaryEts,
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
+                       dying_clients_ets      = DyingClientsEts,
                        client_refs            = ClientRefs1,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit
@@ -588,6 +593,7 @@ prioritise_cast(Msg, _State) ->
         sync                                         -> 8;
         {gc_done, _Reclaimed, _Source, _Destination} -> 8;
         {set_maximum_since_use, _Age}                -> 8;
+        {client_dying, _Pid}                         -> 7;
         _                                            -> 0
     end.
 
@@ -619,39 +625,48 @@ handle_call(successfully_recovered_state, _From, State) ->
 handle_call(client_terminate, _From, State) ->
     reply(ok, State).
 
-handle_cast({write, Guid},
+handle_cast({write, Guid, ClientPid},
             State = #msstate { sum_valid_data      = SumValid,
                                file_summary_ets    = FileSummaryEts,
                                cur_file_cache_ets  = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
-    case index_lookup(Guid, State) of
-        not_found ->
-            write_message(Guid, Msg, State);
-        #msg_location { ref_count = 0, file = File, total_size = TotalSize } ->
-            [#file_summary { locked    = Locked,
-                             file_size = FileSize } = Summary] =
-                ets:lookup(FileSummaryEts, File),
-            case Locked of
-                true  -> ok = index_delete(Guid, State),
-                         write_message(Guid, Msg, State);
-                false -> ok = index_update_ref_count(Guid, 1, State),
-                         ok = add_to_file_summary(Summary, TotalSize, FileSize,
-                                                  State),
-                         noreply(State #msstate {
-                                   sum_valid_data = SumValid + TotalSize })
-            end;
-        #msg_location { ref_count = RefCount } ->
-            %% We already know about it, just update counter. Only
-            %% update field otherwise bad interaction with concurrent GC
-            ok = index_update_ref_count(Guid, RefCount + 1, State),
-            noreply(State)
+    case should_mask_action(ClientPid, Guid, State) of
+        true ->
+            noreply(State);
+        false ->
+            case index_lookup(Guid, State) of
+                not_found ->
+                    write_message(Guid, Msg, State);
+                #msg_location { ref_count = 0, file = File,
+                                total_size = TotalSize } ->
+                    [#file_summary { locked    = Locked,
+                                     file_size = FileSize } = Summary] =
+                        ets:lookup(FileSummaryEts, File),
+                    case Locked of
+                        true  -> ok = index_delete(Guid, State),
+                                 write_message(Guid, Msg, State);
+                        false -> ok = index_update_ref_count(Guid, 1, State),
+                                 ok = add_to_file_summary(Summary, TotalSize,
+                                                          FileSize, State),
+                                 noreply(
+                                   State #msstate {
+                                     sum_valid_data = SumValid + TotalSize })
+                    end;
+                #msg_location { ref_count = RefCount } ->
+                    %% We already know about it, just update
+                    %% counter. Only update field otherwise bad
+                    %% interaction with concurrent GC
+                    ok = index_update_ref_count(Guid, RefCount + 1, State),
+                    noreply(State)
+            end
     end;
 
-handle_cast({remove, Guids}, State) ->
-    State1 = lists:foldl(
-               fun (Guid, State2) -> remove_message(Guid, State2) end,
-               State, Guids),
+handle_cast({remove, Guids, ClientPid}, State) ->
+    State1 =
+        lists:foldl(
+          fun (Guid, State2) -> remove_message(Guid, ClientPid, State2) end,
+          State, Guids),
     noreply(maybe_compact(State1));
 
 handle_cast({release, Guids}, State =
@@ -714,8 +729,16 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast({client_delete, CRef},
-            State = #msstate { client_refs = ClientRefs }) ->
+handle_cast({client_dying, ClientPid},
+            State = #msstate { dying_clients_ets = DyingClientsEts }) ->
+    Guid = rabbit_guid:guid(),
+    true = ets:insert_new(DyingClientsEts, {ClientPid, Guid}),
+    write_message(Guid, <<>>, State);
+
+handle_cast({client_delete, CRef, ClientPid},
+            State = #msstate { client_refs = ClientRefs,
+                               dying_clients_ets = DyingClientsEts }) ->
+    true = ets:delete(DyingClientsEts, ClientPid),
     noreply(
       State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
@@ -733,6 +756,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       file_summary_ets    = FileSummaryEts,
                                       dedup_cache_ets     = DedupCacheEts,
                                       cur_file_cache_ets  = CurFileCacheEts,
+                                      dying_clients_ets   = DyingClientsEts,
                                       client_refs         = ClientRefs,
                                       dir                 = Dir }) ->
     %% stop the gc first, otherwise it could be working and we pull
@@ -746,8 +770,8 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
              end,
     State3 = close_all_handles(State1),
     store_file_summary(FileSummaryEts, Dir),
-    [ets:delete(T) ||
-        T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts, CurFileCacheEts]],
+    [ets:delete(T) || T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts,
+                            DyingClientsEts, CurFileCacheEts]],
     IndexModule:terminate(IndexState),
     store_recovery_terms([{client_refs, sets:to_list(ClientRefs)},
                           {index_module, IndexModule}], Dir),
@@ -921,37 +945,46 @@ contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
             end
     end.
 
-remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
-                                        file_summary_ets = FileSummaryEts,
-                                        dedup_cache_ets  = DedupCacheEts }) ->
-    #msg_location { ref_count = RefCount, file = File,
-                    total_size = TotalSize } =
-        index_lookup_positive_ref_count(Guid, State),
-    %% only update field, otherwise bad interaction with concurrent GC
-    Dec = fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
-    case RefCount of
-        %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
-        %% there may be further writes in the mailbox for the same
-        %% msg.
-        1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
-             [#file_summary { valid_total_size = ValidTotalSize,
-                              locked           = Locked }] =
-                 ets:lookup(FileSummaryEts, File),
-             case Locked of
-                 true  -> add_to_pending_gc_completion({remove, Guid}, State);
-                 false -> ok = Dec(),
-                          true = ets:update_element(
-                                   FileSummaryEts, File,
-                                   [{#file_summary.valid_total_size,
-                                     ValidTotalSize - TotalSize}]),
-                          delete_file_if_empty(
-                            File,
-                            State #msstate {
-                              sum_valid_data = SumValid - TotalSize })
-             end;
-        _ -> ok = decrement_cache(DedupCacheEts, Guid),
-             ok = Dec(),
-             State
+remove_message(Guid, ClientPid,
+               State = #msstate { sum_valid_data   = SumValid,
+                                  file_summary_ets = FileSummaryEts,
+                                  dedup_cache_ets  = DedupCacheEts }) ->
+    case should_mask_action(ClientPid, Guid, State) of
+        true ->
+            State;
+        false ->
+            #msg_location { ref_count = RefCount, file = File,
+                            total_size = TotalSize } =
+                index_lookup_positive_ref_count(Guid, State),
+            %% only update field, otherwise bad interaction with
+            %% concurrent GC
+            Dec =
+                fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
+            case RefCount of
+                %% don't remove from CUR_FILE_CACHE_ETS_NAME here
+                %% because there may be further writes in the mailbox
+                %% for the same msg.
+                1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
+                     [#file_summary { valid_total_size = ValidTotalSize,
+                                      locked           = Locked }] =
+                         ets:lookup(FileSummaryEts, File),
+                     case Locked of
+                         true  -> add_to_pending_gc_completion(
+                                    {remove, Guid, ClientPid}, State);
+                         false -> ok = Dec(),
+                                  true = ets:update_element(
+                                           FileSummaryEts, File,
+                                           [{#file_summary.valid_total_size,
+                                             ValidTotalSize - TotalSize}]),
+                                  delete_file_if_empty(
+                                    File,
+                                    State #msstate {
+                                      sum_valid_data = SumValid - TotalSize })
+                     end;
+                _ -> ok = decrement_cache(DedupCacheEts, Guid),
+                     ok = Dec(),
+                     State
+            end
     end.
 
 add_to_pending_gc_completion(
@@ -968,8 +1001,8 @@ run_pending({read, Guid, From}, State) ->
     read_message(Guid, From, State);
 run_pending({contains, Guid, From}, State) ->
     contains_message(Guid, From, State);
-run_pending({remove, Guid}, State) ->
-    remove_message(Guid, State).
+run_pending({remove, Guid, ClientPid}, State) ->
+    remove_message(Guid, ClientPid, State).
 
 safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
     try
@@ -979,6 +1012,23 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+should_mask_action(ClientPid, Guid,
+                   State = #msstate { dying_clients_ets = DyingClientsEts }) ->
+    case ets:lookup(DyingClientsEts, ClientPid) of
+        []                        -> false;
+        [{_ClientPid, DeathGuid}] -> preceeds(DeathGuid, Guid, State)
+    end.
+
+preceeds(GuidA, GuidB, State) ->
+    #msg_location { file = FileA, offset = OffsetA } =
+        index_lookup_positive_ref_count(GuidA, State),
+    case index_lookup_positive_ref_count(GuidB, State) of
+        #msg_location { file = FileB, offset = OffsetB } ->
+            {FileA, OffsetA} < {FileB, OffsetB};
+        not_found ->
+            true
+    end.
 
 %%----------------------------------------------------------------------------
 %% file helper functions
