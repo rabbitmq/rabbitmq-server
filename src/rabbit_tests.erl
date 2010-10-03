@@ -1633,7 +1633,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
                end,
-    {A, B, MSCStateEnd} =
+    {A, B = [{_SeqId, LastGuidWritten} | _], MSCStateEnd} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsGuidsAcc, MSCStateN}) ->
                   Guid = rabbit_guid:guid(),
@@ -1643,6 +1643,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                                                            Guid, MSCStateN),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
           end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
+    %% do this just to force all of the publishes through to the msg_store:
+    true = rabbit_msg_store:contains(MsgStore, LastGuidWritten),
     ok = rabbit_msg_store:client_delete_and_terminate(
            MSCStateEnd, MsgStore, Ref),
     {A, B}.

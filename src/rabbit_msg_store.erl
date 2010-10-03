@@ -632,34 +632,33 @@ handle_cast({write, Guid, ClientPid},
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case should_mask_action(ClientPid, Guid, State) of
-        true ->
+        {true, _Location} ->
             noreply(State);
-        false ->
-            case index_lookup(Guid, State) of
-                not_found ->
+        {false, not_found} ->
+            write_message(Guid, Msg, State);
+        {Mask, #msg_location { ref_count = 0, file = File,
+                               total_size = TotalSize }} ->
+            [#file_summary { locked = Locked, file_size = FileSize } =
+                 Summary] = ets:lookup(FileSummaryEts, File),
+            case {Mask, Locked} of
+                {false, true} ->
+                    ok = index_delete(Guid, State),
                     write_message(Guid, Msg, State);
-                #msg_location { ref_count = 0, file = File,
-                                total_size = TotalSize } ->
-                    [#file_summary { locked    = Locked,
-                                     file_size = FileSize } = Summary] =
-                        ets:lookup(FileSummaryEts, File),
-                    case Locked of
-                        true  -> ok = index_delete(Guid, State),
-                                 write_message(Guid, Msg, State);
-                        false -> ok = index_update_ref_count(Guid, 1, State),
-                                 ok = add_to_file_summary(Summary, TotalSize,
-                                                          FileSize, State),
-                                 noreply(
-                                   State #msstate {
-                                     sum_valid_data = SumValid + TotalSize })
-                    end;
-                #msg_location { ref_count = RefCount } ->
-                    %% We already know about it, just update
-                    %% counter. Only update field otherwise bad
-                    %% interaction with concurrent GC
-                    ok = index_update_ref_count(Guid, RefCount + 1, State),
-                    noreply(State)
-            end
+                {false_if_increment, true} ->
+                    noreply(State);
+                {_Mask, false} ->
+                    ok = index_update_ref_count(Guid, 1, State),
+                    ok = add_to_file_summary(Summary, TotalSize,
+                                             FileSize, State),
+                    noreply(
+                      State #msstate { sum_valid_data = SumValid + TotalSize })
+            end;
+        {_Mask, #msg_location { ref_count = RefCount }} ->
+            %% We already know about it, just update counter. Only
+            %% update field otherwise bad interaction with concurrent
+            %% GC
+            ok = index_update_ref_count(Guid, RefCount + 1, State),
+            noreply(State)
     end;
 
 handle_cast({remove, Guids, ClientPid}, State) ->
@@ -953,12 +952,16 @@ remove_message(Guid, ClientPid,
                                   file_summary_ets = FileSummaryEts,
                                   dedup_cache_ets  = DedupCacheEts }) ->
     case should_mask_action(ClientPid, Guid, State) of
-        true ->
+        {true, _Location} ->
             State;
-        false ->
-            #msg_location { ref_count = RefCount, file = File,
-                            total_size = TotalSize } =
-                index_lookup_positive_ref_count(Guid, State),
+        {false_if_increment, #msg_location { ref_count = 0 }} ->
+            %% ClientPid has tried to both write and remove this msg
+            %% whilst it's being GC'd. ASSERTION:
+            %% [#file_summary { locked = true }] =
+            %%    ets:lookup(FileSummaryEts, File),
+            State;
+        {_Mask, #msg_location { ref_count = RefCount, file = File,
+                                total_size = TotalSize }} when RefCount > 0 ->
             %% only update field, otherwise bad interaction with
             %% concurrent GC
             Dec =
@@ -1018,21 +1021,27 @@ safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
 
 should_mask_action(ClientPid, Guid,
                    State = #msstate { dying_clients_ets = DyingClientsEts }) ->
-    case ets:lookup(DyingClientsEts, ClientPid) of
-        []                        -> false;
-        [{_ClientPid, DeathGuid}] -> preceeds(DeathGuid, Guid, State)
-    end.
-
-%% lhs must exist, and must have refcount =:= 1
-preceeds(GuidA, GuidB, State) ->
-    #msg_location { file = FileA, offset = OffsetA, ref_count = 1 } =
-        index_lookup(GuidA, State),
-    case index_lookup(GuidB, State) of
-        #msg_location { file = FileB, offset = OffsetB } ->
-            {FileA, OffsetA} < {FileB, OffsetB};
-        not_found ->
-            true
-    end.
+    Location = index_lookup(Guid, State),
+    {case ets:lookup(DyingClientsEts, ClientPid) of
+         [] ->
+             false;
+         [{_ClientPid, DeathGuid}] ->
+             case Location of
+                 not_found ->
+                     true;
+                 #msg_location { file = FileB, offset = OffsetB,
+                                 ref_count = RefCount } ->
+                     #msg_location { file = FileA, offset = OffsetA } =
+                         index_lookup(DeathGuid, State),
+                     case {FileA, OffsetA} < {FileB, OffsetB} of
+                         true  -> true;
+                         false -> case RefCount of
+                                      0 -> false_if_increment;
+                                      _ -> false
+                                  end
+                     end
+             end
+     end, Location}.
 
 %%----------------------------------------------------------------------------
 %% file helper functions
