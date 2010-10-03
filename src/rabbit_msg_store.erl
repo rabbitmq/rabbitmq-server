@@ -1023,10 +1023,11 @@ should_mask_action(ClientPid, Guid,
         [{_ClientPid, DeathGuid}] -> preceeds(DeathGuid, Guid, State)
     end.
 
+%% lhs must exist, and must have refcount =:= 1
 preceeds(GuidA, GuidB, State) ->
-    #msg_location { file = FileA, offset = OffsetA } =
-        index_lookup_positive_ref_count(GuidA, State),
-    case index_lookup_positive_ref_count(GuidB, State) of
+    #msg_location { file = FileA, offset = OffsetA, ref_count = 1 } =
+        index_lookup(GuidA, State),
+    case index_lookup(GuidB, State) of
         #msg_location { file = FileB, offset = OffsetB } ->
             {FileA, OffsetA} < {FileB, OffsetB};
         not_found ->
