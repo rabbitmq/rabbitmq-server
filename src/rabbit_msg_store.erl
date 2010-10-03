@@ -738,9 +738,12 @@ handle_cast({client_dying, ClientPid},
 handle_cast({client_delete, CRef, ClientPid},
             State = #msstate { client_refs = ClientRefs,
                                dying_clients_ets = DyingClientsEts }) ->
+    [{_ClientPid, DeathGuid}] = ets:lookup(DyingClientsEts, ClientPid),
     true = ets:delete(DyingClientsEts, ClientPid),
     noreply(
-      State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
+      remove_message(
+        DeathGuid, ClientPid,
+        State #msstate { client_refs = sets:del_element(CRef, ClientRefs) })).
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
