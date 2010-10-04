@@ -683,13 +683,18 @@ handle_cast({write, CRef, Guid},
                                     sum_valid_data = SumValid + TotalSize,
                                     sum_file_size  = SumFileSize + TotalSize,
                                     cref_to_guids  = CTG1 }));
-        #msg_location { ref_count = RefCount } ->
+        #msg_location { ref_count = RefCount, file = File } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
             ok = index_update_fields(Guid,
                                      {#msg_location.ref_count, RefCount + 1},
                                      State),
-            noreply(State)
+            CTG1 = case {dict:find(CRef, CODC), File =:= CurFile} of
+                       {{ok, _}  , true}  -> rabbit_misc:dict_cons(CRef, Guid, CTG);
+                       {{ok, Fun}, false} -> Fun([Guid]), CTG;
+                       _                  -> CTG
+                   end,
+            noreply(State #msstate { cref_to_guids = CTG1 })
     end;
 
 handle_cast({remove, Guids}, State) ->
