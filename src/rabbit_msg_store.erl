@@ -493,6 +493,13 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
             end
     end.
 
+clear_client_callback(CRef,
+                      State = #msstate { client_ondisk_callback = CODC,
+                                         cref_to_guids          = CTG }) ->
+    State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
+                     cref_to_guids          = dict:erase(CRef, CTG)}.
+
+
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
@@ -632,11 +639,8 @@ handle_call({new_client_state, CRef, Callback}, _From,
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({client_terminate, #client_msstate { client_ref = CRef }}, _From,
-            State = #msstate { client_ondisk_callback = CODC,
-                               cref_to_guids          = CTG }) ->
-    reply(ok, State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
-                               cref_to_guids          = dict:erase(CRef, CTG)}).
+handle_call({client_terminate, #client_msstate { client_ref = CRef }}, _From, State) ->
+    reply(ok, clear_client_callback(CRef, State)).
 
 handle_cast({write, CRef, Guid},
             State = #msstate { current_file_handle    = CurHdl,
@@ -754,10 +758,9 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast({client_delete, CRef},
-            State = #msstate { client_refs = ClientRefs }) ->
-    noreply(
-      State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
+handle_cast({client_delete, CRef}, State = #msstate { client_refs = ClientRefs }) ->
+    State1 = clear_client_callback(CRef, State),
+    noreply(State1 #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
