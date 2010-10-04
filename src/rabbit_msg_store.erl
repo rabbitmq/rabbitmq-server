@@ -846,15 +846,21 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
                                  client_ondisk_callback = CODC,
                                  cref_to_guids          = CTG }) ->
     State1 = stop_sync_timer(State),
+    CGs = dict:fold(fun (_CRef, [],    NS) -> NS;
+                        (CRef,  Guids, NS) -> [{CRef, Guids} | NS]
+                    end, [], CTG),
+    if Syncs =/= [] orelse CGs =/= [] -> ok = file_handle_cache:sync(CurHdl);
+       true                           -> ok
+    end,
     State2 = case Syncs of
                  [] -> State1;
-                 _  -> ok = file_handle_cache:sync(CurHdl),
-                       lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
+                 _  -> lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
                        State1 #msstate { on_sync = [] }
              end,
-    dict:map(fun(CRef, Guids) -> Fun = dict:fetch(CRef, CODC),
-                                 Fun(Guids)
-             end, CTG),
+    [begin
+         Fun = dict:fetch(CRef, CODC),
+         Fun(Guids)
+     end || {CRef, Guids} <- CGs],
     State2 #msstate { cref_to_guids = dict:new() }.
 
 
