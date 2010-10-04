@@ -1170,16 +1170,11 @@ ack(MsgStoreFun, Fun, AckTags, State = #vqstate { pending_ack = PendAck }) ->
                                    pending_ack = dict:erase(SeqId, PA) })}
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-    ok = orddict:fold(fun (MsgStore, Guids, ok) ->
-                              MsgStoreFun(MsgStore, Guids)
-                      end, ok, GuidsByStore),
-    AckdGuids = lists:foldl(
-                  fun(SeqId, Guids) ->
-                          [case dict:fetch(SeqId, PendAck) of
-                               #msg_status { msg = Msg } -> Msg#basic_message.guid;
-                               {_, Guid}                 -> Guid
-                           end | Guids]
-                  end, [], SeqIds),
+    AckdGuids = lists:concat(
+                  orddict:fold(fun (MsgStore, Guids, Gs) ->
+                                       MsgStoreFun(MsgStore, Guids),
+                                       [Guids | Gs]
+                               end, [], GuidsByStore)),
     State2 = remove_confirms(gb_sets:from_list(AckdGuids), State1),
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
