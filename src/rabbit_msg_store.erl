@@ -1583,7 +1583,7 @@ combine_files(#file_summary { file             = Source,
     %%   copy back in, and then copy over from Source
     %% otherwise we just truncate straight away and copy over from Source
     {DestinationWorkList, DestinationValid} =
-        find_unremoved_messages_in_file(Destination, State),
+        load_and_vacuum_message_file(Destination, State),
     {DestinationContiguousTop, DestinationWorkListTail} =
         drop_contiguous_block_prefix(DestinationWorkList),
     case DestinationWorkListTail of
@@ -1609,8 +1609,7 @@ combine_files(#file_summary { file             = Source,
               ok = file_handle_cache:sync(DestinationHdl),
               ok = file_handle_cache:delete(TmpHdl)
     end,
-    {SourceWorkList, SourceValid} =
-        find_unremoved_messages_in_file(Source, State),
+    {SourceWorkList, SourceValid} = load_and_vacuum_message_file(Source, State),
     ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
@@ -1618,25 +1617,25 @@ combine_files(#file_summary { file             = Source,
     ok = file_handle_cache:delete(SourceHdl),
     ExpectedSize.
 
-find_unremoved_messages_in_file(File,
-                                {_FileSummaryEts, Dir, Index, IndexState}) ->
+load_and_vacuum_message_file(File, {_FileSummaryEts, Dir, Index, IndexState}) ->
     %% Messages here will be end-of-file at start-of-list
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
-    lists:foldl(fun ({Guid, TotalSize, Offset}, Acc = {List, Size}) ->
-                        case Index:lookup(Guid, IndexState) of
-                            #msg_location { file = File, total_size = TotalSize,
-                                            offset = Offset, ref_count = 0 } ->
-                                ok = Index:delete(Guid, IndexState),
-                                Acc;
-                            #msg_location { file = File, total_size = TotalSize,
-                                            offset = Offset } = Entry ->
-                                {[ Entry | List ], TotalSize + Size};
-                            _ ->
-                                Acc
-                        end
-                end, {[], 0}, Messages).
+    lists:foldl(
+      fun ({Guid, TotalSize, Offset}, Acc = {List, Size}) ->
+              case Index:lookup(Guid, IndexState) of
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset, ref_count = 0 } = Entry ->
+                      ok = Index:delete_object(Entry, IndexState),
+                      Acc;
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset } = Entry ->
+                      {[ Entry | List ], TotalSize + Size};
+                  _ ->
+                      Acc
+              end
+      end, {[], 0}, Messages).
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
               Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
