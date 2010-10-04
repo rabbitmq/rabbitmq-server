@@ -849,19 +849,13 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
     CGs = dict:fold(fun (_CRef, [],    NS) -> NS;
                         (CRef,  Guids, NS) -> [{CRef, Guids} | NS]
                     end, [], CTG),
-    if Syncs =/= [] orelse CGs =/= [] -> ok = file_handle_cache:sync(CurHdl);
-       true                           -> ok
+    if Syncs =:= [] andalso CGs =:= [] -> ok;
+       true                            -> file_handle_cache:sync(CurHdl)
     end,
-    State2 = case Syncs of
-                 [] -> State1;
-                 _  -> lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-                       State1 #msstate { on_sync = [] }
-             end,
-    [begin
-         Fun = dict:fetch(CRef, CODC),
-         Fun(Guids)
-     end || {CRef, Guids} <- CGs],
-    State2 #msstate { cref_to_guids = dict:new() }.
+    lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
+    [(dict:fetch(CRef, CODC))(Guids) || {CRef, Guids} <- CGs],
+    State #msstate { cref_to_guids = dict:new(),
+                      on_sync = [] }.
 
 
 read_message(Guid, From,

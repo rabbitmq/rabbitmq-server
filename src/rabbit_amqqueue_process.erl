@@ -698,8 +698,8 @@ handle_call(consumers, _From,
                     [{ChPid, ConsumerTag, AckRequired} | Acc]
             end, [], queue:join(ActiveConsumers, BlockedConsumers)), State);
 
-handle_call({deliver_immediately, Delivery = #delivery{message = Msg}}
-            , _From, State) ->
+handle_call({deliver_immediately, Delivery = #delivery{message = Msg}},
+            _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
     %% FIXME: Is this correct semantics?
@@ -713,13 +713,12 @@ handle_call({deliver_immediately, Delivery = #delivery{message = Msg}}
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    State1 = record_confirm_message(Delivery, State),
-    {Delivered, State2} = attempt_delivery(Delivery, State1),
-    State3 = case Delivered of
-                 true  -> State2;
-                 false -> confirm_message(Msg#basic_message.guid, State2)
-             end,
-    reply(Delivered, State3);
+    {Delivered, State1} = attempt_delivery(Delivery,
+                                           record_confirm_message(Delivery, State)),
+    reply(Delivered, case Delivered of
+                         true  -> State1;
+                         false -> confirm_message(Msg#basic_message.guid, State1)
+                     end);
 
 handle_call({deliver, Delivery}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
