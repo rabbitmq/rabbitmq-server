@@ -34,6 +34,7 @@
 -export([start/0, stop/0, declare/5, delete_exclusive/1, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
+         maybe_run_queue_via_backing_queue_async/2,
          update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1]).
 -export([pseudo_queue/2]).
@@ -158,6 +159,8 @@
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
 -spec(maybe_run_queue_via_backing_queue/2 ::
+        (pid(), (fun ((A) -> A))) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue_async/2 ::
         (pid(), (fun ((A) -> A))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
@@ -456,6 +459,9 @@ internal_delete(QueueName) ->
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
     gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
+
+maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
+    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
 
 update_ram_duration(QPid) ->
     gen_server2:cast(QPid, update_ram_duration).

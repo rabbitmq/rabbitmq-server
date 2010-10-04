@@ -541,10 +541,7 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     PA1 = record_pending_ack(m(MsgStatus1), PA),
     PCount1 = PCount + one_if(IsPersistent1),
-    Unconfirmed1 = case NeedsConfirming of
-                       true  -> gb_sets:insert(Guid, Unconfirmed);
-                       false -> Unconfirmed
-                   end,
+    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, a(State1 #vqstate {
                 next_seq_id       = SeqId    + 1,
                 out_counter       = OutCount + 1,
@@ -823,6 +820,9 @@ one_if(false) -> 0.
 cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
+gb_sets_maybe_insert(false, _Val, Set) -> Set;
+gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:insert(Val, Set).
+
 msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid }) ->
     #msg_status { seq_id = SeqId, guid = Guid, msg = Msg,
                   is_persistent = IsPersistent, is_delivered = false,
@@ -1066,10 +1066,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
                  true  -> State1 #vqstate { q4 = queue:in(m(MsgStatus1), Q4) }
              end,
     PCount1 = PCount + one_if(IsPersistent1),
-    Unconfirmed1 = case NeedsConfirming of
-                       true  -> gb_sets:insert(Guid, Unconfirmed);
-                       false -> Unconfirmed
-                   end,
+    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, State2 #vqstate {
               next_seq_id      = SeqId   + 1,
               len              = Len     + 1,
@@ -1212,36 +1209,34 @@ msgs_confirmed(GuidSet, State) ->
     {remove_confirms(GuidSet, State), {confirm, gb_sets:to_list(GuidSet)}}.
 
 msgs_written_to_disk(QPid, Guids) ->
-    spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                     QPid,
-                     fun(State = #vqstate { msgs_on_disk        = MOD,
-                                            msg_indices_on_disk = MIOD,
-                                            unconfirmed         = UC }) ->
-                             GuidSet = gb_sets:from_list(Guids),
-                             msgs_confirmed(
-                               gb_sets:intersection(GuidSet, MIOD),
-                               State #vqstate {
-                                 msgs_on_disk =
-                                     gb_sets:intersection(
-                                       gb_sets:union(MOD, GuidSet), UC) })
-                     end)
-          end).
+    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+      QPid,
+      fun(State = #vqstate { msgs_on_disk        = MOD,
+                             msg_indices_on_disk = MIOD,
+                             unconfirmed         = UC }) ->
+              GuidSet = gb_sets:from_list(Guids),
+              msgs_confirmed(
+                gb_sets:intersection(GuidSet, MIOD),
+                State #vqstate {
+                  msgs_on_disk =
+                      gb_sets:intersection(
+                        gb_sets:union(MOD, GuidSet), UC) })
+      end).
 
 msg_indices_written_to_disk(QPid, Guids) ->
-    spawn(fun() -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                     QPid,
-                     fun(State = #vqstate { msgs_on_disk        = MOD,
-                                            msg_indices_on_disk = MIOD,
-                                            unconfirmed         = UC }) ->
-                             GuidSet = gb_sets:from_list(Guids),
-                             msgs_confirmed(
-                               gb_sets:intersection(GuidSet, MOD),
-                               State #vqstate {
-                                 msg_indices_on_disk =
-                                     gb_sets:intersection(
-                                       gb_sets:union(MIOD, GuidSet), UC) })
-                     end)
-          end).
+    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+      QPid,
+      fun(State = #vqstate { msgs_on_disk        = MOD,
+                             msg_indices_on_disk = MIOD,
+                             unconfirmed         = UC }) ->
+              GuidSet = gb_sets:from_list(Guids),
+              msgs_confirmed(
+                gb_sets:intersection(GuidSet, MOD),
+                State #vqstate {
+                  msg_indices_on_disk =
+                      gb_sets:intersection(
+                        gb_sets:union(MIOD, GuidSet), UC) })
+      end).
 
 
 %%----------------------------------------------------------------------------

@@ -878,6 +878,9 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
     reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
 
 
+handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
+    noreply(maybe_run_queue_via_backing_queue(Fun, State));
+
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
