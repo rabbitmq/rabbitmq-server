@@ -185,12 +185,13 @@
                               })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict:dictionary(), [segment()]}).
+-type(on_sync_fun() :: fun (([rabbit_guid:guid()]) -> ok)).
 -type(qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
-                              on_sync             :: fun (([rabbit_guid:guid()]) -> ok),
+                              on_sync             :: on_sync_fun(),
                               unsynced_guids      :: [rabbit_guid:guid()]
                              }).
 -type(startup_fun_state() ::
@@ -198,8 +199,7 @@
              A}).
 
 -spec(init/5 :: (rabbit_amqqueue:name(), boolean(), boolean(),
-                 fun ((rabbit_guid:guid()) -> boolean()),
-                 fun (([seq_id()]) -> ok))
+                 fun ((rabbit_guid:guid()) -> boolean()), on_sync_fun())
                  -> {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
@@ -232,19 +232,18 @@ init(Name, false, _MsgStoreRecovered, _ContainsCheckFun, OnSyncFun) ->
 
 init(Name, true, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
-    State1 = State #qistate { on_sync = OnSyncFun },
     Terms = case read_shutdown_terms(Dir) of
                 {error, _}   -> [];
                 {ok, Terms1} -> Terms1
             end,
     CleanShutdown = detect_clean_shutdown(Dir),
-    {Count, State2} =
+    {Count, State1} =
         case CleanShutdown andalso MsgStoreRecovered of
             true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
-                     init_clean(RecoveredCounts, State1);
-            false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
+                     init_clean(RecoveredCounts, State);
+            false -> init_dirty(CleanShutdown, ContainsCheckFun, State)
         end,
-    {Count, Terms, State2}.
+    {Count, Terms, State1 #qistate { on_sync = OnSyncFun }}.
 
 terminate(Terms, State) ->
     {SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
@@ -380,6 +379,7 @@ blank_state(QueueName) ->
                journal_handle      = undefined,
                dirty_count         = 0,
                max_journal_entries = MaxJournal,
+               on_sync             = fun (_) -> ok end,
                unsynced_guids      = [] }.
 
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
