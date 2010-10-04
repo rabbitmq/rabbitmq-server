@@ -348,6 +348,8 @@ format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
                      Value) when is_binary(TableEntryKey) andalso
                                  is_atom(TableEntryType) ->
     io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+format_info_item([C|_] = Value) when is_number(C), C >= 32, C =< 255 ->
+    Value;
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 
