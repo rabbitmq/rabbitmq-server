@@ -91,7 +91,7 @@
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
--spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
+-spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').

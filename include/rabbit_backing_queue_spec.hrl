@@ -50,7 +50,7 @@
         (ack_required(), rabbit_types:basic_message(), confirm_required(), state())
         -> {ack(), state()}).
 -spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
--spec(ack/2 :: ([ack()], state()) -> state()).
+-spec(ack/2 :: ([ack()], state()) -> {state(), [rabbit_guid:guid()]}).
 -spec(tx_publish/3 :: (rabbit_types:txn(), rabbit_types:basic_message(), state()) -> state()).
 -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
