@@ -854,7 +854,7 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
     [(dict:fetch(CRef, CODC))(Guids) || {CRef, Guids} <- CGs],
-    State #msstate { cref_to_guids = dict:new(),
+    State1 #msstate { cref_to_guids = dict:new(),
                       on_sync = [] }.
 
 

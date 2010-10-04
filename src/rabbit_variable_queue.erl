@@ -1160,8 +1160,8 @@ remove_pending_ack(KeepPersistent,
 ack(_MsgStoreFun, _Fun, [], State) ->
     {State, []};
 ack(MsgStoreFun, Fun, AckTags, State) ->
-    {Guids, {SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
-                                                        persistent_count = PCount }} =
+    {AckdGuids, {SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
+                                                            persistent_count = PCount }} =
         lists:foldl(
           fun (SeqId, {Gs, Acc, State2 = #vqstate { pending_ack = PA }}) ->
                   {ok, AckEntry} = dict:find(SeqId, PA),
@@ -1174,11 +1174,11 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
                               MsgStoreFun(MsgStore, Guids)
                       end, ok, GuidsByStore),
-    State2 = remove_confirms(gb_sets:from_list(Guids), State1),
+    State2 = remove_confirms(gb_sets:from_list(AckdGuids), State1),
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
     {State2 #vqstate { index_state      = IndexState1,
-                      persistent_count = PCount1 }, Guids}.
+                      persistent_count = PCount1 }, AckdGuids}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
