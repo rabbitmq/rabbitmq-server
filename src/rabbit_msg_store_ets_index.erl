@@ -80,7 +80,7 @@ delete(Key, State) ->
     ok.
 
 delete_object(Obj, State) ->
-    true = ets:match_delete(State #state.table, Obj),
+    true = ets:delete_object(State #state.table, Obj),
     ok.
 
 delete_by_file(File, State) ->
