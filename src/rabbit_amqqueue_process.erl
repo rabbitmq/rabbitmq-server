@@ -717,7 +717,7 @@ handle_call({deliver_immediately, Delivery = #delivery{message = Msg}}
     State1 = record_confirm_message(Delivery, State),
     {Delivered, State2} = attempt_delivery(Delivery, State1),
     State3 = case Delivered of
-                 true  -> State2,
+                 true  -> State2;
                  false -> confirm_message(Msg#basic_message.guid, State2)
              end,
     reply(Delivered, State3);

@@ -452,18 +452,18 @@ send_or_enqueue_ack(undefined, State) ->
 send_or_enqueue_ack(_, State = #ch{confirm_enabled = false}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = false}) ->
-    do_if_not_dup(MsgSeqNo, State,
-                  fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
-                          ok = rabbit_writer:send_command(
-                                 WriterPid, #'basic.ack'{delivery_tag = MSN}),
-                          State1
-                  end);
+    do_if_unconfirmed(MsgSeqNo, State,
+                      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
+                              ok = rabbit_writer:send_command(
+                                     WriterPid, #'basic.ack'{delivery_tag = MSN}),
+                              State1
+                      end);
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
-    do_if_not_dup(MsgSeqNo, State,
-                  fun(MSN, State1 = #ch{held_confirms = As}) ->
-                          start_ack_timer(State1#ch{held_confirms =
-                                                        gb_sets:add(MSN, As)})
-                  end).
+    do_if_unconfirmed(MsgSeqNo, State,
+                      fun(MSN, State1 = #ch{held_confirms = As}) ->
+                              start_ack_timer(State1#ch{held_confirms =
+                                                            gb_sets:add(MSN, As)})
+                      end).
 
 msg_sent_to_queue(undefined, _QPid, State) ->
     State;
@@ -473,9 +473,9 @@ msg_sent_to_queue(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
                 error      -> erlang:monitor(process, QPid),
                               gb_sets:new()
             end,
-    State#ch{qpid_to_msgs = dict:store(QPid, gb_sets:add(MsgSeqNo, Msgs1))}.
+    State#ch{qpid_to_msgs = dict:store(QPid, gb_sets:add(MsgSeqNo, Msgs1), QTM)}.
 
-do_if_not_dup(MsgSeqNo, State = #ch{unconfirmed = UC}, Fun) ->
+do_if_unconfirmed(MsgSeqNo, State = #ch{unconfirmed = UC}, Fun) ->
     case gb_sets:is_element(MsgSeqNo, UC) of
         true  -> QTM = dict:map(fun (_, Msgs) ->
                                         gb_sets:delete_any(MsgSeqNo, Msgs)
