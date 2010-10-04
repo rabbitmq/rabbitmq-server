@@ -542,7 +542,7 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
     PA1 = record_pending_ack(m(MsgStatus1), PA),
     PCount1 = PCount + one_if(IsPersistent1),
     Unconfirmed1 = case NeedsConfirming of
-                       true  -> gb_sets:add(Guid, Unconfirmed);
+                       true  -> gb_sets:insert(Guid, Unconfirmed);
                        false -> Unconfirmed
                    end,
     {SeqId, a(State1 #vqstate {
@@ -1068,7 +1068,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
              end,
     PCount1 = PCount + one_if(IsPersistent1),
     Unconfirmed1 = case NeedsConfirming of
-                       true  -> gb_sets:add(Guid, Unconfirmed);
+                       true  -> gb_sets:insert(Guid, Unconfirmed);
                        false -> Unconfirmed
                    end,
     {SeqId, State2 #vqstate {
