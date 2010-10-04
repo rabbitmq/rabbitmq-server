@@ -611,9 +611,11 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
     end.
 
 ack(AckTags, State) ->
-    a(ack(fun rabbit_msg_store:remove/2,
-          fun (_AckEntry, State1) -> State1 end,
-          AckTags, State)).
+    {State1, Guids} =
+        ack(fun rabbit_msg_store:remove/2,
+            fun (_AckEntry, State1) -> State1 end,
+            AckTags, State),
+    {a(State1), Guids}.
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent },
            State = #vqstate { durable           = IsDurable,
@@ -663,21 +665,20 @@ tx_commit(Txn, Fun, State = #vqstate { durable = IsDurable }) ->
 
 requeue(AckTags, State) ->
     {State1, _Guids} =
-        a(reduce_memory_use(
-            ack(fun rabbit_msg_store:release/2,
-                fun (#msg_status { msg = Msg }, State1) ->
-                        {_SeqId, State2} = publish(Msg, true, false, false, State1),
-                        State2;
-                    ({IsPersistent, Guid}, State1) ->
-                        #vqstate { msg_store_clients = MSCState } = State1,
-                        {{ok, Msg = #basic_message{}}, MSCState1} =
-                            read_from_msg_store(MSCState, IsPersistent, Guid),
-                        State2 = State1 #vqstate { msg_store_clients = MSCState1 },
-                        {_SeqId, State3} = publish(Msg, true, true, false, State2),
-                        State3
-                end,
-                AckTags, State))),
-    State1.
+        ack(fun rabbit_msg_store:release/2,
+            fun (#msg_status { msg = Msg }, State1) ->
+                    {_SeqId, State2} = publish(Msg, true, false, false, State1),
+                    State2;
+                ({IsPersistent, Guid}, State1) ->
+                    #vqstate { msg_store_clients = MSCState } = State1,
+                    {{ok, Msg = #basic_message{}}, MSCState1} =
+                        read_from_msg_store(MSCState, IsPersistent, Guid),
+                    State2 = State1 #vqstate { msg_store_clients = MSCState1 },
+                    {_SeqId, State3} = publish(Msg, true, true, false, State2),
+                    State3
+            end,
+            AckTags, State),
+    a(reduce_memory_use(State1)).
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -782,8 +783,6 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-a({State, Other}) ->
-    {a(State), Other};
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
                      len                  = Len,
                      persistent_count     = PersistentCount,
@@ -1284,8 +1283,6 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, State) ->
                     end
     end.
 
-reduce_memory_use({State, Other}) ->
-    {reduce_memory_use(State), Other};
 reduce_memory_use(State) ->
     {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
                                     fun limit_ram_index/2,
