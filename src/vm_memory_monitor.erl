@@ -47,7 +47,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([update/0, get_total_memory/0,
+-export([update/0, get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
          get_memory_limit/0]).
