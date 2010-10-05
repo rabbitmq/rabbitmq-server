@@ -47,8 +47,8 @@ parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
         [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
         _ -> {error, {invalid_destination, exchange, Rest}}
     end;
-parse_destination(_) ->
-    {error, unknown_destination}.
+parse_destination(Destination) ->
+    {error, {unknown_destination, Destination}}.
 
 parse_simple_destination(Type, Content) ->
     case parse_content(Content) of

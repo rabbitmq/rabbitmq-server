@@ -62,16 +62,13 @@ class TestConnected(unittest.TestCase):
     def test_newline_after_nul(self):
         self.cd.sendall('\n'
                         'SUBSCRIBE\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\x00\n'
                         'SEND\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n\n'
-                        'hello\n\x00\n')
+                        'destination:/exchange/amq.fanout\n'
+                        '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
-                'destination:a\n'
-                'exchange:amq.fanout\n'
+                'destination:/exchange/amq.fanout\n'
                 'message-id:session-(.*)\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
@@ -84,16 +81,13 @@ class TestConnected(unittest.TestCase):
     def test_newline_after_nul_and_leading_nul(self):
         self.cd.sendall('\n'
                         '\x00SUBSCRIBE\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\x00\n'
                         '\x00SEND\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
-                'destination:a\n'
-                'exchange:amq.fanout\n'
+                'destination:/exchange/amq.fanout\n'
                 'message-id:session-(.*)\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
@@ -106,16 +100,13 @@ class TestConnected(unittest.TestCase):
     def test_subscribe_present_exchange(self):
         ''' Just send a valid message '''
         self.cd.sendall('SUBSCRIBE\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\x00'
                         'SEND\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\nhello\n\x00')
         resp = ('MESSAGE\n'
-                'destination:a\n'
-                'exchange:amq.fanout\n'
+                'destination:/exchange/amq.fanout\n'
                 'message-id:session-(.*)\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
@@ -128,12 +119,10 @@ class TestConnected(unittest.TestCase):
     def test_subscribe_missing_exchange(self):
         ''' Just send a message to a wrong exchange'''
         self.cd.sendall('SUBSCRIBE\n'
-                        'destination:a\n'
-                        'exchange:foo\n'
+                        'destination:/exchange/foo\n'
                         '\n\x00'
                         'SEND\n'
-                        'destination:a\n'
-                        'exchange:foo\n'
+                        'destination:/exchange/foo\n'
                         '\nhello\n\x00')
         resp = ('ERROR\n'
                 'message:not_found\n'
@@ -148,8 +137,7 @@ class TestConnected(unittest.TestCase):
     def test_bad_command(self):
         ''' Trigger an error message. '''
         self.cd.sendall('WRONGCOMMAND\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\0')
         resp = ('ERROR\n'
                 'message:Bad command\n'
@@ -165,12 +153,11 @@ class TestConnected(unittest.TestCase):
     def test_unsubscribe_destination(self):
         ''' Test UNSUBSCRIBE command with destination parameter '''
         self.cd.sendall('SUBSCRIBE\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\0'
                         'UNSUBSCRIBE\n'
                         'receipt: 1\n'
-                        'destination:a\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\0')
         resp=  ('RECEIPT\n'
                 'receipt-id:1\n'
@@ -183,8 +170,7 @@ class TestConnected(unittest.TestCase):
         ''' Test UNSUBSCRIBE command with id parameter'''
         self.cd.sendall('SUBSCRIBE\n'
                         'id: 123\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n\0'
                         'UNSUBSCRIBE\n'
                         'receipt: 1\n'
@@ -204,9 +190,7 @@ class TestConnected(unittest.TestCase):
         '''
         subscribe=( 'SUBSCRIBE\n'
                     'id: XsKNhAf\n'
-                    'destination:\n'
-                    'exchange: amq.topic\n'
-                    'routing_key: da9d4779\n'
+                    'destination:/exchange/amq.topic/da9d4779\n'
                     '\n\0')
         for cd in [self.cd1, self.cd2]:
             cd.sendall(subscribe)
@@ -214,15 +198,13 @@ class TestConnected(unittest.TestCase):
         time.sleep(0.1)
 
         self.sd.sendall('SEND\n'
-                        'destination: da9d4779\n'
-                        'exchange: amq.topic\n'
+                        'destination:/exchange/amq.topic/da9d4779\n'
                         '\n'
                         'message'
                         '\n\0')
 
         resp=('MESSAGE\n'
-            'destination:da9d4779\n'
-            'exchange:amq.topic\n'
+            'destination:/exchange/amq.topic/da9d4779\n'
             'message-id:(.*)\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
@@ -244,9 +226,7 @@ class TestConnected(unittest.TestCase):
         subscribe=(
             'SUBSCRIBE\n'
             'id: sTXtc\n'
-            'destination: test_queue\n'
-            'exchange: amq.topic\n'
-            'routing_key: yAoXMwiF\n'
+            'destination:/exchange/amq.topic/yAoXMwiF\n'
             '\n\0')
         for cd in [self.cd1, self.cd2]:
             cd.sendall(subscribe)
@@ -255,15 +235,13 @@ class TestConnected(unittest.TestCase):
 
         for msg in messages:
             self.sd.sendall('SEND\n'
-                            'destination: yAoXMwiF\n'
-                            'exchange: amq.topic\n'
+                            'destination:/exchange/amq.topic/yAoXMwiF\n'
                             '\n'
                             '%s'
                             '\n\0' % msg)
 
         resp=('MESSAGE\n'
-            'destination:yAoXMwiF\n'
-            'exchange:amq.topic\n'
+            'destination:/exchange/amq.topic/yAoXMwiF\n'
             'message-id:.*\n'
             'content-type:text/plain\n'
             'subscription:.*\n'
@@ -297,18 +275,15 @@ class TestConnected(unittest.TestCase):
                         'transaction: abc\n'
                         '\n\0'
                         'SUBSCRIBE\n'
-                        'destination:a\n'
+                        'destination:/exchange/amq.fanout\n'
                         'ack: client\n'
-                        'exchange:amq.fanout\n'
                         '\n\0'
                         'SEND\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
+                        'destination:/exchange/amq.fanout\n'
                         '\n'
                         'hello\n\0')
         resp = ('MESSAGE\n'
-                'destination:a\n'
-                'exchange:amq.fanout\n'
+                'destination:/exchange/amq.fanout\n'
                 'message-id:(.*)\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
@@ -350,9 +325,7 @@ class TestConnected(unittest.TestCase):
         ''' Test sending/receiving huge (92MB) message. '''
         subscribe=( 'SUBSCRIBE\n'
                     'id: xxx\n'
-                    'destination:\n'
-                    'exchange: amq.topic\n'
-                    'routing_key: test_huge_message\n'
+                    'destination:/exchange/amq.topic/test_huge_message\n'
                     '\n\0')
         self.cd.sendall(subscribe)
 
@@ -362,15 +335,13 @@ class TestConnected(unittest.TestCase):
         message = 'x' * 1024*1024*16
 
         self.cd.sendall('SEND\n'
-                        'destination: test_huge_message\n'
-                        'exchange: amq.topic\n'
+                        'destination:/exchange/amq.topic/test_huge_message\n'
                         '\n'
                         '%s'
                         '\0' % message)
 
         resp=('MESSAGE\n'
-            'destination:test_huge_message\n'
-            'exchange:amq.topic\n'
+            'destination:/exchange/amq.topic/test_huge_message\n'
             'message-id:(.*)\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'

@@ -68,7 +68,8 @@ exchange_with_invalid_name_test() ->
         parse_destination("/exchange/foo/bar/baz").
 
 unknown_destination_test() ->
-    {error, unknown_destination} = parse_destination("/blah/boo").
+    {error, {unknown_destination, "/blah/boo"}} = 
+        parse_destination("/blah/boo").
 
 parse_destination(Destination) ->
     rabbit_stomp_destination_parser:parse_destination(Destination).

@@ -41,7 +41,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, connection, parse_state}).
+-record(state, {socket, session_id, channel, connection, parse_state, 
+                subscriptions}).
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
@@ -101,9 +102,10 @@ init(_Parent) ->
                                   [self(), PeerAddressS, PeerPort]),
             ParseState = rabbit_stomp_frame:initial_state(),
             try
-                ?MODULE:mainloop(#state{socket = Sock,
-                                        channel = none,
-                                        parse_state = ParseState})
+                ?MODULE:mainloop(#state{socket        = Sock,
+                                        channel       = none,
+                                        parse_state   = ParseState,
+                                        subscriptions = dict:new()})
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
                                       [self(), PeerAddressS, PeerPort])
@@ -194,11 +196,12 @@ send_delivery(#'basic.deliver'{consumer_tag = ConsumerTag,
                          correlation_id   = CorrelationId,
                          reply_to         = ReplyTo,
                          message_id       = MessageId},
-              Body, State = #state{session_id = SessionId}) ->
+              Body, State = #state{session_id    = SessionId, 
+                                   subscriptions = Subs}) ->
+   {ok, Destination} = dict:find(ConsumerTag, Subs),
    send_frame(
       "MESSAGE",
-      [{"destination", binary_to_list(RoutingKey)},
-       {"exchange", binary_to_list(Exchange)},
+      [{"destination", Destination},
        %% TODO append ContentEncoding as ContentType;
        %% charset=ContentEncoding?  The STOMP SEND handler could also
        %% parse "content-type" to split it, perhaps?
@@ -414,8 +417,9 @@ process_command("SEND",
     BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
     IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
     case rabbit_stomp_frame:header(Frame, "destination") of
-        {ok, RoutingKeyStr} ->
-            ExchangeStr = rabbit_stomp_frame:header(Frame, "exchange", ""),
+        {ok, DestHeader} ->
+            {ok, Destination} = 
+                rabbit_stomp_destination_parser:parse_destination(DestHeader),
             Props = #'P_basic'{
               content_type     = BinH("content-type",     <<"text/plain">>),
               content_encoding = BinH("content-encoding", undefined),
@@ -426,9 +430,10 @@ process_command("SEND",
               message_id       = BinH("amqp-message-id",  undefined),
               headers          = [longstr_field(K, V) ||
                                      {"X-" ++ K, V} <- Headers]},
+            {Exchange, RoutingKey} = parse_routing_information(Destination),
             Method = #'basic.publish'{
-              exchange = list_to_binary(ExchangeStr),
-              routing_key = list_to_binary(RoutingKeyStr),
+              exchange = list_to_binary(Exchange),
+              routing_key = list_to_binary(RoutingKey),
               mandatory = false,
               immediate = false},
             case transactional(Frame) of
@@ -475,32 +480,25 @@ process_command("ABORT", Frame, State) ->
     transactional_action(Frame, "ABORT", fun abort_transaction/2, State);
 process_command("SUBSCRIBE",
                 Frame = #stomp_frame{headers = Headers},
-                State = #state{channel = Channel}) ->
+                State = #state{channel = Channel, subscriptions = Subs}) ->
     AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
                   "auto" -> auto;
                   "client" -> client
               end,
     case rabbit_stomp_frame:header(Frame, "destination") of
-        {ok, QueueStr} ->
+        {ok, DestHeader} ->
+            {ok, Destination} = 
+                rabbit_stomp_destination_parser:parse_destination(DestHeader),
+
+            {ok, Queue} = create_queue_if_needed(subscribe, Destination, State),
+
             ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                               {ok, Str} ->
                                   list_to_binary("T_" ++ Str);
                               not_found ->
-                                  list_to_binary("Q_" ++ QueueStr)
-                          end,
-            Queue = list_to_binary(QueueStr),
-            BoolH = fun(K, V) -> 
-                            rabbit_stomp_frame:boolean_header(Frame, K, V) end,
-            State1 = send_method(
-                       #'queue.declare'{
-                           queue       = Queue,
-                           passive     = BoolH("passive", false),
-                           durable     = BoolH("durable", false),
-                           exclusive   = BoolH("exclusive", false),
-                           auto_delete = BoolH("auto-delete", true),
-                           arguments   = [longstr_field(K, V) ||
-                                             {"X-Q-" ++ K, V} <- Headers]},
-                       State),
+                                  list_to_binary("Q_" ++ Queue)
+                          end,            
+            
             amqp_channel:subscribe(Channel, 
                                    #'basic.consume'{
                                      queue        = Queue, 
@@ -509,29 +507,17 @@ process_command("SUBSCRIBE",
                                      no_ack       = (AckMode == auto),
                                      exclusive    = false},
                                  self()),
-            State2 = case rabbit_stomp_frame:header(Frame, "exchange") of
-                         {ok, ExchangeStr } ->
-                             Exchange = list_to_binary(ExchangeStr),
-                             RoutingKey = list_to_binary(
-                                            rabbit_stomp_frame:header(
-                                              Frame, "routing_key", "")),
-                             send_method(
-                               #'queue.bind'{
-                                   queue       = Queue,
-                                   exchange    = Exchange,
-                                   routing_key = RoutingKey,
-                                   arguments   = [longstr_field(K, V) ||
-                                                   {"X-B-" ++ K, V} <- Headers]},
-                               State1);
-                         not_found -> State1
-                     end,
-            {ok, State2};
+
+            ok = bind_queue_if_needed(subscribe, Queue, Destination, State),
+
+            {ok, State#state{subscriptions = 
+                            dict:store(ConsumerTag, DestHeader, Subs)}};
         not_found ->
             {ok, send_error("Missing destination",
                             "SUBSCRIBE must include a 'destination' header\n",
                             State)}
     end;
-process_command("UNSUBSCRIBE", Frame, State) ->
+process_command("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
     ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, IdStr} ->
                           list_to_binary("T_" ++ IdStr);
@@ -552,9 +538,37 @@ process_command("UNSUBSCRIBE", Frame, State) ->
         true ->
             {ok, send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                                              nowait = true},
-                            State)}
+                            State#state{subscriptions = 
+                                            dict:erase(ConsumerTag, Subs)})}
     end;
 process_command(Command, _Frame, State) ->
     {ok, send_error("Bad command",
                     "Could not interpret command " ++ Command ++ "\n",
                     State)}.
+
+parse_routing_information({exchange, {Name, undefined}}) ->
+    {Name, ""};
+parse_routing_information({exchange, {Name, Pattern}}) ->
+    {Name, Pattern}.
+
+create_queue_if_needed(subscribe, {exchange, _}, 
+                       State = #state{channel = Channel}) ->
+    #'queue.declare_ok'{queue = Queue} = 
+        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
+    {ok, Queue}.
+
+bind_queue_if_needed(subscribe, Queue, {exchange, {Name, Pattern}},
+                    State = #state{channel = Channel}) ->
+    RoutingKey = case Pattern of 
+                     undefined -> "";
+                     _         -> Pattern
+                 end,
+    #'queue.bind_ok'{} = 
+        amqp_channel:call(Channel, 
+                          #'queue.bind'{
+                            queue       = Queue,
+                            exchange    = list_to_binary(Name),
+                            routing_key = list_to_binary(RoutingKey)}),    
+    ok.
+    
+    
