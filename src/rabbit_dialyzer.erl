@@ -61,25 +61,26 @@ add_to_plt(PltPath, FilesString) ->
                                      {init_plt, PltPath},
                                      {output_plt, PltPath},
                                      {files, Files}]),
-    print_warnings(DialyzerWarnings),
+    print_warnings(DialyzerWarnings, fun dialyzer:format_warning/1),
     ok.
 
 dialyze_files(PltPath, ModifiedFiles) ->
     Files = string:tokens(ModifiedFiles, " "),
     DialyzerWarnings = dialyzer:run([{init_plt, PltPath},
-                                     {files, Files}]),
+                                     {files, Files},
+                                     {warnings, [behaviours,
+                                                 race_conditions]}]),
     case DialyzerWarnings of
-        [] -> io:format("~nOk~n"),
-              ok;
-        _  -> io:format("~nFAILED with the following warnings:~n"),
-              print_warnings(DialyzerWarnings),
-              fail
-    end.
-
-print_warnings(Warnings) ->
-    [io:format("~s", [dialyzer:format_warning(W)]) || W <- Warnings],
-    io:format("~n"),
+        [] -> io:format("~nOk~n");
+        _  -> io:format("~n~nFAILED with the following ~p warnings:~n~n",
+                        [length(DialyzerWarnings)]),
+              print_warnings(DialyzerWarnings, fun dialyzer:format_warning/1)
+    end,
     ok.
+
+print_warnings(Warnings, FormatFun) ->
+    [io:format("~s~n", [FormatFun(W)]) || W <- Warnings],
+    io:format("~n").
 
 otp_apps_dependencies_paths() ->
     [code:lib_dir(App, ebin) ||

@@ -41,7 +41,8 @@
 -export([emit_stats/1, flush/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
+         prioritise_cast/2]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
@@ -57,7 +58,8 @@
          consumer_count,
          messages_unacknowledged,
          acks_uncommitted,
-         prefetch_count]).
+         prefetch_count,
+         client_flow_blocked]).
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -131,10 +133,10 @@ list() ->
 info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
-    gen_server2:pcall(Pid, 9, info, infinity).
+    gen_server2:call(Pid, info, infinity).
 
 info(Pid, Items) ->
-    case gen_server2:pcall(Pid, 9, {info, Items}, infinity) of
+    case gen_server2:call(Pid, {info, Items}, infinity) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -146,7 +148,7 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 emit_stats(Pid) ->
-    gen_server2:pcast(Pid, 7, emit_stats).
+    gen_server2:cast(Pid, emit_stats).
 
 flush(Pid) ->
     gen_server2:call(Pid, flush).
@@ -157,6 +159,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
+    StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
@@ -174,10 +177,25 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 consumer_mapping        = dict:new(),
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = rabbit_event:init_stats_timer()},
+                stats_timer             = StatsTimer},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun() -> internal_emit_stats(State) end),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info           -> 9;
+        {info, _Items} -> 9;
+        _              -> 0
+    end.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        emit_stats -> 7;
+        _          -> 0
+    end.
 
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
@@ -237,17 +255,22 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State) ->
+handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    {noreply, State}.
+    {noreply,
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State)}.
 
-handle_pre_hibernate(State) ->
+handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    {hibernate, stop_stats_timer(State)}.
+    rabbit_event:if_enabled(StatsTimer, fun () ->
+                                                internal_emit_stats(State)
+                                        end),
+    {hibernate,
+     State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -277,13 +300,7 @@ ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
                              StatsTimer,
-                             fun() -> internal_emit_stats(State) end,
                              fun() -> emit_stats(ChPid) end)}.
-
-stop_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    State#ch{stats_timer = rabbit_event:stop_stats_timer(
-                             StatsTimer,
-                             fun() -> internal_emit_stats(State) end)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -298,14 +315,10 @@ terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
-    NewState = State#ch{most_recently_declared_queue = ActualName},
-    case NoWait of
-        true  -> {noreply, NewState};
-        false -> Reply = #'queue.declare_ok'{queue = ActualName,
-                                             message_count = MessageCount,
-                                             consumer_count = ConsumerCount},
-                 {reply, Reply, NewState}
-    end.
+    return_ok(State#ch{most_recently_declared_queue = ActualName}, NoWait,
+              #'queue.declare_ok'{queue          = ActualName,
+                                  message_count  = MessageCount,
+                                  consumer_count = ConsumerCount}).
 
 check_resource_access(Username, Resource, Perm) ->
     V = {Resource, Perm},
@@ -327,30 +340,30 @@ clear_permission_cache() ->
     erase(permission_cache),
     ok.
 
-check_configure_permitted(Resource, #ch{ username = Username}) ->
+check_configure_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, configure).
 
-check_write_permitted(Resource, #ch{ username = Username}) ->
+check_write_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, write).
 
-check_read_permitted(Resource, #ch{ username = Username}) ->
+check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
+expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
-expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
-                                      most_recently_declared_queue = MRDQ }) ->
+expand_queue_name_shortcut(<<>>, #ch{virtual_host = VHostPath,
+                                     most_recently_declared_queue = MRDQ}) ->
     rabbit_misc:r(VHostPath, queue, MRDQ);
-expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
+expand_queue_name_shortcut(QueueNameBin, #ch{virtual_host = VHostPath}) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
 expand_routing_key_shortcut(<<>>, <<>>,
-                            #ch{ most_recently_declared_queue = <<>> }) ->
+                            #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
-                            #ch{ most_recently_declared_queue = MRDQ }) ->
+                            #ch{most_recently_declared_queue = MRDQ}) ->
     MRDQ;
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
@@ -421,11 +434,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
-    Message = #basic_message{exchange_name  = ExchangeName,
-                             routing_key    = RoutingKey,
-                             content        = DecodedContent,
-                             guid           = rabbit_guid:guid(),
-                             is_persistent  = IsPersistent},
+    Message = #basic_message{exchange_name = ExchangeName,
+                             routing_key   = RoutingKey,
+                             content       = DecodedContent,
+                             guid          = rabbit_guid:guid(),
+                             is_persistent = IsPersistent},
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
@@ -464,9 +477,9 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{ writer_pid = WriterPid,
-                              reader_pid = ReaderPid,
-                              next_tag = DeliveryTag }) ->
+              _, State = #ch{writer_pid = WriterPid,
+                             reader_pid = ReaderPid,
+                             next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
@@ -496,15 +509,15 @@ handle_method(#'basic.get'{queue = QueueNameBin,
             {reply, #'basic.get_empty'{}, State}
     end;
 
-handle_method(#'basic.consume'{queue = QueueNameBin,
+handle_method(#'basic.consume'{queue        = QueueNameBin,
                                consumer_tag = ConsumerTag,
-                               no_local = _, % FIXME: implement
-                               no_ack = NoAck,
-                               exclusive = ExclusiveConsume,
-                               nowait = NoWait},
-              _, State = #ch{ reader_pid = ReaderPid,
-                              limiter_pid = LimiterPid,
-                              consumer_mapping = ConsumerMapping }) ->
+                               no_local     = _, % FIXME: implement
+                               no_ack       = NoAck,
+                               exclusive    = ExclusiveConsume,
+                               nowait       = NoWait},
+              _, State = #ch{reader_pid       = ReaderPid,
+                             limiter_pid      = LimiterPid,
+                             consumer_mapping = ConsumerMapping }) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = expand_queue_name_shortcut(QueueNameBin, State),
@@ -599,7 +612,7 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
 handle_method(#'basic.recover_async'{requeue = true},
-              _, State = #ch{ unacked_message_q = UAMQ }) ->
+              _, State = #ch{unacked_message_q = UAMQ}) ->
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    %% The Qpid python test suite incorrectly assumes
@@ -614,8 +627,8 @@ handle_method(#'basic.recover_async'{requeue = true},
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
 handle_method(#'basic.recover_async'{requeue = false},
-              _, State = #ch{ writer_pid = WriterPid,
-                              unacked_message_q = UAMQ }) ->
+              _, State = #ch{writer_pid = WriterPid,
+                             unacked_message_q = UAMQ}) ->
     ok = rabbit_misc:queue_fold(
            fun ({_DeliveryTag, none, _Msg}, ok) ->
                    %% Was sent as a basic.get_ok. Don't redeliver
@@ -648,7 +661,7 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
-              _, State = #ch{ unacked_message_q = UAMQ}) ->
+              _, State = #ch{unacked_message_q = UAMQ}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
@@ -665,7 +678,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   internal = false,
                                   nowait = NoWait,
                                   arguments = Args},
-              _, State = #ch{ virtual_host = VHostPath }) ->
+              _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
@@ -693,7 +706,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   passive = true,
                                   nowait = NoWait},
-              _, State = #ch{ virtual_host = VHostPath }) ->
+              _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -702,7 +715,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
 handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
                                  if_unused = IfUnused,
                                  nowait = NoWait},
-              _, State = #ch { virtual_host = VHostPath }) ->
+              _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
@@ -856,6 +869,7 @@ handle_method(#'channel.flow'{active = true}, _,
                   end,
     {reply, #'channel.flow_ok'{active = true},
      State#ch{limiter_pid = LimiterPid1}};
+
 handle_method(#'channel.flow'{active = false}, _,
               State = #ch{limiter_pid = LimiterPid,
                           consumer_mapping = Consumers}) ->
@@ -1111,6 +1125,8 @@ i(acks_uncommitted, #ch{uncommitted_ack_q = UAQ}) ->
     queue:len(UAQ);
 i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
+i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->
+    rabbit_limiter:is_blocked(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
 

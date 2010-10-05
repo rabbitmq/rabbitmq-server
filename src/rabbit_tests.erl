@@ -75,7 +75,6 @@ all_tests() ->
     passed = maybe_run_cluster_dependent_tests(),
     passed.
 
-
 maybe_run_cluster_dependent_tests() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
 

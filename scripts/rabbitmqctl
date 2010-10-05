@@ -47,4 +47,3 @@ exec erl \
     -s rabbit_control \
     -nodename $RABBITMQ_NODENAME \
     -extra "$@"
-	
