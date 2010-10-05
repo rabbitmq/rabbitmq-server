@@ -629,17 +629,16 @@ handle_cast({write, Guid},
         not_found ->
             write_message(Guid, Msg, State);
         #msg_location { ref_count = 0, file = File, total_size = TotalSize } ->
-            [#file_summary { locked    = Locked,
-                             file_size = FileSize } = Summary] =
-                ets:lookup(FileSummaryEts, File),
-            case Locked of
-                true  -> ok = index_delete(Guid, State),
-                         write_message(Guid, Msg, State);
-                false -> ok = index_update_ref_count(Guid, 1, State),
-                         ok = add_to_file_summary(Summary, TotalSize, FileSize,
-                                                  State),
-                         noreply(State #msstate {
-                                   sum_valid_data = SumValid + TotalSize })
+            case ets:lookup(FileSummaryEts, File) of
+                [#file_summary { locked = true }] ->
+                    ok = index_delete(Guid, State),
+                    write_message(Guid, Msg, State);
+                [#file_summary { file_size = FileSize } = Summary] ->
+                    ok = index_update_ref_count(Guid, 1, State),
+                    ok = add_to_file_summary(Summary, TotalSize, FileSize,
+                                             State),
+                    noreply(State #msstate {
+                              sum_valid_data = SumValid + TotalSize })
             end;
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
