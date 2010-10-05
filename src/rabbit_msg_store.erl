@@ -620,9 +620,9 @@ handle_call(client_terminate, _From, State) ->
     reply(ok, State).
 
 handle_cast({write, Guid},
-            State = #msstate { sum_valid_data      = SumValid,
-                               file_summary_ets    = FileSummaryEts,
-                               cur_file_cache_ets  = CurFileCacheEts }) ->
+            State = #msstate { sum_valid_data     = SumValid,
+                               file_summary_ets   = FileSummaryEts,
+                               cur_file_cache_ets = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case index_lookup(Guid, State) of
@@ -945,9 +945,8 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                                    [{#file_summary.valid_total_size,
                                      ValidTotalSize - TotalSize}]),
                           delete_file_if_empty(
-                            File,
-                            State #msstate {
-                              sum_valid_data = SumValid - TotalSize })
+                            File, State #msstate {
+                                    sum_valid_data = SumValid - TotalSize })
              end;
         _ -> ok = decrement_cache(DedupCacheEts, Guid),
              ok = Dec(),
