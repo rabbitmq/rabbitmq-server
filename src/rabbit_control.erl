@@ -314,9 +314,9 @@ default_if_empty(List, Default) when is_list(List) ->
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
     lists:foreach(
-      fun (Result) ->
-              display_row([format_info_item(proplists:get_value(X, Result))
-                           || X <- InfoItemKeys])
+      fun (Result) -> display_row(
+                        [format_info_item(proplists:get_value(X, Result)) ||
+                            X <- InfoItemKeys])
       end, Results),
     ok;
 display_info_list(Other, _) ->
