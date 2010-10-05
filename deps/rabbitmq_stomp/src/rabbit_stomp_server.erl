@@ -124,7 +124,7 @@ mainloop(State) ->
             %% just being notified that we got made a successful
             %% subscription.
             mainloop(State);
-        {Delivery = #'basic.deliver'{}, 
+        {Delivery = #'basic.deliver'{},
          #amqp_msg{props = Props, payload = Payload}} ->
              mainloop(send_delivery(Delivery, Props, Payload, State));
         Data ->
@@ -149,7 +149,7 @@ process_received_bytes(Bytes, State = #state{parse_state = ParseState}) ->
             PS = rabbit_stomp_frame:initial_state(),
             case catch process_frame(Command, Frame,
                                      State#state{parse_state = PS}) of
-                {'EXIT', 
+                {'EXIT',
                  {{server_initiated_close, ReplyCode, Explanation}, _}} ->
                     explain_amqp_death(ReplyCode, Explanation, State),
                     done;
@@ -489,7 +489,7 @@ process_command("SUBSCRIBE",
                                   list_to_binary("Q_" ++ QueueStr)
                           end,
             Queue = list_to_binary(QueueStr),
-            BoolH = fun(K, V) -> 
+            BoolH = fun(K, V) ->
                             rabbit_stomp_frame:boolean_header(Frame, K, V) end,
             State1 = send_method(
                        #'queue.declare'{
@@ -501,9 +501,9 @@ process_command("SUBSCRIBE",
                            arguments   = [longstr_field(K, V) ||
                                              {"X-Q-" ++ K, V} <- Headers]},
                        State),
-            amqp_channel:subscribe(Channel, 
+            amqp_channel:subscribe(Channel,
                                    #'basic.consume'{
-                                     queue        = Queue, 
+                                     queue        = Queue,
                                      consumer_tag = ConsumerTag,
                                      no_local     = false,
                                      no_ack       = (AckMode == auto),
