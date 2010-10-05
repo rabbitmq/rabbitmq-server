@@ -72,21 +72,21 @@ create(_X) -> ok.
 recover(_X, _Bs) -> ok.
 
 delete(#exchange{name = X}, _Bs) ->
-    rabbit_misc:execute_mnesia_transaction(fun() -> trie_remove_all_edges(X),
-                                                    trie_remove_all_bindings(X)
+    rabbit_misc:execute_mnesia_transaction(fun () -> trie_remove_all_edges(X),
+                                                     trie_remove_all_bindings(X)
                                            end),
     ok.
 
 add_binding(_Exchange, #binding{exchange_name = X, key = K, queue_name = Q}) ->
     rabbit_misc:execute_mnesia_transaction(
-        fun() -> FinalNode = follow_down_create(X, split_topic_key(K)),
-                 trie_add_binding(X, FinalNode, Q)
+        fun () -> FinalNode = follow_down_create(X, split_topic_key(K)),
+                  trie_add_binding(X, FinalNode, Q)
         end),
     ok.
 
 remove_bindings(_X, Bs) ->
     rabbit_misc:execute_mnesia_transaction(
-        fun() -> lists:foreach(fun remove_binding/1, Bs) end),
+        fun () -> lists:foreach(fun remove_binding/1, Bs) end),
     ok.
 
 remove_binding(#binding{exchange_name = X, key = K, queue_name = Q}) ->
@@ -151,10 +151,10 @@ follow_down_create(X, Words) ->
     case follow_down(X, Words) of
         {ok, FinalNode}      -> FinalNode;
         {error, Node, RestW} -> lists:foldl(
-                                  fun(W, CurNode) ->
-                                         NewNode = new_node_id(),
-                                         trie_add_edge(X, CurNode, NewNode, W),
-                                         NewNode
+                                  fun (W, CurNode) ->
+                                          NewNode = new_node_id(),
+                                          trie_add_edge(X, CurNode, NewNode, W),
+                                          NewNode
                                   end, Node, RestW)
     end.
 
@@ -170,8 +170,7 @@ follow_down_get_path(X, CurNode, [W | RestW], PathAcc) ->
 remove_path_if_empty(_, [{root, none}]) ->
     ok;
 remove_path_if_empty(X, [{Node, W} | [{Parent, _} | _] = RestPath]) ->
-    case trie_has_any_bindings(X, Node) orelse
-             trie_has_any_children(X, Node) of
+    case trie_has_any_bindings(X, Node) orelse trie_has_any_children(X, Node) of
         true  -> ok;
         false -> trie_remove_edge(X, Parent, Node, W),
                  remove_path_if_empty(X, RestPath)
@@ -248,7 +247,7 @@ trie_remove_all_edges(X) ->
                                                       _='_'},
                                _='_'},
     lists:foreach(
-        fun(R) -> mnesia:delete_object(rabbit_topic_trie_edge, R, write) end,
+        fun (R) -> mnesia:delete_object(rabbit_topic_trie_edge, R, write) end,
         mnesia:match_object(rabbit_topic_trie_edge, Pattern, write)).
     
 trie_remove_all_bindings(X) ->
@@ -256,7 +255,7 @@ trie_remove_all_bindings(X) ->
                                                                _='_'},
                                   _='_'},
     lists:foreach(
-        fun(R) -> mnesia:delete_object(rabbit_topic_trie_binding, R, write) end,
+        fun (R) -> mnesia:delete_object(rabbit_topic_trie_binding, R, write) end,
         mnesia:match_object(rabbit_topic_trie_binding, Pattern, write)).
 
 new_node_id() ->
