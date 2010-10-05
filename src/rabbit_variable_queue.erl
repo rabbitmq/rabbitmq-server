@@ -608,10 +608,9 @@ fetch(AckRequired, State = #vqstate { q4               = Q4,
     end.
 
 ack(AckTags, State) ->
-    {Guids, State1} =
-        ack(fun rabbit_msg_store:remove/2,
-            fun (_AckEntry, State1) -> State1 end,
-            AckTags, State),
+    {Guids, State1} = ack(fun rabbit_msg_store:remove/2,
+                          fun (_AckEntry, State1) -> State1 end,
+                          AckTags, State),
     {Guids, a(State1)}.
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent },
