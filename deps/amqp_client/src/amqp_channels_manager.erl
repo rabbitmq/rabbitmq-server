@@ -164,17 +164,16 @@ handle_channel_down(Pid, Number, Reason, State) ->
 
 maybe_report_down(_Pid, normal, _State) ->
     ok;
-maybe_report_down(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
-    {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
-                            ?PROTOCOL:amqp_exception(Code)),
-    case IsHardError of
-        true  -> signal_connection({hard_error_in_channel, Pid, Reason}, State);
-        false -> ok
-    end;
 maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
+    ok;
+maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
+maybe_report_down(Pid, {server_initiated_hard_close, _, _} = Reason, State) ->
+    signal_connection({hard_error_in_channel, Pid, Reason}, State);
+maybe_report_down(_Pid, {send_hard_error, AmqpError}, State) ->
+    signal_connection({send_hard_error, AmqpError}, State);
 maybe_report_down(Pid, Other, State) ->
     signal_connection({channel_internal_error, Pid, Other}, State).
 

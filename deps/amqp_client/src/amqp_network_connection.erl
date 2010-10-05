@@ -104,12 +104,14 @@ handle_info(socket_closing_timeout, State = #state{closing = Closing}) ->
     {stop, {socket_closing_timeout, closing_to_reason(Closing)}, State};
 handle_info(socket_closed, State) ->
     handle_socket_closed(State);
+handle_info({send_hard_error, AmqpError}, State) ->
+    {noreply, send_error(AmqpError, State)};
 handle_info({hard_error_in_channel, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: channel (~p) received hard error ~p "
               "from server~n", [self(), Pid, Reason]),
     {stop, Reason, State};
 handle_info({channel_internal_error, _Pid, _Reason}, State) ->
-    {noreply, set_closing_state(abrupt, internal_error_closing(), State)};
+    {noreply, send_error(#amqp_error{name = internal_error}, State)};
 handle_info(all_channels_terminated, State) ->
     handle_all_channels_terminated(State);
 handle_info({channel_exit, Framing0, Reason},
@@ -159,12 +161,19 @@ handle_method(#'connection.close_ok'{}, none,
     end,
     if ReplyCode =:= 200 -> {stop, normal, State};
        true              -> {stop, closing_to_reason(Closing), State}
-    end.
+    end;
+
+handle_method(OtherMethod, _, State) ->
+    {noreply,
+     send_error(#amqp_error{name        = command_invalid,
+                            explanation = "unexpected method on channel 0",
+                            method      = element(1, OtherMethod)}, State)}.
 
 %%---------------------------------------------------------------------------
 %% Infos
 %%---------------------------------------------------------------------------
 
+i(type,              _)     -> network;
 i(server_properties, State) -> State#state.server_properties;
 i(is_closing,        State) -> State#state.closing =/= false;
 i(amqp_params,       State) -> State#state.params;
@@ -189,17 +198,16 @@ i(Item,             _State) -> throw({bad_argument, Item}).
 %%         the channels have terminated (and flushed); the from field is the
 %%         process that initiated the call and to whom the server must reply.
 %%         phase = terminate_channels | wait_close_ok
-%%     internal_error - there was an internal error either in a channel or in
-%%         the connection process. close field is the method to be sent to the
-%%         server after all channels have been abruptly terminated (do not flush
-%%         in this case).
+%%     error - there was either an internal error or the server misbehaved.
+%%         close field is the method to be sent to the server after all channels
+%%         have been abruptly terminated (do not flush in this case).
 %%         phase = terminate_channels | wait_close_ok
 %%     server_initiated_close - server has sent 'connection.close'. close field
 %%         is the method sent by the server.
 %%         phase = terminate_channels | wait_socket_close
 %%
 %% The precedence of the closing MainReason's is as follows:
-%%     app_initiated_close, internal_error, server_initiated_close
+%%     app_initiated_close, error, server_initiated_close
 %% (i.e.: a given reason can override the currently set one if it is later
 %% mentioned in the above list). We can rely on erlang's comparison of atoms
 %% for this.
@@ -261,16 +269,13 @@ closing_to_reason(#closing{reason = Reason,
                                                        reply_text = Text}}) ->
     {Reason, Code, Text}.
 
-internal_error_closing() ->
-    #closing{reason = internal_error,
-             close = #'connection.close'{reply_text = <<>>,
-                                         reply_code = ?INTERNAL_ERROR,
-                                         class_id = 0,
-                                         method_id = 0}}.
+send_error(#amqp_error{} = AmqpError, State) ->
+    {true, 0, Close} =
+        rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
+    set_closing_state(abrupt, #closing{reason = error, close = Close}, State).
 
-handle_socket_closed(State = #state{
-                       closing = Closing = #closing{
-                                   phase = wait_socket_close}}) ->
+handle_socket_closed(State = #state{closing = Closing = #closing{
+                                            phase = wait_socket_close}}) ->
     {stop, closing_to_reason(Closing), State};
 handle_socket_closed(State) ->
     {stop, socket_closed_unexpectedly, State}.
