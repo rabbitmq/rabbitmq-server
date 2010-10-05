@@ -314,7 +314,7 @@ send_method(Method, State = #state{channel = Channel}) ->
     amqp_channel:call(Channel, Method),
     State.
 
-send_method(Method, Properties, BodyFragments, 
+send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
     amqp_channel:call(Channel,Method, #amqp_msg{
                                 props = Properties,
@@ -322,18 +322,19 @@ send_method(Method, Properties, BodyFragments,
     State.
 
 do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
-    {ok, Connection} = amqp_connection:start(direct, #amqp_params{
-					       username		= list_to_binary(Login),
-					       password		= list_to_binary(Passcode),
-					       virtual_host	= list_to_binary(VirtualHost)}),
+    {ok, Connection} = amqp_connection:start(
+                         direct, #amqp_params{
+                           username     = list_to_binary(Login),
+                           password     = list_to_binary(Passcode),
+                           virtual_host = list_to_binary(VirtualHost)}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
     {ok, send_frame("CONNECTED",
                     [{"session", SessionId}],
                     "",
-                    State#state{session_id	= SessionId, 
-				channel		= Channel, 
-				connection	= Connection})};
+                    State#state{session_id = SessionId,
+                                channel    = Channel,
+                                connection = Connection})};
 do_login(_, _, _, State) ->
     {ok, send_error("Bad CONNECT", "Missing login or passcode header(s)\n",
                     State)}.
@@ -409,7 +410,8 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 process_command("BEGIN", Frame, State) ->
     transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
 process_command("SEND",
-                Frame = #stomp_frame{headers = Headers, body_iolist = BodyFragments},
+                Frame = #stomp_frame{headers     = Headers,
+                                     body_iolist = BodyFragments},
                 State) ->
     BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
     IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
