@@ -423,7 +423,7 @@ record_confirm_message(#delivery{msg_seq_no = MsgSeqNo,
 
 ack_by_acktags(AckTags, State = #q{backing_queue       = BQ,
                                    backing_queue_state = BQS}) ->
-    {BQS1, AckdGuids} = BQ:ack(AckTags, BQS),
+    {AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
     confirm_messages(AckdGuids, State#q{backing_queue_state = BQS1}).
 
 run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
