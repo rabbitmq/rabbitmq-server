@@ -22,6 +22,8 @@
 %% TODO this is vestigal from the status plugin. Do we need a caching
 %% mechanism for the os-level info this returns?
 
+%% TODO rename mem_total to mem_limit
+
 -module(rabbit_mgmt_external_stats).
 
 -behaviour(gen_server).
@@ -124,12 +126,9 @@ find_files_line([_H | T]) ->
     find_files_line(T).
 
 get_total_memory() ->
-    {ok, MemoryWatermark} =
-        application:get_env(rabbit, vm_memory_high_watermark),
-    case MemoryWatermark == 0 of
-        true  -> memory_monitoring_disabled;
-        false -> vm_memory_monitor:get_vm_memory_high_watermark() *
-                     vm_memory_monitor:get_total_memory()
+    try
+        vm_memory_monitor:get_memory_limit()
+    catch exit:{noproc, _} -> memory_monitoring_disabled
     end.
 
 %%--------------------------------------------------------------------
