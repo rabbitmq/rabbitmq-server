@@ -66,8 +66,8 @@ function fmt_exchange_url(name) {
 
 function fmt_download_filename(host) {
     var now = new Date();
-    return host + "_" + now.getFullYear() + "-" + (now.getMonth() + 1) + "-" +
-        now.getDate() + ".json";
+    return host.replace('@', '_') + "_" + now.getFullYear() + "-" +
+        (now.getMonth() + 1) + "-" + now.getDate() + ".json";
 }
 
 function alt_rows(i) {

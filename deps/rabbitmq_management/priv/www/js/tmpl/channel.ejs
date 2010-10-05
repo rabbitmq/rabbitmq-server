@@ -17,10 +17,13 @@
  <tr><th>Connection</th><td><%= link_conn(channel.connection_details.name) %></td></tr>
  <tr><th>Virtual host</th><td><%= channel.vhost %></td></tr>
  <tr><th>Username</th><td><%= channel.user %></td></tr>
- <tr><th>Transactional</th><td><%= channel.transactional %></td></tr>
+ <tr><th>Transactional</th><td><%= fmt_boolean(channel.transactional) %></td></tr>
  <tr><th>Prefetch count</th><td><%= channel.prefetch_count %></td></tr>
  <tr><th>Acks uncommitted</th><td><%= channel.acks_uncommitted %></td></tr>
  <tr><th>Messages unacknowledged</th><td><%= channel.messages_unacknowledged %></td></tr>
+<% if ('client_flow_blocked' in channel) { %>
+ <tr><th>Client blocked</th><td><%= fmt_boolean(channel.client_flow_blocked) %></td></tr>
+<% } %>
 </table>
 </div>
 </div>

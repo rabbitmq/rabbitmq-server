@@ -1,7 +1,5 @@
 Before first "proper" release
 =============================
-Write more management:
-  Purge queues
 Do sensible things with vhosts in UI.
 Write more thorough unit tests, especially around:
   * Listings

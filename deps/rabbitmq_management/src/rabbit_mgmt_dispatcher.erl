@@ -39,6 +39,7 @@ dispatcher() ->
      {["queues", vhost],                           rabbit_mgmt_wm_queues, []},
      {["queues", vhost, queue],                    rabbit_mgmt_wm_queue, []},
      {["queues", vhost, queue, "bindings"],        rabbit_mgmt_wm_bindings, [queue]},
+     {["queues", vhost, queue, "contents"],        rabbit_mgmt_wm_queue_purge, []},
      {["bindings"],                                rabbit_mgmt_wm_bindings, [all]},
      {["bindings", vhost],                         rabbit_mgmt_wm_bindings, [all]},
      {["bindings", vhost, queue, exchange],        rabbit_mgmt_wm_bindings, [queue_exchange]},
@@ -49,6 +50,7 @@ dispatcher() ->
      {["users"],                                   rabbit_mgmt_wm_users, []},
      {["users", user],                             rabbit_mgmt_wm_user, []},
      {["users", user, "permissions"],              rabbit_mgmt_wm_permissions_user, []},
+     {["whoami"],                                  rabbit_mgmt_wm_whoami, []},
      {["permissions"],                             rabbit_mgmt_wm_permissions, []},
      {["permissions", vhost, user],                rabbit_mgmt_wm_permission, []},
      {["aliveness-test", vhost],                   rabbit_mgmt_wm_aliveness_test, []}

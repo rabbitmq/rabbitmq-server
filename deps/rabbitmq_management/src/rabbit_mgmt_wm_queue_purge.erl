@@ -18,37 +18,37 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_vhosts).
+-module(rabbit_mgmt_wm_queue_purge).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([vhosts/0]).
+-export([init/1, resource_exists/2, is_authorized/2, allowed_methods/2,
+         delete_resource/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-
 init(_Config) -> {ok, #context{}}.
 
-content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+allowed_methods(ReqData, Context) ->
+    {['DELETE'], ReqData, Context}.
 
-to_json(ReqData, Context = #context{username = Username,
-                                    is_admin = IsAdmin}) ->
-    VHosts = case IsAdmin of
-                 true  -> vhosts();
-                 false -> format(rabbit_mgmt_util:vhosts(Username))
-             end,
-    rabbit_mgmt_util:reply(VHosts, ReqData, Context).
+resource_exists(ReqData, Context) ->
+    {case rabbit_mgmt_wm_queue:queue(ReqData) of
+         not_found -> false;
+         _         -> true
+     end, ReqData, Context}.
+
+delete_resource(ReqData, Context) ->
+    try
+        rabbit_mgmt_util:amqp_request(
+          rabbit_mgmt_util:vhost(ReqData),
+          ReqData, Context,
+          #'queue.purge'{ queue = rabbit_mgmt_util:id(queue, ReqData) })
+    catch {server_closed, Reason} ->
+            rabbit_mgmt_util:bad_request(
+              list_to_binary(Reason), ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
-
-%%--------------------------------------------------------------------
-
-vhosts() ->
-    format(rabbit_access_control:list_vhosts()).
-
-format(Vs) ->
-    [[{name, N}] || N <- Vs].
+    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

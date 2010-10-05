@@ -1,8 +1,11 @@
 var statistics_level;
+var user_administrator;
 
 $(document).ready(function() {
-    var overview = JSON.parse(sync_get('/overview'));
-    statistics_level = overview.statistics_level;
+    statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
+    var user = JSON.parse(sync_get('/whoami'));
+    replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
+    user_administrator = user.administrator;
     app.run();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
@@ -66,8 +69,16 @@ function dispatcher() {
             return false;
         });
     this.del('#/queues', function() {
-            if (sync_delete(this, '/queues/:vhost/:name'))
-                go_to('#/queues');
+            if (this.params['mode'] == 'delete') {
+                if (sync_delete(this, '/queues/:vhost/:name'))
+                    go_to('#/queues');
+            }
+            else if (this.params['mode'] == 'purge') {
+                if (sync_delete(this, '/queues/:vhost/:name/contents')) {
+                    error_popup("Queue purged");
+                    update();
+                }
+            }
             return false;
         });
 
@@ -193,8 +204,8 @@ function with_update(reqs, acc, fun) {
 }
 
 function error_popup(text) {
-    $('body').prepend('<div class="error-message">' + text + '</div>');
-    $('.error-message').center().fadeOut(10000)
+    $('body').prepend('<div class="form-error">' + text + '</div>');
+    $('.form-error').center().fadeOut(5000)
         .click( function() { $(this).stop().fadeOut('fast') } );
 }
 
@@ -223,6 +234,7 @@ function postprocess() {
             var path = '/api/all-configuration?download=' +
                 esc($('#download-filename').val());
             window.location = path;
+            setTimeout('app.run()');
             return false;
         });
     $('#update-every').change(function() {
@@ -230,6 +242,9 @@ function postprocess() {
             if (interval == '') interval = null;
             set_timer_interval(interval);
         });
+    if (! user_administrator) {
+        $('.administrator-only').remove();
+    }
 }
 
 function with_reqs(reqs, acc, fun) {

@@ -18,37 +18,23 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_vhosts).
+-module(rabbit_mgmt_wm_whoami).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([vhosts/0]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-
 init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{username = Username,
-                                    is_admin = IsAdmin}) ->
-    VHosts = case IsAdmin of
-                 true  -> vhosts();
-                 false -> format(rabbit_mgmt_util:vhosts(Username))
-             end,
-    rabbit_mgmt_util:reply(VHosts, ReqData, Context).
+to_json(ReqData, Context = #context{username = Username}) ->
+    {ok, User} = rabbit_access_control:lookup_user(Username),
+    rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
-
-%%--------------------------------------------------------------------
-
-vhosts() ->
-    format(rabbit_access_control:list_vhosts()).
-
-format(Vs) ->
-    [[{name, N}] || N <- Vs].

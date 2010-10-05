@@ -62,6 +62,9 @@ vhosts_test() ->
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 users_test() ->
+    assert_item([{name, <<"guest">>},
+                 {password, <<"guest">>},
+                 {administrator, true}], http_get("/whoami", ?OK)),
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
@@ -331,8 +334,10 @@ permissions_administrator_test() ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
                 http_get(Path, "guest", "guest", ?OK)
         end,
-    Test("/vhosts"),
+    %% All users can get a list of vhosts. It may be filtered.
+    %%Test("/vhosts"),
     Test("/vhosts/%2f"),
+    Test("/vhosts/%2f/permissions"),
     Test("/users"),
     Test("/users/guest"),
     Test("/users/guest/permissions"),
@@ -352,6 +357,11 @@ permissions_vhost_test() ->
     http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
     http_put("/permissions/myvhost1/guest", PermArgs, ?NO_CONTENT),
     http_put("/permissions/myvhost2/guest", PermArgs, ?NO_CONTENT),
+    assert_list([[{name, <<"/">>}],
+                 [{name, <<"myvhost1">>}],
+                 [{name, <<"myvhost2">>}]], http_get("/vhosts", ?OK)),
+    assert_list([[{name, <<"myvhost1">>}]],
+                http_get("/vhosts", "myuser", "myuser", ?OK)),
     http_put("/queues/myvhost1/myqueue", QArgs, ?NO_CONTENT),
     http_put("/queues/myvhost2/myqueue", QArgs, ?NO_CONTENT),
     Test1 =
@@ -424,9 +434,9 @@ permissions_connection_channel_test() ->
     http_get(ChPath2, ?OK),
     http_get(ChPath1, "user", "user", ?OK),
     http_get(ChPath2, "user", "user", ?NOT_AUTHORISED),
-
     amqp_connection:close(Conn1),
     amqp_connection:close(Conn2),
+    http_delete("/users/user", ?NO_CONTENT),
     ok.
 
 unicode_test() ->
@@ -543,6 +553,29 @@ arguments_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+queue_purge_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Publish = fun() ->
+                      amqp_channel:call(
+                        Ch, #'basic.publish'{exchange = <<"">>,
+                                             routing_key = <<"myqueue">>},
+                        #amqp_msg{payload = <<"message">>})
+              end,
+    Publish(),
+    Publish(),
+    {#'basic.get_ok'{}, _} =
+        amqp_channel:call(Ch, #'basic.get'{queue = <<"myqueue">>}),
+    http_delete("/queues/%2f/myqueue/contents", ?NO_CONTENT),
+    http_delete("/queues/%2f/badqueue/contents", ?NOT_FOUND),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = <<"myqueue">>}),
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->
