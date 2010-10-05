@@ -128,9 +128,8 @@
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
          startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
--spec(write/4 :: (server(), rabbit_guid:guid(),
-                  msg(), client_msstate())
-                 -> rabbit_types:ok(client_msstate())).
+-spec(write/4 :: (server(), rabbit_guid:guid(), msg(), client_msstate()) ->
+                      rabbit_types:ok(client_msstate())).
 -spec(read/3 :: (server(), rabbit_guid:guid(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (server(), rabbit_guid:guid()) -> boolean()).
@@ -140,7 +139,8 @@
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(client_init/3 :: (server(), rabbit_guid:guid(), guid_fun()) -> client_msstate()).
+-spec(client_init/3 :: (server(), rabbit_guid:guid(), guid_fun()) ->
+                            client_msstate()).
 -spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
 -spec(client_delete_and_terminate/3 ::
         (client_msstate(), server(), rabbit_guid:guid()) -> 'ok').
@@ -363,7 +363,8 @@ set_maximum_since_use(Server, Age) ->
 client_init(Server, Ref, MsgOnDiskFun) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
-        gen_server2:call(Server, {new_client_state, Ref, MsgOnDiskFun}, infinity),
+        gen_server2:call(Server, {new_client_state, Ref, MsgOnDiskFun},
+                         infinity),
     #client_msstate { file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
@@ -639,7 +640,8 @@ handle_call({new_client_state, CRef, Callback}, _From,
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({client_terminate, #client_msstate { client_ref = CRef }}, _From, State) ->
+handle_call({client_terminate, #client_msstate { client_ref = CRef }}, _From,
+            State) ->
     reply(ok, clear_client_callback(CRef, State)).
 
 handle_cast({write, CRef, Guid},
@@ -690,7 +692,8 @@ handle_cast({write, CRef, Guid},
                                      {#msg_location.ref_count, RefCount + 1},
                                      State),
             CTG1 = case {dict:find(CRef, CODC), File =:= CurFile} of
-                       {{ok, _}  , true}  -> rabbit_misc:dict_cons(CRef, Guid, CTG);
+                       {{ok, _}  , true}  -> rabbit_misc:dict_cons(CRef, Guid,
+                                                                   CTG);
                        {{ok, Fun}, false} -> Fun([Guid]), CTG;
                        _                  -> CTG
                    end,
@@ -763,9 +766,11 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast({client_delete, CRef}, State = #msstate { client_refs = ClientRefs }) ->
+handle_cast({client_delete, CRef},
+            State = #msstate { client_refs = ClientRefs }) ->
     State1 = clear_client_callback(CRef, State),
-    noreply(State1 #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
+    noreply(State1 #msstate {
+              client_refs = sets:del_element(CRef, ClientRefs) }).
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
@@ -854,8 +859,7 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
     [(dict:fetch(CRef, CODC))(Guids) || {CRef, Guids} <- CGs],
-    State1 #msstate { cref_to_guids = dict:new(),
-                      on_sync = [] }.
+    State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
 
 read_message(Guid, From,

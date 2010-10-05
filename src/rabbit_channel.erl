@@ -291,17 +291,14 @@ handle_cast({confirm, MsgSeqNo}, State) ->
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{qpid_to_msgs = QTM}) ->
-    State1 = case dict:find(QPid, QTM) of
-               {ok, Msgs} ->
-                   S = gb_sets:fold(fun (MsgSeqNo, State0) ->
-                                            send_or_enqueue_ack(MsgSeqNo, State0)
-                                    end, State, Msgs),
-                   S #ch{qpid_to_msgs = dict:erase(QPid, QTM)};
-               error ->
-                   State
+    State2 = case dict:find(QPid, QTM) of
+                 {ok, Msgs} -> State1 = gb_sets:fold(fun send_or_enqueue_ack/2,
+                                                     State, Msgs),
+                               State1 #ch{qpid_to_msgs = dict:erase(QPid, QTM)};
+                 error      -> State
              end,
     erase_queue_stats(QPid),
-    {noreply, queue_blocked(QPid, State1)}.
+    {noreply, queue_blocked(QPid, State2)}.
 
 handle_pre_hibernate(State = #ch{writer_pid    = WriterPid,
                                  held_confirms = As,
@@ -452,18 +449,20 @@ send_or_enqueue_ack(undefined, State) ->
 send_or_enqueue_ack(_, State = #ch{confirm_enabled = false}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = false}) ->
-    do_if_unconfirmed(MsgSeqNo, State,
-                      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
-                              ok = rabbit_writer:send_command(
-                                     WriterPid, #'basic.ack'{delivery_tag = MSN}),
-                              State1
-                      end);
+    do_if_unconfirmed(
+      MsgSeqNo, State,
+      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
+              ok = rabbit_writer:send_command(
+                     WriterPid, #'basic.ack'{delivery_tag = MSN}),
+              State1
+      end);
 send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
-    do_if_unconfirmed(MsgSeqNo, State,
-                      fun(MSN, State1 = #ch{held_confirms = As}) ->
-                              start_ack_timer(State1#ch{held_confirms =
-                                                            gb_sets:add(MSN, As)})
-                      end).
+    do_if_unconfirmed(
+      MsgSeqNo, State,
+      fun(MSN, State1 = #ch{held_confirms = As}) ->
+              start_ack_timer(State1#ch{held_confirms =
+                                            gb_sets:add(MSN, As)})
+      end).
 
 msg_sent_to_queue(undefined, _QPid, State) ->
     State;
@@ -473,7 +472,8 @@ msg_sent_to_queue(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
                 error      -> erlang:monitor(process, QPid),
                               gb_sets:new()
             end,
-    State#ch{qpid_to_msgs = dict:store(QPid, gb_sets:add(MsgSeqNo, Msgs1), QTM)}.
+    QTM1 = dict:store(QPid, gb_sets:add(MsgSeqNo, Msgs1), QTM),
+    State#ch{qpid_to_msgs = QTM1}.
 
 do_if_unconfirmed(MsgSeqNo, State = #ch{unconfirmed = UC}, Fun) ->
     case gb_sets:is_element(MsgSeqNo, UC) of

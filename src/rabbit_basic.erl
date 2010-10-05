@@ -52,8 +52,8 @@
         (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/5 ::
         (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         rabbit_types:message(), undefined | integer())
-        -> rabiit_types:delivery()).
+         rabbit_types:message(), undefined | integer()) ->
+                         rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          properties_input(), binary())

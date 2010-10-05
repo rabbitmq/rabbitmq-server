@@ -990,7 +990,8 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
           fun (Msg = #basic_message { is_persistent = IsPersistent },
                {SeqIdsAcc, State2}) ->
                   IsPersistent1 = IsDurable andalso IsPersistent,
-                  {SeqId, State3} = publish(Msg, false, IsPersistent1, false, State2),
+                  {SeqId, State3} = publish(Msg, false, IsPersistent1, false,
+                                            State2),
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
           end, {PAcks, NewState}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
@@ -1046,8 +1047,7 @@ sum_guids_by_store_to_len(LensByStore, GuidsByStore) ->
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
-publish(Msg = #basic_message { is_persistent = IsPersistent,
-                               guid          = Guid },
+publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
         IsDelivered, MsgOnDisk, NeedsConfirming,
         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
                            next_seq_id      = SeqId,
@@ -1067,13 +1067,12 @@ publish(Msg = #basic_message { is_persistent = IsPersistent,
              end,
     PCount1 = PCount + one_if(IsPersistent1),
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
-    {SeqId, State2 #vqstate {
-              next_seq_id      = SeqId   + 1,
-              len              = Len     + 1,
-              in_counter       = InCount + 1,
-              persistent_count = PCount1,
-              ram_msg_count    = RamMsgCount + 1,
-              unconfirmed      = Unconfirmed1 }}.
+    {SeqId, State2 #vqstate { next_seq_id      = SeqId   + 1,
+                              len              = Len     + 1,
+                              in_counter       = InCount + 1,
+                              persistent_count = PCount1,
+                              ram_msg_count    = RamMsgCount + 1,
+                              unconfirmed      = Unconfirmed1 }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, MSCState) ->
@@ -1159,7 +1158,7 @@ remove_pending_ack(KeepPersistent,
 
 ack(_MsgStoreFun, _Fun, [], State) ->
     {State, []};
-ack(MsgStoreFun, Fun, AckTags, State = #vqstate { pending_ack = PendAck }) ->
+ack(MsgStoreFun, Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore}, State1 = #vqstate { index_state      = IndexState,
                                                  persistent_count = PCount }} =
         lists:foldl(
@@ -1179,7 +1178,7 @@ ack(MsgStoreFun, Fun, AckTags, State = #vqstate { pending_ack = PendAck }) ->
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
     {State2 #vqstate { index_state      = IndexState1,
-                      persistent_count = PCount1 }, AckdGuids}.
+                       persistent_count = PCount1 }, AckdGuids}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
@@ -1211,34 +1210,29 @@ msgs_confirmed(GuidSet, State) ->
 
 msgs_written_to_disk(QPid, Guids) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid,
-      fun(State = #vqstate { msgs_on_disk        = MOD,
-                             msg_indices_on_disk = MIOD,
-                             unconfirmed         = UC }) ->
-              GuidSet = gb_sets:from_list(Guids),
-              msgs_confirmed(
-                gb_sets:intersection(GuidSet, MIOD),
-                State #vqstate {
-                  msgs_on_disk =
-                      gb_sets:intersection(
-                        gb_sets:union(MOD, GuidSet), UC) })
-      end).
+      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
+                                   msg_indices_on_disk = MIOD,
+                                   unconfirmed         = UC }) ->
+                    GuidSet = gb_sets:from_list(Guids),
+                    msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
+                                   State #vqstate {
+                                     msgs_on_disk =
+                                         gb_sets:intersection(
+                                           gb_sets:union(MOD, GuidSet), UC) })
+            end).
 
 msg_indices_written_to_disk(QPid, Guids) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid,
-      fun(State = #vqstate { msgs_on_disk        = MOD,
-                             msg_indices_on_disk = MIOD,
-                             unconfirmed         = UC }) ->
-              GuidSet = gb_sets:from_list(Guids),
-              msgs_confirmed(
-                gb_sets:intersection(GuidSet, MOD),
-                State #vqstate {
-                  msg_indices_on_disk =
-                      gb_sets:intersection(
-                        gb_sets:union(MIOD, GuidSet), UC) })
-      end).
-
+      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
+                                   msg_indices_on_disk = MIOD,
+                                   unconfirmed         = UC }) ->
+                    GuidSet = gb_sets:from_list(Guids),
+                    msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
+                                   State #vqstate {
+                                     msg_indices_on_disk =
+                                         gb_sets:intersection(
+                                           gb_sets:union(MIOD, GuidSet), UC) })
+            end).
 
 %%----------------------------------------------------------------------------
 %% Phase changes

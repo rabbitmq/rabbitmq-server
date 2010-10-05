@@ -196,11 +196,11 @@
                              }).
 -type(startup_fun_state() ::
         {fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A}),
-             A}).
+         A}).
 
 -spec(init/5 :: (rabbit_amqqueue:name(), boolean(), boolean(),
-                 fun ((rabbit_guid:guid()) -> boolean()), on_sync_fun())
-                 -> {'undefined' | non_neg_integer(), [any()], qistate()}).
+                 fun ((rabbit_guid:guid()) -> boolean()), on_sync_fun()) ->
+             {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/4 :: (rabbit_guid:guid(), seq_id(), boolean(), qistate()) ->
