@@ -39,7 +39,7 @@
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
--define(BASE_MSG_PROPERTIES, #msg_properties{expiry = undefined}).
+-define(BASE_MESSAGE_PROPERTIES, #message_properties{expiry = undefined}).
 
 -export([start_link/1, info_keys/0]).
 
@@ -152,7 +152,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 init_queue_state(State) ->
-    lists:foldl(fun(F, S) -> F(S) end, State, 
+    lists:foldl(fun(F, S) -> F(S) end, State,
                 [fun init_expires/1, fun init_ttl/1]).
 
 init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
@@ -413,7 +413,7 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
             fun deliver_from_queue_deliver/3},
-    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} = 
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_messages(State),
     IsEmpty = BQ:is_empty(BQS),
     {_IsEmpty1, State2} = deliver_msgs_to_consumers(Funs, IsEmpty, State1),
@@ -424,17 +424,18 @@ attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
                 {AckTag, BQS1} =
-                    BQ:publish_delivered(AckRequired, Message, 
-                                         #msg_properties{}, BQS),
+                    BQ:publish_delivered(AckRequired, Message,
+                                         #message_properties{}, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue       = BQ, 
+attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue       = BQ,
                                                  backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
-    {true, State#q{backing_queue_state = 
-                       BQ:tx_publish(Txn, Message, #msg_properties{}, BQS)}}.
+    {true,
+     State#q{backing_queue_state =
+                 BQ:tx_publish(Txn, Message, #message_properties{}, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
@@ -442,25 +443,25 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            BQS = BQ:publish(Message, 
-                             msg_properties(State), 
+            BQS = BQ:publish(Message,
+                             message_properties(State),
                              State #q.backing_queue_state),
             {false, ensure_ttl_timer(NewState#q{backing_queue_state = BQS})}
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
     maybe_run_queue_via_backing_queue(
-      fun (BQS) -> 
+      fun (BQS) ->
               BQ:requeue(AckTags, reset_msg_expiry_fun(State), BQS)
       end, State).
 
-fetch(AckRequired, State = #q{backing_queue_state = BQS, 
+fetch(AckRequired, State = #q{backing_queue_state = BQS,
                                   backing_queue = BQ}) ->
     case BQ:fetch(AckRequired, BQS) of
-        {empty, BQS1} -> 
+        {empty, BQS1} ->
             {empty, State#q{backing_queue_state = BQS1}};
         {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
-            {{Message, IsDelivered, AckTag, Remaining}, 
+            {{Message, IsDelivered, AckTag, Remaining},
                State#q{backing_queue_state = BQS1}}
     end.
 
@@ -559,9 +560,9 @@ maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
 
 commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
                                                 backing_queue_state = BQS}) ->
-    {AckTags, BQS1} = BQ:tx_commit(Txn, 
-                                   fun () -> gen_server2:reply(From, ok) end, 
-                                   reset_msg_expiry_fun(State), 
+    {AckTags, BQS1} = BQ:tx_commit(Txn,
+                                   fun () -> gen_server2:reply(From, ok) end,
+                                   reset_msg_expiry_fun(State),
                                    BQS),
     %% ChPid must be known here because of the participant management
     %% by the channel.
@@ -583,38 +584,38 @@ subtract_acks(A, B) when is_list(B) ->
 
 reset_msg_expiry_fun(State) ->
     fun(MsgProps) ->
-            MsgProps#msg_properties{expiry=calculate_msg_expiry(State)}
+            MsgProps#message_properties{expiry = calculate_msg_expiry(State)}
     end.
 
-msg_properties(State) ->
-    #msg_properties{expiry = calculate_msg_expiry(State)}.
+message_properties(State) ->
+    #message_properties{expiry = calculate_msg_expiry(State)}.
 
 calculate_msg_expiry(_State = #q{ttl = undefined}) ->
     undefined;
 calculate_msg_expiry(_State = #q{ttl = TTL}) ->
-    now_millis() + (TTL * 1000).                 
+    now_millis() + (TTL * 1000).
 
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
-drop_expired_messages(State = #q{backing_queue_state = BQS, 
-                                  backing_queue = BQ}) ->
+drop_expired_messages(State = #q{backing_queue_state = BQS,
+                                 backing_queue = BQ}) ->
     Now = now_millis(),
     BQS1 = BQ:dropwhile(
-             fun (_MsgProperties = #msg_properties{expiry=Expiry}) ->
+             fun (_MsgProperties = #message_properties{expiry = Expiry}) ->
                      Now > Expiry
              end, BQS),
     ensure_ttl_timer(State #q{backing_queue_state = BQS1}).
 
-ensure_ttl_timer(State = #q{backing_queue       = BQ, 
-                            backing_queue_state = BQS, 
-                            ttl                 = TTL, 
-                            ttl_timer_ref       = undefined}) 
+ensure_ttl_timer(State = #q{backing_queue       = BQ,
+                            backing_queue_state = BQS,
+                            ttl                 = TTL,
+                            ttl_timer_ref       = undefined})
   when TTL =/= undefined->
     case BQ:is_empty(BQS) of
         true ->
             State;
         false ->
-            State#q{ttl_timer_ref = 
+            State#q{ttl_timer_ref =
                         timer:send_after(TTL, self(), drop_expired)}
     end;
 ensure_ttl_timer(State) ->
@@ -622,8 +623,7 @@ ensure_ttl_timer(State) ->
 
 now_millis() ->
     timer:now_diff(now(), {0,0,0}).
-            
-    
+
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
@@ -752,7 +752,7 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %%
 
     %% we don't need an expiry here because messages are not being
-    %% enqueued, so we use an empty msg_properties.
+    %% enqueued, so we use an empty message_properties.
     {Delivered, NewState} = attempt_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
@@ -781,7 +781,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
     case fetch(AckRequired, drop_expired_messages(State1)) of
-        {empty, State2} -> 
+        {empty, State2} ->
             reply(empty, State2);
         {{Message, IsDelivered, AckTag, Remaining}, State2} ->
             case AckRequired of

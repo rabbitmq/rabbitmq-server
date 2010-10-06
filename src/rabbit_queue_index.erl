@@ -141,7 +141,7 @@
 -define(REL_SEQ_ONLY_ENTRY_LENGTH_BYTES, 2).
 
 %% publish record is binary 1 followed by a bit for is_persistent,
-%% then 14 bits of rel seq id, 64 bits for message expiry and 128 bits 
+%% then 14 bits of rel seq id, 64 bits for message expiry and 128 bits
 %% of md5sum msg id
 -define(PUBLISH_PREFIX, 1).
 -define(PUBLISH_PREFIX_BITS, 1).
@@ -205,15 +205,16 @@
              {'undefined' | non_neg_integer(), [any()], qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/5 :: (rabbit_guid:guid(), seq_id(), rabbit_types:msg_properties(),
-                       boolean(), qistate()) -> qistate()).
+-spec(publish/5 :: (rabbit_guid:guid(), seq_id(),
+                    rabbit_types:message_properties(), boolean(), qistate())
+                   -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-                     {[{rabbit_guid:guid(), seq_id(), 
-                        rabbit_types:msg_properties(), 
+                     {[{rabbit_guid:guid(), seq_id(),
+                        rabbit_types:message_properties(),
                         boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
@@ -258,7 +259,7 @@ delete_and_terminate(State) ->
     ok = rabbit_misc:recursive_delete([Dir]),
     State1.
 
-publish(Guid, SeqId, MsgProperties, IsPersistent, State) 
+publish(Guid, SeqId, MsgProperties, IsPersistent, State)
   when is_binary(Guid) ->
     ?GUID_BYTES = size(Guid),
     {JournalHdl, State1} = get_journal_handle(State),
@@ -266,7 +267,7 @@ publish(Guid, SeqId, MsgProperties, IsPersistent, State)
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
-                           end):?JPREFIX_BITS, 
+                           end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS>>,
                           create_pub_record_body(Guid, MsgProperties)]),
     maybe_flush_journal(
@@ -463,8 +464,8 @@ recover_segment(ContainsCheckFun, CleanShutdown,
     {SegEntries1, UnackedCountDelta} =
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
-      fun (RelSeq, 
-           {{Guid, _MsgProperties, _IsPersistent}, Del, no_ack}, 
+      fun (RelSeq,
+           {{Guid, _MsgProperties, _IsPersistent}, Del, no_ack},
            Segment1) ->
               recover_message(ContainsCheckFun(Guid), CleanShutdown,
                               Del, RelSeq, Segment1)
@@ -518,8 +519,8 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = #qistate { segments = Segments, dir = Dir } =
         recover_journal(blank_state(QueueName)),
     [ok = segment_entries_foldr(
-            fun (_RelSeq, 
-                 {{Guid, _MsgProps, true}, _IsDelivered, no_ack}, 
+            fun (_RelSeq,
+                 {{Guid, _MsgProps, true}, _IsDelivered, no_ack},
                  ok) ->
                     gatherer:in(Gatherer, {Guid, 1});
                 (_RelSeq, _Value, Acc) ->
@@ -533,7 +534,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
 %% expiry/binary manipulation
 %%----------------------------------------------------------------------------
 
-create_pub_record_body(Guid, #msg_properties{expiry = Expiry}) ->
+create_pub_record_body(Guid, #message_properties{expiry = Expiry}) ->
     [Guid, expiry_to_binary(Expiry)].
 
 expiry_to_binary(undefined) ->
@@ -552,11 +553,11 @@ read_pub_record_body(Hdl) ->
                       ?NO_EXPIRY -> undefined;
                       X          -> X
                   end,
-            {Guid, #msg_properties{expiry = Exp}};
+            {Guid, #message_properties{expiry = Exp}};
         Error ->
             Error
     end.
-            
+
 %%----------------------------------------------------------------------------
 %% journal manipulation
 %%----------------------------------------------------------------------------
@@ -806,8 +807,8 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
                      {Messages, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
     {segment_entries_foldr(
-       fun (RelSeq, 
-            {{Guid, MsgProperties, IsPersistent}, IsDelivered, no_ack}, 
+       fun (RelSeq,
+            {{Guid, MsgProperties, IsPersistent}, IsDelivered, no_ack},
             Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->

@@ -1639,7 +1639,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           fun (SeqId, {QiN, SeqIdsGuidsAcc, MSCStateN}) ->
                   Guid = rabbit_guid:guid(),
                   QiM = rabbit_queue_index:publish(
-                          Guid, SeqId, #msg_properties{}, Persistent, QiN),
+                          Guid, SeqId, #message_properties{}, Persistent, QiN),
                   {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
                                                            Guid, MSCStateN),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
@@ -1661,9 +1661,9 @@ test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
               Guid = rabbit_guid:guid(),
-              Props = #msg_properties{expiry=12345},
+              Props = #message_properties{expiry=12345},
               Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
-              {[{Guid, 1, Props, _, _}], Qi2} = 
+              {[{Guid, 1, Props, _, _}], Qi2} =
                   rabbit_queue_index:read(1, 2, Qi1),
               Qi2
       end),
@@ -1802,12 +1802,12 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
       fun (_N, VQN) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
-                  rabbit_misc:r(<<>>, exchange, <<>>), 
+                  rabbit_misc:r(<<>>, exchange, <<>>),
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>), 
-                #msg_properties{}, VQN)
+                                                   end}, <<>>),
+                #message_properties{}, VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -1853,14 +1853,14 @@ test_dropwhile(VQ0) ->
       fun (N, VQN) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
-                  rabbit_misc:r(<<>>, exchange, <<>>), 
-                  <<>>, #'P_basic'{}, <<>>), 
-                #msg_properties{expiry = N}, VQN)
+                  rabbit_misc:r(<<>>, exchange, <<>>),
+                  <<>>, #'P_basic'{}, <<>>),
+                #message_properties{expiry = N}, VQN)
       end, VQ0, lists:seq(1, Count)),
 
     %% drop the first 5 messages
     VQ2 = rabbit_variable_queue:dropwhile(
-      fun(#msg_properties { expiry = Expiry }) ->
+      fun(#message_properties { expiry = Expiry }) ->
               Expiry =< 5
       end, VQ1),
 
@@ -1875,7 +1875,7 @@ test_dropwhile(VQ0) ->
     {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
 
     VQ4.
-    
+
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
 
