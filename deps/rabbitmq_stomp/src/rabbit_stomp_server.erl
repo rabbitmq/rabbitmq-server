@@ -314,7 +314,8 @@ receipt_if_necessary(Frame, State) ->
     end.
 
 send_method(Method, State = #state{channel = Channel}) ->
-    amqp_channel:call(Channel, Method),
+    Res = amqp_channel:call(Channel, Method),
+    io:format("Res: ~p~n", [Res]),
     State.
 
 send_method(Method, Properties, BodyFragments, 
@@ -420,6 +421,9 @@ process_command("SEND",
         {ok, DestHeader} ->
             {ok, Destination} = 
                 rabbit_stomp_destination_parser:parse_destination(DestHeader),
+
+            {ok, _Q} = create_queue_if_needed(send, Destination, State),
+
             Props = #'P_basic'{
               content_type     = BinH("content-type",     <<"text/plain">>),
               content_encoding = BinH("content-encoding", undefined),
@@ -430,12 +434,15 @@ process_command("SEND",
               message_id       = BinH("amqp-message-id",  undefined),
               headers          = [longstr_field(K, V) ||
                                      {"X-" ++ K, V} <- Headers]},
+
             {Exchange, RoutingKey} = parse_routing_information(Destination),
+
             Method = #'basic.publish'{
               exchange = list_to_binary(Exchange),
               routing_key = list_to_binary(RoutingKey),
               mandatory = false,
               immediate = false},
+
             case transactional(Frame) of
                 {yes, Transaction} ->
                     extend_transaction(Transaction, {Method, Props, BodyFragments},
@@ -496,7 +503,7 @@ process_command("SUBSCRIBE",
                               {ok, Str} ->
                                   list_to_binary("T_" ++ Str);
                               not_found ->
-                                  list_to_binary("Q_" ++ Queue)
+                                  list_to_binary("Q_" ++ DestHeader)
                           end,            
             
             amqp_channel:subscribe(Channel, 
@@ -506,7 +513,7 @@ process_command("SUBSCRIBE",
                                      no_local     = false,
                                      no_ack       = (AckMode == auto),
                                      exclusive    = false},
-                                 self()),
+                                   self()),
 
             ok = bind_queue_if_needed(subscribe, Queue, Destination, State),
 
@@ -529,6 +536,7 @@ process_command("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
                                   missing
                           end
                   end,
+    io:format("~p~n", [ConsumerTag]),
     if
         ConsumerTag == missing ->
             {ok, send_error("Missing destination or id",
@@ -537,7 +545,7 @@ process_command("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
                             State)};
         true ->
             {ok, send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                             nowait = true},
+                                             nowait       = true},
                             State#state{subscriptions = 
                                             dict:erase(ConsumerTag, Subs)})}
     end;
@@ -549,16 +557,30 @@ process_command(Command, _Frame, State) ->
 parse_routing_information({exchange, {Name, undefined}}) ->
     {Name, ""};
 parse_routing_information({exchange, {Name, Pattern}}) ->
-    {Name, Pattern}.
+    {Name, Pattern};
+parse_routing_information({queue, Name}) ->
+    {"", Name}.
+
 
 create_queue_if_needed(subscribe, {exchange, _}, 
                        State = #state{channel = Channel}) ->
     #'queue.declare_ok'{queue = Queue} = 
         amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
+    {ok, Queue};
+create_queue_if_needed(send, {exchange, _}, State) ->
+    {ok, undefined};
+create_queue_if_needed(_, {queue, Name},
+                       State = #state{channel = Channel}) ->
+    Queue = list_to_binary(Name),
+    #'queue.declare_ok'{queue = Queue} = 
+        amqp_channel:call(Channel, 
+                          #'queue.declare'{durable = true, 
+                                           queue   = Queue}),
     {ok, Queue}.
 
+
 bind_queue_if_needed(subscribe, Queue, {exchange, {Name, Pattern}},
-                    State = #state{channel = Channel}) ->
+                     State = #state{channel = Channel}) ->
     RoutingKey = case Pattern of 
                      undefined -> "";
                      _         -> Pattern
@@ -569,6 +591,9 @@ bind_queue_if_needed(subscribe, Queue, {exchange, {Name, Pattern}},
                             queue       = Queue,
                             exchange    = list_to_binary(Name),
                             routing_key = list_to_binary(RoutingKey)}),    
+    ok;
+bind_queue_if_needed(_Method, _Queue, {queue, _}, _State) ->
+    %% rely on default binding for /queue
     ok.
     
     
