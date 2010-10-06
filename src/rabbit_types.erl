@@ -41,7 +41,8 @@
               amqp_error/0, r/1, r2/2, r3/3, listener/0,
               binding/0, amqqueue/0, exchange/0, connection/0, protocol/0,
               user/0, ok/1, error/1, ok_or_error/1, ok_or_error2/2,
-              ok_pid_or_error/0, channel_exit/0, connection_exit/0]).
+              ok_pid_or_error/0, channel_exit/0, connection_exit/0,
+              msg_properties/0]).
 
 -type(channel_exit() :: no_return()).
 -type(connection_exit() :: no_return()).
@@ -86,6 +87,8 @@
                 txn       :: maybe(txn()),
                 sender    :: pid(),
                 message   :: message()}).
+-type(msg_properties() ::
+        #msg_properties{expiry :: pos_integer() | 'undefined'}).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(txn() :: rabbit_guid:guid()).
