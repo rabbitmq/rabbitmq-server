@@ -1469,7 +1469,7 @@ msg_store_remove(Guids) ->
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
       lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref), L), MsgStore).
+                  rabbit_msg_store:client_init(MsgStore, Ref, undefined), L), MsgStore).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1479,7 +1479,7 @@ test_msg_store() ->
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, Guids),
     Ref = rabbit_guid:guid(),
-    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref, undefined),
     %% publish the first half
     {ok, MSCState1} = msg_store_write(Guids1stHalf, MSCState),
     %% sync on the first half
@@ -1553,7 +1553,7 @@ test_msg_store() ->
     %% check we don't contain any of the msgs
     false = msg_store_contains(false, Guids),
     %% publish the first half again
-    MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref, undefined),
     {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
@@ -1607,6 +1607,9 @@ init_test_queue() ->
       test_queue(), true, false,
       fun (Guid) ->
               rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
+      end,
+      fun (_) ->
+              ok %% Sync!
       end).
 
 restart_test_queue(Qi) ->
@@ -1642,7 +1645,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
                                                            Guid, MSCStateN),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
-          end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
+          end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref, undefined)}, SeqIds),
     ok = rabbit_msg_store:client_delete_and_terminate(
            MSCStateEnd, MsgStore, Ref),
     {A, B}.
@@ -1789,7 +1792,8 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>), VQN)
+                                                   end}, <<>>),
+                false, VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -1809,7 +1813,8 @@ assert_props(List, PropVals) ->
 
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
-    VQ = rabbit_variable_queue:init(test_queue(), true, false),
+    VQ = rabbit_variable_queue:init(test_queue(), true, false,
+                                    fun nop/1, fun nop/1),
     S0 = rabbit_variable_queue:status(VQ),
     assert_props(S0, [{q1, 0}, {q2, 0},
                       {delta, {delta, undefined, 0, undefined}},
@@ -1849,7 +1854,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
 
     %% drain
     {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags, VQ8),
+    {VQ9, _} = rabbit_variable_queue:ack(AckTags, VQ8),
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
     VQ10.
@@ -1859,7 +1864,8 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
-    publish_fetch_and_ack(N-1, Len, rabbit_variable_queue:ack([AckTag], VQ2)).
+    {VQ3, _} = rabbit_variable_queue:ack([AckTag], VQ2),
+    publish_fetch_and_ack(N-1, Len, VQ3).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -1892,7 +1898,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
+    {VQ9, _} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
     %% should be empty now
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
     VQ10.
@@ -1921,7 +1927,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
+    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
+                                     fun nop/1, fun nop/1),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
     VQ9 = variable_queue_publish(false, 1, VQ8),
@@ -1937,7 +1944,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ4 = rabbit_variable_queue:requeue(AckTags, VQ3),
     VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
+    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
+                                     fun nop/1, fun nop/1),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
@@ -1967,10 +1975,13 @@ test_queue_recover() ->
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
-              VQ1 = rabbit_variable_queue:init(QName, true, true),
+              VQ1 = rabbit_variable_queue:init(QName, true, true,
+                                               fun nop/1, fun nop/1),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
+
+nop(_) -> ok.

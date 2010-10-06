@@ -69,7 +69,8 @@
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, immediate, txn, sender, message}).
+-record(delivery, {mandatory, immediate, txn, sender, message,
+                   origin, msg_seq_no}).
 -record(amqp_error, {name, explanation, method = none}).
 
 -record(event, {type, props, timestamp}).
