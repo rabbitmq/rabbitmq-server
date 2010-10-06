@@ -456,7 +456,7 @@ requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
       end, State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,
-                                  backing_queue = BQ}) ->
+                              backing_queue       = BQ}) ->
     case BQ:fetch(AckRequired, BQS) of
         {empty, BQS1} ->
             {empty, State#q{backing_queue_state = BQS1}};
