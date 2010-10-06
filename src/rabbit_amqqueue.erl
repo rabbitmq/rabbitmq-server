@@ -312,19 +312,19 @@ check_declare_arguments(QueueName, Args) ->
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <- 
+     end || {Key, Fun} <-
                 [{<<"x-expires">>, fun check_expires_argument/1},
                  {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
     ok.
 
 check_expires_argument(Val) ->
-    check_integer_argument(Val, 
-                           expires_not_of_acceptable_type, 
+    check_integer_argument(Val,
+                           expires_not_of_acceptable_type,
                            expires_zero_or_less).
 
 check_message_ttl_argument(Val) ->
-    check_integer_argument(Val, 
-                           ttl_not_of_acceptable_type, 
+    check_integer_argument(Val,
+                           ttl_not_of_acceptable_type,
                            ttl_zero_or_less).
 
 check_integer_argument(undefined, _, _) ->
@@ -336,7 +336,7 @@ check_integer_argument({Type, Val}, InvalidTypeError, _) when Val > 0 ->
     end;
 check_integer_argument({_Type, _Val}, _, ZeroOrLessError) ->
     {error, ZeroOrLessError}.
-  
+
 list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_queue,
@@ -524,4 +524,3 @@ delegate_call(Pid, Msg, Timeout) ->
 
 delegate_cast(Pid, Msg) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
-

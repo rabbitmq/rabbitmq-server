@@ -89,7 +89,7 @@ purge(State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
     %% We do not purge messages pending acks.
     {AckTags, PA} =
         rabbit_misc:queue_fold(
-          fun ({#basic_message { is_persistent = false }, 
+          fun ({#basic_message { is_persistent = false },
                 _MsgProps, _IsDelivered}, Acc) ->
                   Acc;
               ({Msg = #basic_message { guid = Guid }, MsgProps, IsDelivered},
@@ -100,8 +100,8 @@ purge(State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
     ok = persist_acks(QName, IsDurable, none, AckTags, PA),
     {Len, State #iv_state { len = 0, queue = queue:new() }}.
 
-publish(Msg, MsgProps, State = #iv_state { queue   = Q, 
-                                           qname   = QName, 
+publish(Msg, MsgProps, State = #iv_state { queue   = Q,
+                                           qname   = QName,
                                            durable = IsDurable,
                                            len     = Len }) ->
     ok = persist_message(QName, IsDurable, none, Msg, MsgProps),
@@ -124,7 +124,7 @@ dropwhile(Pred, State = #iv_state { queue = Q }) ->
     {{value, {Msg, MsgProps, IsDelivered}}, Q1} = queue:out(Q),
     case Pred(MsgProps) of
         true ->
-            {_, State1} = 
+            {_, State1} =
                 fetch_internal(false, Q1, Msg, MsgProps, IsDelivered, State),
             dropwhile(Pred, State1);
         false ->
@@ -137,10 +137,10 @@ fetch(AckRequired, State = #iv_state { queue = Q }) ->
     {{value, {Msg, MsgProps, IsDelivered}}, Q1} = queue:out(Q),
     fetch_internal(AckRequired, Q1, Msg, MsgProps, IsDelivered, State).
 
-fetch_internal(AckRequired, Q1, 
-               Msg = #basic_message {guid = Guid}, 
+fetch_internal(AckRequired, Q1,
+               Msg = #basic_message {guid = Guid},
                MsgProps, IsDelivered,
-               State = #iv_state { len         = Len, 
+               State = #iv_state { len         = Len,
                                    qname       = QName,
                                    durable     = IsDurable,
                                    pending_ack = PA }) ->
@@ -183,9 +183,9 @@ tx_rollback(Txn, State = #iv_state { qname = QName }) ->
     erase_tx(Txn),
     {lists:flatten(AckTags), State}.
 
-tx_commit(Txn, Fun, MsgPropsFun, State = #iv_state { qname       = QName, 
-                                                     pending_ack = PA, 
-                                                     queue       = Q, 
+tx_commit(Txn, Fun, MsgPropsFun, State = #iv_state { qname       = QName,
+                                                     pending_ack = PA,
+                                                     queue       = Q,
                                                      len         = Len }) ->
     #tx { pending_acks = AckTags, pending_messages = PubsRev } = lookup_tx(Txn),
     ok = do_if_persistent(fun rabbit_persister:commit_transaction/1,
@@ -195,13 +195,13 @@ tx_commit(Txn, Fun, MsgPropsFun, State = #iv_state { qname       = QName,
     AckTags1 = lists:flatten(AckTags),
     PA1 = remove_acks(AckTags1, PA),
     {Q1, Len1} = lists:foldr(fun ({Msg, MsgProps}, {QN, LenN}) ->
-                                     {enqueue(Msg, MsgPropsFun(MsgProps), 
-                                              false, QN), 
+                                     {enqueue(Msg, MsgPropsFun(MsgProps),
+                                              false, QN),
                                       LenN + 1}
                              end, {Q, Len}, PubsRev),
     {AckTags1, State #iv_state { pending_ack = PA1, queue = Q1, len = Len1 }}.
 
-requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA, 
+requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA,
                                                   queue       = Q,
                                                   len         = Len }) ->
     %% We don't need to touch the persister here - the persister will
@@ -217,7 +217,7 @@ requeue(AckTags, MsgPropsFun, State = #iv_state { pending_ack = PA,
                    fun (Guid, {QN, LenN}) ->
                            {Msg = #basic_message {}, MsgProps}
                                = dict:fetch(Guid, PA),
-                           {enqueue(Msg, MsgPropsFun(MsgProps), true, QN), 
+                           {enqueue(Msg, MsgPropsFun(MsgProps), true, QN),
                             LenN + 1}
                    end, {Q, Len}, AckTags),
     PA1 = remove_acks(AckTags, PA),
@@ -286,7 +286,7 @@ persist_message(QName, true, Txn, Msg = #basic_message {
              content = rabbit_binary_parser:clear_decoded_content(
                          Msg #basic_message.content)},
     persist_work(Txn, QName,
-                 [{publish, Msg1, MsgProps, 
+                 [{publish, Msg1, MsgProps,
                    {QName, Msg1 #basic_message.guid}}]);
 persist_message(_QName, _IsDurable, _Txn, _Msg, _MsgProps) ->
     ok.
@@ -301,7 +301,7 @@ persist_acks(QName, true, Txn, AckTags, PA) ->
     persist_work(Txn, QName,
                  [{ack, {QName, Guid}} || Guid <- AckTags,
                                           begin
-                                              {ok, {Msg, _MsgProps}} 
+                                              {ok, {Msg, _MsgProps}}
                                                   = dict:find(Guid, PA),
                                               Msg #basic_message.is_persistent
                                           end]);
