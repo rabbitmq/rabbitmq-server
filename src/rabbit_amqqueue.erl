@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2, maybe_expire/1]).
+         set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -483,6 +483,9 @@ set_maximum_since_use(QPid, Age) ->
 
 maybe_expire(QPid) ->
     gen_server2:cast(QPid, maybe_expire).
+
+drop_expired(QPid) ->
+    gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
     [Hook() ||

@@ -617,7 +617,8 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
             State;
         false ->
             State#q{ttl_timer_ref =
-                        timer:send_after(TTL, self(), drop_expired)}
+                        timer:apply_after(TTL, rabbit_amqqueue,
+                                          drop_expired, [self()])}
     end;
 ensure_ttl_timer(State) ->
     State.
@@ -685,6 +686,7 @@ prioritise_cast(Msg, _State) ->
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         maybe_expire                         -> 8;
+        drop_expired                         -> 8;
         emit_stats                           -> 7;
         {ack, _Txn, _MsgIds, _ChPid}         -> 7;
         {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
@@ -1008,6 +1010,9 @@ handle_cast(maybe_expire, State) ->
         false -> noreply(ensure_expiry_timer(State))
     end;
 
+handle_cast(drop_expired, State) ->
+    noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
+
 handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     %% Do not invoke noreply as it would see no timer and create a new one.
     emit_stats(State),
@@ -1033,9 +1038,6 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
 handle_info(timeout, State = #q{backing_queue = BQ}) ->
     noreply(maybe_run_queue_via_backing_queue(
               fun (BQS) -> BQ:idle_timeout(BQS) end, State));
-
-handle_info(drop_expired, State) ->
-    noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
