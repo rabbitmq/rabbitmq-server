@@ -98,12 +98,12 @@
 %% and seeding the message store on start up.
 %%
 %% Note that in general, the representation of a message's state as
-%% the tuple: {('no_pub'|{Guid, MsgProperties, IsPersistent}), ('del'|'no_del'),
-%% ('ack'|'no_ack')} is richer than strictly necessary for most
-%% operations. However, for startup, and to ensure the safe and
-%% correct combination of journal entries with entries read from the
-%% segment on disk, this richer representation vastly simplifies and
-%% clarifies the code.
+%% the tuple: {('no_pub'|{Guid, MsgProperties, IsPersistent}),
+%% ('del'|'no_del'), ('ack'|'no_ack')} is richer than strictly
+%% necessary for most operations. However, for startup, and to ensure
+%% the safe and correct combination of journal entries with entries
+%% read from the segment on disk, this richer representation vastly
+%% simplifies and clarifies the code.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
 %% variable_queue.
@@ -300,7 +300,7 @@ flush(State)                                -> flush_journal(State).
 
 read(StartEnd, StartEnd, State) ->
     {[], State};
-read(Start, End, State =  #qistate { segments = Segments,
+read(Start, End, State = #qistate { segments = Segments,
                                     dir = Dir }) when Start =< End ->
     %% Start is inclusive, End is exclusive.
     LowerB = {StartSeg, _StartRelSeq} = seq_id_to_seg_and_rel_seq_id(Start),
@@ -537,10 +537,8 @@ queue_index_walker_reader(QueueName, Gatherer) ->
 create_pub_record_body(Guid, #message_properties{expiry = Expiry}) ->
     [Guid, expiry_to_binary(Expiry)].
 
-expiry_to_binary(undefined) ->
-    <<?NO_EXPIRY:?EXPIRY_BITS>>;
-expiry_to_binary(Expiry) ->
-    <<Expiry:?EXPIRY_BITS>>.
+expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
+expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
 read_pub_record_body(Hdl) ->
     case file_handle_cache:read(Hdl, ?GUID_BYTES + ?EXPIRY_BYTES) of
@@ -681,10 +679,11 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                 _ ->
                     case read_pub_record_body(Hdl) of
                         {Guid, MsgProperties} ->
-                            Publish = {Guid, MsgProperties, case Prefix of
-                                                 ?PUB_PERSIST_JPREFIX -> true;
-                                                 ?PUB_TRANS_JPREFIX   -> false
-                                             end},
+                            Publish = {Guid, MsgProperties,
+                                       case Prefix of
+                                           ?PUB_PERSIST_JPREFIX -> true;
+                                           ?PUB_TRANS_JPREFIX   -> false
+                                       end},
                             load_journal_entries(
                               add_to_journal(SeqId, Publish, State));
                         _ErrOrEoF -> %% err, we've lost at least a publish

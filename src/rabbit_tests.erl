@@ -1850,26 +1850,26 @@ test_dropwhile(VQ0) ->
 
     %% add messages with sequential expiry
     VQ1 = lists:foldl(
-      fun (N, VQN) ->
-              rabbit_variable_queue:publish(
-                rabbit_basic:message(
-                  rabbit_misc:r(<<>>, exchange, <<>>),
-                  <<>>, #'P_basic'{}, <<>>),
-                #message_properties{expiry = N}, VQN)
-      end, VQ0, lists:seq(1, Count)),
+            fun (N, VQN) ->
+                    rabbit_variable_queue:publish(
+                      rabbit_basic:message(
+                        rabbit_misc:r(<<>>, exchange, <<>>),
+                        <<>>, #'P_basic'{}, <<>>),
+                      #message_properties{expiry = N}, VQN)
+            end, VQ0, lists:seq(1, Count)),
 
     %% drop the first 5 messages
     VQ2 = rabbit_variable_queue:dropwhile(
-      fun(#message_properties { expiry = Expiry }) ->
-              Expiry =< 5
-      end, VQ1),
+            fun(#message_properties { expiry = Expiry }) ->
+                    Expiry =< 5
+            end, VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
-                                   {{#basic_message{}, _, _, _}, VQM} =
-                                       rabbit_variable_queue:fetch(false, VQN),
-                                   VQM
-                           end, VQ2, lists:seq(1, 5)),
+                              {{#basic_message{}, _, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch(false, VQN),
+                              VQM
+                      end, VQ2, lists:seq(6, Count)),
 
     %% should be empty now
     {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
