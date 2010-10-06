@@ -785,8 +785,8 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply(empty, State2);
         {{Message, IsDelivered, AckTag, Remaining}, State2} ->
             case AckRequired of
-                true  ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                          store_ch_record(
+                true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
+                         store_ch_record(
                            C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
                 false -> ok
             end,

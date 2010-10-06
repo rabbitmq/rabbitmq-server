@@ -105,8 +105,7 @@ publish(Msg, MsgProps, State = #iv_state { queue   = Q,
                                            durable = IsDurable,
                                            len     = Len }) ->
     ok = persist_message(QName, IsDurable, none, Msg, MsgProps),
-    Q1 = enqueue(Msg, MsgProps, false, Q),
-    State #iv_state { queue = Q1, len = Len + 1 }.
+    State #iv_state { queue = enqueue(Msg, MsgProps, false, Q), len = Len + 1 }.
 
 publish_delivered(false, _Msg, _MsgProps, State) ->
     {blank_ack, State};
@@ -163,7 +162,7 @@ ack(AckTags, State = #iv_state { qname = QName, durable = IsDurable,
     State #iv_state { pending_ack = PA1 }.
 
 tx_publish(Txn, Msg, MsgProps, State = #iv_state { qname = QName,
-                                         durable = IsDurable }) ->
+                                                   durable = IsDurable }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
     ok = persist_message(QName, IsDurable, Txn, Msg, MsgProps),
