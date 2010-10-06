@@ -602,7 +602,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue = BQ}) ->
     Now = now_millis(),
     BQS1 = BQ:dropwhile(
-             fun (_MsgProperties = #message_properties{expiry = Expiry}) ->
+             fun (#message_properties{expiry = Expiry}) ->
                      Now > Expiry
              end, BQS),
     ensure_ttl_timer(State #q{backing_queue_state = BQS1}).
