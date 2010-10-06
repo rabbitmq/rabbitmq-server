@@ -33,8 +33,8 @@
         ('empty' |
          %% Message,                  IsDelivered, AckTag, Remaining_Len
          {rabbit_types:basic_message(), boolean(), ack(), non_neg_integer()})).
--type(peek_result() :: ('empty'|{rabbit_types:basic_message(),
-                                 rabbit_types:message_properties()})).
+-type(peek_result() :: ('empty' | {rabbit_types:basic_message(),
+                                   rabbit_types:message_properties()})).
 -type(is_durable() :: boolean()).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
@@ -51,8 +51,7 @@
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 -spec(publish/3 :: (rabbit_types:basic_message(),
-                    rabbit_types:message_properties_properties(), state())
-                   -> state()).
+                    rabbit_types:message_properties(), state()) -> state()).
 -spec(publish_delivered/4 :: (ack_required(), rabbit_types:basic_message(),
                               rabbit_types:message_properties(), state())
                              -> {ack(), state()}).
