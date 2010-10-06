@@ -463,7 +463,9 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
                             {ok, send_method(Method, State)}
                     end;
                 _ ->
-                    rabbit_misc:die(command_invalid, 'basic.ack')
+                    {ok, send_error("Invalid message-id",
+                            "ACK must include a vaild 'message-id' header\n",
+                            State)}
             end;
         not_found ->
             {ok, send_error("Missing message-id",
