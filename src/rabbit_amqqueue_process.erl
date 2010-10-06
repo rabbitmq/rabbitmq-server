@@ -422,6 +422,9 @@ attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
+                %% we don't need an expiry here because messages are
+                %% not being enqueued, so we use an empty
+                %% message_properties.
                 {AckTag, BQS1} =
                     BQ:publish_delivered(AckRequired, Message,
                                          ?BASE_MESSAGE_PROPERTIES, BQS),
@@ -751,8 +754,6 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% queues discarding the message?
     %%
 
-    %% we don't need an expiry here because messages are not being
-    %% enqueued, so we use an empty message_properties.
     {Delivered, NewState} = attempt_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
