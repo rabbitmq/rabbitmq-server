@@ -633,10 +633,11 @@ handle_cast({write, Guid},
                 [#file_summary { locked = true }] ->
                     ok = index_delete(Guid, State),
                     write_message(Guid, Msg, State);
-                [#file_summary { file_size = FileSize } = Summary] ->
+                [#file_summary {}] ->
                     ok = index_update_ref_count(Guid, 1, State),
-                    ok = add_to_file_summary(Summary, TotalSize, FileSize,
-                                             State),
+                    [_] = ets:update_counter(
+                            FileSummaryEts, File,
+                            [{#file_summary.valid_total_size, TotalSize}]),
                     noreply(State #msstate {
                               sum_valid_data = SumValid + TotalSize })
             end;
@@ -808,27 +809,16 @@ write_message(Guid, Msg,
     ok = index_insert(
            #msg_location { guid = Guid, ref_count = 1, file = CurFile,
                            offset = CurOffset, total_size = TotalSize }, State),
-    [#file_summary { right     = undefined,
-                     locked    = false,
-                     file_size = FileSize } = Summary] =
+    [#file_summary { right = undefined, locked = false }] =
         ets:lookup(FileSummaryEts, CurFile),
-    ok = add_to_file_summary(Summary, TotalSize, FileSize + TotalSize, State),
+    [_,_] = ets:update_counter(FileSummaryEts, CurFile,
+                               [{#file_summary.valid_total_size, TotalSize},
+                                {#file_summary.file_size,        TotalSize}]),
     NextOffset = CurOffset + TotalSize,
     noreply(maybe_roll_to_new_file(
               NextOffset, State #msstate {
-                            sum_valid_data = SumValid + TotalSize,
+                            sum_valid_data = SumValid    + TotalSize,
                             sum_file_size  = SumFileSize + TotalSize })).
-
-add_to_file_summary(#file_summary { file             = File,
-                                    valid_total_size = ValidTotalSize },
-                    TotalSize, FileSize,
-                    #msstate { file_summary_ets = FileSummaryEts }) ->
-    ValidTotalSize1 = ValidTotalSize + TotalSize,
-    true = ets:update_element(
-             FileSummaryEts, File,
-             [{#file_summary.valid_total_size, ValidTotalSize1},
-              {#file_summary.file_size,        FileSize}]),
-    ok.
 
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->
@@ -933,19 +923,17 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
         %% there may be further writes in the mailbox for the same
         %% msg.
         1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
-             [#file_summary { valid_total_size = ValidTotalSize,
-                              locked           = Locked }] =
-                 ets:lookup(FileSummaryEts, File),
-             case Locked of
-                 true  -> add_to_pending_gc_completion({remove, Guid}, State);
-                 false -> ok = Dec(),
-                          true = ets:update_element(
-                                   FileSummaryEts, File,
-                                   [{#file_summary.valid_total_size,
-                                     ValidTotalSize - TotalSize}]),
-                          delete_file_if_empty(
-                            File, State #msstate {
-                                    sum_valid_data = SumValid - TotalSize })
+             case ets:lookup(FileSummaryEts, File) of
+                 [#file_summary { locked = true } ] ->
+                     add_to_pending_gc_completion({remove, Guid}, State);
+                 [#file_summary {}] ->
+                     ok = Dec(),
+                     [_] = ets:update_counter(
+                             FileSummaryEts, File,
+                             [{#file_summary.valid_total_size, -TotalSize}]),
+                     delete_file_if_empty(
+                       File, State #msstate {
+                               sum_valid_data = SumValid - TotalSize })
              end;
         _ -> ok = decrement_cache(DedupCacheEts, Guid),
              ok = Dec(),
