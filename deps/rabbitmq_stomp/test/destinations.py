@@ -2,7 +2,7 @@ import unittest
 import stomp
 import base
 
-class XTestExchange(base.BaseTest):
+class TestExchange(base.BaseTest):
 
         
     def test_amq_direct(self):

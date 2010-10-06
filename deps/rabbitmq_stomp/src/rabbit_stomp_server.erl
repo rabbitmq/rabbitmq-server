@@ -533,7 +533,6 @@ process_command("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
                                   missing
                           end
                   end,
-    io:format("~p~n", [ConsumerTag]),
     if
         ConsumerTag == missing ->
             {ok, send_error("Missing destination or id",
