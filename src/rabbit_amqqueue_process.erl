@@ -425,7 +425,7 @@ attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
                 {AckTag, BQS1} =
                     BQ:publish_delivered(AckRequired, Message,
-                                         #message_properties{}, BQS),
+                                         ?BASE_MESSAGE_PROPERTIES, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
@@ -435,7 +435,7 @@ attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue       = BQ,
     record_current_channel_tx(ChPid, Txn),
     {true,
      State#q{backing_queue_state =
-                 BQ:tx_publish(Txn, Message, #message_properties{}, BQS)}}.
+                 BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
