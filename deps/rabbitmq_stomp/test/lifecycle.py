@@ -21,7 +21,7 @@ class TestLifecycle(base.BaseTest):
         self.conn.send("test", destination=d)
         self.assertFalse(self.listener.await(3),
                          "UNSUBSCRIBE failed, still receiving messages")
-        
+
     def test_unsubscribe_id(self):
         ''' Test UNSUBSCRIBE command with id parameter'''
         d = "/exchange/amq.fanout"

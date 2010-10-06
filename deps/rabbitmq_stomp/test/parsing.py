@@ -46,7 +46,7 @@ class TestParsing(unittest.TestCase):
     host='127.0.0.1'
     port=61613
 
-    
+
     def match(self, pattern, data):
         ''' helper: try to match 'pattern' regexp with 'data' string.
             Fail testif they don't match.

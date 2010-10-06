@@ -158,9 +158,10 @@ finalize_body(_State = #bstate{chunk = Chunk, chunks = Chunks}) ->
 finalize_chunk(Chunk) ->
     list_to_binary(lists:reverse(Chunk)).
 
-accumulate_byte(Ch, NewRemaining, State = #bstate{chunk = Chunk,
-                                                  chunks = Chunks,
-                                                  chunksize = ?CHUNK_SIZE_LIMIT}) ->
+accumulate_byte(Ch, NewRemaining, 
+                State = #bstate{chunk = Chunk,
+                                chunks = Chunks,
+                                chunksize = ?CHUNK_SIZE_LIMIT}) ->
     State#bstate{chunk = [Ch],
                  chunks = [finalize_chunk(Chunk) | Chunks],
                  chunksize = 0,
@@ -195,9 +196,10 @@ parse(Rest, {headers, HState}) ->
         {more, HState1} ->
             {more, {headers, HState1}};
         {ok, Command, Headers, Rest1} ->
-            parse(Rest1, #stomp_frame{command = Command,
-                                      headers = Headers,
-                                      body_iolist = initial_body_state(Headers)});
+            parse(Rest1, 
+                  #stomp_frame{command = Command,
+                               headers = Headers,
+                               body_iolist = initial_body_state(Headers)});
         E = {error, _} ->
             E
     end;

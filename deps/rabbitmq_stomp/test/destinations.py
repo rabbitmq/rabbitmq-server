@@ -4,7 +4,7 @@ import base
 
 class TestExchange(base.BaseTest):
 
-        
+
     def test_amq_direct(self):
         ''' Test basic send/receive for /exchange/amq.direct '''
         self.__test_exchange_send_rec("amq.direct", "route")
@@ -30,7 +30,8 @@ class TestExchange(base.BaseTest):
         self.assertEquals(1, len(self.listener.errors))
         err = self.listener.errors[0]
         self.assertEquals("not_found", err['headers']['message'])
-        self.assertEquals("no exchange 'does.not.exist' in vhost '/'\n", err['message'])
+        self.assertEquals("no exchange 'does.not.exist' in vhost '/'\n",
+                          err['message'])
 
     def __test_exchange_send_rec(self, exchange, route = None):
         dest = "/exchange/" + exchange
@@ -47,7 +48,7 @@ class TestQueue(base.BaseTest):
         self.simple_test_send_rec(d)
 
     def test_send_receive_in_other_conn(self):
-        ''' Test send in one connection, receive in another ''' 
+        ''' Test send in one connection, receive in another '''
         d = '/queue/test2'
 
         # send
@@ -83,7 +84,7 @@ class TestQueue(base.BaseTest):
         finally:
             conn2.stop()
 
-    
+
     def test_multi_subscribers(self):
         ''' Test multiple subscribers against a single /queue destination '''
         d = '/queue/test-multi'
@@ -99,13 +100,15 @@ class TestQueue(base.BaseTest):
 
             ## expect both consumers to get a message?
             self.assertTrue(listener1.await(2))
-            self.assertEquals(1, len(listener1.messages), "unexpected message count")
+            self.assertEquals(1, len(listener1.messages),
+                              "unexpected message count")
             self.assertTrue(listener2.await(2))
-            self.assertEquals(1, len(listener2.messages), "unexpected message count")
+            self.assertEquals(1, len(listener2.messages),
+                              "unexpected message count")
         finally:
             conn1.stop()
             conn2.stop()
-        
+
 
 class TestTopic(base.BaseTest):
 
@@ -129,10 +132,12 @@ class TestTopic(base.BaseTest):
 
               ## expect both consumers to get both messages
               self.assertTrue(listener1.await(2))
-              self.assertEquals(2, len(listener1.messages), "unexpected message count")
+              self.assertEquals(2, len(listener1.messages),
+                                "unexpected message count")
               self.assertTrue(listener2.await(2))
-              self.assertEquals(2, len(listener2.messages), "unexpected message count")
+              self.assertEquals(2, len(listener2.messages),
+                                "unexpected message count")
           finally:
               conn1.stop()
               conn2.stop()
-          
+
