@@ -2,13 +2,11 @@
 
 import unittest
 import sys
-import parsing, destinations, lifecycle
 import logging
 
 def run_unittests():
     emodules = ['parsing', 'destinations', 'lifecycle', 'transactions', 'ack']
-    modules = ['destinations']
-    
+    modules= ['destinations']
     suite = unittest.TestSuite()
     for m in modules:
         mod = __import__(m)

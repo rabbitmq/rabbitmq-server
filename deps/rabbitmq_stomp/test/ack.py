@@ -6,7 +6,7 @@ import time
 class TestAck(base.BaseTest):
 
     def test_ack_client(self):
-        d = "/exchange/amq.direct/test"
+        d = "/queue/ack-test"
 
         # subscribe and send message
         self.listener.reset()
@@ -19,9 +19,27 @@ class TestAck(base.BaseTest):
         self.conn.disconnect()
 
         # now reconnect
-        self.listener.reset()
         conn2 = self.createConnection()
-        conn2.subscribe(destination=d, ack='client')
-        self.assertTrue(self.listener.await())
-        self.assertEquals(1, len(self.listener.messages))
+        try:
+            listener2 = base.WaitableListener()
+            conn2.set_listener('', listener2)
+            conn2.subscribe(destination=d, ack='client')
+            self.assertTrue(listener2.await(), "message not received again")
+            self.assertEquals(1, len(listener2.messages))
+
+            # now ack
+            mid = listener2.messages[0]['headers']['message-id']
+            conn2.ack({'message-id':mid})
+        finally:
+            conn2.stop()
+
+        # now reconnect again, shouldn't see the message
+        conn3 = self.createConnection()
+        try:
+            listener3 = base.WaitableListener()
+            conn3.set_listener('', listener3)
+            conn3.subscribe(destination=d)
+            self.assertFalse(listener3.await(3), "unexpected message. ACK not working?")
+        finally:
+            conn3.stop()
         

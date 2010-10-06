@@ -286,13 +286,11 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
                             rabbit_stomp_frame:header(Frame, "virtual-host",
                                                binary_to_list(DefaultVHost)),
                             State),
-    case rabbit_stomp_frame:integer_header(Frame, "prefetch") of
-        {ok, PrefetchCount} ->
-            send_method(#'basic.qos'{prefetch_size = 0,
-                                     prefetch_count = PrefetchCount,
-                                     global = false}, State1);
-        not_found -> ok
-    end,
+     
+    send_method(#'basic.qos'{prefetch_size = 0,
+                             prefetch_count = 1,
+                             global = false}, State1),
+
     {ok, State1};
 process_frame("DISCONNECT", Frame, State) ->
     receipt_if_necessary(Frame, shutdown_channel_and_connection(State)),
@@ -314,8 +312,7 @@ receipt_if_necessary(Frame, State) ->
     end.
 
 send_method(Method, State = #state{channel = Channel}) ->
-    Res = amqp_channel:call(Channel, Method),
-    io:format("Res: ~p~n", [Res]),
+    amqp_channel:call(Channel, Method),
     State.
 
 send_method(Method, Properties, BodyFragments, 

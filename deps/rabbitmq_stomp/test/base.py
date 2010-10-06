@@ -57,7 +57,6 @@ class WaitableListener(object):
         self.event.set()
 
     def on_message(self, headers, message):
-        print message
         self.messages.append({'message' : message, 'headers' : headers})
         self.event.set()
 

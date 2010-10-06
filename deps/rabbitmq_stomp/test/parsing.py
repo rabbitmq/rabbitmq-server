@@ -12,7 +12,6 @@ import sys
 def connect(cnames):
     ''' Decorator that creates stomp connections and issues CONNECT '''
     cmd=('CONNECT\n'
-        'prefetch: 0\n'
         'login:guest\n'
         'passcode:guest\n'
         '\n'
@@ -144,59 +143,15 @@ class TestParsing(unittest.TestCase):
             self.match(resp, cd.recv(4096))
 
 
-    @connect(['sd', 'cd1', 'cd2'])
-    def test_roundrobin(self):
-        ''' Two messages should be delivered to two consumers using round robin:
-            amq.topic --routing_key--> single_queue --> first_connection
-                                                  \---> second_connection
-        '''
-        messages = ['message1', 'message2']
-        subscribe=(
-            'SUBSCRIBE\n'
-            'id: sTXtc\n'
-            'destination:/exchange/amq.topic/yAoXMwiF\n'
-            '\n\0')
-        for cd in [self.cd1, self.cd2]:
-            cd.sendall(subscribe)
-
-        time.sleep(0.1)
-
-        for msg in messages:
-            self.sd.sendall('SEND\n'
-                            'destination:/exchange/amq.topic/yAoXMwiF\n'
-                            '\n'
-                            '%s'
-                            '\n\0' % msg)
-
-        resp=('MESSAGE\n'
-            'destination:/exchange/amq.topic/yAoXMwiF\n'
-            'message-id:.*\n'
-            'content-type:text/plain\n'
-            'subscription:.*\n'
-            'content-length:.\n'
-            '\n'
-            '(.*)'
-            '\n\x00')
-
-        recv_messages = [self.match(resp, cd.recv(4096))[0] \
-                            for cd in [self.cd1, self.cd2]]
-        self.assertTrue(sorted(messages) == sorted(recv_messages), \
-                                        '%r != %r ' % (messages, recv_messages))
-
-
-
     @connect(['cd'])
     def test_huge_message(self):
-        ''' Test sending/receiving huge (92MB) message. '''
+        ''' Test sending/receiving huge (16MB) message. '''
         subscribe=( 'SUBSCRIBE\n'
                     'id: xxx\n'
                     'destination:/exchange/amq.topic/test_huge_message\n'
                     '\n\0')
         self.cd.sendall(subscribe)
 
-        # Instead of 92MB, let's use 16, so that the test can finish in
-        # reasonable time.
-        ##message = 'x' * 1024*1024*92
         message = 'x' * 1024*1024*16
 
         self.cd.sendall('SEND\n'
