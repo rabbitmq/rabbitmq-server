@@ -1,0 +1,31 @@
+Stomp Bridge for Oracle AQ
+==========================
+
+This provides a STOMP bridging mechanism to Oracle AQ (Advanced Messaging).
+
+Before using, you'll need to grant various privileges to your user:
+
+GRANT RESOURCE TO <UserName>;
+GRANT CONNECT TO <UserName>;
+GRANT EXECUTE ANY PROCEDURE TO <UserName>;
+GRANT aq_administrator_role TO <UserName>;
+GRANT aq_user_role TO <UserName>;
+GRANT EXECUTE ON dbms_aqadm TO <UserName>;
+GRANT EXECUTE ON dbms_aq TO <UserName>;
+GRANT EXECUTE ON dbms_aqin TO <UserName>;
+
+You will also need to create a sequence:
+
+CREATE SEQUENCE stomp_client_id_seq
+/
+
+Startup the Oracle Stomp Server, by running the following command (from the root directory of this project):
+
+bridge/oracleaq.py -D localhost -B 1521 -I xe -U test -W test -N localhost -T 8888
+
+Run: 
+
+bridge/oracleaq.py --help 
+
+to see the make up of the command line arguments.
+
