@@ -98,8 +98,7 @@
          durable,
          auto_delete,
          arguments,
-         owner_pid,
-         ttl
+         owner_pid
         ]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
@@ -660,8 +659,6 @@ i(memory, _) ->
     M;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
-i(ttl, #q{ttl = TTL}) ->
-    TTL;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
