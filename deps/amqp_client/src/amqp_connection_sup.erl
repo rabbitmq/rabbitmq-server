@@ -38,7 +38,6 @@
 
 start_link(Type, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
-    unlink(Sup),
     {ok, ChSupSup} = supervisor2:start_child(
                        Sup,
                        {channel_sup_sup, {amqp_channel_sup_sup, start_link,
