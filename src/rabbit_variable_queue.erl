@@ -678,7 +678,7 @@ tx_commit(Txn, Fun, MsgPropsFun, State = #vqstate { durable = IsDurable }) ->
      a(case IsDurable andalso HasPersistentPubs of
            true  -> ok = rabbit_msg_store:sync(
                            ?PERSISTENT_MSG_STORE, PersistentGuids,
-                           msg_store_callback(PersistentGuids,Pubs, AckTags1,
+                           msg_store_callback(PersistentGuids, Pubs, AckTags1,
                                               Fun, MsgPropsFun)),
                     State;
            false -> tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags1,
@@ -888,9 +888,8 @@ store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
 erase_tx(Txn) -> erase({txn, Txn}).
 
 persistent_guids(Pubs) ->
-    [Guid ||
-        {#basic_message { guid = Guid, is_persistent = true },
-          _MsgProps} <- Pubs].
+    [Guid || {#basic_message { guid = Guid, is_persistent = true }, _MsgProps}
+                 <- Pubs].
 
 betas_from_index_entries(List, TransientThreshold, IndexState) ->
     {Filtered, Delivers, Acks} =
@@ -1337,9 +1336,7 @@ fetch_from_q3(State = #vqstate {
         {empty, _Q3} ->
             {empty, State};
         {{value, _IndexOnDisk, MsgStatus}, Q3a} ->
-
-            State1 = State #vqstate { q3 = Q3a},
-
+            State1 = State #vqstate { q3 = Q3a },
             State2 =
                 case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
                     {true, true} ->
