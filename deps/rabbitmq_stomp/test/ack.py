@@ -19,7 +19,7 @@ class TestAck(base.BaseTest):
         self.conn.disconnect()
 
         # now reconnect
-        conn2 = self.createConnection()
+        conn2 = self.create_connection()
         try:
             listener2 = base.WaitableListener()
             conn2.set_listener('', listener2)
@@ -34,7 +34,7 @@ class TestAck(base.BaseTest):
             conn2.stop()
 
         # now reconnect again, shouldn't see the message
-        conn3 = self.createConnection()
+        conn3 = self.create_connection()
         try:
             listener3 = base.WaitableListener()
             conn3.set_listener('', listener3)

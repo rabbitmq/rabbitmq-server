@@ -54,7 +54,7 @@ class TestQueue(base.BaseTest):
         self.conn.send("hello", destination=d)
 
         # now receive
-        conn2 = self.createConnection()
+        conn2 = self.create_connection()
         try:
             listener2 = base.WaitableListener()
             conn2.set_listener('', listener2)
@@ -73,7 +73,7 @@ class TestQueue(base.BaseTest):
         self.conn.stop()
 
         # now receive
-        conn2 = self.createConnection()
+        conn2 = self.create_connection()
         try:
             listener2 = base.WaitableListener()
             conn2.set_listener('', listener2)
@@ -83,13 +83,14 @@ class TestQueue(base.BaseTest):
         finally:
             conn2.stop()
 
+    
     def test_multi_subscribers(self):
         ''' Test multiple subscribers against a single /queue destination '''
         d = '/queue/test-multi'
 
         ## set up two subscribers
-        conn1, listener1 = self.__create_subscriber_connection(d)
-        conn2, listener2 = self.__create_subscriber_connection(d)
+        conn1, listener1 = self.create_subscriber_connection(d)
+        conn2, listener2 = self.create_subscriber_connection(d)
 
         try:
             ## now send
@@ -98,15 +99,40 @@ class TestQueue(base.BaseTest):
 
             ## expect both consumers to get a message?
             self.assertTrue(listener1.await(2))
+            self.assertEquals(1, len(listener1.messages), "unexpected message count")
             self.assertTrue(listener2.await(2))
+            self.assertEquals(1, len(listener2.messages), "unexpected message count")
         finally:
             conn1.stop()
             conn2.stop()
         
 
-    def __create_subscriber_connection(self, dest):
-        conn = self.createConnection()
-        listener = base.WaitableListener()
-        conn.set_listener('', listener)
-        conn.subscribe(destination=dest)
-        return conn, listener
+class TestTopic(base.BaseTest):
+
+      def test_send_receive(self):
+        ''' Test basic send/receive for /topic '''
+        d = '/topic/test'
+        self.simple_test_send_rec(d)
+
+      def test_send_multiple(self):
+          ''' Test /topic with multiple consumers '''
+          d = '/topic/multiple'
+
+          ## set up two subscribers
+          conn1, listener1 = self.create_subscriber_connection(d)
+          conn2, listener2 = self.create_subscriber_connection(d)
+
+          try:
+              ## now send
+              self.conn.send("test1", destination=d)
+              self.conn.send("test2", destination=d)
+
+              ## expect both consumers to get both messages
+              self.assertTrue(listener1.await(2))
+              self.assertEquals(2, len(listener1.messages), "unexpected message count")
+              self.assertTrue(listener2.await(2))
+              self.assertEquals(2, len(listener2.messages), "unexpected message count")
+          finally:
+              conn1.stop()
+              conn2.stop()
+          

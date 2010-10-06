@@ -6,6 +6,7 @@ import logging
 
 def run_unittests():
     modules = ['parsing', 'destinations', 'lifecycle', 'transactions', 'ack']
+    
     suite = unittest.TestSuite()
     for m in modules:
         mod = __import__(m)

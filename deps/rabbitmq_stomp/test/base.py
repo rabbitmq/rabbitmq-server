@@ -6,14 +6,24 @@ import threading
 
 class BaseTest(unittest.TestCase):
 
-   def createConnection(self):
+   def create_connection(self):
        conn = stomp.Connection(user="guest", passcode="guest")
        conn.start()
        conn.connect()
        return conn
-   
+
+   def create_subscriber_connection(self, dest):
+       conn = self.create_connection()
+       listener = WaitableListener()
+       conn.set_listener('', listener)
+       conn.subscribe(destination=dest, receipt="sub.receipt")
+       listener.await()
+       self.assertEquals(1, len(listener.receipts))
+       listener.reset()
+       return conn, listener
+    
    def setUp(self):
-        self.conn = self.createConnection()
+        self.conn = self.create_connection()
         self.listener = WaitableListener()
         self.conn.set_listener('', self.listener)
 
@@ -49,7 +59,7 @@ class WaitableListener(object):
 
 
     def on_receipt(self, headers, message):
-        self.receipt.append({'message' : message, 'headers' : headers})
+        self.receipts.append({'message' : message, 'headers' : headers})
         self.event.set()
         
     def on_error(self, headers, message):

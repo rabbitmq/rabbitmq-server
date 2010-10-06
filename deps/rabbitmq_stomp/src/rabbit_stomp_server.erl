@@ -185,9 +185,7 @@ maybe_header(_Key, _Value) ->
     [].
 
 send_delivery(#'basic.deliver'{consumer_tag = ConsumerTag,
-                            delivery_tag = DeliveryTag,
-                            exchange     = Exchange,
-                            routing_key  = RoutingKey},
+                            delivery_tag = DeliveryTag},
               #'P_basic'{headers          = Headers,
                          content_type     = ContentType,
                          content_encoding = ContentEncoding,
@@ -482,8 +480,7 @@ process_command("COMMIT", Frame, State) ->
     transactional_action(Frame, "COMMIT", fun commit_transaction/2, State);
 process_command("ABORT", Frame, State) ->
     transactional_action(Frame, "ABORT", fun abort_transaction/2, State);
-process_command("SUBSCRIBE",
-                Frame = #stomp_frame{headers = Headers},
+process_command("SUBSCRIBE", Frame,
                 State = #state{channel = Channel, subscriptions = Subs}) ->
     AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
                   "auto" -> auto;
@@ -512,7 +509,7 @@ process_command("SUBSCRIBE",
                                      exclusive    = false},
                                    self()),
 
-            ok = bind_queue_if_needed(subscribe, Queue, Destination, State),
+            ok = bind_queue_if_needed(Queue, Destination, State),
 
             {ok, State#state{subscriptions = 
                             dict:store(ConsumerTag, DestHeader, Subs)}};
@@ -555,28 +552,38 @@ parse_routing_information({exchange, {Name, undefined}}) ->
 parse_routing_information({exchange, {Name, Pattern}}) ->
     {Name, Pattern};
 parse_routing_information({queue, Name}) ->
-    {"", Name}.
+    {"", Name};
+parse_routing_information({topic, Name}) ->
+    {"amq.topic", Name}.
 
 
-create_queue_if_needed(subscribe, {exchange, _}, 
-                       State = #state{channel = Channel}) ->
+create_queue_if_needed(subscribe, {exchange, _}, #state{channel = Channel}) ->
+    %% Create anonymous queue for SUBSCRIBE on /exchange destinations
     #'queue.declare_ok'{queue = Queue} = 
         amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
     {ok, Queue};
-create_queue_if_needed(send, {exchange, _}, State) ->
+create_queue_if_needed(send, {exchange, _}, _State) ->
+    %% Don't create queues on SEND for /exchange destinations
     {ok, undefined};
-create_queue_if_needed(_, {queue, Name},
-                       State = #state{channel = Channel}) ->
+create_queue_if_needed(_, {queue, Name}, #state{channel = Channel}) ->
+    %% Always create named queue for /queue destinations
     Queue = list_to_binary(Name),
     #'queue.declare_ok'{queue = Queue} = 
         amqp_channel:call(Channel, 
                           #'queue.declare'{durable = true, 
                                            queue   = Queue}),
-    {ok, Queue}.
+    {ok, Queue};
+create_queue_if_needed(subscribe, {topic, _}, #state{channel = Channel}) ->
+    %% Create anonymous, exclusive queue for SUBSCRIBE on /topic destinations
+    #'queue.declare_ok'{queue = Queue} = 
+        amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+    {ok, Queue};
+create_queue_if_needed(send, {topic, _}, _State) ->
+    %% Don't create queues on SEND for /topic destinations
+    {ok, undefined}.
 
-
-bind_queue_if_needed(subscribe, Queue, {exchange, {Name, Pattern}},
-                     State = #state{channel = Channel}) ->
+bind_queue_if_needed(Queue, {exchange, {Name, Pattern}},
+                     #state{channel = Channel}) ->
     RoutingKey = case Pattern of 
                      undefined -> "";
                      _         -> Pattern
@@ -588,8 +595,16 @@ bind_queue_if_needed(subscribe, Queue, {exchange, {Name, Pattern}},
                             exchange    = list_to_binary(Name),
                             routing_key = list_to_binary(RoutingKey)}),    
     ok;
-bind_queue_if_needed(_Method, _Queue, {queue, _}, _State) ->
+bind_queue_if_needed(_Queue, {queue, _}, _State) ->
     %% rely on default binding for /queue
-    ok.
+    ok;
+bind_queue_if_needed(Queue, {topic, Name}, #state{channel = Channel}) ->
+    #'queue.bind_ok'{} = 
+        amqp_channel:call(Channel, 
+                          #'queue.bind'{
+                            queue       = Queue,
+                            exchange    = list_to_binary("amq.topic"),
+                            routing_key = list_to_binary(Name)}),    
+    ok.                       
     
     
