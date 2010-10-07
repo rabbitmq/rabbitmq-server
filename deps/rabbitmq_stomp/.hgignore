@@ -1,6 +1,8 @@
 syntax: regexp
+\.pyc$
 \.beam$
 ^dist/
 ^build/
 ^ebin/
 ^tmp/
+^cover/
