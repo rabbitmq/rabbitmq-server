@@ -28,28 +28,49 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_stomp).
 
--export([start/0, stop/0, start/2, stop/1]).
+-module(rabbit_stomp_destination_parser).
 
-start() ->
-    start(normal,[]),
-    ok.
+-export([parse_destination/1]).
 
-stop() ->
-    ok.
+-define(QUEUE_PREFIX, "/queue").
+-define(TOPIC_PREFIX, "/topic").
+-define(EXCHANGE_PREFIX, "/exchange").
 
-start(normal, []) ->
-    {ok, SupPid} = rabbit_stomp_sup:start_link(),
-    case application:get_env(listeners) of
-         undefined -> throw({error, {stomp_configuration_not_found}});
-         {ok, Listeners} -> 
-                         io:format("starting ~s (binding to ~p)  ...", 
-                                   ["STOMP Adapter", Listeners]),
-                         {ok, _} = rabbit_stomp_server:start(Listeners),
-                         io:format("done~n")
-    end,
-    {ok, SupPid}.
+parse_destination(?QUEUE_PREFIX ++ Rest) ->
+    parse_simple_destination(queue, Rest);
+parse_destination(?TOPIC_PREFIX ++ Rest) ->
+    parse_simple_destination(topic, Rest);
+parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
+    case parse_content(Rest) of
+        [Name] -> {ok, {exchange, {Name, undefined}}};
+        [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
+        _ -> {error, {invalid_destination, exchange, Rest}}
+    end;
+parse_destination(Destination) ->
+    {error, {unknown_destination, Destination}}.
 
-stop(_State) ->
-    ok.
+parse_simple_destination(Type, Content) ->
+    case parse_content(Content) of
+        [Name] -> {ok, {Type, Name}};
+        _      -> {error, {invalid_destination, Type, Content}}
+    end.
+
+parse_content(Content)->
+    parse_content(Content, {[], []}).
+
+parse_content([], State) ->
+    lists:reverse(accumulate_part(State));
+parse_content("/" ++ Rest, State) ->
+    parse_content(Rest, {accumulate_part(State), []});
+parse_content([C | Rest], {Parts, Acc}) ->
+    parse_content(Rest, {Parts, [C | Acc]}).
+
+accumulate_part({Parts, Acc}) ->
+    case Acc of
+        [] -> Parts;
+        _ -> [lists:reverse(Acc) | Parts]
+    end.
+
+
+
