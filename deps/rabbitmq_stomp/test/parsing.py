@@ -67,7 +67,7 @@ class TestParsing(unittest.TestCase):
                         'hello\n\x00\n')
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
-                'message-id:session-(.*)\n'
+                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
@@ -86,7 +86,7 @@ class TestParsing(unittest.TestCase):
                         '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
-                'message-id:session-(.*)\n'
+                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'

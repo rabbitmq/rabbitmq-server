@@ -29,13 +29,34 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_stomp_destination_parser).
+-module(rabbit_stomp_util).
 
--export([parse_destination/1]).
+-export([parse_destination/1, parse_routing_information/1,
+         create_message_id/3, parse_message_id/1]).
 
 -define(QUEUE_PREFIX, "/queue").
 -define(TOPIC_PREFIX, "/topic").
 -define(EXCHANGE_PREFIX, "/exchange").
+
+-define(MESSAGE_ID_SEPARATOR, "@@").
+
+create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
+    [ConsumerTag,
+     ?MESSAGE_ID_SEPARATOR,
+     SessionId,
+     ?MESSAGE_ID_SEPARATOR,
+     integer_to_list(DeliveryTag)].
+
+parse_message_id(MessageId) ->
+    Pieces = re:split(MessageId, ?MESSAGE_ID_SEPARATOR, [{return, list}]),
+    case Pieces of
+        [ConsumerTag, SessionId, DeliveryTag] ->
+            {ok, {list_to_binary(ConsumerTag),
+                  SessionId,
+                  list_to_integer(DeliveryTag)}};
+        _ ->
+            {error, invalid_message_id}
+    end.
 
 parse_destination(?QUEUE_PREFIX ++ Rest) ->
     parse_simple_destination(queue, Rest);
@@ -49,6 +70,17 @@ parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     end;
 parse_destination(Destination) ->
     {error, {unknown_destination, Destination}}.
+
+parse_routing_information({exchange, {Name, undefined}}) ->
+    {Name, ""};
+parse_routing_information({exchange, {Name, Pattern}}) ->
+    {Name, Pattern};
+parse_routing_information({queue, Name}) ->
+    {"", Name};
+parse_routing_information({topic, Name}) ->
+    {"amq.topic", Name}.
+
+%% ---- Destination parsing helpers ----
 
 parse_simple_destination(Type, Content) ->
     case parse_content(Content) of
