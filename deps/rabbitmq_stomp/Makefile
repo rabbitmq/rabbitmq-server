@@ -1,6 +1,7 @@
 PACKAGE=rabbit_stomp
 APPNAME=rabbit_stomp
 DEPS=rabbitmq-server rabbitmq-erlang-client
+INTERNAL_DEPS=stomppy
 
 START_RABBIT_IN_TESTS=true
 TEST_APPS=rabbit_stomp
