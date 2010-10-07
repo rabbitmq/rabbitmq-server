@@ -406,54 +406,103 @@ perform_transaction_action({Method}, State) ->
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
-process_command("BEGIN", Frame, State) ->
-    transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
-process_command("SEND",
-                Frame = #stomp_frame{headers     = Headers,
-                                     body_iolist = BodyFragments},
-                State) ->
-    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
-    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
+with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
-        {ok, DestHeader} ->
-            {ok, Destination} =
-                rabbit_stomp_destination_parser:parse_destination(DestHeader),
-
-            {ok, _Q} = create_queue_if_needed(send, Destination, State),
-
-            Props = #'P_basic'{
-              content_type     = BinH("content-type",     <<"text/plain">>),
-              content_encoding = BinH("content-encoding", undefined),
-              delivery_mode    = IntH("delivery-mode",    undefined),
-              priority         = IntH("priority",         undefined),
-              correlation_id   = BinH("correlation-id",   undefined),
-              reply_to         = BinH("reply-to",         undefined),
-              message_id       = BinH("amqp-message-id",  undefined),
-              headers          = [longstr_field(K, V) ||
-                                     {"X-" ++ K, V} <- Headers]},
-
-            {Exchange, RoutingKey} = parse_routing_information(Destination),
-
-            Method = #'basic.publish'{
-              exchange = list_to_binary(Exchange),
-              routing_key = list_to_binary(RoutingKey),
-              mandatory = false,
-              immediate = false},
-
-            case transactional(Frame) of
-                {yes, Transaction} ->
-                    extend_transaction(Transaction,
-                                       {Method, Props, BodyFragments},
-                                       State);
-                no ->
-                    {ok, send_method(Method, Props, BodyFragments, State)}
+        {ok, DestHdr} ->
+            case rabbit_stomp_destination_parser:parse_destination(DestHdr) of
+                {ok, Destination} ->
+                    Fun(Destination, DestHdr, Frame, State);
+                {error, {invalid_destination, Type, Content}} ->
+                    {ok, send_error("Invalid destination",
+                                    "'~s' is not a valid ~p destination\n",
+                                    [Content, Type],
+                                    State)};
+                {error, {unknown_destination, Content}} ->
+                    {ok, send_error("Unknown destination",
+                                    "'~s' is not a valid destination.\n" ++
+                                        "Valid exchange types are: " ++
+                                        "/exchange, /topic or /queue.\n",
+                                    [Content],
+                                    State)}
             end;
         not_found ->
             {ok, send_error("Missing destination",
-                            "SEND must include a 'destination', "
-                            "and optional 'exchange' header\n",
+                            "~p must include a 'destination' header\n",
+                            [Command],
                             State)}
-    end;
+    end.
+
+do_send(Destination, _DestHdr,
+        Frame = #stomp_frame{headers     = Headers,
+                             body_iolist = BodyFragments}, State) ->
+    {ok, _Q} = create_queue_if_needed(send, Destination, State),
+
+    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
+    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
+
+
+    Props = #'P_basic'{
+      content_type     = BinH("content-type",     <<"text/plain">>),
+      content_encoding = BinH("content-encoding", undefined),
+      delivery_mode    = IntH("delivery-mode",    undefined),
+      priority         = IntH("priority",         undefined),
+      correlation_id   = BinH("correlation-id",   undefined),
+      reply_to         = BinH("reply-to",         undefined),
+      message_id       = BinH("amqp-message-id",  undefined),
+      headers          = [longstr_field(K, V) ||
+                             {"X-" ++ K, V} <- Headers]},
+
+    {Exchange, RoutingKey} = parse_routing_information(Destination),
+
+    Method = #'basic.publish'{
+      exchange = list_to_binary(Exchange),
+      routing_key = list_to_binary(RoutingKey),
+      mandatory = false,
+      immediate = false},
+
+    case transactional(Frame) of
+        {yes, Transaction} ->
+            extend_transaction(Transaction,
+                               {Method, Props, BodyFragments},
+                               State);
+        no ->
+            {ok, send_method(Method, Props, BodyFragments, State)}
+    end.
+
+do_subscribe(Destination, DestHdr, Frame,
+             State = #state{channel = Channel, subscriptions = Subs}) ->
+    AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
+                  "auto"   -> auto;
+                  "client" -> client
+              end,
+
+    {ok, Queue} = create_queue_if_needed(subscribe, Destination, State),
+
+    ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
+                      {ok, Str} ->
+                          list_to_binary("T_" ++ Str);
+                      not_found ->
+                          list_to_binary("Q_" ++ DestHdr)
+                  end,
+
+    amqp_channel:subscribe(Channel,
+                           #'basic.consume'{
+                             queue        = Queue,
+                             consumer_tag = ConsumerTag,
+                             no_local     = false,
+                             no_ack       = (AckMode == auto),
+                             exclusive    = false},
+                           self()),
+
+    ok = bind_queue_if_needed(Queue, Destination, State),
+
+    {ok, State#state{subscriptions =
+                         dict:store(ConsumerTag, DestHdr, Subs)}}.
+
+
+process_command("SEND", Frame, State) ->
+    with_destination("SEND", Frame, State, fun do_send/4);
+
 process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
     case rabbit_stomp_frame:header(Frame, "message-id") of
         {ok, IdStr} ->
@@ -461,7 +510,8 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
             case string:substr(IdStr, 1, length(IdPrefix)) of
                 IdPrefix ->
                     DeliveryTag = list_to_integer(
-                                    string:substr(IdStr, length(IdPrefix) + 1)),
+                                    string:substr(IdStr,
+                                                  length(IdPrefix) + 1)),
                     Method = #'basic.ack'{delivery_tag = DeliveryTag,
                                           multiple = false},
                     case transactional(Frame) of
@@ -481,48 +531,16 @@ process_command("ACK", Frame, State = #state{session_id = SessionId}) ->
                             State)}
     end;
 
+process_command("BEGIN", Frame, State) ->
+    transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
 process_command("COMMIT", Frame, State) ->
     transactional_action(Frame, "COMMIT", fun commit_transaction/2, State);
 process_command("ABORT", Frame, State) ->
     transactional_action(Frame, "ABORT", fun abort_transaction/2, State);
-process_command("SUBSCRIBE", Frame,
-                State = #state{channel = Channel, subscriptions = Subs}) ->
-    AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
-                  "auto" -> auto;
-                  "client" -> client
-              end,
-    case rabbit_stomp_frame:header(Frame, "destination") of
-        {ok, DestHeader} ->
-            {ok, Destination} =
-                rabbit_stomp_destination_parser:parse_destination(DestHeader),
 
-            {ok, Queue} = create_queue_if_needed(subscribe, Destination, State),
+process_command("SUBSCRIBE", Frame, State) ->
+    with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
 
-            ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
-                              {ok, Str} ->
-                                  list_to_binary("T_" ++ Str);
-                              not_found ->
-                                  list_to_binary("Q_" ++ DestHeader)
-                          end,
-
-            amqp_channel:subscribe(Channel,
-                                   #'basic.consume'{
-                                     queue        = Queue,
-                                     consumer_tag = ConsumerTag,
-                                     no_local     = false,
-                                     no_ack       = (AckMode == auto),
-                                     exclusive    = false},
-                                   self()),
-
-            ok = bind_queue_if_needed(Queue, Destination, State),
-
-            {ok, State#state{subscriptions =
-                            dict:store(ConsumerTag, DestHeader, Subs)}};
-        not_found ->
-            {ok, send_error("Missing destination",
-                            "SUBSCRIBE must include a 'destination' header\n",
-                            State)}
-    end;
 process_command("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
     ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, IdStr} ->

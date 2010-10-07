@@ -5,7 +5,8 @@ import sys
 import logging
 
 def run_unittests():
-    modules = ['parsing', 'destinations', 'lifecycle', 'transactions', 'ack']
+    modules = ['parsing', 'destinations', 'lifecycle', 'transactions',
+               'ack', 'errors']
 
     suite = unittest.TestSuite()
     for m in modules:
