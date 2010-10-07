@@ -6,12 +6,39 @@ $(document).ready(function() {
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     user_administrator = user.administrator;
+    setup_constant_events();
+    update_vhosts();
     app.run();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
     }
 });
+
+function setup_constant_events() {
+    $('#update-every').change(function() {
+            var interval = $(this).val();
+            if (interval == '') interval = null;
+            set_timer_interval(interval);
+        });
+    $('#show-vhost').change(function() {
+            current_vhost = $(this).val();
+            update();
+        });
+}
+
+function update_vhosts() {
+    var vhosts = JSON.parse(sync_get('/vhosts'));
+    var select = $('#show-vhost').get(0);
+    select.options.length = vhosts.length + 1;
+    var index = 0;
+    for (var i = 0; i < vhosts.length; i++) {
+        var vhost = vhosts[i].name;
+        select.options[i + 1] = new Option(vhost);
+        if (vhost == current_vhost) index = i + 1;
+    }
+    select.selectedIndex = index;
+}
 
 var app = $.sammy(dispatcher);
 function dispatcher() {
@@ -101,13 +128,17 @@ function dispatcher() {
                 'vhost', '#/vhosts');
         });
     this.put('#/vhosts', function() {
-            if (sync_put(this, '/vhosts/:name'))
+            if (sync_put(this, '/vhosts/:name')) {
+                update_vhosts();
                 update();
+            }
             return false;
         });
     this.del('#/vhosts', function() {
-            if (sync_delete(this, '/vhosts/:name'))
+            if (sync_delete(this, '/vhosts/:name')) {
+                update_vhosts();
                 go_to('#/vhosts');
+            }
             return false;
         });
 
@@ -151,6 +182,7 @@ function go_to(url) {
 var current_template;
 var current_reqs;
 var current_highlight;
+var current_vhost = '';
 var timer;
 var timer_interval;
 
@@ -171,7 +203,7 @@ function render(reqs, template, highlight) {
 
 function update() {
     clearInterval(timer);
-    with_update(current_reqs, [], function(html) {
+    with_update(function(html) {
             replace_content('main', html);
             postprocess();
             set_timer_interval(5000);
@@ -180,7 +212,7 @@ function update() {
 
 function partial_update() {
     if ($('.updatable').length > 0) {
-        with_update(current_reqs, [], function(html) {
+        with_update(function(html) {
             replace_content('scratch', html);
             var befores = $('#main .updatable');
             var afters = $('#scratch .updatable');
@@ -194,13 +226,28 @@ function partial_update() {
     }
 }
 
-function with_update(reqs, acc, fun) {
-    with_reqs(current_reqs, [], function(json) {
+function with_update(fun) {
+    with_reqs(vhostise(current_reqs), [], function(json) {
             json.statistics_level = statistics_level;
             var html = format(current_template, json);
             fun(html);
             update_status('ok');
         });
+}
+
+function vhostise(reqs) {
+    if (current_vhost == '' ||
+        ! (current_template in {'queues':'', 'exchanges':''})) {
+        return reqs;
+    }
+    else {
+        var reqs2 = {};
+        for (k in reqs) {
+            reqs2[k] = reqs[k] + '/' + esc(current_vhost);
+        }
+
+        return reqs2;
+    }
 }
 
 function error_popup(text) {
@@ -236,11 +283,6 @@ function postprocess() {
             window.location = path;
             setTimeout('app.run()');
             return false;
-        });
-    $('#update-every').change(function() {
-            var interval = $(this).val();
-            if (interval == '') interval = null;
-            set_timer_interval(interval);
         });
     if (! user_administrator) {
         $('.administrator-only').remove();
