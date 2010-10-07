@@ -654,13 +654,12 @@ handle_cast({write, Guid, ClientPid},
                     [_] = ets:update_counter(
                             FileSummaryEts, File,
                             [{#file_summary.valid_total_size, TotalSize}]),
-                    noreply(
-                      State #msstate { sum_valid_data = SumValid + TotalSize })
+                    noreply(State #msstate {
+                              sum_valid_data = SumValid + TotalSize })
             end;
         {_Mask, #msg_location { ref_count = RefCount }} ->
             %% We already know about it, just update counter. Only
-            %% update field otherwise bad interaction with concurrent
-            %% GC
+            %% update field otherwise bad interaction with concurrent GC
             ok = index_update_ref_count(Guid, RefCount + 1, State),
             noreply(State)
     end;
@@ -1014,7 +1013,9 @@ safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
 %% msg (if there is one). If the msg is older than the client death
 %% msg, and it has a 0 ref_count we must only alter the ref_count it,
 %% not rewrite the msg - rewriting it would make it younger than the
-%% death msg and thus should be ignored.
+%% death msg and thus should be ignored. Note that this will
+%% (correctly) return false when testing to remove the death msg
+%% itself.
 should_mask_action(ClientPid, Guid,
                    State = #msstate { dying_clients_ets = DyingClientsEts }) ->
     Location = index_lookup(Guid, State),
@@ -1025,11 +1026,11 @@ should_mask_action(ClientPid, Guid,
              case Location of
                  not_found ->
                      true;
-                 #msg_location { file = FileB, offset = OffsetB,
+                 #msg_location { file = File, offset = Offset,
                                  ref_count = RefCount } ->
-                     #msg_location { file = FileA, offset = OffsetA } =
+                     #msg_location { file = DeathFile, offset = DeathOffset } =
                          index_lookup(DeathGuid, State),
-                     case {FileA, OffsetA} < {FileB, OffsetB} of
+                     case {DeathFile, DeathOffset} < {File, Offset} of
                          true  -> true;
                          false -> case RefCount of
                                       0 -> false_if_increment;
