@@ -227,38 +227,20 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 publish(X = #exchange{name = XName}, Delivery) ->
-    QNames = find_qnames(Delivery, queue:from_list([X]),
-                         sets:from_list([XName]), []),
-    rabbit_router:deliver(QNames, Delivery).
+    rabbit_router:deliver(
+      route(Delivery, {queue:from_list([X]), sets:from_list([XName]), []}),
+      Delivery).
 
-find_qnames(Delivery, WorkList, SeenXs, QNames) ->
+route(Delivery, {WorkList, SeenXs, QNames}) ->
     case queue:out(WorkList) of
         {empty, _WorkList} ->
             lists:usort(QNames);
         {{value, X = #exchange{type = Type}}, WorkList1} ->
-            DstNames =
-                process_alternate(
-                  X, ((type_to_module(Type)):publish(X, Delivery))),
-            {WorkList2, SeenXs1, QNames1} =
-                lists:foldl(
-                  fun (XName = #resource{kind = exchange},
-                       {WorkListN, SeenXsN, QNamesN} = Acc) ->
-                          case sets:is_element(XName, SeenXsN) of
-                              true  -> Acc;
-                              false -> {case lookup(XName) of
-                                            {ok, X1} ->
-                                                queue:in(X1, WorkListN);
-                                            {error, not_found} ->
-                                                WorkListN
-                                        end,
-                                        sets:add_element(XName, SeenXsN),
-                                        QNamesN}
-                          end;
-                      (QName = #resource{kind = queue},
-                       {WorkListN, SeenXsN, QNamesN})->
-                          {WorkListN, SeenXsN, [QName | QNamesN]}
-                  end, {WorkList1, SeenXs, QNames}, DstNames),
-            find_qnames(Delivery, WorkList2, SeenXs1, QNames1)
+            DstNames = process_alternate(
+                         X, ((type_to_module(Type)):publish(X, Delivery))),
+            route(Delivery,
+                  lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
+                              DstNames))
     end.
 
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->
@@ -268,6 +250,19 @@ process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     end;
 process_alternate(_X, Results) ->
     Results.
+
+process_route(#resource{kind = exchange} = XName,
+              {WorkList, SeenXs, QNames} = Acc) ->
+    case sets:is_element(XName, SeenXs) of
+        true  -> Acc;
+        false -> {case lookup(XName) of
+                      {ok, X}            -> queue:in(X, WorkList);
+                      {error, not_found} -> WorkList
+                  end, sets:add_element(XName, SeenXs), QNames}
+    end;
+process_route(#resource{kind = queue} = QName,
+              {WorkList, SeenXs, QNames}) ->
+    {WorkList, SeenXs, [QName | QNames]}.
 
 call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
