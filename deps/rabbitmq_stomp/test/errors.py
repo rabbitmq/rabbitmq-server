@@ -33,6 +33,22 @@ class TestErrors(base.BaseTest):
         err = self.listener.errors[0]
         self.assertEquals("Unknown destination", err['headers']['message'])
 
+    def test_send_missing_destination(self):
+        self.__test_missing_destination("SEND")
+
+    def test_send_missing_destination(self):
+        self.__test_missing_destination("SUBSCRIBE")
+
+    def __test_missing_destination(self, command):
+        self.listener.reset()
+        self.conn.send_frame(command)
+
+        self.assertTrue(self.listener.await())
+        self.assertEquals(1, len(self.listener.errors))
+
+        err = self.listener.errors[0]
+        self.assertEquals("Missing destination", err['headers']['message'])
+
     def __test_invalid_destination(self, dtype, content):
         self.listener.reset()
         self.conn.send(destination="/" + dtype + content)
