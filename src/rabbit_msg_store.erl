@@ -638,18 +638,22 @@ handle_cast({write, Guid, ClientPid},
             write_message(Guid, Msg, State);
         {Mask, #msg_location { ref_count = 0, file = File,
                                total_size = TotalSize }} ->
-            [#file_summary { locked = Locked, file_size = FileSize } =
-                 Summary] = ets:lookup(FileSummaryEts, File),
-            case {Mask, Locked} of
-                {false, true} ->
+            case {Mask, ets:lookup(FileSummaryEts, File)} of
+                {false, [#file_summary { locked = true }]} ->
                     ok = index_delete(Guid, State),
                     write_message(Guid, Msg, State);
-                {false_if_increment, true} ->
+                {false_if_increment, [#file_summary { locked = true }]} ->
+                    %% The msg for Guid is older then the client death
+                    %% message, but seeing as it's being GC'd
+                    %% currently, we'll have to write a new copy,
+                    %% which will then be younger, so ignore this
+                    %% write.
                     noreply(State);
-                {_Mask, false} ->
+                {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
-                    ok = add_to_file_summary(Summary, TotalSize,
-                                             FileSize, State),
+                    [_] = ets:update_counter(
+                            FileSummaryEts, File,
+                            [{#file_summary.valid_total_size, TotalSize}]),
                     noreply(
                       State #msstate { sum_valid_data = SumValid + TotalSize })
             end;
@@ -835,27 +839,16 @@ write_message(Guid, Msg,
     ok = index_insert(
            #msg_location { guid = Guid, ref_count = 1, file = CurFile,
                            offset = CurOffset, total_size = TotalSize }, State),
-    [#file_summary { right     = undefined,
-                     locked    = false,
-                     file_size = FileSize } = Summary] =
+    [#file_summary { right = undefined, locked = false }] =
         ets:lookup(FileSummaryEts, CurFile),
-    ok = add_to_file_summary(Summary, TotalSize, FileSize + TotalSize, State),
+    [_,_] = ets:update_counter(FileSummaryEts, CurFile,
+                               [{#file_summary.valid_total_size, TotalSize},
+                                {#file_summary.file_size,        TotalSize}]),
     NextOffset = CurOffset + TotalSize,
     noreply(maybe_roll_to_new_file(
               NextOffset, State #msstate {
-                            sum_valid_data = SumValid + TotalSize,
+                            sum_valid_data = SumValid    + TotalSize,
                             sum_file_size  = SumFileSize + TotalSize })).
-
-add_to_file_summary(#file_summary { file             = File,
-                                    valid_total_size = ValidTotalSize },
-                    TotalSize, FileSize,
-                    #msstate { file_summary_ets = FileSummaryEts }) ->
-    ValidTotalSize1 = ValidTotalSize + TotalSize,
-    true = ets:update_element(
-             FileSummaryEts, File,
-             [{#file_summary.valid_total_size, ValidTotalSize1},
-              {#file_summary.file_size,        FileSize}]),
-    ok.
 
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->
@@ -971,21 +964,19 @@ remove_message(Guid, ClientPid,
                 %% because there may be further writes in the mailbox
                 %% for the same msg.
                 1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
-                     [#file_summary { valid_total_size = ValidTotalSize,
-                                      locked           = Locked }] =
-                         ets:lookup(FileSummaryEts, File),
-                     case Locked of
-                         true  -> add_to_pending_gc_completion(
-                                    {remove, Guid, ClientPid}, State);
-                         false -> ok = Dec(),
-                                  true = ets:update_element(
-                                           FileSummaryEts, File,
-                                           [{#file_summary.valid_total_size,
-                                             ValidTotalSize - TotalSize}]),
-                                  delete_file_if_empty(
-                                    File,
-                                    State #msstate {
-                                      sum_valid_data = SumValid - TotalSize })
+                     case ets:lookup(FileSummaryEts, File) of
+                         [#file_summary { locked = true }] ->
+                             add_to_pending_gc_completion(
+                               {remove, Guid, ClientPid}, State);
+                         [#file_summary {}] ->
+                             ok = Dec(),
+                             [_] = ets:update_counter(
+                                     FileSummaryEts, File,
+                                     [{#file_summary.valid_total_size,
+                                       -TotalSize}]),
+                             delete_file_if_empty(
+                               File, State #msstate {
+                                       sum_valid_data = SumValid - TotalSize })
                      end;
                 _ -> ok = decrement_cache(DedupCacheEts, Guid),
                      ok = Dec(),
@@ -1019,6 +1010,11 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
 
+%% Detect whether the Guid is older or younger than the client's death
+%% msg (if there is one). If the msg is older than the client death
+%% msg, and it has a 0 ref_count we must only alter the ref_count it,
+%% not rewrite the msg - rewriting it would make it younger than the
+%% death msg and thus should be ignored.
 should_mask_action(ClientPid, Guid,
                    State = #msstate { dying_clients_ets = DyingClientsEts }) ->
     Location = index_lookup(Guid, State),
