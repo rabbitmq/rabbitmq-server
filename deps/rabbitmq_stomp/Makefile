@@ -1,7 +1,6 @@
 PACKAGE=rabbit_stomp
 APPNAME=rabbit_stomp
 DEPS=rabbitmq-server rabbitmq-erlang-client
-INTERNAL_DEPS=stomppy
 
 START_RABBIT_IN_TESTS=true
 TEST_APPS=rabbit_stomp
@@ -12,7 +11,10 @@ TEST_ARGS=-rabbit_stomp listeners "[{\"0.0.0.0\",61613}]"
 
 include ../include.mk
 
-test: unittest
+testdeps:
+	make -C deps/stomppy
+
+test: unittest testdeps
 
 unittest: $(TARGETS) $(TEST_TARGETS)
 	ERL_LIBS=$(LIBS_PATH) $(ERL) $(TEST_LOAD_PATH) \
