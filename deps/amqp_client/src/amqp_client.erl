@@ -23,30 +23,26 @@
 %%   Contributor(s): ____________________.
 
 %% @private
--module(amqp_channel_sup_sup).
+-module(amqp_client).
 
--include("amqp_client.hrl").
+-behaviour(application).
 
--behaviour(supervisor2).
-
--export([start_link/1, start_channel_sup/3]).
--export([init/1]).
+-export([start/0]).
+-export([start/2, stop/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type) ->
-    supervisor2:start_link(?MODULE, [Type]).
-
-start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
-    supervisor2:start_child(Sup, [InfraArgs, ChannelNumber]).
+start() ->
+    application:start(amqp_client).
 
 %%---------------------------------------------------------------------------
-%% supervisor2 callbacks
+%% application callbacks
 %%---------------------------------------------------------------------------
 
-init([Type]) ->
-    {ok, {{simple_one_for_one, 0, 1},
-          [{channel_sup, {amqp_channel_sup, start_link, [Type]},
-            temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.
+start(_StartType, _StartArgs) ->
+    amqp_sup:start_link().
+
+stop(_State) ->
+    ok.

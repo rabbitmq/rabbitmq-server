@@ -34,12 +34,19 @@ non_existent_exchange_test(Connection) ->
     RoutingKey = <<"a">>, 
     Payload = <<"foobar">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, OtherChannel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
+    
     %% Deliberately mix up the routingkey and exchange arguments
     Publish = #'basic.publish'{exchange = RoutingKey, routing_key = X},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     test_util:wait_for_death(Channel),
-    ?assertMatch(true, is_process_alive(Connection)),
+
+    %% Make sure Connection and OtherChannel still serve us and are not dead
+    {ok, _} = amqp_connection:open_channel(Connection),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(OtherChannel,
+                          #'exchange.declare'{exchange = test_util:uuid()}),
     amqp_connection:close(Connection).
 
 bogus_rpc_test(Connection) ->
@@ -61,14 +68,34 @@ bogus_rpc_test(Connection) ->
     amqp_connection:close(Connection).
 
 hard_error_test(Connection) ->
-    unlink(Connection),
     {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, OtherChannel} = amqp_connection:open_channel(Connection),
+    OtherChannelMonitor = erlang:monitor(process, OtherChannel),
     Qos = #'basic.qos'{global = true},
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{{server_initiated_close, Code, _Text}, _} ->
-            ?assertMatch(?NOT_IMPLEMENTED, Code)
+        exit:{{connection_closing, _}, _} = Reason ->
+            %% Network case
+            ?assertMatch({{connection_closing,
+                           {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _},
+                         Reason);
+        exit:Reason ->
+            %% Direct case
+            ?assertMatch({{server_initiated_close, ?NOT_IMPLEMENTED, _}, _},
+                         Reason)
+    end,
+    receive {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
+        case OtherExit of
+            %% Direct case
+            %% TODO fix error code in the direct case
+            killed -> ok;
+            %% Network case
+            _      -> ?assertMatch(
+                         {connection_closing,
+                          {server_initiated_close, ?NOT_IMPLEMENTED, _}},
+                         OtherExit)
+        end
     end,
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection).
