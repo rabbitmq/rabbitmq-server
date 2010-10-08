@@ -237,7 +237,7 @@ route(Delivery, {WorkList, SeenXs, QNames}) ->
             lists:usort(QNames);
         {{value, X = #exchange{type = Type}}, WorkList1} ->
             DstNames = process_alternate(
-                         X, ((type_to_module(Type)):publish(X, Delivery))),
+                         X, ((type_to_module(Type)):route(X, Delivery))),
             route(Delivery,
                   lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
                               DstNames))

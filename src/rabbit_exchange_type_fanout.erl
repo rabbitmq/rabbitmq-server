@@ -34,7 +34,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, publish/2]).
+-export([description/0, route/2]).
 -export([validate/1, create/1, recover/2, delete/2, add_binding/2,
          remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -50,7 +50,7 @@ description() ->
     [{name, <<"fanout">>},
      {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name}, _Delivery) ->
+route(#exchange{name = Name}, _Delivery) ->
     rabbit_router:match_routing_key(Name, '_').
 
 validate(_X) -> ok.
