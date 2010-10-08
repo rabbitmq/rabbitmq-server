@@ -331,14 +331,12 @@ remove_for_destination(DstName, FwdDeleteFun) ->
               end, Grouped)
     end.
 
-post_binding_removal(IsDeleted, Src = #exchange{ type = Type }, Bs) ->
-    Module = type_to_module(Type),
-    case IsDeleted of
-        {auto_deleted, Fun} -> ok = Module:delete(Src, Bs),
-                               Fun(),
-                               ok;
-        not_deleted         -> ok = Module:remove_bindings(Src, Bs)
-    end.
+post_binding_removal(not_deleted, Src = #exchange{ type = Type }, Bs) ->
+    ok = type_to_module(Type):remove_bindings(Src, Bs);
+post_binding_removal({auto_deleted, Fun}, Src = #exchange{ type = Type }, Bs) ->
+    ok = type_to_module(Type):delete(Src, Bs),
+    Fun(),
+    ok.
 
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to
