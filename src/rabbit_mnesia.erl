@@ -93,6 +93,8 @@ status() ->
 init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
+    ok = rabbit_misc:write_term_file(dir() ++ "/" ++ ?SCHEMA_VERSION_FILENAME,
+                                     [?SCHEMA_VERSION]),
     ok = init_db(read_cluster_nodes_config(), true),
     ok.
 
@@ -245,10 +247,6 @@ ensure_mnesia_dir() ->
         {error, Reason} ->
             throw({error, {cannot_create_mnesia_dir, MnesiaDir, Reason}});
         ok ->
-            {ok, File} = file:open(MnesiaDir ++ ?SCHEMA_VERSION_FILENAME,
-                                   write),
-            io:format(File, "~p.", [?SCHEMA_VERSION]),
-            ok = file:close(File),
             ok
     end.
 
