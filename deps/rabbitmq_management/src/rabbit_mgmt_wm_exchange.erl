@@ -80,7 +80,6 @@ is_authorized(ReqData, Context) ->
 
 exchange(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        none      -> not_found;
         not_found -> not_found;
         VHost     -> Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
                      case rabbit_exchange:lookup(Name) of
