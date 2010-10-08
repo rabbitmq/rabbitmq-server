@@ -85,7 +85,6 @@ is_authorized(ReqData, Context) ->
 
 queue(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        none      -> not_found;
         not_found -> not_found;
         VHost     -> Name = rabbit_misc:r(VHost, queue,
                                           rabbit_mgmt_util:id(queue, ReqData)),
