@@ -236,14 +236,19 @@ function with_update(fun) {
 }
 
 function vhostise(reqs) {
-    if (current_vhost == '' ||
-        ! (current_template in {'queues':'', 'exchanges':''})) {
+    if (current_vhost == '') {
         return reqs;
     }
     else {
         var reqs2 = {};
         for (k in reqs) {
-            reqs2[k] = reqs[k] + '/' + esc(current_vhost);
+            var req = reqs[k];
+            if (req in {'/queues':'', '/exchanges':''}) {
+                reqs2[k] = req + '/' + esc(current_vhost);
+            }
+            else {
+                reqs2[k] = req;
+            }
         }
 
         return reqs2;
