@@ -44,6 +44,9 @@
 
 -include("rabbit.hrl").
 
+-define(SCHEMA_VERSION, origin).
+-define(SCHEMA_VERSION_FILENAME, "rabbitmq_schema_version").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -241,7 +244,12 @@ ensure_mnesia_dir() ->
     case filelib:ensure_dir(MnesiaDir) of
         {error, Reason} ->
             throw({error, {cannot_create_mnesia_dir, MnesiaDir, Reason}});
-        ok -> ok
+        ok ->
+            {ok, File} = file:open(MnesiaDir ++ ?SCHEMA_VERSION_FILENAME,
+                                   write),
+            io:format(File, "~p.", [?SCHEMA_VERSION]),
+            ok = file:close(File),
+            ok
     end.
 
 ensure_mnesia_running() ->
