@@ -94,7 +94,7 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = rabbit_misc:write_term_file(filename:join(
-                                       [dir(), ?SCHEMA_VERSION_FILENAME]),
+                                       dir(), ?SCHEMA_VERSION_FILENAME),
                                      [?SCHEMA_VERSION]),
     ok = init_db(read_cluster_nodes_config(), true),
     ok.
