@@ -35,7 +35,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case queues(ReqData) of
+    {case queues0(ReqData) of
          vhost_not_found -> false;
          _               -> true
      end, ReqData, Context}.
@@ -52,6 +52,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 queues(ReqData) ->
-    [rabbit_mgmt_format:queue(Q) ||
-        Q <- rabbit_mgmt_util:all_or_one_vhost(ReqData,
-                                               fun rabbit_amqqueue:list/1)].
+    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)].
+
+queues0(ReqData) ->
+    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).

@@ -22,7 +22,7 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([allowed_methods/2, post_is_create/2, create_path/2]).
--export([content_types_accepted/2, accept_content/2]).
+-export([content_types_accepted/2, accept_content/2, resource_exists/2]).
 -export([bindings/1]).
 
 -include("rabbit_mgmt.hrl").
@@ -36,6 +36,12 @@ init([Mode]) ->
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+resource_exists(ReqData, {Mode, Context}) ->
+    {case list_bindings(Mode, ReqData) of
+         vhost_not_found -> false;
+         _               -> true
+     end, ReqData, {Mode, Context}}.
 
 content_types_accepted(ReqData, Context) ->
    {[{"application/json", accept_content}], ReqData, Context}.

@@ -222,6 +222,7 @@ exchanges_test() ->
     http_delete("/exchanges/myvhost/foo", ?NOT_FOUND),
 
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
+    http_get("/exchanges/badvhost", ?NOT_FOUND),
     ok.
 
 queues_test() ->
@@ -262,6 +263,7 @@ queues_test() ->
     http_delete("/queues/%2f/foo", ?NO_CONTENT),
     http_delete("/queues/%2f/baz", ?NO_CONTENT),
     http_delete("/queues/%2f/foo", ?NOT_FOUND),
+    http_get("/queues/badvhost", ?NOT_FOUND),
     ok.
 
 bindings_test() ->
@@ -299,6 +301,7 @@ bindings_test() ->
     http_delete("/bindings/%2f/myqueue/myexchange/key_routing", ?NOT_FOUND),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    http_get("/bindings/badvhost", ?NOT_FOUND),
     ok.
 
 bindings_post_test() ->
