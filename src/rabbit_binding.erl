@@ -332,9 +332,9 @@ remove_for_destination(DstName, FwdDeleteFun) ->
     end.
 
 post_binding_removal(not_deleted, Src = #exchange{ type = Type }, Bs) ->
-    ok = type_to_module(Type):remove_bindings(Src, Bs);
+    ok = (type_to_module(Type)):remove_bindings(Src, Bs);
 post_binding_removal({auto_deleted, Fun}, Src = #exchange{ type = Type }, Bs) ->
-    ok = type_to_module(Type):delete(Src, Bs),
+    ok = (type_to_module(Type)):delete(Src, Bs),
     Fun(),
     ok.
 
