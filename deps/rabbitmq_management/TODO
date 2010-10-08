@@ -1,6 +1,5 @@
 Before first "proper" release
 =============================
-Do sensible things with vhosts in UI.
 Write more thorough unit tests, especially around:
   * Listings
   * Rates / grouping (more multi-stage stuff).
