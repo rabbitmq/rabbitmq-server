@@ -125,8 +125,7 @@ unpack_binding_props(Str) ->
 unpack_binding_props0([Key | Args]) ->
     try
         {unquote_binding(Key), unpack_binding_args(Args)}
-    catch throw:E ->
-            E
+    catch E -> E
     end;
 unpack_binding_props0([]) ->
     {bad_request, empty_properties}.
