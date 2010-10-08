@@ -30,15 +30,20 @@ tokenise_test() ->
     ok.
 
 pack_binding_test() ->
-    assert_binding(<<"key_foo">>,
+    assert_binding(<<"foo">>,
                    <<"foo">>, []),
-    assert_binding(<<"key_foo%5Fbar%2Fbash">>,
+    assert_binding(<<"foo%5Fbar%2Fbash">>,
                    <<"foo_bar/bash">>, []),
-    assert_binding(<<"key_foo_arg1_foo%5Fbar%2Fbash">>,
+    assert_binding(<<"foo_arg1_foo%5Fbar%2Fbash">>,
                    <<"foo">>, [{<<"arg1">>, longstr, <<"foo_bar/bash">>}]),
-    assert_binding(<<"key_foo_arg1_bar_arg2_bash">>,
+    assert_binding(<<"foo_arg1_bar_arg2_bash">>,
                    <<"foo">>, [{<<"arg1">>, longstr, <<"bar">>},
                                {<<"arg2">>, longstr, <<"bash">>}]),
+    assert_binding(<<"_arg1_bar">>,
+                   <<"">>, [{<<"arg1">>, longstr, <<"bar">>}]),
+
+    {bad_request, {no_value, "routing"}} =
+        rabbit_mgmt_format:unpack_binding_props(<<"bad_routing">>),
     ok.
 
 %%--------------------------------------------------------------------

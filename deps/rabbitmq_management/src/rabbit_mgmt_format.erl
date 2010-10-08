@@ -106,8 +106,7 @@ pack_binding_props(Key, Args) ->
           [quote_binding(K) ++ "_" ++
                quote_binding(dict:fetch(K, Dict)) || K <- ArgsKeys],
           "_"),
-    %% TODO can we eliminate the key_ here?
-    list_to_binary("key_" ++ quote_binding(Key) ++
+    list_to_binary(quote_binding(Key) ++
                        case PackedArgs of
                            "" -> "";
                            _  -> "_" ++ PackedArgs
@@ -123,13 +122,19 @@ unpack_binding_props(B) when is_binary(B) ->
 unpack_binding_props(Str) ->
     unpack_binding_props0(tokenise(Str)).
 
-unpack_binding_props0(["key", Key | Args]) ->
-    {unquote_binding(Key), unpack_binding_args(Args)};
-unpack_binding_props0(Tokens) ->
-    {bad_request, Tokens}.
+unpack_binding_props0([Key | Args]) ->
+    try
+        {unquote_binding(Key), unpack_binding_args(Args)}
+    catch throw:E ->
+            E
+    end;
+unpack_binding_props0([]) ->
+    {bad_request, empty_properties}.
 
 unpack_binding_args([]) ->
     [];
+unpack_binding_args([K]) ->
+    throw({bad_request, {no_value, K}});
 unpack_binding_args([K, V | Rest]) ->
     Value = unquote_binding(V),
     [{unquote_binding(K), args_type(Value), Value} | unpack_binding_args(Rest)].
