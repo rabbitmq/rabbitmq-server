@@ -569,20 +569,14 @@ internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
 
 read_msg(MsgStatus = #msg_status { msg           = undefined,
                                    guid          = Guid,
-                                   index_on_disk = IndexOnDisk,
                                    is_persistent = IsPersistent },
-         State = #vqstate { ram_msg_count    = RamMsgCount,
-                            ram_index_count  = RamIndexCount,
+         State = #vqstate { ram_msg_count     = RamMsgCount,
                             msg_store_clients = MSCState}) ->
     {{ok, Msg = #basic_message {}}, MSCState1} =
         read_from_msg_store(MSCState, IsPersistent, Guid),
 
-    RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
-    true = RamIndexCount1 >= 0, %% ASSERTION
-
     {MsgStatus #msg_status { msg = Msg },
      State #vqstate { ram_msg_count     = RamMsgCount + 1,
-                      ram_index_count   = RamIndexCount1,
                       msg_store_clients = MSCState1 }};
 read_msg(MsgStatus, State) ->
     {MsgStatus, State}.
@@ -593,9 +587,9 @@ internal_fetch(AckRequired,
                  is_persistent = IsPersistent, is_delivered = IsDelivered,
                  msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk },
                State = #vqstate {
-                 ram_msg_count = RamMsgCount, out_counter = OutCount,
-                 index_state = IndexState, len = Len, persistent_count = PCount,
-                 pending_ack = PA }) ->
+                 ram_msg_count = RamMsgCount, ram_index_count = RamIndexCount,
+                 out_counter = OutCount, index_state = IndexState, len = Len,
+                 persistent_count = PCount, pending_ack = PA }) ->
     %% 1. Mark it delivered if necessary
     IndexState1 = maybe_write_delivered(
                     IndexOnDisk andalso not IsDelivered,
@@ -626,8 +620,12 @@ internal_fetch(AckRequired,
     Len1 = Len - 1,
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
+    RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
+    true = RamIndexCount1 >= 0, %% ASSERTION
+
     {{Msg, IsDelivered, AckTag, Len1},
      a(State #vqstate { ram_msg_count    = RamMsgCount1,
+                        ram_index_count  = RamIndexCount1,
                         out_counter      = OutCount + 1,
                         index_state      = IndexState2,
                         len              = Len1,
