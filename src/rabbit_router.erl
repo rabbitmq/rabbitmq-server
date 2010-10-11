@@ -102,6 +102,7 @@ match_routing_key(SrcName, RoutingKey) ->
                                           key         = RoutingKey,
                                           _           = '_'}},
     mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]).
+
 %%--------------------------------------------------------------------
 
 fold_deliveries({Pid, true},{_, Handled}) -> {true, [Pid|Handled]};
