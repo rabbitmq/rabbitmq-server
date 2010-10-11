@@ -84,7 +84,7 @@
                               rabbit_types:error('in_use')).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
-        -> 'not_deleted' | {'auto_deleted', dict:dictionary()}).
+        -> 'not_deleted' | {'deleted', rabbit_binding:dictionary()}).
 
 -endif.
 
@@ -278,11 +278,10 @@ delete(XName, IfUnused) ->
               false -> fun unconditional_delete/1
           end,
     case call_with_exchange(XName, Fun) of
-        {deleted, X, Bs, Grouped} ->
-            Grouped1 = dict:update(XName, fun ({_X, _MaybeDeleted, Bs1}) ->
-                                                  {X, deleted, [Bs | Bs1]}
-                                          end, {X, deleted, Bs}, Grouped),
-            ok = (rabbit_binding:post_binding_removal_fun(Grouped1))();
+        {deleted, X, Bs, Deletions} ->
+            ok = rabbit_binding:process_deletions(
+                   rabbit_binding:add_deletion(
+                     XName, {X, deleted, Bs}, Deletions));
         Error = {error, _InUseOrNotFound} ->
             Error
     end.
@@ -291,8 +290,8 @@ maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
 maybe_auto_delete(#exchange{auto_delete = true} = X) ->
     case conditional_delete(X) of
-        {error, in_use}       -> not_deleted;
-        {deleted, X, [], Res} -> {auto_deleted, Res}
+        {error, in_use}             -> not_deleted;
+        {deleted, X, [], Deletions} -> {deleted, Deletions}
     end.
 
 conditional_delete(X = #exchange{name = XName}) ->
@@ -302,8 +301,7 @@ conditional_delete(X = #exchange{name = XName}) ->
     end.
 
 unconditional_delete(X = #exchange{name = XName}) ->
-    Bindings = rabbit_binding:remove_for_source(XName),
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
-    rabbit_event:notify(exchange_deleted, [{name, XName}]),
-    {deleted, X, Bindings, rabbit_binding:remove_for_destination_inner(XName)}.
+    Bindings = rabbit_binding:remove_for_source(XName),
+    {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
