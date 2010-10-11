@@ -44,8 +44,8 @@
 
 -include("rabbit.hrl").
 
--define(SCHEMA_VERSION, origin).
--define(SCHEMA_VERSION_FILENAME, "rabbitmq_schema_version").
+-define(SCHEMA_VERSION_SET, []).
+-define(SCHEMA_VERSION_FILENAME, "schema_version").
 
 %%----------------------------------------------------------------------------
 
@@ -95,7 +95,7 @@ init() ->
     ok = ensure_mnesia_dir(),
     ok = rabbit_misc:write_term_file(filename:join(
                                        dir(), ?SCHEMA_VERSION_FILENAME),
-                                     [?SCHEMA_VERSION]),
+                                     [?SCHEMA_VERSION_SET]),
     ok = init_db(read_cluster_nodes_config(), true),
     ok.
 
