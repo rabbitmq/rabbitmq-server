@@ -408,10 +408,6 @@ anything_but( NotThis, NotThis,    This) -> This;
 anything_but( NotThis,    This, NotThis) -> This;
 anything_but(_NotThis,    This,    This) -> This.
 
-boolean_or( True, True, _Any) -> True;
-boolean_or( True, _Any, True) -> True;
-boolean_or(_True,  Any,  Any) -> Any.
-
 new_deletions() -> dict:new().
 
 add_deletion(XName, Entry, Deletions) ->
@@ -423,7 +419,8 @@ combine_deletions(Deletions1, Deletions2) ->
                Deletions1, Deletions2).
 
 merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
-    {anything_but(undefined, X1, X2), boolean_or(deleted, Deleted1, Deleted2),
+    {anything_but(undefined, X1, X2),
+     anything_but(not_deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
 
 process_deletions(Deletions) ->
