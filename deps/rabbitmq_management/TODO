@@ -13,6 +13,11 @@ DTRT in a cluster
   One rabbit_event / rabbit_mgmt_db per cluster
   Per-node events to replace external_stats
 
+(At some point in this group
+    * get e.g. mikeb to pronounce self happy
+    * move to BPB
+    * move these into Bugzilla)
+
 Time series is a priority by itself
 ===================================
 Cope with e.g. channel going away, want to view exchange / queue stats in the
