@@ -340,24 +340,13 @@ clear_permission_cache() ->
     erase(permission_cache),
     ok.
 
-check_configure_permitted(Resource, Action, #ch{username = Username}) ->
-    DE = is_default_exchange(Resource),
-    if DE andalso Action =/= 'exchange.declare' ->
-            rabbit_misc:protocol_error(
-              access_refused, "cannot ~p the default exchange", [Action]);
-       true -> ok
-    end,
+check_configure_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, configure).
 
-check_write_permitted(Resource, _Action, #ch{username = Username}) ->
+check_write_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, write).
 
-check_read_permitted(Resource, Action, #ch{username = Username}) ->
-    case is_default_exchange(Resource) of
-        true -> rabbit_misc:protocol_error(
-                  access_refused, "cannot ~p the default exchange", [Action]);
-        false -> ok
-    end,
+check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
@@ -379,10 +368,11 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
-is_default_exchange(#resource{kind = exchange, name = N}) ->
-    N =:= <<"">> orelse N =:= <<"amq.default">>;
-is_default_exchange(_) ->
-    false.
+check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
+    rabbit_misc:protocol_error(
+      access_refused, "operation not permitted on the default exchange", []);
+check_not_default_exchange(_) ->
+    ok.
 
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
@@ -444,7 +434,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    transaction_id = TxnKey,
                                    writer_pid     = WriterPid}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_write_permitted(ExchangeName, 'basic.publish', State),
+    check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
@@ -497,7 +487,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                              reader_pid = ReaderPid,
                              next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_read_permitted(QueueName, 'basic.get', State),
+    check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
@@ -537,7 +527,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-            check_read_permitted(QueueName, 'basic.consume', State),
+            check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
                     <<>>  -> rabbit_guid:binstring_guid("amq.ctag");
@@ -697,7 +687,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configure_permitted(ExchangeName, 'exchange.declare', State),
+    check_configure_permitted(ExchangeName, State),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
@@ -705,10 +695,8 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                 case rabbit_misc:r_arg(VHostPath, exchange, Args,
                                        <<"alternate-exchange">>) of
                     undefined -> ok;
-                    AName     -> check_read_permitted(ExchangeName,
-                                                      'exchange.declare', State),
-                                 check_write_permitted(AName,
-                                                       'exchange.declare', State),
+                    AName     -> check_read_permitted(ExchangeName, State),
+                                 check_write_permitted(AName, State),
                                  ok
                 end,
                 rabbit_exchange:declare(ExchangeName,
@@ -726,7 +714,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   nowait = NoWait},
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configure_permitted(ExchangeName, 'exchange.declare', State),
+    check_configure_permitted(ExchangeName, State),
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
@@ -735,7 +723,8 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
                                  nowait = NoWait},
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configure_permitted(ExchangeName, 'exchange.delete', State),
+    check_not_default_exchange(ExchangeName),
+    check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
             rabbit_misc:not_found(ExchangeName);
@@ -765,7 +754,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                         Other -> check_name('queue', Other)
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
-    check_configure_permitted(QueueName, 'queue.declare', State),
+    check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
@@ -802,7 +791,7 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               _, State = #ch{virtual_host = VHostPath,
                              reader_pid   = ReaderPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
-    check_configure_permitted(QueueName, 'queue.declare', State),
+    check_configure_permitted(QueueName, State),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),
@@ -816,7 +805,7 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
                               nowait = NoWait},
               _, State = #ch{reader_pid = ReaderPid}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_configure_permitted(QueueName, 'queue.delete', State),
+    check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ReaderPid,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
@@ -852,7 +841,7 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
                              nowait = NoWait},
               _, State = #ch{reader_pid = ReaderPid}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_read_permitted(QueueName, 'queue.purge', State),
+    check_read_permitted(QueueName, State),
     {ok, PurgedMessageCount} = rabbit_amqqueue:with_exclusive_access_or_die(
                                  QueueName, ReaderPid,
                                  fun (Q) -> rabbit_amqqueue:purge(Q) end),
@@ -920,11 +909,12 @@ binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
     %% FIXME: don't allow binding to internal exchanges -
     %% including the one named "" !
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_write_permitted(QueueName, 'queue.bind', State),
+    check_write_permitted(QueueName, State),
     ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
                                                    State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_read_permitted(ExchangeName, 'queue.bind', State),
+    check_not_default_exchange(ExchangeName),
+    check_read_permitted(ExchangeName, State),
     case Fun(#binding{exchange_name = ExchangeName,
                       queue_name    = QueueName,
                       key           = ActualRoutingKey,
