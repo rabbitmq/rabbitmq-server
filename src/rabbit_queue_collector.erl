@@ -82,8 +82,7 @@ handle_call(delete_all, _From, State = #state{queues = Queues}) ->
        fun () -> ok end,
        fun () -> rabbit_amqqueue:delete_immediately(Q) end)
      || {_MRef, Q} <- Qs],
-    {reply, ok, wait_DOWNs(gb_sets:from_list([MRef || {MRef, _Q} <- Qs]),
-                           State)}.
+    {reply, ok, wait_DOWNs(sets:from_list([MRef || {MRef, _Q} <- Qs]), State)}.
 
 handle_cast(Msg, State) ->
     {stop, {unhandled_cast, Msg}, State}.
@@ -99,11 +98,11 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 wait_DOWNs(MRefs, State) ->
-    case gb_sets:is_empty(MRefs) of
-        true  -> State;
-        false -> receive
+    case sets:size(MRefs) of
+        0 -> State;
+        _ -> receive
                      {'DOWN', MRef, process, _DownPid, _Reason} ->
-                         wait_DOWNs(gb_sets:del_element(MRef, MRefs),
+                         wait_DOWNs(sets:del_element(MRef, MRefs),
                                     erase_queue(MRef, State))
                  end
     end.

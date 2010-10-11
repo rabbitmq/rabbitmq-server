@@ -858,8 +858,7 @@ handle_cast({reject, AckTags, Requeue, ChPid},
 handle_cast({rollback, Txn, ChPid}, State) ->
     noreply(rollback_transaction(Txn, ChPid, State));
 
-handle_cast(delete_immediately,
-            State = #q{ q = #amqqueue{exclusive_owner = Owner}}) ->
+handle_cast(delete_immediately, State) ->
     {stop, normal, State};
 
 handle_cast({unblock, ChPid}, State) ->
