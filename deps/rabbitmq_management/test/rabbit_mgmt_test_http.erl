@@ -281,8 +281,7 @@ bindings_test() ->
     http_put("/bindings/%2f/myqueue/myexchange/bad_routing", [], ?BAD_REQUEST),
     http_put("/bindings/%2f/myqueue/myexchange/routing", [], ?NO_CONTENT),
     http_get("/bindings/%2f/myqueue/myexchange/routing", ?OK),
-    %% TODO this actually fails!
-    %%http_get("/bindings/%2f/myqueue/myexchange/rooting", ?NOT_FOUND),
+    http_get("/bindings/%2f/myqueue/myexchange/rooting", ?NOT_FOUND),
     Binding =
         [{exchange,<<"myexchange">>},
          {vhost,<<"/">>},
@@ -309,8 +308,7 @@ bindings_test() ->
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     http_get("/bindings/badvhost", ?NOT_FOUND),
-    %% TODO this fails too!
-    %%http_get("/bindings/%2f/myqueue/myexchange/routing", ?NOT_FOUND),
+    http_get("/bindings/%2f/myqueue/myexchange/routing", ?NOT_FOUND),
     ok.
 
 bindings_post_test() ->
@@ -348,8 +346,7 @@ permissions_administrator_test() ->
     Test =
         fun(Path) ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
-                %% TODO this fails!
-                %%http_get(Path, "isadmin", "isadmin", ?OK),
+                http_get(Path, "isadmin", "isadmin", ?OK),
                 http_get(Path, "guest", "guest", ?OK)
         end,
     %% All users can get a list of vhosts. It may be filtered.
@@ -410,7 +407,7 @@ permissions_vhost_test() ->
     Test2("/queues", "myqueue/bindings"),
     Test2("/exchanges", "amq.default/bindings"),
     Test2("/bindings", "myqueue/amq.default"),
-    Test2("/bindings", "myqueue/amq.default/test"),
+    Test2("/bindings", "myqueue/amq.default/myqueue"),
     http_delete("/vhosts/myvhost1", ?NO_CONTENT),
     http_delete("/vhosts/myvhost2", ?NO_CONTENT),
     http_delete("/users/myuser", ?NO_CONTENT),

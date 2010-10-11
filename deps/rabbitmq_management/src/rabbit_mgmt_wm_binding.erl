@@ -42,9 +42,13 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case exists(binding(ReqData)) of
-         not_found   -> false;
-         _           -> true
+    Binding = binding(ReqData),
+    {case Binding of
+         {bad_request, _} -> false;
+         _                -> case rabbit_binding:exists(Binding) of
+                                 true -> true;
+                                 _    -> false
+                             end
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
@@ -103,14 +107,6 @@ binding(ReqData) ->
                                        key           = Key,
                                        args          = Args }
                      end
-    end.
-
-exists(Binding) ->
-    case Binding of
-        {bad_request, _} -> false;
-        _                -> rabbit_binding:exists(Binding)
-                            %% TODO does this work? Seems to match even when
-                            %% args differ
     end.
 
 with_binding(ReqData, Context, Fun) ->

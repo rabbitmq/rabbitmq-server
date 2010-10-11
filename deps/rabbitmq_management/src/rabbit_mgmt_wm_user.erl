@@ -76,11 +76,11 @@ user(ReqData) ->
 put_user(User, Password, IsAdmin) ->
     case rabbit_access_control:lookup_user(User) of
         {ok, _} ->
-            rabbit_access_control:change_password(User, Password),
-            case rabbit_mgmt_util:parse_bool(IsAdmin) of
-                true ->  rabbit_access_control:set_admin(User);
-                false -> rabbit_access_control:clear_admin(User)
-            end;
+            rabbit_access_control:change_password(User, Password);
         {error, not_found} ->
             rabbit_access_control:add_user(User, Password)
+    end,
+    case rabbit_mgmt_util:parse_bool(IsAdmin) of
+        true  -> rabbit_access_control:set_admin(User);
+        false -> rabbit_access_control:clear_admin(User)
     end.
