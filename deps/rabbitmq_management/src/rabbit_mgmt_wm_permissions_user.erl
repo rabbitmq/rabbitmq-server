@@ -36,11 +36,11 @@ content_types_provided(ReqData, Context) ->
 to_json(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     Perms = rabbit_access_control:list_user_permissions(User),
-    rabbit_mgmt_util:reply(
+    rabbit_mgmt_util:reply_list(
       [rabbit_mgmt_format:permissions({User, VHost,
                                        Conf, Write, Read, Scope}) ||
           {VHost, Conf, Write, Read, Scope} <- Perms],
-      ReqData, Context).
+      [vhost, user], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).

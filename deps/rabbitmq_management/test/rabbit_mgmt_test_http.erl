@@ -360,6 +360,7 @@ permissions_administrator_test() ->
     Test("/permissions"),
     Test("/permissions/%2f/guest"),
     http_delete("/users/notadmin", ?NO_CONTENT),
+    http_delete("/users/isadmin", ?NO_CONTENT),
     ok.
 
 permissions_vhost_test() ->
@@ -555,7 +556,9 @@ all_configuration_server_named_queue_test() ->
 
 aliveness_test() ->
     [{status, <<"ok">>}] = http_get("/aliveness-test/%2f", ?OK),
-    http_get("/aliveness-test/foo", ?NOT_FOUND).
+    http_get("/aliveness-test/foo", ?NOT_FOUND),
+    http_delete("/queues/%2f/aliveness-test", ?NO_CONTENT),
+    ok.
 
 arguments_test() ->
     XArgs = [{type, <<"headers">>}, {durable, false}, {auto_delete, false},
@@ -610,6 +613,47 @@ queue_purge_test() ->
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+sorting_test() ->
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
+                {read,      <<".*">>}, {scope, <<"client">>}],
+    http_put("/vhosts/vh1", [], ?NO_CONTENT),
+    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test2", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test3", QArgs, ?NO_CONTENT),
+    assert_list([[{name, <<"test0">>}],
+                 [{name, <<"test2">>}],
+                 [{name, <<"test1">>}],
+                 [{name, <<"test3">>}]], http_get("/queues", ?OK)),
+    assert_list([[{name, <<"test0">>}],
+                 [{name, <<"test1">>}],
+                 [{name, <<"test2">>}],
+                 [{name, <<"test3">>}]], http_get("/queues?sort=name", ?OK)),
+    assert_list([[{name, <<"test0">>}],
+                 [{name, <<"test2">>}],
+                 [{name, <<"test1">>}],
+                 [{name, <<"test3">>}]], http_get("/queues?sort=vhost", ?OK)),
+    assert_list([[{name, <<"test3">>}],
+                 [{name, <<"test1">>}],
+                 [{name, <<"test2">>}],
+                 [{name, <<"test0">>}]], http_get("/queues?sort_reverse=true", ?OK)),
+    assert_list([[{name, <<"test3">>}],
+                 [{name, <<"test2">>}],
+                 [{name, <<"test1">>}],
+                 [{name, <<"test0">>}]], http_get("/queues?sort=name&sort_reverse=true", ?OK)),
+    assert_list([[{name, <<"test3">>}],
+                 [{name, <<"test1">>}],
+                 [{name, <<"test2">>}],
+                 [{name, <<"test0">>}]], http_get("/queues?sort=vhost&sort_reverse=true", ?OK)),
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+    http_delete("/queues/vh1/test1", ?NO_CONTENT),
+    http_delete("/queues/%2f/test2", ?NO_CONTENT),
+    http_delete("/queues/vh1/test3", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
     ok.
 
 %%---------------------------------------------------------------------------

@@ -34,10 +34,9 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Chs = [{struct, C} || C <- rabbit_mgmt_util:filter_user(
-                                 rabbit_mgmt_db:get_channels(),
-                                 ReqData, Context)],
-    rabbit_mgmt_util:reply(Chs, ReqData, Context).
+    Chs = rabbit_mgmt_util:filter_user(rabbit_mgmt_db:get_channels(),
+                                       ReqData, Context),
+    rabbit_mgmt_util:reply_list(Chs, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

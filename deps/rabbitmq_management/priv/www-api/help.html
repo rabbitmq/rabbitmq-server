@@ -39,14 +39,11 @@
     hard in the general case, you can also create bindings by POSTing
     to a factory URI. See the example below.</p>
 
-    <h2>Caveats</h2>
-    <p>These caveats apply to the current development version of the
-    management API. In future they will be fixed.</p>
-    <ul>
-      <li>There are many monitoring-related information items in the
-      objects returned from GET requests. They are undocumented and
-      subject to change.</li>
-    </ul>
+    <p>Many URIs return lists. Such URIs can have the query string
+    parameters <code>sort</code> and <code>sort_reverse</code>
+    added. <code>sort</code> allows you to select a primary field to
+    sort by, and <code>sort_reverse</code> will reverse the sort order
+    if set to <code>true</code>.</p>
 
     <h2>Examples</h2>
 

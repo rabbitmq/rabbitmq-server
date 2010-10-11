@@ -50,7 +50,7 @@ function dispatcher() {
     }
     path('#/', {'overview': '/overview', 'applications': '/applications'}, 'overview');
 
-    path('#/connections', {'connections': '/connections/'}, 'connections');
+    path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {
             render({'connection': '/connections/' + esc(this.params['name'])}, 'connection',
                    '#/connections');
@@ -120,7 +120,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/vhosts', {'vhosts': '/vhosts/'}, 'vhosts');
+    path('#/vhosts', {'vhosts': '/vhosts'}, 'vhosts');
     this.get('#/vhosts/:id', function() {
             render({'vhost': '/vhosts/' + esc(this.params['id']),
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
@@ -142,7 +142,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/users', {'users': '/users/'}, 'users');
+    path('#/users', {'users': '/users'}, 'users');
     this.get('#/users/:id', function() {
             render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
@@ -183,6 +183,8 @@ var current_template;
 var current_reqs;
 var current_highlight;
 var current_vhost = '';
+var current_sort;
+var current_sort_reverse = false;
 var timer;
 var timer_interval;
 
@@ -206,6 +208,7 @@ function update() {
     with_update(function(html) {
             replace_content('main', html);
             postprocess();
+            postprocess_partial();
             set_timer_interval(5000);
         });
 }
@@ -222,12 +225,13 @@ function partial_update() {
             for (var i = 0; i < befores.length; i++) {
                 befores[i].innerHTML = afters[i].innerHTML;
             }
+            postprocess_partial();
         });
     }
 }
 
 function with_update(fun) {
-    with_reqs(vhostise(current_reqs), [], function(json) {
+    with_reqs(apply_state(current_reqs), [], function(json) {
             json.statistics_level = statistics_level;
             var html = format(current_template, json);
             fun(html);
@@ -235,24 +239,39 @@ function with_update(fun) {
         });
 }
 
-function vhostise(reqs) {
-    if (current_vhost == '') {
-        return reqs;
+var VHOST_QUERIES = map(['/queues', '/exchanges']);
+var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
+                         '/queues', '/exchanges']);
+
+function map(list) {
+    var res = {};
+    for (i in list) {
+        res[list[i]] = '';
     }
-    else {
-        var reqs2 = {};
-        for (k in reqs) {
-            var req = reqs[k];
-            if (req in {'/queues':'', '/exchanges':''}) {
-                reqs2[k] = req + '/' + esc(current_vhost);
-            }
-            else {
-                reqs2[k] = req;
-            }
+    return res;
+}
+
+function apply_state(reqs) {
+    var reqs2 = {};
+    for (k in reqs) {
+        var req = reqs[k];
+        var req2;
+        if (req in VHOST_QUERIES && current_vhost != '') {
+            req2 = req + '/' + esc(current_vhost);
+        }
+        else {
+            req2 = req;
         }
 
-        return reqs2;
+        var qs = '';
+        if (req in SORT_QUERIES && current_sort != null) {
+            qs = '?sort=' + current_sort +
+                '&sort_reverse=' + current_sort_reverse;
+        }
+
+        reqs2[k] = req2 + qs;
     }
+    return reqs2;
 }
 
 function error_popup(text) {
@@ -292,6 +311,20 @@ function postprocess() {
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
+}
+
+function postprocess_partial() {
+    $('.sort').click(function() {
+            var sort = $(this).attr('sort');
+            if (current_sort == sort) {
+                current_sort_reverse = ! current_sort_reverse;
+            }
+            else {
+                current_sort = sort;
+                current_sort_reverse = false;
+            }
+            update();
+        });
 }
 
 function with_reqs(reqs, acc, fun) {

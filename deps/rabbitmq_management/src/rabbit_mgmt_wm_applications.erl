@@ -34,7 +34,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(
+    rabbit_mgmt_util:reply_list(
       [rabbit_mgmt_format:application(A) ||
           A <- application:which_applications()],
       ReqData, Context).

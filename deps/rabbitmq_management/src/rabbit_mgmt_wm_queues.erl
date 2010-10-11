@@ -42,8 +42,8 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Qs = rabbit_mgmt_db:get_queues(queues(ReqData)),
-    rabbit_mgmt_util:reply(
-      [{struct, Q} || Q <-rabbit_mgmt_util:filter_vhost(Qs, ReqData, Context)],
+    rabbit_mgmt_util:reply_list(
+      rabbit_mgmt_util:filter_vhost(Qs, ReqData, Context),
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->

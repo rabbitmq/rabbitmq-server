@@ -42,7 +42,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Xs = exchanges(ReqData),
-    rabbit_mgmt_util:reply(
+    rabbit_mgmt_util:reply_list(
       rabbit_mgmt_util:filter_vhost(Xs, ReqData, Context),
       ReqData, Context).
 

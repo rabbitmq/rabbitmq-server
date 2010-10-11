@@ -40,7 +40,7 @@ to_json(ReqData, Context = #context{username = Username,
                  true  -> vhosts();
                  false -> format(rabbit_mgmt_util:vhosts(Username))
              end,
-    rabbit_mgmt_util:reply(VHosts, ReqData, Context).
+    rabbit_mgmt_util:reply_list(VHosts, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

@@ -28,6 +28,7 @@
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
+-export([reply_list/3, reply_list/4]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -100,6 +101,31 @@ vhost(ReqData) ->
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
     {mochijson2:encode(Facts), ReqData1, Context}.
+
+reply_list(Facts, ReqData, Context) ->
+    reply_list(Facts, [vhost, name], ReqData, Context).
+
+reply_list(Facts, DefaultSort, ReqData, Context) ->
+    Sort = case wrq:get_qs_value("sort", ReqData) of
+               undefined -> DefaultSort;
+               Extra     -> [list_to_atom(Extra) | DefaultSort]
+           end,
+    Facts1 = lists:sort(fun(A, B) -> compare(A, B, Sort) end, Facts),
+    Facts2 = case wrq:get_qs_value("sort_reverse", ReqData) of
+                 "true" -> lists:reverse(Facts1);
+                 _      -> Facts1
+             end,
+    reply(Facts2, ReqData, Context).
+
+compare(_A, _B, []) ->
+    true;
+compare(A, B, [H|T]) ->
+    A0 = proplists:get_value(H, A),
+    B0 = proplists:get_value(H, B),
+    case A0 == B0 of
+        true  -> compare(A, B, T);
+        false -> A0 < B0
+    end.
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).

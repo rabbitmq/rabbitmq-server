@@ -12,19 +12,19 @@
 <% } %>
   </tr>
   <tr>
-   <th>Channel</th>
-   <th>Virtual host</th>
-   <th>Username</th>
-   <th>Transactional</th>
-   <th>Prefetch</th>
-   <th>Messages unacked</th>
+    <th><%= fmt_sort('Channel',         'name') %></th>
+    <th><%= fmt_sort('Virtual host',    'vhost') %></th>
+    <th><%= fmt_sort('User name',       'user') %></th>
+    <th><%= fmt_sort('Transactional',   'transactional') %></th>
+    <th><%= fmt_sort('Prefetch',        'prefetch_count') %></th>
+    <th><%= fmt_sort('Message unacked', 'messages_unacknowledged') %></th>
 <% if (statistics_level == 'fine') { %>
-   <th>publish</th>
-   <th>deliver</th>
-   <th>get</th>
-   <th>deliver<sub>(noack)</sub></th>
-   <th>get<sub>(noack)</sub></th>
-   <th>ack</th>
+    <th>publish</th>
+    <th>deliver</th>
+    <th>get</th>
+    <th>deliver<sub>(noack)</sub></th>
+    <th>get<sub>(noack)</sub></th>
+    <th>ack</th>
 <% } %>
   </tr>
  </thead>

@@ -25,6 +25,8 @@ table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1e
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
 table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
 table.list td a { display: block; width: 100%; }
+table.list th a.sort { display: block; width: 100%; cursor: pointer; }
+table.list th a.sort .arrow { color: #888; }
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 

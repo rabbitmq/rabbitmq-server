@@ -12,9 +12,15 @@
     <th colspan="4">Parameters</th>
   </tr>
   <tr>
-   <th>Virtual host</th><th>Name</th>
-   <th>Ready</th><th>Unacked</th><th>Total</th>
-   <th>Durable</th><th>Auto delete</th><th>Exclusive</th><th>Arguments</th>
+    <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+    <th><%= fmt_sort('Name',         'name') %></th>
+    <th><%= fmt_sort('Ready',        'messages_ready') %></th>
+    <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
+    <th><%= fmt_sort('Total',        'messages') %></th>
+    <th><%= fmt_sort('Durable',      'durable') %></th>
+    <th><%= fmt_sort('Auto delete',  'auto_delete') %></th>
+    <th><%= fmt_sort('Exclusive',    'owner_pid') %></th>
+    <th>Arguments</th>
   </tr>
  </thead>
  <tbody>
