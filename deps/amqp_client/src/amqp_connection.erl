@@ -99,13 +99,16 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams) ->
-    {ok, _Sup, Connection} = amqp_connection_sup:start_link(Type, AmqpParams),
     Module = case Type of direct  -> amqp_direct_connection;
                           network -> amqp_network_connection
              end,
-    try Module:connect(Connection) of
-        ok -> {ok, Connection}
+    {ok, _Sup, Connection} =
+        amqp_connection_sup:start_link(Type, Module, AmqpParams),
+    try amqp_gen_connection:connect(Connection) of
+        ok                 -> {ok, Connection};
+        {error, _} = Error -> Error
     catch
+        %% TODO: try-catching should occur at the handshake level, not here
         exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
             {error, Reason};
         exit:Reason ->
@@ -134,15 +137,7 @@ open_channel(ConnectionPid) ->
 %% value is 0.<br/>
 %% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber) ->
-    case command(ConnectionPid, {open_channel, ChannelNumber}) of
-        {ok, ChannelPid} ->
-            case amqp_channel:call(ChannelPid, #'channel.open'{}) of
-                #'channel.open_ok'{} -> {ok, ChannelPid};
-                Error                -> Error
-            end;
-        Error ->
-            Error
-    end.
+    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber).
 
 %% @spec (ConnectionPid) -> ok | Error
 %% where
@@ -163,7 +158,7 @@ close(ConnectionPid, Code, Text) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    command(ConnectionPid, {close, Close}).
+    amqp_gen_connection:close(ConnectionPid, Close).
 
 %%---------------------------------------------------------------------------
 %% Other functions
@@ -187,7 +182,6 @@ close(ConnectionPid, Code, Text) ->
 %%      num_channels - returns the number of channels currently open under the
 %%          connection (excluding channel 0)
 %%      channel_max - returns the channel_max value negotiated with the server
-%%          (only for the network connection)
 %%      heartbeat - returns the heartbeat value negotiated with the server
 %%          (only for the network connection)
 %%      sock - returns the socket for the network connection (for use with
@@ -195,7 +189,7 @@ close(ConnectionPid, Code, Text) ->
 %%          (only for the network connection)
 %%      any other value - throws an exception
 info(ConnectionPid, Items) ->
-    gen_server:call(ConnectionPid, {info, Items}, infinity).
+    amqp_gen_connection:info(ConnectionPid, Items).
 
 %% @spec (ConnectionPid) -> Items
 %% where
@@ -207,7 +201,7 @@ info(ConnectionPid, Items) ->
 %% direct). Use info_keys/0 to get a list of info keys that can be used for
 %% any connection.
 info_keys(ConnectionPid) ->
-    gen_server:call(ConnectionPid, info_keys, infinity).
+    amqp_gen_connection:info_keys(ConnectionPid).
 
 %% @spec () -> Items
 %% where
@@ -218,11 +212,4 @@ info_keys(ConnectionPid) ->
 %% Other info keys may exist for a specific type. To get the full list of
 %% atoms that can be used for a certain connection, use info_keys/1.
 info_keys() ->
-    ?COMMON_INFO_KEYS.
-
-%%---------------------------------------------------------------------------
-%% Internal plumbing
-%%---------------------------------------------------------------------------
-
-command(ConnectionPid, Command) ->
-    gen_server:call(ConnectionPid, {command, Command}, infinity).
+    amqp_gen_connection:info_keys().

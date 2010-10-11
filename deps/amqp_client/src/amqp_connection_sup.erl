@@ -29,14 +29,14 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, AmqpParams) ->
+start_link(Type, Module, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     unlink(Sup),
     {ok, ChSupSup} = supervisor2:start_child(
@@ -45,27 +45,18 @@ start_link(Type, AmqpParams) ->
                                           [Type]},
                         intrinsic, infinity, supervisor,
                         [amqp_channel_sup_sup]}),
-    {ok, Connection} =
-        start_connection(Sup, Type, AmqpParams,
-                         start_infrastructure_fun(Sup, Type, ChSupSup)),
+    SIF = start_infrastructure_fun(Sup, Type, ChSupSup),
+    {ok, Connection} = supervisor2:start_child(
+                         Sup,
+                         {connection, {amqp_gen_connection, start_link,
+                                       [Module, AmqpParams, SIF, []]},
+                          intrinsic, brutal_kill, worker,
+                          [amqp_gen_connection]}),
     {ok, Sup, Connection}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
-
-start_connection(Sup, network, AmqpParams, SIF) ->
-    {ok, _} = supervisor2:start_child(
-                Sup,
-                {connection, {amqp_network_connection, start_link,
-                              [AmqpParams, SIF]},
-                 intrinsic, brutal_kill, worker, [amqp_network_connection]});
-start_connection(Sup, direct, AmqpParams, SIF) ->
-    {ok, _} = supervisor2:start_child(
-                Sup,
-                {connection, {amqp_direct_connection, start_link,
-                              [AmqpParams, SIF]},
-                 intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
 
 start_infrastructure_fun(Sup, network, ChSupSup) ->
     fun (Sock) ->

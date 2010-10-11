@@ -253,10 +253,8 @@ do_rpc(State = #state{rpc_requests = RequestQueue,
             State1;
         empty ->
             case Closing of
-                {connection, Reason} ->
-                    self() ! {shutdown, {connection_closing, Reason}};
-                _ ->
-                    ok
+                connection -> self() ! {shutdown, connection_closing};
+                _          -> ok
             end,
             State
     end.
@@ -322,9 +320,9 @@ build_content(#amqp_msg{props = Props, payload = Payload}) ->
     rabbit_basic:build_content(Props, Payload).
 
 check_block(_Method, _AmqpMsg, #state{closing = just_channel}) ->
-    channel_closing;
-check_block(_Method, _AmqpMsg, #state{closing = {connection, _}}) ->
-    connection_closing;
+    closing;
+check_block(_Method, _AmqpMsg, #state{closing = connection}) ->
+    closing;
 check_block(_Method, none, #state{}) ->
     ok;
 check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
@@ -334,12 +332,6 @@ check_block(_Method, _AmqpMsg, #state{}) ->
 
 shutdown_with_reason({_, 200, _}, State) ->
     {stop, normal, State};
-shutdown_with_reason({connection_closing, {_, 200, _}}, State) ->
-    {stop, normal, State};
-shutdown_with_reason({connection_closing, normal}, State) ->
-    {stop, normal, State};
-shutdown_with_reason({connection_closing, _} = Reason, State) ->
-    {stop, Reason, State};
 shutdown_with_reason(Reason, State) ->
     {stop, Reason, State}.
 
@@ -475,7 +467,7 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
 %% @private
 handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
             From, #state{tagged_sub_requests = Tagged,
-                           anon_sub_requests = Anon} = State) ->
+                         anon_sub_requests   = Anon} = State) ->
     case check_block(Method, none, State) of
         ok ->
             {NewMethod, NewState} =
@@ -597,40 +589,38 @@ handle_info({shutdown, Reason}, State) ->
     shutdown_with_reason(Reason, State);
 
 %% @private
-handle_info({shutdown, FailShutdownReason, InitialReason},
+handle_info({shutdown, FailShutdownReason, connection_closing},
             #state{number = Number} = State) ->
     case FailShutdownReason of
-        {connection_closing, timed_out_flushing_channel} ->
+        timed_out_flushing_channel ->
             ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
                       "closing~n", [Number]);
-        {connection_closing, timed_out_waiting_close_ok} ->
+        timed_out_waiting_close_ok ->
             ?LOG_WARN("Channel ~p closing: timed out waiting for "
                       "channel.close_ok while connection closing~n", [Number])
     end,
-    {stop, {FailShutdownReason, InitialReason}, State};
+    {stop, FailShutdownReason, State};
 
 %% Handles the situation when the connection closes without closing the channel
 %% beforehand. The channel must block all further RPCs,
 %% flush the RPC queue (optional), and terminate
 %% @private
-handle_info({connection_closing, CloseType, Reason},
+handle_info({connection_closing, CloseType},
             #state{rpc_requests = RpcQueue,
                    closing = Closing} = State) ->
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
             erlang:send_after(?TIMEOUT_FLUSH, self(),
-                              {shutdown,
-                               {connection_closing, timed_out_flushing_channel},
-                               Reason}),
-            {noreply, State#state{closing = {connection, Reason}}};
+                              {shutdown, timed_out_flushing_channel,
+                               connection_closing}),
+            {noreply, State#state{closing = connection}};
         {flush, just_channel, false} ->
             erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
-                              {shutdown,
-                               {connection_closing, timed_out_waiting_close_ok},
-                               Reason}),
+                              {shutdown, timed_out_waiting_close_ok,
+                               connection_closing}),
             {noreply, State};
         _ ->
-            shutdown_with_reason({connection_closing, Reason}, State)
+            shutdown_with_reason(connection_closing, State)
     end;
 
 %% @private
