@@ -169,10 +169,11 @@ handle_call(connect, _From, State = #state{module = Mod,
                                            start_infrastructure_fun = SIF}) ->
     case Mod:connect(AmqpParams, SIF, MState) of
         {ok, ServerProperties, ChannelMax, ChMgr, NewMState} ->
-            {reply, ok, State#state{module_state = NewMState,
-                                    server_properties = ServerProperties,
-                                    channel_max = ChannelMax,
-                                    channels_manager = ChMgr}};
+            {reply, {ok, self()},
+             State#state{module_state = NewMState,
+                         server_properties = ServerProperties,
+                         channel_max = ChannelMax,
+                         channels_manager = ChMgr}};
         {error, _} = Error ->
             {stop, Error, Error, State}
     end;

@@ -92,6 +92,7 @@ handle_inet_async({inet_async, Sock, _, Msg},
             State#state.connection ! socket_closed,
             {noreply, State};
         {error, Reason} ->
+            State#state.connection ! {socket_error, Reason},
             {stop, {socket_error, Reason}, State}
     end.
 

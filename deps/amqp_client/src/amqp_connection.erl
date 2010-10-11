@@ -99,21 +99,12 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams) ->
-    Module = case Type of direct  -> amqp_direct_connection;
-                          network -> amqp_network_connection
-             end,
     {ok, _Sup, Connection} =
-        amqp_connection_sup:start_link(Type, Module, AmqpParams),
-    try amqp_gen_connection:connect(Connection) of
-        ok                 -> {ok, Connection};
-        {error, _} = Error -> Error
-    catch
-        %% TODO: try-catching should occur at the handshake level, not here
-        exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
-            {error, Reason};
-        exit:Reason ->
-            {error, {auth_failure_likely, Reason}}
-    end.
+        amqp_connection_sup:start_link(
+            Type, case Type of direct  -> amqp_direct_connection;
+                               network -> amqp_network_connection
+                  end, AmqpParams),
+    amqp_gen_connection:connect(Connection).
 
 %%---------------------------------------------------------------------------
 %% Commands

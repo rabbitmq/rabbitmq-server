@@ -75,7 +75,7 @@ hard_error_test(Connection) ->
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{connection_closing, _} = Reason ->
+        exit:{connection_closing, _} ->
             %% Network case
             ok;
         exit:Reason ->

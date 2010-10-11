@@ -71,8 +71,16 @@ i(Item, _State) -> throw({bad_argument, Item}).
 info_keys() ->
     ?INFO_KEYS.
 
-connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
-        SIF, State) ->
+connect(AmqpParams, SIF, State) ->
+    try do_connect(AmqpParams, SIF, State) of
+        Return -> Return
+    catch
+        exit:#amqp_error{name = access_refused} -> {error, auth_failure};
+        _:Reason                                -> {error, Reason}
+    end.
+
+do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
+           SIF, State) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  -> rabbit_access_control:user_pass_login(User, Pass),
                  rabbit_access_control:check_vhost_access(

@@ -74,6 +74,8 @@ handle_message(socket_closed, State = #state{waiting_socket_close = true,
     {stop, Reason, State};
 handle_message(socket_closed, State = #state{waiting_socket_close = false}) ->
     {stop, socket_closed_unexpectedly, State};
+handle_message({socket_error, _} = SocketError, State) ->
+    {stop, SocketError, State};
 handle_message({channel_exit, _, Reason}, State) ->
     {stop, {channel0_died, Reason}, State};
 handle_message(timeout, State) ->
@@ -106,7 +108,8 @@ connect(AmqpParams = #amqp_params{host        = Host,
                                   port        = Port,
                                   ssl_options = none}, SIF, State) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
-        {ok, Sock}     -> handshake(AmqpParams, SIF, State#state{sock = Sock});
+        {ok, Sock}     -> try_handshake(AmqpParams, SIF,
+                                        State#state{sock = Sock});
         {error, _} = E -> E
     end;
 connect(AmqpParams = #amqp_params{host        = Host,
@@ -118,13 +121,23 @@ connect(AmqpParams = #amqp_params{host        = Host,
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
-                    handshake(AmqpParams, SIF,
-                              State#state{sock = RabbitSslSock});
+                    try_handshake(AmqpParams, SIF,
+                                  State#state{sock = RabbitSslSock});
                 {error, _} = E ->
                     E
             end;
         {error, _} = E ->
             E
+    end.
+
+try_handshake(AmqpParams, SIF, State) ->
+    try handshake(AmqpParams, SIF, State) of
+        Return -> Return
+    catch
+        exit:socket_closed_unexpectedly = Reason ->
+            {error, {auth_failure_likely, Reason}};
+        _:Reason ->
+            {error, Reason}
     end.
 
 handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
@@ -225,10 +238,14 @@ client_properties(UserProperties) ->
 
 handshake_recv() ->
     receive
-        {'$gen_cast', {method, Method, _Content}} ->
+        {'$gen_cast', {method, Method, none}} ->
             Method;
         socket_closed ->
-            exit(socket_closed_unexpectedly)
+            exit(socket_closed_unexpectedly);
+        {socket_error, _} = SocketError ->
+            exit(SocketError);
+        Other ->
+            exit({handshake_recv_unexpected_message, Other})
     after ?HANDSHAKE_RECEIVE_TIMEOUT ->
         exit(handshake_receive_timed_out)
     end.

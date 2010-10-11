@@ -54,6 +54,7 @@ SOURCE_DIR=src
 DIST_DIR=dist
 DEPS_DIR=deps
 DOC_DIR=doc
+DEPS_FILE=deps.mk
 
 ifeq ("$(ERL_LIBS)", "")
 	ERL_LIBS :=
@@ -108,7 +109,7 @@ ifndef USE_SPECS
 USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
 endif
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+ERLC_OPTS=-I $(INCLUDE_DIR) -pa $(EBIN_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
@@ -135,6 +136,7 @@ common_clean:
 	rm -f erl_crash.dump
 	rm -rf $(DEPS_DIR)
 	rm -rf $(DOC_DIR)
+	rm -f $(DEPS_FILE)
 	$(MAKE) -C $(TEST_DIR) clean
 
 compile: $(TARGETS)
@@ -169,8 +171,14 @@ $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR
 	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	unzip -o $< -d $(DEPS_DIR)
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
+$(DEPS_FILE): $(SOURCES) $(INCLUDES)
+	rm -f $@
+	escript $(BROKER_DIR)/generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $@
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) | $(DEPS_FILE)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 $(DEPS_DIR):
 	mkdir -p $@
+
+-include $(DEPS_FILE)
