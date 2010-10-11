@@ -110,10 +110,9 @@ check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
 
 lookup_qpids(QNames) ->
-    lists:foldl(
-      fun (Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], lists:usort(QNames)).
+    lists:foldl(fun (QName, QPids) ->
+                        case mnesia:dirty_read({rabbit_queue, QName}) of
+                            [#amqqueue{pid = QPid}] -> [QPid | QPids];
+                            []                      -> QPids
+                        end
+                end, [], lists:usort(QNames)).
