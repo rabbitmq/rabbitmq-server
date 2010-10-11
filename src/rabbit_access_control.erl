@@ -180,12 +180,6 @@ check_resource_access(Username,
                           R#resource{name = <<"amq.default">>},
                           Permission);
 check_resource_access(Username,
-                      R = #resource{kind = exchange, name = <<"amq.default">>},
-                      Permission)
-  when Permission =/= write ->
-    rabbit_misc:protocol_error(access_refused,
-                               "default exchange is publish-only", []);
-check_resource_access(Username,
                       R = #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
     Res = case mnesia:dirty_read({rabbit_user_permission,
