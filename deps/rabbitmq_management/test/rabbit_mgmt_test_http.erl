@@ -308,6 +308,7 @@ bindings_test() ->
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     http_get("/bindings/badvhost", ?NOT_FOUND),
+    http_get("/bindings/badvhost/myqueue/myexchange/routing", ?NOT_FOUND),
     http_get("/bindings/%2f/myqueue/myexchange/routing", ?NOT_FOUND),
     ok.
 

@@ -52,11 +52,8 @@ allowed_methods(ReqData, {Mode, Context}) ->
          _              -> ['HEAD', 'GET']
      end, ReqData, {Mode, Context}}.
 
-post_is_create(ReqData, {Mode, Context}) ->
-    {case Mode of
-         queue_exchange -> true;
-         _              -> false
-     end, ReqData, {Mode, Context}}.
+post_is_create(ReqData, Context) ->
+    {true, ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
     Bs = [rabbit_mgmt_format:binding(B) || B <- list_bindings(Mode, ReqData)],

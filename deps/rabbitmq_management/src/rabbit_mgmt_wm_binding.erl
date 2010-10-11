@@ -44,6 +44,7 @@ allowed_methods(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     Binding = binding(ReqData),
     {case Binding of
+         not_found        -> false;
          {bad_request, _} -> false;
          _                -> case rabbit_binding:exists(Binding) of
                                  true -> true;
@@ -111,8 +112,6 @@ binding(ReqData) ->
 
 with_binding(ReqData, Context, Fun) ->
     case binding(ReqData) of
-        not_found ->
-            rabbit_mgmt_util:not_found(not_found, ReqData, Context);
         {bad_request, Reason} ->
             rabbit_mgmt_util:bad_request(Reason, ReqData, Context);
         Binding ->
