@@ -474,18 +474,16 @@ on_node_down(Node) ->
           fun rabbit_binding:combine_deletions/2,
           rabbit_binding:new_deletions(),
           rabbit_misc:execute_mnesia_transaction(
-            fun () ->
-                    qlc:e(qlc:q([delete_queue(QueueName) ||
-                                    #amqqueue{name = QueueName, pid = Pid}
-                                        <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node]))
+            fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
+                                      #amqqueue{name = QueueName, pid = Pid}
+                                          <- mnesia:table(rabbit_queue),
+                                      node(Pid) == Node]))
             end)),
     ok = rabbit_binding:process_deletions(Deletions).
 
 delete_queue(QueueName) ->
-    Deletions = rabbit_binding:remove_transient_for_destination(QueueName),
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    Deletions.
+    rabbit_binding:remove_transient_for_destination(QueueName).
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name = QueueName,

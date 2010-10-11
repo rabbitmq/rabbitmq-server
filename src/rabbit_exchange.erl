@@ -84,7 +84,7 @@
                               rabbit_types:error('in_use')).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
-        -> 'not_deleted' | {'deleted', rabbit_binding:dictionary()}).
+        -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
 
 -endif.
 
