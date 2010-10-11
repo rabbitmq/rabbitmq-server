@@ -1532,7 +1532,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:release(?PERSISTENT_MSG_STORE, Guids2ndHalf),
     %% read the second half again, just for fun (aka code coverage)
     MSCState7 = msg_store_read(Guids2ndHalf, MSCState6),
-    ok = rabbit_msg_store:client_terminate(MSCState7, ?PERSISTENT_MSG_STORE),
+    Ref = rabbit_msg_store:client_terminate(MSCState7, ?PERSISTENT_MSG_STORE),
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
@@ -1556,8 +1556,8 @@ test_msg_store() ->
     MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
     {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
     %% this should force some sort of sync internally otherwise misread
-    ok = rabbit_msg_store:client_terminate(
-           msg_store_read(Guids1stHalf, MSCState9), ?PERSISTENT_MSG_STORE),
+    Ref = rabbit_msg_store:client_terminate(
+            msg_store_read(Guids1stHalf, MSCState9), ?PERSISTENT_MSG_STORE),
     ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids1stHalf),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse guids
@@ -1567,21 +1567,21 @@ test_msg_store() ->
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
     GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
-    ok = foreach_with_msg_store_client(
-           ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MsgStore, MSCStateM) ->
-                   {ok, MSCStateN} = rabbit_msg_store:write(
-                                       MsgStore, Guid, Payload, MSCStateM),
-                   MSCStateN
-           end, GuidsBig),
+    Ref = foreach_with_msg_store_client(
+            ?PERSISTENT_MSG_STORE, Ref,
+            fun (Guid, MsgStore, MSCStateM) ->
+                    {ok, MSCStateN} = rabbit_msg_store:write(
+                                        MsgStore, Guid, Payload, MSCStateM),
+                    MSCStateN
+            end, GuidsBig),
     %% now read them to ensure we hit the fast client-side reading
-    ok = foreach_with_msg_store_client(
-           ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MsgStore, MSCStateM) ->
-                   {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
-                                                  MsgStore, Guid, MSCStateM),
-                   MSCStateN
-           end, GuidsBig),
+    Ref = foreach_with_msg_store_client(
+            ?PERSISTENT_MSG_STORE, Ref,
+            fun (Guid, MsgStore, MSCStateM) ->
+                    {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
+                                                   MsgStore, Guid, MSCStateM),
+                    MSCStateN
+            end, GuidsBig),
     %% .., then 3s by 1...
     ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
     %% .., then remove 3s by 2, from the young end first. This hits
@@ -1645,8 +1645,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
     %% do this just to force all of the publishes through to the msg_store:
     true = rabbit_msg_store:contains(MsgStore, LastGuidWritten),
-    ok = rabbit_msg_store:client_delete_and_terminate(
-           MSCStateEnd, MsgStore, Ref),
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCStateEnd, MsgStore),
     {A, B}.
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->

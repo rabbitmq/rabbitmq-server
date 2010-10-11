@@ -35,7 +35,7 @@
 
 -export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
          sync/3, client_init/2, client_terminate/2,
-         client_delete_and_terminate/3, successfully_recovered_state/1]).
+         client_delete_and_terminate/2, successfully_recovered_state/1]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
@@ -87,7 +87,8 @@
          }).
 
 -record(client_msstate,
-        { file_handle_cache,
+        { ref,
+          file_handle_cache,
           index_state,
           index_module,
           dir,
@@ -108,6 +109,7 @@
 -type(server() :: pid() | atom()).
 -type(file_num() :: non_neg_integer()).
 -type(client_msstate() :: #client_msstate {
+                      ref                :: binary(),
                       file_handle_cache  :: dict:dictionary(),
                       index_state        :: any(),
                       index_module       :: atom(),
@@ -136,9 +138,9 @@
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(client_init/2 :: (server(), binary()) -> client_msstate()).
--spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
--spec(client_delete_and_terminate/3 ::
-        (client_msstate(), server(), binary()) -> 'ok').
+-spec(client_terminate/2 :: (client_msstate(), server()) -> binary()).
+-spec(client_delete_and_terminate/2 ::
+        (client_msstate(), server()) -> 'ok').
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
@@ -358,7 +360,8 @@ client_init(Server, Ref) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
         gen_server2:call(Server, {new_client_state, Ref}, infinity),
-    #client_msstate { file_handle_cache  = dict:new(),
+    #client_msstate { ref                = Ref,
+                      file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = Dir,
@@ -370,9 +373,10 @@ client_init(Server, Ref) ->
 
 client_terminate(CState, Server) ->
     close_all_handles(CState),
-    ok = gen_server2:call(Server, client_terminate, infinity).
+    ok = gen_server2:call(Server, client_terminate, infinity),
+    CState #client_msstate.ref.
 
-client_delete_and_terminate(CState, Server, Ref) ->
+client_delete_and_terminate(CState = #client_msstate { ref = Ref }, Server) ->
     close_all_handles(CState),
     ok = gen_server2:cast(Server, {client_dying, self()}),
     ok = gen_server2:cast(Server, {client_delete, Ref, self()}).

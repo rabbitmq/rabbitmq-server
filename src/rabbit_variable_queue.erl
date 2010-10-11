@@ -306,8 +306,7 @@
              next_seq_id          :: seq_id(),
              pending_ack          :: dict:dictionary(),
              index_state          :: any(),
-             msg_store_clients    :: 'undefined' | {{any(), binary()},
-                                                    {any(), binary()}},
+             msg_store_clients    :: 'undefined' | {any(), any()},
              on_sync              :: sync(),
              durable              :: boolean(),
 
@@ -398,7 +397,7 @@ init(QueueName, IsDurable, Recover) ->
             true  -> rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, PRef);
             false -> undefined
         end,
-    TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
+    TransientClient = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE, TRef),
     State = #vqstate {
       q1                   = queue:new(),
       q2                   = bpqueue:new(),
@@ -408,8 +407,7 @@ init(QueueName, IsDurable, Recover) ->
       next_seq_id          = NextSeqId,
       pending_ack          = dict:new(),
       index_state          = IndexState1,
-      msg_store_clients    = {{PersistentClient, PRef},
-                              {TransientClient, TRef}},
+      msg_store_clients    = {PersistentClient, TransientClient},
       on_sync              = ?BLANK_SYNC,
       durable              = IsDurable,
       transient_threshold  = NextSeqId,
@@ -434,18 +432,17 @@ init(QueueName, IsDurable, Recover) ->
 terminate(State) ->
     State1 = #vqstate { persistent_count  = PCount,
                         index_state       = IndexState,
-                        msg_store_clients = {{MSCStateP, PRef},
-                                             {MSCStateT, TRef}} } =
+                        msg_store_clients = {MSCStateP, MSCStateT} } =
         remove_pending_ack(true, tx_commit_index(State)),
-    case MSCStateP of
-        undefined -> ok;
-        _         -> rabbit_msg_store:client_terminate(
-                       MSCStateP, ?PERSISTENT_MSG_STORE)
-    end,
-    rabbit_msg_store:client_terminate(MSCStateT, ?TRANSIENT_MSG_STORE),
-    Terms = [{persistent_ref, PRef},
-             {transient_ref, TRef},
-             {persistent_count, PCount}],
+    PersistentEntries =
+        case MSCStateP of
+            undefined -> [];
+            _         -> [{persistent_ref, rabbit_msg_store:client_terminate(
+                                             MSCStateP, ?PERSISTENT_MSG_STORE)}]
+        end,
+    TRef = rabbit_msg_store:client_terminate(MSCStateT, ?TRANSIENT_MSG_STORE),
+    Terms = [{transient_ref, TRef},
+             {persistent_count, PCount} | PersistentEntries],
     a(State1 #vqstate { index_state       = rabbit_queue_index:terminate(
                                               Terms, IndexState),
                         msg_store_clients = undefined }).
@@ -458,17 +455,16 @@ delete_and_terminate(State) ->
     %% deleting it.
     {_PurgeCount, State1} = purge(State),
     State2 = #vqstate { index_state         = IndexState,
-                        msg_store_clients   = {{MSCStateP, PRef},
-                                               {MSCStateT, TRef}} } =
+                        msg_store_clients   = {MSCStateP, MSCStateT} } =
         remove_pending_ack(false, State1),
     IndexState1 = rabbit_queue_index:delete_and_terminate(IndexState),
     case MSCStateP of
         undefined -> ok;
         _         -> rabbit_msg_store:client_delete_and_terminate(
-                       MSCStateP, ?PERSISTENT_MSG_STORE, PRef)
+                       MSCStateP, ?PERSISTENT_MSG_STORE)
     end,
     rabbit_msg_store:client_delete_and_terminate(
-      MSCStateT, ?TRANSIENT_MSG_STORE, TRef),
+      MSCStateT, ?TRANSIENT_MSG_STORE),
     a(State2 #vqstate { index_state       = IndexState1,
                         msg_store_clients = undefined }).
 
@@ -798,12 +794,12 @@ msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid }) ->
 find_msg_store(true)  -> ?PERSISTENT_MSG_STORE;
 find_msg_store(false) -> ?TRANSIENT_MSG_STORE.
 
-with_msg_store_state({{MSCStateP, PRef}, MSCStateT}, true, Fun) ->
+with_msg_store_state({MSCStateP, MSCStateT}, true, Fun) ->
     {Result, MSCStateP1} = Fun(?PERSISTENT_MSG_STORE, MSCStateP),
-    {Result, {{MSCStateP1, PRef}, MSCStateT}};
-with_msg_store_state({MSCStateP, {MSCStateT, TRef}}, false, Fun) ->
+    {Result, {MSCStateP1, MSCStateT}};
+with_msg_store_state({MSCStateP, MSCStateT}, false, Fun) ->
     {Result, MSCStateT1} = Fun(?TRANSIENT_MSG_STORE, MSCStateT),
-    {Result, {MSCStateP, {MSCStateT1, TRef}}}.
+    {Result, {MSCStateP, MSCStateT1}}.
 
 read_from_msg_store(MSCState, IsPersistent, Guid) ->
     with_msg_store_state(
