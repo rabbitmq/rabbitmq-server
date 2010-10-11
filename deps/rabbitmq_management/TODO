@@ -1,8 +1,5 @@
 Before first "proper" release
 =============================
-Write more thorough unit tests, especially around:
-  * Listings
-  * Rates / grouping (more multi-stage stuff).
 Basic sorting.
 
 Then
