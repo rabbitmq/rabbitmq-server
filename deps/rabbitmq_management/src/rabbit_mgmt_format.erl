@@ -51,6 +51,8 @@ print(Fmt, Val) when is_list(Val) ->
 print(Fmt, Val) ->
     print(Fmt, [Val]).
 
+%% TODO - can we remove all these "unknown" cases? Coverage never hits them.
+
 pid(Pid) when is_pid(Pid) -> list_to_binary(rabbit_misc:pid_to_string(Pid));
 pid('')                   ->  <<"">>;
 pid(unknown)              -> unknown;

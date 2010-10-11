@@ -26,7 +26,7 @@
 -compile([export_all]).
 
 -define(TESTS, [test_queues, test_connections, test_channels, test_overview,
-                test_rates]).
+                test_rates, test_rate_zeroing]).
 
 -define(X, <<"">>).
 
@@ -153,22 +153,37 @@ test_rates(Conn, Chan) ->
      fun() ->
              publish(Chan, ?X, Q, 5),
              publish(Chan, X2, Q, 5),
-             Channels = rabbit_mgmt_db:get_channels(),
-             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
-             assert_close(1, pget(rate, pget(publish_details, Stats)))
+             assert_close(1, publish_rate(Conn, 1))
      end,
      fun() ->
              publish(Chan, X2, Q, 5),
-             Channels = rabbit_mgmt_db:get_channels(),
-             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
-             assert_close(2, pget(rate, pget(publish_details, Stats)))
+             assert_close(2, publish_rate(Conn, 1))
      end,
      fun() ->
+             assert_close(1, publish_rate(Conn, 1)),
              Channels = rabbit_mgmt_db:get_channels(),
              Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
-             assert_close(1, pget(rate, pget(publish_details, Stats))),
              30 = pget(publish, Stats)
      end].
+
+test_rate_zeroing(Conn, Chan) ->
+    Q = declare_queue(Chan),
+    publish(Chan, ?X, Q, 5),
+
+    [fun() ->
+             publish(Chan, ?X, Q, 5)
+     end,
+     fun() ->
+             assert_close(1, publish_rate(Conn, 1))
+     end,
+     fun() ->
+             assert_close(0, publish_rate(Conn, 1))
+     end].
+
+publish_rate(Conn, ChNum) ->
+    Channels = rabbit_mgmt_db:get_channels(),
+    Stats = pget(message_stats, find_channel(Conn, ChNum, Channels)),
+    pget(rate, pget(publish_details, Stats)).
 
 %% TODO rethink this test
 %% test_aggregation(Conn, Chan) ->

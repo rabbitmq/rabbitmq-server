@@ -25,7 +25,7 @@
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
--export([with_decode/4, not_found/3, not_authorised/3, amqp_request/4]).
+-export([with_decode/4, not_found/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
 
@@ -184,25 +184,23 @@ amqp_request(VHost, ReqData, Context, Method) ->
         Params = #amqp_params{username = Context#context.username,
                               password = Context#context.password,
                               virtual_host = VHost},
-        case amqp_connection:start(direct, Params) of
-            {ok, Conn} ->
-                {ok, Ch} = amqp_connection:open_channel(Conn),
-                amqp_channel:call(Ch, Method),
-                amqp_channel:close(Ch),
-                amqp_connection:close(Conn),
-                {true, ReqData, Context};
-            {error, {auth_failure_likely,
-                     {#amqp_error{name = access_refused}, _}}} ->
-                not_authorised(not_authorised, ReqData, Context);
-            {error, #amqp_error{name = {error, Error}}} ->
-                bad_request(Error, ReqData, Context)
-        end
-        %% See bug 23187
+        {ok, Conn} = amqp_connection:start(direct, Params),
+        %% No need to check for {error, {auth_failure_likely...
+        %% since we will weed out failed logins in some webmachine
+        %% is_authorized/2 anyway.
+        {ok, Ch} = amqp_connection:open_channel(Conn),
+        amqp_channel:call(Ch, Method),
+        amqp_channel:close(Ch),
+        amqp_connection:close(Conn),
+        {true, ReqData, Context}
     catch
         exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
             not_found(list_to_binary(Reason), ReqData, Context);
-        exit:{{server_initiated_close, _Code, Reason}, _} ->
-            bad_request(list_to_binary(Reason), ReqData, Context)
+        exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
+            not_authorised(list_to_binary(Reason), ReqData, Context);
+        exit:{{server_initiated_close, Code, Reason}, _} ->
+            bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
+                        ReqData, Context)
     end.
 
 all_or_one_vhost(ReqData, Fun) ->

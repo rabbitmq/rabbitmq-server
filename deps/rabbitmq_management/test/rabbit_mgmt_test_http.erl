@@ -188,8 +188,8 @@ test_auth(Code, Headers) ->
 
 exchanges_test() ->
     %% Can pass booleans or strings
-    Good = [{type, <<"direct">>}, {durable, <<"true">>}, {auto_delete, false},
-            {arguments, []}],
+    Good = [{type, <<"direct">>}, {durable, <<"true">>},
+            {auto_delete, <<"false">>}, {arguments, []}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
@@ -414,6 +414,19 @@ permissions_vhost_test() ->
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
+permissions_amqp_test() ->
+    %% Just test that it works at all, not that it works in all possible cases.
+    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
+                {read,      <<"foo.*">>}, {scope, <<"client">>}],
+    http_put("/users/myuser", [{password, <<"myuser">>},
+                               {administrator, false}], ?NO_CONTENT),
+    http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser", ?NOT_AUTHORISED),
+    http_put("/queues/%2f/bar-queue", QArgs, "nonexistent", "nonexistent", ?NOT_AUTHORISED),
+    http_delete("/users/myuser", ?NO_CONTENT),
+    ok.
+
 get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(network, #amqp_params{
                                         username = Username,
@@ -614,6 +627,9 @@ http_get(Path, User, Pass, CodeExp) ->
 http_put(Path, List, CodeExp) ->
     http_put_raw(Path, format_for_upload(List), CodeExp).
 
+http_put(Path, List, User, Pass, CodeExp) ->
+    http_put_raw(Path, format_for_upload(List), User, Pass, CodeExp).
+
 http_post(Path, List, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), CodeExp).
 
@@ -621,15 +637,18 @@ format_for_upload(List) ->
     iolist_to_binary(mochijson2:encode({struct, List})).
 
 http_put_raw(Path, Body, CodeExp) ->
-    http_upload_raw(put, Path, Body, CodeExp).
+    http_upload_raw(put, Path, Body, "guest", "guest", CodeExp).
+
+http_put_raw(Path, Body, User, Pass, CodeExp) ->
+    http_upload_raw(put, Path, Body, User, Pass, CodeExp).
 
 http_post_raw(Path, Body, CodeExp) ->
-    http_upload_raw(post, Path, Body, CodeExp).
+    http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
 
 %% TODO Lose the sleep below. What is happening async?
-http_upload_raw(Type, Path, Body, CodeExp) ->
+http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
-        req(Type, Path, [auth_header()], Body),
+        req(Type, Path, [auth_header(User, Pass)], Body),
     timer:sleep(100),
     decode(CodeExp, Headers, ResBody).
 

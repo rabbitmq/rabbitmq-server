@@ -32,7 +32,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([update/0, info/0]).
+-export([info/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -52,9 +52,6 @@ start_link() ->
 
 info() ->
     gen_server2:call(?MODULE, {info, ?KEYS}, infinity).
-
-update() ->
-    gen_server2:cast(?MODULE, update).
 
 %%--------------------------------------------------------------------
 
@@ -169,10 +166,6 @@ handle_call({info, Items}, _From, State0) ->
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
-
-
-handle_cast(update, State) ->
-    {noreply, internal_update(State)};
 
 handle_cast(_C, State) ->
     {noreply, State}.
