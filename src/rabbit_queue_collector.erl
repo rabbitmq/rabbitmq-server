@@ -80,7 +80,7 @@ handle_call(delete_all, _From, State = #state{queues = Queues}) ->
     Qs = dict:to_list(Queues),
     [rabbit_misc:with_exit_handler(
        fun () -> ok end,
-       fun () -> rabbit_amqqueue:delete_exclusive(Q) end)
+       fun () -> rabbit_amqqueue:delete_immediately(Q) end)
      || {_MRef, Q} <- Qs],
     {reply, ok, wait_DOWNs(gb_sets:from_list([MRef || {MRef, _Q} <- Qs]),
                            State)}.
