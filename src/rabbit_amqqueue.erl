@@ -481,9 +481,8 @@ on_node_down(Node) ->
     ok.
 
 delete_queue(QueueName) ->
-    Post = rabbit_binding:remove_transient_for_queue(QueueName),
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    Post.
+    rabbit_binding:remove_transient_for_queue(QueueName).
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name = QueueName,
