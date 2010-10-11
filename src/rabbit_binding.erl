@@ -415,14 +415,14 @@ boolean_or(_True,  Any,  Any) -> Any.
 new_deletions() -> dict:new().
 
 add_deletion(XName, Entry, Deletions) ->
-    dict:update(XName, fun (Entry1) -> combine_entries(Entry1, Entry) end,
+    dict:update(XName, fun (Entry1) -> merge_entry(Entry1, Entry) end,
                 Entry, Deletions).
 
 combine_deletions(Deletions1, Deletions2) ->
-    dict:merge(fun (_XName, E1, E2) -> combine_entries(E1, E2) end,
+    dict:merge(fun (_XName, Entry1, Entry2) -> merge_entry(Entry1, Entry2) end,
                Deletions1, Deletions2).
 
-combine_entries({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
+merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
     {anything_but(undefined, X1, X2), boolean_or(deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
 
