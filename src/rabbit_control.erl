@@ -257,7 +257,8 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
 action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [exchange_name, queue_name,
+    ArgAtoms = default_if_empty(Args, [source_name, source_kind,
+                                       destination_name, destination_kind,
                                        routing_key, arguments]),
     display_info_list(rpc_call(Node, rabbit_binding, info_all,
                                [VHostArg, ArgAtoms]),
