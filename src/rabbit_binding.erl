@@ -354,13 +354,12 @@ maybe_auto_delete(XName, Bindings, Deletions) ->
         {error, not_found} ->
             add_deletion(XName, {undefined, not_deleted, Bindings}, Deletions);
         {ok, X} ->
-            Deletions1 =
-                add_deletion(XName, {X, not_deleted, Bindings}, Deletions),
-            case rabbit_exchange:maybe_auto_delete(X) of
-                not_deleted           -> Deletions1;
-                {deleted, Deletions2} -> combine_deletions(Deletions1,
-                                                           Deletions2)
-            end
+            add_deletion(XName, {X, not_deleted, Bindings},
+                         case rabbit_exchange:maybe_auto_delete(X) of
+                             not_deleted           -> Deletions;
+                             {deleted, Deletions1} -> combine_deletions(
+                                                        Deletions, Deletions1)
+                         end)
     end.
 
 delete_forward_routes(Route) ->
@@ -404,45 +403,36 @@ reverse_binding(#binding{source      = SrcName,
 %% Binding / exchange deletion abstraction API
 %% ----------------------------------------------------------------------------
 
-anything_but(NotThis, NotThis, NotThis) ->
-    NotThis;
-anything_but(NotThis, NotThis, This) ->
-    This;
-anything_but(NotThis, This, NotThis) ->
-    This;
-anything_but(_NotThis, This, This) ->
-    This.
+anything_but( NotThis, NotThis, NotThis) -> NotThis;
+anything_but( NotThis, NotThis,    This) -> This;
+anything_but( NotThis,    This, NotThis) -> This;
+anything_but(_NotThis,    This,    This) -> This.
 
-boolean_or(True, True, _Any) ->
-    True;
-boolean_or(True, _Any, True) ->
-    True;
-boolean_or(_True, Any, Any) ->
-    Any.
+boolean_or( True, True, _Any) -> True;
+boolean_or( True, _Any, True) -> True;
+boolean_or(_True,  Any,  Any) -> Any.
 
-new_deletions() ->
-    dict:new().
+new_deletions() -> dict:new().
 
-add_deletion(XName, Init = {X, Deleted, Bindings}, Deletions) ->
-    dict:update(
-      XName, fun ({X1, Deleted1, Bindings1}) ->
-                     {anything_but(undefined, X, X1),
-                      boolean_or(deleted, Deleted, Deleted1),
-                      [Bindings | Bindings1]}
-             end, Init, Deletions).
+add_deletion(XName, Entry, Deletions) ->
+    dict:update(XName, fun (Entry1) -> combine_entries(Entry1, Entry) end,
+                Entry, Deletions).
 
 combine_deletions(Deletions1, Deletions2) ->
-    dict:merge(
-      fun (_XName, {X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
-              {anything_but(undefined, X1, X2),
-               boolean_or(deleted, Deleted1, Deleted2),
-               [Bindings1 | Bindings2]}
-      end, Deletions1, Deletions2).
+    dict:merge(fun (_XName, E1, E2) -> combine_entries(E1, E2) end,
+               Deletions1, Deletions2).
+
+combine_entries({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
+    {anything_but(undefined, X1, X2), boolean_or(deleted, Deleted1, Deleted2),
+     [Bindings1 | Bindings2]}.
 
 process_deletions(Deletions) ->
     dict:fold(
-      fun (_XName, {X = #exchange{ type = Type }, not_deleted, Bindings}, ok) ->
-              (type_to_module(Type)):remove_bindings(X, lists:flatten(Bindings));
-          (_XName, {X = #exchange{ type = Type }, deleted, Bindings}, ok) ->
-              (type_to_module(Type)):delete(X, lists:flatten(Bindings))
+      fun (_XName, {X = #exchange{ type = Type }, Deleted, Bindings}, ok) ->
+              TypeModule = type_to_module(Type),
+              FlatBindings = lists:flatten(Bindings),
+              case Deleted of
+                  not_deleted -> TypeModule:remove_bindings(X, FlatBindings);
+                  deleted     -> TypeModule:delete(X, FlatBindings)
+              end
       end, ok, Deletions).
