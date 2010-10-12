@@ -77,9 +77,11 @@ input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; }
 input[type=text].wide { width: 300px; }
 
 table.form { margin-bottom: 0.5em; }
-table.form th { text-align: right; }
+table.form th { text-align: right; vertical-align: top; }
 table.form input[type=text] { width: 200px; }
 table.form select { width: 200px; }
+table.form .multifield { margin: 0; padding: 0; }
+table.form .multifield p { margin: 0; padding: 0; }
 
 table.two-col-layout td { width: 50%; vertical-align: top; }
 

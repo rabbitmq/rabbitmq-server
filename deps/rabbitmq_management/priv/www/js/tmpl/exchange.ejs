@@ -10,9 +10,7 @@
       <tr><th>Auto delete</th><td><%= fmt_boolean(exchange.auto_delete) %></td></tr>
       <tr>
         <th>Arguments</th>
-        <td>
-          <%= format('table', {'table': exchange.arguments}) %>
-        </td>
+        <td><%= fmt_table_short(exchange.arguments) %></td>
       </tr>
     </table>
   </div>

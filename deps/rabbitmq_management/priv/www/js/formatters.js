@@ -70,6 +70,14 @@ function fmt_download_filename(host) {
         (now.getMonth() + 1) + "-" + now.getDate() + ".json";
 }
 
+function fmt_table_short(table) {
+    var res = '';
+    for (k in table) {
+        res += k + '=' + table[k] + '<br/>';
+    }
+    return res;
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt"' : '';
 }

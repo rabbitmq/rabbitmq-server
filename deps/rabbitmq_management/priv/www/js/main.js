@@ -308,9 +308,13 @@ function postprocess() {
             setTimeout('app.run()');
             return false;
         });
+    $('.multifield input').live('blur', function() {
+            update_multifields();
+        });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
+    update_multifields();
 }
 
 function postprocess_partial() {
@@ -324,6 +328,38 @@ function postprocess_partial() {
                 current_sort_reverse = false;
             }
             update();
+        });
+}
+
+function update_multifields() {
+    $('.multifield').each(function(index) {
+            var largest_id = 0;
+            var empty_found = false;
+            var name = $(this).attr('id');
+            $('input[name$="_mfkey"]').each(function(index) {
+                    var match = $(this).attr('name').
+                        match(/[a-z]*_([0-9]*)_mfkey/);
+                    var id = parseInt(match[1]);
+                    largest_id = Math.max(id, largest_id);
+                    var key = $(this).val();
+                    var value = $(this).next('input').val();
+                    if (key == '' && value == '') {
+                        if (empty_found) {
+                            $(this).parent().remove();
+                        }
+                        else {
+                            empty_found = true;
+                        }
+                    }
+                });
+            if (!empty_found) {
+                $(this).append('<p><input type="text" name="' + name + '_' +
+                               (largest_id + 1) +
+                               '_mfkey" value=""/> = ' +
+                               '<input type="text" name="' + name + '_' +
+                               (largest_id + 1) +
+                               '_mfvalue" value=""/></p>');
+            }
         });
 }
 
@@ -419,7 +455,8 @@ function sync_post(sammy, path_template) {
     return sync_req('POST', sammy.params, path_template);
 }
 
-function sync_req(type, params, path_template) {
+function sync_req(type, params0, path_template) {
+    var params = collapse_multifields(params0);
     var path = fill_path_template(path_template, params);
     var req = xmlHttpRequest();
     req.open(type, '/api' + path, false);
@@ -462,6 +499,39 @@ function fill_path_template(template, params) {
     return template.replace(re, function(m) {
             return esc(params[m.substring(1)]);
         });
+}
+
+// Better suggestions appreciated
+var INTEGER_ARGUMENTS = map(['x-expires']);
+
+function collapse_multifields(params0) {
+    var params = {};
+    for (key in params0) {
+        var match = key.match(/([a-z]*)_([0-9]*)_mfkey/);
+        var match2 = key.match(/[a-z]*_[0-9]*_mfvalue/);
+        if (match == null && match2 == null) {
+            params[key] = params0[key];
+        }
+        else if (match == null) {
+            // Do nothing, value is handled below
+        }
+        else {
+            var name = match[1];
+            var id = match[2];
+            if (params[name] == undefined) {
+                params[name] = {};
+            }
+            if (params0[key] != "") {
+                var k = params0[key];
+                var v = params0[name + '_' + id + '_mfvalue'];
+                if (k in INTEGER_ARGUMENTS) {
+                    v = parseInt(v);
+                }
+                params[name][k] = v;
+            }
+        }
+    }
+    return params;
 }
 
 function debug(str) {
