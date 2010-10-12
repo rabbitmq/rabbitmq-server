@@ -409,7 +409,7 @@ perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
     amqp_channel:call(Channel, Method),
-    {ok, State};
+    State;
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
