@@ -210,9 +210,9 @@ add_exchange(Exchange) ->
 
 add_binding(Binding) ->
     rabbit_binding:add(
-      #binding{exchange_name = r(exchange, exchange,                Binding),
-               queue_name    = r(queue, queue,                      Binding),
-               key           = pget(routing_key,                    Binding),
+      #binding{source       = r(exchange, exchange,                 Binding),
+               destination  = r(queue, queue,                       Binding),
+               key          = pget(routing_key,                     Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
 
 pget(Key, List) ->

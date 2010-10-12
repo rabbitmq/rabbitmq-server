@@ -63,10 +63,10 @@ to_json(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     sync_resource(
       ReqData, Context,
-      fun(#binding{queue_name    = QueueName,
-                   exchange_name = ExchangeName,
-                   key           = RoutingKey,
-                   args          = Arguments}) ->
+      fun(#binding{destination = QueueName,
+                   source      = ExchangeName,
+                   key         = RoutingKey,
+                   args        = Arguments}) ->
               #'queue.bind'{ queue       = QueueName#resource.name,
                              exchange    = ExchangeName#resource.name,
                              routing_key = RoutingKey,
@@ -76,10 +76,10 @@ accept_content(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     sync_resource(
       ReqData, Context,
-      fun(#binding{queue_name    = QueueName,
-                   exchange_name = ExchangeName,
-                   key           = RoutingKey,
-                   args          = Arguments}) ->
+      fun(#binding{destination = QueueName,
+                   source      = ExchangeName,
+                   key         = RoutingKey,
+                   args        = Arguments}) ->
               #'queue.unbind'{ queue       = QueueName#resource.name,
                                exchange    = ExchangeName#resource.name,
                                routing_key = RoutingKey,
@@ -103,10 +103,10 @@ binding(ReqData) ->
                          {Key, Args} ->
                              XName = rabbit_misc:r(VHost, exchange, X),
                              QName = rabbit_misc:r(VHost, queue, Q),
-                             #binding{ exchange_name = XName,
-                                       queue_name    = QName,
-                                       key           = Key,
-                                       args          = Args }
+                             #binding{ source      = XName,
+                                       destination = QName,
+                                       key         = Key,
+                                       args        = Args }
                      end
     end.
 
