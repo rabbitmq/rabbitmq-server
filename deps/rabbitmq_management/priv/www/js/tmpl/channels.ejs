@@ -19,12 +19,12 @@
     <th><%= fmt_sort('Prefetch',        'prefetch_count') %></th>
     <th><%= fmt_sort('Message unacked', 'messages_unacknowledged') %></th>
 <% if (statistics_level == 'fine') { %>
-    <th>publish</th>
-    <th>deliver</th>
-    <th>get</th>
-    <th>deliver<sub>(noack)</sub></th>
-    <th>get<sub>(noack)</sub></th>
-    <th>ack</th>
+    <th><%= fmt_sort('publish',                   'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('deliver',                   'message_stats.deliver_details.rate') %></th>
+    <th><%= fmt_sort('get',                       'message_stats.get_details.rate') %></th>
+    <th><%= fmt_sort('deliver<sub>(noack)</sub>', 'message_stats.deliver_no_ack_details.rate') %></th>
+    <th><%= fmt_sort('get<sub>(noack)</sub>',     'message_stats.get_no_ack_details.rate') %></th>
+    <th><%= fmt_sort('ack',                       'message_stats.ack_details.rate') %></th>
 <% } %>
   </tr>
  </thead>

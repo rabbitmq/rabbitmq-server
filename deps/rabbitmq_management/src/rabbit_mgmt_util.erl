@@ -103,12 +103,12 @@ reply(Facts, ReqData, Context) ->
     {mochijson2:encode(Facts), ReqData1, Context}.
 
 reply_list(Facts, ReqData, Context) ->
-    reply_list(Facts, [vhost, name], ReqData, Context).
+    reply_list(Facts, ["vhost", "name"], ReqData, Context).
 
-reply_list(Facts, DefaultSort, ReqData, Context) ->
+reply_list(Facts, DefaultSorts, ReqData, Context) ->
     Sort = case wrq:get_qs_value("sort", ReqData) of
-               undefined -> DefaultSort;
-               Extra     -> [list_to_atom(Extra) | DefaultSort]
+               undefined -> DefaultSorts;
+               Extra     -> [Extra | DefaultSorts]
            end,
     Facts1 = lists:sort(fun(A, B) -> compare(A, B, Sort) end, Facts),
     Facts2 = case wrq:get_qs_value("sort_reverse", ReqData) of
@@ -119,13 +119,30 @@ reply_list(Facts, DefaultSort, ReqData, Context) ->
 
 compare(_A, _B, []) ->
     true;
-compare(A, B, [H|T]) ->
-    A0 = proplists:get_value(H, A),
-    B0 = proplists:get_value(H, B),
-    case A0 == B0 of
-        true  -> compare(A, B, T);
-        false -> A0 < B0
+compare(A, B, [Sort | Sorts]) ->
+    A0 = get_dotted_value(Sort, A),
+    B0 = get_dotted_value(Sort, B),
+    case {A0, B0, A0 == B0} of
+        %% Put "nothing" before everything else, in number terms it usually
+        %% means 0.
+        {_,         _,         true}  -> compare(A, B, Sorts);
+        {undefined, _,         _}     -> true;
+        {_,         undefined, _}     -> false;
+        {_,         _,         false} -> A0 < B0
     end.
+
+get_dotted_value(Key, Item) ->
+    Keys = string:tokens(Key, "."),
+    get_dotted_value0(Keys, Item).
+
+get_dotted_value0([Key], Item) ->
+    proplists:get_value(list_to_atom(Key), Item);
+get_dotted_value0([Key | Keys], Item) ->
+    SubItem = case proplists:get_value(list_to_atom(Key), Item) of
+                  undefined -> [];
+                  Other     -> Other
+              end,
+    get_dotted_value0(Keys, SubItem).
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).

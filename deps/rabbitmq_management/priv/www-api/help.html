@@ -43,7 +43,10 @@
     parameters <code>sort</code> and <code>sort_reverse</code>
     added. <code>sort</code> allows you to select a primary field to
     sort by, and <code>sort_reverse</code> will reverse the sort order
-    if set to <code>true</code>.</p>
+    if set to <code>true</code>. The <code>sort</code> parameter can
+    contain subfields separated by dots. This allows you to sort by a
+    nested component of the listed items; it does not allow you to
+    sort by more than one field. See the example below.</p>
 
     <h2>Examples</h2>
 
@@ -61,6 +64,18 @@ Content-Type: application/json
 Content-Length: 5
 
 [{"name":"/"}]</pre>
+      </li>
+      <li>
+        Get a list of channels, fast publishers first:
+<pre>$ curl -i -u guest:guest 'http://localhost:55672/api/channels?sort=message_stats.publish_details.rate&sort_reverse=true'
+HTTP/1.1 200 OK
+Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
+Date: Tue, 12 Oct 2010 10:03:21 GMT
+Content-Type: application/json
+Content-Length: 6078
+Cache-Control: no-cache
+
+[{"connection_details":{"peer_address":"127.0.0.1","peer_port":47340<i>... (remainder elided)</i></pre>
       </li>
       <li>
         Create a new vhost:

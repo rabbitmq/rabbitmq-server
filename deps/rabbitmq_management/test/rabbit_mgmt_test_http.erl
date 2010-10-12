@@ -649,6 +649,8 @@ sorting_test() ->
                  [{name, <<"test1">>}],
                  [{name, <<"test2">>}],
                  [{name, <<"test0">>}]], http_get("/queues?sort=vhost&sort_reverse=true", ?OK)),
+    %% Rather poor but at least test it doesn't blow up with dots
+    http_get("/queues?sort=owner_pid_details.name", ?OK),
     http_delete("/queues/%2f/test0", ?NO_CONTENT),
     http_delete("/queues/vh1/test1", ?NO_CONTENT),
     http_delete("/queues/%2f/test2", ?NO_CONTENT),

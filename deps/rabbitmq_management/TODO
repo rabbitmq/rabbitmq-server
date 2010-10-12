@@ -6,7 +6,6 @@ Further management:
 Fix backing queue status breakage
 Fix management plugin shutdown
 Add lots of uses of fine stats
-Sorting by something not at top level (for message rates!)
 Command-line / REPL client
 Publish / get via HTTP
 DTRT in a cluster

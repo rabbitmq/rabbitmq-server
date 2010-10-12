@@ -40,7 +40,7 @@ to_json(ReqData, Context) ->
       [rabbit_mgmt_format:permissions({User, VHost,
                                        Conf, Write, Read, Scope}) ||
           {User, Conf, Write, Read, Scope} <- Perms],
-      [vhost, user], ReqData, Context).
+      ["vhost", "user"], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
