@@ -1,11 +1,7 @@
 syntax: regexp
-
-^build/
 ^dist/
-.*\.beam
+\.beam$
 ^ebin/rabbit_management.app
-^deps/webmachine/webmachine
-^deps/webmachine/ebin
-^deps/webmachine/include
 ^cover/
 ^tmp/
+^deps.mk$
