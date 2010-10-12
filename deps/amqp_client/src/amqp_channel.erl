@@ -339,16 +339,16 @@ is_connection_method(Method) ->
     {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
     ?PROTOCOL:lookup_class_name(ClassId) == connection.
 
-send_error(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
-    {HardError, _, Close} =
-        rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL),
-    if HardError -> {stop, {send_hard_error, AmqpError}, State};
-       true      -> ?LOG_WARN("Channel (~p) flushing and closing due to soft "
-                              "error caused by the server ~p~n",
-                              [self(), AmqpError]),
-                    Self = self(),
-                    spawn(fun() -> call(Self, Close) end),
-                    {noreply, State}
+server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
+    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
+        {true, _, _} ->
+            {stop, {server_misbehaved, AmqpError}, State};
+        {false, _, Close} ->
+            ?LOG_WARN("Channel (~p) flushing and closing due to soft "
+                      "error caused by the server ~p~n", [self(), AmqpError]),
+            Self = self(),
+            spawn(fun() -> call(Self, Close) end),
+            {noreply, State}
     end.
 
 %%---------------------------------------------------------------------------
@@ -357,11 +357,12 @@ send_error(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
 
 handle_method(Method, Content, State = #state{closing = Closing}) ->
     case is_connection_method(Method) of
-        true -> send_error(#amqp_error{name        = command_invalid,
-                                       explanation = "connection method on "
-                                                     "non-zero channel",
-                                       method      = element(1, Method)},
-                           State);
+        true -> server_misbehaved(
+                    #amqp_error{name        = command_invalid,
+                                explanation = "connection method on "
+                                              "non-zero channel",
+                                method      = element(1, Method)},
+                    State);
         false -> Drop = case {Closing, Method} of
                             {just_channel, #'channel.close'{}}    -> false;
                             {just_channel, #'channel.close_ok'{}} -> false;

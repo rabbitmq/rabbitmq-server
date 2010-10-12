@@ -29,8 +29,8 @@
 -behaviour(gen_server).
 
 -export([start_link/4, connect/1, open_channel/2, hard_error_in_channel/3,
-         channel_internal_error/3, channels_terminated/1, close/2, info/2,
-         info_keys/0, info_keys/1]).
+         channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
+         close/2, info/2, info_keys/0, info_keys/1]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -84,6 +84,9 @@ hard_error_in_channel(Pid, ChannelPid, Reason) ->
 
 channel_internal_error(Pid, ChannelPid, Reason) ->
     gen_server:cast(Pid, {channel_internal_error, ChannelPid, Reason}).
+
+server_misbehaved(Pid, AmqpError) ->
+    gen_server:cast(Pid, {server_misbehaved, AmqpError}).
 
 channels_terminated(Pid) ->
     gen_server:cast(Pid, channels_terminated).
@@ -197,7 +200,11 @@ handle_cast({hard_error_in_channel, Pid, Reason}, State) ->
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p~n",
              [self(), Pid, Reason]),
-    internal_error(State).
+    internal_error(State);
+handle_cast({server_misbehaved, AmqpError}, State) ->
+    ?LOG_WARN("Connection (~p) closing: server misbehaved: ~p~n",
+              [self(), AmqpError]),
+    server_misbehaved_close(AmqpError, State).
 
 handle_info(Info, State) ->
     callback(handle_message, [Info], State).
@@ -244,7 +251,13 @@ handle_method(#'connection.close_ok'{}, State = #state{closing = Closing}) ->
     case Closing of #closing{from = none} -> ok;
                     #closing{from = From} -> gen_server:reply(From, ok)
     end,
-    {stop, closing_to_reason(Closing), State}.
+    {stop, closing_to_reason(Closing), State};
+handle_method(Other, State) ->
+    server_misbehaved_close(#amqp_error{name        = command_invalid,
+                                        explanation = "unexpected method on "
+                                                      "channel 0",
+                                        method      = element(1, Other)},
+                            State).
 
 %%---------------------------------------------------------------------------
 %% Closing
@@ -267,6 +280,12 @@ server_initiated_close(Close, State) ->
     set_closing_state(abrupt, #closing{reason = server_initiated_close,
                                        close = Close}, State).
 
+server_misbehaved_close(AmqpError, State) ->
+    {true, 0, Close} =
+        rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
+    set_closing_state(abrupt, #closing{reason = server_misbehaved,
+                                       close = Close}, State).
+
 set_closing_state(ChannelCloseType, NewClosing,
                   State = #state{channels_manager = ChMgr,
                                  closing = CurClosing}) ->
@@ -283,7 +302,7 @@ set_closing_state(ChannelCloseType, NewClosing,
 closing_priority(false)                                     -> 99;
 closing_priority(#closing{reason = app_initiated_close})    -> 4;
 closing_priority(#closing{reason = internal_error})         -> 3;
-closing_priority(#closing{reason = server_misbehaved})      -> 2; %% bug 22180
+closing_priority(#closing{reason = server_misbehaved})      -> 2;
 closing_priority(#closing{reason = server_initiated_close}) -> 1.
 
 closing_to_reason(#closing{close = #'connection.close'{reply_code = 200}}) ->

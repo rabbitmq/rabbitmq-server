@@ -170,11 +170,13 @@ maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, connection_closing, _State) ->
     ok;
-maybe_report_down(Pid, {server_initiated_hard_close, _, _} = Reason, State) ->
+maybe_report_down(Pid, {server_initiated_hard_close, _, _} = Reason,
+                  #state{connection = Connection}) ->
     amqp_gen_connection:hard_error_in_channel(Connection, Pid, Reason);
-maybe_report_down(_Pid, {send_hard_error, AmqpError}, State) ->
-    amqp_gen_connection:close(Connection, AmqpError);
-maybe_report_down(Pid, Other, State) ->
+maybe_report_down(_Pid, {server_misbehaved, AmqpError},
+                  #state{connection = Connection}) ->
+    amqp_gen_connection:server_misbehaved(Connection, AmqpError);
+maybe_report_down(Pid, Other, #state{connection = Connection}) ->
     amqp_gen_connection:channel_internal_error(Connection, Pid, Other).
 
 check_all_channels_terminated(#state{closing = false}) ->

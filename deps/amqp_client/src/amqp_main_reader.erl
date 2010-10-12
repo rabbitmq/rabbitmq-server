@@ -99,9 +99,10 @@ handle_inet_async({inet_async, Sock, _, Msg},
 process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) ->
     case rabbit_reader:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when ChNumber /= 0 ->
-            Connection ! {send_hard_error,
+            amqp_gen_connection:server_misbehaved(
+                Connection,
                 #amqp_error{name        = command_invalid,
-                            explanation = "heartbeat on non-zero channel"}};
+                            explanation = "heartbeat on non-zero channel"});
         %% Match heartbeats but don't do anything with them
         heartbeat ->
             heartbeat;

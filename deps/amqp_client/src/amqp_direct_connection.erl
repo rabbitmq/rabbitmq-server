@@ -39,7 +39,7 @@
                 closing_reason = false %% false | Reason
                }).
 
--define(INFO_KEYS, []).
+-define(INFO_KEYS, [type]).
 
 %%---------------------------------------------------------------------------
 
@@ -66,6 +66,7 @@ channels_terminated(State = #state{closing_reason = Reason,
 terminate(_Reason, _State) ->
     ok.
 
+i(type, _State) -> direct;
 i(Item, _State) -> throw({bad_argument, Item}).
 
 info_keys() ->

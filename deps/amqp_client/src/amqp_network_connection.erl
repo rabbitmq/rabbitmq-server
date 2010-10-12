@@ -43,7 +43,7 @@
                 closing_reason = false, %% false | Reason
                 waiting_socket_close = false}).
 
--define(INFO_KEYS, [heartbeat, sock]).
+-define(INFO_KEYS, [type, heartbeat, sock]).
 
 %%---------------------------------------------------------------------------
 
@@ -93,6 +93,7 @@ channels_terminated(State) ->
 terminate(_Reason, _State) ->
     ok.
 
+i(type,     _State) -> network;
 i(heartbeat, State) -> State#state.heartbeat;
 i(sock,      State) -> State#state.sock;
 i(Item,     _State) -> throw({bad_argument, Item}).

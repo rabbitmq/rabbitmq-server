@@ -40,9 +40,6 @@
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
--define(COMMON_INFO_KEYS,
-        [type, server_properties, is_closing, amqp_params, num_channels]).
-
 %%---------------------------------------------------------------------------
 %% Type Definitions
 %%---------------------------------------------------------------------------
@@ -101,7 +98,7 @@ start(Type) ->
 start(Type, AmqpParams) ->
     amqp_client:start(),
     {ok, _Sup, Connection} =
-        amqp_connection_sup:start_link(
+        amqp_sup:start_connection_sup(
             Type, case Type of direct  -> amqp_direct_connection;
                                network -> amqp_network_connection
                   end, AmqpParams),
@@ -177,7 +174,7 @@ close(ConnectionPid, Code, Text) ->
 %%<li>num_channels - returns the number of channels currently open under the
 %%    connection (excluding channel 0)</li>
 %%<li>channel_max - returns the channel_max value negotiated with the
-      server</li>
+%%    server</li>
 %%<li>heartbeat - returns the heartbeat value negotiated with the server
 %%    (only for the network connection)</li>
 %%<li>sock - returns the socket for the network connection (for use with
