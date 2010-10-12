@@ -126,15 +126,19 @@ class TestTopic(base.BaseTest):
           conn2, listener2 = self.create_subscriber_connection(d)
 
           try:
+              ## listeners are expecting 2 messages
+              listener1.reset(2)
+              listener2.reset(2)
+
               ## now send
               self.conn.send("test1", destination=d)
               self.conn.send("test2", destination=d)
 
               ## expect both consumers to get both messages
-              self.assertTrue(listener1.await(2))
+              self.assertTrue(listener1.await(5))
               self.assertEquals(2, len(listener1.messages),
                                 "unexpected message count")
-              self.assertTrue(listener2.await(2))
+              self.assertTrue(listener2.await(5))
               self.assertEquals(2, len(listener2.messages),
                                 "unexpected message count")
           finally:

@@ -21,7 +21,7 @@ class BaseTest(unittest.TestCase):
        self.assertEquals(1, len(listener.receipts))
        listener.reset()
        return conn, listener
-    
+
    def setUp(self):
         self.conn = self.create_connection()
         self.listener = WaitableListener()
@@ -42,7 +42,7 @@ class BaseTest(unittest.TestCase):
         # assert no errors
         if len(self.listener.errors) > 0:
             self.fail(self.listener.errors[0]['message'])
-        
+
         # check header content
         msg = self.listener.messages[0]
         self.assertEquals("foo", msg['message'])
@@ -55,27 +55,49 @@ class WaitableListener(object):
         self.messages = []
         self.errors = []
         self.receipts = []
-        self.event = threading.Event()
+        self.latch = Latch(1)
 
 
     def on_receipt(self, headers, message):
         self.receipts.append({'message' : message, 'headers' : headers})
-        self.event.set()
-        
+        self.latch.countdown()
+
     def on_error(self, headers, message):
         self.errors.append({'message' : message, 'headers' : headers})
-        self.event.set()
+        self.latch.countdown()
 
     def on_message(self, headers, message):
         self.messages.append({'message' : message, 'headers' : headers})
-        self.event.set()
+        self.latch.countdown()
 
-    def reset(self):
+    def reset(self,count=1):
         self.messages = []
         self.errors = []
-        self.event.clear()
+        self.latch = Latch(count)
 
     def await(self, timeout=10):
-        self.event.wait(timeout)
-        return self.event.is_set()
-        
+        return self.latch.await(timeout)
+
+class Latch(object):
+
+   def __init__(self, count=1):
+      self.cond = threading.Condition()
+      self.cond.acquire()
+      self.count = count
+      self.cond.release()
+
+   def countdown(self):
+      self.cond.acquire()
+      self.count -= 1
+      if self.count == 0:
+         self.cond.notify_all()
+      self.cond.release()
+
+   def await(self, timeout=None):
+      try:
+         self.cond.acquire()
+         self.cond.wait(timeout)
+         return self.count == 0
+      finally:
+         self.cond.release()
+
