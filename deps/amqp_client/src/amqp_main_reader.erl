@@ -56,15 +56,8 @@ init([Sock, Connection, ChMgr, Framing0]) ->
     {ok, #state{sock = Sock, connection = Connection,
                 channels_manager = ChMgr, framing0 = Framing0}}.
 
-terminate(Reason, #state{sock = Sock}) ->
-    Nice = case Reason of normal        -> true;
-                          shutdown      -> true;
-                          {shutdown, _} -> true;
-                          _             -> false
-           end,
-    ok = case Nice of true  -> rabbit_net:close(Sock);
-                      false -> ok
-         end.
+terminate(_Reason, _State) ->
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     State.

@@ -13,4 +13,5 @@
   ]},
   {registered, []},
   {env, []},
+  {mod, {amqp_client, []}},
   {applications, [kernel, stdlib]}]}.

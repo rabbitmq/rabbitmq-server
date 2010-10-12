@@ -151,13 +151,13 @@ handle_method(#'connection.close'{} = Close, none, State) ->
                                 #closing{reason = server_initiated_close,
                                          close  = Close},
                                 State)};
-handle_method(#'connection.close_ok'{}, none,
-              State = #state{closing = Closing}) ->
+handle_method(#'connection.close_ok'{}, none, State = #state{closing = Closing,
+                                                             sock = Sock}) ->
+    ok = rabbit_net:close(Sock),
     #closing{from = From,
              close = #'connection.close'{reply_code = ReplyCode}} = Closing,
-    case From of
-        none -> ok;
-        _    -> gen_server:reply(From, ok)
+    case From of none -> ok;
+                 _    -> gen_server:reply(From, ok)
     end,
     if ReplyCode =:= 200 -> {stop, normal, State};
        true              -> {stop, closing_to_reason(Closing), State}
@@ -397,10 +397,6 @@ start_ok(#state{params = #amqp_params{username          = Username,
         response = rabbit_binary_generator:generate_table(LoginTable)}.
 
 client_properties(UserProperties) ->
-    %% TODO This eagerly starts the amqp_client application in order to
-    %% to get the version from the app descriptor, which may be
-    %% overkill - maybe there is a more suitable point to boot the app
-    rabbit_misc:start_applications([amqp_client]),
     {ok, Vsn} = application:get_key(amqp_client, vsn),
     Default = [{<<"product">>,   longstr, <<"RabbitMQ">>},
                {<<"version">>,   longstr, list_to_binary(Vsn)},
