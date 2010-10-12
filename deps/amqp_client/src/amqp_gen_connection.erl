@@ -28,7 +28,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/4, connect/1, open_channel/2, hard_error_in_channel/3,
+-export([start_link/5, connect/1, open_channel/2, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
          close/2, info/2, info_keys/0, info_keys/1]).
 -export([behaviour_info/1]).
@@ -48,6 +48,7 @@
                 channel_max,
                 server_properties,
                 start_infrastructure_fun,
+                start_channels_manager_fun,
                 closing = false %% #closing{} | false
                 }).
 
@@ -55,13 +56,13 @@
                   close,
                   from = none}).
 
-
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Mod, AmqpParams, SIF, ExtraParams) ->
-    gen_server:start_link(?MODULE, [Mod, self(), AmqpParams, SIF, ExtraParams],
+start_link(Mod, AmqpParams, SIF, SChMF, ExtraParams) ->
+    gen_server:start_link(?MODULE,
+                          [Mod, self(), AmqpParams, SIF, SChMF, ExtraParams],
                           []).
 
 connect(Pid) ->
@@ -115,9 +116,9 @@ behaviour_info(callbacks) ->
      %% terminate(Reason, FinalState) -> Ignored
      {terminate, 2},
 
-     %% connect(AmqpParams, SIF, State) ->
-     %%     {ok, ServerProperties, ChannelMax, ChMgr} | {error, Error}
-     {connect, 3},
+     %% connect(AmqpParams, SIF, ChMgr, State) ->
+     %%     {ok, ServerProperties, ChannelMax} | {error, Error}
+     {connect, 4},
 
      %% do(Method, State) -> Ignored
      {do, 2},
@@ -158,20 +159,29 @@ callback(Function, Params, State = #state{module = Mod,
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Mod, Sup, AmqpParams, SIF, ExtraParams]) ->
+init([Mod, Sup, AmqpParams, SIF, SChMF, ExtraParams]) ->
     {ok, MState} = Mod:init(ExtraParams),
     {ok, #state{module = Mod,
                 module_state = MState,
                 sup = Sup,
                 amqp_params = AmqpParams,
-                start_infrastructure_fun = SIF}}.
+                start_infrastructure_fun = SIF,
+                start_channels_manager_fun = SChMF}}.
 
-handle_call(connect, _From, State = #state{module = Mod,
-                                           module_state = MState,
-                                           amqp_params = AmqpParams,
-                                           start_infrastructure_fun = SIF}) ->
-    case Mod:connect(AmqpParams, SIF, MState) of
-        {ok, ServerProperties, ChannelMax, ChMgr, NewMState} ->
+handle_call(connect, _From,
+            State = #state{module = Mod,
+                           module_state = MState,
+                           amqp_params = AmqpParams,
+                           start_infrastructure_fun = SIF,
+                           start_channels_manager_fun = SChMF}) ->
+    {ok, ChMgr} = SChMF(),
+    case Mod:connect(AmqpParams, SIF, ChMgr, MState) of
+        {ok, ServerProperties, ChannelMax, NewMState} ->
+            if ChannelMax =/= 0 ->
+                   amqp_channels_manager:set_channel_max(ChMgr, ChannelMax);
+               true ->
+                   ok
+            end,
             {reply, {ok, self()},
              State#state{module_state = NewMState,
                          server_properties = ServerProperties,

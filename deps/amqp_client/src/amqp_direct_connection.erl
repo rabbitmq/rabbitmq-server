@@ -29,7 +29,7 @@
 
 -behaviour(amqp_gen_connection).
 
--export([init/1, terminate/2, connect/3, do/2, open_channel_args/1, i/2,
+-export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing_state_set/3,
          channels_terminated/1]).
 
@@ -72,7 +72,7 @@ i(Item, _State) -> throw({bad_argument, Item}).
 info_keys() ->
     ?INFO_KEYS.
 
-connect(AmqpParams, SIF, State) ->
+connect(AmqpParams, SIF, _ChMgr, State) ->
     try do_connect(AmqpParams, SIF, State) of
         Return -> Return
     catch
@@ -86,8 +86,8 @@ do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
         true  -> rabbit_access_control:user_pass_login(User, Pass),
                  rabbit_access_control:check_vhost_access(
                          #user{username = User, password = Pass}, VHost),
-                 {ok, {ChMgr, Collector}} = SIF(),
-                 {ok, rabbit_reader:server_properties(), 0, ChMgr,
+                 {ok, Collector} = SIF(),
+                 {ok, rabbit_reader:server_properties(), 0,
                   State#state{user = User,
                               vhost = VHost,
                               collector = Collector}};

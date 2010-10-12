@@ -29,7 +29,7 @@
 
 -behaviour(amqp_gen_connection).
 
--export([init/1, terminate/2, connect/3, do/2, open_channel_args/1, i/2,
+-export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing_state_set/3,
          channels_terminated/1]).
 
@@ -40,10 +40,11 @@
 -record(state, {sock,
                 heartbeat,
                 writer0,
+                frame_max,
                 closing_reason = false, %% false | Reason
                 waiting_socket_close = false}).
 
--define(INFO_KEYS, [type, heartbeat, sock]).
+-define(INFO_KEYS, [type, heartbeat, frame_max, sock]).
 
 %%---------------------------------------------------------------------------
 
@@ -95,6 +96,7 @@ terminate(_Reason, _State) ->
 
 i(type,     _State) -> network;
 i(heartbeat, State) -> State#state.heartbeat;
+i(frame_max, State) -> State#state.frame_max;
 i(sock,      State) -> State#state.sock;
 i(Item,     _State) -> throw({bad_argument, Item}).
 
@@ -105,24 +107,24 @@ info_keys() ->
 %% Handshake
 %%---------------------------------------------------------------------------
 
-connect(AmqpParams = #amqp_params{host        = Host,
-                                  port        = Port,
-                                  ssl_options = none}, SIF, State) ->
+connect(AmqpParams = #amqp_params{ssl_options = none,
+                                  host        = Host,
+                                  port        = Port}, SIF, ChMgr, State) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
-        {ok, Sock}     -> try_handshake(AmqpParams, SIF,
+        {ok, Sock}     -> try_handshake(AmqpParams, SIF, ChMgr,
                                         State#state{sock = Sock});
         {error, _} = E -> E
     end;
-connect(AmqpParams = #amqp_params{host        = Host,
-                                  port        = Port,
-                                  ssl_options = SslOpts}, SIF, State) ->
+connect(AmqpParams = #amqp_params{ssl_options = SslOpts,
+                                  host        = Host,
+                                  port        = Port}, SIF, ChMgr, State) ->
     rabbit_misc:start_applications([crypto, public_key, ssl]),
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Sock} ->
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
                     RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
-                    try_handshake(AmqpParams, SIF,
+                    try_handshake(AmqpParams, SIF, ChMgr,
                                   State#state{sock = RabbitSslSock});
                 {error, _} = E ->
                     E
@@ -131,8 +133,8 @@ connect(AmqpParams = #amqp_params{host        = Host,
             E
     end.
 
-try_handshake(AmqpParams, SIF, State) ->
-    try handshake(AmqpParams, SIF, State) of
+try_handshake(AmqpParams, SIF, ChMgr, State) ->
+    try handshake(AmqpParams, SIF, ChMgr, State) of
         Return -> Return
     catch
         exit:socket_closed_unexpectedly = Reason ->
@@ -141,19 +143,19 @@ try_handshake(AmqpParams, SIF, State) ->
             {error, Reason}
     end.
 
-handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
+handshake(AmqpParams, SIF, ChMgr, State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    {SHF, ChMgr, State1} = start_infrastructure(SIF, State0),
+    {SHF, State1} = start_infrastructure(SIF, ChMgr, State0),
     {ServerProperties, ChannelMax, State2} =
-        network_handshake(AmqpParams, ChMgr, State1),
+        network_handshake(AmqpParams, State1),
     start_heartbeat(SHF, State2),
-    {ok, ServerProperties, ChannelMax, ChMgr, State2}.
+    {ok, ServerProperties, ChannelMax, State2}.
 
-start_infrastructure(SIF, State = #state{sock = Sock}) ->
-    {ok, {ChMgr, _MainReader, _Framing, Writer, SHF}} = SIF(Sock),
-    {SHF, ChMgr, State#state{writer0 = Writer}}.
+start_infrastructure(SIF, ChMgr, State = #state{sock = Sock}) ->
+    {ok, {_MainReader, _Framing, Writer, SHF}} = SIF(Sock, ChMgr),
+    {SHF, State#state{writer0 = Writer}}.
 
-network_handshake(AmqpParams, ChMgr, State) ->
+network_handshake(AmqpParams, State) ->
     Start = handshake_recv(),
     #'connection.start'{server_properties = ServerProperties} = Start,
     ok = check_version(Start),
@@ -168,15 +170,8 @@ network_handshake(AmqpParams, ChMgr, State) ->
     #'connection.tune_ok'{channel_max = ChannelMax,
                           frame_max   = FrameMax,
                           heartbeat   = Heartbeat} = TuneOk,
-    %% TODO: remove this message and add info items for these instead
-    ?LOG_INFO("Negotiated maximums: (Channel = ~p, Frame = ~p, "
-              "Heartbeat = ~p)~n",
-              [ChannelMax, FrameMax, Heartbeat]),
-    if ChannelMax =/= 0 -> amqp_channels_manager:set_channel_max(ChMgr,
-                                                                 ChannelMax);
-       true             -> ok
-    end,
-    {ServerProperties, ChannelMax, State#state{heartbeat = Heartbeat}}.
+    {ServerProperties, ChannelMax, State#state{heartbeat = Heartbeat,
+                                               frame_max = FrameMax}}.
 
 start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
     SHF(Sock, Heartbeat).

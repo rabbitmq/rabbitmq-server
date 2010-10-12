@@ -177,6 +177,8 @@ close(ConnectionPid, Code, Text) ->
 %%    server</li>
 %%<li>heartbeat - returns the heartbeat value negotiated with the server
 %%    (only for the network connection)</li>
+%%<li>frame_max - returns the frame_max value negotiated with the
+%%    server (only for the network connection)</li>
 %%<li>sock - returns the socket for the network connection (for use with
 %%    e.g. inet:sockname/1) (only for the network connection)</li>
 %%<li>any other value - throws an exception</li>
