@@ -44,6 +44,9 @@
 
 -include("rabbit.hrl").
 
+-define(SCHEMA_VERSION_SET, []).
+-define(SCHEMA_VERSION_FILENAME, "schema_version").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -91,6 +94,9 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
+    ok = rabbit_misc:write_term_file(filename:join(
+                                       dir(), ?SCHEMA_VERSION_FILENAME),
+                                     [?SCHEMA_VERSION_SET]),
     ok.
 
 is_db_empty() ->
@@ -241,7 +247,8 @@ ensure_mnesia_dir() ->
     case filelib:ensure_dir(MnesiaDir) of
         {error, Reason} ->
             throw({error, {cannot_create_mnesia_dir, MnesiaDir, Reason}});
-        ok -> ok
+        ok ->
+            ok
     end.
 
 ensure_mnesia_running() ->
