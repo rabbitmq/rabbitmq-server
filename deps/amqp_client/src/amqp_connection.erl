@@ -41,7 +41,7 @@
 -export([info/2, info_keys/1, info_keys/0]).
 
 -define(COMMON_INFO_KEYS,
-        [server_properties, is_closing, amqp_params, num_channels]).
+        [type, server_properties, is_closing, amqp_params, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -99,6 +99,7 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams) ->
+    amqp_client:start(),
     {ok, _Sup, Connection} =
         amqp_connection_sup:start_link(
             Type, case Type of direct  -> amqp_direct_connection;
@@ -133,7 +134,8 @@ open_channel(ConnectionPid, ChannelNumber) ->
 %% @spec (ConnectionPid) -> ok | Error
 %% where
 %%      ConnectionPid = pid()
-%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
+%% @doc Closes the channel, invokes
+%% close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
@@ -164,21 +166,24 @@ close(ConnectionPid, Code, Text) ->
 %%      Result = term()
 %% @doc Returns information about the connection, as specified by the Items
 %% list. Item may be any atom returned by info_keys/1:
-%%      server_properties - returns the server_properties fiels sent by the
-%%          server while establishing the connection
-%%      is_closing - returns true if the connection is in the process of closing
-%%          and false otherwise
-%%      amqp_params - returns the #amqp_params{} structure used to start the
-%%          connection
-%%      num_channels - returns the number of channels currently open under the
-%%          connection (excluding channel 0)
-%%      channel_max - returns the channel_max value negotiated with the server
-%%      heartbeat - returns the heartbeat value negotiated with the server
-%%          (only for the network connection)
-%%      sock - returns the socket for the network connection (for use with
-%%             e.g. inet:sockname/1)
-%%          (only for the network connection)
-%%      any other value - throws an exception
+%%<ul>
+%%<li>type - returns the type of the connection (network or direct)</li>
+%%<li>server_properties - returns the server_properties fields sent by the
+%%    server while establishing the connection</li>
+%%<li>is_closing - returns true if the connection is in the process of closing
+%%    and false otherwise</li>
+%%<li>amqp_params - returns the #amqp_params{} structure used to start the
+%%    connection</li>
+%%<li>num_channels - returns the number of channels currently open under the
+%%    connection (excluding channel 0)</li>
+%%<li>channel_max - returns the channel_max value negotiated with the
+      server</li>
+%%<li>heartbeat - returns the heartbeat value negotiated with the server
+%%    (only for the network connection)</li>
+%%<li>sock - returns the socket for the network connection (for use with
+%%    e.g. inet:sockname/1) (only for the network connection)</li>
+%%<li>any other value - throws an exception</li>
+%%</ul>
 info(ConnectionPid, Items) ->
     amqp_gen_connection:info(ConnectionPid, Items).
 

@@ -131,6 +131,12 @@ shortstr_overflow_property_test() ->
 shortstr_overflow_field_test() ->
     negative_test_util:shortstr_overflow_field_test(new_connection()).
 
+command_invalid_over_channel_test() ->
+    negative_test_util:command_invalid_over_channel_test(new_connection()).
+
+command_invalid_over_channel0_test() ->
+    negative_test_util:command_invalid_over_channel0_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 
