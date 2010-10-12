@@ -462,7 +462,6 @@ function sync_req(type, params0, path_template) {
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
-        if (params["arguments"] == "") params["arguments"] = []; // TODO
         if (type == 'GET')
             req.send(null);
         else
