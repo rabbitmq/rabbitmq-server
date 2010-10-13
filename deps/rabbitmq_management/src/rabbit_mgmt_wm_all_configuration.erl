@@ -54,10 +54,9 @@ to_json(ReqData, Context) ->
                export_exchange(X)],
     Qs = [Q || Q <- rabbit_mgmt_wm_queues:queues(ReqData),
                export_queue(Q)],
-    XNames = [{pget(name, X), pget(vhost, X)} || X <- Xs],
     QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
     Bs = [B || B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
-               export_binding(B, XNames, QNames)],
+               export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
       [{rabbit_version, list_to_binary(Vsn)}] ++
@@ -133,8 +132,8 @@ get_part(Name, Parts) ->
 export_queue(Queue) ->
     pget(owner_pid, Queue) == none.
 
-export_binding(Binding, Xs, Qs) ->
-    lists:member({pget(exchange, Binding), pget(vhost, Binding)}, Xs) andalso
+export_binding(Binding, Qs) ->
+    pget(exchange, Binding) =/= <<"">> andalso
         lists:member({pget(queue, Binding), pget(vhost, Binding)}, Qs).
 
 export_exchange(Exchange) ->
