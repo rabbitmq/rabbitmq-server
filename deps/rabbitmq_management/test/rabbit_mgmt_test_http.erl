@@ -276,40 +276,42 @@ bindings_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/myexchange/badqueue/routing", [], ?NOT_FOUND),
-    http_put("/bindings/%2f/badexchange/myqueue/routing", [], ?NOT_FOUND),
-    http_put("/bindings/%2f/myexchange/myqueue/bad_routing", [], ?BAD_REQUEST),
-    http_put("/bindings/%2f/myexchange/myqueue/routing", [], ?NO_CONTENT),
-    http_get("/bindings/%2f/myexchange/myqueue/routing", ?OK),
-    http_get("/bindings/%2f/myexchange/myqueue/rooting", ?NOT_FOUND),
+    http_put("/bindings/%2f/e/myexchange/q/badqueue/routing", [], ?NOT_FOUND),
+    http_put("/bindings/%2f/e/badexchange/q/myqueue/routing", [], ?NOT_FOUND),
+    http_put("/bindings/%2f/e/myexchange/q/myqueue/bad_routing", [], ?BAD_REQUEST),
+    http_put("/bindings/%2f/e/myexchange/q/myqueue/routing", [], ?NO_CONTENT),
+    http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?OK),
+    http_get("/bindings/%2f/e/myexchange/q/myqueue/rooting", ?NOT_FOUND),
     Binding =
-        [{exchange,<<"myexchange">>},
+        [{source,<<"myexchange">>},
          {vhost,<<"/">>},
-         {queue,<<"myqueue">>},
+         {destination,<<"myqueue">>},
+         {destination_type,<<"queue">>},
          {routing_key,<<"routing">>},
          {arguments,[]},
          {properties_key,<<"routing">>}],
     DBinding =
-        [{exchange,<<"">>},
+        [{source,<<"">>},
          {vhost,<<"/">>},
-         {queue,<<"myqueue">>},
+         {destination,<<"myqueue">>},
+         {destination_type,<<"queue">>},
          {routing_key,<<"myqueue">>},
          {arguments,[]},
          {properties_key,<<"myqueue">>}],
-    Binding = http_get("/bindings/%2f/myexchange/myqueue/routing"),
+    Binding = http_get("/bindings/%2f/e/myexchange/q/myqueue/routing"),
     assert_list([Binding],
-                http_get("/bindings/%2f/myexchange/myqueue")),
+                http_get("/bindings/%2f/e/myexchange/q/myqueue")),
     assert_list([Binding, DBinding],
                 http_get("/queues/%2f/myqueue/bindings")),
     assert_list([Binding],
                 http_get("/exchanges/%2f/myexchange/bindings")),
-    http_delete("/bindings/%2f/myexchange/myqueue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/myexchange/myqueue/routing", ?NOT_FOUND),
+    http_delete("/bindings/%2f/e/myexchange/q/myqueue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/myexchange/q/myqueue/routing", ?NOT_FOUND),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     http_get("/bindings/badvhost", ?NOT_FOUND),
     http_get("/bindings/badvhost/myqueue/myexchange/routing", ?NOT_FOUND),
-    http_get("/bindings/%2f/myexchange/myqueue/routing", ?NOT_FOUND),
+    http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?NOT_FOUND),
     ok.
 
 bindings_post_test() ->
@@ -319,22 +321,46 @@ bindings_post_test() ->
     BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_post("/bindings/%2f/myexchange/badqueue", BArgs, ?NOT_FOUND),
-    http_post("/bindings/%2f/badexchange/myqueue", BArgs, ?NOT_FOUND),
-    http_post("/bindings/%2f/myexchange/myqueue", [{a, "b"}], ?BAD_REQUEST),
-    Headers = http_post("/bindings/%2f/myexchange/myqueue", BArgs, ?CREATED),
-    "/api/bindings/%2F/myexchange/myqueue/routing_foo_bar" =
+    http_post("/bindings/%2f/e/myexchange/q/badqueue", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/myexchange/q/myqueue", [{a, "b"}], ?BAD_REQUEST),
+    Headers = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
+    "/api/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar" =
         pget("location", Headers),
-    [{exchange,<<"myexchange">>},
+    [{source,<<"myexchange">>},
      {vhost,<<"/">>},
-     {queue,<<"myqueue">>},
+     {destination,<<"myqueue">>},
+     {destination_type,<<"queue">>},
      {routing_key,<<"routing">>},
      {arguments,[{foo,<<"bar">>}]},
      {properties_key,<<"routing_foo_bar">>}] =
-        http_get("/bindings/%2F/myexchange/myqueue/routing_foo_bar", ?OK),
-    http_delete("/bindings/%2F/myexchange/myqueue/routing_foo_bar", ?NO_CONTENT),
+        http_get("/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar", ?OK),
+    http_delete("/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar", ?NO_CONTENT),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+bindings_e2e_test() ->
+    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
+    http_post("/bindings/%2f/e/amq.direct/e/badexchange", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/badexchange/e/amq.fanout", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", [{a, "b"}], ?BAD_REQUEST),
+    Headers = http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
+    "/api/bindings/%2F/e/amq.direct/e/amq.fanout/routing" =
+        pget("location", Headers),
+    [{source,<<"amq.direct">>},
+     {vhost,<<"/">>},
+     {destination,<<"amq.fanout">>},
+     {destination_type,<<"exchange">>},
+     {routing_key,<<"routing">>},
+     {arguments,[]},
+     {properties_key,<<"routing">>}] =
+        http_get("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?OK),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
+    http_put("/bindings/%2f/e/amq.direct/e/amq.headers/routing", [], ?NO_CONTENT),
+    http_get("/bindings/%2f/e/amq.direct/e/amq.headers/routing", ?OK),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.headers/routing", ?NO_CONTENT),
+    http_get("/bindings/%2f/e/amq.direct/e/amq.headers/rooting", ?NOT_FOUND),
     ok.
 
 permissions_administrator_test() ->
@@ -408,8 +434,8 @@ permissions_vhost_test() ->
     Test2("/bindings", ""),
     Test2("/queues", "myqueue/bindings"),
     Test2("/exchanges", "amq.default/bindings"),
-    Test2("/bindings", "amq.default/myqueue"),
-    Test2("/bindings", "amq.default/myqueue/myqueue"),
+    Test2("/bindings", "e/amq.default/q/myqueue"),
+    Test2("/bindings", "e/amq.default/q/myqueue/myqueue"),
     http_delete("/vhosts/myvhost1", ?NO_CONTENT),
     http_delete("/vhosts/myvhost2", ?NO_CONTENT),
     http_delete("/users/myuser", ?NO_CONTENT),
@@ -484,16 +510,19 @@ all_configuration_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/my-exchange/my-queue/routing", [], ?NO_CONTENT),
-    http_put("/bindings/%2f/amq.direct/my-queue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/my-exchange/q/my-queue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/amq.direct/q/my-queue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", [], ?NO_CONTENT),
     AllConfig = http_get("/all-configuration", ?OK),
-    http_delete("/bindings/%2f/my-exchange/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/amq.direct/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
     http_post("/all-configuration", AllConfig, ?NO_CONTENT),
-    http_delete("/bindings/%2f/my-exchange/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/amq.direct/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
     ExtraConfig =
@@ -573,7 +602,7 @@ arguments_test() ->
                           {foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_post("/bindings/%2f/myexchange/myqueue", BArgs, ?CREATED),
+    http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
     AllConfig = http_get("/all-configuration", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
@@ -584,7 +613,7 @@ arguments_test() ->
         pget(arguments, http_get("/queues/%2f/myqueue", ?OK)),
     [{foo, <<"bar">>}, {'x-match', <<"all">>}] =
         pget(arguments,
-             http_get("/bindings/%2f/myexchange/myqueue/" ++
+             http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
                           "_foo_bar_x-match_all", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
@@ -669,8 +698,9 @@ http_get(Path, CodeExp) ->
     http_get(Path, "guest", "guest", CodeExp).
 
 http_get(Path, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(get, Path, [auth_header(User, Pass)]),
+    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
 http_put(Path, List, CodeExp) ->
@@ -696,15 +726,24 @@ http_post_raw(Path, Body, CodeExp) ->
 
 %% TODO Lose the sleep below. What is happening async?
 http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Type, Path, [auth_header(User, Pass)], Body),
+    assert_code(CodeExp, CodeAct, Type, Path, ResBody),
     timer:sleep(100),
     decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(delete, Path, [auth_header()]),
+    assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
+
+assert_code(CodeExp, CodeAct, Type, Path, Body) ->
+    case CodeExp of
+        CodeAct -> ok;
+        _       -> throw({expected, CodeExp, got, CodeAct, type, Type,
+                          path, Path, body, Body})
+    end.
 
 req(Type, Path, Headers) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).

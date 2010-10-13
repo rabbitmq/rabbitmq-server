@@ -110,12 +110,12 @@ function dispatcher() {
         });
 
     this.post('#/bindings', function() {
-            if (sync_post(this, '/bindings/:vhost/:exchange/:queue'))
+            if (sync_post(this, '/bindings/:vhost/e/:exchange/q/:queue'))
                 update();
             return false;
         });
     this.del('#/bindings', function() {
-            if (sync_delete(this, '/bindings/:vhost/:exchange/:queue/:properties_key'))
+            if (sync_delete(this, '/bindings/:vhost/e/:exchange/q/:queue/:properties_key'))
                 update();
             return false;
         });
