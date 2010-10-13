@@ -87,13 +87,12 @@ resource(_, unknown) ->
 resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
 
-permissions({User, VHost, Conf, Write, Read, Scope}) ->
+permissions({User, VHost, Conf, Write, Read}) ->
     [{user,      User},
      {vhost,     VHost},
      {configure, Conf},
      {write,     Write},
-     {read,      Read},
-     {scope,     Scope}].
+     {read,      Read}].
 
 user(User) ->
     [{name,          User#user.username},

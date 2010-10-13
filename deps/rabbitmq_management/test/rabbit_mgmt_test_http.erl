@@ -94,19 +94,12 @@ users_test() ->
     ok.
 
 permissions_validation_test() ->
-    Good = [{configure, <<".*">>}, {write, <<".*">>},
-            {read,      <<".*">>}, {scope, <<"client">>}],
+    Good = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/wrong", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/guest",
-             [{configure, <<".*">>}, {write, <<".*">>},
-              {read,      <<".*">>}], ?BAD_REQUEST),
-    http_put("/permissions/%2f/guest",
-             [{configure, <<".*">>}, {write, <<".*">>},
-              {read,      <<".*">>}, {scope, <<"wrong">>}], ?BAD_REQUEST),
-    http_put("/permissions/%2f/guest",
-             [{configure, <<"[">>},  {write, <<".*">>},
-              {read,      <<".*">>}, {scope, <<"client">>}], ?BAD_REQUEST),
+             [{configure, <<"[">>}, {write, <<".*">>}, {read, <<".*">>}],
+             ?BAD_REQUEST),
     http_put("/permissions/%2f/guest", Good, ?NO_CONTENT),
     ok.
 
@@ -115,8 +108,7 @@ permissions_list_test() ->
       {vhost,<<"/">>},
       {configure,<<".*">>},
       {write,<<".*">>},
-      {read,<<".*">>},
-      {scope,<<"client">>}]] =
+      {read,<<".*">>}]] =
         http_get("/permissions"),
 
     http_put("/users/myuser1", [{password, <<"">>}, {administrator, true}],
@@ -126,8 +118,7 @@ permissions_list_test() ->
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
 
-    Perms = [{configure, <<"foo">>}, {write, <<"foo">>},
-             {read,      <<"foo">>}, {scope, <<"client">>}],
+    Perms = [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
     http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost2/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser2", Perms, ?NO_CONTENT),
@@ -148,21 +139,19 @@ permissions_test() ->
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
-             [{configure, <<"foo">>}, {write, <<"foo">>},
-              {read,      <<"foo">>}, {scope, <<"client">>}], ?NO_CONTENT),
+             [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
+             ?NO_CONTENT),
 
     Permission = [{user,<<"myuser">>},
                   {vhost,<<"myvhost">>},
                   {configure,<<"foo">>},
                   {write,<<"foo">>},
-                  {read,<<"foo">>},
-                  {scope,<<"client">>}],
+                  {read,<<"foo">>}] =
     Default = [{user,<<"guest">>},
                {vhost,<<"/">>},
                {configure,<<".*">>},
                {write,<<".*">>},
-               {read,<<".*">>},
-               {scope,<<"client">>}],
+               {read,<<".*">>}],
     Permission = http_get("/permissions/myvhost/myuser"),
     assert_list([Permission, Default], http_get("/permissions")),
     assert_list([Permission], http_get("/users/myuser/permissions")),
@@ -194,8 +183,8 @@ exchanges_test() ->
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
-             [{configure, <<".*">>}, {write, <<".*">>},
-              {read,      <<".*">>}, {scope, <<"client">>}], ?NO_CONTENT),
+             [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+             ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
@@ -365,8 +354,7 @@ permissions_administrator_test() ->
 
 permissions_vhost_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
-    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
-                {read,      <<".*">>}, {scope, <<"client">>}],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
@@ -419,7 +407,7 @@ permissions_amqp_test() ->
     %% Just test that it works at all, not that it works in all possible cases.
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
-                {read,      <<"foo.*">>}, {scope, <<"client">>}],
+                {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
@@ -442,8 +430,7 @@ get_conn(Username, Password) ->
     {Conn, ConnPath, ChPath}.
 
 permissions_connection_channel_test() ->
-    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
-                {read,      <<".*">>}, {scope, <<"client">>}],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
                              {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
@@ -617,8 +604,7 @@ queue_purge_test() ->
 
 sorting_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
-    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
-                {read,      <<".*">>}, {scope, <<"client">>}],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/vhosts/vh1", [], ?NO_CONTENT),
     http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
     http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
