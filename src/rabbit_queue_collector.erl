@@ -66,7 +66,7 @@ delete_all(CollectorPid) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{queues = dict:new()}}.
+    {ok, #state{queues = dict:new(), delete_from = undefined}}.
 
 %%--------------------------------------------------------------------------
 
@@ -79,7 +79,8 @@ handle_call({register, Q}, _From,
     end,
     {reply, ok, State#state{queues = dict:store(MonitorRef, Q, Queues)}};
 
-handle_call(delete_all, From, State = #state{queues = Queues}) ->
+handle_call(delete_all, From, State = #state{queues      = Queues,
+                                             delete_from = undefined}) ->
     case dict:size(Queues) of
         0 -> {reply, ok, State#state{delete_from = From}};
         _ -> [rabbit_amqqueue:delete_immediately(Q)
@@ -99,7 +100,6 @@ handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
     {noreply, State#state{queues = dict:erase(MonitorRef, Queues)}}.
 
 terminate(_Reason, _State) ->
-    rabbit_log:info("collector terminated~n"),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

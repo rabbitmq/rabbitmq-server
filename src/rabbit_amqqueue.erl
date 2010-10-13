@@ -115,9 +115,7 @@
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
 -spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
--spec(delete_immediately/1 :: (rabbit_types:amqqueue())
-                              -> rabbit_types:ok_or_error2(qlen(),
-                                                         'not_exclusive')).
+-spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
       (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
