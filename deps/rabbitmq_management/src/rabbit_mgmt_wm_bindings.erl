@@ -83,7 +83,7 @@ accept_content(ReqData, {_Mode, Context}) ->
                   {true, ReqData, Context2} ->
                       Loc = binary_to_list(
                               rabbit_mgmt_format:url(
-                                "/api/bindings/~s/e2q/~s/~s/~s",
+                                "/api/bindings/~s/~s/~s/~s",
                                 [VHost, Exchange, Queue,
                                  rabbit_mgmt_format:pack_binding_props(Key, [])])),
                       ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
