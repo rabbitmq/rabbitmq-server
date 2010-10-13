@@ -241,7 +241,9 @@ amqp_request(VHost, ReqData, Context, Method) ->
             not_found(list_to_binary(Reason), ReqData, Context);
         exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
             not_authorised(list_to_binary(Reason), ReqData, Context);
-        exit:{{server_initiated_close, Code, Reason}, _} ->
+        exit:{{ServerClose, Code, Reason}, _}
+          when ServerClose =:= server_initiated_close;
+               ServerClose =:= server_initiated_hard_close ->
             bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
                         ReqData, Context)
     end.
