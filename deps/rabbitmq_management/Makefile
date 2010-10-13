@@ -19,8 +19,12 @@ EXTRA_TARGETS=$(wildcard $(TEMPLATES_DIR)/*.ejs) \
     $(wildcard $(WEB_DIR)/*.html) \
     $(wildcard $(WEB_DIR)/css/*.css) \
     $(wildcard $(WEB_DIR)/img/*.png) \
+    priv/www-cli/rabbitmgmt \
 
 include ../include.mk
+
+priv/www-cli/rabbitmgmt:
+	cp bin/rabbitmgmt $@
 
 test: cleantest
 

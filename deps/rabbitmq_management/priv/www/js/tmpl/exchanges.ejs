@@ -25,11 +25,7 @@
    <td><%= exchange.type %></td>
    <td class="c"><%= fmt_boolean(exchange.durable) %></td>
    <td class="c"><%= fmt_boolean(exchange.auto_delete) %></td>
-   <td>
-     <% for (var j = 0; j < exchange.arguments.length; j++) { %>
-       <%= exchange.arguments[j] %>
-     <% } %>
-   </td>
+   <td><%= fmt_table_short(exchange.arguments) %></td>
   </tr>
   <% } %>
  </tbody>
@@ -80,7 +76,7 @@
         </tr>
         <tr>
           <th><label>Arguments:</label></th>
-          <td><input type="hidden" value="" name="arguments" />(TODO)</td>
+          <td><span class="multifield" id="arguments"></span></td>
         </tr>
       </table>
       <input type="submit" value="Add exchange"/>

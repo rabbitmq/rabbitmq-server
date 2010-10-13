@@ -1,0 +1,68 @@
+<html>
+  <head>
+    <title>RabbitMQ Management Command Line Tool</title>
+    <style>
+      body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+      td, th { font: 12px Verdana,sans-serif; color: #444; }
+      h1 { font-size: 2em; }
+      h2 { font-size: 1.5em; }
+      td.path { font-family: monospace; }
+      th { font-size 1em; font-weight: bold; }
+      table { border-collapse: collapse; }
+      table th, table td { vertical-align: top; border: 1px solid #bbb; padding: 5px; }
+      code { background: #ffa; }
+      pre { background: black; color: #0f0; padding: 10px; }
+      table pre { background: #ffa; color: black; }
+    </style>
+  </head>
+  <body>
+    <h1>RabbitMQ Management Command Line Tool</h1>
+
+    <p>Download it from <a href="rabbitmgmt">here</a> (Right click,
+    Save as). You will need Python 2.6+. Currently this has had very
+    little testing, but it's pretty simplistic.</p>
+
+    <p>Invoke <code>rabbitmgmt --help</code> for usage
+    instructions. At the moment you can list things, and import /
+    export configuration.</p>
+
+    <h2>Examples</h2>
+
+    <p>A few quick examples:</p>
+
+    <ul>
+      <li>
+        Get a list of exchanges:
+<pre>$ ./rabbitmgmt -V test list exchanges
++-------------+---------+-------+---------+-------------+
+|    name     | durable | vhost |  type   | auto_delete |
++-------------+---------+-------+---------+-------------+
+|             | True    | test  | direct  | False       |
+| amq.direct  | True    | test  | direct  | False       |
+| amq.fanout  | True    | test  | fanout  | False       |
+| amq.headers | True    | test  | headers | False       |
+| amq.match   | True    | test  | headers | False       |
+| amq.topic   | True    | test  | topic   | False       |
++-------------+---------+-------+---------+-------------+</pre>
+      </li>
+      <li>
+        Connect to another host as another user:
+<pre>$ ./rabbitmgmt -H myserver -u simon -p simon list vhosts
++------+
+| name |
++------+
+| /    |
++------+</pre>
+      </li>
+      <li>
+        Export configuration:
+<pre>$ ./rabbitmgmt export rabbit.config
+Exported configuration for localhost to "rabbit.config"</pre>
+      </li>
+      <li>
+        Import configuration, quietly:
+<pre>$ ./rabbitmgmt -q import rabbit.config</pre>
+      </li>
+    </ul>
+  </body>
+</html>

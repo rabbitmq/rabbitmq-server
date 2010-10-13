@@ -24,7 +24,7 @@
              <td><%= link_queue(bindings[i].vhost, bindings[i].queue) %></td>
 <% } %>
              <td><%= bindings[i].routing_key %></td>
-             <td></td>
+             <td><%= fmt_table_short(bindings[i].arguments) %></td>
              <td class="c">
                <form action="#/bindings" method="delete" class="confirm">
                  <input type="hidden" name="vhost" value="<%= bindings[i].vhost %>"/>
@@ -72,7 +72,7 @@
         </tr>
         <tr>
           <th><label>Arguments:</label></th>
-          <td><input type="hidden" name="arguments" value=""/> (TODO)</td>
+          <td><span class="multifield" id="arguments"></span></td>
         </tr>
       </table>
       <input type="submit" value="Bind"/>

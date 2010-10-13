@@ -1,8 +1,7 @@
 Higher priority
 ===============
 Further management:
-  Exchange / queue / binding arguments support (UI)
-  Application list / start / stop
+  Application start / stop
 Fix backing queue status breakage
 Fix management plugin shutdown
 Add lots of uses of fine stats
