@@ -93,11 +93,12 @@ handle_cast(Msg, State) ->
 
 handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
             State = #state{queues = Queues, delete_from = Deleting}) ->
-    case {Deleting, dict:size(Queues)} of
-        {undefined, _} -> ok;
-        {_,         1} -> gen_server:reply(Deleting, ok)
+    Queues1 = dict:erase(MonitorRef, Queues),
+    case Deleting =/= undefined andalso dict:size(Queues1) =:= 0 of
+        true  -> gen_server:reply(Deleting, ok);
+        false -> ok
     end,
-    {noreply, State#state{queues = dict:erase(MonitorRef, Queues)}}.
+    {noreply, State#state{queues = Queues1}}.
 
 terminate(_Reason, _State) ->
     ok.
