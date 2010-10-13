@@ -99,19 +99,12 @@ http_users_test() ->
     ok.
 
 http_permissions_validation_test() ->
-    Good = [{configure, ".*"}, {write, ".*"},
-            {read,      ".*"}, {scope, "client"}],
+    Good = [{configure, ".*"}, {write, ".*"}, {read, ".*"}],
     http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/wrong", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/guest",
-             [{configure, ".*"}, {write, ".*"},
-              {read,      ".*"}], ?BAD_REQUEST),
-    http_put("/permissions/%2f/guest",
-             [{configure, ".*"}, {write, ".*"},
-              {read,      ".*"}, {scope, "wrong"}], ?BAD_REQUEST),
-    http_put("/permissions/%2f/guest",
-             [{configure, "["}, {write, ".*"},
-              {read,      ".*"}, {scope, "client"}], ?BAD_REQUEST),
+             [{configure, "["}, {write, ".*"}, {read, ".*"}],
+             ?BAD_REQUEST),
     http_put("/permissions/%2f/guest", Good, ?NO_CONTENT),
     ok.
 
@@ -120,8 +113,7 @@ http_permissions_list_test() ->
       {user,<<"guest">>},
       {configure,<<".*">>},
       {write,<<".*">>},
-      {read,<<".*">>},
-      {scope,<<"client">>}]] =
+      {read,<<".*">>}]] =
         http_get("/permissions"),
 
     http_put("/users/myuser1", [{password, ""}, {administrator, true}],
@@ -131,8 +123,7 @@ http_permissions_list_test() ->
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
 
-    Perms = [{configure, "foo"}, {write, "foo"},
-             {read,      "foo"}, {scope, "client"}],
+    Perms = [{configure, "foo"}, {write, "foo"}, {read, "foo"}],
     http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost2/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser2", Perms, ?NO_CONTENT),
@@ -153,14 +144,13 @@ http_permissions_test() ->
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
-             [{configure, "foo"}, {write, "foo"},
-              {read,      "foo"}, {scope, "client"}], ?NO_CONTENT),
+             [{configure, "foo"}, {write, "foo"}, {read, "foo"}],
+             ?NO_CONTENT),
 
     [{vhost,<<"myvhost">>},
      {configure,<<"foo">>},
      {write,<<"foo">>},
-     {read,<<"foo">>},
-     {scope,<<"client">>}] =
+     {read,<<"foo">>}] =
         http_get("/permissions/myvhost/myuser"),
     http_delete("/permissions/myvhost/myuser", ?NO_CONTENT),
     http_get("/permissions/myvhost/myuser", ?NOT_FOUND),
@@ -190,8 +180,8 @@ http_exchanges_test() ->
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
-             [{configure, ".*"}, {write, ".*"},
-              {read,      ".*"}, {scope, "client"}], ?NO_CONTENT),
+             [{configure, ".*"}, {write, ".*"}, {read, ".*"}],
+             ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
@@ -332,8 +322,7 @@ http_permissions_administrator_test() ->
 
 http_permissions_vhost_test() ->
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, ""}],
-    PermArgs = [{configure, ".*"}, {write, ".*"},
-                {read,      ".*"}, {scope, "client"}],
+    PermArgs = [{configure, ".*"}, {write, ".*"}, {read, ".*"}],
     http_put("/users/myuser", [{password, "myuser"},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
@@ -391,8 +380,7 @@ get_conn(Username, Password) ->
     {Conn, ConnPath, ChPath}.
 
 http_permissions_connection_channel_test() ->
-    PermArgs = [{configure, ".*"}, {write, ".*"},
-                {read,      ".*"}, {scope, "client"}],
+    PermArgs = [{configure, ".*"}, {write, ".*"}, {read, ".*"}],
     http_put("/users/user", [{password, "user"},
                              {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),

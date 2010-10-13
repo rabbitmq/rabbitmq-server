@@ -89,19 +89,17 @@ resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
 permissions({VHost, Perms}) ->
     [{vhost, VHost}|permissions(Perms)];
 
-permissions({User, Conf, Write, Read, Scope}) ->
+permissions({User, Conf, Write, Read}) ->
     [{user,      User},
      {configure, Conf},
      {write,     Write},
-     {read,      Read},
-     {scope,     Scope}].
+     {read,      Read}].
 
-user_permissions({VHost, Conf, Write, Read, Scope}) ->
+user_permissions({VHost, Conf, Write, Read}) ->
     [{vhost,     VHost},
      {configure, Conf},
      {write,     Write},
-     {read,      Read},
-     {scope,     Scope}].
+     {read,      Read}].
 
 exchange(X) ->
     format(X, [{fun resource/1, [name]},
