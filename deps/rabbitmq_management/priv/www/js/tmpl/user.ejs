@@ -13,7 +13,6 @@
       <thead>
         <tr>
           <th>Virtual Host</th>
-          <th>Scope</th>
           <th>Configure Regexp</th>
           <th>Write Regexp</th>
           <th>Read Regexp</th>
@@ -24,7 +23,6 @@
         <% for (var i = 0; i < permissions.length; i++) { %>
            <tr<%= alt_rows(i)%>>
              <td><%= link_to(permissions[i].vhost, '#/vhosts/' + esc(permissions[i].vhost)) %></td>
-             <td><%= permissions[i].scope %></td>
              <td><%= permissions[i].configure %></td>
              <td><%= permissions[i].write %></td>
              <td><%= permissions[i].read %></td>
@@ -69,15 +67,6 @@
         <tr>
           <th><label>Read Regexp:</label></th>
           <td><input type="text" name="read" value=".*"/></td>
-        </tr>
-        <tr>
-          <th><label>Scope:</label></th>
-          <td>
-            <select name="scope">
-              <option value="client">Client</option>
-              <option value="all">All</option>
-            </select>
-          </td>
         </tr>
       </table>
       <input type="submit" value="Set Permission"/>
