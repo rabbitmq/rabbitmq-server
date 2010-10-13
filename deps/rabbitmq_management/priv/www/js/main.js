@@ -71,7 +71,8 @@ function dispatcher() {
     this.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': path,
-                    'bindings': path + '/bindings'}, 'exchange', '#/exchanges');
+                    'bindings': path + '/bindings/source'},
+                'exchange', '#/exchanges');
         });
     this.put('#/exchanges', function() {
             if (sync_put(this, '/exchanges/:vhost/:name'))
