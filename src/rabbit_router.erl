@@ -99,15 +99,6 @@ match_routing_key(Name, RoutingKey) ->
                                           _ = '_'}},
     lookup_qpids(mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}])).
 
-lookup_qpids(Queues) ->
-    lists:foldl(
-      fun (Key, Acc) ->
-              case mnesia:dirty_read({rabbit_queue, Key}) of
-                  [#amqqueue{pid = QPid}] -> [QPid | Acc];
-                  []                      -> Acc
-              end
-      end, [], lists:usort(Queues)).
-
 %%--------------------------------------------------------------------
 
 fold_deliveries({Pid, true},{_, Handled}) -> {true, [Pid|Handled]};
@@ -117,3 +108,11 @@ fold_deliveries({_,  false},{_, Handled}) -> {true, Handled}.
 check_delivery(true, _   , {false, []}) -> {unroutable, []};
 check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
+
+lookup_qpids(QNames) ->
+    lists:foldl(fun (QName, QPids) ->
+                        case mnesia:dirty_read({rabbit_queue, QName}) of
+                            [#amqqueue{pid = QPid}] -> [QPid | QPids];
+                            []                      -> QPids
+                        end
+                end, [], lists:usort(QNames)).
