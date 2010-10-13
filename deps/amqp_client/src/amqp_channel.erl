@@ -34,7 +34,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/3]).
+-export([start_link/3, connection_closing/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -439,6 +439,10 @@ handle_method1(Method, Content, State) ->
 start_link(Driver, ChannelNumber, SWF) ->
     gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
 
+%% @private
+connection_closing(Pid, ChannelCloseType) ->
+    gen_server:cast(Pid, {connection_closing, ChannelCloseType}).
+
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -557,7 +561,29 @@ handle_cast({notify_sent, _Peer}, State) ->
 %% to this gen_server instance
 %% @private
 handle_cast({method, Method, Content}, State) ->
-    handle_method(Method, Content, State).
+    handle_method(Method, Content, State);
+
+%% Handles the situation when the connection closes without closing the channel
+%% beforehand. The channel must block all further RPCs,
+%% flush the RPC queue (optional), and terminate
+%% @private
+handle_cast({connection_closing, CloseType},
+            #state{rpc_requests = RpcQueue,
+                   closing = Closing} = State) ->
+    case {CloseType, Closing, queue:is_empty(RpcQueue)} of
+        {flush, false, false} ->
+            erlang:send_after(?TIMEOUT_FLUSH, self(),
+                              {shutdown, timed_out_flushing_channel,
+                               connection_closing}),
+            {noreply, State#state{closing = connection}};
+        {flush, just_channel, false} ->
+            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
+                              {shutdown, timed_out_waiting_close_ok,
+                               connection_closing}),
+            {noreply, State};
+        _ ->
+            {stop, connection_closing, State}
+    end.
 
 %% These callbacks are invoked when a direct channel sends messages
 %% to this gen_server instance
@@ -609,28 +635,6 @@ handle_info({shutdown, FailShutdownReason, connection_closing},
                       "channel.close_ok while connection closing~n", [Number])
     end,
     {stop, FailShutdownReason, State};
-
-%% Handles the situation when the connection closes without closing the channel
-%% beforehand. The channel must block all further RPCs,
-%% flush the RPC queue (optional), and terminate
-%% @private
-handle_info({connection_closing, CloseType},
-            #state{rpc_requests = RpcQueue,
-                   closing = Closing} = State) ->
-    case {CloseType, Closing, queue:is_empty(RpcQueue)} of
-        {flush, false, false} ->
-            erlang:send_after(?TIMEOUT_FLUSH, self(),
-                              {shutdown, timed_out_flushing_channel,
-                               connection_closing}),
-            {noreply, State#state{closing = connection}};
-        {flush, just_channel, false} ->
-            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
-                              {shutdown, timed_out_waiting_close_ok,
-                               connection_closing}),
-            {noreply, State};
-        _ ->
-            shutdown_with_reason(connection_closing, State)
-    end;
 
 %% @private
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->

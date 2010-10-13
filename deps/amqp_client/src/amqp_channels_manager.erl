@@ -192,7 +192,7 @@ handle_connection_closing(ChannelCloseType,
                           State = #state{connection = Connection}) ->
     case internal_is_empty(State) of
         true  -> amqp_gen_connection:channels_terminated(Connection);
-        false -> signal_channels({connection_closing, ChannelCloseType}, State)
+        false -> signal_channels_connection_closing(ChannelCloseType, State)
     end,
     {noreply, State#state{closing = true}}.
 
@@ -235,5 +235,8 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
                                   error        -> undefined
     end.
 
-signal_channels(Msg, #state{map_pid_num = MapPN}) ->
-    dict:fold(fun(Pid, _, _) -> Pid ! Msg end, none, MapPN).
+signal_channels_connection_closing(ChannelCloseType,
+                                   #state{map_pid_num = MapPN}) ->
+    dict:fold(fun (Pid, _, _) ->
+                      amqp_channel:connection_closing(Pid, ChannelCloseType)
+              end, none, MapPN).
