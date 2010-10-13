@@ -68,7 +68,8 @@ create_path(ReqData, Context) ->
 accept_content(ReqData, {_Mode, Context}) ->
     rabbit_mgmt_util:with_decode_vhost(
       [routing_key, arguments], ReqData, Context,
-      fun(VHost, [Key, Args]) ->
+      fun(VHost, [Key, Args0]) ->
+              Args = rabbit_mgmt_util:args(Args0),
               Exchange = rabbit_mgmt_util:id(exchange, ReqData),
               Queue = rabbit_mgmt_util:id(queue, ReqData),
               Res = rabbit_mgmt_util:amqp_request(
@@ -76,7 +77,7 @@ accept_content(ReqData, {_Mode, Context}) ->
                       #'queue.bind'{ exchange    = Exchange,
                                      queue       = Queue,
                                      routing_key = Key,
-                                     arguments  = rabbit_mgmt_util:args(Args)}),
+                                     arguments   = Args}),
               case Res of
                   {{halt, _}, _, _} ->
                       Res;
@@ -85,7 +86,8 @@ accept_content(ReqData, {_Mode, Context}) ->
                               rabbit_mgmt_format:url(
                                 "/api/bindings/~s/~s/~s/~s",
                                 [VHost, Exchange, Queue,
-                                 rabbit_mgmt_format:pack_binding_props(Key, [])])),
+                                 rabbit_mgmt_format:pack_binding_props(
+                                   Key, Args)])),
                       ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
                       {true, ReqData2, Context2}
               end

@@ -316,23 +316,23 @@ bindings_post_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
              {arguments, []}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
-    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
+    BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_post("/bindings/%2f/myexchange/badqueue", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/badexchange/myqueue", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/myexchange/myqueue", [{a, "b"}], ?BAD_REQUEST),
     Headers = http_post("/bindings/%2f/myexchange/myqueue", BArgs, ?CREATED),
-    "/api/bindings/%2F/myexchange/myqueue/routing" =
+    "/api/bindings/%2F/myexchange/myqueue/routing_foo_bar" =
         pget("location", Headers),
     [{exchange,<<"myexchange">>},
      {vhost,<<"/">>},
      {queue,<<"myqueue">>},
      {routing_key,<<"routing">>},
-     {arguments,[]},
-     {properties_key,<<"routing">>}] =
-        http_get("/bindings/%2f/myexchange/myqueue/routing", ?OK),
-    http_delete("/bindings/%2f/myexchange/myqueue/routing", ?NO_CONTENT),
+     {arguments,[{foo,<<"bar">>}]},
+     {properties_key,<<"routing_foo_bar">>}] =
+        http_get("/bindings/%2F/myexchange/myqueue/routing_foo_bar", ?OK),
+    http_delete("/bindings/%2F/myexchange/myqueue/routing_foo_bar", ?NO_CONTENT),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
