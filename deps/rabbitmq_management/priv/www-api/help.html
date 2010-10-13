@@ -299,8 +299,8 @@ Content-Length: 0</pre>
         <td></td>
         <td>X</td>
         <td class="path">/api/bindings/<i>vhost</i>/e2q/<i>exchange</i>/<i>queue</i></td>
-        <td>A list of all bindings between a queue and an
-        exchange. Remember, a queue and an exchange can be bound
+        <td>A list of all bindings between an exchange and a
+        queue. Remember, an exchange and a queue can be bound
         together many times! To create a new binding, POST to this
         URI. You will need a body looking something like this:
           <pre>{"routing_key":"my_routing_key","arguments":[]}</pre>
@@ -314,10 +314,10 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/bindings/<i>vhost</i>/e2q/<i>exchange</i>/<i>queue</i>/<i>props</i></td>
-        <td>An individual binding between a queue and an
-        exchange. The <i>props</i> part of the URI is a "name" for the
-        binding composed of its routing key and properties. While you
-        can create a binding by PUTing to this URI, it may be more
+        <td>An individual binding between an exchange and a queue.
+        The <i>props</i> part of the URI is a "name" for the binding
+        composed of its routing key and properties. While you can
+        create a binding by PUTing to this URI, it may be more
         convenient to POST to the URI above.</td>
       </tr>
       <tr>
