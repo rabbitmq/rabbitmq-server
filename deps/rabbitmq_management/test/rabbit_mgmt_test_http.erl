@@ -146,7 +146,7 @@ permissions_test() ->
                   {vhost,<<"myvhost">>},
                   {configure,<<"foo">>},
                   {write,<<"foo">>},
-                  {read,<<"foo">>}] =
+                  {read,<<"foo">>}],
     Default = [{user,<<"guest">>},
                {vhost,<<"/">>},
                {configure,<<".*">>},
