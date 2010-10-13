@@ -437,24 +437,21 @@ flush_all(QPids, ChPid) ->
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
     ok = mnesia:delete({rabbit_durable_queue, QueueName}),
-    %% we want to execute some things, as
-    %% decided by rabbit_exchange, after the
-    %% transaction.
+    %% we want to execute some things, as decided by rabbit_exchange,
+    %% after the transaction.
     rabbit_binding:remove_for_queue(QueueName).
 
 internal_delete(QueueName) ->
-    case
-        rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_queue, QueueName}) of
-                      []  -> {error, not_found};
-                      [_] -> internal_delete1(QueueName)
-                  end
-          end) of
-        Err = {error, _} -> Err;
-        PostHook ->
-            PostHook(),
-            ok
+    case rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   case mnesia:wread({rabbit_queue, QueueName}) of
+                       []  -> {error, not_found};
+                       [_] -> internal_delete1(QueueName)
+                   end
+           end) of
+        {error, _} = Err -> Err;
+        PostHook         -> PostHook(),
+                            ok
     end.
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
@@ -484,9 +481,8 @@ on_node_down(Node) ->
     ok.
 
 delete_queue(QueueName) ->
-    Post = rabbit_binding:remove_transient_for_queue(QueueName),
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    Post.
+    rabbit_binding:remove_transient_for_queue(QueueName).
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name = QueueName,

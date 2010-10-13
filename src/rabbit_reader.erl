@@ -66,6 +66,8 @@
                           send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
+                              peer_cert_subject, peer_cert_issuer,
+                              peer_cert_validity,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
@@ -813,27 +815,26 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid, #v1{}) ->
     self();
 i(address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:sockname(Sock),
-    A;
+    socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:sockname(Sock),
-    P;
+    socket_info(fun rabbit_net:sockname/1, fun ({_, P}) -> P end, Sock);
 i(peer_address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:peername(Sock),
-    A;
+    socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
 i(peer_port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:peername(Sock),
-    P;
+    socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
+i(peer_cert_issuer, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
+i(peer_cert_subject, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_subject/1, Sock);
+i(peer_cert_validity, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_validity/1, Sock);
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{SockStat, StatVal}]} -> StatVal;
-        {error, einval}             -> undefined;
-        {error, Error}              -> throw({cannot_get_socket_stats, Error})
-    end;
+    socket_info(fun () -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end);
 i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
@@ -857,6 +858,22 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+socket_info(Get, Select, Sock) ->
+    socket_info(fun() -> Get(Sock) end, Select).
+
+socket_info(Get, Select) ->
+    case Get() of
+        {ok,    T} -> Select(T);
+        {error, _} -> ''
+    end.
+
+cert_info(F, Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl                -> '';
+        {error, no_peercert} -> '';
+        {ok, Cert}           -> F(Cert)
+    end.
 
 %%--------------------------------------------------------------------------
 
@@ -891,7 +908,7 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
 send_exception(State = #v1{connection = #connection{protocol = Protocol}},
                Channel, Reason) ->
     {ShouldClose, CloseChannel, CloseMethod} =
-        map_exception(Channel, Reason, Protocol),
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     NewState = case ShouldClose of
                    true  -> terminate_channels(),
                             close_connection(State);
@@ -900,47 +917,6 @@ send_exception(State = #v1{connection = #connection{protocol = Protocol}},
     ok = rabbit_writer:internal_send_command(
            NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
     NewState.
-
-map_exception(Channel, Reason, Protocol) ->
-    {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason, Protocol),
-    ShouldClose = SuggestedClose or (Channel == 0),
-    {ClassId, MethodId} = case FailedMethod of
-                              {_, _} -> FailedMethod;
-                              none   -> {0, 0};
-                              _      -> Protocol:method_id(FailedMethod)
-                          end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true -> {0, #'connection.close'{reply_code = ReplyCode,
-                                            reply_text = ReplyText,
-                                            class_id = ClassId,
-                                            method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
-
-lookup_amqp_exception(#amqp_error{name        = Name,
-                                  explanation = Expl,
-                                  method      = Method},
-                      Protocol) ->
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
-    ExplBin = amqp_exception_explanation(Text, Expl),
-    {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other, Protocol) ->
-    rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
-    {ShouldClose, Code, Text, none}.
-
-amqp_exception_explanation(Text, Expl) ->
-    ExplBin = list_to_binary(Expl),
-    CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
-       true                        -> CompleteTextBin
-    end.
 
 internal_emit_stats(State = #v1{stats_timer = StatsTimer}) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),

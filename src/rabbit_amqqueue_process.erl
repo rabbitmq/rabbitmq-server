@@ -251,8 +251,9 @@ stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{expiry_timer_ref = undefined}.
 
-%% We only wish to expire where there are no consumers *and* when
-%% basic.get hasn't been called for the configured period.
+%% We wish to expire only when there are no consumers *and* the expiry
+%% hasn't been refreshed (by queue.declare or basic.get) for the
+%% configured period.
 ensure_expiry_timer(State = #q{expires = undefined}) ->
     State;
 ensure_expiry_timer(State = #q{expires = Expires}) ->
@@ -783,7 +784,8 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
 handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)},
+          ensure_expiry_timer(State));
 
 handle_call(delete_exclusive, _From,
             State = #q{ backing_queue_state = BQS,
