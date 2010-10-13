@@ -10,6 +10,12 @@ Publish / get via HTTP
 DTRT in a cluster
   One rabbit_event / rabbit_mgmt_db per cluster
   Per-node events to replace external_stats
+UI tweaks
+  error popup
+  connection xxxkB/s thing
+  connection "sending" "receiving"
+  connection -> channels drilldown
+  connection -> user / vhost link
 
 (At some point in this group
     * get e.g. mikeb to pronounce self happy
