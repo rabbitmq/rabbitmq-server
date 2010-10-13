@@ -111,12 +111,12 @@ list_bindings(all, ReqData) ->
                                              rabbit_binding:list(VHost)
                                      end);
 list_bindings(exchange, ReqData) ->
-    rabbit_binding:list_for_exchange(r(exchange, ReqData));
+    rabbit_binding:list_for_source(r(exchange, ReqData));
 list_bindings(queue, ReqData) ->
-    rabbit_binding:list_for_queue(r(queue, ReqData));
+    rabbit_binding:list_for_destination(r(queue, ReqData));
 list_bindings(queue_exchange, ReqData) ->
-    rabbit_binding:list_for_exchange_and_queue(r(exchange, ReqData),
-                                               r(queue,    ReqData)).
+    rabbit_binding:list_for_source_and_destination(r(exchange, ReqData),
+                                                   r(queue,    ReqData)).
 
 r(Type, ReqData) ->
     rabbit_misc:r(rabbit_mgmt_util:vhost(ReqData),
