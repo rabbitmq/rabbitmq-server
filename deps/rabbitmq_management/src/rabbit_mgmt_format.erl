@@ -69,10 +69,18 @@ tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
 tuple(Term)                       -> Term.
 
-protocol(unknown)                  -> unknown;
-protocol({Major, Minor, 0})        -> print("~w-~w", [Major, Minor]);
-protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
-                                            [Major, Minor, Revision]).
+protocol(unknown) ->
+    unknown;
+protocol(Version = {Major, Minor, Revision}) ->
+    protocol({'AMQP', Version});
+protocol({Family, Version}) -> print("~s ~s", [Family, protocol_version(Version)]).
+
+protocol_version(Arbitrary)
+  when is_list(Arbitrary)                  -> Arbitrary;
+protocol_version({Major, Minor})           -> io_lib:format("~B-~B", [Major, Minor]);
+protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
+protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
+                                                    [Major, Minor, Revision]).
 
 timestamp(unknown) ->
     unknown;

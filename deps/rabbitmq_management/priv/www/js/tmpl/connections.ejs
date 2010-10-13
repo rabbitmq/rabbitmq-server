@@ -5,10 +5,11 @@
 <table class="list">
  <thead>
   <tr>
-   <th colspan="3">Network</th>
+   <th colspan="4">Network</th>
    <th colspan="4">Overview</th>
   </tr>
   <tr>
+    <th><%= fmt_sort('Protocol',     'protocol') %></th>
     <th><%= fmt_sort('Peer address', 'name') %></th>
     <th><%= fmt_sort('Receiving',    'recv_oct_details.rate') %></th>
     <th><%= fmt_sort('Sending',      'send_oct_details.rate') %></th>
@@ -24,6 +25,7 @@
     var connection = connections[i];
 %>
   <tr<%= alt_rows(i)%>>
+    <td><%= connection.protocol %></td>
     <td><%= link_conn(connection.name) %></td>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
