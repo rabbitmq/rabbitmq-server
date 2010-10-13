@@ -821,11 +821,8 @@ i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{SockStat, StatVal}]} -> StatVal;
-        {error, einval}             -> undefined;
-        {error, Error}              -> throw({cannot_get_socket_stats, Error})
-    end;
+    socket_info(fun () -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end);
 i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
@@ -851,7 +848,10 @@ i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
 socket_info(Get, Select, Sock) ->
-    case Get(Sock) of
+    socket_info(fun() -> Get(Sock) end, Select).
+
+socket_info(Get, Select) ->
+    case Get() of
         {ok,    T} -> Select(T);
         {error, _} -> ''
     end.
