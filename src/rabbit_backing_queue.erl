@@ -62,12 +62,12 @@ behaviour_info(callbacks) ->
      {purge, 1},
 
      %% Publish a message.
-     {publish, 2},
+     {publish, 3},
 
      %% Called for messages which have already been passed straight
      %% out to a client. The queue will be empty for these calls
      %% (i.e. saves the round trip through the backing queue).
-     {publish_delivered, 3},
+     {publish_delivered, 4},
 
      %% Produce the next message.
      {fetch, 2},

@@ -31,8 +31,8 @@
 
 -module(rabbit_invariable_queue).
 
--export([init/3, terminate/1, delete_and_terminate/1, purge/1, publish/2,
-         publish_delivered/3, fetch/2, ack/2, tx_publish/3, tx_ack/3,
+-export([init/3, terminate/1, delete_and_terminate/1, purge/1, publish/3,
+         publish_delivered/4, fetch/2, ack/2, tx_publish/3, tx_ack/3,
          tx_rollback/2, tx_commit/3, requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
          idle_timeout/1, handle_pre_hibernate/1, status/1]).
@@ -99,14 +99,14 @@ purge(State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
     ok = persist_acks(QName, IsDurable, none, AckTags, PA),
     {Len, State #iv_state { len = 0, queue = queue:new() }}.
 
-publish(Msg, State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
-                                 len = Len }) ->
+publish(Msg, _, State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
+                                    len = Len }) ->
     ok = persist_message(QName, IsDurable, none, Msg),
     State #iv_state { queue = queue:in({Msg, false}, Q), len = Len + 1 }.
 
-publish_delivered(false, _Msg, State) ->
+publish_delivered(false, _Msg, _, State) ->
     {blank_ack, State};
-publish_delivered(true, Msg = #basic_message { guid = Guid },
+publish_delivered(true, Msg = #basic_message { guid = Guid }, _,
                   State = #iv_state { qname = QName, durable = IsDurable,
                                       len = 0, pending_ack = PA }) ->
     ok = persist_message(QName, IsDurable, none, Msg),

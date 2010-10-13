@@ -38,7 +38,7 @@
 -export([start_link/7, do/2, do/3, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1, flush/1]).
+-export([emit_stats/1, flush/1, flush_multiple_acks/1, confirm/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -48,7 +48,9 @@
              start_limiter_fun, transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
-             consumer_mapping, blocking, queue_collector_pid, stats_timer}).
+             consumer_mapping, blocking, queue_collector_pid, stats_timer,
+             confirm_enabled, published_count, confirm_multiple, confirm_tref,
+             held_confirms, unconfirmed, qpid_to_msgs}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -69,6 +71,8 @@
          vhost]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
+
+-define(FLUSH_MULTIPLE_ACKS_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -99,6 +103,8 @@
 -spec(info_all/0 :: () -> [[rabbit_types:info()]]).
 -spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
+-spec(flush_multiple_acks/1 :: (pid()) -> 'ok').
+-spec(confirm/2 ::(pid(), integer()) -> 'ok').
 
 -endif.
 
@@ -153,6 +159,12 @@ emit_stats(Pid) ->
 flush(Pid) ->
     gen_server2:call(Pid, flush).
 
+flush_multiple_acks(Pid) ->
+    gen_server2:cast(Pid, flush_multiple_acks).
+
+confirm(Pid, MsgSeqNo) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNo}).
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
@@ -177,7 +189,13 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 consumer_mapping        = dict:new(),
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = StatsTimer},
+                stats_timer             = StatsTimer,
+                confirm_enabled         = false,
+                published_count         = 0,
+                confirm_multiple        = false,
+                held_confirms           = gb_sets:new(),
+                unconfirmed             = gb_sets:new(),
+                qpid_to_msgs            = dict:new()},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -258,19 +276,43 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
     {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}};
 
-handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+handle_cast(flush_multiple_acks,
+            State = #ch{writer_pid      = WriterPid,
+                        held_confirms   = As,
+                        unconfirmed     = UC}) ->
+    flush_multiple(WriterPid, As, UC),
+    {noreply, State#ch{held_confirms = gb_sets:new(),
+                       confirm_tref  = undefined}};
+
+handle_cast({confirm, MsgSeqNo}, State) ->
+    {noreply, send_or_enqueue_ack(MsgSeqNo, State)}.
+
+handle_info({'DOWN', _MRef, process, QPid, _Reason},
+            State = #ch{qpid_to_msgs = QTM}) ->
+    State2 = case dict:find(QPid, QTM) of
+                 {ok, Msgs} -> State1 = gb_sets:fold(fun send_or_enqueue_ack/2,
+                                                     State, Msgs),
+                               State1 #ch{qpid_to_msgs = dict:erase(QPid, QTM)};
+                 error      -> State
+             end,
     erase_queue_stats(QPid),
-    {noreply, queue_blocked(QPid, State)}.
+    {noreply, queue_blocked(QPid, State2)}.
 
-handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
+handle_pre_hibernate(State = #ch{writer_pid    = WriterPid,
+                                 held_confirms = As,
+                                 stats_timer   = StatsTimer,
+                                 unconfirmed   = UC}) ->
     ok = clear_permission_cache(),
-    rabbit_event:if_enabled(StatsTimer, fun () ->
+    flush_multiple(WriterPid, As, UC),
+    rabbit_event:if_enabled(StatsTimer, fun() ->
                                                 internal_emit_stats(State)
                                         end),
-    {hibernate,
-     State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
+    StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
+    {hibernate, State#ch{held_confirms = gb_sets:new(),
+                         stats_timer   = StatsTimer1,
+                         confirm_tref  = undefined}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -402,6 +444,47 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
+send_or_enqueue_ack(undefined, State) ->
+    State;
+send_or_enqueue_ack(_, State = #ch{confirm_enabled = false}) ->
+    State;
+send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = false}) ->
+    do_if_unconfirmed(
+      MsgSeqNo, State,
+      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
+              ok = rabbit_writer:send_command(
+                     WriterPid, #'basic.ack'{delivery_tag = MSN}),
+              State1
+      end);
+send_or_enqueue_ack(MsgSeqNo, State = #ch{confirm_multiple = true}) ->
+    do_if_unconfirmed(
+      MsgSeqNo, State,
+      fun(MSN, State1 = #ch{held_confirms = As}) ->
+              start_ack_timer(State1#ch{held_confirms =
+                                            gb_sets:add(MSN, As)})
+      end).
+
+msg_sent_to_queue(undefined, _QPid, State) ->
+    State;
+msg_sent_to_queue(MsgSeqNo, QPid, State = #ch{qpid_to_msgs = QTM}) ->
+    Msgs1 = case dict:find(QPid, QTM) of
+                {ok, Msgs} -> Msgs;
+                error      -> erlang:monitor(process, QPid),
+                              gb_sets:new()
+            end,
+    QTM1 = dict:store(QPid, gb_sets:add(MsgSeqNo, Msgs1), QTM),
+    State#ch{qpid_to_msgs = QTM1}.
+
+do_if_unconfirmed(MsgSeqNo, State = #ch{unconfirmed = UC}, Fun) ->
+    case gb_sets:is_element(MsgSeqNo, UC) of
+        true  -> QTM = dict:map(fun (_, Msgs) ->
+                                        gb_sets:delete_any(MsgSeqNo, Msgs)
+                                end, State#ch.qpid_to_msgs),
+                 State1 = Fun(MsgSeqNo, State#ch{qpid_to_msgs = QTM}),
+                 State1#ch{unconfirmed = gb_sets:delete(MsgSeqNo, UC)};
+        false -> State
+    end.
+
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     {reply, #'channel.open_ok'{}, State#ch{state = running}};
 
@@ -424,9 +507,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                routing_key = RoutingKey,
                                mandatory   = Mandatory,
                                immediate   = Immediate},
-              Content, State = #ch{virtual_host   = VHostPath,
-                                   transaction_id = TxnKey,
-                                   writer_pid     = WriterPid}) ->
+              Content, State = #ch{virtual_host    = VHostPath,
+                                   transaction_id  = TxnKey,
+                                   confirm_enabled = ConfirmEnabled}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -434,6 +517,15 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
+    {MsgSeqNo, State1}
+        = case ConfirmEnabled of
+              false -> {undefined, State};
+              true  -> Count = State#ch.published_count,
+                       {Count,
+                        State#ch{published_count = Count + 1,
+                                 unconfirmed =
+                                     gb_sets:add(Count, State#ch.unconfirmed)}}
+          end,
     Message = #basic_message{exchange_name = ExchangeName,
                              routing_key   = RoutingKey,
                              content       = DecodedContent,
@@ -442,18 +534,19 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message)),
-    case RoutingRes of
-        routed        -> ok;
-        unroutable    -> ok = basic_return(Message, WriterPid, no_route);
-        not_delivered -> ok = basic_return(Message, WriterPid, no_consumers)
-    end,
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
+                                case IsPersistent of
+                                    true  -> MsgSeqNo;
+                                    false -> undefined
+                                end)),
+    State2 = process_routing_result(RoutingRes, DeliveredQPids, IsPersistent,
+                                    MsgSeqNo, Message, State1),
     maybe_incr_stats([{ExchangeName, 1} |
                       [{{QPid, ExchangeName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State),
+                          QPid <- DeliveredQPids]], publish, State2),
     {noreply, case TxnKey of
-                  none -> State;
-                  _    -> add_tx_participants(DeliveredQPids, State)
+                  none -> State2;
+                  _    -> add_tx_participants(DeliveredQPids, State2)
               end};
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
@@ -841,6 +934,11 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
     return_ok(State, NoWait,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
 
+
+handle_method(#'tx.select'{}, _, #ch{confirm_enabled = true}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "cannot switch from confirm to tx mode", []);
+
 handle_method(#'tx.select'{}, _, State = #ch{transaction_id = none}) ->
     {reply, #'tx.select_ok'{}, new_tx(State)};
 
@@ -860,6 +958,25 @@ handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
 
 handle_method(#'tx.rollback'{}, _, State) ->
     {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
+
+handle_method(#'confirm.select'{}, _, #ch{transaction_id = TxId})
+  when TxId =/= none ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "cannot switch from tx to confirm mode", []);
+
+handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
+              _, State = #ch{confirm_enabled = false}) ->
+    return_ok(State#ch{confirm_enabled = true, confirm_multiple = Multiple},
+              NoWait, #'confirm.select_ok'{});
+
+handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
+              _, State = #ch{confirm_enabled = true,
+                             confirm_multiple = Multiple}) ->
+    return_ok(State, NoWait, #'confirm.select_ok'{});
+
+handle_method(#'confirm.select'{}, _, #ch{confirm_enabled = true}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "cannot change confirm_multiple setting", []);
 
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter_pid = LimiterPid}) ->
@@ -1083,6 +1200,21 @@ is_message_persistent(Content) ->
             IsPersistent
     end.
 
+process_routing_result(unroutable,    _,     _, MsgSeqNo, Message, State) ->
+    ok = basic_return(Message, State#ch.writer_pid, no_route),
+    send_or_enqueue_ack(MsgSeqNo, State);
+process_routing_result(not_delivered, _,     _, MsgSeqNo, Message, State) ->
+    ok = basic_return(Message, State#ch.writer_pid, no_consumers),
+    send_or_enqueue_ack(MsgSeqNo, State);
+process_routing_result(routed,       [],     _, MsgSeqNo,       _, State) ->
+    send_or_enqueue_ack(MsgSeqNo, State);
+process_routing_result(routed,        _, false, MsgSeqNo,       _, State) ->
+    send_or_enqueue_ack(MsgSeqNo, State);
+process_routing_result(routed,    QPids,  true, MsgSeqNo,       _, State) ->
+    lists:foldl(fun (QPid, State0) ->
+                        msg_sent_to_queue(MsgSeqNo, QPid, State0)
+                end, State, QPids).
+
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
@@ -1104,7 +1236,8 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
              false -> rabbit_writer:send_command(WriterPid, M, Content)
          end.
 
-terminate(_State) ->
+terminate(State) ->
+    stop_ack_timer(State),
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 
@@ -1186,3 +1319,47 @@ erase_queue_stats(QPid) ->
     erase({queue_stats, QPid}),
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
+
+start_ack_timer(State = #ch{confirm_tref = undefined}) ->
+    {ok, TRef} = timer:apply_after(?FLUSH_MULTIPLE_ACKS_INTERVAL,
+                                   ?MODULE, flush_multiple_acks, [self()]),
+    State#ch{confirm_tref = TRef};
+start_ack_timer(State) ->
+    State.
+
+stop_ack_timer(State = #ch{confirm_tref = undefined}) ->
+    State;
+stop_ack_timer(State = #ch{confirm_tref = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State#ch{confirm_tref = undefined}.
+
+flush_multiple(WriterPid, As, NA) ->
+    case gb_sets:is_empty(As) of
+        true -> ok;
+        false -> [First | Rest] = gb_sets:to_list(As),
+                 [rabbit_writer:send_command(WriterPid,
+                                             #'basic.ack'{delivery_tag = A}) ||
+                     A <- case Rest of
+                              [] -> [First];
+                              _  -> flush_multiple(
+                                      First, Rest, WriterPid,
+                                      case gb_sets:is_empty(NA) of
+                                          false -> gb_sets:smallest(NA);
+                                          true  -> gb_sets:largest(As) + 1
+                                      end)
+                          end],
+                 ok
+    end.
+
+flush_multiple(Prev, [Cur | Rest], WriterPid, SNA) ->
+    ExpNext = Prev + 1,
+    case {SNA >= Cur, Cur} of
+        {true, ExpNext} -> flush_multiple(Cur, Rest, WriterPid, SNA);
+        _               -> flush_multiple(Prev, [], WriterPid, SNA),
+                           [Cur | Rest]
+    end;
+flush_multiple(Prev, [], WriterPid, _) ->
+    ok = rabbit_writer:send_command(WriterPid,
+                                    #'basic.ack'{delivery_tag = Prev,
+                                                 multiple = true}),
+    [].

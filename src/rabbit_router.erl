@@ -70,16 +70,18 @@ deliver(QPids, Delivery = #delivery{mandatory = false,
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
-deliver(QPids, Delivery) ->
-    {Success, _} =
-        delegate:invoke(QPids,
-                        fun (Pid) ->
-                                rabbit_amqqueue:deliver(Pid, Delivery)
-                        end),
-    {Routed, Handled} =
-        lists:foldl(fun fold_deliveries/2, {false, []}, Success),
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   {Routed, Handled}).
+deliver(QPids, Delivery = #delivery{mandatory = Mandatory,
+                                    immediate = Immediate}) ->
+    {Success, _} = delegate:invoke(
+                     QPids, fun (Pid) ->
+                                    rabbit_amqqueue:deliver(Pid, Delivery)
+                            end),
+    case check_delivery(Mandatory, Immediate,
+                        lists:foldl(fun fold_deliveries/2,
+                                    {false, []}, Success)) of
+        {routed, Qs} -> {routed, Qs};
+        O            -> O
+    end.
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same exchange
