@@ -21,8 +21,9 @@
 %%
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
--export([protocol/1, resource/1, permissions/1, queue/1]).
+-export([format/2, print/2, pid/1, ip/1, addr/1,
+         port/1, table/1, tuple/1, timestamp/1]).
+-export([protocol/1, resource/1, permissions/1, queue/1, connection/2]).
 -export([exchange/1, user/1, binding/1, url/2, application/1]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([args_type/1]).
@@ -61,6 +62,12 @@ pid(none)                 -> none.
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(inet_parse:ntoa(IP)).
 
+addr(Addr) when is_list(Addr); is_atom(Addr) -> print("~s", Addr);
+addr(Addr) when is_tuple(Addr)               -> ip(Addr).
+
+port(Port) when is_number(Port) -> Port;
+port(Port)                      -> print("~w", Port).
+
 table(unknown) -> unknown;
 table(Table)   -> {struct, [{Name, tuple(Value)} ||
                                {Name, _Type, Value} <- Table]}.
@@ -81,7 +88,6 @@ protocol_version({Major, Minor})           -> io_lib:format("~B-~B", [Major, Min
 protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
 protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
                                                     [Major, Minor, Revision]).
-
 timestamp(unknown) ->
     unknown;
 timestamp(Timestamp) ->
@@ -177,6 +183,9 @@ application({Application, Description, Version}) ->
     [{name, Application},
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
+
+connection(Address, Port) ->
+    print("~s:~w", [addr(Address), Port]).
 
 exchange(X) ->
     format(X, [{fun resource/1, [name]},
