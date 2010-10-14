@@ -9,6 +9,7 @@ $(document).ready(function() {
     setup_constant_events();
     update_vhosts();
     app.run();
+    set_timer_interval(5000);
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -192,6 +193,10 @@ var timer_interval;
 
 function set_timer_interval(interval) {
     timer_interval = interval;
+    reset_timer();
+}
+
+function reset_timer() {
     clearInterval(timer);
     if (timer_interval != null) {
         timer = setInterval('partial_update()', timer_interval);
@@ -211,7 +216,7 @@ function update() {
             replace_content('main', html);
             postprocess();
             postprocess_partial();
-            set_timer_interval(5000);
+            reset_timer();
         });
 }
 
