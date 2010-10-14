@@ -34,7 +34,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, publish/2]).
+-export([description/0, route/2]).
 -export([validate/1, create/1, recover/2, delete/2,
          add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -50,10 +50,9 @@ description() ->
     [{name, <<"direct">>},
      {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name}, Delivery =
-        #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:deliver(rabbit_router:match_routing_key(Name, RoutingKey),
-                          Delivery).
+route(#exchange{name = Name},
+      #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
+    rabbit_router:match_routing_key(Name, RoutingKey).
 
 validate(_X) -> ok.
 create(_X) -> ok.
