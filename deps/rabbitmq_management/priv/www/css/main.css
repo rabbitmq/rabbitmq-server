@@ -64,6 +64,8 @@ p#update-form { float: right; margin: 0; padding: 0; }
 .highlight { float: left; }
 .highlight-right { float: right; }
 
+.mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
+
 div.section, div.section-hidden { margin: 0 0 1em 0; }
 div.section-hidden div { display: none; }
 div.section div, div.section-hidden div { padding: 0.5em 0; }

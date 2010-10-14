@@ -8,5 +8,5 @@ syntax: regexp
 ^deps/webmachine/ebin
 ^deps/webmachine/include
 ^cover/
-^priv/www-cli/rabbitmgmt
+^priv/www-cli/rabbitmqadmin
 ^tmp/
