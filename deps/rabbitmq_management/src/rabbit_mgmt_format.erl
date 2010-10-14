@@ -100,6 +100,8 @@ user(User) ->
      {password,      User#user.password},
      {administrator, User#user.is_admin}].
 
+pack_binding_props(<<"">>, []) ->
+    <<"_">>;
 pack_binding_props(Key, Args) ->
     Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
     ArgsKeys = lists:sort(dict:fetch_keys(Dict)),
