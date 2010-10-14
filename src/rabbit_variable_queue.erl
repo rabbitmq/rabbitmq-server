@@ -220,7 +220,7 @@
           q4,
           next_seq_id,
           pending_ack,
-          pending_ack_index,
+          ram_ack_index,
           index_state,
           msg_store_clients,
           on_sync,
@@ -306,7 +306,7 @@
              q4                   :: queue(),
              next_seq_id          :: seq_id(),
              pending_ack          :: dict:dictionary(),
-             pending_ack_index    :: gb_trees:gb_tree(),
+             ram_ack_index        :: gb_tree(),
              index_state          :: any(),
              msg_store_clients    :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
@@ -409,7 +409,7 @@ init(QueueName, IsDurable, Recover) ->
       q4                   = queue:new(),
       next_seq_id          = NextSeqId,
       pending_ack          = dict:new(),
-      pending_ack_index    = gb_trees:empty(),
+      ram_ack_index        = gb_trees:empty(),
       index_state          = IndexState1,
       msg_store_clients    = {{PersistentClient, PRef},
                               {TransientClient, TRef}},
@@ -1092,16 +1092,16 @@ record_pending_ack(#msg_status { guid = Guid, seq_id = SeqId,
                                  is_persistent = IsPersistent,
                                  msg_on_disk = MsgOnDisk } = MsgStatus,
                    State = #vqstate { pending_ack = PA,
-                                      pending_ack_index = PAI }) ->
-    {AckEntry, PAI1} =
+                                      ram_ack_index = RAI }) ->
+    {AckEntry, RAI1} =
         case MsgOnDisk of
             true  ->
-                {{IsPersistent, Guid}, PAI};
+                {{IsPersistent, Guid}, RAI};
             false ->
-                {MsgStatus, gb_trees:insert(SeqId, Guid, PAI)}
+                {MsgStatus, gb_trees:insert(SeqId, Guid, RAI)}
         end,
     PA1 = dict:store(SeqId, AckEntry, PA),
-    State #vqstate { pending_ack = PA1, pending_ack_index = PAI1 }.
+    State #vqstate { pending_ack = PA1, ram_ack_index = RAI1 }.
 
 %% TODO: On remove, need to prevent any seqids that
 remove_pending_ack(KeepPersistent,
@@ -1110,7 +1110,7 @@ remove_pending_ack(KeepPersistent,
     {SeqIds, GuidsByStore} = dict:fold(fun accumulate_ack/3,
                                        {[], orddict:new()}, PA),
     State1 = State #vqstate { pending_ack = dict:new(),
-                              pending_ack_index = gb_trees:empty() },
+                              ram_ack_index = gb_trees:empty() },
     case KeepPersistent of
         true  -> case orddict:find(?TRANSIENT_MSG_STORE, GuidsByStore) of
                      error       -> State1;
@@ -1133,13 +1133,13 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                                                  persistent_count = PCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2 = #vqstate { pending_ack       = PA,
-                                                pending_ack_index = PAI }}) ->
+                                                ram_ack_index = RAI }}) ->
                   {ok, AckEntry} = dict:find(SeqId, PA),
                   {accumulate_ack(SeqId, AckEntry, Acc),
                    Fun(AckEntry, State2 #vqstate {
                                    pending_ack       = dict:erase(SeqId, PA),
-                                   pending_ack_index =
-                                       gb_trees:delete_any(SeqId, PAI)})}
+                                   ram_ack_index =
+                                       gb_trees:delete_any(SeqId, RAI)})}
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     ok = orddict:fold(fun (MsgStore, Guids, ok) ->
