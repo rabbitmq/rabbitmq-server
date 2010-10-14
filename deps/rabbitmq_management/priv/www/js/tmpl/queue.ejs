@@ -48,7 +48,14 @@
   </div>
 </div>
 
-<%= format('bindings', {'mode': 'queue', 'bindings': bindings, 'parent': queue}) %>
+<div class="section">
+  <h2>Bindings</h2>
+  <div class="updatable">
+    <%= format('bindings', {'mode': 'queue', 'bindings': bindings}) %>
+  </div>
+</div>
+
+<%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
 
 <div class="section-hidden">
   <h2>Purge This Queue</h2>

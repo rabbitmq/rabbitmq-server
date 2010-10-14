@@ -15,7 +15,7 @@ body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
-h1 b { color: black; font-weight: normal; }
+b { color: black; font-weight: normal; }
 
 table { border-collapse: collapse; }
 table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 6em; }
@@ -80,6 +80,7 @@ table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; vertical-align: top; }
 table.form input[type=text] { width: 200px; }
 table.form select { width: 200px; }
+table.form select.narrow { width: 80px; }
 table.form .multifield { margin: 0; padding: 0; }
 table.form .multifield p { margin: 0; padding: 0; }
 
@@ -87,6 +88,6 @@ table.two-col-layout td { width: 50%; vertical-align: top; }
 
 input[type=submit], button { padding: 8px; background-color: #aaf; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; cursor: pointer; border: none; font-weight: bold; }
 
-h3 { padding: 0 0 2px 0; margin: 0 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; }
+h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
 #scratch { display: none; }

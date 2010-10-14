@@ -16,7 +16,19 @@
   </div>
 </div>
 
-<%= format('bindings', {'mode': 'exchange', 'bindings': bindings, 'parent': exchange}) %>
+<div class="section">
+  <h2>Bindings</h2>
+  <div class="updatable">
+    <h3>From <b><%= exchange.name %></b></h3>
+    <%= format('bindings', {'mode': 'exchange_source', 'bindings': bindings_source}) %>
+    <h3>To <b><%= exchange.name %></b></h3>
+    <%= format('bindings', {'mode': 'exchange_destination', 'bindings': bindings_destination}) %>
+  </div>
+</div>
+
+<% if (exchange.name != "") { %>
+<%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
+<% } %>
 
 <div class="section-hidden">
   <h2>Delete This Exchange</h2>
