@@ -215,7 +215,6 @@ add_exchange(Exchange) ->
                             rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
 add_binding(Binding) ->
-    %% TODO make this handle old exports
     DestType = list_to_atom(binary_to_list(pget(destination_type, Binding))),
     rabbit_binding:add(
       #binding{source       = r(exchange, source,                   Binding),
