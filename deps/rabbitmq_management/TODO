@@ -12,10 +12,7 @@ DTRT in a cluster
   Per-node events to replace external_stats
 UI tweaks
   error popup
-  connection xxxkB/s thing
-  connection "sending" "receiving"
   connection -> channels drilldown
-  connection -> user / vhost link
 
 (At some point in this group
     * get e.g. mikeb to pronounce self happy
