@@ -84,9 +84,6 @@ deliver(QNames, Delivery) ->
     check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
                    {Routed, Handled}).
 
-deliver_by_queue_names(Qs, Delivery) ->
-    deliver(lookup_qpids(Qs), Delivery).
-
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source
 match_bindings(SrcName, Match) ->

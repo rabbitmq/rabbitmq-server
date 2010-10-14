@@ -592,12 +592,12 @@ test_topic_matching() ->
 
     %% add some bindings
     Bindings = lists:map(
-        fun({Key, Q}) ->
-            #binding{exchange_name = XName,
-                     key = list_to_binary(Key),
-                     queue_name = #resource{virtual_host = <<"/">>,
-                                            kind = queue,
-                                            name = list_to_binary(Q)}}
+        fun ({Key, Q}) ->
+                #binding{source = XName,
+                         key = list_to_binary(Key),
+                         destination = #resource{virtual_host = <<"/">>,
+                                                 kind = queue,
+                                                 name = list_to_binary(Q)}}
         end, [{"a.b.c",         "t1"},
               {"a.*.c",         "t2"},
               {"a.#.b",         "t3"},
@@ -624,7 +624,7 @@ test_topic_matching() ->
               {"#.#.#",         "t24"},
               {"*",             "t25"},
               {"#.b.#",         "t26"}]),
-    lists:foreach(fun(B) -> rabbit_exchange_type_topic:add_binding(X, B) end,
+    lists:foreach(fun (B) -> rabbit_exchange_type_topic:add_binding(X, B) end,
                   Bindings),
 
     %% test some matches
@@ -678,17 +678,19 @@ test_topic_matching() ->
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
-test_topic_expect_match(#exchange{name = XName}, List) ->
+test_topic_expect_match(X, List) ->
     lists:foreach(
-        fun({Key, Expected}) ->
-            Res = rabbit_exchange_type_topic:which_matches(
-                    XName, list_to_binary(Key)),
-            ExpectedRes = lists:map(
-                fun(Q) -> #resource{virtual_host = <<"/">>,
-                                    kind = queue,
-                                    name = list_to_binary(Q)}
-                end, Expected),
-            true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
+        fun ({Key, Expected}) ->
+                BinKey = list_to_binary(Key),
+                Res = rabbit_exchange_type_topic:route(
+                        X, #delivery{message = #basic_message{routing_key =
+                                                                BinKey}}),
+                ExpectedRes = lists:map(
+                                fun (Q) -> #resource{virtual_host = <<"/">>,
+                                                     kind = queue,
+                                                     name = list_to_binary(Q)}
+                                end, Expected),
+                true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
         end, List).
 
 test_app_management() ->

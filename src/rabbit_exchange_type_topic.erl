@@ -47,25 +47,17 @@
                     {requires,    rabbit_exchange_type_registry},
                     {enables,     kernel_ready}]}).
 
--export([which_matches/2]).
-
--ifdef(use_specs).
-
--spec(which_matches/2 ::
-        (rabbit_exchange:name(), rabbit_router:routing_key()) ->
-          [rabbit_amqqueue:name()]).
-
--endif.
-
 %%----------------------------------------------------------------------------
 
 description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = X}, Delivery =
-        #delivery{message = #basic_message{routing_key = Key}}) ->
-    which_matches(X, Key).
+%% NB: This may return duplicate results in some situations (that's ok)
+route(#exchange{name = X},
+      #delivery{message = #basic_message{routing_key = Key}}) ->
+    Words = split_topic_key(Key),
+    mnesia:async_dirty(fun trie_match/2, [X, Words]).
 
 validate(_X) -> ok.
 create(_X) -> ok.
@@ -77,10 +69,10 @@ delete(#exchange{name = X}, _Bs) ->
                                            end),
     ok.
 
-add_binding(_Exchange, #binding{exchange_name = X, key = K, queue_name = Q}) ->
+add_binding(_Exchange, #binding{source = X, key = K, destination = D}) ->
     rabbit_misc:execute_mnesia_transaction(
         fun () -> FinalNode = follow_down_create(X, split_topic_key(K)),
-                  trie_add_binding(X, FinalNode, Q)
+                  trie_add_binding(X, FinalNode, D)
         end),
     ok.
 
@@ -89,20 +81,15 @@ remove_bindings(_X, Bs) ->
         fun () -> lists:foreach(fun remove_binding/1, Bs) end),
     ok.
 
-remove_binding(#binding{exchange_name = X, key = K, queue_name = Q}) ->
+remove_binding(#binding{source = X, key = K, destination = D}) ->
     Path = follow_down_get_path(X, split_topic_key(K)),
     {FinalNode, _} = hd(Path),
-    trie_remove_binding(X, FinalNode, Q),
+    trie_remove_binding(X, FinalNode, D),
     remove_path_if_empty(X, Path),
     ok.
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
-
-%% NB: This function may return duplicate results in some situations (that's ok)
-which_matches(X, Key) ->
-    Words = split_topic_key(Key),
-    mnesia:async_dirty(fun trie_match/2, [X, Words]).
 
 %%----------------------------------------------------------------------------
 
@@ -188,7 +175,7 @@ trie_bindings(X, Node) ->
     MatchHead = #topic_trie_binding{
                     trie_binding = #trie_binding{exchange_name = X,
                                                  node_id = Node,
-                                                 queue_name = '$1'}},
+                                                 destination = '$1'}},
     mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$1']}]).
 
 trie_add_edge(X, FromNode, ToNode, W) ->
@@ -205,17 +192,17 @@ trie_edge_op(X, FromNode, ToNode, W, Op) ->
                              node_id = ToNode},
             write).
 
-trie_add_binding(X, Node, Q) ->
-    trie_binding_op(X, Node, Q, fun mnesia:write/3).
+trie_add_binding(X, Node, D) ->
+    trie_binding_op(X, Node, D, fun mnesia:write/3).
 
-trie_remove_binding(X, Node, Q) ->
-    trie_binding_op(X, Node, Q, fun mnesia:delete_object/3).
+trie_remove_binding(X, Node, D) ->
+    trie_binding_op(X, Node, D, fun mnesia:delete_object/3).
 
-trie_binding_op(X, Node, Q, Op) ->
+trie_binding_op(X, Node, D, Op) ->
     ok = Op(rabbit_topic_trie_binding,
             #topic_trie_binding{trie_binding = #trie_binding{exchange_name = X,
                                                              node_id = Node,
-                                                             queue_name = Q}},
+                                                             destination = D}},
             write).
 
 trie_has_any_children(X, Node) ->

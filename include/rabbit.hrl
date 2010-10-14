@@ -67,7 +67,7 @@
 -record(topic_trie_binding, {trie_binding, value = const}).
 
 -record(trie_edge, {exchange_name, node_id, word}).
--record(trie_binding, {exchange_name, node_id, queue_name}).
+-record(trie_binding, {exchange_name, node_id, destination}).
 
 -record(listener, {node, protocol, host, port}).
 
