@@ -13,6 +13,8 @@ DTRT in a cluster
 UI tweaks
   error popup
   connection -> channels drilldown
+vhosts for connections / channels
+
 
 (At some point in this group
     * get e.g. mikeb to pronounce self happy
@@ -51,6 +53,8 @@ Add more OS-y, Erlang-y things to overview(?)
 Catch up if mgmt application is restarted
 Queues with server generated names
 Backup / restore entire state (with messages) (sane?)
+auto completion for exchange names, queue names
+API / select box for exchange types
 
 When / if they become available in RabbitMQ
 ===========================================
