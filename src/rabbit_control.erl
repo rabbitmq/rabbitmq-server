@@ -257,7 +257,8 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
 action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [exchange_name, queue_name,
+    ArgAtoms = default_if_empty(Args, [source_name, source_kind,
+                                       destination_name, destination_kind,
                                        routing_key, arguments]),
     display_info_list(rpc_call(Node, rabbit_binding, info_all,
                                [VHostArg, ArgAtoms]),
@@ -347,6 +348,8 @@ format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
                      Value) when is_binary(TableEntryKey) andalso
                                  is_atom(TableEntryType) ->
     io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+format_info_item([C|_] = Value) when is_number(C), C >= 32, C =< 255 ->
+    Value;
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 

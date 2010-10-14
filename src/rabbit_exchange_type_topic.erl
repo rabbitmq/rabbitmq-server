@@ -35,7 +35,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, publish/2]).
+-export([description/0, route/2]).
 -export([validate/1, create/1, recover/2, delete/2, add_binding/2,
          remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -63,9 +63,9 @@ description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = X}, Delivery =
+route(#exchange{name = X}, Delivery =
         #delivery{message = #basic_message{routing_key = Key}}) ->
-    rabbit_router:deliver_by_queue_names(which_matches(X, Key), Delivery).
+    which_matches(X, Key).
 
 validate(_X) -> ok.
 create(_X) -> ok.

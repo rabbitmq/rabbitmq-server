@@ -251,8 +251,9 @@ stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{expiry_timer_ref = undefined}.
 
-%% We only wish to expire where there are no consumers *and* when
-%% basic.get hasn't been called for the configured period.
+%% We wish to expire only when there are no consumers *and* the expiry
+%% hasn't been refreshed (by queue.declare or basic.get) for the
+%% configured period.
 ensure_expiry_timer(State = #q{expires = undefined}) ->
     State;
 ensure_expiry_timer(State = #q{expires = Expires}) ->
@@ -593,7 +594,6 @@ prioritise_call(Msg, _From, _State) ->
         info                                      -> 9;
         {info, _Items}                            -> 9;
         consumers                                 -> 9;
-        delete_exclusive                          -> 8;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
         _                                         -> 0
     end.
@@ -601,6 +601,7 @@ prioritise_call(Msg, _From, _State) ->
 prioritise_cast(Msg, _State) ->
     case Msg of
         update_ram_duration                  -> 8;
+        delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         maybe_expire                         -> 8;
@@ -783,17 +784,8 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
 handle_call(stat, _From, State = #q{backing_queue = BQ,
                                     backing_queue_state = BQS,
                                     active_consumers = ActiveConsumers}) ->
-    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
-
-handle_call(delete_exclusive, _From,
-            State = #q{ backing_queue_state = BQS,
-                        backing_queue       = BQ,
-                        q                   = #amqqueue{exclusive_owner = Owner}
-                      }) when Owner =/= none ->
-    {stop, normal, {ok, BQ:len(BQS)}, State};
-
-handle_call(delete_exclusive, _From, State) ->
-    reply({error, not_exclusive}, State);
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)},
+          ensure_expiry_timer(State));
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
@@ -865,6 +857,9 @@ handle_cast({reject, AckTags, Requeue, ChPid},
 
 handle_cast({rollback, Txn, ChPid}, State) ->
     noreply(rollback_transaction(Txn, ChPid, State));
+
+handle_cast(delete_immediately, State) ->
+    {stop, normal, State};
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
