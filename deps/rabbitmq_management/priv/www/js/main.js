@@ -71,7 +71,9 @@ function dispatcher() {
     this.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': path,
-                    'bindings': path + '/bindings'}, 'exchange', '#/exchanges');
+                    'bindings_source': path + '/bindings/source',
+                    'bindings_destination': path + '/bindings/destination'},
+                'exchange', '#/exchanges');
         });
     this.put('#/exchanges', function() {
             if (sync_put(this, '/exchanges/:vhost/:name'))
@@ -110,12 +112,12 @@ function dispatcher() {
         });
 
     this.post('#/bindings', function() {
-            if (sync_post(this, '/bindings/:vhost/:exchange/:queue'))
+            if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
             return false;
         });
     this.del('#/bindings', function() {
-            if (sync_delete(this, '/bindings/:vhost/:exchange/:queue/:properties_key'))
+            if (sync_delete(this, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
                 update();
             return false;
         });

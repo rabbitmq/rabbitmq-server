@@ -133,8 +133,14 @@ export_queue(Queue) ->
     pget(owner_pid, Queue) == none.
 
 export_binding(Binding, Qs) ->
-    pget(exchange, Binding) =/= <<"">> andalso
-        lists:member({pget(queue, Binding), pget(vhost, Binding)}, Qs).
+    Src      = pget(source, Binding),
+    Dest     = pget(destination, Binding),
+    DestType = pget(destination_type, Binding),
+    VHost    = pget(vhost, Binding),
+    Src =/= <<"">>
+        andalso
+          ( (DestType =:= queue andalso lists:member({Dest, VHost}, Qs))
+            orelse (DestType =:= exchange andalso Dest =/= <<"">>) ).
 
 export_exchange(Exchange) ->
     export_name(pget(name, Exchange)).
@@ -151,7 +157,8 @@ rw_state() ->
      {permissions, [user, vhost, configure, write, read, scope]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
      {exchanges,   [name, vhost, type, durable, auto_delete, arguments]},
-     {bindings,    [exchange, vhost, queue, routing_key, arguments]}].
+     {bindings,    [source, vhost, destination, destination_type, routing_key,
+                    arguments]}].
 
 filter(Items) ->
     [filter_items(N, V, proplists:get_value(N, rw_state())) || {N, V} <- Items].
@@ -208,9 +215,10 @@ add_exchange(Exchange) ->
                             rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
 add_binding(Binding) ->
+    DestType = list_to_atom(binary_to_list(pget(destination_type, Binding))),
     rabbit_binding:add(
-      #binding{source       = r(exchange, exchange,                 Binding),
-               destination  = r(queue, queue,                       Binding),
+      #binding{source       = r(exchange, source,                   Binding),
+               destination  = r(DestType, destination,              Binding),
                key          = pget(routing_key,                     Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
 

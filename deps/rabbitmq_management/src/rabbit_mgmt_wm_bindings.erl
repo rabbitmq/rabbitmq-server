@@ -48,8 +48,8 @@ content_types_accepted(ReqData, Context) ->
 
 allowed_methods(ReqData, {Mode, Context}) ->
     {case Mode of
-         queue_exchange -> ['HEAD', 'GET', 'POST'];
-         _              -> ['HEAD', 'GET']
+         source_destination -> ['HEAD', 'GET', 'POST'];
+         _                  -> ['HEAD', 'GET']
      end, ReqData, {Mode, Context}}.
 
 post_is_create(ReqData, Context) ->
@@ -69,23 +69,32 @@ accept_content(ReqData, {_Mode, Context}) ->
     rabbit_mgmt_util:with_decode_vhost(
       [routing_key, arguments], ReqData, Context,
       fun(VHost, [Key, Args0]) ->
+              Source = rabbit_mgmt_util:id(source, ReqData),
+              Dest = rabbit_mgmt_util:id(destination, ReqData),
+              DestType = rabbit_mgmt_util:id(dtype, ReqData),
               Args = rabbit_mgmt_util:args(Args0),
-              Exchange = rabbit_mgmt_util:id(exchange, ReqData),
-              Queue = rabbit_mgmt_util:id(queue, ReqData),
-              Res = rabbit_mgmt_util:amqp_request(
-                      VHost, ReqData, Context,
-                      #'queue.bind'{ exchange    = Exchange,
-                                     queue       = Queue,
-                                     routing_key = Key,
-                                     arguments   = Args}),
-              case Res of
-                  {{halt, _}, _, _} ->
+              Method =
+                  case DestType of
+                      <<"q">> ->
+                          #'queue.bind'{ exchange    = Source,
+                                         queue       = Dest,
+                                         routing_key = Key,
+                                         arguments   = Args };
+                      <<"e">> ->
+                          #'exchange.bind'{ source      = Source,
+                                            destination = Dest,
+                                            routing_key = Key,
+                                            arguments   = Args}
+                  end,
+              case rabbit_mgmt_util:amqp_request(
+                     VHost, ReqData, Context, Method) of
+                  {{halt, _}, _, _} = Res ->
                       Res;
                   {true, ReqData, Context2} ->
                       Loc = binary_to_list(
                               rabbit_mgmt_format:url(
-                                "/api/bindings/~s/~s/~s/~s",
-                                [VHost, Exchange, Queue,
+                                "/api/bindings/~s/e/~s/~s/~s/~s",
+                                [VHost, Source, DestType, Dest,
                                  rabbit_mgmt_format:pack_binding_props(
                                    Key, Args)])),
                       ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
@@ -110,15 +119,18 @@ list_bindings(all, ReqData) ->
                                      fun (VHost) ->
                                              rabbit_binding:list(VHost)
                                      end);
-list_bindings(exchange, ReqData) ->
-    rabbit_binding:list_for_source(r(exchange, ReqData));
+list_bindings(exchange_source, ReqData) ->
+    rabbit_binding:list_for_source(r(exchange, exchange, ReqData));
+list_bindings(exchange_destination, ReqData) ->
+    rabbit_binding:list_for_destination(r(exchange, exchange, ReqData));
 list_bindings(queue, ReqData) ->
-    rabbit_binding:list_for_destination(r(queue, ReqData));
-list_bindings(queue_exchange, ReqData) ->
-    rabbit_binding:list_for_source_and_destination(r(exchange, ReqData),
-                                                   r(queue,    ReqData)).
+    rabbit_binding:list_for_destination(r(queue, destination, ReqData));
+list_bindings(source_destination, ReqData) ->
+    DestType = rabbit_mgmt_util:destination_type(ReqData),
+    rabbit_binding:list_for_source_and_destination(
+      r(exchange, source, ReqData),
+      r(DestType, destination, ReqData)).
 
-r(Type, ReqData) ->
-    rabbit_misc:r(rabbit_mgmt_util:vhost(ReqData),
-                  Type,
-                  rabbit_mgmt_util:id(Type, ReqData)).
+r(Type, Name, ReqData) ->
+    rabbit_misc:r(rabbit_mgmt_util:vhost(ReqData), Type,
+                  rabbit_mgmt_util:id(Name, ReqData)).

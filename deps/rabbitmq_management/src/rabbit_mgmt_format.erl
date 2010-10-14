@@ -199,15 +199,16 @@ queue(#amqqueue{name            = Name,
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
 %% there are no per-exchange / queue / etc variants for the latter. Therefore
 %% we have a record rather than a proplist to deal with.
-binding(#binding{source      = X,
+binding(#binding{source      = S,
                  key         = Key,
-                 destination = Q,
+                 destination = D,
                  args        = Args}) ->
     format(
-      [{exchange,       X},
-       {queue,          Q#resource.name},
-       {routing_key,    Key},
-       {arguments,      Args},
+      [{source,           S},
+       {destination,      D#resource.name},
+       {destination_type, D#resource.kind},
+       {routing_key,      Key},
+       {arguments,        Args},
        {properties_key, pack_binding_props(Key, Args)}],
-      [{fun (Res) -> resource(exchange, Res) end, [exchange]},
-       {fun table/1,                              [arguments]}]).
+      [{fun (Res) -> resource(source, Res) end, [source]},
+       {fun table/1,                            [arguments]}]).
