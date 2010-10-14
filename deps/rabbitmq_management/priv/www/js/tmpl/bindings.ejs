@@ -1,12 +1,11 @@
 <% if (bindings.length > 0) { %>
-    <table class="list">
+    <table class="list bindings">
       <thead>
         <tr>
 <% if (mode == 'exchange_source') { %>
-          <th>To Exchange</th>
-          <th>To Queue</th>
+          <th>To</th>
 <% } else { %>
-          <th>From Exchange</th>
+          <th>From</th>
 <% } %>
           <th>Routing Key</th>
           <th>Arguments</th>
@@ -20,13 +19,20 @@
         %>
            <tr<%= alt_rows(i)%>>
 <% if (mode == 'queue' || mode == 'exchange_destination') { %>
-             <td><%= link_exchange(binding.vhost, binding.source) %></td>
+             <td>
+               <%= link_exchange(binding.vhost, binding.source) %>
+               <sub>Exchange</sub>
+             </td>
 <% } else if (binding.destination_type == 'exchange') { %>
-             <td><%= link_exchange(binding.vhost, binding.destination) %></td>
-             <td></td>
+             <td>
+               <%= link_exchange(binding.vhost, binding.destination) %>
+               <sub>Exchange</sub>
+             </td>
 <% } else { %>
-             <td></td>
-             <td><%= link_queue(binding.vhost, binding.destination) %></td>
+             <td>
+               <%= link_queue(binding.vhost, binding.destination) %>
+               <sub>Queue</sub>
+             </td>
 <% } %>
              <td><%= binding.routing_key %></td>
              <td><%= fmt_table_short(binding.arguments) %></td>

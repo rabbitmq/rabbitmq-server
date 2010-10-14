@@ -2,47 +2,69 @@
   <h2>Add binding</h2>
   <div>
     <form action="#/bindings" method="post">
-      <input type="hidden" name="vhost" value="<%= parent.vhost %>"/>
-<% if (mode == 'queue') { %>
-      <input type="hidden" name="destination" value="<%= parent.name %>"/>
-<% } else { %>
-      <input type="hidden" name="source" value="<%= parent.name %>"/>
-<% } %>
-      <table class="form">
-<% if (mode == 'queue') { %>
+      <table class="bindings">
         <tr>
-          <th>
-            <label>From exchange:</label>
-          </th>
-          <td>
-            <input type="hidden" name="destination_type" value="q"/>
-            <input type="text" name="source" value=""/>
+<% if (mode != 'queue') { %>
+          <td class="binding-endpoint">
+            <span class="object"><%= parent.name %></span>
+            <span class="arrow">&rarr;</span>
           </td>
-        </tr>
-<% } else { %>
-        <tr>
-          <th>
-            To
-            <select name="destination_type" class="narrow">
-              <option value="e">exchange</option>
-              <option value="q" selected="selected">queue</option>
-            </select>:
-          </th>
-          <td>
-            <input type="text" name="destination" value=""/>
-          </td>
-        </tr>
 <% } %>
-        <tr>
-          <th><label>Routing Key:</label></th>
-          <td><input type="text" name="routing_key" value=""/></td>
+          <td>
+            <input type="hidden" name="vhost" value="<%= parent.vhost %>"/>
+<% if (mode == 'queue') { %>
+            <input type="hidden" name="destination" value="<%= parent.name %>"/>
+<% } else { %>
+            <input type="hidden" name="source" value="<%= parent.name %>"/>
+<% } %>
+            <table class="form">
+<% if (mode == 'queue') { %>
+              <tr>
+                <th>
+                  <label>Exchange:</label>
+                </th>
+                <td>
+                  <input type="hidden" name="destination_type" value="q"/>
+                  <input type="text" name="source" value=""/>
+                </td>
+              </tr>
+<% } else { %>
+              <tr>
+                <th>
+                  <select name="destination_type" class="narrow">
+                    <option value="e">exchange</option>
+                    <option value="q" selected="selected">queue</option>
+                  </select>:
+                </th>
+                <td>
+                  <input type="text" name="destination" value=""/>
+                </td>
+              </tr>
+<% } %>
+              <tr>
+                <th><label>Routing Key:</label></th>
+                <td><input type="text" name="routing_key" value=""/></td>
+              </tr>
+              <tr>
+                <th><label>Arguments:</label></th>
+                <td><span class="multifield" id="arguments"></span></td>
+              </tr>
+            </table>
+          </td>
+<% if (mode == 'queue') { %>
+          <td class="binding-endpoint">
+            <span class="arrow">&rarr;</span>
+            <span class="object"><%= parent.name %></span>
+          </td>
+<% } %>
         </tr>
         <tr>
-          <th><label>Arguments:</label></th>
-          <td><span class="multifield" id="arguments"></span></td>
+          <td>
+            <input type="submit" value="Bind"/>
+          </td>
+          <td></td>
         </tr>
       </table>
-      <input type="submit" value="Bind"/>
     </form>
   </div>
 </div>
