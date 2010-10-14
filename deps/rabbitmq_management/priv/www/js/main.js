@@ -53,8 +53,10 @@ function dispatcher() {
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {
-            render({'connection': '/connections/' + esc(this.params['name'])}, 'connection',
-                   '#/connections');
+            var name = esc(this.params['name']);
+            render({'connection': '/connections/' + name,
+                    'channels': '/connections/' + name + '/channels'},
+                'connection', '#/connections');
         });
     this.del('#/connections', function() {
             if (sync_delete(this, '/connections/:name'))
