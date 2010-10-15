@@ -94,29 +94,29 @@ start() ->
             end,
             halt();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            error("invalid command '~s'",
-                  [lists:flatten(
-                     rabbit_misc:intersperse(
-                       " ", [atom_to_list(Command) | Args]))]),
+            print_error("invalid command '~s'",
+                        [lists:flatten(
+                           rabbit_misc:intersperse(
+                             " ", [atom_to_list(Command) | Args]))]),
             usage();
         {error, Reason} ->
-            error("~p", [Reason]),
+            print_error("~p", [Reason]),
             halt(2);
         {badrpc, {'EXIT', Reason}} ->
-            error("~p", [Reason]),
+            print_error("~p", [Reason]),
             halt(2);
         {badrpc, Reason} ->
-            error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
             halt(2);
         Other ->
-            error("~p", [Other]),
+            print_error("~p", [Other]),
             halt(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
-error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
     fmt_stderr("diagnostics:", []),
