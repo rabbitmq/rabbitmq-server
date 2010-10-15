@@ -44,9 +44,6 @@
 
 -include("rabbit.hrl").
 
--define(SCHEMA_VERSION_SET, []).
--define(SCHEMA_VERSION_FILENAME, "schema_version").
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -94,9 +91,6 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
-    ok = rabbit_misc:write_term_file(filename:join(
-                                       dir(), ?SCHEMA_VERSION_FILENAME),
-                                     [?SCHEMA_VERSION_SET]),
     ok.
 
 is_db_empty() ->
@@ -384,6 +378,7 @@ init_db(ClusterNodes, Force) ->
                 [] ->
                     case mnesia:system_info(use_dir) of
                         true ->
+                            rabbit_upgrade:maybe_upgrade(dir()),
                             case check_schema_integrity() of
                                 ok ->
                                     ok;
@@ -428,7 +423,8 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables().
+    ok = wait_for_tables(),
+    ok = rabbit_upgrade:write_version(dir()).
 
 move_db() ->
     mnesia:stop(),

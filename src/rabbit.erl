@@ -40,6 +40,8 @@
 
 -export([log_location/1]).
 
+-export([all_module_attributes/1]).
+
 %%---------------------------------------------------------------------------
 %% Boot steps.
 -export([maybe_insert_default_data/0]).
@@ -313,20 +315,21 @@ module_attributes(Module) ->
             V
     end.
 
-boot_steps() ->
+all_module_attributes(Name) ->
     AllApps = [App || {App, _, _} <- application:loaded_applications()],
     Modules = lists:usort(
                 lists:append([Modules
                               || {ok, Modules} <-
                                      [application:get_key(App, modules)
                                       || App <- AllApps]])),
-    UnsortedSteps =
-        lists:flatmap(fun (Module) ->
-                              [{StepName, Attributes}
-                               || {rabbit_boot_step, [{StepName, Attributes}]}
-                                      <- module_attributes(Module)]
-                      end, Modules),
-    sort_boot_steps(UnsortedSteps).
+    lists:flatmap(fun (Module) ->
+                          [{StepName, Attributes}
+                           || {N, [{StepName, Attributes}]}
+                                  <- module_attributes(Module), N =:= Name]
+                  end, Modules).
+
+boot_steps() ->
+    sort_boot_steps(all_module_attributes(rabbit_boot_step)).
 
 sort_boot_steps(UnsortedSteps) ->
     G = digraph:new([acyclic]),
