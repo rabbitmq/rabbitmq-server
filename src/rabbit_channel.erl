@@ -368,6 +368,13 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
+expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
+    {expand_queue_name_shortcut(DestinationNameBin, State),
+     expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State)};
+expand_binding(exchange, DestinationNameBin, RoutingKey, State) ->
+    {rabbit_misc:r(State#ch.virtual_host, exchange, DestinationNameBin),
+     RoutingKey}.
+
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -919,14 +926,9 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
     %% including the one named "" !
-    DestinationName =
-        case DestinationType of
-            queue    -> expand_queue_name_shortcut(DestinationNameBin, State);
-            exchange -> rabbit_misc:r(VHostPath, exchange, DestinationNameBin)
-        end,
+    {DestinationName, ActualRoutingKey} =
+        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
     check_write_permitted(DestinationName, State),
-    ActualRoutingKey =
-        expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_read_permitted(ExchangeName, State),
     case Fun(#binding{source      = ExchangeName,
