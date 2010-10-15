@@ -1,0 +1,85 @@
+<% if (channels.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+   <th></th>
+<% if (mode == 'standalone') { %>
+   <th colspan="5">Details</th>
+<% } else { %>
+   <th colspan="3">Details</th>
+<% } %>
+<% if (statistics_level == 'fine') { %>
+   <th colspan="6">Message rates</th>
+<% } %>
+  </tr>
+  <tr>
+<% if (mode == 'standalone') { %>
+    <th><%= fmt_sort('Channel',         'name') %></th>
+    <th><%= fmt_sort('Virtual host',    'vhost') %></th>
+    <th><%= fmt_sort('User name',       'user') %></th>
+    <th><%= fmt_sort('Transactional',   'transactional') %></th>
+    <th><%= fmt_sort('Prefetch',        'prefetch_count') %></th>
+    <th><%= fmt_sort('Message unacked', 'messages_unacknowledged') %></th>
+<% if (statistics_level == 'fine') { %>
+    <th><%= fmt_sort('publish',                   'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('deliver',                   'message_stats.deliver_details.rate') %></th>
+    <th><%= fmt_sort('get',                       'message_stats.get_details.rate') %></th>
+    <th><%= fmt_sort('deliver<sub>(noack)</sub>', 'message_stats.deliver_no_ack_details.rate') %></th>
+    <th><%= fmt_sort('get<sub>(noack)</sub>',     'message_stats.get_no_ack_details.rate') %></th>
+    <th><%= fmt_sort('ack',                       'message_stats.ack_details.rate') %></th>
+<% } %>
+<% } else { %>
+<!-- TODO make sortable after bug 23401 -->
+    <th>Channel</th>
+    <th>Transactional</th>
+    <th>Prefetch</th>
+    <th>Message unacked</th>
+<% if (statistics_level == 'fine') { %>
+    <th>publish</th>
+    <th>deliver</th>
+    <th>get</th>
+    <th>deliver<sub>(noack)</sub></th>
+    <th>get<sub>(noack)</sub></th>
+    <th>ack</th>
+<% } %>
+<% } %>
+  </tr>
+ </thead>
+ <tbody>
+<%
+  for (var i = 0; i < channels.length; i++) {
+    var channel = channels[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td>
+      <%= link_channel(channel.name) %>
+    </td>
+<% if (mode == 'standalone') { %>
+    <td class="c"><%= link_vhost(channel.vhost) %></td>
+    <td class="c"><%= link_user(channel.user) %></td>
+<% } %>
+    <td class="c">
+      <%= fmt_boolean(channel.transactional) %>
+      <% if (channel.transactional) { %>
+      <sub><%= channel.acks_uncommitted %> uncommitted acks</sub>
+      <% } %>
+    </td>
+    <td class="c"><%= channel.prefetch_count %></td>
+    <td class="c"><%= channel.messages_unacknowledged %></td>
+<% if (statistics_level == 'fine') { %>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'publish') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'deliver') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'get') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'deliver_no_ack') %></td>
+    <td class="l"><%= fmt_rate(channel.message_stats, 'get_no_ack') %></td>
+    <td class="l">
+      <%= fmt_rate(channel.message_stats, 'ack') %>
+    </td>
+<% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no channels ...</p>
+<% } %>
