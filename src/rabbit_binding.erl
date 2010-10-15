@@ -426,10 +426,14 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
 process_deletions(Deletions) ->
     dict:fold(
       fun (_XName, {X = #exchange{ type = Type }, Deleted, Bindings}, ok) ->
-              TypeModule = type_to_module(Type),
               FlatBindings = lists:flatten(Bindings),
+              [rabbit_event:notify(binding_deleted, info(B)) ||
+                  B <- FlatBindings],
+              TypeModule = type_to_module(Type),
               case Deleted of
                   not_deleted -> TypeModule:remove_bindings(X, FlatBindings);
-                  deleted     -> TypeModule:delete(X, FlatBindings)
+                  deleted     -> rabbit_event:notify(exchange_deleted,
+                                                     [{name, X#exchange.name}]),
+                                 TypeModule:delete(X, FlatBindings)
               end
       end, ok, Deletions).
