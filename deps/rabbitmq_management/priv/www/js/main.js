@@ -107,8 +107,8 @@ function dispatcher() {
             }
             else if (this.params['mode'] == 'purge') {
                 if (sync_delete(this, '/queues/:vhost/:name/contents')) {
-                    error_popup("Queue purged");
-                    update();
+                    error_popup('info', "Queue purged");
+                    update_partial();
                 }
             }
             return false;
@@ -283,10 +283,28 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function error_popup(text) {
-    $('body').prepend('<div class="form-error">' + text + '</div>');
-    $('.form-error').center().fadeOut(5000)
-        .click( function() { $(this).stop().fadeOut('fast') } );
+function error_popup(type, text) {
+    function hide() {
+        $('.form-error').slideUp(200, function() {
+                $(this).remove();
+            });
+    }
+
+    var heading;
+    if (type == 'pre_send') {
+        heading = 'Could not send your request. The reason is:';
+    }
+    else if (type == 'send') {
+        heading = 'Form submission failed. The server response was:';
+    }
+    else if (type == 'info') {
+        heading = 'Information';
+    }
+
+    hide();
+    $('h1').after(format('error-popup', {'heading':heading, 'text':text}));
+    $('.form-error').slideDown(200);
+    $('.form-error span').click(hide);
 }
 
 function postprocess() {
@@ -466,7 +484,13 @@ function sync_post(sammy, path_template) {
 
 function sync_req(type, params0, path_template) {
     var params = collapse_multifields(params0);
-    var path = fill_path_template(path_template, params);
+    var path;
+    try {
+        path = fill_path_template(path_template, params);
+    } catch (e) {
+        error_popup('pre_send', e);
+        return false;
+    }
     var req = xmlHttpRequest();
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
@@ -484,8 +508,10 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (req.status == 400) {
-        error_popup(JSON.stringify(JSON.parse(req.responseText).reason));
+    if (req.status == 400 || req.status == 404) {
+        var reason = JSON.parse(req.responseText).reason;
+        if (typeof(reason) != 'string') reason = JSON.stringify(reason);
+        error_popup('send', reason);
         return false;
     }
 
@@ -505,7 +531,11 @@ function sync_req(type, params0, path_template) {
 function fill_path_template(template, params) {
     var re = /:[a-zA-Z_]*/g;
     return template.replace(re, function(m) {
-            return esc(params[m.substring(1)]);
+            var str = esc(params[m.substring(1)]);
+            if (str == '') {
+                throw(m.substring(1) + " is required");
+            }
+            return str;
         });
 }
 
@@ -566,15 +596,3 @@ function xmlHttpRequest() {
     }
     return res;
 }
-
-(function($){
-    $.fn.extend({
-        center: function () {
-            return this.each(function() {
-                var top = ($(window).height() - $(this).outerHeight()) / 2;
-                var left = ($(window).width() - $(this).outerWidth()) / 2;
-                $(this).css({margin:0, top: (top > 0 ? top : 0)+'px', left: (left > 0 ? left : 0)+'px'});
-            });
-        }
-    });
-})(jQuery);
