@@ -284,27 +284,17 @@ function apply_state(reqs) {
 }
 
 function error_popup(type, text) {
+    var cssClass = '.form-popup-' + type;
     function hide() {
-        $('.form-error').slideUp(200, function() {
+        $(cssClass).slideUp(200, function() {
                 $(this).remove();
             });
     }
 
-    var heading;
-    if (type == 'pre_send') {
-        heading = 'Could not send your request. The reason is:';
-    }
-    else if (type == 'send') {
-        heading = 'Form submission failed. The server response was:';
-    }
-    else if (type == 'info') {
-        heading = 'Information';
-    }
-
     hide();
-    $('h1').after(format('error-popup', {'heading':heading, 'text':text}));
-    $('.form-error').slideDown(200);
-    $('.form-error span').click(hide);
+    $('h1').after(format('error-popup', {'type': type, 'text': text}));
+    $(cssClass).center().slideDown(200);
+    $(cssClass + ' span').click(hide);
 }
 
 function postprocess() {
@@ -488,7 +478,7 @@ function sync_req(type, params0, path_template) {
     try {
         path = fill_path_template(path_template, params);
     } catch (e) {
-        error_popup('pre_send', e);
+        error_popup('warn', e);
         return false;
     }
     var req = xmlHttpRequest();
@@ -511,7 +501,7 @@ function sync_req(type, params0, path_template) {
     if (req.status == 400 || req.status == 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
-        error_popup('send', reason);
+        error_popup('warn', reason);
         return false;
     }
 
@@ -596,3 +586,15 @@ function xmlHttpRequest() {
     }
     return res;
 }
+
+(function($){
+    $.fn.extend({
+        center: function () {
+            return this.each(function() {
+                var top = ($(window).height() - $(this).outerHeight()) / 2;
+                var left = ($(window).width() - $(this).outerWidth()) / 2;
+                $(this).css({margin:0, top: (top > 0 ? top : 0)+'px', left: (left > 0 ? left : 0)+'px'});
+            });
+        }
+    });
+})(jQuery);
