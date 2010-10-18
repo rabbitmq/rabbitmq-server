@@ -443,7 +443,7 @@ do_send(Destination, _DestHdr,
         Frame = #stomp_frame{headers     = Headers,
                              body_iolist = BodyFragments},
         State = #state{channel = Channel}) ->
-    {ok, _Q} = create_queue_if_needed(send, Destination, Channel),
+    {ok, _Q} = ensure_queue(send, Destination, Channel),
 
     BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
     IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
@@ -488,7 +488,7 @@ do_subscribe(Destination, DestHdr, Frame,
                   "client" -> client
               end,
 
-    {ok, Queue} = create_queue_if_needed(subscribe, Destination, Channel),
+    {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
     ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, Str} ->
@@ -506,7 +506,7 @@ do_subscribe(Destination, DestHdr, Frame,
                              exclusive    = false},
                            self()),
 
-    ok = bind_queue_if_needed(Queue, Destination, Channel),
+    ok = ensure_queue_binding(Queue, Destination, Channel),
 
     {ok, State1#state{subscriptions =
                          dict:store(ConsumerTag, DestHdr, Subs)}}.
@@ -610,15 +610,15 @@ subscribe_channel_for_destination(_Destination,
                                   State = #state{channel = Channel}) ->
     {State, Channel}.
 
-create_queue_if_needed(subscribe, {exchange, _}, Channel) ->
+ensure_queue(subscribe, {exchange, _}, Channel) ->
     %% Create anonymous queue for SUBSCRIBE on /exchange destinations
     #'queue.declare_ok'{queue = Queue} =
         amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
     {ok, Queue};
-create_queue_if_needed(send, {exchange, _}, _Channel) ->
+ensure_queue(send, {exchange, _}, _Channel) ->
     %% Don't create queues on SEND for /exchange destinations
     {ok, undefined};
-create_queue_if_needed(_, {queue, Name}, Channel) ->
+ensure_queue(_, {queue, Name}, Channel) ->
     %% Always create named queue for /queue destinations
     Queue = list_to_binary(Name),
     #'queue.declare_ok'{queue = Queue} =
@@ -626,16 +626,16 @@ create_queue_if_needed(_, {queue, Name}, Channel) ->
                           #'queue.declare'{durable = true,
                                            queue   = Queue}),
     {ok, Queue};
-create_queue_if_needed(subscribe, {topic, _}, Channel) ->
+ensure_queue(subscribe, {topic, _}, Channel) ->
     %% Create anonymous, exclusive queue for SUBSCRIBE on /topic destinations
     #'queue.declare_ok'{queue = Queue} =
         amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
     {ok, Queue};
-create_queue_if_needed(send, {topic, _}, _Channel) ->
+ensure_queue(send, {topic, _}, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
     {ok, undefined}.
 
-bind_queue_if_needed(Queue, {exchange, {Name, Pattern}}, Channel) ->
+ensure_queue_binding(Queue, {exchange, {Name, Pattern}}, Channel) ->
     RoutingKey = case Pattern of
                      undefined -> "";
                      _         -> Pattern
@@ -647,10 +647,10 @@ bind_queue_if_needed(Queue, {exchange, {Name, Pattern}}, Channel) ->
                             exchange    = list_to_binary(Name),
                             routing_key = list_to_binary(RoutingKey)}),
     ok;
-bind_queue_if_needed(_Queue, {queue, _}, _Channel) ->
+ensure_queue_binding(_Queue, {queue, _}, _Channel) ->
     %% rely on default binding for /queue
     ok;
-bind_queue_if_needed(Queue, {topic, Name}, Channel) ->
+ensure_queue_binding(Queue, {topic, Name}, Channel) ->
     #'queue.bind_ok'{} =
         amqp_channel:call(Channel,
                           #'queue.bind'{

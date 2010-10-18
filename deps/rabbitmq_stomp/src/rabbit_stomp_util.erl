@@ -83,7 +83,6 @@ parse_routing_information({topic, Name}) ->
 %% ---- Destination parsing helpers ----
 
 parse_simple_destination(Type, Content) ->
-    io:format("~p~n", [parse_content(Content)]),
     case parse_content(Content) of
         [Name] -> {ok, {Type, Name}};
         _      -> {error, {invalid_destination, Type, Content}}
