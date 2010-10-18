@@ -694,6 +694,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    check_not_default_exchange(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
