@@ -48,7 +48,7 @@ create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
      integer_to_list(DeliveryTag)].
 
 parse_message_id(MessageId) ->
-    Pieces = re:split(MessageId, ?MESSAGE_ID_SEPARATOR, [{return, list}]),
+    {ok, Pieces} = regexp:split(MessageId, ?MESSAGE_ID_SEPARATOR),
     case Pieces of
         [ConsumerTag, SessionId, DeliveryTag] ->
             {ok, {list_to_binary(ConsumerTag),

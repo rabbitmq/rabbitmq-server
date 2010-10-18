@@ -123,8 +123,8 @@ mainloop(State) ->
             shutdown_channel_and_connection(State),
             done;
         #'basic.consume_ok'{} ->
-            %% just being notified that we got made a successful
-            %% subscription.
+            %% just being notified that we made a successful
+            %% basic.consume.
             mainloop(State);
         {Delivery = #'basic.deliver'{},
          #amqp_msg{props = Props, payload = Payload}} ->
@@ -287,7 +287,6 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
                       Acc
               end
       end, 0, Subs),
-
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     State#state{channel = none, connection = none}.
@@ -299,7 +298,6 @@ process_frame("CONNECT", Frame, State = #state{channel = none}) ->
                             rabbit_stomp_frame:header(Frame, "virtual-host",
                                                binary_to_list(DefaultVHost)),
                             State),
-
     {ok, State1};
 process_frame("DISCONNECT", Frame, State) ->
     receipt_if_necessary(Frame, shutdown_channel_and_connection(State)),
