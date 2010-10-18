@@ -12,15 +12,26 @@ LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
 
+# {type: ([mandatory], {optional: default})}
+DECLARABLE = {'exchange': (['name', 'type'],
+                           {'auto_delete': 'false', 'durable': 'true'}),
+              'queue': (['name'],
+                        {'auto_delete': 'false', 'durable': 'true'})}
+
 def make_usage():
-    usage = """usage: %prog [options] args
-where args is one of:
+    usage = """usage: %prog [options] cmd
+where cmd is one of:
 """
     for l in LISTABLE:
-        usage += "  list %s\n" % l
+        usage += "  list {0}\n".format(l)
+    for l in DECLARABLE.keys():
+        usage += "  declare {0} {1}\n".format(l, fmt_mandatory(DECLARABLE[l][0]))
     usage += """  export FILE
   import FILE"""
     return usage
+
+def fmt_mandatory(args):
+    return " ".join(["<{0}>".format(a) for a in args])
 
 parser = OptionParser(usage=make_usage())
 
@@ -32,7 +43,7 @@ def make_parser():
                       help="connect to port PORT [default: %default]",
                       metavar="PORT")
     parser.add_option("-V", "--vhost", dest="vhost",
-                      help="connect to vhost VHOST [default: all vhosts]",
+                      help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
                       metavar="VHOST")
     parser.add_option("-u", "--username", dest="username", default="guest",
                       help="connect using username USERNAME [default: %default]",
@@ -132,6 +143,26 @@ class Management:
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
         format_list(self.get(uri), self.options)
+
+    def invoke_declare(self):
+        assert_usage(len(self.args) > 0)
+        obj_type = self.args[0]
+        assert_usage(obj_type in DECLARABLE)
+        (mandatory, optional) = DECLARABLE[obj_type]
+        args = self.args[1:]
+        assert_usage(len(args) >= len(mandatory))
+        payload = {}
+        for i in xrange(0, len(mandatory)):
+            payload[mandatory[i]] = args[i]
+        for k in optional.keys():
+            payload[k] = optional[k]
+        payload['arguments'] = {}
+        vhost = self.options.vhost or '/'
+        uri_args = [urllib.quote_plus(a) for a in
+                    [obj_type + 's', vhost, payload['name']]]
+        uri = "/" + "/".join(uri_args)
+        res = self.put(uri, json.dumps(payload))
+        self.verbose("{0} declared".format(obj_type))
 
 def format_list(json_list, options):
     format = options.format
