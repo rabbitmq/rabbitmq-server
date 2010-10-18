@@ -323,7 +323,7 @@ all_module_attributes(Name) ->
                                      [application:get_key(App, modules)
                                       || App <- AllApps]])),
     lists:flatmap(fun (Module) ->
-                          [{StepName, Attributes}
+                          [{Module, StepName, Attributes}
                            || {N, [{StepName, Attributes}]}
                                   <- module_attributes(Module), N =:= Name]
                   end, Modules).
@@ -336,12 +336,12 @@ sort_boot_steps(UnsortedSteps) ->
 
     %% Add vertices, with duplicate checking.
     [case digraph:vertex(G, StepName) of
-         false -> digraph:add_vertex(G, StepName, Step);
+         false -> digraph:add_vertex(G, StepName, {StepName, Attrs});
          _     -> boot_error("Duplicate boot step name: ~w~n", [StepName])
-     end || Step = {StepName, _Attrs} <- UnsortedSteps],
+     end || {_Module, StepName, Attrs} <- UnsortedSteps],
 
     %% Add edges, detecting cycles and missing vertices.
-    lists:foreach(fun ({StepName, Attributes}) ->
+    lists:foreach(fun ({_Module, StepName, Attributes}) ->
                           [add_boot_step_dep(G, StepName, PrecedingStepName)
                            || {requires, PrecedingStepName} <- Attributes],
                           [add_boot_step_dep(G, SucceedingStepName, StepName)

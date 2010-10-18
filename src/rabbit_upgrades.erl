@@ -34,27 +34,27 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({foo,
-                 [{mf,      {rabbit_upgrades, foo}},
-                  {requires, []}]}).
+-rabbit_upgrade({foo, []}).
+-rabbit_upgrade({bar, [foo]}).
+-rabbit_upgrade({baz, [bar]}).
 
--rabbit_upgrade({bar,
-                 [{mf,      {rabbit_upgrades, foo}},
-                  {requires, []}]}).
+-rabbit_upgrade({remove_user_scope, [foo]}).
+-rabbit_upgrade({remove_user_scope2, [remove_user_scope]}).
 
--rabbit_upgrade({remove_user_scope,
-                 [{mf,      {rabbit_upgrades, remove_user_scope}},
-                  {requires, [foo]}]}).
-
--rabbit_upgrade({remove_user_scope2,
-                 [{mf,      {rabbit_upgrades, foo}},
-                  {requires, [remove_user_scope]}]}).
-
--rabbit_upgrade({baz,
-                 [{mf,      {rabbit_upgrades, foo}},
-                  {requires, [bar]}]}).
 
 %%--------------------------------------------------------------------
 
+foo() ->
+    ok.
+
 remove_user_scope() ->
+    ok.
+
+remove_user_scope2() ->
+    ok.
+
+bar() ->
+    ok.
+
+baz() ->
     ok.

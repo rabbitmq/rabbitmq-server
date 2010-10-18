@@ -49,10 +49,12 @@ maybe_upgrade(Dir) ->
             case check_unknown_heads(CurrentHeads, G) of
                 ok ->
                     Upgrades = upgrades_to_apply(CurrentHeads, G),
-                    [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
                     case length(Upgrades) of
                         0 -> ok;
-                        _ -> write_version(Dir)
+                        L -> info("Upgrades: ~w to apply~n", [L]),
+                             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
+                             info("Upgrades: All applied~n", []),
+                             write_version(Dir)
                     end;
                 _ ->
                     ok
@@ -66,7 +68,8 @@ maybe_upgrade(Dir) ->
 write_version(Dir) ->
     G = load_graph(),
     rabbit_misc:write_term_file(schema_filename(Dir), [heads(G)]),
-    digraph:delete(G).
+    digraph:delete(G),
+    ok.
 
 %% Graphs ------------------------------------------------------------
 
@@ -74,13 +77,12 @@ load_graph() ->
     G = digraph:new([acyclic]),
     Upgrades = rabbit:all_module_attributes(rabbit_upgrade),
     [case digraph:vertex(G, StepName) of
-         false -> digraph:add_vertex(G, StepName, Step);
+         false -> digraph:add_vertex(G, StepName, {Module, StepName});
          _     -> throw({duplicate_upgrade, StepName})
-     end || Step = {StepName, _Attrs} <- Upgrades],
+     end || {Module, StepName, _Requires} <- Upgrades],
 
-    lists:foreach(fun ({Upgrade, Attributes}) ->
-                          [add_edges(G, Requires, Upgrade)
-                           || {requires, Requires} <- Attributes]
+    lists:foreach(fun ({_Module, Upgrade, Requires}) ->
+                          add_edges(G, Requires, Upgrade)
                   end, Upgrades),
     G.
 
@@ -117,10 +119,9 @@ heads(G) ->
 
 %% Upgrades-----------------------------------------------------------
 
-apply_upgrade({Name, Props}) ->
-    info("Applying upgrade ~w~n", [Name]),
-    {Module, Function} = proplists:get_value(mf, Props),
-    info("->  ~w:~w~n", [Module, Function]).
+apply_upgrade({M, F}) ->
+    info("Upgrades: Applying ~w:~w~n", [M, F]),
+    apply(M, F, []).
 
 %% Utils -------------------------------------------------------------
 
