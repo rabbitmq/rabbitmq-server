@@ -16,6 +16,9 @@
   </div>
 </div>
 
+<% if (exchange.name == "") { %>
+<p>Note: you cannot bind to, unbind from or delete the default exchange.</p>
+<% } else { %>
 <div class="section">
   <h2>Bindings</h2>
   <div class="updatable">
@@ -48,9 +51,7 @@
   </div>
 </div>
 
-<% if (exchange.name != "") { %>
 <%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
-<% } %>
 
 <div class="section-hidden">
   <h2>Delete This Exchange</h2>
@@ -62,3 +63,4 @@
     </form>
   </div>
 </div>
+<% } %>
