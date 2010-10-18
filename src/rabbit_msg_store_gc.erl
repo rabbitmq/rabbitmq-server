@@ -41,9 +41,9 @@
          terminate/2, code_change/3, prioritise_cast/2]).
 
 -record(state,
-        {parent,
-         scheduled,
-         msg_store_state
+        { parent,
+          pending_no_readers,
+          msg_store_state
         }).
 
 -include("rabbit.hrl").
@@ -84,9 +84,9 @@ set_maximum_since_use(Pid, Age) ->
 init([Parent, MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
-    {ok, #state { parent          = Parent,
-                  scheduled       = undefined,
-                  msg_store_state = MsgStoreState }, hibernate,
+    {ok, #state { parent             = Parent,
+                  pending_no_readers = dict:new(),
+                  msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 prioritise_cast({set_maximum_since_use, _Age}, _State) -> 8;
@@ -95,18 +95,21 @@ prioritise_cast(_Msg,                          _State) -> 0.
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
-handle_cast({gc, Source, Destination},
-            State = #state { scheduled = undefined }) ->
-    {noreply, attempt_gc(State #state { scheduled = {Source, Destination} }),
-     hibernate};
+handle_cast({gc, Source, Destination}, State) ->
+    {noreply, attempt_gc(Source, Destination, State), hibernate};
 
 handle_cast({no_readers, File},
-            State = #state { scheduled = {Source, Destination} })
-  when File =:= Source orelse File =:= Destination ->
-    {noreply, attempt_gc(State), hibernate};
-
-handle_cast({no_readers, _File}, State) ->
-    {noreply, State, hibernate};
+            State = #state { pending_no_readers = Pending }) ->
+    State1 = case dict:find(File, Pending) of
+                 error ->
+                     State;
+                 {ok, {Source, Destination}} ->
+                     attempt_gc(
+                       Source, Destination,
+                       State #state { pending_no_readers =
+                                          dict:erase(File, Pending) })
+             end,
+    {noreply, State1, hibernate};
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -121,17 +124,20 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-attempt_gc(State = #state { parent          = Parent,
-                            scheduled       = {Source, Destination},
-                            msg_store_state = MsgStoreState }) ->
-    case lists:all(fun (File) ->
-                           rabbit_msg_store:has_no_readers(File, MsgStoreState)
-                   end, [Source, Destination]) of
-        true ->
+attempt_gc(Source, Destination,
+           State = #state { parent             = Parent,
+                            pending_no_readers = Pending,
+                            msg_store_state    = MsgStoreState }) ->
+    case lists:filter(fun (File) ->
+                              rabbit_msg_store:has_readers(File, MsgStoreState)
+                      end, [Source, Destination]) of
+        [] ->
             Reclaimed = rabbit_msg_store:gc(Source, Destination, MsgStoreState),
             ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source,
                                           Destination),
-            State #state { scheduled = undefined };
-        false ->
-            State
+            State;
+        [File | _] ->
+            State #state { pending_no_readers =
+                               dict:store(File, {Source, Destination}, Pending)
+                         }
     end.

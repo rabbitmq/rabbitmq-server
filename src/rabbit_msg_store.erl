@@ -38,7 +38,7 @@
          write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2,
-         gc/3, has_no_readers/2]). %% internal
+         gc/3, has_readers/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -159,7 +159,7 @@
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                    non_neg_integer()).
--spec(has_no_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
+-spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 
 -endif.
 
@@ -1547,10 +1547,10 @@ delete_file_if_empty(File, State = #msstate {
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
 
-has_no_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
+has_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
     [#file_summary { locked = true, readers = Count }] =
         ets:lookup(FileSummaryEts, File),
-    Count == 0.
+    Count /= 0.
 
 gc(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     [SrcObj = #file_summary {
