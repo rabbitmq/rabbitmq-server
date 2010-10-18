@@ -90,7 +90,8 @@ parse_simple_destination(Type, Content) ->
 
 parse_content(Content)->
     case regexp:split(Content, "/") of
-        {ok, Matches} -> strip_leading_blank_matches(Matches);
+        {ok, Matches} -> [unescape(X) ||
+                             X <- strip_leading_blank_matches(Matches)];
         Other -> Other
     end.
 
@@ -100,4 +101,8 @@ strip_leading_blank_matches([[] | Rest]) ->
     strip_leading_blank_matches(Rest);
 strip_leading_blank_matches(Matches) ->
     Matches.
+
+unescape(Str) ->
+    {ok, OutStr, _} = regexp:gsub(Str, "%2F", "/"),
+    OutStr.
 

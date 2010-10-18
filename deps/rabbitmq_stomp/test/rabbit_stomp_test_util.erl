@@ -71,6 +71,13 @@ unknown_destination_test() ->
     {error, {unknown_destination, "/blah/boo"}} =
         parse_destination("/blah/boo").
 
+queue_with_escaped_name_test() ->
+    {ok, {queue, "te/st"}} = parse_destination("/queue/te%2Fst").
+
+valid_exchange_with_escaped_name_and_pattern_test() ->
+    {ok, {exchange, {"te/st", "pa/tt/ern"}}} =
+        parse_destination("/exchange/te%2Fst/pa%2Ftt%2Fern").
+
 create_message_id_test() ->
     [<<"baz">>, "@@", "abc", "@@", "123"] =
         rabbit_stomp_util:create_message_id(<<"baz">>, "abc", 123).
