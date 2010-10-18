@@ -884,16 +884,31 @@
             </para>
             <variablelist>
               <varlistentry>
-                <term>exchange_name</term>
-                <listitem><para>The name of the exchange to which the
-                binding is attached. with non-ASCII characters
-                escaped as in C.</para></listitem>
+                <term>source_name</term>
+                <listitem><para>The name of the source of messages to
+                which the binding is attached. With non-ASCII
+                characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>queue_name</term>
-                <listitem><para>The name of the queue to which the
-                binding is attached. with non-ASCII characters
-                escaped as in C.</para></listitem>
+                <term>source_kind</term>
+                <listitem><para>The kind of the source of messages to
+                which the binding is attached. Currently always
+                queue. With non-ASCII characters escaped as in
+                C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>destination_name</term>
+                <listitem><para>The name of the destination of
+                messages to which the binding is attached. With
+                non-ASCII characters escaped as in
+                C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>destination_kind</term>
+                <listitem><para>The kind of the destination of
+                messages to which the binding is attached. With
+                non-ASCII characters escaped as in
+                C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>routing_key</term>
