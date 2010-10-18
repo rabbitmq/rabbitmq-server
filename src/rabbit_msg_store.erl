@@ -37,7 +37,8 @@
          client_init/2, client_terminate/2, client_delete_and_terminate/3,
          write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
--export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
+-export([sync/1, gc_done/4, set_maximum_since_use/2,
+         gc/3, has_no_readers/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -157,7 +158,8 @@
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
-                   'concurrent_readers' | non_neg_integer()).
+                   non_neg_integer()).
+-spec(has_no_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 
 -endif.
 
@@ -1545,29 +1547,31 @@ delete_file_if_empty(File, State = #msstate {
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
 
+has_no_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
+    [#file_summary { locked = true, readers = Count }] =
+        ets:lookup(FileSummaryEts, File),
+    Count == 0.
+
 gc(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     [SrcObj = #file_summary {
-       readers          = SrcReaders,
-       left             = DstFile,
-       file_size        = SrcFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, SrcFile),
+       readers   = 0,
+       left      = DstFile,
+       file_size = SrcFileSize,
+       locked    = true }] = ets:lookup(FileSummaryEts, SrcFile),
     [DstObj = #file_summary {
-       readers          = DstReaders,
-       right            = SrcFile,
-       file_size        = DstFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, DstFile),
+       readers   = 0,
+       right     = SrcFile,
+       file_size = DstFileSize,
+       locked    = true }] = ets:lookup(FileSummaryEts, DstFile),
 
-    case SrcReaders =:= 0 andalso DstReaders =:= 0 of
-        true  -> TotalValidData = combine_files(SrcObj, DstObj, State),
-                 %% don't update dest.right, because it could be
-                 %% changing at the same time
-                 true = ets:update_element(
-                          FileSummaryEts, DstFile,
-                          [{#file_summary.valid_total_size, TotalValidData},
-                           {#file_summary.file_size,        TotalValidData}]),
-                 SrcFileSize + DstFileSize - TotalValidData;
-        false -> concurrent_readers
-    end.
+    TotalValidData = combine_files(SrcObj, DstObj, State),
+    %% don't update dest.right, because it could be changing at the
+    %% same time
+    true = ets:update_element(
+             FileSummaryEts, DstFile,
+             [{#file_summary.valid_total_size, TotalValidData},
+              {#file_summary.file_size,        TotalValidData}]),
+    SrcFileSize + DstFileSize - TotalValidData.
 
 combine_files(#file_summary { file             = Source,
                               valid_total_size = SourceValid,

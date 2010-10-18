@@ -124,9 +124,14 @@ code_change(_OldVsn, State, _Extra) ->
 attempt_gc(State = #state { parent          = Parent,
                             scheduled       = {Source, Destination},
                             msg_store_state = MsgStoreState }) ->
-    case rabbit_msg_store:gc(Source, Destination, MsgStoreState) of
-        concurrent_readers -> State;
-        Reclaimed          -> ok = rabbit_msg_store:gc_done(
-                                     Parent, Reclaimed, Source, Destination),
-                              State #state { scheduled = undefined }
+    case lists:all(fun (File) ->
+                           rabbit_msg_store:has_no_readers(File, MsgStoreState)
+                   end, [Source, Destination]) of
+        true ->
+            Reclaimed = rabbit_msg_store:gc(Source, Destination, MsgStoreState),
+            ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source,
+                                          Destination),
+            State #state { scheduled = undefined };
+        false ->
+            State
     end.
