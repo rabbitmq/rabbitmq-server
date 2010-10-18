@@ -368,6 +368,13 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
+expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
+    {expand_queue_name_shortcut(DestinationNameBin, State),
+     expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State)};
+expand_binding(exchange, DestinationNameBin, RoutingKey, State) ->
+    {rabbit_misc:r(State#ch.virtual_host, exchange, DestinationNameBin),
+     RoutingKey}.
+
 check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
     rabbit_misc:protocol_error(
       access_refused, "operation not permitted on the default exchange", []);
@@ -735,6 +742,24 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
 
+handle_method(#'exchange.bind'{destination = DestinationNameBin,
+                               source = SourceNameBin,
+                               routing_key = RoutingKey,
+                               nowait = NoWait,
+                               arguments = Arguments}, _, State) ->
+    binding_action(fun rabbit_binding:add/2,
+                   SourceNameBin, exchange, DestinationNameBin, RoutingKey,
+                   Arguments, #'exchange.bind_ok'{}, NoWait, State);
+
+handle_method(#'exchange.unbind'{destination = DestinationNameBin,
+                                 source = SourceNameBin,
+                                 routing_key = RoutingKey,
+                                 nowait = NoWait,
+                                 arguments = Arguments}, _, State) ->
+    binding_action(fun rabbit_binding:remove/2,
+                   SourceNameBin, exchange, DestinationNameBin, RoutingKey,
+                   Arguments, #'exchange.unbind_ok'{}, NoWait, State);
+
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
                                durable     = Durable,
@@ -826,7 +851,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:add/2,
-                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   ExchangeNameBin, queue, QueueNameBin, RoutingKey, Arguments,
                    #'queue.bind_ok'{}, NoWait, State);
 
 handle_method(#'queue.unbind'{queue = QueueNameBin,
@@ -834,7 +859,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:remove/2,
-                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   ExchangeNameBin, queue, QueueNameBin, RoutingKey, Arguments,
                    #'queue.unbind_ok'{}, false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
@@ -884,14 +909,14 @@ handle_method(#'channel.flow'{active = false}, _,
                       undefined -> start_limiter(State);
                       Other     -> Other
                   end,
+    State1 = State#ch{limiter_pid = LimiterPid1},
     ok = rabbit_limiter:block(LimiterPid1),
-    QPids = consumer_queues(Consumers),
-    Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
-    ok = rabbit_amqqueue:flush_all(QPids, self()),
-    case Queues of
-        [] -> {reply, #'channel.flow_ok'{active = false}, State};
-        _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
-                                 blocking = dict:from_list(Queues)}}
+    case consumer_queues(Consumers) of
+        []    -> {reply, #'channel.flow_ok'{active = false}, State1};
+        QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
+                              QPid <- QPids],
+                 ok = rabbit_amqqueue:flush_all(QPids, self()),
+                 {noreply, State1#ch{blocking = dict:from_list(Queues)}}
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->
@@ -900,43 +925,44 @@ handle_method(_MethodRecord, _Content, _State) ->
 
 %%----------------------------------------------------------------------------
 
-binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-               ReturnMethod, NoWait,
+binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
+               RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            reader_pid   = ReaderPid}) ->
     %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
     %% including the one named "" !
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_write_permitted(QueueName, State),
-    ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
-                                                   State),
+    {DestinationName, ActualRoutingKey} =
+        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
+    check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_not_default_exchange(ExchangeName),
     check_read_permitted(ExchangeName, State),
-    case Fun(#binding{exchange_name = ExchangeName,
-                      queue_name    = QueueName,
-                      key           = ActualRoutingKey,
-                      args          = Arguments},
-             fun (_X, Q) ->
+    case Fun(#binding{source      = ExchangeName,
+                      destination = DestinationName,
+                      key         = ActualRoutingKey,
+                      args        = Arguments},
+             fun (_X, Q = #amqqueue{}) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                      catch exit:Reason -> {error, Reason}
-                     end
+                     end;
+                 (_X, #exchange{}) ->
+                     ok
              end) of
-        {error, exchange_not_found} ->
+        {error, source_not_found} ->
             rabbit_misc:not_found(ExchangeName);
-        {error, queue_not_found} ->
-            rabbit_misc:not_found(QueueName);
-        {error, exchange_and_queue_not_found} ->
+        {error, destination_not_found} ->
+            rabbit_misc:not_found(DestinationName);
+        {error, source_and_destination_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
-                                             rabbit_misc:rs(QueueName)]);
+                                             rabbit_misc:rs(DestinationName)]);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
-               rabbit_misc:rs(QueueName)]);
+               rabbit_misc:rs(DestinationName)]);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)

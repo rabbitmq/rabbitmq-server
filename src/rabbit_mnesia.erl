@@ -44,6 +44,9 @@
 
 -include("rabbit.hrl").
 
+-define(SCHEMA_VERSION_SET, []).
+-define(SCHEMA_VERSION_FILENAME, "schema_version").
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -91,6 +94,9 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
+    ok = rabbit_misc:write_term_file(filename:join(
+                                       dir(), ?SCHEMA_VERSION_FILENAME),
+                                     [?SCHEMA_VERSION_SET]),
     ok.
 
 is_db_empty() ->
@@ -212,13 +218,15 @@ table_definitions() ->
        {match, #amqqueue{name = queue_name_match(), _='_'}}]}].
 
 binding_match() ->
-    #binding{queue_name = queue_name_match(),
-             exchange_name = exchange_name_match(),
+    #binding{source = exchange_name_match(),
+             destination = binding_destination_match(),
              _='_'}.
 reverse_binding_match() ->
-    #reverse_binding{queue_name = queue_name_match(),
-                     exchange_name = exchange_name_match(),
+    #reverse_binding{destination = binding_destination_match(),
+                     source = exchange_name_match(),
                      _='_'}.
+binding_destination_match() ->
+    resource_match('_').
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
@@ -241,7 +249,8 @@ ensure_mnesia_dir() ->
     case filelib:ensure_dir(MnesiaDir) of
         {error, Reason} ->
             throw({error, {cannot_create_mnesia_dir, MnesiaDir, Reason}});
-        ok -> ok
+        ok ->
+            ok
     end.
 
 ensure_mnesia_running() ->

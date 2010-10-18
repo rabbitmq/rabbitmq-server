@@ -35,7 +35,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, publish/2]).
+-export([description/0, route/2]).
 -export([validate/1, create/1, recover/2, delete/2, add_binding/2,
          remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -56,17 +56,14 @@ description() ->
     [{name, <<"headers">>},
      {description, <<"AMQP headers exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name},
-        Delivery = #delivery{message = #basic_message{content = Content}}) ->
+route(#exchange{name = Name},
+      #delivery{message = #basic_message{content = Content}}) ->
     Headers = case (Content#content.properties)#'P_basic'.headers of
                   undefined -> [];
                   H         -> rabbit_misc:sort_field_table(H)
               end,
-    rabbit_router:deliver(rabbit_router:match_bindings(
-                            Name, fun (#binding{args = Spec}) ->
-                                          headers_match(Spec, Headers)
-                                  end),
-                          Delivery).
+    rabbit_router:match_bindings(
+      Name, fun (#binding{args = Spec}) -> headers_match(Spec, Headers) end).
 
 default_headers_match_kind() -> all.
 
@@ -79,7 +76,7 @@ parse_x_match(Other) ->
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
-%% (rabbit_misc:sort_field_table) that publish/1 and
+%% (rabbit_misc:sort_field_table) that route/1 and
 %% rabbit_binding:{add,remove}/2 do.
 %%
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

@@ -60,8 +60,8 @@
 -record(route, {binding, value = const}).
 -record(reverse_route, {reverse_binding, value = const}).
 
--record(binding, {exchange_name, key, queue_name, args = []}).
--record(reverse_binding, {queue_name, key, exchange_name, args = []}).
+-record(binding, {source, key, destination, args = []}).
+-record(reverse_binding, {destination, key, source, args = []}).
 
 -record(listener, {node, protocol, host, port}).
 
@@ -70,7 +70,7 @@
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
--record(amqp_error, {name, explanation, method = none}).
+-record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, timestamp}).
 
