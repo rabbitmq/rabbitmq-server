@@ -34,14 +34,14 @@
 
 -include("rabbit.hrl").
 
--define(SCHEMA_VERSION_FILENAME, "schema_version").
+-define(VERSION_FILENAME, "schema_version").
+-define(LOCK_FILENAME, "schema_upgrade_lock").
 
 %% API ---------------------------------------------------------------
 
 %% Try to upgrade the schema. If no information on the existing schema could
 %% be found, do nothing. rabbit_mnesia:check_schema_integrity() will catch the
 %% problem.
-%% TODO detect failed upgrades
 maybe_upgrade(Dir) ->
     case rabbit_misc:read_term_file(schema_filename(Dir)) of
         {ok, [CurrentHeads]} ->
@@ -51,10 +51,7 @@ maybe_upgrade(Dir) ->
                     Upgrades = upgrades_to_apply(CurrentHeads, G),
                     case length(Upgrades) of
                         0 -> ok;
-                        L -> info("Upgrades: ~w to apply~n", [L]),
-                             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
-                             info("Upgrades: All applied~n", []),
-                             write_version(Dir)
+                        _ -> apply_upgrades(Upgrades, Dir)
                     end;
                 _ ->
                     ok
@@ -119,6 +116,23 @@ heads(G) ->
 
 %% Upgrades-----------------------------------------------------------
 
+apply_upgrades(Upgrades, Dir) ->
+    LockFile = lock_filename(Dir),
+    case file:read_file_info(LockFile) of
+        {error, enoent} ->
+            info("Upgrades: ~w to apply~n", [length(Upgrades)]),
+            {ok, Lock} = file:open(LockFile, write),
+            ok = file:close(Lock),
+            [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
+            info("Upgrades: All applied~n", []),
+            write_version(Dir),
+            ok = file:delete(LockFile);
+        {ok, _FI} ->
+            exit(previous_upgrade_failed);
+        {error, _} = Error ->
+            exit(Error)
+    end.
+
 apply_upgrade({M, F}) ->
     info("Upgrades: Applying ~w:~w~n", [M, F]),
     apply(M, F, []).
@@ -126,7 +140,10 @@ apply_upgrade({M, F}) ->
 %% Utils -------------------------------------------------------------
 
 schema_filename(Dir) ->
-    filename:join(Dir, ?SCHEMA_VERSION_FILENAME).
+    filename:join(Dir, ?VERSION_FILENAME).
+
+lock_filename(Dir) ->
+    filename:join(Dir, ?LOCK_FILENAME).
 
 %% NB: we cannot use rabbit_log here since it may not have been started yet
 info(Msg, Args) ->
