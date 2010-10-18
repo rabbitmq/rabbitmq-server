@@ -44,8 +44,8 @@
 -define(TABLES, [queue_stats, connection_stats, channel_stats] ++
             ?FINE_STATS_TYPES).
 
-%% TODO can this be got rid of?
--define(FINE_STATS, [ack, deliver, deliver_no_ack, get, get_no_ack, publish]).
+-define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
+-define(FINE_STATS, [publish, ack, deliver_get] ++ ?DELIVER_GET).
 
 %%----------------------------------------------------------------------------
 
@@ -413,11 +413,17 @@ handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
                 {Ids, Stats, OldStats, OldTimestamp} <- IdsStatsTS]
     end.
 
+
 handle_fine_stat(ChPid, Ids, Stats, Timestamp,
                  OldStats, OldTimestamp,
                  Table) ->
     Id = fine_stats_key(ChPid, Ids),
-    Res = rates(Stats, Timestamp, OldStats, OldTimestamp, ?FINE_STATS),
+    Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
+    Stats1 = case Total of
+                 0 -> Stats;
+                 _ -> [{deliver_get, Total}|Stats]
+             end,
+    Res = rates(Stats1, Timestamp, OldStats, OldTimestamp, ?FINE_STATS),
     ets:insert(Table, {Id, Res, Timestamp}).
 
 delete_fine_stats(Type, ChPid, #state{tables = Tables}) ->

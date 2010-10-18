@@ -28,7 +28,7 @@
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
--export([reply_list/3, reply_list/4]).
+-export([reply_list/3, reply_list/4, destination_type/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -98,6 +98,12 @@ vhost(ReqData) ->
                  end
     end.
 
+destination_type(ReqData) ->
+    case id(dtype, ReqData) of
+        <<"e">> -> exchange;
+        <<"q">> -> queue
+    end.
+
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
     {mochijson2:encode(Facts), ReqData1, Context}.
@@ -159,8 +165,10 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
     ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
     {{halt, Code}, ReqData1, Context}.
 
-id(exchange, ReqData) ->
-    case id0(exchange, ReqData) of
+id(Key, ReqData) when Key =:= exchange;
+                      Key =:= source;
+                      Key =:= destination ->
+    case id0(Key, ReqData) of
         <<"amq.default">> -> <<"">>;
         Name              -> Name
     end;
@@ -241,7 +249,9 @@ amqp_request(VHost, ReqData, Context, Method) ->
             not_found(list_to_binary(Reason), ReqData, Context);
         exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
             not_authorised(list_to_binary(Reason), ReqData, Context);
-        exit:{{server_initiated_close, Code, Reason}, _} ->
+        exit:{{ServerClose, Code, Reason}, _}
+          when ServerClose =:= server_initiated_close;
+               ServerClose =:= server_initiated_hard_close ->
             bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
                         ReqData, Context)
     end.

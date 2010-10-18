@@ -9,6 +9,7 @@ $(document).ready(function() {
     setup_constant_events();
     update_vhosts();
     app.run();
+    set_timer_interval(5000);
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -52,8 +53,10 @@ function dispatcher() {
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {
-            render({'connection': '/connections/' + esc(this.params['name'])}, 'connection',
-                   '#/connections');
+            var name = esc(this.params['name']);
+            render({'connection': '/connections/' + name,
+                    'channels': '/connections/' + name + '/channels'},
+                'connection', '#/connections');
         });
     this.del('#/connections', function() {
             if (sync_delete(this, '/connections/:name'))
@@ -71,7 +74,9 @@ function dispatcher() {
     this.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': path,
-                    'bindings': path + '/bindings'}, 'exchange', '#/exchanges');
+                    'bindings_source': path + '/bindings/source',
+                    'bindings_destination': path + '/bindings/destination'},
+                'exchange', '#/exchanges');
         });
     this.put('#/exchanges', function() {
             if (sync_put(this, '/exchanges/:vhost/:name'))
@@ -102,20 +107,20 @@ function dispatcher() {
             }
             else if (this.params['mode'] == 'purge') {
                 if (sync_delete(this, '/queues/:vhost/:name/contents')) {
-                    error_popup("Queue purged");
-                    update();
+                    error_popup('info', "Queue purged");
+                    update_partial();
                 }
             }
             return false;
         });
 
     this.post('#/bindings', function() {
-            if (sync_post(this, '/bindings/:vhost/:queue/:exchange'))
+            if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
             return false;
         });
     this.del('#/bindings', function() {
-            if (sync_delete(this, '/bindings/:vhost/:queue/:exchange/:properties_key'))
+            if (sync_delete(this, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
                 update();
             return false;
         });
@@ -190,6 +195,10 @@ var timer_interval;
 
 function set_timer_interval(interval) {
     timer_interval = interval;
+    reset_timer();
+}
+
+function reset_timer() {
     clearInterval(timer);
     if (timer_interval != null) {
         timer = setInterval('partial_update()', timer_interval);
@@ -209,7 +218,7 @@ function update() {
             replace_content('main', html);
             postprocess();
             postprocess_partial();
-            set_timer_interval(5000);
+            reset_timer();
         });
 }
 
@@ -274,10 +283,18 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function error_popup(text) {
-    $('body').prepend('<div class="form-error">' + text + '</div>');
-    $('.form-error').center().fadeOut(5000)
-        .click( function() { $(this).stop().fadeOut('fast') } );
+function error_popup(type, text) {
+    var cssClass = '.form-popup-' + type;
+    function hide() {
+        $(cssClass).slideUp(200, function() {
+                $(this).remove();
+            });
+    }
+
+    hide();
+    $('h1').after(format('error-popup', {'type': type, 'text': text}));
+    $(cssClass).center().slideDown(200);
+    $(cssClass + ' span').click(hide);
 }
 
 function postprocess() {
@@ -457,7 +474,13 @@ function sync_post(sammy, path_template) {
 
 function sync_req(type, params0, path_template) {
     var params = collapse_multifields(params0);
-    var path = fill_path_template(path_template, params);
+    var path;
+    try {
+        path = fill_path_template(path_template, params);
+    } catch (e) {
+        error_popup('warn', e);
+        return false;
+    }
     var req = xmlHttpRequest();
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
@@ -475,8 +498,10 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (req.status == 400) {
-        error_popup(JSON.stringify(JSON.parse(req.responseText).reason));
+    if (req.status == 400 || req.status == 404) {
+        var reason = JSON.parse(req.responseText).reason;
+        if (typeof(reason) != 'string') reason = JSON.stringify(reason);
+        error_popup('warn', reason);
         return false;
     }
 
@@ -496,7 +521,11 @@ function sync_req(type, params0, path_template) {
 function fill_path_template(template, params) {
     var re = /:[a-zA-Z_]*/g;
     return template.replace(re, function(m) {
-            return esc(params[m.substring(1)]);
+            var str = esc(params[m.substring(1)]);
+            if (str == '') {
+                throw(m.substring(1) + " is required");
+            }
+            return str;
         });
 }
 

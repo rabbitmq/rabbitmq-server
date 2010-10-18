@@ -30,6 +30,8 @@ tokenise_test() ->
     ok.
 
 pack_binding_test() ->
+    assert_binding(<<"_">>,
+                   <<"">>, []),
     assert_binding(<<"foo">>,
                    <<"foo">>, []),
     assert_binding(<<"foo%5Fbar%2Fbash">>,

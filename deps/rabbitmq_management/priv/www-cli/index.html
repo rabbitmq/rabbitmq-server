@@ -18,11 +18,11 @@
   <body>
     <h1>RabbitMQ Management Command Line Tool</h1>
 
-    <p>Download it from <a href="rabbitmgmt">here</a> (Right click,
+    <p>Download it from <a href="rabbitmqadmin">here</a> (Right click,
     Save as). You will need Python 2.6+. Currently this has had very
     little testing, but it's pretty simplistic.</p>
 
-    <p>Invoke <code>rabbitmgmt --help</code> for usage
+    <p>Invoke <code>rabbitmqadmin --help</code> for usage
     instructions. At the moment you can list things, and import /
     export configuration.</p>
 
@@ -33,7 +33,7 @@
     <ul>
       <li>
         Get a list of exchanges:
-<pre>$ ./rabbitmgmt -V test list exchanges
+<pre>$ ./rabbitmqadmin -V test list exchanges
 +-------------+---------+-------+---------+-------------+
 |    name     | durable | vhost |  type   | auto_delete |
 +-------------+---------+-------+---------+-------------+
@@ -47,7 +47,7 @@
       </li>
       <li>
         Connect to another host as another user:
-<pre>$ ./rabbitmgmt -H myserver -u simon -p simon list vhosts
+<pre>$ ./rabbitmqadmin -H myserver -u simon -p simon list vhosts
 +------+
 | name |
 +------+
@@ -56,12 +56,12 @@
       </li>
       <li>
         Export configuration:
-<pre>$ ./rabbitmgmt export rabbit.config
+<pre>$ ./rabbitmqadmin export rabbit.config
 Exported configuration for localhost to "rabbit.config"</pre>
       </li>
       <li>
         Import configuration, quietly:
-<pre>$ ./rabbitmgmt -q import rabbit.config</pre>
+<pre>$ ./rabbitmqadmin -q import rabbit.config</pre>
       </li>
     </ul>
   </body>

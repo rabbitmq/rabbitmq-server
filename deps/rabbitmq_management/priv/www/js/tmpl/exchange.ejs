@@ -16,7 +16,41 @@
   </div>
 </div>
 
-<%= format('bindings', {'mode': 'exchange', 'bindings': bindings, 'parent': exchange}) %>
+<div class="section">
+  <h2>Bindings</h2>
+  <div class="updatable">
+    <% if (bindings_destination.length > 0) { %>
+      <h3>Incoming to <b><%= fmt_exchange(exchange.name) %></b></h3>
+      <table class="bindings">
+        <tr>
+          <td>
+            <%= format('bindings', {'mode': 'exchange_destination', 'bindings': bindings_destination}) %>
+          </td>
+          <td class="binding-endpoint">
+            <span class="arrow">&rarr;</span>
+            <span class="object"><%= fmt_exchange(exchange.name) %></span>
+          </td>
+        </tr>
+      </table>
+    <% } %>
+    <h3>Outgoing from <b><%= fmt_exchange(exchange.name) %></b></h3>
+    <table class="bindings">
+      <tr>
+        <td class="binding-endpoint">
+          <span class="object"><%= fmt_exchange(exchange.name) %></span>
+          <span class="arrow">&rarr;</span>
+        </td>
+        <td>
+          <%= format('bindings', {'mode': 'exchange_source', 'bindings': bindings_source}) %>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<% if (exchange.name != "") { %>
+<%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
+<% } %>
 
 <div class="section-hidden">
   <h2>Delete This Exchange</h2>

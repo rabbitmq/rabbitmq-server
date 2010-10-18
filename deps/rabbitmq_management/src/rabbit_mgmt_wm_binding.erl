@@ -61,30 +61,18 @@ to_json(ReqData, Context) ->
                  end).
 
 accept_content(ReqData, Context) ->
-    sync_resource(
-      ReqData, Context,
-      fun(#binding{queue_name    = QueueName,
-                   exchange_name = ExchangeName,
-                   key           = RoutingKey,
-                   args          = Arguments}) ->
-              #'queue.bind'{ queue       = QueueName#resource.name,
-                             exchange    = ExchangeName#resource.name,
-                             routing_key = RoutingKey,
-                             arguments   = Arguments }
-      end).
+    Fun = case rabbit_mgmt_util:destination_type(ReqData) of
+              exchange -> fun binding_to_exchange_bind/1;
+              queue    -> fun binding_to_queue_bind/1
+          end,
+    sync_resource(ReqData, Context, Fun).
 
 delete_resource(ReqData, Context) ->
-    sync_resource(
-      ReqData, Context,
-      fun(#binding{queue_name    = QueueName,
-                   exchange_name = ExchangeName,
-                   key           = RoutingKey,
-                   args          = Arguments}) ->
-              #'queue.unbind'{ queue       = QueueName#resource.name,
-                               exchange    = ExchangeName#resource.name,
-                               routing_key = RoutingKey,
-                               arguments   = Arguments }
-      end).
+    Fun = case rabbit_mgmt_util:destination_type(ReqData) of
+              exchange -> fun binding_to_exchange_unbind/1;
+              queue    -> fun binding_to_queue_unbind/1
+          end,
+    sync_resource(ReqData, Context, Fun).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -94,19 +82,20 @@ is_authorized(ReqData, Context) ->
 binding(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
-        VHost     -> Q = rabbit_mgmt_util:id(queue, ReqData),
-                     X = rabbit_mgmt_util:id(exchange, ReqData),
+        VHost     -> Source = rabbit_mgmt_util:id(source, ReqData),
+                     Dest = rabbit_mgmt_util:id(destination, ReqData),
+                     DestType = rabbit_mgmt_util:destination_type(ReqData),
                      Props = rabbit_mgmt_util:id(props, ReqData),
                      case rabbit_mgmt_format:unpack_binding_props(Props) of
                          {bad_request, Str} ->
                              {bad_request, Str};
                          {Key, Args} ->
-                             XName = rabbit_misc:r(VHost, exchange, X),
-                             QName = rabbit_misc:r(VHost, queue, Q),
-                             #binding{ exchange_name = XName,
-                                       queue_name    = QName,
-                                       key           = Key,
-                                       args          = Args }
+                             SName = rabbit_misc:r(VHost, exchange, Source),
+                             DName = rabbit_misc:r(VHost, DestType, Dest),
+                             #binding{ source      = SName,
+                                       destination = DName,
+                                       key         = Key,
+                                       args        = Args }
                      end
     end.
 
@@ -126,3 +115,41 @@ sync_resource(ReqData, Context, BindingToAMQPMethod) ->
                 rabbit_mgmt_util:vhost(ReqData),
                 ReqData, Context, BindingToAMQPMethod(Binding))
       end).
+
+%%--------------------------------------------------------------------
+
+binding_to_queue_bind(#binding{destination = Dest,
+                               source      = Source,
+                               key         = RoutingKey,
+                               args        = Arguments}) ->
+    #'queue.bind'{ queue       = Dest#resource.name,
+                   exchange    = Source#resource.name,
+                   routing_key = RoutingKey,
+                   arguments   = Arguments }.
+
+binding_to_queue_unbind(#binding{destination = Dest,
+                                 source      = Source,
+                                 key         = RoutingKey,
+                                 args        = Arguments}) ->
+    #'queue.unbind'{ queue       = Dest#resource.name,
+                     exchange    = Source#resource.name,
+                     routing_key = RoutingKey,
+                     arguments   = Arguments }.
+
+binding_to_exchange_bind(#binding{destination = Dest,
+                                  source      = Source,
+                                  key         = RoutingKey,
+                                  args        = Arguments}) ->
+    #'exchange.bind'{ source      = Source#resource.name,
+                      destination = Dest#resource.name,
+                      routing_key = RoutingKey,
+                      arguments   = Arguments }.
+
+binding_to_exchange_unbind(#binding{destination = Dest,
+                                    source      = Source,
+                                    key         = RoutingKey,
+                                    args        = Arguments}) ->
+    #'exchange.unbind'{ source      = Source#resource.name,
+                        destination = Dest#resource.name,
+                        routing_key = RoutingKey,
+                        arguments   = Arguments }.
