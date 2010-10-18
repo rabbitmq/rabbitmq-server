@@ -269,7 +269,7 @@ filter_vhost(List, _ReqData, Context) ->
     [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
 
 vhosts(Username) ->
-    [VHost || {VHost, _, _, _, _}
+    [VHost || {VHost, _ConfigurePerm, _WritePerm, _ReadPerm}
                   <- rabbit_access_control:list_user_permissions(Username)].
 
 filter_user(List, _ReqData, #context{is_admin = true}) ->
