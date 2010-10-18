@@ -34,27 +34,19 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({foo, []}).
--rabbit_upgrade({bar, [foo]}).
--rabbit_upgrade({baz, [bar]}).
-
--rabbit_upgrade({remove_user_scope, [foo]}).
--rabbit_upgrade({remove_user_scope2, [remove_user_scope]}).
-
+-rabbit_upgrade({remove_user_scope, []}).
 
 %%--------------------------------------------------------------------
 
-foo() ->
-    ok.
+%% TODO this is just a hack, on branch bug23319 this should use the real
+%% permission record
+-record(permission2, {configure, write, read}).
 
 remove_user_scope() ->
-    ok.
-
-remove_user_scope2() ->
-    ok.
-
-bar() ->
-    ok.
-
-baz() ->
-    ok.
+    rabbit_upgrade:mnesia_alter_column(
+      rabbit_user_permission, 2,
+      fun({permission, _Scope, Conf, Write, Read}) ->
+              #permission2{configure = Conf,
+                           write = Write,
+                           read = Read}
+      end).

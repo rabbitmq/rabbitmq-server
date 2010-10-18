@@ -287,6 +287,7 @@ check_schema_integrity() ->
 
 check_table_integrity() ->
     ok = wait_for_tables(),
+    rabbit_upgrade:maybe_upgrade(dir()),
     case lists:all(fun ({Tab, TabDef}) ->
                            {_, Match} = proplists:lookup(match, TabDef),
                            read_test_table(Tab, Match)
@@ -378,7 +379,6 @@ init_db(ClusterNodes, Force) ->
                 [] ->
                     case mnesia:system_info(use_dir) of
                         true ->
-                            rabbit_upgrade:maybe_upgrade(dir()),
                             case check_schema_integrity() of
                                 ok ->
                                     ok;
