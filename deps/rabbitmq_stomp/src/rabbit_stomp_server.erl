@@ -604,9 +604,10 @@ process_command(Command, _Frame, State) ->
 
 
 ensure_queue(subscribe, {exchange, _}, Channel) ->
-    %% Create anonymous queue for SUBSCRIBE on /exchange destinations
+    %% Create anonymous, exclusive queue for SUBSCRIBE on /exchange destinations
     #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true}),
+        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
+                                                    exclusive = true}),
     {ok, Queue};
 ensure_queue(send, {exchange, _}, _Channel) ->
     %% Don't create queues on SEND for /exchange destinations
@@ -622,7 +623,8 @@ ensure_queue(_, {queue, Name}, Channel) ->
 ensure_queue(subscribe, {topic, _}, Channel) ->
     %% Create anonymous, exclusive queue for SUBSCRIBE on /topic destinations
     #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
+                                                    exclusive = true}),
     {ok, Queue};
 ensure_queue(send, {topic, _}, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
