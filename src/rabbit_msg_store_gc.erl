@@ -96,16 +96,16 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
 handle_cast({gc, Source, Destination}, State) ->
-    {noreply, attempt_gc(Source, Destination, State), hibernate};
+    {noreply, attempt_action(gc, [Source, Destination], State), hibernate};
 
 handle_cast({no_readers, File},
             State = #state { pending_no_readers = Pending }) ->
     State1 = case dict:find(File, Pending) of
                  error ->
                      State;
-                 {ok, {Source, Destination}} ->
-                     attempt_gc(
-                       Source, Destination,
+                 {ok, {Action, Files}} ->
+                     attempt_action(
+                       Action, Files,
                        State #state { pending_no_readers =
                                           dict:erase(File, Pending) })
              end,
@@ -124,20 +124,21 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-attempt_gc(Source, Destination,
-           State = #state { parent             = Parent,
-                            pending_no_readers = Pending,
-                            msg_store_state    = MsgStoreState }) ->
+attempt_action(Action, Files,
+               State = #state { pending_no_readers = Pending,
+                                msg_store_state    = MsgStoreState }) ->
     case lists:filter(fun (File) ->
                               rabbit_msg_store:has_readers(File, MsgStoreState)
-                      end, [Source, Destination]) of
-        [] ->
-            Reclaimed = rabbit_msg_store:gc(Source, Destination, MsgStoreState),
-            ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source,
-                                          Destination),
-            State;
-        [File | _] ->
-            State #state { pending_no_readers =
-                               dict:store(File, {Source, Destination}, Pending)
-                         }
+                      end, Files) of
+        []         -> do_action(Action, Files, State);
+        [File | _] -> State #state {
+                        pending_no_readers =
+                            dict:store(File, {Action, Files}, Pending) }
     end.
+
+do_action(gc, [Source, Destination],
+          State = #state { parent             = Parent,
+                           msg_store_state    = MsgStoreState }) ->
+    Reclaimed = rabbit_msg_store:gc(Source, Destination, MsgStoreState),
+    ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
+    State.
