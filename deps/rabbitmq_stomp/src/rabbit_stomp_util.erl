@@ -64,8 +64,8 @@ parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
-        {ok, [Name]} -> {ok, {exchange, {Name, undefined}}};
-        {ok, [Name, Pattern]} -> {ok, {exchange, {Name, Pattern}}};
+        [Name] -> {ok, {exchange, {Name, undefined}}};
+        [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
         _ -> {error, {invalid_destination, exchange, Rest}}
     end;
 parse_destination(Destination) ->
@@ -85,13 +85,13 @@ parse_routing_information({topic, Name}) ->
 parse_simple_destination(Type, Content) ->
     io:format("~p~n", [parse_content(Content)]),
     case parse_content(Content) of
-        {ok, [Name]} -> {ok, {Type, Name}};
+        [Name] -> {ok, {Type, Name}};
         _      -> {error, {invalid_destination, Type, Content}}
     end.
 
 parse_content(Content)->
     case regexp:split(Content, "/") of
-        {ok, Matches} -> {ok, strip_leading_blank_matches(Matches)};
+        {ok, Matches} -> strip_leading_blank_matches(Matches);
         Other -> Other
     end.
 
