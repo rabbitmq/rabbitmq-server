@@ -522,7 +522,8 @@ do_subscribe(Destination, DestHdr, Frame,
                              exclusive    = false},
                            self()),
 
-    ok = ensure_queue_binding(Queue, Destination, Channel),
+    ExchangeAndKey = rabbit_stomp_util:parse_routing_information(Destination),
+    ok = ensure_queue_binding(Queue, ExchangeAndKey, Channel),
 
     {ok, State#state{subscriptions =
                          dict:store(ConsumerTag, {DestHdr, Channel}, Subs)}}.
@@ -630,27 +631,15 @@ ensure_queue(send, {topic, _}, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
     {ok, undefined}.
 
-ensure_queue_binding(Queue, {exchange, {Name, Pattern}}, Channel) ->
-    RoutingKey = case Pattern of
-                     undefined -> "";
-                     _         -> Pattern
-                 end,
+ensure_queue_binding(Queue, {"", Queue}, Channel) ->
+    %% i.e., we should only be asked to bind to the default exchange a
+    %% queue with its own name
+    ok;
+ensure_queue_binding(Queue, {Exchange, RoutingKey}, Channel) ->
     #'queue.bind_ok'{} =
         amqp_channel:call(Channel,
                           #'queue.bind'{
                             queue       = Queue,
-                            exchange    = list_to_binary(Name),
+                            exchange    = list_to_binary(Exchange),
                             routing_key = list_to_binary(RoutingKey)}),
-    ok;
-ensure_queue_binding(_Queue, {queue, _}, _Channel) ->
-    %% rely on default binding for /queue
-    ok;
-ensure_queue_binding(Queue, {topic, Name}, Channel) ->
-    #'queue.bind_ok'{} =
-        amqp_channel:call(Channel,
-                          #'queue.bind'{
-                            queue       = Queue,
-                            exchange    = list_to_binary("amq.topic"),
-                            routing_key = list_to_binary(Name)}),
     ok.
-
