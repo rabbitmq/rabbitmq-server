@@ -64,9 +64,12 @@ parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
-        [Name] -> {ok, {exchange, {Name, undefined}}};
+        %% One cannot refer to the default exchange this way; it has
+        %% different semantics for subscribe and send
+        ["" | _]        -> {error, {invalid_destination, exchange, Rest}};
+        [Name]          -> {ok, {exchange, {Name, undefined}}};
         [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
-        _ -> {error, {invalid_destination, exchange, Rest}}
+        _               -> {error, {invalid_destination, exchange, Rest}}
     end;
 parse_destination(Destination) ->
     {error, {unknown_destination, Destination}}.
@@ -84,22 +87,20 @@ parse_routing_information({topic, Name}) ->
 
 parse_simple_destination(Type, Content) ->
     case parse_content(Content) of
-        [Name] -> {ok, {Type, Name}};
-        _      -> {error, {invalid_destination, Type, Content}}
+        [Name = [_|_]] -> {ok, {Type, Name}};
+        _              -> {error, {invalid_destination, Type, Content}}
     end.
 
 parse_content(Content)->
     case regexp:split(Content, "/") of
         {ok, Matches} -> [unescape(X) ||
-                             X <- strip_leading_blank_matches(Matches)];
+                             X <- strip_leading_blank(Matches)];
         Other -> Other
     end.
 
-strip_leading_blank_matches([[] | Rest]) ->
-    %% We might get a few leading blank matches in cases such as
-    %% /queue or /queue/. We don't want these in the result set.
-    strip_leading_blank_matches(Rest);
-strip_leading_blank_matches(Matches) ->
+strip_leading_blank([[] | Rest]) ->
+    Rest;
+strip_leading_blank(Matches) ->
     Matches.
 
 unescape(Str) ->

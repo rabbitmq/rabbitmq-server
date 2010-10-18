@@ -23,6 +23,9 @@ class TestErrors(base.BaseTest):
     def test_invalid_empty_exchange_destination(self):
         self.__test_invalid_destination("exchange", "")
 
+    def test_invalid_default_exchange_destination(self):
+        self.__test_invalid_destination("exchange", "//foo")
+
     def test_unknown_destination(self):
         self.listener.reset()
         self.conn.send(destination="/something/interesting")

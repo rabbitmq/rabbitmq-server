@@ -45,6 +45,10 @@ exchange_with_no_name_test() ->
     {error, {invalid_destination, exchange, ""}} =
         parse_destination("/exchange").
 
+exchange_default_name_test() ->
+    {error, {invalid_destination, exchange, "//foo"}} =
+        parse_destination("/exchange//foo").
+
 queue_with_no_name_slash_test() ->
     {error, {invalid_destination, queue, "/"}} = parse_destination("/queue/").
 
