@@ -936,6 +936,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     {DestinationName, ActualRoutingKey} =
         expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
     check_write_permitted(DestinationName, State),
+    check_not_default_exchange(DestinationName),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_not_default_exchange(ExchangeName),
     check_read_permitted(ExchangeName, State),
