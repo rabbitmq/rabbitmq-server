@@ -64,8 +64,8 @@ parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
-        [Name] -> {ok, {exchange, {Name, undefined}}};
-        [Name, Pattern] -> {ok, {exchange, {Name, Pattern}}};
+        {ok, [Name]} -> {ok, {exchange, {Name, undefined}}};
+        {ok, [Name, Pattern]} -> {ok, {exchange, {Name, Pattern}}};
         _ -> {error, {invalid_destination, exchange, Rest}}
     end;
 parse_destination(Destination) ->
@@ -83,26 +83,22 @@ parse_routing_information({topic, Name}) ->
 %% ---- Destination parsing helpers ----
 
 parse_simple_destination(Type, Content) ->
+    io:format("~p~n", [parse_content(Content)]),
     case parse_content(Content) of
-        [Name] -> {ok, {Type, Name}};
+        {ok, [Name]} -> {ok, {Type, Name}};
         _      -> {error, {invalid_destination, Type, Content}}
     end.
 
 parse_content(Content)->
-    parse_content(Content, {[], []}).
-
-parse_content([], State) ->
-    lists:reverse(accumulate_part(State));
-parse_content("/" ++ Rest, State) ->
-    parse_content(Rest, {accumulate_part(State), []});
-parse_content([C | Rest], {Parts, Acc}) ->
-    parse_content(Rest, {Parts, [C | Acc]}).
-
-accumulate_part({Parts, Acc}) ->
-    case Acc of
-        [] -> Parts;
-        _ -> [lists:reverse(Acc) | Parts]
+    case regexp:split(Content, "/") of
+        {ok, Matches} -> {ok, strip_leading_blank_matches(Matches)};
+        Other -> Other
     end.
 
-
+strip_leading_blank_matches([[] | Rest]) ->
+    %% We might get a few leading blank matches in cases such as
+    %% /queue or /queue/. We don't want these in the result set.
+    strip_leading_blank_matches(Rest);
+strip_leading_blank_matches(Matches) ->
+    Matches.
 
