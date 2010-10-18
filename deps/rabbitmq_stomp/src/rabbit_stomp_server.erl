@@ -41,8 +41,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, queue_channel,
-                connection, parse_state, subscriptions}).
+-record(state, {socket, session_id, channel, connection,
+                parse_state, subscriptions}).
 
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
@@ -104,7 +104,6 @@ init(_Parent) ->
             try
                 ?MODULE:mainloop(#state{socket        = Sock,
                                         channel       = none,
-                                        queue_channel = none,
                                         parse_state   = ParseState,
                                         subscriptions = dict:new()})
             after
@@ -197,7 +196,7 @@ send_delivery(#'basic.deliver'{consumer_tag = ConsumerTag,
                          message_id       = MessageId},
               Body, State = #state{session_id    = SessionId,
                                    subscriptions = Subs}) ->
-   Destination = dict:fetch(ConsumerTag, Subs),
+   {Destination, _SubChannel} = dict:fetch(ConsumerTag, Subs),
 
    send_frame(
       "MESSAGE",
@@ -276,13 +275,21 @@ send_error(Message, Detail, State) ->
 send_error(Message, Format, Args, State) ->
     send_priv_error(Message, Format, Args, none, State).
 
-shutdown_channel_and_connection(State) ->
-    case State#state.queue_channel of
-        none    -> ok;
-        Channel -> amqp_channel:close(Channel)
-    end,
-    amqp_channel:close(State#state.channel),
-    amqp_connection:close(State#state.connection),
+shutdown_channel_and_connection(State = #state{channel       = Channel,
+                                               connection    = Connection,
+                                               subscriptions = Subs}) ->
+    dict:fold(
+      fun(_ConsumerTag, {_DestHdr, SubChannel}, Acc) ->
+              case SubChannel of
+                  Channel -> Acc;
+                  _ ->
+                      amqp_channel:close(SubChannel),
+                      Acc
+              end
+      end, 0, Subs),
+
+    amqp_channel:close(Channel),
+    amqp_connection:close(Connection),
     State#state{channel = none, connection = none}.
 
 process_frame("CONNECT", Frame, State = #state{channel = none}) ->
@@ -479,9 +486,20 @@ do_send(Destination, _DestHdr,
     end.
 
 do_subscribe(Destination, DestHdr, Frame,
-             State = #state{subscriptions = Subs}) ->
+             State = #state{subscriptions = Subs,
+                            connection    = Connection,
+                            channel       = MainChannel}) ->
 
-    {State1, Channel} = subscribe_channel_for_destination(Destination, State),
+    Channel = case Destination of
+                  {queue, _} ->
+                      {ok, Channel1} = amqp_connection:open_channel(Connection),
+                      amqp_channel:call(Channel1,
+                                        #'basic.qos'{prefetch_size  = 0,
+                                                     prefetch_count = 1,
+                                                     global         = false}),
+                      Channel1;
+                  _ -> MainChannel
+              end,
 
     AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
                   "auto"   -> auto;
@@ -508,8 +526,8 @@ do_subscribe(Destination, DestHdr, Frame,
 
     ok = ensure_queue_binding(Queue, Destination, Channel),
 
-    {ok, State1#state{subscriptions =
-                         dict:store(ConsumerTag, DestHdr, Subs)}}.
+    {ok, State#state{subscriptions =
+                         dict:store(ConsumerTag, {DestHdr, Channel}, Subs)}}.
 
 
 process_command("SEND", Frame, State) ->
@@ -521,27 +539,19 @@ process_command("ACK", Frame, State = #state{session_id    = SessionId,
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, SessionId, DeliveryTag}} ->
-                    DestHdr = dict:fetch(ConsumerTag, Subs),
-                    case rabbit_stomp_util:parse_destination(DestHdr) of
-                        {ok, Destination} ->
-                            {State1, Channel} =
-                                subscribe_channel_for_destination(
-                                        Destination, State),
-                            Method = #'basic.ack'{delivery_tag = DeliveryTag,
-                                                  multiple = false},
-                            case transactional(Frame) of
-                                {yes, Transaction} ->
-                                    extend_transaction(Transaction,
-                                                       {Channel, Method},
-                                                       State1);
-                                no ->
-                                    amqp_channel:call(Channel, Method),
-                                    {ok, State1}
-                            end;
-                        _ ->
-                            {ok, send_error("Corrupted message-id",
-                                            "ACK message-id is corrupt\n",
-                                            State)}
+                    {_DestHdr, SubChannel} = dict:fetch(ConsumerTag, Subs),
+
+                    Method = #'basic.ack'{delivery_tag = DeliveryTag,
+                                          multiple = false},
+
+                    case transactional(Frame) of
+                        {yes, Transaction} ->
+                            extend_transaction(Transaction,
+                                               {SubChannel, Method},
+                                               State);
+                        no ->
+                            amqp_channel:call(SubChannel, Method),
+                            {ok, State}
                     end;
                 _ ->
                     {ok, send_error("Invalid message-id",
@@ -594,21 +604,6 @@ process_command(Command, _Frame, State) ->
                     "Could not interpret command " ++ Command ++ "\n",
                     State)}.
 
-subscribe_channel_for_destination({queue, _},
-                                  State = #state{connection    = Connection,
-                                                 queue_channel = none}) ->
-    %% queue_channel is used for SUBSCRIBE on /queue destinations
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    amqp_channel:call(Channel, #'basic.qos'{prefetch_size  = 0,
-                                            prefetch_count = 1,
-                                            global         = false}),
-    {State#state{queue_channel = Channel}, Channel};
-subscribe_channel_for_destination({queue, _},
-                                  State = #state{queue_channel = Channel}) ->
-    {State, Channel};
-subscribe_channel_for_destination(_Destination,
-                                  State = #state{channel = Channel}) ->
-    {State, Channel}.
 
 ensure_queue(subscribe, {exchange, _}, Channel) ->
     %% Create anonymous queue for SUBSCRIBE on /exchange destinations
