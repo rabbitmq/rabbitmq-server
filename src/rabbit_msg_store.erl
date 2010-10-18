@@ -100,9 +100,24 @@
 -record(file_summary,
         {file, valid_total_size, left, right, file_size, locked, readers}).
 
+-record(gc_state,
+        { dir,
+          index_module,
+          index_state,
+          file_summary_ets
+        }).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-export_type([gc_state/0]).
+
+-opaque(gc_state() :: #gc_state { dir              :: file:filename(),
+                                  index_module     :: atom(),
+                                  index_state      :: any(),
+                                  file_summary_ets :: ets:tid()
+                                }).
 
 -type(server() :: pid() | atom()).
 -type(file_num() :: non_neg_integer()).
@@ -141,8 +156,7 @@
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
-               {ets:tid(), file:filename(), atom(), any()}) ->
+-spec(gc/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                    'concurrent_readers' | non_neg_integer()).
 
 -endif.
@@ -570,8 +584,12 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     {ok, Offset} = file_handle_cache:position(CurHdl, Offset),
     ok = file_handle_cache:truncate(CurHdl),
 
-    {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
-                                                 FileSummaryEts),
+    {ok, GCPid} = rabbit_msg_store_gc:start_link(
+                    #gc_state { dir              = Dir,
+                                index_module     = IndexModule,
+                                index_state      = IndexState,
+                                file_summary_ets = FileSummaryEts
+                              }),
 
     {ok, maybe_compact(
            State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid }),
@@ -1527,7 +1545,7 @@ delete_file_if_empty(File, State = #msstate {
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
 
-gc(SrcFile, DstFile, State = {FileSummaryEts, _Dir, _Index, _IndexState}) ->
+gc(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     [SrcObj = #file_summary {
        readers          = SrcReaders,
        left             = DstFile,
@@ -1557,7 +1575,7 @@ combine_files(#file_summary { file             = Source,
               #file_summary { file             = Destination,
                               valid_total_size = DestinationValid,
                               right            = Source },
-              State = {_FileSummaryEts, Dir, _Index, _IndexState}) ->
+              State = #gc_state { dir = Dir }) ->
     SourceName      = filenum_to_name(Source),
     DestinationName = filenum_to_name(Destination),
     {ok, SourceHdl}      = open_file(Dir, SourceName,
@@ -1606,7 +1624,9 @@ combine_files(#file_summary { file             = Source,
     ok = file_handle_cache:delete(SourceHdl),
     ExpectedSize.
 
-load_and_vacuum_message_file(File, {_FileSummaryEts, Dir, Index, IndexState}) ->
+load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
+                                               index_module = Index,
+                                               index_state  = IndexState}) ->
     %% Messages here will be end-of-file at start-of-list
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
@@ -1627,7 +1647,8 @@ load_and_vacuum_message_file(File, {_FileSummaryEts, Dir, Index, IndexState}) ->
       end, {[], 0}, Messages).
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
-              Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
+              Destination, #gc_state { index_module = Index,
+                                       index_state  = IndexState }) ->
     Copy = fun ({BlockStart, BlockEnd}) ->
                    BSize = BlockEnd - BlockStart,
                    {ok, BlockStart} =
