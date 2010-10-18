@@ -3,26 +3,39 @@
 <div class="section">
 <h2>Overview</h2>
 <div class="updatable">
-<div class="highlight-right">
-  Receiving
-  <strong><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</strong>
-  (<%= fmt_bytes(connection.recv_oct) %> total)
-</div>
 
-<div class="highlight-right">
-  <span>Sending</span>
-  <strong><%= fmt_bytes(connection.send_oct_details.rate) %>/s</strong>
-  (<%= fmt_bytes(connection.send_oct) %> total)
-</div>
 <table class="facts">
+<% if (connection.recv_oct_details) { %>
+ <tr>
+   <th>From client</th>
+   <td>
+     <span class="mini-highlight"><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</span>
+   </td>
+ </tr>
+<% } %>
+<% if (connection.send_oct_details) { %>
+ <tr>
+   <th>To client</th>
+   <td>
+     <span class="mini-highlight"><%= fmt_bytes(connection.send_oct_details.rate) %>/s</span>
+   </td>
+ </tr>
+<% } %>
  <tr><th>Channels</th><td><%= connection.channels %></td></tr>
- <tr><th>Vhost</th><td><%= connection.vhost %></td></tr>
- <tr><th>Username</th><td><%= connection.user %></td></tr>
+ <tr><th>Virtual host</th><td><%= link_vhost(connection.vhost) %></td></tr>
+ <tr><th>Username</th><td><%= link_user(connection.user) %></td></tr>
  <tr><th>Protocol</th><td><%= connection.protocol %></td></tr>
  <tr><th>State</th><td><%= connection.state %></td></tr>
  <tr><th>Timeout</th><td><%= connection.timeout %></td></tr>
 </table>
 </div>
+</div>
+
+<div class="section">
+  <h2>Channels</h2>
+  <div class="updatable">
+    <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
+  </div>
 </div>
 
 <div class="section-hidden">

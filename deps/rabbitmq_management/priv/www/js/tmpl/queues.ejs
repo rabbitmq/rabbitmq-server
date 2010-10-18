@@ -41,11 +41,7 @@
      <%= link_conn(queue.owner_pid_details.name) %>
      <% } %>
    </td>
-   <td>
-     <% for (var j = 0; j < queue.arguments.length; j++) { %>
-       <%= queue.arguments[j] %>
-     <% } %>
-   </td>
+   <td><%= fmt_table_short(queue.arguments) %></td>
   </tr>
   <% } %>
  </tbody>
@@ -95,7 +91,7 @@
         </tr>
         <tr>
           <th><label>Arguments:</label></th>
-          <td><input type="hidden" value="" name="arguments" />(TODO)</td>
+          <td><span class="multifield" id="arguments"></span></td>
         </tr>
       </table>
       <input type="submit" value="Add queue"/>

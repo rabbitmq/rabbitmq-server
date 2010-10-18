@@ -9,6 +9,7 @@ $(document).ready(function() {
     setup_constant_events();
     update_vhosts();
     app.run();
+    set_timer_interval(5000);
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -52,8 +53,10 @@ function dispatcher() {
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {
-            render({'connection': '/connections/' + esc(this.params['name'])}, 'connection',
-                   '#/connections');
+            var name = esc(this.params['name']);
+            render({'connection': '/connections/' + name,
+                    'channels': '/connections/' + name + '/channels'},
+                'connection', '#/connections');
         });
     this.del('#/connections', function() {
             if (sync_delete(this, '/connections/:name'))
@@ -71,7 +74,9 @@ function dispatcher() {
     this.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': path,
-                    'bindings': path + '/bindings'}, 'exchange', '#/exchanges');
+                    'bindings_source': path + '/bindings/source',
+                    'bindings_destination': path + '/bindings/destination'},
+                'exchange', '#/exchanges');
         });
     this.put('#/exchanges', function() {
             if (sync_put(this, '/exchanges/:vhost/:name'))
@@ -102,20 +107,20 @@ function dispatcher() {
             }
             else if (this.params['mode'] == 'purge') {
                 if (sync_delete(this, '/queues/:vhost/:name/contents')) {
-                    error_popup("Queue purged");
-                    update();
+                    error_popup('info', "Queue purged");
+                    update_partial();
                 }
             }
             return false;
         });
 
     this.post('#/bindings', function() {
-            if (sync_post(this, '/bindings/:vhost/:queue/:exchange'))
+            if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
             return false;
         });
     this.del('#/bindings', function() {
-            if (sync_delete(this, '/bindings/:vhost/:queue/:exchange/:properties_key'))
+            if (sync_delete(this, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
                 update();
             return false;
         });
@@ -190,6 +195,10 @@ var timer_interval;
 
 function set_timer_interval(interval) {
     timer_interval = interval;
+    reset_timer();
+}
+
+function reset_timer() {
     clearInterval(timer);
     if (timer_interval != null) {
         timer = setInterval('partial_update()', timer_interval);
@@ -209,7 +218,7 @@ function update() {
             replace_content('main', html);
             postprocess();
             postprocess_partial();
-            set_timer_interval(5000);
+            reset_timer();
         });
 }
 
@@ -274,10 +283,18 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function error_popup(text) {
-    $('body').prepend('<div class="form-error">' + text + '</div>');
-    $('.form-error').center().fadeOut(5000)
-        .click( function() { $(this).stop().fadeOut('fast') } );
+function error_popup(type, text) {
+    var cssClass = '.form-popup-' + type;
+    function hide() {
+        $(cssClass).slideUp(200, function() {
+                $(this).remove();
+            });
+    }
+
+    hide();
+    $('h1').after(format('error-popup', {'type': type, 'text': text}));
+    $(cssClass).center().slideDown(200);
+    $(cssClass + ' span').click(hide);
 }
 
 function postprocess() {
@@ -308,9 +325,13 @@ function postprocess() {
             setTimeout('app.run()');
             return false;
         });
+    $('.multifield input').live('blur', function() {
+            update_multifields();
+        });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
+    update_multifields();
 }
 
 function postprocess_partial() {
@@ -324,6 +345,38 @@ function postprocess_partial() {
                 current_sort_reverse = false;
             }
             update();
+        });
+}
+
+function update_multifields() {
+    $('.multifield').each(function(index) {
+            var largest_id = 0;
+            var empty_found = false;
+            var name = $(this).attr('id');
+            $('input[name$="_mfkey"]').each(function(index) {
+                    var match = $(this).attr('name').
+                        match(/[a-z]*_([0-9]*)_mfkey/);
+                    var id = parseInt(match[1]);
+                    largest_id = Math.max(id, largest_id);
+                    var key = $(this).val();
+                    var value = $(this).next('input').val();
+                    if (key == '' && value == '') {
+                        if (empty_found) {
+                            $(this).parent().remove();
+                        }
+                        else {
+                            empty_found = true;
+                        }
+                    }
+                });
+            if (!empty_found) {
+                $(this).append('<p><input type="text" name="' + name + '_' +
+                               (largest_id + 1) +
+                               '_mfkey" value=""/> = ' +
+                               '<input type="text" name="' + name + '_' +
+                               (largest_id + 1) +
+                               '_mfvalue" value=""/></p>');
+            }
         });
 }
 
@@ -419,13 +472,19 @@ function sync_post(sammy, path_template) {
     return sync_req('POST', sammy.params, path_template);
 }
 
-function sync_req(type, params, path_template) {
-    var path = fill_path_template(path_template, params);
+function sync_req(type, params0, path_template) {
+    var params = collapse_multifields(params0);
+    var path;
+    try {
+        path = fill_path_template(path_template, params);
+    } catch (e) {
+        error_popup('warn', e);
+        return false;
+    }
     var req = xmlHttpRequest();
     req.open(type, '/api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
-        if (params["arguments"] == "") params["arguments"] = []; // TODO
         if (type == 'GET')
             req.send(null);
         else
@@ -439,8 +498,10 @@ function sync_req(type, params, path_template) {
         }
     }
 
-    if (req.status == 400) {
-        error_popup(JSON.stringify(JSON.parse(req.responseText).reason));
+    if (req.status == 400 || req.status == 404) {
+        var reason = JSON.parse(req.responseText).reason;
+        if (typeof(reason) != 'string') reason = JSON.stringify(reason);
+        error_popup('warn', reason);
         return false;
     }
 
@@ -460,8 +521,45 @@ function sync_req(type, params, path_template) {
 function fill_path_template(template, params) {
     var re = /:[a-zA-Z_]*/g;
     return template.replace(re, function(m) {
-            return esc(params[m.substring(1)]);
+            var str = esc(params[m.substring(1)]);
+            if (str == '') {
+                throw(m.substring(1) + " is required");
+            }
+            return str;
         });
+}
+
+// Better suggestions appreciated
+var INTEGER_ARGUMENTS = map(['x-expires']);
+
+function collapse_multifields(params0) {
+    var params = {};
+    for (key in params0) {
+        var match = key.match(/([a-z]*)_([0-9]*)_mfkey/);
+        var match2 = key.match(/[a-z]*_[0-9]*_mfvalue/);
+        if (match == null && match2 == null) {
+            params[key] = params0[key];
+        }
+        else if (match == null) {
+            // Do nothing, value is handled below
+        }
+        else {
+            var name = match[1];
+            var id = match[2];
+            if (params[name] == undefined) {
+                params[name] = {};
+            }
+            if (params0[key] != "") {
+                var k = params0[key];
+                var v = params0[name + '_' + id + '_mfvalue'];
+                if (k in INTEGER_ARGUMENTS) {
+                    v = parseInt(v);
+                }
+                params[name][k] = v;
+            }
+        }
+    }
+    return params;
 }
 
 function debug(str) {

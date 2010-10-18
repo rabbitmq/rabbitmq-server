@@ -100,6 +100,8 @@ user(User) ->
      {password,      User#user.password},
      {administrator, User#user.is_admin}].
 
+pack_binding_props(<<"">>, []) ->
+    <<"_">>;
 pack_binding_props(Key, Args) ->
     Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
     ArgsKeys = lists:sort(dict:fetch_keys(Dict)),
@@ -197,15 +199,16 @@ queue(#amqqueue{name            = Name,
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
 %% there are no per-exchange / queue / etc variants for the latter. Therefore
 %% we have a record rather than a proplist to deal with.
-binding(#binding{exchange_name = X,
-                 key           = Key,
-                 queue_name    = Q,
-                 args          = Args}) ->
+binding(#binding{source      = S,
+                 key         = Key,
+                 destination = D,
+                 args        = Args}) ->
     format(
-      [{exchange,       X},
-       {queue,          Q#resource.name},
-       {routing_key,    Key},
-       {arguments,      Args},
+      [{source,           S},
+       {destination,      D#resource.name},
+       {destination_type, D#resource.kind},
+       {routing_key,      Key},
+       {arguments,        Args},
        {properties_key, pack_binding_props(Key, Args)}],
-      [{fun (Res) -> resource(exchange, Res) end, [exchange]},
-       {fun table/1,                              [arguments]}]).
+      [{fun (Res) -> resource(source, Res) end, [source]},
+       {fun table/1,                            [arguments]}]).

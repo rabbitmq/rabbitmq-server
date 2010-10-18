@@ -54,10 +54,9 @@ to_json(ReqData, Context) ->
                export_exchange(X)],
     Qs = [Q || Q <- rabbit_mgmt_wm_queues:queues(ReqData),
                export_queue(Q)],
-    XNames = [{pget(name, X), pget(vhost, X)} || X <- Xs],
     QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
     Bs = [B || B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
-               export_binding(B, XNames, QNames)],
+               export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
       [{rabbit_version, list_to_binary(Vsn)}] ++
@@ -133,9 +132,15 @@ get_part(Name, Parts) ->
 export_queue(Queue) ->
     pget(owner_pid, Queue) == none.
 
-export_binding(Binding, Xs, Qs) ->
-    lists:member({pget(exchange, Binding), pget(vhost, Binding)}, Xs) andalso
-        lists:member({pget(queue, Binding), pget(vhost, Binding)}, Qs).
+export_binding(Binding, Qs) ->
+    Src      = pget(source, Binding),
+    Dest     = pget(destination, Binding),
+    DestType = pget(destination_type, Binding),
+    VHost    = pget(vhost, Binding),
+    Src =/= <<"">>
+        andalso
+          ( (DestType =:= queue andalso lists:member({Dest, VHost}, Qs))
+            orelse (DestType =:= exchange andalso Dest =/= <<"">>) ).
 
 export_exchange(Exchange) ->
     export_name(pget(name, Exchange)).
@@ -152,7 +157,8 @@ rw_state() ->
      {permissions, [user, vhost, configure, write, read, scope]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
      {exchanges,   [name, vhost, type, durable, auto_delete, arguments]},
-     {bindings,    [exchange, vhost, queue, routing_key, arguments]}].
+     {bindings,    [source, vhost, destination, destination_type, routing_key,
+                    arguments]}].
 
 filter(Items) ->
     [filter_items(N, V, proplists:get_value(N, rw_state())) || {N, V} <- Items].
@@ -209,10 +215,11 @@ add_exchange(Exchange) ->
                             rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
 add_binding(Binding) ->
+    DestType = list_to_atom(binary_to_list(pget(destination_type, Binding))),
     rabbit_binding:add(
-      #binding{exchange_name = r(exchange, exchange,                Binding),
-               queue_name    = r(queue, queue,                      Binding),
-               key           = pget(routing_key,                    Binding),
+      #binding{source       = r(exchange, source,                   Binding),
+               destination  = r(DestType, destination,              Binding),
+               key          = pget(routing_key,                     Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
 
 pget(Key, List) ->

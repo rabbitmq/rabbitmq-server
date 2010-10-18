@@ -39,6 +39,7 @@
 
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
+-define(CLI_PREFIX, "cli").
 -define(SETUP_WM_TRACE, false).
 
 %% Make sure our database is hooked in *before* listening on the network or
@@ -73,7 +74,10 @@ register_contexts() ->
                                             "Management Console"),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
-                                             "HTTP API").
+                                             "HTTP API"),
+    rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
+                                            "priv/www-cli",
+                                            "Command Line Tool").
 setup_wm_logging() ->
     {ok, LogDir} = application:get_env(rabbit_management, http_log_dir),
     case LogDir of

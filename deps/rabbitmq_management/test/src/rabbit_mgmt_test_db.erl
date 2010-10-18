@@ -115,8 +115,8 @@ test_overview(_Conn, Chan) ->
     [fun() ->
              %% Very noddy, but at least we test we can get it
              Overview = rabbit_mgmt_db:get_overview(),
-             0 < pget(recv_oct, Overview),
-             0 < pget(send_oct, Overview)
+             true = 0 < pget(recv_oct, Overview),
+             true = 0 < pget(send_oct, Overview)
      end].
 
 test_channels(Conn, Chan) ->

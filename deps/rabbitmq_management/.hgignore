@@ -3,5 +3,6 @@ syntax: regexp
 \.beam$
 ^ebin/rabbit_management.app
 ^cover/
+^priv/www-cli/rabbitmqadmin
 ^tmp/
 ^deps.mk$
