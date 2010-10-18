@@ -446,6 +446,19 @@
 			 "arguments": [],
 			 "name": "rollback-ok"}],
 	    "name": "tx"
-	}
+	},
+    	{
+            "id": 85,
+            "methods": [{"id": 10,
+                         "arguments": [
+                             {"type": "bit", "name": "multiple", "default-value": false},
+                             {"type": "bit", "name": "nowait", "default-value": false}],
+                         "name": "select",
+                         "synchronous": true},
+                        {"id": 11,
+                         "arguments": [],
+                         "name": "select-ok"}],
+            "name": "confirm"
+        }
     ]
 }
