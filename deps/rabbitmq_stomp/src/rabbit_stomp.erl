@@ -43,8 +43,9 @@ start(normal, []) ->
     {ok, SupPid} = rabbit_stomp_sup:start_link(),
     case application:get_env(listeners) of
          undefined -> throw({error, {stomp_configuration_not_found}});
-         {ok, Listeners} -> 
-                         io:format("starting ~s (binding to ~p)  ...", ["STOMP Adapter", Listeners]),
+         {ok, Listeners} ->
+                         io:format("starting ~s (binding to ~p)  ...",
+                                   ["STOMP Adapter", Listeners]),
                          {ok, _} = rabbit_stomp_server:start(Listeners),
                          io:format("done~n")
     end,
