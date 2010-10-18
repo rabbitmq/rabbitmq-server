@@ -9,6 +9,9 @@ import json
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
             'users', 'vhosts']
 
+PROMOTE_COLUMNS = ['vhost', 'name', 'type',
+                   'source', 'destination', 'destination_type', 'routing_key']
+
 def make_usage():
     usage = """usage: %prog [options] args
 where args is one of:
@@ -40,12 +43,21 @@ def make_parser():
     parser.add_option("-q", "--quiet", action="store_false", dest="verbose",
                       default=True, help="suppress status messages")
     parser.add_option("-f", "--format", dest="format", default="table",
-                      help="format for listing commands - one of [pretty_json, raw_json, table, tsv]  [default: %default]")
+                      help="format for listing commands - one of [pretty_json, raw_json, table, tsv, long]  [default: %default]")
+    parser.add_option("-d", "--depth", dest="depth", default="1",
+                      help="maximum depth to recurse for listing tables [default: %default]")
+
 
 def assert_usage(val):
     if not val:
         parser.print_help()
         sys.exit(1)
+
+def column_sort_key(col):
+    if col in PROMOTE_COLUMNS:
+        return (1, PROMOTE_COLUMNS.index(col))
+    else:
+        return (2, col)
 
 def main():
     make_parser()
@@ -119,66 +131,116 @@ class Management:
         uri = "/%s" % obj_type
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
-        self.format_list(self.get(uri))
+        format_list(self.get(uri), self.options)
 
-    def format_list(self, json_list):
-        format = self.options.format
-        if format == "raw_json":
-            print json_list
-            return
-        formatter = "format_list_" + format
-        assert_usage(hasattr(self, formatter))
-        method = getattr(self, formatter)
-        assert_usage(callable(method))
-        method(json.loads(json_list))
-
-    def format_list_pretty_json(self, items):
+def format_list(json_list, options):
+    format = options.format
+    formatter = None
+    if format == "raw_json":
+        print json_list
+        return
+    elif format == "pretty_json":
         enc = json.JSONEncoder(False, False, True, True, True, 2)
-        print enc.encode(items)
+        print enc.encode(json.loads(json_list))
+        return
+    elif format == "tsv":
+        formatter = TSVList
+    elif format == "long":
+        formatter = LongList
+    elif format == "table":
+        formatter = TableList
+    assert_usage(formatter != None)
+    formatter_instance = formatter(options)
+    formatter_instance.display(json_list)
 
-    def format_list_tsv(self, items):
-        def ok(obj):
-            return type(obj) != dict
+class Lister:
+    def verbose(self, string):
+        if self.options.verbose:
+            print string
 
-        if len(items) > 0:
-            head = ""
-            item = items[0]
-            for key in item:
-                if ok(item[key]):
-                    head += str(key) + "\t"
-            self.verbose(head)
-
-            body = ""
-            for item in items:
-                for key in item:
-                    if ok(item[key]):
-                        body += str(item[key]) + "\t"
-                body += "\n"
-            print body
+    def display(self, json_list):
+        (columns, table) = self.list_to_table(json.loads(json_list),
+                                              int(self.options.depth))
+        if len(table) > 0:
+            self.display_list(columns, table)
         else:
             self.verbose("No items")
 
-    def format_list_table(self, items):
-        def ok(obj):
-            return type(obj) != dict
+    def list_to_table(self, items, max_depth):
+        columns = {}
+        column_ix = {}
+        row = None
+        table = []
 
-        if len(items) > 0:
-            head = []
-            item = items[0]
+        def add(prefix, depth, item, fun):
             for key in item:
-                if ok(item[key]):
-                    head.append(str(key))
+                column = prefix == '' and key or (prefix + '_' + key)
+                if type(item[key]) == dict:
+                    if depth < max_depth:
+                        add(column, depth + 1, item[key], fun)
+                else:
+                    fun(column, item[key])
 
-            rows = [head]
-            for item in items:
-                row = []
-                for key in item:
-                    if ok(item[key]):
-                        row.append(str(item[key]))
-                rows.append(row)
-            self.ascii_table(rows)
-        else:
-            self.verbose("No items")
+        def add_to_columns(col, val):
+            columns[col] = True
+
+        def add_to_row(col, val):
+            row[column_ix[col]] = str(val)
+
+        for item in items:
+            add('', 1, item, add_to_columns)
+        columns = columns.keys()
+        columns.sort(key=column_sort_key)
+        for i in xrange(0, len(columns)):
+            column_ix[columns[i]] = i
+        for item in items:
+            row = len(columns) * ['']
+            add('', 1, item, add_to_row)
+            table.append(row)
+
+        return (columns, table)
+
+class TSVList(Lister):
+    def __init__(self, options):
+        self.options = options
+
+    def display_list(self, columns, table):
+        head = ""
+        for col in columns:
+            head += col + "\t"
+        self.verbose(head)
+
+        body = ""
+        for row in table:
+            for cell in row:
+                body += cell + "\t"
+            body += "\n"
+        print body
+
+class LongList(Lister):
+    def __init__(self, options):
+        self.options = options
+
+    def display_list(self, columns, table):
+        sep = "\n" + "-" * 80 + "\n"
+        max_width = 0
+        for col in columns:
+            max_width = max(max_width, len(col))
+        fmt = "{0:>" + str(max_width) + "}: {1}"
+        print sep
+        for i in xrange(0, len(table)):
+            for j in xrange(0, len(columns)):
+                print fmt.format(columns[j], table[i][j])
+            print sep
+
+class TableList(Lister):
+    def __init__(self, options):
+        self.options = options
+
+    def display_list(self, columns, table):
+        total = [columns]
+        total.extend(table)
+        self.ascii_table(total)
 
     def ascii_table(self, rows):
         table = ""
