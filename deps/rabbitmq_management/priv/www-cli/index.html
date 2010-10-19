@@ -18,9 +18,20 @@
   <body>
     <h1>RabbitMQ Management Command Line Tool</h1>
 
-    <p>Download it from <a href="rabbitmqadmin">here</a> (Right click,
-    Save as). You will need Python 2.6+. Currently this has had very
-    little testing, but it's pretty simplistic.</p>
+    <p>
+      Download it from <a href="rabbitmqadmin">here</a> (Right click,
+      Save as), make executable, and drop it in your path. Note that
+      many browsers will rename the
+      file <code>rabbitmqadmin.txt</code>. You will need Python
+      2.6+. Currently this has had little testing, but it's
+      pretty simple.
+    </p>
+
+    <p>
+      Windows users will need to ensure Python is on their path, and
+      invoke rabbitmqadmin as <code>python.exe
+      rabbitmqadmin</code>.
+    </p>
 
     <p>
       Invoke <code>rabbitmqadmin --help</code> for usage
@@ -48,7 +59,7 @@
     <ul>
       <li>
         Get a list of exchanges:
-<pre>$ ./rabbitmqadmin -V test list exchanges
+<pre>$ rabbitmqadmin -V test list exchanges
 +-------------+---------+-------+---------+-------------+
 |    name     | durable | vhost |  type   | auto_delete |
 +-------------+---------+-------+---------+-------------+
@@ -62,7 +73,7 @@
       </li>
       <li>
         Connect to another host as another user:
-<pre>$ ./rabbitmqadmin -H myserver -u simon -p simon list vhosts
+<pre>$ rabbitmqadmin -H myserver -u simon -p simon list vhosts
 +------+
 | name |
 +------+
@@ -71,28 +82,28 @@
       </li>
       <li>
         Declare an exchange:
-<pre>$ ./rabbitmqadmin declare exchange my-new-exchange fanout
+<pre>$ rabbitmqadmin declare exchange my-new-exchange fanout
 exchange declared
 </pre>
       </li>
       <li>
         Declare a queue, with optional parameters:
-<pre>$ ./rabbitmqadmin declare queue my-new-queue durable=false
+<pre>$ rabbitmqadmin declare queue my-new-queue durable=false
 queue declared
 </pre>
       </li>
       <li>
         Export configuration:
-<pre>$ ./rabbitmqadmin export rabbit.config
+<pre>$ rabbitmqadmin export rabbit.config
 Exported configuration for localhost to "rabbit.config"</pre>
       </li>
       <li>
         Import configuration, quietly:
-<pre>$ ./rabbitmqadmin -q import rabbit.config</pre>
+<pre>$ rabbitmqadmin -q import rabbit.config</pre>
       </li>
       <li>
         Close all connections:
-<pre>./rabbitmqadmin -f tsv -q list connections | cut -f 2 | while read conn ; do ./rabbitmqadmin close connection ${conn} ; done</pre>
+<pre>rabbitmqadmin -f tsv -q list connections | cut -f 2 | while read conn ; do rabbitmqadmin close connection ${conn} ; done</pre>
       </li>
     </ul>
   </body>
