@@ -498,9 +498,14 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
                         read_from_disk(MsgLocation, CState1, DedupCacheEts),
                     Release(), %% this MUST NOT fail with badarg
                     {{ok, Msg}, CState2};
-                MsgLocation -> %% different file!
+                #msg_location {} = MsgLocation -> %% different file!
                     Release(), %% this MUST NOT fail with badarg
-                    client_read1(Server, MsgLocation, Defer, CState)
+                    client_read1(Server, MsgLocation, Defer, CState);
+                not_found -> %% it seems not to exist. Defer, just to be sure.
+                    try Release() %% this can badarg, same as locked case, above
+                    catch error:badarg -> ok
+                    end,
+                    Defer()
             end
     end.
 
