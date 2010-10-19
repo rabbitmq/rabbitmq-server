@@ -12,44 +12,73 @@ LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
 
+URIS = {
+    'exchange':   '/exchanges/{vhost}/{name}',
+    'queue':      '/queues/{vhost}/{name}',
+    'binding':    '/bindings/{vhost}/e/{source}/{destination_char}/{destination}',
+    'binding_del':'/bindings/{vhost}/e/{source}/{destination_char}/{destination}/{properties_key}',
+    'vhost':      '/vhosts/{name}',
+    'user':       '/users/{name}',
+    'permission': '/permissions/{vhost}/{user}'
+    }
+
 DECLARABLE = {
-    'exchange': {'mandatory': ['name', 'type'],
-                 'optional':  {'auto_delete': 'false', 'durable': 'true'},
-                 'uri':       '/exchanges/{vhost}/{name}'},
-    'queue': {'mandatory': ['name'],
-              'optional':  {'auto_delete': 'false', 'durable': 'true'},
-              'uri':       '/queues/{vhost}/{name}'},
-    'binding': {'mandatory': ['source', 'destination_type', 'destination',
-                              'routing_key'],
-                'optional':  {},
-                'uri':       '/bindings/{vhost}/e/{source}/{destination_char}/{destination}'},
-    'vhost': {'mandatory': ['name'],
-              'optional':  {},
-              'uri':       '/vhosts/{name}'},
-    'user': {'mandatory': ['name', 'password', 'administrator'],
-             'optional':  {},
-             'uri':       '/users/{name}'},
+    'exchange':   {'mandatory': ['name', 'type'],
+                   'optional':  {'auto_delete': 'false', 'durable': 'true'}},
+    'queue':      {'mandatory': ['name'],
+                   'optional':  {'auto_delete': 'false', 'durable': 'true'}},
+    'binding':    {'mandatory': ['source', 'destination_type', 'destination',
+                                 'routing_key'],
+                   'optional':  {}},
+    'vhost':      {'mandatory': ['name'],
+                   'optional':  {}},
+    'user':       {'mandatory': ['name', 'password', 'administrator'],
+                   'optional':  {}},
     'permission': {'mandatory': ['vhost', 'user', 'scope',
                                  'configure', 'write', 'read'],
-                'optional':  {},
-                'uri':       '/permissions/{vhost}/{user}'}
+                   'optional':  {}}
     }
+
+DELETABLE = {
+    'exchange':   {'mandatory': ['name']},
+    'queue':      {'mandatory': ['name']},
+    'binding':    {'mandatory': ['source', 'destination_type', 'destination',
+                                 'properties_key']},
+    'vhost':      {'mandatory': ['name']},
+    'user':       {'mandatory': ['name']},
+    'permission': {'mandatory': ['vhost', 'user']}
+    }
+
+for k in DECLARABLE:
+    DECLARABLE[k]['uri'] = URIS[k]
+
+for k in DELETABLE:
+    DELETABLE[k]['uri'] = URIS[k]
+    DELETABLE[k]['optional'] = {}
+DELETABLE['binding']['uri'] = URIS['binding_del']
 
 def make_usage():
     usage = """usage: %prog [options] cmd
 where cmd is one of:
+
 """
     for l in LISTABLE:
         usage += "  list {0}\n".format(l)
+    usage += "\n"
     for l in DECLARABLE.keys():
         usage += "  declare {0} {1}\n".format(
-            l, fmt_mandatory(DECLARABLE[l]['mandatory']))
-    usage += """  export FILE
+            l, fmt_mandatory(DECLARABLE[l]))
+    usage += "\n"
+    for l in DECLARABLE.keys():
+        usage += "  delete {0} {1}\n".format(
+            l, fmt_mandatory(DELETABLE[l]))
+    usage += """
+  export FILE
   import FILE"""
     return usage
 
 def fmt_mandatory(args):
-    return " ".join(["<{0}>".format(a) for a in args])
+    return " ".join(["<{0}>".format(a) for a in args['mandatory']])
 
 parser = OptionParser(usage=make_usage())
 
@@ -113,6 +142,9 @@ class Management:
     def post(self, path, body):
         return self.http("POST", path, body)
 
+    def delete(self, path):
+        return self.http("DELETE", path, "")
+
     def http(self, method, path, body):
         conn = httplib.HTTPConnection(self.options.hostname, self.options.port)
         headers = {"Authorization":
@@ -163,11 +195,25 @@ class Management:
         format_list(self.get(uri), self.options)
 
     def invoke_declare(self):
+        (obj_type, uri, payload) = self.declare_delete_parse(DECLARABLE)
+        if obj_type == 'binding':
+            self.post(uri, json.dumps(payload))
+        else:
+            self.put(uri, json.dumps(payload))
+        self.verbose("{0} declared".format(obj_type))
+
+    def invoke_delete(self):
+        (obj_type, uri, payload) = self.declare_delete_parse(DELETABLE)
+        self.delete(uri)
+        self.verbose("{0} deleted".format(obj_type))
+
+    def declare_delete_parse(self, root):
         assert_usage(len(self.args) > 0)
         obj_type = self.args[0]
-        assert_usage(obj_type in DECLARABLE)
-        mandatory = DECLARABLE[obj_type]['mandatory']
-        optional = DECLARABLE[obj_type]['optional']
+        assert_usage(obj_type in root)
+        args = self.args[1:]
+        mandatory = root[obj_type]['mandatory']
+        optional = root[obj_type]['optional']
         args = self.args[1:]
         assert_usage(len(args) >= len(mandatory))
         payload = {}
@@ -182,12 +228,8 @@ class Management:
             uri_args[k] = urllib.quote_plus(payload[k])
             if k == 'destination_type':
                 uri_args['destination_char'] = payload[k][0]
-        uri = DECLARABLE[obj_type]['uri'].format(**uri_args)
-        if obj_type == 'binding':
-            self.post(uri, json.dumps(payload))
-        else:
-            self.put(uri, json.dumps(payload))
-        self.verbose("{0} declared".format(obj_type))
+        uri = root[obj_type]['uri'].format(**uri_args)
+        return (obj_type, uri, payload)
 
 def format_list(json_list, options):
     format = options.format
