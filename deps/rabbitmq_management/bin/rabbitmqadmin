@@ -86,12 +86,16 @@ where cmd is one of:
     return usage
 
 def fmt_usage_stanza(root, verb):
-    def fmt_mandatory(args):
-        return " ".join(["<{0}>".format(a) for a in args['mandatory']])
+    def fmt_args(args):
+        res = " ".join(["<{0}>".format(a) for a in args['mandatory']])
+        opts = " ".join("{0}=...".format(o) for o in args['optional'].keys())
+        if opts != "":
+            res += " [{0}]".format(opts)
+        return res
 
     text = "\n"
     for k in root.keys():
-        text += "  {0} {1} {2}\n".format(verb, k, fmt_mandatory(root[k]))
+        text += "  {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
     return text
 
 parser = OptionParser(usage=make_usage())
@@ -245,6 +249,11 @@ class Management:
             payload[mandatory[i]] = args[i]
         for k in optional.keys():
             payload[k] = optional[k]
+        for optional_arg in args[len(mandatory):]:
+            assert_usage("=" in optional_arg)
+            (name, value) = optional_arg.split("=")
+            assert_usage(name in optional.keys())
+            payload[name] = value
         payload['arguments'] = {}
         payload['vhost'] = self.options.vhost or '/'
         uri_args = {}
