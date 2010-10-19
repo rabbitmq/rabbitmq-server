@@ -49,6 +49,18 @@ DELETABLE = {
     'permission': {'mandatory': ['vhost', 'user']}
     }
 
+CLOSABLE = {
+    'connection': {'mandatory': ['name'],
+                   'optional':  {},
+                   'uri':       '/connections/{name}'}
+    }
+
+PURGABLE = {
+    'queue': {'mandatory': ['name'],
+              'optional':  {},
+              'uri':       '/queues/{vhost}/{name}/contents'}
+    }
+
 for k in DECLARABLE:
     DECLARABLE[k]['uri'] = URIS[k]
 
@@ -64,21 +76,23 @@ where cmd is one of:
 """
     for l in LISTABLE:
         usage += "  list {0}\n".format(l)
-    usage += "\n"
-    for l in DECLARABLE.keys():
-        usage += "  declare {0} {1}\n".format(
-            l, fmt_mandatory(DECLARABLE[l]))
-    usage += "\n"
-    for l in DECLARABLE.keys():
-        usage += "  delete {0} {1}\n".format(
-            l, fmt_mandatory(DELETABLE[l]))
+    usage += fmt_usage_stanza(DECLARABLE, 'declare')
+    usage += fmt_usage_stanza(DELETABLE,  'delete')
+    usage += fmt_usage_stanza(CLOSABLE,   'close')
+    usage += fmt_usage_stanza(PURGABLE,   'purge')
     usage += """
   export FILE
   import FILE"""
     return usage
 
-def fmt_mandatory(args):
-    return " ".join(["<{0}>".format(a) for a in args['mandatory']])
+def fmt_usage_stanza(root, verb):
+    def fmt_mandatory(args):
+        return " ".join(["<{0}>".format(a) for a in args['mandatory']])
+
+    text = "\n"
+    for k in root.keys():
+        text += "  {0} {1} {2}\n".format(verb, k, fmt_mandatory(root[k]))
+    return text
 
 parser = OptionParser(usage=make_usage())
 
@@ -206,6 +220,16 @@ class Management:
         (obj_type, uri, payload) = self.declare_delete_parse(DELETABLE)
         self.delete(uri)
         self.verbose("{0} deleted".format(obj_type))
+
+    def invoke_close(self):
+        (obj_type, uri, payload) = self.declare_delete_parse(CLOSABLE)
+        self.delete(uri)
+        self.verbose("{0} closed".format(obj_type))
+
+    def invoke_purge(self):
+        (obj_type, uri, payload) = self.declare_delete_parse(PURGABLE)
+        self.delete(uri)
+        self.verbose("{0} purged".format(obj_type))
 
     def declare_delete_parse(self, root):
         assert_usage(len(self.args) > 0)
