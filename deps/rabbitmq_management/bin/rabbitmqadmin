@@ -12,11 +12,28 @@ LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
 
-# {type: ([mandatory], {optional: default})}
-DECLARABLE = {'exchange': (['name', 'type'],
-                           {'auto_delete': 'false', 'durable': 'true'}),
-              'queue': (['name'],
-                        {'auto_delete': 'false', 'durable': 'true'})}
+DECLARABLE = {
+    'exchange': {'mandatory': ['name', 'type'],
+                 'optional':  {'auto_delete': 'false', 'durable': 'true'},
+                 'uri':       '/exchanges/{vhost}/{name}'},
+    'queue': {'mandatory': ['name'],
+              'optional':  {'auto_delete': 'false', 'durable': 'true'},
+              'uri':       '/queues/{vhost}/{name}'},
+    'binding': {'mandatory': ['source', 'destination_type', 'destination',
+                              'routing_key'],
+                'optional':  {},
+                'uri':       '/bindings/{vhost}/e/{source}/{destination_char}/{destination}'},
+    'vhost': {'mandatory': ['name'],
+              'optional':  {},
+              'uri':       '/vhosts/{name}'},
+    'user': {'mandatory': ['name', 'password', 'administrator'],
+             'optional':  {},
+             'uri':       '/users/{name}'},
+    'permission': {'mandatory': ['vhost', 'user', 'scope',
+                                 'configure', 'write', 'read'],
+                'optional':  {},
+                'uri':       '/permissions/{vhost}/{user}'}
+    }
 
 def make_usage():
     usage = """usage: %prog [options] cmd
@@ -25,7 +42,8 @@ where cmd is one of:
     for l in LISTABLE:
         usage += "  list {0}\n".format(l)
     for l in DECLARABLE.keys():
-        usage += "  declare {0} {1}\n".format(l, fmt_mandatory(DECLARABLE[l][0]))
+        usage += "  declare {0} {1}\n".format(
+            l, fmt_mandatory(DECLARABLE[l]['mandatory']))
     usage += """  export FILE
   import FILE"""
     return usage
@@ -148,7 +166,8 @@ class Management:
         assert_usage(len(self.args) > 0)
         obj_type = self.args[0]
         assert_usage(obj_type in DECLARABLE)
-        (mandatory, optional) = DECLARABLE[obj_type]
+        mandatory = DECLARABLE[obj_type]['mandatory']
+        optional = DECLARABLE[obj_type]['optional']
         args = self.args[1:]
         assert_usage(len(args) >= len(mandatory))
         payload = {}
@@ -157,11 +176,17 @@ class Management:
         for k in optional.keys():
             payload[k] = optional[k]
         payload['arguments'] = {}
-        vhost = self.options.vhost or '/'
-        uri_args = [urllib.quote_plus(a) for a in
-                    [obj_type + 's', vhost, payload['name']]]
-        uri = "/" + "/".join(uri_args)
-        res = self.put(uri, json.dumps(payload))
+        payload['vhost'] = self.options.vhost or '/'
+        uri_args = {}
+        for k in payload:
+            uri_args[k] = urllib.quote_plus(payload[k])
+            if k == 'destination_type':
+                uri_args['destination_char'] = payload[k][0]
+        uri = DECLARABLE[obj_type]['uri'].format(**uri_args)
+        if obj_type == 'binding':
+            self.post(uri, json.dumps(payload))
+        else:
+            self.put(uri, json.dumps(payload))
         self.verbose("{0} declared".format(obj_type))
 
 def format_list(json_list, options):
