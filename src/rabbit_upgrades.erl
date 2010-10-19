@@ -34,6 +34,8 @@
 
 -compile([export_all]).
 
+-rabbit_upgrade({test_add_column, []}).
+-rabbit_upgrade({test_remove_column, [test_add_column]}).
 -rabbit_upgrade({remove_user_scope, []}).
 
 %%--------------------------------------------------------------------
@@ -53,3 +55,19 @@ remove_user_scope() ->
                                           read = Read}}
       end,
       record_info(fields, user_permission)).
+
+test_add_column() ->
+    {atomic, ok} = mnesia:transform_table(
+      rabbit_user,
+      fun({user, Username, Password, Admin}) ->
+              {user, Username, Password, Admin, something_else}
+      end,
+      [username, password, is_admin, something]).
+
+test_remove_column() ->
+    {atomic, ok} = mnesia:transform_table(
+      rabbit_user,
+      fun({user, Username, Password, Admin, _SomethingElse}) ->
+              {user, Username, Password, Admin}
+      end,
+      record_info(fields, user)).
