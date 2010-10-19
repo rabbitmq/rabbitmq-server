@@ -112,7 +112,7 @@
 
 -ifdef(use_specs).
 
--export_type([gc_state/0]).
+-export_type([gc_state/0, file_num/0]).
 
 -opaque(gc_state() :: #gc_state { dir              :: file:filename(),
                                   index_module     :: atom(),
