@@ -5,6 +5,7 @@ import httplib
 import urllib
 import base64
 import json
+import os
 
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
             'users', 'vhosts', 'permissions']
@@ -124,9 +125,11 @@ def make_parser():
                       help="maximum depth to recurse for listing tables [default: %default]")
 
 
-def assert_usage(val):
-    if not val:
-        parser.print_help()
+def assert_usage(expr, error):
+    if not expr:
+        if error:
+            print "\nERROR: {0}\n".format(error)
+            print "{0} --help for help\n".format(os.path.basename(sys.argv[0]))
         sys.exit(1)
 
 def column_sort_key(col):
@@ -138,12 +141,12 @@ def column_sort_key(col):
 def main():
     make_parser()
     (options, args) = parser.parse_args()
-    assert_usage(len(args) > 0)
+    assert_usage(len(args) > 0, 'Action not specified')
     mgmt = Management(options, args[1:])
     mode = "invoke_" + args[0]
-    assert_usage(hasattr(mgmt, mode))
+    assert_usage(hasattr(mgmt, mode),
+                 'Action {0} not understood'.format(args[0]))
     method = getattr(mgmt, "invoke_%s" % args[0])
-    assert_usage(callable(method))
     method()
 
 class Management:
@@ -181,12 +184,9 @@ class Management:
         if self.options.verbose:
             print string
 
-    def get_args(self, count):
-        assert_usage(len(self.args) == count)
-        return self.args
-
     def get_arg(self):
-        return self.get_args(1)[0]
+        assert_usage(len(self.args) == 1, 'Exactly one argument required')
+        return self.args[0]
 
     def invoke_export(self):
         path = self.get_arg()
@@ -206,7 +206,8 @@ class Management:
 
     def invoke_list(self):
         obj_type = self.get_arg()
-        assert_usage(obj_type in LISTABLE)
+        assert_usage(obj_type in LISTABLE,
+                     "Don't know how to list {0}".format(obj_type))
         uri = "/%s" % obj_type
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
@@ -236,23 +237,27 @@ class Management:
         self.verbose("{0} purged".format(obj_type))
 
     def declare_delete_parse(self, root):
-        assert_usage(len(self.args) > 0)
+        assert_usage(len(self.args) > 0, 'Type not specified')
         obj_type = self.args[0]
-        assert_usage(obj_type in root)
+        assert_usage(obj_type in root,
+                     'Type {0} not recognised'.format(obj_type))
         args = self.args[1:]
         mandatory = root[obj_type]['mandatory']
         optional = root[obj_type]['optional']
         args = self.args[1:]
-        assert_usage(len(args) >= len(mandatory))
+        assert_usage(len(args) >= len(mandatory),
+                     '{0} mandatory arguments required'.format(len(mandatory)))
         payload = {}
         for i in xrange(0, len(mandatory)):
             payload[mandatory[i]] = args[i]
         for k in optional.keys():
             payload[k] = optional[k]
         for optional_arg in args[len(mandatory):]:
-            assert_usage("=" in optional_arg)
+            assert_usage("=" in optional_arg,
+                         'Optional argument {0} not in format name=value'.format(optional_arg))
             (name, value) = optional_arg.split("=")
-            assert_usage(name in optional.keys())
+            assert_usage(name in optional.keys(),
+                         'Optional argument {0} not recognised'.format(name))
             payload[name] = value
         payload['arguments'] = {}
         payload['vhost'] = self.options.vhost or '/'
@@ -280,7 +285,8 @@ def format_list(json_list, options):
         formatter = LongList
     elif format == "table":
         formatter = TableList
-    assert_usage(formatter != None)
+    assert_usage(formatter != None,
+                 "Format {0} not recognised".format(format))
     formatter_instance = formatter(options)
     formatter_instance.display(json_list)
 
