@@ -33,7 +33,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, gc/3, delete/2, no_readers/2, stop/1]).
+-export([start_link/1, combine/3, delete/2, no_readers/2, stop/1]).
 
 -export([set_maximum_since_use/2]).
 
@@ -54,7 +54,7 @@
 
 -spec(start_link/1 :: (rabbit_msg_store:gc_state()) ->
                            rabbit_types:ok_pid_or_error()).
--spec(gc/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
+-spec(combine/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
 -spec(delete/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(no_readers/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(stop/1 :: (pid()) -> 'ok').
@@ -68,8 +68,8 @@ start_link(MsgStoreState) ->
     gen_server2:start_link(?MODULE, [self(), MsgStoreState],
                            [{timeout, infinity}]).
 
-gc(Server, Source, Destination) ->
-    gen_server2:cast(Server, {gc, [Source, Destination]}).
+combine(Server, Source, Destination) ->
+    gen_server2:cast(Server, {combine, [Source, Destination]}).
 
 delete(Server, File) ->
     gen_server2:cast(Server, {delete, [File]}).
@@ -100,7 +100,7 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
 handle_cast({Action, Files}, State)
-  when is_list(Files) andalso (Action =:= gc orelse Action =:= delete) ->
+  when is_list(Files) andalso (Action =:= combine orelse Action =:= delete) ->
     {noreply, attempt_action(Action, Files, State), hibernate};
 
 handle_cast({no_readers, File},
@@ -141,10 +141,10 @@ attempt_action(Action, Files,
                             dict:store(File, {Action, Files}, Pending) }
     end.
 
-do_action(gc, [Source, Destination],
-          State = #state { parent             = Parent,
-                           msg_store_state    = MsgStoreState }) ->
-    Reclaimed = rabbit_msg_store:gc(Source, Destination, MsgStoreState),
+do_action(combine, [Source, Destination],
+          State = #state { parent          = Parent,
+                           msg_store_state = MsgStoreState }) ->
+    Reclaimed = rabbit_msg_store:combine(Source, Destination, MsgStoreState),
     ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
     State;
 do_action(delete, [File], State = #state { msg_store_state = MsgStoreState }) ->

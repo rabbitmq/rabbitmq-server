@@ -38,7 +38,7 @@
          write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2,
-         gc/3, delete_file/2, has_readers/2]). %% internal
+         combine/3, delete_file/2, has_readers/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -157,8 +157,8 @@
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(gc/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
-                   non_neg_integer()).
+-spec(combine/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
+                        non_neg_integer()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 
@@ -1464,8 +1464,8 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
         '$end_of_table' ->
             State;
         First ->
-            case find_files_to_gc(FileSummaryEts, FileSizeLimit,
-                                  ets:lookup(FileSummaryEts, First)) of
+            case find_files_to_combine(FileSummaryEts, FileSizeLimit,
+                                       ets:lookup(FileSummaryEts, First)) of
                 not_found ->
                     State;
                 {Src, Dst} ->
@@ -1474,14 +1474,14 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
                                               {#file_summary.locked, true}),
                     true = ets:update_element(FileSummaryEts, Dst,
                                               {#file_summary.locked, true}),
-                    ok = rabbit_msg_store_gc:gc(GCPid, Src, Dst),
+                    ok = rabbit_msg_store_gc:combine(GCPid, Src, Dst),
                     State1 #msstate { gc_active = {Src, Dst} }
             end
     end;
 maybe_compact(State) ->
     State.
 
-find_files_to_gc(FileSummaryEts, FileSizeLimit,
+find_files_to_combine(FileSummaryEts, FileSizeLimit,
                  [#file_summary { file             = Dst,
                                   valid_total_size = DstValid,
                                   right            = Src,
@@ -1502,7 +1502,7 @@ find_files_to_gc(FileSummaryEts, FileSizeLimit,
                                  (DstValid > 0) andalso (SrcValid > 0) andalso
                                  not (DstLocked orelse SrcLocked) of
                                  true  -> {Src, Dst};
-                                 false -> find_files_to_gc(
+                                 false -> find_files_to_combine(
                                             FileSummaryEts, FileSizeLimit, Next)
                              end
             end
@@ -1565,7 +1565,7 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
     true = ets:delete(FileSummaryEts, File),
     ok = file:delete(form_filename(Dir, filenum_to_name(File))).
 
-gc(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
+combine(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     [SrcObj = #file_summary {
        readers   = 0,
        left      = DstFile,
