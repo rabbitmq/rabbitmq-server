@@ -22,9 +22,24 @@
     Save as). You will need Python 2.6+. Currently this has had very
     little testing, but it's pretty simplistic.</p>
 
-    <p>Invoke <code>rabbitmqadmin --help</code> for usage
-    instructions. At the moment you can list things, and import /
-    export configuration.</p>
+    <p>
+      Invoke <code>rabbitmqadmin --help</code> for usage
+      instructions. You can:
+      <ul>
+        <li>
+          list exchanges, queues, bindings, vhosts, users, permissions, connections and channels.
+        </li>
+        <li>
+          declare and delete exchanges, queues, bindings, vhosts, users and permissions.
+        </li>
+        <li>
+          close connections and purge queues.
+        </li>
+        <li>
+          import and export configuration.
+        </li>
+      </ul>
+   </p>
 
     <h2>Examples</h2>
 
@@ -55,6 +70,18 @@
 +------+</pre>
       </li>
       <li>
+        Declare an exchange:
+<pre>$ ./rabbitmqadmin declare exchange my-new-exchange fanout
+exchange declared
+</pre>
+      </li>
+      <li>
+        Declare a queue, with optional parameters:
+<pre>$ ./rabbitmqadmin declare queue my-new-queue durable=false
+queue declared
+</pre>
+      </li>
+      <li>
         Export configuration:
 <pre>$ ./rabbitmqadmin export rabbit.config
 Exported configuration for localhost to "rabbit.config"</pre>
@@ -62,6 +89,10 @@ Exported configuration for localhost to "rabbit.config"</pre>
       <li>
         Import configuration, quietly:
 <pre>$ ./rabbitmqadmin -q import rabbit.config</pre>
+      </li>
+      <li>
+        Close all connections:
+<pre>./rabbitmqadmin -f tsv -q list connections | cut -f 2 | while read conn ; do ./rabbitmqadmin close connection ${conn} ; done</pre>
       </li>
     </ul>
   </body>
