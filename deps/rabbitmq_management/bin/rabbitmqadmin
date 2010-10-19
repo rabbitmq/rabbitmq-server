@@ -7,7 +7,7 @@ import base64
 import json
 
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
-            'users', 'vhosts']
+            'users', 'vhosts', 'permissions']
 
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
