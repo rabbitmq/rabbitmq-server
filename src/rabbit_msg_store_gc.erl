@@ -150,7 +150,6 @@ attempt_action(Action, Files,
 
 do_action(combine, [Source, Destination], MsgStoreState) ->
     {rabbit_msg_store:combine(Source, Destination, MsgStoreState),
-     Source,
-     Destination};
+     Source, Destination};
 do_action(delete, [File], MsgStoreState) ->
     {rabbit_msg_store:delete_file(File, MsgStoreState), File, undefined}.
