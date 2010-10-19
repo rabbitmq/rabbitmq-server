@@ -31,7 +31,6 @@
 -module(rabbit_upgrade).
 
 -export([maybe_upgrade/1, write_version/1]).
--export([mnesia_alter_column/3]).
 
 -include("rabbit.hrl").
 
@@ -68,26 +67,6 @@ write_version(Dir) ->
     rabbit_misc:write_term_file(schema_filename(Dir), [heads(G)]),
     digraph:delete(G),
     ok.
-
-%% -------------------------------------------------------------------
-
-mnesia_alter_column(Table, Column, Fun) ->
-    {atomic, _} =
-        mnesia:transaction(
-          fun() ->
-                  [mnesia_alter_column_for_key(Table, Column, Key, Fun)
-                   || Key <- mnesia:all_keys(Table)]
-          end),
-    ok.
-
-mnesia_alter_column_for_key(Table, Column, Key, Fun) ->
-    Vals = mnesia:read(Table, Key, write),
-    ok = mnesia:delete(Table, Key, write),
-    [mnesia_alter_column_for_value(Table, Column, Val, Fun) || Val <- Vals].
-
-mnesia_alter_column_for_value(Table, Column, Val, Fun) ->
-    Val2 = setelement(Column + 1, Val, Fun(element(Column + 1, Val))),
-    mnesia:write(Table, Val2, write).
 
 %% Graphs ------------------------------------------------------------
 
