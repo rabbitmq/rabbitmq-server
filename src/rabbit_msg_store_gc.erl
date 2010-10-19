@@ -131,25 +131,24 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 attempt_action(Action, Files,
-               State = #state { pending_no_readers = Pending,
+               State = #state { parent             = Parent,
+                                pending_no_readers = Pending,
                                 msg_store_state    = MsgStoreState }) ->
     case lists:filter(fun (File) ->
                               rabbit_msg_store:has_readers(File, MsgStoreState)
                       end, Files) of
-        []         -> do_action(Action, Files, State);
-        [File | _] -> State #state {
-                        pending_no_readers =
-                            dict:store(File, {Action, Files}, Pending) }
+        [] ->
+            {Reclaimed, Casualty, Survivor} =
+                do_action(Action, Files, MsgStoreState),
+            ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Casualty,
+                                          Survivor),
+            State;
+        [File | _] ->
+            State #state {
+              pending_no_readers = dict:store(File, {Action, Files}, Pending) }
     end.
 
-do_action(combine, [Source, Destination],
-          State = #state { parent          = Parent,
-                           msg_store_state = MsgStoreState }) ->
-    Reclaimed = rabbit_msg_store:combine(Source, Destination, MsgStoreState),
-    ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
-    State;
-do_action(delete, [File], State = #state { parent          = Parent,
-                                           msg_store_state = MsgStoreState }) ->
-    FileSize = rabbit_msg_store:delete_file(File, MsgStoreState),
-    ok = rabbit_msg_store:gc_done(Parent, FileSize, File, undefined),
-    State.
+do_action(combine, [Source, Destination], MsgStoreState) ->
+    {rabbit_msg_store:combine(Source, Destination, MsgStoreState), Source, Destination};
+do_action(delete, [File], MsgStoreState) ->
+    {rabbit_msg_store:delete_file(File, MsgStoreState), File, undefined}.
