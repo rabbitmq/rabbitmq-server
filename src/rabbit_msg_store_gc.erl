@@ -148,6 +148,8 @@ do_action(combine, [Source, Destination],
     Reclaimed = rabbit_msg_store:combine(Source, Destination, MsgStoreState),
     ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Source, Destination),
     State;
-do_action(delete, [File], State = #state { msg_store_state = MsgStoreState }) ->
-    ok = rabbit_msg_store:delete_file(File, MsgStoreState),
+do_action(delete, [File], State = #state { parent          = Parent,
+                                           msg_store_state = MsgStoreState }) ->
+    FileSize = rabbit_msg_store:delete_file(File, MsgStoreState),
+    ok = rabbit_msg_store:gc_done(Parent, FileSize, File, undefined),
     State.

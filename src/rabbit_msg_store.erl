@@ -154,12 +154,12 @@
 -spec(sync/3 :: (server(), [rabbit_guid:guid()], fun (() -> any())) -> 'ok').
 
 -spec(sync/1 :: (server()) -> 'ok').
--spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
-                        'ok').
+-spec(gc_done/4 :: (server(), non_neg_integer(), file_num(),
+                    'undefined' | file_num()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(combine/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                         non_neg_integer()).
--spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> 'ok').
+-spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> non_neg_integer()).
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 
 -endif.
@@ -392,8 +392,8 @@ sync(Server, Guids, K) -> gen_server2:cast(Server, {sync, Guids, K}).
 sync(Server) ->
     gen_server2:cast(Server, sync).
 
-gc_done(Server, Reclaimed, Source, Destination) ->
-    gen_server2:cast(Server, {gc_done, Reclaimed, Source, Destination}).
+gc_done(Server, Reclaimed, Casualty, Survivor) ->
+    gen_server2:cast(Server, {gc_done, Reclaimed, Casualty, Survivor}).
 
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
@@ -609,10 +609,10 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        sync                                         -> 8;
-        {gc_done, _Reclaimed, _Source, _Destination} -> 8;
-        {set_maximum_since_use, _Age}                -> 8;
-        _                                            -> 0
+        sync                                        -> 8;
+        {gc_done, _Reclaimed, _Casualty, _Survivor} -> 8;
+        {set_maximum_since_use, _Age}               -> 8;
+        _                                           -> 0
     end.
 
 handle_call(successfully_recovered_state, _From, State) ->
@@ -706,6 +706,31 @@ handle_cast({sync, Guids, K},
 
 handle_cast(sync, State) ->
     noreply(internal_sync(State));
+
+handle_cast({gc_done, Reclaimed, Casualty, undefined},
+            State = #msstate { sum_file_size    = SumFileSize,
+                               file_handles_ets = FileHandlesEts,
+                               file_summary_ets = FileSummaryEts }) ->
+    [#file_summary { left    = Left,
+                     right   = Right,
+                     locked  = true,
+                     readers = 0 }] = ets:lookup(FileSummaryEts, Casualty),
+    %% we should NEVER find the current file in here hence right
+    %% should always be a file, not undefined
+    true = Right =/= undefined, %% ASSERTION
+    true = ets:update_element(FileSummaryEts, Right,
+                              {#file_summary.left, Left}),
+    case Left of
+        undefined -> ok;
+        _         ->  true = ets:update_element(FileSummaryEts, Left,
+                                                {#file_summary.right, Right})
+    end,
+    true = mark_handle_to_close(FileHandlesEts, Casualty),
+    true = ets:delete(FileSummaryEts, Casualty),
+    noreply(
+      maybe_compact(
+        run_pending(
+          State #msstate { sum_file_size = SumFileSize - Reclaimed })));
 
 handle_cast({gc_done, Reclaimed, Src, Dst},
             State = #msstate { sum_file_size    = SumFileSize,
@@ -1512,38 +1537,18 @@ delete_file_if_empty(File, State = #msstate { current_file = File }) ->
     State;
 delete_file_if_empty(File, State = #msstate {
                              gc_pid           = GCPid,
-                             sum_file_size    = SumFileSize,
-                             file_handles_ets = FileHandlesEts,
                              file_summary_ets = FileSummaryEts }) ->
     [#file_summary { valid_total_size = ValidData,
-                     left             = Left,
-                     right            = Right,
-                     file_size        = FileSize,
                      locked           = false }] =
         ets:lookup(FileSummaryEts, File),
     case ValidData of
-        0 -> true = ets:update_element(FileSummaryEts, File,
-                                       {#file_summary.locked, true}),
-             %% don't delete the file_summary_ets entry for File here
+        0 -> %% don't delete the file_summary_ets entry for File here
              %% because we could have readers which need to be able to
              %% decrement the readers count.
+             true = ets:update_element(FileSummaryEts, File,
+                                       {#file_summary.locked, true}),
              ok = rabbit_msg_store_gc:delete(GCPid, File),
-             %% we should NEVER find the current file in here hence
-             %% right should always be a file, not undefined
-             case {Left, Right} of
-                 {undefined, _} when Right =/= undefined ->
-                     %% the eldest file is empty.
-                     true = ets:update_element(FileSummaryEts, Right,
-                                               {#file_summary.left, undefined});
-                 {_, _} when Right =/= undefined ->
-                     true = ets:update_element(FileSummaryEts, Right,
-                                               {#file_summary.left, Left}),
-                     true = ets:update_element(FileSummaryEts, Left,
-                                               {#file_summary.right, Right})
-             end,
-             true = mark_handle_to_close(FileHandlesEts, File),
-             State1 = close_handle(File, State),
-             State1 #msstate { sum_file_size = SumFileSize - FileSize };
+             close_handle(File, State);
         _ -> State
     end.
 
@@ -1560,10 +1565,11 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       dir              = Dir }) ->
     [#file_summary { valid_total_size = 0,
                      locked           = true,
+                     file_size        = FileSize,
                      readers          = 0 }] = ets:lookup(FileSummaryEts, File),
     {[], 0} = load_and_vacuum_message_file(File, State),
-    true = ets:delete(FileSummaryEts, File),
-    ok = file:delete(form_filename(Dir, filenum_to_name(File))).
+    ok = file:delete(form_filename(Dir, filenum_to_name(File))),
+    FileSize.
 
 combine(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     [SrcObj = #file_summary {
