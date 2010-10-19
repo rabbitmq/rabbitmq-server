@@ -346,12 +346,11 @@ class TSVList(Lister):
             head += col + "\t"
         self.verbose(head)
 
-        body = ""
         for row in table:
+            line = ""
             for cell in row:
-                body += cell + "\t"
-            body += "\n"
-        print body
+                line += cell + "\t"
+            print line
 
 class LongList(Lister):
     def __init__(self, options):
