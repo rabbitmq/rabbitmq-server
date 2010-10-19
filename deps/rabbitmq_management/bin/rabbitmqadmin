@@ -127,9 +127,8 @@ def make_parser():
 
 def assert_usage(expr, error):
     if not expr:
-        if error:
-            print "\nERROR: {0}\n".format(error)
-            print "{0} --help for help\n".format(os.path.basename(sys.argv[0]))
+        print "\nERROR: {0}\n".format(error)
+        print "{0} --help for help\n".format(os.path.basename(sys.argv[0]))
         sys.exit(1)
 
 def column_sort_key(col):
