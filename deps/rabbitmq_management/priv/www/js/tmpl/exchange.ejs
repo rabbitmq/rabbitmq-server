@@ -16,13 +16,19 @@
   </div>
 </div>
 
-<% if (exchange.name == "") { %>
-<p>Note: you cannot bind to, unbind from or delete the default exchange.</p>
-<% } else { %>
 <div class="section">
   <h2>Bindings</h2>
   <div class="updatable">
-    <% if (bindings_destination.length > 0) { %>
+<% if (exchange.name == "") { %>
+  <h3>Default exchange</h3>
+  <p>
+    The default exchange is implicitly bound to every queue, with a
+    routing key equal to the queue name. It it not possible to
+    explicitly bind to, or unbind from the default exchange. It also
+    cannot be deleted.
+  </p>
+<% } else { %>
+<% if (bindings_destination.length > 0) { %>
       <h3>Incoming to <b><%= fmt_exchange(exchange.name) %></b></h3>
       <table class="bindings">
         <tr>
@@ -48,8 +54,11 @@
         </td>
       </tr>
     </table>
+<% } %>
   </div>
 </div>
+
+<% if (exchange.name != "") { %>
 
 <%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
 
