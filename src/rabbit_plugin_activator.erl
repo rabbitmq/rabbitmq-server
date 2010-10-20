@@ -56,8 +56,8 @@ start() ->
     application:load(rabbit),
 
     %% Determine our various directories
-    PluginDir         = get_env(plugins_dir,        ?DefaultPluginDir),
-    UnpackedPluginDir = get_env(plugins_expand_dir, ?DefaultUnpackedPluginDir),
+    {ok, PluginDir}         = application:get_env(rabbit, plugins_dir),
+    {ok, UnpackedPluginDir} = application:get_env(rabbit, plugins_expand_dir),
 
     RootName = UnpackedPluginDir ++ "/rabbit",
 
@@ -141,12 +141,6 @@ start() ->
 
 stop() ->
     ok.
-
-get_env(Key, Default) ->
-    case application:get_env(rabbit, Key) of
-        {ok, V} -> V;
-        _       -> Default
-    end.
 
 determine_version(App) ->
     application:load(App),

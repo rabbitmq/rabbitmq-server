@@ -123,6 +123,8 @@ exec erl \
     -boot ${RABBITMQ_BOOT_FILE} \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
+    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+    -rabbit plugins_expand_dir "\"${RABBITMQ_MNESIA_DIR}/plugins-scratch\"" \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \
