@@ -35,6 +35,7 @@
 
 -export([start_link/4, successfully_recovered_state/1,
          client_init/2, client_terminate/1, client_delete_and_terminate/1,
+         client_ref/1,
          write/3, read/2, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
@@ -132,6 +133,7 @@
 -spec(client_init/2 :: (server(), client_ref()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
+-spec(client_ref/1 :: (client_msstate()) -> client_ref()).
 -spec(write/3 :: (rabbit_guid:guid(), msg(), client_msstate()) ->
              rabbit_types:ok(client_msstate())).
 -spec(read/2 :: (rabbit_guid:guid(), client_msstate()) ->
@@ -340,6 +342,8 @@ client_terminate(CState) ->
 client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
     close_all_handles(CState),
     ok = server_cast(CState, {client_delete, Ref}).
+
+client_ref(#client_msstate { client_ref = Ref }) -> Ref.
 
 write(Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
