@@ -269,7 +269,9 @@ $(SOURCE_DIR)/%_usage.erl:
 
 docs_all: $(MANPAGES) $(WEB_MANPAGES)
 
-install: all docs_all install_dirs
+install: install_bin install_docs
+
+install_bin: all install_dirs
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
@@ -277,14 +279,16 @@ install: all docs_all install_dirs
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
+	mkdir -p $(TARGET_DIR)/plugins
+	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
+
+install_docs: docs_all install_dirs
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in $(DOCS_DIR)/*.$$section.gz; do \
 			cp $$manpage $(MAN_DIR)/man$$section; \
 		done; \
 	done
-	mkdir -p $(TARGET_DIR)/plugins
-	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
 
 install_dirs:
 	@ OK=true && \
