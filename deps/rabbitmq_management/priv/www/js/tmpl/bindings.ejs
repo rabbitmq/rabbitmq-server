@@ -37,6 +37,7 @@
              <td><%= binding.routing_key %></td>
              <td><%= fmt_table_short(binding.arguments) %></td>
              <td class="c">
+<% if (binding.source != '') { %>
                <form action="#/bindings" method="delete" class="confirm">
                  <input type="hidden" name="vhost" value="<%= binding.vhost %>"/>
                  <input type="hidden" name="source" value="<%= fmt_exchange_url(binding.source) %>"/>
@@ -45,6 +46,7 @@
                  <input type="hidden" name="properties_key" value="<%= binding.properties_key %>"/>
                  <input type="submit" value="Unbind"/>
                </form>
+<% } %>
              </td>
            </tr>
            <% } %>
