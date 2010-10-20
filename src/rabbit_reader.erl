@@ -815,17 +815,13 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid, #v1{}) ->
     self();
 i(address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:sockname(Sock),
-    A;
+    socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:sockname(Sock),
-    P;
+    socket_info(fun rabbit_net:sockname/1, fun ({_, P}) -> P end, Sock);
 i(peer_address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:peername(Sock),
-    A;
+    socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
 i(peer_port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:peername(Sock),
-    P;
+    socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
 i(peer_cert_issuer, #v1{sock = Sock}) ->
     cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
 i(peer_cert_subject, #v1{sock = Sock}) ->
@@ -837,11 +833,8 @@ i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{SockStat, StatVal}]} -> StatVal;
-        {error, einval}             -> undefined;
-        {error, Error}              -> throw({cannot_get_socket_stats, Error})
-    end;
+    socket_info(fun () -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end);
 i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
@@ -865,6 +858,15 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+socket_info(Get, Select, Sock) ->
+    socket_info(fun() -> Get(Sock) end, Select).
+
+socket_info(Get, Select) ->
+    case Get() of
+        {ok,    T} -> Select(T);
+        {error, _} -> ''
+    end.
 
 cert_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of

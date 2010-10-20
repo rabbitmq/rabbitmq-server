@@ -33,9 +33,9 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/3, client_terminate/2,
-         client_delete_and_terminate/3, successfully_recovered_state/1]).
+-export([start_link/4, successfully_recovered_state/1,
+         client_init/3, client_terminate/2, client_delete_and_terminate/3,
+         write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
 
@@ -128,6 +128,11 @@
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
          startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
+-spec(successfully_recovered_state/1 :: (server()) -> boolean()).
+-spec(client_init/3 :: (server(), rabbit_guid:guid(), guid_fun()) -> client_msstate()).
+-spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
+-spec(client_delete_and_terminate/3 ::
+        (client_msstate(), server(), binary()) -> 'ok').
 -spec(write/4 :: (server(), rabbit_guid:guid(), msg(), client_msstate()) ->
                       rabbit_types:ok(client_msstate())).
 -spec(read/3 :: (server(), rabbit_guid:guid(), client_msstate()) ->
@@ -136,16 +141,11 @@
 -spec(remove/2 :: (server(), [rabbit_guid:guid()]) -> 'ok').
 -spec(release/2 :: (server(), [rabbit_guid:guid()]) -> 'ok').
 -spec(sync/3 :: (server(), [rabbit_guid:guid()], fun (() -> any())) -> 'ok').
+
+-spec(sync/1 :: (server()) -> 'ok').
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
                         'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(client_init/3 :: (server(), rabbit_guid:guid(), guid_fun()) ->
-                            client_msstate()).
--spec(client_terminate/2 :: (client_msstate(), server()) -> 'ok').
--spec(client_delete_and_terminate/3 ::
-        (client_msstate(), server(), rabbit_guid:guid()) -> 'ok').
--spec(successfully_recovered_state/1 :: (server()) -> boolean()).
-
 -spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
                {ets:tid(), file:filename(), atom(), any()}) ->
                    'concurrent_readers' | non_neg_integer()).
@@ -314,6 +314,33 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
                            [Server, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
+successfully_recovered_state(Server) ->
+    gen_server2:call(Server, successfully_recovered_state, infinity).
+
+client_init(Server, Ref, MsgOnDiskFun) ->
+    {IState, IModule, Dir, GCPid,
+     FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
+        gen_server2:call(Server, {new_client_state, Ref, MsgOnDiskFun},
+                         infinity),
+    #client_msstate { file_handle_cache  = dict:new(),
+                      index_state        = IState,
+                      index_module       = IModule,
+                      dir                = Dir,
+                      gc_pid             = GCPid,
+                      file_handles_ets   = FileHandlesEts,
+                      file_summary_ets   = FileSummaryEts,
+                      dedup_cache_ets    = DedupCacheEts,
+                      cur_file_cache_ets = CurFileCacheEts,
+                      client_ref         = Ref }.
+
+client_terminate(CState, Server) ->
+    close_all_handles(CState),
+    ok = gen_server2:call(Server, {client_terminate, CState}, infinity).
+
+client_delete_and_terminate(CState, Server, Ref) ->
+    close_all_handles(CState),
+    ok = gen_server2:cast(Server, {client_delete, Ref}).
+
 write(Server, Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
                                  client_ref         = CRef }) ->
@@ -352,40 +379,15 @@ remove(Server, Guids)  -> gen_server2:cast(Server, {remove, Guids}).
 release(_Server, [])   -> ok;
 release(Server, Guids) -> gen_server2:cast(Server, {release, Guids}).
 sync(Server, Guids, K) -> gen_server2:cast(Server, {sync, Guids, K}).
-sync(Server)           -> gen_server2:cast(Server, sync). %% internal
+
+sync(Server) ->
+    gen_server2:cast(Server, sync).
 
 gc_done(Server, Reclaimed, Source, Destination) ->
     gen_server2:cast(Server, {gc_done, Reclaimed, Source, Destination}).
 
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
-
-client_init(Server, Ref, MsgOnDiskFun) ->
-    {IState, IModule, Dir, GCPid,
-     FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
-        gen_server2:call(Server, {new_client_state, Ref, MsgOnDiskFun},
-                         infinity),
-    #client_msstate { file_handle_cache  = dict:new(),
-                      index_state        = IState,
-                      index_module       = IModule,
-                      dir                = Dir,
-                      gc_pid             = GCPid,
-                      file_handles_ets   = FileHandlesEts,
-                      file_summary_ets   = FileSummaryEts,
-                      dedup_cache_ets    = DedupCacheEts,
-                      cur_file_cache_ets = CurFileCacheEts,
-                      client_ref         = Ref}.
-
-client_terminate(CState, Server) ->
-    close_all_handles(CState),
-    ok = gen_server2:call(Server, {client_terminate, CState}, infinity).
-
-client_delete_and_terminate(CState, Server, Ref) ->
-    close_all_handles(CState),
-    ok = gen_server2:cast(Server, {client_delete, Ref}).
-
-successfully_recovered_state(Server) ->
-    gen_server2:call(Server, successfully_recovered_state, infinity).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -595,8 +597,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        {new_client_state, _Ref, _MODC} -> 7;
         successfully_recovered_state    -> 7;
+        {new_client_state, _Ref, _MODC} -> 7;
         {read, _Guid}                   -> 2;
         _                               -> 0
     end.
@@ -609,13 +611,8 @@ prioritise_cast(Msg, _State) ->
         _                                            -> 0
     end.
 
-handle_call({read, Guid}, From, State) ->
-    State1 = read_message(Guid, From, State),
-    noreply(State1);
-
-handle_call({contains, Guid}, From, State) ->
-    State1 = contains_message(Guid, From, State),
-    noreply(State1);
+handle_call(successfully_recovered_state, _From, State) ->
+    reply(State #msstate.successfully_recovered, State);
 
 handle_call({new_client_state, CRef, Callback}, _From,
             State = #msstate { dir                    = Dir,
@@ -637,12 +634,23 @@ handle_call({new_client_state, CRef, Callback}, _From,
           State #msstate { client_refs = sets:add_element(CRef, ClientRefs),
                            client_ondisk_callback = CODC1 });
 
-handle_call(successfully_recovered_state, _From, State) ->
-    reply(State #msstate.successfully_recovered, State);
-
 handle_call({client_terminate, #client_msstate { client_ref = CRef }}, _From,
             State) ->
-    reply(ok, clear_client_callback(CRef, State)).
+    reply(ok, clear_client_callback(CRef, State));
+
+handle_call({read, Guid}, From, State) ->
+    State1 = read_message(Guid, From, State),
+    noreply(State1);
+
+handle_call({contains, Guid}, From, State) ->
+    State1 = contains_message(Guid, From, State),
+    noreply(State1).
+
+handle_cast({client_delete, CRef},
+            State = #msstate { client_refs = ClientRefs }) ->
+    State1 = clear_client_callback(CRef, State),
+    noreply(State1 #msstate {
+              client_refs = sets:del_element(CRef, ClientRefs) });
 
 handle_cast({write, CRef, Guid},
             State = #msstate { sum_valid_data         = SumValid,
@@ -751,13 +759,7 @@ handle_cast({gc_done, Reclaimed, Src, Dst},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
-
-handle_cast({client_delete, CRef},
-            State = #msstate { client_refs = ClientRefs }) ->
-    State1 = clear_client_callback(CRef, State),
-    noreply(State1 #msstate {
-              client_refs = sets:del_element(CRef, ClientRefs) }).
+    noreply(State).
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));

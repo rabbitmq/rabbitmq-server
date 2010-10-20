@@ -64,20 +64,20 @@ start() ->
                     io:format("done.~n"),
                     halt();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-                    error("invalid command '~s'",
-                          [lists:flatten(
-                             rabbit_misc:intersperse(" ", FullCommand))]),
+                    print_error("invalid command '~s'",
+                                [lists:flatten(
+                                   rabbit_misc:intersperse(" ", FullCommand))]),
                     usage();
                 timeout ->
-                    error("timeout starting some nodes.", []),
+                    print_error("timeout starting some nodes.", []),
                     halt(1);
                 Other ->
-                    error("~p", [Other]),
+                    print_error("~p", [Other]),
                     halt(2)
             end
     end.
 
-error(Format, Args) ->
+print_error(Format, Args) ->
     rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 parse_args([Command | Args]) ->
