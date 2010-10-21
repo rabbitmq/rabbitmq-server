@@ -602,13 +602,13 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
              fun (#message_properties{expiry = Expiry}) ->
                      Now > Expiry
              end, BQS),
-    ensure_ttl_timer(State #q{backing_queue_state = BQS1}).
+    ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(State = #q{backing_queue       = BQ,
                             backing_queue_state = BQS,
                             ttl                 = TTL,
                             ttl_timer_ref       = undefined})
-  when TTL =/= undefined->
+  when TTL =/= undefined ->
     case BQ:is_empty(BQS) of
         true ->
             State;
@@ -748,7 +748,6 @@ handle_call({deliver_immediately, Txn, Message, ChPid}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-
     {Delivered, NewState} = attempt_delivery(Txn, ChPid, Message, State),
     reply(Delivered, NewState);
 
