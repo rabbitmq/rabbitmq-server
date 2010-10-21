@@ -459,13 +459,8 @@ requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,
                               backing_queue       = BQ}) ->
-    case BQ:fetch(AckRequired, BQS) of
-        {empty, BQS1} ->
-            {empty, State#q{backing_queue_state = BQS1}};
-        {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
-            {{Message, IsDelivered, AckTag, Remaining},
-               State#q{backing_queue_state = BQS1}}
-    end.
+    {Result, BQS1} = BQ:fetch(AckRequired, BQS),
+    {Result, State#q{backing_queue_state = BQS1}}.
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
