@@ -69,8 +69,8 @@ behaviour_info(callbacks) ->
      %% (i.e. saves the round trip through the backing queue).
      {publish_delivered, 4},
 
-     %% Drop messages in the queue while the supplied predicate
-     %% returns true and return the new state.
+     %% Drop messages from the head of the queue while the supplied
+     %% predicate returns true.
      {dropwhile, 2},
 
      %% Produce the next message.
