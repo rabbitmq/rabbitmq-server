@@ -159,7 +159,9 @@
 
 -define(PUB, {_, _}). %% {Guid, IsPersistent}
 
--define(READ_MODE, [binary, raw, read, {read_ahead, ?SEGMENT_TOTAL_SIZE}]).
+-define(READ_MODE, [binary, raw, read]).
+-define(READ_AHEAD_MODE, [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE]).
+-define(WRITE_MODE, [write | ?READ_MODE]).
 
 %%----------------------------------------------------------------------------
 
@@ -220,8 +222,13 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-init(Name, Recover, MsgStoreRecovered, ContainsCheckFun) ->
-    State = #qistate { dir = Dir } = blank_state(Name, not Recover),
+init(Name, false, _MsgStoreRecovered, _ContainsCheckFun) ->
+    State = #qistate { dir = Dir } = blank_state(Name),
+    false = filelib:is_file(Dir), %% is_file == is file or dir
+    {0, [], State};
+
+init(Name, true, MsgStoreRecovered, ContainsCheckFun) ->
+    State = #qistate { dir = Dir } = blank_state(Name),
     Terms = case read_shutdown_terms(Dir) of
                 {error, _}   -> [];
                 {ok, Terms1} -> Terms1
@@ -356,15 +363,8 @@ recover(DurableQueues) ->
 %% startup and shutdown
 %%----------------------------------------------------------------------------
 
-blank_state(QueueName, EnsureFresh) ->
-    StrName = queue_name_to_dir_name(QueueName),
-    Dir = filename:join(queues_dir(), StrName),
-    ok = case EnsureFresh of
-             true  -> false = filelib:is_file(Dir), %% is_file == is file or dir
-                      ok;
-             false -> ok
-         end,
-    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+blank_state(QueueName) ->
+    Dir = filename:join(queues_dir(), queue_name_to_dir_name(QueueName)),
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
@@ -373,17 +373,21 @@ blank_state(QueueName, EnsureFresh) ->
                dirty_count         = 0,
                max_journal_entries = MaxJournal }.
 
+clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
+
 detect_clean_shutdown(Dir) ->
-    case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
+    case file:delete(clean_file_name(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
 
 read_shutdown_terms(Dir) ->
-    rabbit_misc:read_term_file(filename:join(Dir, ?CLEAN_FILENAME)).
+    rabbit_misc:read_term_file(clean_file_name(Dir)).
 
 store_clean_shutdown(Terms, Dir) ->
-    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
+    CleanFileName = clean_file_name(Dir),
+    ok = filelib:ensure_dir(CleanFileName),
+    rabbit_misc:write_term_file(CleanFileName, Terms).
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
@@ -500,7 +504,7 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
 
 queue_index_walker_reader(QueueName, Gatherer) ->
     State = #qistate { segments = Segments, dir = Dir } =
-        recover_journal(blank_state(QueueName, false)),
+        recover_journal(blank_state(QueueName)),
     [ok = segment_entries_foldr(
             fun (_RelSeq, {{Guid, true}, _IsDelivered, no_ack}, ok) ->
                     gatherer:in(Gatherer, {Guid, 1});
@@ -578,7 +582,7 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
                                      path = Path } = Segment) ->
     case array:sparse_size(JEntries) of
         0 -> Segment;
-        _ -> {ok, Hdl} = file_handle_cache:open(Path, [write | ?READ_MODE],
+        _ -> {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
                                                 [{write_buffer, infinity}]),
              array:sparse_foldl(fun write_entry_to_segment/3, Hdl, JEntries),
              ok = file_handle_cache:close(Hdl),
@@ -588,7 +592,8 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
 get_journal_handle(State = #qistate { journal_handle = undefined,
                                       dir = Dir }) ->
     Path = filename:join(Dir, ?JOURNAL_FILENAME),
-    {ok, Hdl} = file_handle_cache:open(Path, [write | ?READ_MODE],
+    ok = filelib:ensure_dir(Path),
+    {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
                                        [{write_buffer, infinity}]),
     {Hdl, State #qistate { journal_handle = Hdl }};
 get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
@@ -785,7 +790,7 @@ segment_entries_foldr(Fun, Init,
 load_segment(KeepAcked, #segment { path = Path }) ->
     case filelib:is_file(Path) of
         false -> {array_new(), 0};
-        true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_MODE, []),
+        true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  Res = load_segment_entries(KeepAcked, Hdl, array_new(), 0),
                  ok = file_handle_cache:close(Hdl),

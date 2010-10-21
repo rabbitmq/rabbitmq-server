@@ -72,7 +72,8 @@ start() ->
     %% applications along the way
     AllApps = case catch sets:to_list(expand_dependencies(RequiredApps)) of
                   {failed_to_load_app, App, Err} ->
-                      error("failed to load application ~s:~n~p", [App, Err]);
+                      terminate("failed to load application ~s:~n~p",
+                                [App, Err]);
                   AppList ->
                       AppList
               end,
@@ -90,7 +91,7 @@ start() ->
 
     %% Compile the script
     ScriptFile = RootName ++ ".script",
-    case systools:make_script(RootName, [local, silent]) of
+    case systools:make_script(RootName, [local, silent, exref]) of
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
@@ -116,19 +117,20 @@ start() ->
             end,
             ok;
         {error, Module, Error} ->
-            error("generation of boot script file ~s failed:~n~s",
-                  [ScriptFile, Module:format_error(Error)])
+            terminate("generation of boot script file ~s failed:~n~s",
+                      [ScriptFile, Module:format_error(Error)])
     end,
 
     case post_process_script(ScriptFile) of
         ok -> ok;
         {error, Reason} ->
-            error("post processing of boot script file ~s failed:~n~w",
-                  [ScriptFile, Reason])
+            terminate("post processing of boot script file ~s failed:~n~w",
+                      [ScriptFile, Reason])
     end,
     case systools:script2boot(RootName) of
         ok    -> ok;
-        error -> error("failed to compile boot script file ~s", [ScriptFile])
+        error -> terminate("failed to compile boot script file ~s",
+                           [ScriptFile])
     end,
     io:format("~w plugins activated:~n", [length(PluginApps)]),
     [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
@@ -190,11 +192,11 @@ unpack_ez_plugins(SrcDir, DestDir) ->
     %% Eliminate the contents of the destination directory
     case delete_recursively(DestDir) of
         ok         -> ok;
-        {error, E} -> error("Could not delete dir ~s (~p)", [DestDir, E])
+        {error, E} -> terminate("Could not delete dir ~s (~p)", [DestDir, E])
     end,
     case filelib:ensure_dir(DestDir ++ "/") of
         ok          -> ok;
-        {error, E2} -> error("Could not create dir ~s (~p)", [DestDir, E2])
+        {error, E2} -> terminate("Could not create dir ~s (~p)", [DestDir, E2])
     end,
     [unpack_ez_plugin(PluginName, DestDir) ||
         PluginName <- filelib:wildcard(SrcDir ++ "/*.ez")].
@@ -261,6 +263,6 @@ process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
 process_entry(Entry) ->
     [Entry].
 
-error(Fmt, Args) ->
+terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
     halt(1).

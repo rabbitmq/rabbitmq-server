@@ -51,6 +51,7 @@
                                                [{fieldpos(), fieldvalue()}]),
                           index_state()) -> 'ok').
 -spec(delete/2 :: (rabbit_guid:guid(), index_state()) -> 'ok').
+-spec(delete_object/2 :: (keyvalue(), index_state()) -> 'ok').
 -spec(delete_by_file/2 :: (fieldvalue(), index_state()) -> 'ok').
 -spec(terminate/1 :: (index_state()) -> any()).
 

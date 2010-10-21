@@ -47,7 +47,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([update/0, get_total_memory/0,
+-export([update/0, get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
          get_memory_limit/0]).
@@ -76,14 +76,13 @@
 -spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_vm_limit/0 :: () -> non_neg_integer()).
--spec(get_memory_limit/0 :: () -> (non_neg_integer() | 'undefined')).
+-spec(get_memory_limit/0 :: () -> non_neg_integer()).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
 -spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_vm_memory_high_watermark/0 :: () -> float()).
 -spec(set_vm_memory_high_watermark/1 :: (float()) -> 'ok').
 
 -endif.
-
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -296,6 +295,12 @@ get_total_memory({unix, sunos}) ->
     Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
     dict:fetch('Memory size', Dict);
 
+get_total_memory({unix, aix}) ->
+    File = cmd("/usr/bin/vmstat -v"),
+    Lines = string:tokens(File, "\n"),
+    Dict = dict:from_list(lists:map(fun parse_line_aix/1, Lines)),
+    dict:fetch('memory pages', Dict) * 4096;
+
 get_total_memory(_OsType) ->
     unknown.
 
@@ -340,6 +345,17 @@ parse_line_sunos(Line) ->
             {list_to_atom(Name), Value2};
         [Name] -> {list_to_atom(Name), none}
     end.
+
+%% Lines look like " 12345 memory pages"
+%% or              "  80.1 maxpin percentage"
+parse_line_aix(Line) ->
+    [Value | NameWords] = string:tokens(Line, " "),
+    Name = string:join(NameWords, " "),
+    {list_to_atom(Name),
+     case lists:member($., Value) of
+         true  -> trunc(list_to_float(Value));
+         false -> list_to_integer(Value)
+     end}.
 
 freebsd_sysctl(Def) ->
     list_to_integer(cmd("/sbin/sysctl -n " ++ Def) -- "\n").

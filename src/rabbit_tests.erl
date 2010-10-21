@@ -75,7 +75,6 @@ all_tests() ->
     passed = maybe_run_cluster_dependent_tests(),
     passed.
 
-
 maybe_run_cluster_dependent_tests() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
 
@@ -1041,11 +1040,11 @@ test_server_status() ->
     %% list bindings
     ok = info_action(list_bindings, rabbit_binding:info_keys(), true),
     %% misc binding listing APIs
-    [_|_] = rabbit_binding:list_for_exchange(
+    [_|_] = rabbit_binding:list_for_source(
               rabbit_misc:r(<<"/">>, exchange, <<"">>)),
-    [_] = rabbit_binding:list_for_queue(
+    [_] = rabbit_binding:list_for_destination(
               rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
-    [_] = rabbit_binding:list_for_exchange_and_queue(
+    [_] = rabbit_binding:list_for_source_and_destination(
             rabbit_misc:r(<<"/">>, exchange, <<"">>),
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
