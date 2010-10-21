@@ -1297,9 +1297,8 @@ maybe_deltas_to_betas(State = #vqstate {
                         delta                = Delta,
                         q3                   = Q3,
                         index_state          = IndexState,
-                        target_ram_msg_count = TargetRamMsgCount,
                         transient_threshold  = TransientThreshold }) ->
-    case bpqueue:is_empty(Q3) orelse (TargetRamMsgCount /= 0) of
+    case bpqueue:is_empty(Q3) of
         false ->
             State;
         true ->
@@ -1319,7 +1318,7 @@ maybe_deltas_to_betas(State = #vqstate {
                     %% we ignored every message in the segment due to
                     %% it being transient and below the threshold
                     maybe_deltas_to_betas(
-                      State #vqstate {
+                      State1 #vqstate {
                         delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
                 Q3aLen ->
                     Q3b = bpqueue:join(Q3, Q3a),
