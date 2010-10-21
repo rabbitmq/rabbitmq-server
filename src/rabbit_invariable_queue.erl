@@ -137,7 +137,7 @@ fetch(AckRequired, State = #iv_state { queue = Q }) ->
     fetch_internal(AckRequired, Q1, Msg, MsgProps, IsDelivered, State).
 
 fetch_internal(AckRequired, Q1,
-               Msg = #basic_message {guid = Guid},
+               Msg = #basic_message { guid = Guid },
                MsgProps, IsDelivered,
                State = #iv_state { len         = Len,
                                    qname       = QName,
@@ -161,7 +161,7 @@ ack(AckTags, State = #iv_state { qname = QName, durable = IsDurable,
     PA1 = remove_acks(AckTags, PA),
     State #iv_state { pending_ack = PA1 }.
 
-tx_publish(Txn, Msg, MsgProps, State = #iv_state { qname = QName,
+tx_publish(Txn, Msg, MsgProps, State = #iv_state { qname   = QName,
                                                    durable = IsDurable }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
