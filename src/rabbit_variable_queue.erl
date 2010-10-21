@@ -587,8 +587,8 @@ internal_fetch(AckRequired,
                  is_persistent = IsPersistent, is_delivered = IsDelivered,
                  msg_on_disk = MsgOnDisk, index_on_disk = IndexOnDisk },
                State = #vqstate {
-                 ram_msg_count = RamMsgCount, ram_index_count = RamIndexCount,
-                 out_counter = OutCount, index_state = IndexState, len = Len,
+                 ram_msg_count = RamMsgCount, out_counter = OutCount,
+                 index_state = IndexState, len = Len,
                  persistent_count = PCount, pending_ack = PA }) ->
     %% 1. Mark it delivered if necessary
     IndexState1 = maybe_write_delivered(

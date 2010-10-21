@@ -33,8 +33,6 @@
         ('empty' |
          %% Message,                  IsDelivered, AckTag, Remaining_Len
          {rabbit_types:basic_message(), boolean(), ack(), non_neg_integer()})).
--type(peek_result() :: ('empty' | {rabbit_types:basic_message(),
-                                   rabbit_types:message_properties()})).
 -type(is_durable() :: boolean()).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
