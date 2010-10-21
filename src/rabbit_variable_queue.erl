@@ -295,7 +295,8 @@
 
 -type(sync() :: #sync { acks_persistent :: [[seq_id()]],
                         acks_all        :: [[seq_id()]],
-                        pubs            :: [[rabbit_guid:guid()]],
+                        pubs            :: [{message_properties_transformer(),
+                                             [rabbit_types:basic_message()]}],
                         funs            :: [fun (() -> any())] }).
 
 -type(state() :: #vqstate {
@@ -1010,7 +1011,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
                                    durable = IsDurable }) ->
     PAcks = lists:append(SPAcks),
     Acks  = lists:append(SAcks),
-    Pubs =  lists:foldl(
+    Pubs  = lists:foldl(
               fun({Fun, PubsN}, OuterAcc) ->
                       lists:foldl(
                         fun({Msg, MsgProps}, Acc) ->
@@ -1091,8 +1092,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
                            ram_msg_count    = RamMsgCount }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProperties))
-        #msg_status { is_delivered = IsDelivered,
-                      msg_on_disk = MsgOnDisk},
+        #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = case bpqueue:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = queue:in(m(MsgStatus1), Q1) };
@@ -1131,10 +1131,10 @@ maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
     true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
     {MsgStatus, IndexState};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
-                                   guid = Guid,
-                                   seq_id = SeqId,
-                                   is_persistent = IsPersistent,
-                                   is_delivered = IsDelivered,
+                                   guid           = Guid,
+                                   seq_id         = SeqId,
+                                   is_persistent  = IsPersistent,
+                                   is_delivered   = IsDelivered,
                                    msg_properties = MsgProperties},
                           IndexState)
   when Force orelse IsPersistent ->
@@ -1337,7 +1337,6 @@ fetch_from_q3(State = #vqstate {
         {{value, IndexOnDisk, MsgStatus}, Q3a} ->
             RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
             true = RamIndexCount1 >= 0, %% ASSERTION
-
             State1 = State #vqstate { q3              = Q3a,
                                       ram_index_count = RamIndexCount1 },
             State2 =
