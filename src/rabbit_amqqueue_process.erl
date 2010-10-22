@@ -162,7 +162,7 @@ init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
 
 init_ttl(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-message-ttl">>) of
-        {_Type, TTL} -> State#q{ttl = TTL};
+        {_Type, TTL} -> drop_expired_messages(State#q{ttl = TTL});
         undefined    -> State
     end.
 
@@ -858,11 +858,11 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             end
     end;
 
-handle_call(stat, _From, State = #q{backing_queue = BQ,
-                                    backing_queue_state = BQS,
-                                    active_consumers = ActiveConsumers}) ->
-    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)},
-          ensure_expiry_timer(State));
+handle_call(stat, _From, State) ->
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS,
+                active_consumers = ActiveConsumers} =
+        drop_expired_messages(ensure_expiry_timer(State)),
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State1);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
