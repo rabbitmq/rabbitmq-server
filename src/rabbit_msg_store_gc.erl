@@ -70,10 +70,10 @@ start_link(MsgStoreState) ->
                            [{timeout, infinity}]).
 
 combine(Server, Source, Destination) ->
-    gen_server2:cast(Server, {combine, [Source, Destination]}).
+    gen_server2:cast(Server, {combine, Source, Destination}).
 
 delete(Server, File) ->
-    gen_server2:cast(Server, {delete, [File]}).
+    gen_server2:cast(Server, {delete, File}).
 
 no_readers(Server, File) ->
     gen_server2:cast(Server, {no_readers, File}).
@@ -100,9 +100,11 @@ prioritise_cast(_Msg,                          _State) -> 0.
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
-handle_cast({Action, Files}, State)
-  when is_list(Files) andalso (Action =:= combine orelse Action =:= delete) ->
-    {noreply, attempt_action(Action, Files, State), hibernate};
+handle_cast({combine, Source, Destination}, State) ->
+    {noreply, attempt_action(combine, [Source, Destination], State), hibernate};
+
+handle_cast({delete, File}, State) ->
+    {noreply, attempt_action(delete, [File], State), hibernate};
 
 handle_cast({no_readers, File},
             State = #state { pending_no_readers = Pending }) ->
@@ -149,7 +151,7 @@ attempt_action(Action, Files,
     end.
 
 do_action(combine, [Source, Destination], MsgStoreState) ->
-    {rabbit_msg_store:combine(Source, Destination, MsgStoreState),
+    {rabbit_msg_store:combine_files(Source, Destination, MsgStoreState),
      Source, Destination};
 do_action(delete, [File], MsgStoreState) ->
     {rabbit_msg_store:delete_file(File, MsgStoreState), File, undefined}.

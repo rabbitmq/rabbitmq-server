@@ -38,7 +38,7 @@
          write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, gc_done/4, set_maximum_since_use/2,
-         combine/3, delete_file/2, has_readers/2]). %% internal
+         combine_files/3, delete_file/2, has_readers/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -156,8 +156,8 @@
 -spec(gc_done/4 :: (server(), non_neg_integer(), file_num(),
                     'undefined' | file_num()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(combine/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
-                        non_neg_integer()).
+-spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
+             non_neg_integer()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> non_neg_integer()).
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 
@@ -984,14 +984,14 @@ add_to_pending_gc_completion(
                          rabbit_misc:orddict_cons(File, Op, Pending) }.
 
 run_pending(Files, State) ->
-    lists:foldl(fun run_pending_for_file/2, State, Files).
-
-run_pending_for_file(File,
-                     State = #msstate { pending_gc_completion = Pending }) ->
     lists:foldl(
-      fun run_pending_action/2,
-      State #msstate { pending_gc_completion = orddict:erase(File, Pending) },
-      lists:reverse(orddict:fetch(File, Pending))).
+      fun (File, State1 = #msstate { pending_gc_completion = Pending }) ->
+              Pending1 = orddict:erase(File, Pending),
+              lists:foldl(
+                fun run_pending_action/2,
+                State1 #msstate { pending_gc_completion = Pending1 },
+                lists:reverse(orddict:fetch(File, Pending)))
+      end, State, Files).
 
 run_pending_action({read, Guid, From}, State) ->
     read_message(Guid, From, State);
@@ -1008,6 +1008,10 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+orddict_store(Key, Val, Dict) ->
+    false = orddict:is_key(Key, Dict),
+    orddict:store(Key, Val, Dict).
 
 %%----------------------------------------------------------------------------
 %% file helper functions
@@ -1488,10 +1492,8 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
                 not_found ->
                     State;
                 {Src, Dst} ->
-                    false = orddict:is_key(Src, Pending) orelse
-                        orddict:is_key(Dst, Pending), %% ASSERTION
-                    Pending1 = orddict:store(Dst, [],
-                                             orddict:store(Src, [], Pending)),
+                    Pending1 = orddict_store(Dst, [],
+                                             orddict_store(Src, [], Pending)),
                     State1 = close_handle(Src, close_handle(Dst, State)),
                     true = ets:update_element(FileSummaryEts, Src,
                                               {#file_summary.locked, true}),
@@ -1547,8 +1549,7 @@ delete_file_if_empty(File, State = #msstate {
              true = ets:update_element(FileSummaryEts, File,
                                        {#file_summary.locked, true}),
              ok = rabbit_msg_store_gc:delete(GCPid, File),
-             false = orddict:is_key(File, Pending), %% ASSERTION
-             Pending1 = orddict:store(File, [], Pending),
+             Pending1 = orddict_store(File, [], Pending),
              close_handle(File,
                           State #msstate { pending_gc_completion = Pending1 });
         _ -> State
@@ -1573,7 +1574,8 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
     ok = file:delete(form_filename(Dir, filenum_to_name(File))),
     FileSize.
 
-combine(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
+combine_files(SrcFile, DstFile,
+              State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     [SrcObj = #file_summary {
        readers   = 0,
        left      = DstFile,
@@ -1585,7 +1587,7 @@ combine(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts 
        file_size = DstFileSize,
        locked    = true }] = ets:lookup(FileSummaryEts, DstFile),
 
-    TotalValidData = combine_files(SrcObj, DstObj, State),
+    TotalValidData = combine_files1(SrcObj, DstObj, State),
     %% don't update dest.right, because it could be changing at the
     %% same time
     true = ets:update_element(
@@ -1594,13 +1596,13 @@ combine(SrcFile, DstFile, State = #gc_state { file_summary_ets = FileSummaryEts 
               {#file_summary.file_size,        TotalValidData}]),
     SrcFileSize + DstFileSize - TotalValidData.
 
-combine_files(#file_summary { file             = Source,
-                              valid_total_size = SourceValid,
-                              left             = Destination },
-              #file_summary { file             = Destination,
-                              valid_total_size = DestinationValid,
-                              right            = Source },
-              State = #gc_state { dir = Dir }) ->
+combine_files1(#file_summary { file             = Source,
+                               valid_total_size = SourceValid,
+                               left             = Destination },
+               #file_summary { file             = Destination,
+                               valid_total_size = DestinationValid,
+                               right            = Source },
+               State = #gc_state { dir = Dir }) ->
     SourceName      = filenum_to_name(Source),
     DestinationName = filenum_to_name(Destination),
     {ok, SourceHdl}      = open_file(Dir, SourceName,
