@@ -427,7 +427,6 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables(),
     ok = rabbit_upgrade:write_version(dir()).
 
 move_db() ->
