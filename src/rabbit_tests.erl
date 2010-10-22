@@ -1564,7 +1564,7 @@ test_msg_store() ->
     %% push a lot of msgs in... at least 100 files worth
     {ok, FileSize} = application:get_env(rabbit, msg_store_file_size_limit),
     PayloadSizeBits = 65536,
-    BigCount = trunc(10 * FileSize / (PayloadSizeBits div 8)),
+    BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
     GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
     ok = foreach_with_msg_store_client(
