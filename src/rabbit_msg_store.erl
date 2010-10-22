@@ -1574,42 +1574,29 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
     ok = file:delete(form_filename(Dir, filenum_to_name(File))),
     FileSize.
 
-combine_files(SrcFile, DstFile,
-              State = #gc_state { file_summary_ets = FileSummaryEts }) ->
-    [SrcObj = #file_summary {
-       readers   = 0,
-       left      = DstFile,
-       file_size = SrcFileSize,
-       locked    = true }] = ets:lookup(FileSummaryEts, SrcFile),
-    [DstObj = #file_summary {
-       readers   = 0,
-       right     = SrcFile,
-       file_size = DstFileSize,
-       locked    = true }] = ets:lookup(FileSummaryEts, DstFile),
+combine_files(Source, Destination,
+              State = #gc_state { file_summary_ets = FileSummaryEts,
+                                  dir              = Dir }) ->
+    [#file_summary {
+       readers          = 0,
+       left             = Destination,
+       valid_total_size = SourceValid,
+       file_size        = SourceFileSize,
+       locked           = true }] = ets:lookup(FileSummaryEts, Source),
+    [#file_summary {
+       readers          = 0,
+       right            = Source,
+       valid_total_size = DestinationValid,
+       file_size        = DestinationFileSize,
+       locked           = true }] = ets:lookup(FileSummaryEts, Destination),
 
-    TotalValidData = combine_files1(SrcObj, DstObj, State),
-    %% don't update dest.right, because it could be changing at the
-    %% same time
-    true = ets:update_element(
-             FileSummaryEts, DstFile,
-             [{#file_summary.valid_total_size, TotalValidData},
-              {#file_summary.file_size,        TotalValidData}]),
-    SrcFileSize + DstFileSize - TotalValidData.
-
-combine_files1(#file_summary { file             = Source,
-                               valid_total_size = SourceValid,
-                               left             = Destination },
-               #file_summary { file             = Destination,
-                               valid_total_size = DestinationValid,
-                               right            = Source },
-               State = #gc_state { dir = Dir }) ->
-    SourceName      = filenum_to_name(Source),
-    DestinationName = filenum_to_name(Destination),
+    SourceName           = filenum_to_name(Source),
+    DestinationName      = filenum_to_name(Destination),
     {ok, SourceHdl}      = open_file(Dir, SourceName,
                                      ?READ_AHEAD_MODE),
     {ok, DestinationHdl} = open_file(Dir, DestinationName,
                                      ?READ_AHEAD_MODE ++ ?WRITE_MODE),
-    ExpectedSize = SourceValid + DestinationValid,
+    TotalValidData = SourceValid + DestinationValid,
     %% if DestinationValid =:= DestinationContiguousTop then we don't
     %% need a tmp file
     %% if they're not equal, then we need to write out everything past
@@ -1622,7 +1609,7 @@ combine_files1(#file_summary { file             = Source,
         drop_contiguous_block_prefix(DestinationWorkList),
     case DestinationWorkListTail of
         [] -> ok = truncate_and_extend_file(
-                     DestinationHdl, DestinationContiguousTop, ExpectedSize);
+                     DestinationHdl, DestinationContiguousTop, TotalValidData);
         _  -> Tmp = filename:rootname(DestinationName) ++ ?FILE_EXTENSION_TMP,
               {ok, TmpHdl} = open_file(Dir, Tmp, ?READ_AHEAD_MODE++?WRITE_MODE),
               ok = copy_messages(
@@ -1636,7 +1623,7 @@ combine_files1(#file_summary { file             = Source,
               %% Destination and copy from Tmp back to the end
               {ok, 0} = file_handle_cache:position(TmpHdl, 0),
               ok = truncate_and_extend_file(
-                     DestinationHdl, DestinationContiguousTop, ExpectedSize),
+                     DestinationHdl, DestinationContiguousTop, TotalValidData),
               {ok, TmpSize} =
                   file_handle_cache:copy(TmpHdl, DestinationHdl, TmpSize),
               %% position in DestinationHdl should now be DestinationValid
@@ -1644,12 +1631,20 @@ combine_files1(#file_summary { file             = Source,
               ok = file_handle_cache:delete(TmpHdl)
     end,
     {SourceWorkList, SourceValid} = load_and_vacuum_message_file(Source, State),
-    ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
+    ok = copy_messages(SourceWorkList, DestinationValid, TotalValidData,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
     ok = file_handle_cache:close(DestinationHdl),
     ok = file_handle_cache:delete(SourceHdl),
-    ExpectedSize.
+
+    %% don't update dest.right, because it could be changing at the
+    %% same time
+    true = ets:update_element(
+             FileSummaryEts, Destination,
+             [{#file_summary.valid_total_size, TotalValidData},
+              {#file_summary.file_size,        TotalValidData}]),
+
+    SourceFileSize + DestinationFileSize - TotalValidData.
 
 load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
                                                index_module = Index,
