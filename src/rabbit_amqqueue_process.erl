@@ -162,7 +162,7 @@ init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
 
 init_ttl(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-message-ttl">>) of
-        {_Type, TTL} -> State#q{ttl = TTL};
+        {_Type, TTL} -> ensure_ttl_timer(State#q{ttl = TTL});
         undefined    -> State
     end.
 
