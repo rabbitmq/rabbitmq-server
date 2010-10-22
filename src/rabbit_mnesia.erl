@@ -543,12 +543,9 @@ reset(Force) ->
                                   cannot_delete_schema)
     end,
     ok = delete_cluster_nodes_config(),
-    %% remove persisted messages and any other garbage we find, but
-    %% preserve the plugins expand dir if it's in here
-    {ok, UnpackedPluginDir} = application:get_env(rabbit, plugins_expand_dir),
-    ok = rabbit_misc:recursive_delete(
-           filelib:wildcard(dir() ++ "/*") --
-               [filename:absname(UnpackedPluginDir)]).
+    %% remove persisted messages and any other garbage we find
+    ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
+    ok.
 
 leave_cluster([], _) -> ok;
 leave_cluster(Nodes, RunningNodes) ->

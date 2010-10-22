@@ -107,6 +107,10 @@ if "!RABBITMQ_MNESIA_DIR!"=="" (
     set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
 )
 
+if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
+    set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-plugins-expand
+)
+
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
@@ -115,7 +119,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -noinput -hidden ^
 -s rabbit_plugin_activator ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
--rabbit plugins_expand_dir \""!RABBITMQ_MNESIA_DIR:\=/!/plugins-scratch"\" ^
+-rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
 -rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
 -extra !STAR!
 
@@ -158,8 +162,6 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
 -kernel error_logger {file,\""!RABBITMQ_LOG_BASE!/!RABBITMQ_NODENAME!.log"\"} ^
--rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
--rabbit plugins_expand_dir \""!RABBITMQ_MNESIA_DIR:\=/!/plugins-scratch"\" ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger {file,\""!RABBITMQ_LOG_BASE!/!RABBITMQ_NODENAME!-sasl.log"\"} ^
