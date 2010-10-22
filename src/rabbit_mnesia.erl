@@ -378,10 +378,10 @@ init_db(ClusterNodes, Force) ->
                 [] ->
                     case mnesia:system_info(use_dir) of
                         true ->
-                            case is_clustered() of
-                                false -> wait_for_tables(),
-                                         rabbit_upgrade:maybe_upgrade(dir());
-                                _     -> ok
+                            case length(mnesia:system_info(db_nodes)) of
+                                1 -> wait_for_tables(),
+                                     rabbit_upgrade:maybe_upgrade(dir());
+                                _ -> ok
                             end,
                             case check_schema_integrity() of
                                 ok ->
