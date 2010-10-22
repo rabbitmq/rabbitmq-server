@@ -135,9 +135,8 @@ attempt_action(Action, Files,
                State = #state { parent             = Parent,
                                 pending_no_readers = Pending,
                                 msg_store_state    = MsgStoreState }) ->
-    case lists:filter(fun (File) ->
-                              rabbit_msg_store:has_readers(File, MsgStoreState)
-                      end, Files) of
+    case [File || File <- Files,
+                  rabbit_msg_store:has_readers(File, MsgStoreState)] of
         []         -> do_action(Action, Files, Parent, MsgStoreState),
                       State;
         [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
