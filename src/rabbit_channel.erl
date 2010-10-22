@@ -368,6 +368,19 @@ expand_routing_key_shortcut(<<>>, <<>>,
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
 
+expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
+    {expand_queue_name_shortcut(DestinationNameBin, State),
+     expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State)};
+expand_binding(exchange, DestinationNameBin, RoutingKey, State) ->
+    {rabbit_misc:r(State#ch.virtual_host, exchange, DestinationNameBin),
+     RoutingKey}.
+
+check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
+    rabbit_misc:protocol_error(
+      access_refused, "operation not permitted on the default exchange", []);
+check_not_default_exchange(_) ->
+    ok.
+
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -681,6 +694,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    check_not_default_exchange(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
@@ -709,6 +723,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
+    check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
@@ -717,6 +732,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
                                  nowait = NoWait},
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    check_not_default_exchange(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
@@ -919,15 +935,11 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
     %% including the one named "" !
-    DestinationName =
-        case DestinationType of
-            queue    -> expand_queue_name_shortcut(DestinationNameBin, State);
-            exchange -> rabbit_misc:r(VHostPath, exchange, DestinationNameBin)
-        end,
+    {DestinationName, ActualRoutingKey} =
+        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
     check_write_permitted(DestinationName, State),
-    ActualRoutingKey =
-        expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
     check_read_permitted(ExchangeName, State),
     case Fun(#binding{source      = ExchangeName,
                       destination = DestinationName,
