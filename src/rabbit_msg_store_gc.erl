@@ -138,19 +138,13 @@ attempt_action(Action, Files,
     case lists:filter(fun (File) ->
                               rabbit_msg_store:has_readers(File, MsgStoreState)
                       end, Files) of
-        [] ->
-            {Reclaimed, Casualty, Survivor} =
-                do_action(Action, Files, MsgStoreState),
-            ok = rabbit_msg_store:gc_done(Parent, Reclaimed, Casualty,
-                                          Survivor),
-            State;
-        [File | _] ->
-            State #state {
-              pending_no_readers = dict:store(File, {Action, Files}, Pending) }
+        []         -> do_action(Action, Files, Parent, MsgStoreState),
+                      State;
+        [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
+                      State #state { pending_no_readers = Pending1 }
     end.
 
-do_action(combine, [Source, Destination], MsgStoreState) ->
-    {rabbit_msg_store:combine_files(Source, Destination, MsgStoreState),
-     Source, Destination};
-do_action(delete, [File], MsgStoreState) ->
-    {rabbit_msg_store:delete_file(File, MsgStoreState), File, undefined}.
+do_action(combine, [Source, Destination], Parent, MsgStoreState) ->
+    rabbit_msg_store:combine_files(Source, Destination, Parent, MsgStoreState);
+do_action(delete, [File], Parent, MsgStoreState) ->
+    rabbit_msg_store:delete_file(File, Parent, MsgStoreState).

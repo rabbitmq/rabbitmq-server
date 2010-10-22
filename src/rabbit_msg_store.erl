@@ -37,8 +37,8 @@
          client_init/2, client_terminate/2, client_delete_and_terminate/3,
          write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
--export([sync/1, gc_done/4, set_maximum_since_use/2,
-         combine_files/3, delete_file/2, has_readers/2]). %% internal
+-export([sync/1, set_maximum_since_use/2,
+         has_readers/2, combine_files/4, delete_file/3]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -153,13 +153,12 @@
 -spec(sync/3 :: (server(), [rabbit_guid:guid()], fun (() -> any())) -> 'ok').
 
 -spec(sync/1 :: (server()) -> 'ok').
--spec(gc_done/4 :: (server(), non_neg_integer(), file_num(),
-                    'undefined' | file_num()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
-             non_neg_integer()).
--spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> non_neg_integer()).
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
+-spec(combine_files/4 :: (non_neg_integer(), non_neg_integer(),
+                          server(), gc_state()) -> non_neg_integer()).
+-spec(delete_file/3 :: (non_neg_integer(), server(), gc_state()) ->
+             non_neg_integer()).
 
 -endif.
 
@@ -390,9 +389,6 @@ sync(Server, Guids, K) -> gen_server2:cast(Server, {sync, Guids, K}).
 
 sync(Server) ->
     gen_server2:cast(Server, sync).
-
-gc_done(Server, Reclaimed, Casualty, Survivor) ->
-    gen_server2:cast(Server, {gc_done, Reclaimed, Casualty, Survivor}).
 
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
@@ -710,49 +706,23 @@ handle_cast({sync, Guids, K},
 handle_cast(sync, State) ->
     noreply(internal_sync(State));
 
-handle_cast({gc_done, Reclaimed, Casualty, Survivor},
+handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
                                file_handles_ets = FileHandlesEts,
                                file_summary_ets = FileSummaryEts }) ->
-    %% GC done, so now ensure that any clients that have open fhs to
-    %% those files close them before using them again. This has to be
-    %% done here (given it's done in the msg_store, and not the gc),
-    %% and not when starting up the GC, because if done when starting
-    %% up the GC, the client could find the close, and close and
-    %% reopen the fh, whilst the GC is waiting for readers to
-    %% disappear, before it's actually done the GC.
-    true = mark_handle_to_close(FileHandlesEts, Casualty),
-    [#file_summary { left    = Left,
-                     right   = Right,
-                     locked  = true,
-                     readers = 0 }] = ets:lookup(FileSummaryEts, Casualty),
-    %% We'll never do any GC on the current file, so right is never undefined
-    true = Right =/= undefined, %% ASSERTION
-    true = ets:update_element(FileSummaryEts, Right, {#file_summary.left, Left}),
-    %% Regardless of whether Survivor is undefined, we need to ensure
-    %% the double linked list is maintained
-    true = case Left of
-               undefined -> true; %% Casualty is the eldest file (left-most)
-               _         -> ets:update_element(FileSummaryEts, Left,
-                                               {#file_summary.right, Right})
-           end,
-    %% If there is a Survivor, it must be the left of the Casualty.
-    SurvivingFiles =
-        case Survivor of
-            undefined ->
-                [];
-            Left -> %% ASSERTION
-                true = mark_handle_to_close(FileHandlesEts, Survivor),
-                true = ets:update_element(FileSummaryEts, Survivor,
-                                          {#file_summary.locked, false}),
-                [Survivor]
-        end,
-    true = ets:delete(FileSummaryEts, Casualty),
-    noreply(
-      maybe_compact(
-        run_pending(
-          [Casualty | SurvivingFiles],
-          State #msstate { sum_file_size = SumFileSize - Reclaimed })));
+    ok = cleanup_after_file_deletion(Source, State),
+    %% see comment in cleanup_after_file_deletion
+    true = mark_handle_to_close(FileHandlesEts, Destination),
+    true = ets:update_element(FileSummaryEts, Destination,
+                              {#file_summary.locked, false}),
+    State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
+    noreply(maybe_compact(run_pending([Source, Destination], State1)));
+
+handle_cast({delete_file, File, Reclaimed},
+            State = #msstate { sum_file_size    = SumFileSize }) ->
+    ok = cleanup_after_file_deletion(File, State),
+    State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
+    noreply(maybe_compact(run_pending([File], State1)));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -1555,6 +1525,34 @@ delete_file_if_empty(File, State = #msstate {
         _ -> State
     end.
 
+cleanup_after_file_deletion(File,
+                            #msstate { file_handles_ets = FileHandlesEts,
+                                       file_summary_ets = FileSummaryEts }) ->
+    %% Ensure that any clients that have open fhs to the file close
+    %% them before using them again. This has to be done here (given
+    %% it's done in the msg_store, and not the gc), and not when
+    %% starting up the GC, because if done when starting up the GC,
+    %% the client could find the close, and close and reopen the fh,
+    %% whilst the GC is waiting for readers to disappear, before it's
+    %% actually done the GC.
+    true = mark_handle_to_close(FileHandlesEts, File),
+    [#file_summary { left    = Left,
+                     right   = Right,
+                     locked  = true,
+                     readers = 0 }] = ets:lookup(FileSummaryEts, File),
+    %% We'll never delete the current file, so right is never undefined
+    true = Right =/= undefined, %% ASSERTION
+    true = ets:update_element(FileSummaryEts, Right,
+                              {#file_summary.left, Left}),
+    %% ensure the double linked list is maintained
+    true = case Left of
+               undefined -> true; %% File is the eldest file (left-most)
+               _         -> ets:update_element(FileSummaryEts, Left,
+                                               {#file_summary.right, Right})
+           end,
+    true = ets:delete(FileSummaryEts, File),
+    ok.
+
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
@@ -1564,17 +1562,7 @@ has_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
         ets:lookup(FileSummaryEts, File),
     Count /= 0.
 
-delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
-                                      dir              = Dir }) ->
-    [#file_summary { valid_total_size = 0,
-                     locked           = true,
-                     file_size        = FileSize,
-                     readers          = 0 }] = ets:lookup(FileSummaryEts, File),
-    {[], 0} = load_and_vacuum_message_file(File, State),
-    ok = file:delete(form_filename(Dir, filenum_to_name(File))),
-    FileSize.
-
-combine_files(Source, Destination,
+combine_files(Source, Destination, Server,
               State = #gc_state { file_summary_ets = FileSummaryEts,
                                   dir              = Dir }) ->
     [#file_summary {
@@ -1644,7 +1632,18 @@ combine_files(Source, Destination,
              [{#file_summary.valid_total_size, TotalValidData},
               {#file_summary.file_size,        TotalValidData}]),
 
-    SourceFileSize + DestinationFileSize - TotalValidData.
+    Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
+    gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}).
+
+delete_file(File, Server, State = #gc_state { file_summary_ets = FileSummaryEts,
+                                              dir              = Dir }) ->
+    [#file_summary { valid_total_size = 0,
+                     locked           = true,
+                     file_size        = FileSize,
+                     readers          = 0 }] = ets:lookup(FileSummaryEts, File),
+    {[], 0} = load_and_vacuum_message_file(File, State),
+    ok = file:delete(form_filename(Dir, filenum_to_name(File))),
+    gen_server2:cast(Server, {delete_file, File, FileSize}).
 
 load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
                                                index_module = Index,
