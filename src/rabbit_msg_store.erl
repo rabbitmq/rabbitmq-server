@@ -608,10 +608,11 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        sync                                        -> 8;
-        {gc_done, _Reclaimed, _Casualty, _Survivor} -> 8;
-        {set_maximum_since_use, _Age}               -> 8;
-        _                                           -> 0
+        sync                                               -> 8;
+        {combine_files, _Source, _Destination, _Reclaimed} -> 8;
+        {delete_file, _File, _Reclaimed}                   -> 8;
+        {set_maximum_since_use, _Age}                      -> 8;
+        _                                                  -> 0
     end.
 
 handle_call(successfully_recovered_state, _From, State) ->
