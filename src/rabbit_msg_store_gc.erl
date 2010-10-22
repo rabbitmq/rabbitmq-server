@@ -108,16 +108,15 @@ handle_cast({delete, File}, State) ->
 
 handle_cast({no_readers, File},
             State = #state { pending_no_readers = Pending }) ->
-    State1 = case dict:find(File, Pending) of
-                 error ->
-                     State;
-                 {ok, {Action, Files}} ->
-                     attempt_action(
-                       Action, Files,
-                       State #state { pending_no_readers =
-                                          dict:erase(File, Pending) })
-             end,
-    {noreply, State1, hibernate};
+    {noreply, case dict:find(File, Pending) of
+                  error ->
+                      State;
+                  {ok, {Action, Files}} ->
+                      Pending1 = dict:erase(File, Pending),
+                      attempt_action(
+                        Action, Files,
+                        State #state { pending_no_readers = Pending1 })
+              end, hibernate};
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
