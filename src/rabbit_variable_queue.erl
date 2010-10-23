@@ -550,23 +550,21 @@ read_msg(MsgStatus = #msg_status { msg           = undefined,
 read_msg(MsgStatus, State) ->
     {MsgStatus, State}.
 
-internal_fetch(AckRequired,
-               MsgStatus = #msg_status {
-                 seq_id        = SeqId,
-                 guid          = Guid, 
-                 msg           = Msg,
-                 is_persistent = IsPersistent,
-                 is_delivered  = IsDelivered,
-                 msg_on_disk   = MsgOnDisk,
-                 index_on_disk = IndexOnDisk },
-               State = #vqstate {
-                 ram_msg_count     = RamMsgCount,
-                 out_counter       = OutCount,
-                 index_state       = IndexState,
-                 msg_store_clients = MSCState,
-                 len               = Len,
-                 persistent_count  = PCount,
-                 pending_ack       = PA }) ->
+internal_fetch(AckRequired, MsgStatus = #msg_status {
+                              seq_id        = SeqId,
+                              guid          = Guid,
+                              msg           = Msg,
+                              is_persistent = IsPersistent,
+                              is_delivered  = IsDelivered,
+                              msg_on_disk   = MsgOnDisk,
+                              index_on_disk = IndexOnDisk },
+               State = #vqstate {ram_msg_count     = RamMsgCount,
+                                 out_counter       = OutCount,
+                                 index_state       = IndexState,
+                                 msg_store_clients = MSCState,
+                                 len               = Len,
+                                 persistent_count  = PCount,
+                                 pending_ack       = PA }) ->
     %% 1. Mark it delivered if necessary
     IndexState1 = maybe_write_delivered(
                     IndexOnDisk andalso not IsDelivered,
