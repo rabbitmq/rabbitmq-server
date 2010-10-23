@@ -41,8 +41,8 @@
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
 
--define(PERSISTENT_MSG_STORE,     msg_store_persistent).
--define(TRANSIENT_MSG_STORE,      msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
