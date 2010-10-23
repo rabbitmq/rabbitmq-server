@@ -150,22 +150,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-init_queue_state(State) ->
-    lists:foldl(fun(F, S) -> F(S) end, State,
-                [fun init_expires/1, fun init_ttl/1]).
-
-init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
-        {_Type, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
-        undefined        -> State
-    end.
-
-init_ttl(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-message-ttl">>) of
-        {_Type, TTL} -> drop_expired_messages(State#q{ttl = TTL});
-        undefined    -> State
-    end.
-
 declare(Recover, From,
         State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
                    backing_queue = BQ, backing_queue_state = undefined,
@@ -180,8 +164,7 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
-                     State1 = init_queue_state(
-                                State#q{backing_queue_state = BQS}),
+                     State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
                      rabbit_event:if_enabled(StatsTimer,
@@ -189,6 +172,19 @@ declare(Recover, From,
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
+
+process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
+    lists:foldl(fun({Arg, Fun}, State1) ->
+                        case rabbit_misc:table_lookup(Arguments, Arg) of
+                            {_Type, Val} -> Fun(Val, State1);
+                            undefined    -> State1
+                        end
+                end, State, [{<<"x-expires">>,     fun init_expires/2},
+                             {<<"x-message-ttl">>, fun init_ttl/2}]).
+
+init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
+
+init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -588,10 +584,8 @@ reset_msg_expiry_fun(TTL) ->
 message_properties(#q{ttl=TTL}) ->
     #message_properties{expiry = calculate_msg_expiry(TTL)}.
 
-calculate_msg_expiry(undefined) ->
-    undefined;
-calculate_msg_expiry(TTL) ->
-    now_millis() + (TTL * 1000).
+calculate_msg_expiry(undefined) -> undefined;
+calculate_msg_expiry(TTL)       -> now_millis() + (TTL * 1000).
 
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
@@ -610,18 +604,15 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
                             ttl_timer_ref       = undefined})
   when TTL =/= undefined ->
     case BQ:is_empty(BQS) of
-        true ->
-            State;
-        false ->
-            State#q{ttl_timer_ref =
-                        timer:apply_after(TTL, rabbit_amqqueue,
-                                          drop_expired, [self()])}
+        true  -> State;
+        false -> TRef = timer:apply_after(TTL, rabbit_amqqueue, drop_expired,
+                                          [self()]),
+                 State#q{ttl_timer_ref = TRef}
     end;
 ensure_ttl_timer(State) ->
     State.
 
-now_millis() ->
-    timer:now_diff(now(), {0,0,0}).
+now_millis() -> timer:now_diff(now(), {0,0,0}).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
