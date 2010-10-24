@@ -1013,11 +1013,8 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
                                    durable = IsDurable }) ->
     PAcks = lists:append(SPAcks),
     Acks  = lists:append(SAcks),
-    Pubs  = lists:foldl(fun({Fun, PubsN}, OuterAcc) ->
-                                lists:foldl(fun({Msg, MsgProps}, Acc) ->
-                                                    [{Msg, Fun(MsgProps)} | Acc]
-                                            end, OuterAcc, PubsN)
-                        end, [], SPubs),
+    Pubs  = [{Msg, Fun(MsgProps)} || {Fun, PubsN}    <- lists:reverse(SPubs),
+                                     {Msg, MsgProps} <- lists:reverse(PubsN)],
     {SeqIds, State1 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun ({Msg = #basic_message { is_persistent = IsPersistent },
