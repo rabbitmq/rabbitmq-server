@@ -323,8 +323,8 @@ all_module_attributes(Name) ->
                                      [application:get_key(App, modules)
                                       || App <- AllApps]])),
     lists:flatmap(fun (Module) ->
-                          [{Module, StepName, Attributes}
-                           || {N, [{StepName, Attributes}]}
+                          [{Module, AttrName, Attributes}
+                           || {N, [{AttrName, Attributes}]}
                                   <- module_attributes(Module), N =:= Name]
                   end, Modules).
 
