@@ -1478,10 +1478,10 @@ maybe_compact(State) ->
     State.
 
 find_files_to_combine(FileSummaryEts, FileSizeLimit,
-                 [#file_summary { file             = Dst,
-                                  valid_total_size = DstValid,
-                                  right            = Src,
-                                  locked           = DstLocked }]) ->
+                      [#file_summary { file             = Dst,
+                                       valid_total_size = DstValid,
+                                       right            = Src,
+                                       locked           = DstLocked }]) ->
     case Src of
         undefined ->
             not_found;
@@ -1648,7 +1648,7 @@ delete_file(File, Server, State = #gc_state { file_summary_ets = FileSummaryEts,
 
 load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
                                                index_module = Index,
-                                               index_state  = IndexState}) ->
+                                               index_state  = IndexState }) ->
     %% Messages here will be end-of-file at start-of-list
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
