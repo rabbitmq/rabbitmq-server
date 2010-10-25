@@ -90,15 +90,17 @@ unknown_heads(Heads, G) ->
     [H || H <- Heads, digraph:vertex(G, H) =:= false].
 
 upgrades_to_apply(Heads, G) ->
+    %% Take all the vertices which can reach the known heads. That's
+    %% everything we've already applied. Subtract that from all
+    %% vertices: that's what we have to apply.
     Unsorted = sets:to_list(
                 sets:subtract(
                   sets:from_list(digraph:vertices(G)),
                   sets:from_list(digraph_utils:reaching(Heads, G)))),
-    [begin
-         {StepName, Step} = digraph:vertex(G, StepName),
-         Step
-     end || StepName <- digraph_utils:topsort(
-                          digraph_utils:subgraph(G, Unsorted))].
+    %% Form a subgraph from that list and find a topological ordering
+    %% so we can invoke them in order.
+    [element(2, digraph:vertex(G, StepName))
+     || StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
 
 heads(G) ->
     [V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0].
