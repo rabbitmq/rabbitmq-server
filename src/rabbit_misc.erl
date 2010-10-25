@@ -64,6 +64,7 @@
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
+-export([all_module_attributes/1, build_acyclic_graph/4]).
 
 -import(mnesia).
 -import(lists).
@@ -184,6 +185,7 @@
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
+-spec(all_module_attributes/1 :: (atom()) -> dict:dictionary()).
 
 -endif.
 
@@ -721,3 +723,50 @@ get_flag(K, [Nk | As]) ->
     {[Nk | As1], V};
 get_flag(_, []) ->
     {[], false}.
+
+module_attributes(Module) ->
+    case catch Module:module_info(attributes) of
+        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+                      [Module]),
+            [];
+        {'EXIT', Reason} ->
+            exit(Reason);
+        V ->
+            V
+    end.
+
+all_module_attributes(Name) ->
+    AllApps = [App || {App, _, _} <- application:loaded_applications()],
+    Modules = lists:usort(
+                lists:append([Modules
+                              || {ok, Modules} <-
+                                     [application:get_key(App, modules)
+                                      || App <- AllApps]])),
+    lists:foldl(
+      fun (Module, Acc) ->
+              case lists:append(
+                     [Atts || {N, Atts} <- module_attributes(Module),
+                              N =:= Name]) of
+                  []   -> Acc;
+                  Atts -> dict:update(Module, fun (Old) -> Atts ++ Old end,
+                                      Atts, Acc)
+              end
+      end, dict:new(), Modules).
+
+build_acyclic_graph(VertexFun, EdgeFun, ErrorFun, Graph) ->
+    G = digraph:new([acyclic]),
+    dict:fold(
+      fun (Module, Values, _Acc) ->
+              [case digraph:vertex(G, Vertex) of
+                   false -> digraph:add_vertex(G, Vertex, Label);
+                   _     -> ErrorFun({vertex, duplicate, Vertex})
+               end || {Vertex, Label} <- VertexFun(Module, Values)]
+      end, ok, Graph),
+    dict:fold(fun (Module, Values, _Acc) ->
+                      [case digraph:add_edge(G, From, To) of
+                           {error, E} -> ErrorFun({edge, E, From, To});
+                           _          -> ok
+                       end || {From, To} <- EdgeFun(Module, Values)]
+              end, ok, Graph),
+    G.

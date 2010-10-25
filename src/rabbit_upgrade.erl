@@ -72,28 +72,20 @@ write_version(Dir) ->
 %% -------------------------------------------------------------------
 
 load_graph() ->
-    G = digraph:new([acyclic]),
-    Upgrades = rabbit:all_module_attributes(rabbit_upgrade),
-    [case digraph:vertex(G, StepName) of
-         false -> digraph:add_vertex(G, StepName, {Module, StepName});
-         _     -> exit({duplicate_upgrade, StepName})
-     end || {Module, StepName, _Requires} <- Upgrades],
+    Upgrades = rabbit_misc:all_module_attributes(rabbit_upgrade),
+    rabbit_misc:build_acyclic_graph(
+      fun vertices/2, fun edges/2, fun graph_build_error/1, Upgrades).
 
-    lists:foreach(fun ({_Module, Upgrade, Requires}) ->
-                          add_edges(G, Requires, Upgrade)
-                  end, Upgrades),
-    G.
+vertices(Module, Steps) ->
+    [{StepName, {Module, StepName}} || {StepName, _Reqs} <- Steps].
 
-add_edges(G, Requires, Upgrade) ->
-    [add_edge(G, Require, Upgrade) || Require <- Requires].
+edges(_Module, Steps) ->
+    [{Require, StepName} || {StepName, Requires} <- Steps, Require <- Requires].
 
-add_edge(G, Require, Upgrade) ->
-    case digraph:add_edge(G, Require, Upgrade) of
-        {error, E} ->
-            exit(E);
-        _ ->
-            ok
-    end.
+graph_build_error({vertex, duplicate, StepName}) ->
+    exit({duplicate_upgrade, StepName});
+graph_build_error({edge, E, From, To}) ->
+    exit({E, From, To}).
 
 unknown_heads(Heads, G) ->
     [H || H <- Heads, digraph:vertex(G, H) =:= false].
