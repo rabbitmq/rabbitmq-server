@@ -131,6 +131,10 @@ function message_rates(stats) {
                 res += 'msg/s</div>';
             }
         }
+
+        if (res == "") {
+            res = '<p>Waiting for message rates...</p>';
+        }
     }
     else {
         res = '<p>Currently idle</p>';
