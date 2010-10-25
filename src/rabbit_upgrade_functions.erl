@@ -28,7 +28,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_upgrades).
+-module(rabbit_upgrade_functions).
 
 -include("rabbit.hrl").
 
