@@ -65,8 +65,8 @@ maybe_upgrade(Dir) ->
 
 write_version(Dir) ->
     G = load_graph(),
-    rabbit_misc:write_term_file(schema_filename(Dir), [heads(G)]),
-    digraph:delete(G),
+    ok = rabbit_misc:write_term_file(schema_filename(Dir), [heads(G)]),
+    true = digraph:delete(G),
     ok.
 
 %% -------------------------------------------------------------------
@@ -133,7 +133,7 @@ apply_upgrades(Upgrades, Dir) ->
 
 apply_upgrade({M, F}) ->
     info("Upgrades: Applying ~w:~w~n", [M, F]),
-    apply(M, F, []).
+    ok = apply(M, F, []).
 
 %% -------------------------------------------------------------------
 
