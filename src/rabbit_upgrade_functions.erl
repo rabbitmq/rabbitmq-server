@@ -28,6 +28,16 @@
 -rabbit_upgrade({test_remove_column, [test_add_column]}).
 -rabbit_upgrade({remove_user_scope, []}).
 
+%% -------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(remove_user_scope/0 :: () -> 'ok').
+-spec(test_add_column/0 :: () -> 'ok').
+-spec(test_remove_column/0 :: () -> 'ok').
+
+-endif.
+
 %%--------------------------------------------------------------------
 
 %% TODO this is just a hack, when branch bug23319 is merged this should use

@@ -30,6 +30,15 @@
 
 %% -------------------------------------------------------------------
 
+-ifdef(use_specs).
+
+-spec(maybe_upgrade/1 :: (file:filename()) -> 'ok').
+-spec(write_version/1 :: (file:filename()) -> 'ok').
+
+-endif.
+
+%% -------------------------------------------------------------------
+
 %% Try to upgrade the schema. If no information on the existing schema could
 %% be found, do nothing. rabbit_mnesia:check_schema_integrity() will catch the
 %% problem.
@@ -48,7 +57,7 @@ maybe_upgrade(Dir) ->
                     [warn("Data store has had future upgrade ~w applied." ++
                               " Will not upgrade.~n", [U]) || U <- Unknown]
             end,
-            digraph:delete(G),
+            true = digraph:delete(G),
             ok;
         {error, enoent} ->
             ok
