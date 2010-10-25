@@ -37,7 +37,7 @@
 -define(VERSION_FILENAME, "schema_version").
 -define(LOCK_FILENAME, "schema_upgrade_lock").
 
-%% API ---------------------------------------------------------------
+%% -------------------------------------------------------------------
 
 %% Try to upgrade the schema. If no information on the existing schema could
 %% be found, do nothing. rabbit_mnesia:check_schema_integrity() will catch the
@@ -46,15 +46,16 @@ maybe_upgrade(Dir) ->
     case rabbit_misc:read_term_file(schema_filename(Dir)) of
         {ok, [CurrentHeads]} ->
             G = load_graph(),
-            case check_unknown_heads(CurrentHeads, G) of
-                ok ->
+            case unknown_heads(CurrentHeads, G) of
+                [] ->
                     Upgrades = upgrades_to_apply(CurrentHeads, G),
                     case length(Upgrades) of
                         0 -> ok;
                         _ -> apply_upgrades(Upgrades, Dir)
                     end;
-                _ ->
-                    ok
+                Unknown ->
+                    [warn("Data store has had future upgrade ~w applied." ++
+                              " Will not upgrade.~n", [U]) || U <- Unknown]
             end,
             digraph:delete(G),
             ok;
@@ -68,14 +69,14 @@ write_version(Dir) ->
     digraph:delete(G),
     ok.
 
-%% Graphs ------------------------------------------------------------
+%% -------------------------------------------------------------------
 
 load_graph() ->
     G = digraph:new([acyclic]),
     Upgrades = rabbit:all_module_attributes(rabbit_upgrade),
     [case digraph:vertex(G, StepName) of
          false -> digraph:add_vertex(G, StepName, {Module, StepName});
-         _     -> throw({duplicate_upgrade, StepName})
+         _     -> exit({duplicate_upgrade, StepName})
      end || {Module, StepName, _Requires} <- Upgrades],
 
     lists:foreach(fun ({_Module, Upgrade, Requires}) ->
@@ -84,21 +85,18 @@ load_graph() ->
     G.
 
 add_edges(G, Requires, Upgrade) ->
-    Results = [digraph:add_edge(G, R, Upgrade) || R <- Requires],
-    case [E || {error, _} = E <- Results] of
-        [] -> ok;
-        L  -> exit(L)
+    [add_edge(G, Require, Upgrade) || Require <- Requires].
+
+add_edge(G, Require, Upgrade) ->
+    case digraph:add_edge(G, Require, Upgrade) of
+        {error, E} ->
+            exit(E);
+        _ ->
+            ok
     end.
 
-check_unknown_heads(Heads, G) ->
-    case [H || H <- Heads, digraph:vertex(G, H) =:= false] of
-        [] ->
-            ok;
-        Unknown ->
-            [warn("Data store has had future upgrade ~w applied. Will not " ++
-                      "upgrade.~n", [U]) || U <- Unknown],
-            Unknown
-    end.
+unknown_heads(Heads, G) ->
+    [H || H <- Heads, digraph:vertex(G, H) =:= false].
 
 upgrades_to_apply(Heads, G) ->
     Unsorted = sets:to_list(
@@ -114,7 +112,7 @@ upgrades_to_apply(Heads, G) ->
 heads(G) ->
     [V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0].
 
-%% Upgrades-----------------------------------------------------------
+%% -------------------------------------------------------------------
 
 apply_upgrades(Upgrades, Dir) ->
     LockFile = lock_filename(Dir),
@@ -137,7 +135,7 @@ apply_upgrade({M, F}) ->
     info("Upgrades: Applying ~w:~w~n", [M, F]),
     apply(M, F, []).
 
-%% Utils -------------------------------------------------------------
+%% -------------------------------------------------------------------
 
 schema_filename(Dir) ->
     filename:join(Dir, ?VERSION_FILENAME).

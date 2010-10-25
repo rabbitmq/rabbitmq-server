@@ -47,7 +47,7 @@
 remove_user_scope() ->
     {atomic, ok} = mnesia:transform_table(
       rabbit_user_permission,
-      fun(Perm = #user_permission{
+      fun (Perm = #user_permission{
             permission = {permission, _Scope, Conf, Write, Read}}) ->
               Perm#user_permission{
                 permission = #permission2{configure = Conf,
@@ -59,7 +59,7 @@ remove_user_scope() ->
 test_add_column() ->
     {atomic, ok} = mnesia:transform_table(
       rabbit_user,
-      fun({user, Username, Password, Admin}) ->
+      fun ({user, Username, Password, Admin}) ->
               {user, Username, Password, Admin, something_else}
       end,
       [username, password, is_admin, something]).
@@ -67,7 +67,7 @@ test_add_column() ->
 test_remove_column() ->
     {atomic, ok} = mnesia:transform_table(
       rabbit_user,
-      fun({user, Username, Password, Admin, _SomethingElse}) ->
+      fun ({user, Username, Password, Admin, _SomethingElse}) ->
               {user, Username, Password, Admin}
       end,
       record_info(fields, user)).
