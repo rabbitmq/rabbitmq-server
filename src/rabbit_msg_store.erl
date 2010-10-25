@@ -38,7 +38,7 @@
          write/4, read/3, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, set_maximum_since_use/2,
-         has_readers/2, combine_files/4, delete_file/3]). %% internal
+         has_readers/2, combine_files/3, delete_file/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -104,7 +104,8 @@
         { dir,
           index_module,
           index_state,
-          file_summary_ets
+          file_summary_ets,
+          msg_store
         }).
 
 %%----------------------------------------------------------------------------
@@ -116,7 +117,8 @@
 -opaque(gc_state() :: #gc_state { dir              :: file:filename(),
                                   index_module     :: atom(),
                                   index_state      :: any(),
-                                  file_summary_ets :: ets:tid()
+                                  file_summary_ets :: ets:tid(),
+                                  msg_store        :: server()
                                 }).
 
 -type(server() :: pid() | atom()).
@@ -155,10 +157,9 @@
 -spec(sync/1 :: (server()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
--spec(combine_files/4 :: (non_neg_integer(), non_neg_integer(),
-                          server(), gc_state()) -> non_neg_integer()).
--spec(delete_file/3 :: (non_neg_integer(), server(), gc_state()) ->
-             non_neg_integer()).
+-spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(),
+                          gc_state()) -> non_neg_integer()).
+-spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> non_neg_integer()).
 
 -endif.
 
@@ -590,7 +591,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                     #gc_state { dir              = Dir,
                                 index_module     = IndexModule,
                                 index_state      = IndexState,
-                                file_summary_ets = FileSummaryEts
+                                file_summary_ets = FileSummaryEts,
+                                msg_store        = self()
                               }),
 
     {ok, maybe_compact(
@@ -720,7 +722,7 @@ handle_cast({combine_files, Source, Destination, Reclaimed},
     noreply(maybe_compact(run_pending([Source, Destination], State1)));
 
 handle_cast({delete_file, File, Reclaimed},
-            State = #msstate { sum_file_size    = SumFileSize }) ->
+            State = #msstate { sum_file_size = SumFileSize }) ->
     ok = cleanup_after_file_deletion(File, State),
     State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
     noreply(maybe_compact(run_pending([File], State1)));
@@ -1563,9 +1565,10 @@ has_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
         ets:lookup(FileSummaryEts, File),
     Count /= 0.
 
-combine_files(Source, Destination, Server,
+combine_files(Source, Destination,
               State = #gc_state { file_summary_ets = FileSummaryEts,
-                                  dir              = Dir }) ->
+                                  dir              = Dir,
+                                  msg_store        = Server }) ->
     [#file_summary {
        readers          = 0,
        left             = Destination,
@@ -1636,8 +1639,9 @@ combine_files(Source, Destination, Server,
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}).
 
-delete_file(File, Server, State = #gc_state { file_summary_ets = FileSummaryEts,
-                                              dir              = Dir }) ->
+delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
+                                      dir              = Dir,
+                                      msg_store        = Server }) ->
     [#file_summary { valid_total_size = 0,
                      locked           = true,
                      file_size        = FileSize,

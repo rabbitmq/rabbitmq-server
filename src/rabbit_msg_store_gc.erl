@@ -41,8 +41,7 @@
          terminate/2, code_change/3, prioritise_cast/2]).
 
 -record(state,
-        { parent,
-          pending_no_readers,
+        { pending_no_readers,
           msg_store_state
         }).
 
@@ -66,7 +65,7 @@
 %%----------------------------------------------------------------------------
 
 start_link(MsgStoreState) ->
-    gen_server2:start_link(?MODULE, [self(), MsgStoreState],
+    gen_server2:start_link(?MODULE, [MsgStoreState],
                            [{timeout, infinity}]).
 
 combine(Server, Source, Destination) ->
@@ -86,11 +85,10 @@ set_maximum_since_use(Pid, Age) ->
 
 %%----------------------------------------------------------------------------
 
-init([Parent, MsgStoreState]) ->
+init([MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
-    {ok, #state { parent             = Parent,
-                  pending_no_readers = dict:new(),
+    {ok, #state { pending_no_readers = dict:new(),
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -132,18 +130,17 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 attempt_action(Action, Files,
-               State = #state { parent             = Parent,
-                                pending_no_readers = Pending,
+               State = #state { pending_no_readers = Pending,
                                 msg_store_state    = MsgStoreState }) ->
     case [File || File <- Files,
                   rabbit_msg_store:has_readers(File, MsgStoreState)] of
-        []         -> do_action(Action, Files, Parent, MsgStoreState),
+        []         -> do_action(Action, Files, MsgStoreState),
                       State;
         [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
                       State #state { pending_no_readers = Pending1 }
     end.
 
-do_action(combine, [Source, Destination], Parent, MsgStoreState) ->
-    rabbit_msg_store:combine_files(Source, Destination, Parent, MsgStoreState);
-do_action(delete, [File], Parent, MsgStoreState) ->
-    rabbit_msg_store:delete_file(File, Parent, MsgStoreState).
+do_action(combine, [Source, Destination], MsgStoreState) ->
+    rabbit_msg_store:combine_files(Source, Destination, MsgStoreState);
+do_action(delete, [File], MsgStoreState) ->
+    rabbit_msg_store:delete_file(File, MsgStoreState).
