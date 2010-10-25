@@ -157,8 +157,8 @@
 -spec(sync/1 :: (server()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
--spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(),
-                          gc_state()) -> non_neg_integer()).
+-spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
+                              non_neg_integer()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> non_neg_integer()).
 
 -endif.
