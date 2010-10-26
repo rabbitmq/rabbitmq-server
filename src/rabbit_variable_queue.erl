@@ -394,7 +394,7 @@ init(QueueName, true, true) ->
                                                     TRef),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
-          QueueName, Terms,
+          QueueName, Terms1,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (Guid) ->
                   rabbit_msg_store:contains(Guid, PersistentClient)
