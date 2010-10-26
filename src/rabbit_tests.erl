@@ -1584,9 +1584,8 @@ test_msg_store() ->
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
            fun (MSCStateM) ->
-                   [begin
-                        ok = rabbit_msg_store:write(Guid, Payload, MSCStateM)
-                    end || Guid <- GuidsBig],
+                   [ok = rabbit_msg_store:write(Guid, Payload, MSCStateM)
+                    || Guid <- GuidsBig],
                    MSCStateM
            end),
     %% now read them to ensure we hit the fast client-side reading
