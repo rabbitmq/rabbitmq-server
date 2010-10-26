@@ -184,10 +184,8 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_plugin_activator ^
--rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
--rabbit plugins_expand_dir \""!RABBITMQ_MNESIA_DIR:\=/!/plugins-scratch"\" ^
--rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
--extra !STAR!
+-extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+       "!RABBITMQ_MNESIA_DIR:\=/!/plugins-scratch"
 
 set RABBITMQ_BOOT_FILE=!RABBITMQ_MNESIA_DIR!\plugins-scratch\rabbit
 if not exist "!RABBITMQ_BOOT_FILE!.boot" (
