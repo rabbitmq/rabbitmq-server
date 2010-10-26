@@ -66,9 +66,8 @@ vhosts_test() ->
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 users_test() ->
-    assert_item([{name, <<"guest">>},
-                 {password, <<"guest">>},
-                 {administrator, true}], http_get("/whoami", ?OK)),
+    assert_item([{name, <<"guest">>}, {administrator, true}],
+                http_get("/whoami")),
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
@@ -76,17 +75,11 @@ users_test() ->
                                {administrator, false}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
                                {administrator, true}], ?NO_CONTENT),
-    [{name,          <<"myuser">>},
-     {password,      <<"password">>},
-     {administrator, true}] =
-        http_get("/users/myuser"),
-    [[{name,<<"guest">>},
-      {password,<<"guest">>},
-      {administrator, true}],
-     [{name,          <<"myuser">>},
-      {password,      <<"password">>},
-      {administrator, true}]] =
-        http_get("/users"),
+    assert_item([{name, <<"myuser">>}, {administrator, true}],
+                http_get("/users/myuser")),
+    assert_list([[{name, <<"myuser">>}, {administrator, true}],
+                 [{name, <<"guest">>}, {administrator, true}]],
+                http_get("/users")),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
     test_auth(?NOT_AUTHORISED, [auth_header("myuser", "password")]),

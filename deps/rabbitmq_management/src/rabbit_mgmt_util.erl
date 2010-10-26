@@ -65,21 +65,18 @@ is_authorized(ReqData, Context, Fun) ->
     case wrq:get_req_header("authorization", ReqData) of
         "Basic " ++ Base64 ->
             Str = base64:mime_decode_to_string(Base64),
-            [Username, Pass] =
+            [User, Pass] =
                 [list_to_binary(S) || S <- string:tokens(Str, ":")],
-            case rabbit_access_control:lookup_user(Username) of
-                {ok, User = #user{password = Pass1,
-                                  is_admin = IsAdmin}} when Pass == Pass1  ->
-                    case Fun(User) of
+            case rabbit_access_control:check_user_pass_login(User, Pass) of
+                {ok, U = #user{is_admin = IsAdmin}} ->
+                    case Fun(U) of
                         true  -> {true, ReqData,
-                                  Context#context{username = Username,
+                                  Context#context{username = User,
                                                   password = Pass,
                                                   is_admin = IsAdmin}};
                         false -> Unauthorized
                     end;
-                {ok, #user{}} ->
-                    Unauthorized;
-                {error, _} ->
+                refused ->
                     Unauthorized
             end;
         _ ->
