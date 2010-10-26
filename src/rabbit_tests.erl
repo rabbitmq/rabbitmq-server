@@ -1459,7 +1459,7 @@ msg_store_read(Guids, MSCState) ->
 
 msg_store_write(Guids, MSCState) ->
     lists:foldl(fun (Guid, {ok, MSCStateN}) ->
-                        rabbit_msg_store:write(Guid, Guid, MSCStateN)
+                        {rabbit_msg_store:write(Guid, Guid, MSCStateN), MSCStateN}
                 end, {ok, MSCState}, Guids).
 
 msg_store_remove(Guids, MSCState) ->
@@ -1584,9 +1584,8 @@ test_msg_store() ->
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
            fun (Guid, MSCStateM) ->
-                   {ok, MSCStateN} = rabbit_msg_store:write(
-                                       Guid, Payload, MSCStateM),
-                   MSCStateN
+                   ok = rabbit_msg_store:write(Guid, Payload, MSCStateM),
+                   MSCStateM
            end, GuidsBig),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
@@ -1668,9 +1667,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   Guid = rabbit_guid:guid(),
                   QiM = rabbit_queue_index:publish(
                           Guid, SeqId, #message_properties{}, Persistent, QiN),
-                  {ok, MSCStateM} = rabbit_msg_store:write(Guid, Guid,
-                                                           MSCStateN),
-                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
+                  ok = rabbit_msg_store:write(Guid, Guid, MSCStateN),
+                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateN}
           end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateEnd),
     {A, B}.

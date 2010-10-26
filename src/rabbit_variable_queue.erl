@@ -408,11 +408,11 @@ terminate(State) ->
                         msg_store_clients = {MSCStateP, MSCStateT} } =
         remove_pending_ack(true, tx_commit_index(State)),
     PRef = case MSCStateP of
-               undefined -> ok;
+               undefined -> undefined;
                _         -> ok = rabbit_msg_store:client_terminate(MSCStateP),
                             rabbit_msg_store:client_ref(MSCStateP)
            end,
-    rabbit_msg_store:client_terminate(MSCStateT),
+    ok = rabbit_msg_store:client_terminate(MSCStateT),
     TRef = rabbit_msg_store:client_ref(MSCStateT),
     Terms = [{persistent_ref, PRef},
              {transient_ref, TRef},
@@ -461,12 +461,13 @@ purge(State = #vqstate { q4                = Q4,
                                     fun rabbit_misc:queue_fold/3, Q1,
                                     LensByStore1, IndexState2, MSCState1),
     PCount1 = PCount - find_persistent_count(LensByStore2),
-    {Len, a(State1 #vqstate { q1               = queue:new(),
-                              index_state      = IndexState3,
-                              len              = 0,
-                              ram_msg_count    = 0,
-                              ram_index_count  = 0,
-                              persistent_count = PCount1 })}.
+    {Len, a(State1 #vqstate { q1                = queue:new(),
+                              index_state       = IndexState3,
+                              msg_store_clients = MSCState1,
+                              len               = 0,
+                              ram_msg_count     = 0,
+                              ram_index_count   = 0,
+                              persistent_count  = PCount1 })}.
 
 publish(Msg, MsgProps, State) ->
     {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
@@ -614,13 +615,13 @@ tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
                               msg_store_clients = MSCState }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
-    a(case IsPersistent andalso IsDurable of
-          true  -> MsgStatus = msg_status(true, undefined, Msg, MsgProps),
-                   {#msg_status { msg_on_disk = true }, MSCState1} =
-                       maybe_write_msg_to_disk(false, MsgStatus, MSCState),
-                   State #vqstate { msg_store_clients = MSCState1 };
-          false -> State
-      end).
+    case IsPersistent andalso IsDurable of
+        true  -> MsgStatus = msg_status(true, undefined, Msg, MsgProps),
+                 #msg_status { msg_on_disk = true } =
+                     maybe_write_msg_to_disk(false, MsgStatus, MSCState);
+        false -> ok
+    end,
+    a(State).
 
 tx_ack(Txn, AckTags, State) ->
     Tx = #tx { pending_acks = Acks } = lookup_tx(Txn),
@@ -648,8 +649,7 @@ tx_commit(Txn, Fun, MsgPropsFun,
     {AckTags1,
      a(case IsDurable andalso HasPersistentPubs of
            true  -> ok = msg_store_sync(
-                           MSCState, true,
-                           PersistentGuids,
+                           MSCState, true, PersistentGuids,
                            msg_store_callback(PersistentGuids, Pubs, AckTags1,
                                               Fun, MsgPropsFun)),
                     State;
@@ -843,7 +843,7 @@ msg_store_client_init(MsgStore) ->
     rabbit_msg_store:client_init(MsgStore, rabbit_guid:guid()).
 
 msg_store_write(MSCState, IsPersistent, Guid, Msg) ->
-    with_msg_store_state(
+    with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MSCState1) -> rabbit_msg_store:write(Guid, Msg, MSCState1) end).
 
@@ -1149,8 +1149,8 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
                               ram_msg_count    = RamMsgCount + 1}}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
-                                  msg_on_disk = true }, MSCState) ->
-    {MsgStatus, MSCState};
+                                  msg_on_disk = true }, _MSCState) ->
+    MsgStatus;
 maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                  msg = Msg, guid = Guid,
                                  is_persistent = IsPersistent }, MSCState)
@@ -1159,10 +1159,10 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
              %% don't persist any recoverable decoded properties
              content = rabbit_binary_parser:clear_decoded_content(
                          Msg #basic_message.content)},
-    {ok, MSCState1} = msg_store_write(MSCState, IsPersistent, Guid, Msg1),
-    {MsgStatus #msg_status { msg_on_disk = true }, MSCState1};
-maybe_write_msg_to_disk(_Force, MsgStatus, MSCState) ->
-    {MsgStatus, MSCState}.
+    ok = msg_store_write(MSCState, IsPersistent, Guid, Msg1),
+    MsgStatus #msg_status { msg_on_disk = true };
+maybe_write_msg_to_disk(_Force, MsgStatus, _MSCState) ->
+    MsgStatus.
 
 maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                     index_on_disk = true }, IndexState) ->
@@ -1186,12 +1186,10 @@ maybe_write_index_to_disk(_Force, MsgStatus, IndexState) ->
 maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
                     State = #vqstate { index_state       = IndexState,
                                        msg_store_clients = MSCState }) ->
-    {MsgStatus1, MSCState1}   = maybe_write_msg_to_disk(
-                                  ForceMsg, MsgStatus, MSCState),
-    {MsgStatus2, IndexState1} = maybe_write_index_to_disk(
-                                  ForceIndex, MsgStatus1, IndexState),
-    {MsgStatus2, State #vqstate { index_state       = IndexState1,
-                                  msg_store_clients = MSCState1 }}.
+    MsgStatus1 = maybe_write_msg_to_disk(ForceMsg, MsgStatus, MSCState),
+    {MsgStatus2, IndexState1} =
+        maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
+    {MsgStatus2, State #vqstate { index_state = IndexState1 }}.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks

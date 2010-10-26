@@ -151,8 +151,7 @@
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_ref/1 :: (client_msstate()) -> client_ref()).
--spec(write/3 :: (rabbit_guid:guid(), msg(), client_msstate()) ->
-             rabbit_types:ok(client_msstate())).
+-spec(write/3 :: (rabbit_guid:guid(), msg(), client_msstate()) -> 'ok').
 -spec(read/2 :: (rabbit_guid:guid(), client_msstate()) ->
              {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (rabbit_guid:guid(), client_msstate()) -> boolean()).
@@ -364,7 +363,7 @@ client_ref(#client_msstate { client_ref = Ref }) -> Ref.
 write(Guid, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
     ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {server_cast(CState, {write, Guid}), CState}.
+    ok = server_cast(CState, {write, Guid}).
 
 read(Guid,
      CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
