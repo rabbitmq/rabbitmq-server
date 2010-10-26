@@ -41,8 +41,8 @@
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
 
--define(PERSISTENT_MSG_STORE,     msg_store_persistent).
--define(TRANSIENT_MSG_STORE,      msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
@@ -962,9 +962,6 @@ test_user_management() ->
         control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
-    {error, {invalid_scope, _}} =
-        control_action(set_permissions, ["guest", "foo", ".*", ".*"],
-                       [{"-s", "cilent"}]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
@@ -987,9 +984,7 @@ test_user_management() ->
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
                         [{"-p", "/testhost"}]),
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
-                        [{"-p", "/testhost"}, {"-s", "client"}]),
-    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
-                        [{"-p", "/testhost"}, {"-s", "all"}]),
+                        [{"-p", "/testhost"}]),
     ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_user_permissions, ["foo"]),
@@ -1297,7 +1292,7 @@ info_action(Command, Args, CheckVHost) ->
     {bad_argument, dummy} = control_action(Command, ["dummy"]),
     ok.
 
-default_options() -> [{"-s", "client"}, {"-p", "/"}, {"-q", "false"}].
+default_options() -> [{"-p", "/"}, {"-q", "false"}].
 
 expand_options(As, Bs) ->
     lists:foldl(fun({K, _}=A, R) ->

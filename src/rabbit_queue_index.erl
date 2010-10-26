@@ -98,7 +98,7 @@
 %% and seeding the message store on start up.
 %%
 %% Note that in general, the representation of a message's state as
-%% the tuple: {('no_pub'|{Guid, MsgProperties, IsPersistent}),
+%% the tuple: {('no_pub'|{Guid, MsgProps, IsPersistent}),
 %% ('del'|'no_del'), ('ack'|'no_ack')} is richer than strictly
 %% necessary for most operations. However, for startup, and to ensure
 %% the safe and correct combination of journal entries with entries
@@ -162,7 +162,7 @@
 
 %% ---- misc ----
 
--define(PUB, {_, _, _}). %% {Guid, MsgProperties, IsPersistent}
+-define(PUB, {_, _, _}). %% {Guid, MsgProps, IsPersistent}
 
 -define(READ_MODE, [binary, raw, read]).
 -define(READ_AHEAD_MODE, [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE]).
@@ -259,8 +259,7 @@ delete_and_terminate(State) ->
     ok = rabbit_misc:recursive_delete([Dir]),
     State1.
 
-publish(Guid, SeqId, MsgProperties, IsPersistent, State)
-  when is_binary(Guid) ->
+publish(Guid, SeqId, MsgProps, IsPersistent, State) when is_binary(Guid) ->
     ?GUID_BYTES = size(Guid),
     {JournalHdl, State1} = get_journal_handle(State),
     ok = file_handle_cache:append(
@@ -269,9 +268,9 @@ publish(Guid, SeqId, MsgProperties, IsPersistent, State)
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS>>,
-                          create_pub_record_body(Guid, MsgProperties)]),
+                          create_pub_record_body(Guid, MsgProps)]),
     maybe_flush_journal(
-      add_to_journal(SeqId, {Guid, MsgProperties, IsPersistent}, State1)).
+      add_to_journal(SeqId, {Guid, MsgProps, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -464,9 +463,7 @@ recover_segment(ContainsCheckFun, CleanShutdown,
     {SegEntries1, UnackedCountDelta} =
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
-      fun (RelSeq,
-           {{Guid, _MsgProperties, _IsPersistent}, Del, no_ack},
-           Segment1) ->
+      fun (RelSeq, {{Guid, _MsgProps, _IsPersistent}, Del, no_ack}, Segment1) ->
               recover_message(ContainsCheckFun(Guid), CleanShutdown,
                               Del, RelSeq, Segment1)
       end,
@@ -519,8 +516,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = #qistate { segments = Segments, dir = Dir } =
         recover_journal(blank_state(QueueName)),
     [ok = segment_entries_foldr(
-            fun (_RelSeq,
-                 {{Guid, _MsgProps, true}, _IsDelivered, no_ack},
+            fun (_RelSeq, {{Guid, _MsgProps, true}, _IsDelivered, no_ack},
                  ok) ->
                     gatherer:in(Gatherer, {Guid, 1});
                 (_RelSeq, _Value, Acc) ->
@@ -678,8 +674,8 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
                     case read_pub_record_body(Hdl) of
-                        {Guid, MsgProperties} ->
-                            Publish = {Guid, MsgProperties,
+                        {Guid, MsgProps} ->
+                            Publish = {Guid, MsgProps,
                                        case Prefix of
                                            ?PUB_PERSIST_JPREFIX -> true;
                                            ?PUB_TRANS_JPREFIX   -> false
@@ -781,12 +777,12 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     ok = case Pub of
              no_pub ->
                  ok;
-             {Guid, MsgProperties, IsPersistent} ->
+             {Guid, MsgProps, IsPersistent} ->
                  file_handle_cache:append(
                    Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
                           (bool_to_int(IsPersistent)):1,
                           RelSeq:?REL_SEQ_BITS>>,
-                          create_pub_record_body(Guid, MsgProperties)])
+                          create_pub_record_body(Guid, MsgProps)])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
@@ -806,12 +802,10 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
                      {Messages, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
     {segment_entries_foldr(
-       fun (RelSeq,
-            {{Guid, MsgProperties, IsPersistent}, IsDelivered, no_ack},
-            Acc)
+       fun (RelSeq, {{Guid, MsgProps, IsPersistent}, IsDelivered, no_ack}, Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
-               [ {Guid, reconstruct_seq_id(StartSeg, RelSeq), MsgProperties,
+               [ {Guid, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
                   IsPersistent, IsDelivered == del} | Acc ];
            (_RelSeq, _Value, Acc) ->
                Acc
@@ -841,8 +835,8 @@ load_segment_entries(KeepAcked, Hdl, SegEntries, UnackedCount) ->
     case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
               IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
-            {Guid, MsgProperties} = read_pub_record_body(Hdl),
-            Obj = {{Guid, MsgProperties, 1 == IsPersistentNum}, no_del, no_ack},
+            {Guid, MsgProps} = read_pub_record_body(Hdl),
+            Obj = {{Guid, MsgProps, 1 == IsPersistentNum}, no_del, no_ack},
             SegEntries1 = array:set(RelSeq, Obj, SegEntries),
             load_segment_entries(KeepAcked, Hdl, SegEntries1,
                                  UnackedCount + 1);
