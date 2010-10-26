@@ -396,7 +396,7 @@ init(QueueName, true, true) ->
         rabbit_queue_index:recover(
           QueueName, Terms,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
-          fun (Guid) -> 
+          fun (Guid) ->
                   rabbit_msg_store:contains(Guid, PersistentClient)
           end),
     init(true, IndexState, DeltaCount, Terms1,

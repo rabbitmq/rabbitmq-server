@@ -244,7 +244,7 @@ shutdown_terms(Name) ->
         {error, _}   -> [];
         {ok, Terms1} -> Terms1
     end.
-    
+
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     CleanShutdown = detect_clean_shutdown(Dir),
