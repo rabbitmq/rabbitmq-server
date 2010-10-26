@@ -770,7 +770,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                                           protocol = Protocol},
                            sock = Sock,
                            stats_timer = StatsTimer}) ->
-    ok = rabbit_access_control:check_vhost_access(User, VHostPath),
+    ok = rabbit_access_control:check_vhost_access(
+           User#user.username, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     State1 = internal_conserve_memory(

@@ -33,7 +33,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([check_login/2, user_pass_login/2,
+-export([check_login/2, user_pass_login/2, check_user_pass_login/2,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
@@ -58,8 +58,11 @@
 -spec(user_pass_login/2 ::
         (username(), password())
         -> rabbit_types:user() | rabbit_types:channel_exit()).
+-spec(check_user_pass_login/2 ::
+        (username(), password())
+        -> {'ok', rabbit_types:user()} | 'refused').
 -spec(check_vhost_access/2 ::
-        (rabbit_types:user(), rabbit_types:vhost())
+        (username(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
         (username(), rabbit_types:r(atom()), permission_atom())
@@ -124,17 +127,23 @@ check_login(Mechanism, _Response) ->
 
 user_pass_login(User, Pass) ->
     ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
+    case check_user_pass_login(User, Pass) of
+        refused ->
+            rabbit_misc:protocol_error(
+              access_refused, "login refused for user '~s'", [User]);
+        {ok, U} ->
+            U
+    end.
+
+check_user_pass_login(User, Pass) ->
     case lookup_user(User) of
         {ok, U} ->
-            case
-                check_password(Pass, U#user.password_hash) of
-                true -> U;
-                _    -> rabbit_misc:protocol_error(
-                          access_refused, "login refused for user '~s'", [User])
+            case check_password(Pass, U#user.password_hash) of
+                true -> {ok, U};
+                _    -> refused
             end;
         {error, not_found} ->
-            rabbit_misc:protocol_error(
-              access_refused, "login refused for user '~s'", [User])
+            refused
     end.
 
 internal_lookup_vhost_access(Username, VHostPath) ->
@@ -149,7 +158,7 @@ internal_lookup_vhost_access(Username, VHostPath) ->
               end
       end).
 
-check_vhost_access(#user{username = Username}, VHostPath) ->
+check_vhost_access(Username, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     case internal_lookup_vhost_access(Username, VHostPath) of
         {ok, _R} ->
