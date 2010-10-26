@@ -40,10 +40,6 @@
 
 %%--------------------------------------------------------------------
 
-%% TODO this is just a hack, when branch bug23319 is merged this should use
-%% the real permission record
--record(permission2, {configure, write, read}).
-
 remove_user_scope() ->
     {atomic, ok} = mnesia:transform_table(
                      rabbit_user_permission,
@@ -51,9 +47,9 @@ remove_user_scope() ->
                             permission = {permission,
                                           _Scope, Conf, Write, Read}}) ->
                              Perm#user_permission{
-                               permission = #permission2{configure = Conf,
-                                                         write = Write,
-                                                         read = Read}}
+                               permission = #permission{configure = Conf,
+                                                        write = Write,
+                                                        read = Read}}
                      end,
                      record_info(fields, user_permission)),
     ok.
