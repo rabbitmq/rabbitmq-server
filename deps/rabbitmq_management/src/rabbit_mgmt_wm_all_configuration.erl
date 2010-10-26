@@ -154,7 +154,7 @@ export_name(_Name)                -> true.
 rw_state() ->
     [{users,       [name, password, administrator]},
      {vhosts,      [name]},
-     {permissions, [user, vhost, configure, write, read, scope]},
+     {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
      {exchanges,   [name, vhost, type, durable, auto_delete, arguments]},
      {bindings,    [source, vhost, destination, destination_type, routing_key,
@@ -193,8 +193,7 @@ add_vhost(VHost) ->
     rabbit_mgmt_wm_vhost:put_vhost(VHostName).
 
 add_permission(Permission) ->
-    rabbit_access_control:set_permissions(pget(scope,     Permission),
-                                          pget(user,      Permission),
+    rabbit_access_control:set_permissions(pget(user,      Permission),
                                           pget(vhost,     Permission),
                                           pget(configure, Permission),
                                           pget(write,     Permission),
