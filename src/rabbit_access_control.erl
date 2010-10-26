@@ -126,11 +126,11 @@ user_pass_login(User, Pass) ->
     ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
     case lookup_user(User) of
         {ok, U} ->
-            if
-                Pass == U#user.password -> U;
-                true ->
-                    rabbit_misc:protocol_error(
-                      access_refused, "login refused for user '~s'", [User])
+            case
+                check_password(Pass, U#user.password_hash) of
+                true -> U;
+                _    -> rabbit_misc:protocol_error(
+                          access_refused, "login refused for user '~s'", [User])
             end;
         {error, not_found} ->
             rabbit_misc:protocol_error(
@@ -203,7 +203,8 @@ add_user(Username, Password) ->
                       [] ->
                           ok = mnesia:write(rabbit_user,
                                             #user{username = Username,
-                                                  password = Password,
+                                                  password_hash =
+                                                      hash_password(Password),
                                                   is_admin = false},
                                             write);
                       _ ->
@@ -235,10 +236,29 @@ delete_user(Username) ->
 
 change_password(Username, Password) ->
     R = update_user(Username, fun(User) ->
-                                      User#user{password = Password}
+                                      User#user{
+                                        password_hash = hash_password(Password)}
                               end),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
+
+hash_password(Cleartext) ->
+    Salt = make_salt(),
+    Hash = hash_password(Cleartext, Salt),
+    <<Salt/binary, Hash/binary>>.
+
+check_password(Cleartext, <<Salt:8/binary, Hash/binary>>) ->
+    Hash =:= hash_password(Cleartext, Salt).
+
+make_salt() ->
+    {A1,A2,A3} = now(),
+    random:seed(A1, A2, A3),
+    Salt0 = random:uniform(16#ffffffff),
+    base64:encode(<<Salt0:32>>).
+
+hash_password(Cleartext, Salt) ->
+    Salted = <<Salt/binary, Cleartext/binary>>,
+    base64:encode(sha2:hexdigest512(Salted)).
 
 set_admin(Username) ->
     set_admin(Username, true).
