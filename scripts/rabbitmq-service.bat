@@ -232,7 +232,6 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR!"\" ^
-!CLUSTER_CONFIG! ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !STAR!
 

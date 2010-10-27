@@ -98,18 +98,6 @@ Defaults to 5672.
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term>RABBITMQ_CLUSTER_CONFIG_FILE</term>
-          <listitem>
-            <para>
-Defaults to <filename>/etc/rabbitmq/rabbitmq_cluster.config</filename>. If this file is
-present it is used by the server to auto-configure a RabbitMQ cluster.
-See the <ulink url="http://www.rabbitmq.com/clustering.html">clustering guide</ulink>
-for details.
-            </para>
-          </listitem>
-        </varlistentry>
-
       </variablelist>
     </refsect1>
 
