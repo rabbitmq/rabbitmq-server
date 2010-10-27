@@ -16,20 +16,23 @@
         </tr>
       </thead>
       <tbody>
-        <% for (var i = 0; i < permissions.length; i++) { %>
+<%
+for (var i = 0; i < permissions.length; i++) {
+    var permission = permissions[i];
+%>
            <tr<%= alt_rows(i)%>>
 <% if (mode == 'vhost') { %>
-             <td><%= link_to(permissions[i].user, '#/users/' + esc(permissions[i].user)) %></td>
+             <td><%= link_to(permission.user, '#/users/' + esc(permission.user)) %></td>
 <% } else { %>
-             <td><%= link_to(permissions[i].vhost, '#/vhosts/' + esc(permissions[i].vhost)) %></td>
+             <td><%= link_to(permission.vhost, '#/vhosts/' + esc(permission.vhost)) %></td>
 <% } %>
-             <td><%= permissions[i].configure %></td>
-             <td><%= permissions[i].write %></td>
-             <td><%= permissions[i].read %></td>
+             <td><%= permission.configure %></td>
+             <td><%= permission.write %></td>
+             <td><%= permission.read %></td>
              <td class="c">
                <form action="#/permissions" method="delete" class="confirm">
-                 <input type="hidden" name="username" value="<%= permissions[i].user %>"/>
-                 <input type="hidden" name="vhost" value="<%= permissions[i].vhost %>"/>
+                 <input type="hidden" name="username" value="<%= permission.user %>"/>
+                 <input type="hidden" name="vhost" value="<%= permission.vhost %>"/>
                  <input type="submit" value="Clear"/>
                </form>
              </td>
