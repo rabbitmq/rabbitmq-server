@@ -29,25 +29,25 @@
 %%   Contributor(s): ______________________________________.
 %%
 -module(rabbit_stomp_client_sup).
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 -define(MAX_WAIT, 16#ffffffff).
 -export([start_link/1, init/1]).
 
 start_link(Sock) ->
-    {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, ProcessorPid} =
-        supervisor:start_child(SupPid,
+        supervisor2:start_child(SupPid,
                                {rabbit_stomp_processor,
                                 {rabbit_stomp_processor, start_link, [Sock]},
-                                transient, ?MAX_WAIT, worker,
+                                intrinsic, ?MAX_WAIT, worker,
                                 [rabbit_stomp_processor]}),
     {ok, ReaderPid} =
-        supervisor:start_child(SupPid,
+        supervisor2:start_child(SupPid,
                                {rabbit_stomp_reader,
                                 {rabbit_stomp_reader,
                                  start_link, [ProcessorPid]},
-                                transient, ?MAX_WAIT, worker,
+                                intrinsic, ?MAX_WAIT, worker,
                                 [rabbit_stomp_reader]}),
     {ok, SupPid, ReaderPid}.
 
