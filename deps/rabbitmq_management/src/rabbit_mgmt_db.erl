@@ -50,48 +50,31 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    ensure_statistics_enabled(),
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(
-                         rabbit_management, force_fine_statistics),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    case {ForceStats, StatsLevel} of
-        {true,  fine} ->
-            ok;
-        {true,  _} ->
-            application:set_env(rabbit, collect_statistics, fine),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to fine.~n");
-        {false, none} ->
-            application:set_env(rabbit, collect_statistics, coarse),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to coarse.~n");
-        {_, _} ->
-            ok
+    case gen_server:start_link({global, ?MODULE}, ?MODULE, [], []) of
+        {error, {already_started, _}} -> ignore;
+        Else                          -> Else
     end.
 
 event(Event) ->
-    gen_server:cast(?MODULE, {event, Event}).
+    gen_server:cast({global, ?MODULE}, {event, Event}).
 
 get_queues(Qs) ->
-    gen_server:call(?MODULE, {get_queues, Qs}, infinity).
+    gen_server:call({global, ?MODULE}, {get_queues, Qs}, infinity).
 
 get_connections() ->
-    gen_server:call(?MODULE, get_connections, infinity).
+    gen_server:call({global, ?MODULE}, get_connections, infinity).
 
 get_connection(Name) ->
-    gen_server:call(?MODULE, {get_connection, Name}, infinity).
+    gen_server:call({global, ?MODULE}, {get_connection, Name}, infinity).
 
 get_channels() ->
-    gen_server:call(?MODULE, get_channels, infinity).
+    gen_server:call({global, ?MODULE}, get_channels, infinity).
 
 get_channel(Name) ->
-    gen_server:call(?MODULE, {get_channel, Name}, infinity).
+    gen_server:call({global, ?MODULE}, {get_channel, Name}, infinity).
 
 get_overview() ->
-    gen_server:call(?MODULE, get_overview, infinity).
+    gen_server:call({global, ?MODULE}, get_overview, infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -234,7 +217,6 @@ augment_msg_stats_items(Props, Tables) ->
 %% TODO some sort of generalised query mechanism for the coarse stats?
 
 init([]) ->
-    rabbit_mgmt_db_handler:add_handler(),
     {ok, #state{tables = orddict:from_list(
                            [{Key, ets:new(anon, [private])} ||
                                Key <- ?TABLES])}}.
