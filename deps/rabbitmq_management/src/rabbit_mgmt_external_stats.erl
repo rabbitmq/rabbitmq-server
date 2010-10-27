@@ -19,11 +19,6 @@
 %%   Contributor(s): ______________________________________.
 %%
 
-%% TODO this is vestigal from the status plugin. Do we need a caching
-%% mechanism for the os-level info this returns?
-
-%% TODO rename mem_total to mem_limit
-
 -module(rabbit_mgmt_external_stats).
 
 -behaviour(gen_server).
@@ -38,12 +33,11 @@
 
 -define(REFRESH_RATIO, 5000).
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
-               mem_used, mem_total, proc_used, proc_total, statistics_level]).
+               mem_used, mem_limit, proc_used, proc_total, statistics_level]).
 
 %%--------------------------------------------------------------------
 
--record(state, {time_ms, fd_used, fd_total,
-                mem_used, mem_total, proc_used, proc_total}).
+-record(state, {time_ms, fd_used, fd_total}).
 
 %%--------------------------------------------------------------------
 
@@ -122,7 +116,7 @@ find_files_line(["  File " ++ Rest | _T]) ->
 find_files_line([_H | T]) ->
     find_files_line(T).
 
-get_total_memory() ->
+get_memory_limit() ->
     try
         vm_memory_monitor:get_memory_limit()
     catch exit:{noproc, _} -> memory_monitoring_disabled
@@ -132,15 +126,17 @@ get_total_memory() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(os_pid,      _State)                         -> list_to_binary(os:getpid());
-i(mem_ets,     _State)                         -> erlang:memory(ets);
-i(mem_binary,  _State)                         -> erlang:memory(binary);
-i(fd_used,     #state{fd_used    = FdUsed})    -> FdUsed;
-i(fd_total,    #state{fd_total   = FdTotal})   -> FdTotal;
-i(mem_used,    #state{mem_used   = MemUsed})   -> MemUsed;
-i(mem_total,   #state{mem_total  = MemTotal})  -> MemTotal;
-i(proc_used,   #state{proc_used  = ProcUsed})  -> ProcUsed;
-i(proc_total,  #state{proc_total = ProcTotal}) -> ProcTotal;
+i(os_pid,      _State)                       -> list_to_binary(os:getpid());
+i(mem_ets,     _State)                       -> erlang:memory(ets);
+i(mem_binary,  _State)                       -> erlang:memory(binary);
+i(fd_used,     #state{fd_used    = FdUsed})  -> FdUsed;
+i(fd_total,    #state{fd_total   = FdTotal}) -> FdTotal;
+i(mem_used,    _State)                       -> erlang:memory(total);
+i(mem_limit,   _State)                       -> get_memory_limit();
+i(proc_used,   _State)                       -> erlang:system_info(
+                                                  process_count);
+i(proc_total,  _State)                       -> erlang:system_info(
+                                                  process_limit);
 i(statistics_level, _State) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     StatsLevel.
@@ -148,9 +144,7 @@ i(statistics_level, _State) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    State = #state{fd_total   = file_handle_cache:ulimit(),
-                   mem_total  = get_total_memory(),
-                   proc_total = erlang:system_info(process_limit)},
+    State = #state{fd_total   = file_handle_cache:ulimit()},
     {ok, internal_update(State)}.
 
 
@@ -180,7 +174,4 @@ code_change(_, State, _) -> {ok, State}.
 
 internal_update(State) ->
     State#state{time_ms   = rabbit_mgmt_util:now_ms(),
-                fd_used   = get_used_fd(),
-                mem_used  = erlang:memory(total),
-                proc_used = erlang:system_info(process_count)}.
-
+                fd_used   = get_used_fd()}.

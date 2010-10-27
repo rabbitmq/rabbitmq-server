@@ -57,8 +57,8 @@ for (var i = 0; i < nodes.length; i++) {
      </td>
      <td class="status">
 <% if (node.mem_total != 'memory_monitoring_disabled') { %>
-       <div class="<%= fmt_color(node.mem_used / node.mem_total) %>">
-         <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_total) %>
+       <div class="<%= fmt_color(node.mem_used / node.mem_limit) %>">
+         <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>
        </div>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
