@@ -50,7 +50,6 @@ init([Listeners]) ->
                    supervisor,
                    [tcp_client_sup]} | make_listener_specs(Listeners)
                   ],
-    %% TODO rework supervisor creation to be more OTP like
     {ok, {{one_for_all, 10, 10}, ChildSpecs}}.
 
 make_listener_specs(Listeners) ->
