@@ -34,15 +34,14 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    OSStats = rabbit_mgmt_external_stats:info(),
     Overview = rabbit_mgmt_db:get_overview(),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     rabbit_mgmt_util:reply(
-      OSStats ++ Overview ++
+      Overview ++
+          %% NB: node and stats level duplicate what's in /nodes but we want
+          %% to (a) know which node we're talking to and (b) use the stats
+          %% level to switch features on / off in the UI.
           [{node,             node()},
-           {os_pid,           list_to_binary(os:getpid())},
-           {mem_ets,          erlang:memory(ets)},
-           {mem_binary,       erlang:memory(binary)},
            {statistics_level, StatsLevel},
            {listeners,        [rabbit_mgmt_format:listener(L)
                                || L <- rabbit_networking:active_listeners()]}],

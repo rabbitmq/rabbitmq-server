@@ -32,13 +32,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([info/0]).
+-export([info/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [fd_used, fd_total,
-               mem_used, mem_total, proc_used, proc_total]).
+-define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
+               mem_used, mem_total, proc_used, proc_total, statistics_level]).
 
 %%--------------------------------------------------------------------
 
@@ -50,8 +50,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-info() ->
-    gen_server2:call(?MODULE, {info, ?KEYS}, infinity).
+info(Node) ->
+    gen_server2:call({?MODULE, Node}, {info, ?KEYS}, infinity).
 
 %%--------------------------------------------------------------------
 
@@ -132,12 +132,18 @@ get_total_memory() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
+i(os_pid,      _State)                         -> list_to_binary(os:getpid());
+i(mem_ets,     _State)                         -> erlang:memory(ets);
+i(mem_binary,  _State)                         -> erlang:memory(binary);
 i(fd_used,     #state{fd_used    = FdUsed})    -> FdUsed;
 i(fd_total,    #state{fd_total   = FdTotal})   -> FdTotal;
 i(mem_used,    #state{mem_used   = MemUsed})   -> MemUsed;
 i(mem_total,   #state{mem_total  = MemTotal})  -> MemTotal;
 i(proc_used,   #state{proc_used  = ProcUsed})  -> ProcUsed;
-i(proc_total,  #state{proc_total = ProcTotal}) -> ProcTotal.
+i(proc_total,  #state{proc_total = ProcTotal}) -> ProcTotal;
+i(statistics_level, _State) ->
+    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
+    StatsLevel.
 
 %%--------------------------------------------------------------------
 

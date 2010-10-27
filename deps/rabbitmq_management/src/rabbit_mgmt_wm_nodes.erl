@@ -40,9 +40,16 @@ to_json(ReqData, Context) ->
     Running = proplists:get_value(running_nodes, S),
     rabbit_mgmt_util:reply_list(
       lists:append(
-        [[[{name, Node}, {type, Type}, {running, lists:member(Node, Running)}]
+        [[make_entry(Node, Type, lists:member(Node, Running))
           || Node <- proplists:get_value(Type, Nodes)] || Type <- Types]),
       ReqData, Context).
+
+make_entry(Node, Type, Running) ->
+    [{name, Node}, {type, Type}, {running, Running}]
+        ++ case Running of
+               true -> rabbit_mgmt_external_stats:info(Node);
+               _    -> []
+           end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
