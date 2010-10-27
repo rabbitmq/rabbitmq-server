@@ -37,7 +37,5 @@ start_link() ->
               Else                          -> Else
           end,
     %% Needs to happen after we know the DB's up but before boot step finished
-    io:format("Installing handler~n", []),
     rabbit_mgmt_db_handler:add_handler(),
-    io:format("Installed handler~n", []),
     Res.
