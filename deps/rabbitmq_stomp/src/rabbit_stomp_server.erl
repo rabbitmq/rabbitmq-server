@@ -47,9 +47,9 @@
 start(Listeners) ->
     {ok, Pid} = supervisor:start_child(
                rabbit_stomp_sup,
-               {rabbit_stomp_client_sup,
+               {rabbit_stomp_client_sup_sup,
                 {tcp_client_sup, start_link,
-                 [{local, rabbit_stomp_client_sup},
+                 [{local, rabbit_stomp_client_sup_sup},
                   {?MODULE, start_link,[]}]},
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok = start_listeners(Listeners),

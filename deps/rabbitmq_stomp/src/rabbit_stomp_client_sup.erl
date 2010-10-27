@@ -28,30 +28,29 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_stomp).
+-module(rabbit_stomp_client_sup).
+-behaviour(supervisor).
 
--export([start/0, stop/0, start/2, stop/1]).
+-define(MAX_WAIT, 16#ffffffff).
+-export([start_link/1, init/1]).
 
-start() ->
-    start(normal,[]),
-    ok.
+start_link(Sock) ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    {ok, ProcessorPid} =
+        supervisor:start_child(SupPid,
+                               {rabbit_stomp_processor,
+                                {rabbit_stomp_processor, start_link, [Sock]},
+                                transient, ?MAX_WAIT, worker,
+                                [rabbit_stomp_processor]}),
+    {ok, ReaderPid} =
+        supervisor:start_child(SupPid,
+                               {rabbit_stomp_reader,
+                                {rabbit_stomp_reader,
+                                 start_link, [ProcessorPid]},
+                                transient, ?MAX_WAIT, worker,
+                                [rabbit_stomp_reader]}),
+    {ok, SupPid, ReaderPid}.
 
-stop() ->
-    ok.
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.
 
-start(normal, []) ->
-    Listeners = parse_listener_configuration(),
-    io:format("starting ~s (binding to ~p)  ...",
-              ["STOMP Adapter", Listeners]),
-    {ok, SupPid} = rabbit_stomp_sup:start_link(Listeners),
-    io:format("done~n"),
-    {ok, SupPid}.
-
-stop(_State) ->
-    ok.
-
-parse_listener_configuration() ->
-    case application:get_env(listeners) of
-        undefined -> throw({error, {stomp_configuration_not_found}});
-        {ok, Listeners} -> Listeners
-    end.

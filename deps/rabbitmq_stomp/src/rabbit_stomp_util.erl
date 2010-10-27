@@ -33,12 +33,16 @@
 
 -export([parse_destination/1, parse_routing_information/1,
          create_message_id/3, parse_message_id/1]).
+-export([longstr_field/2]).
 
 -define(QUEUE_PREFIX, "/queue").
 -define(TOPIC_PREFIX, "/topic").
 -define(EXCHANGE_PREFIX, "/exchange").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
+
+longstr_field(K, V) ->
+    {list_to_binary(K), longstr, list_to_binary(V)}.
 
 create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
     [ConsumerTag,

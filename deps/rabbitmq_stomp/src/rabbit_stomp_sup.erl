@@ -31,11 +31,58 @@
 -module(rabbit_stomp_sup).
 -behaviour(supervisor).
 
--export([start_link/0, init/1]).
+-export([start_link/1, init/1]).
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+-export([listener_started/2, listener_stopped/2, start_client/1]).
 
-init([]) ->
-    {ok, {{one_for_all, 10, 10}, []}}.
+start_link(Listeners) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
+
+init([Listeners]) ->
+    io:format("Listeners:~p~n", [Listeners]),
+    ChildSpecs = [
+                  {rabbit_stomp_client_sup_sup,
+                   {tcp_client_sup, start_link,
+                    [{local, rabbit_stomp_client_sup_sup},
+                     {rabbit_stomp_client_sup, start_link,[]}]},
+                   transient,
+                   infinity,
+                   supervisor,
+                   [tcp_client_sup]} | make_listener_specs(Listeners)
+                  ],
+    %% TODO rework supervisor creation to be more OTP like
+    {ok, {{one_for_all, 10, 10}, ChildSpecs}}.
+
+make_listener_specs(Listeners) ->
+    lists:foldl(
+      fun({Host, Port}, Acc) ->
+              {IPAddress, Name} = rabbit_networking:check_tcp_listener_address(
+                                    rabbit_stomp_listener_sup,
+                                    Host,
+                                    Port),
+              [{Name,
+                {tcp_listener_sup, start_link,
+                 [IPAddress, Port,
+                  [{packet, raw},
+                   {reuseaddr, true}],
+                  {?MODULE, listener_started, []},
+                  {?MODULE, listener_stopped, []},
+                  {?MODULE, start_client, []}, "STOMP Listener"]},
+   transient, infinity, supervisor, [tcp_listener_sup]} | Acc]
+
+      end, [], Listeners).
+
+listener_started(_IPAddress, _Port) ->
+    ok.
+
+listener_stopped(_IPAddress, _Port) ->
+    ok.
+
+start_client(Sock) ->
+    {ok, SupPid, ReaderPid} =
+        supervisor:start_child(rabbit_stomp_client_sup_sup, [Sock]),
+    ok = gen_tcp:controlling_process(Sock, ReaderPid),
+    ReaderPid ! {go, Sock},
+    SupPid.
+
 
