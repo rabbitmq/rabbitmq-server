@@ -25,7 +25,7 @@
 -export([protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, binding/1, url/2, application/1]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
--export([args_type/1]).
+-export([args_type/1, listener/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -98,6 +98,13 @@ user(User) ->
     [{name,          User#user.username},
      {password,      User#user.password},
      {administrator, User#user.is_admin}].
+
+listener(#listener{node = Node, protocol = Protocol,
+                   host = Host, port = Port}) ->
+    [{node, Node},
+     {protocol, Protocol},
+     {host, list_to_binary(Host)},
+     {port, Port}].
 
 pack_binding_props(<<"">>, []) ->
     <<"_">>;

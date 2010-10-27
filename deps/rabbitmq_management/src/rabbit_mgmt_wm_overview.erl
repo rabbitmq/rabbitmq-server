@@ -43,7 +43,9 @@ to_json(ReqData, Context) ->
            {os_pid,           list_to_binary(os:getpid())},
            {mem_ets,          erlang:memory(ets)},
            {mem_binary,       erlang:memory(binary)},
-           {statistics_level, StatsLevel}],
+           {statistics_level, StatsLevel},
+           {listeners,        [rabbit_mgmt_format:listener(L)
+                               || L <- rabbit_networking:active_listeners()]}],
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->

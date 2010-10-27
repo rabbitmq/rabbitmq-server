@@ -37,12 +37,12 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [bound_to, fd_used, fd_total,
+-define(KEYS, [fd_used, fd_total,
                mem_used, mem_total, proc_used, proc_total]).
 
 %%--------------------------------------------------------------------
 
--record(state, {time_ms, bound_to, fd_used, fd_total,
+-record(state, {time_ms, fd_used, fd_total,
                 mem_used, mem_total, proc_used, proc_total}).
 
 %%--------------------------------------------------------------------
@@ -132,7 +132,6 @@ get_total_memory() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(bound_to,    #state{bound_to   = BoundTo})   -> BoundTo;
 i(fd_used,     #state{fd_used    = FdUsed})    -> FdUsed;
 i(fd_total,    #state{fd_total   = FdTotal})   -> FdTotal;
 i(mem_used,    #state{mem_used   = MemUsed})   -> MemUsed;
@@ -143,16 +142,9 @@ i(proc_total,  #state{proc_total = ProcTotal}) -> ProcTotal.
 %%--------------------------------------------------------------------
 
 init([]) ->
-    %% TODO obtain this information dynamically from
-    %% rabbit_networking:active_listeners(), or ditch it.
-    {ok, Binds} = application:get_env(rabbit, tcp_listeners),
-    BoundTo = lists:flatten(
-                [rabbit_mgmt_format:print("~s:~p", [Addr,Port]) ||
-                    {Addr, Port} <- Binds]),
     State = #state{fd_total   = file_handle_cache:ulimit(),
                    mem_total  = get_total_memory(),
-                   proc_total = erlang:system_info(process_limit),
-                   bound_to   = BoundTo},
+                   proc_total = erlang:system_info(process_limit)},
     {ok, internal_update(State)}.
 
 
@@ -185,3 +177,4 @@ internal_update(State) ->
                 fd_used   = get_used_fd(),
                 mem_used  = erlang:memory(total),
                 proc_used = erlang:system_info(process_count)}.
+

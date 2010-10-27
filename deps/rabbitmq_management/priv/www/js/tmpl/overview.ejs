@@ -23,10 +23,6 @@
     <td><%= overview.os_pid %></td>
   </tr>
   <tr>
-    <th>Bound To</th>
-    <td><%= overview.bound_to %></td>
-  </tr>
-  <tr>
     <th>File Descriptors</th>
     <td class="status">
       <div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>">
@@ -54,6 +50,33 @@
       </div>
     </td>
   </tr>
+<% } %>
+</table>
+</div>
+</div>
+
+<div class="section">
+<h2>Listening on</h2>
+<div>
+<table class="list">
+  <tr>
+    <th>Host</th>
+    <th>Port</th>
+  </tr>
+<%
+for (var i = 0; i < overview.listeners.length; i++) {
+    var listener = overview.listeners[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td>
+       <%= listener.host %>
+       <sub><%= listener.node %></sub>
+     </td>
+     <td>
+       <%= listener.port %>
+       <sub><%= listener.protocol %></sub>
+     </td>
+   </tr>
 <% } %>
 </table>
 </div>
