@@ -3,7 +3,7 @@
 <% if (statistics_level == 'fine') { %>
 <div class="section">
 <h2>Message Rates</h2>
-<div class="updatable">
+<div class="hider updatable">
 <%= message_rates(channel.message_stats) %>
 <span class="br"></span>
 </div>
@@ -12,7 +12,7 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="updatable">
+<div class="hider updatable">
 <table class="facts">
  <tr><th>Connection</th><td><%= link_conn(channel.connection_details.name) %></td></tr>
  <tr><th>Virtual host</th><td><%= channel.vhost %></td></tr>
