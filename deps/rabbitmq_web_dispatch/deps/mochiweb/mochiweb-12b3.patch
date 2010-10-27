@@ -473,20 +473,23 @@ index 0d0b84b..d7586cb 100755
      io:fwrite("*** ~p~n", [E]),
 --- a/support/include.mk
 +++ b/support/include.mk
-@@ -29,9 +29,15 @@
- APP_FILES := $(wildcard *.app.src)
- EBIN_FILES = $(ERL_OBJECTS) $(APP_FILES:%.app.src=../ebin/%.app)
+@@ -31,7 +31,7 @@
  MODULES = $(ERL_SOURCES:%.erl=%)
-+IS_CYGWIN=$(shell if [ $(shell expr "$(shell uname -s)" : 'CYGWIN_NT') -gt 0 ]; then echo "true"; else echo "false"; fi)
-+ifeq ($(IS_CYGWIN),true)
-+    EMPTY_STRING=\"\"
-+else
-+    EMPTY_STRING=""
-+endif
 
  ../ebin/%.app: %.app.src
 -	../support/make_app.escript $< $@ "" "$(MODULES)"
-+	../support/make_app.escript $< $@ $(EMPTY_STRING) "$(MODULES)"
++	../support/make_app.escript $< $@ default "$(MODULES)"
 
 
  $(EBIN_DIR)/%.$(EMULATOR): %.erl
+--- a/support/make_app.escript
++++ b/support/make_app.escript
+@@ -63,7 +63,7 @@
+     end,
+     io:fwrite(Fd, "~p.~n", [T]).
+
+-vsn(Vsn, Attrs) when Vsn =:= '' orelse Vsn =:= "" ->
++vsn(Vsn, Attrs) when Vsn =:= '' orelse Vsn =:= "" orelse Vsn =:= "default" ->
+     {vsn, "1.3"}; %% By inspection
+ vsn(Vsn, _Attrs) ->
+     {vsn, Vsn}.
