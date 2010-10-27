@@ -57,7 +57,7 @@
 
 <div class="section">
 <h2>Listening on</h2>
-<div>
+<div class="hider">
 <table class="list">
   <tr>
     <th>Host</th>
@@ -84,7 +84,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 
 <div class="section-hidden">
 <h2>Applications</h2>
-<div>
+<div class="hider">
 <table class="list">
   <thead>
     <tr>
@@ -107,7 +107,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 
 <div class="section-hidden administrator-only">
 <h2>Import / Export Configuration</h2>
-<div>
+<div class="hider">
   <p>
     The configuration consists of users, virtual hosts, permissions,
     exchanges, queues and bindings. It does not include the contents of
@@ -160,7 +160,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 <% if (overview.statistics_level != 'fine') { %>
 <div class="section-hidden">
 <h2>Message Rates Disabled</h2>
-<div>
+<div class="hider">
 <p>
   The statistics level in this RabbitMQ server is currently set to
   <code><%= overview.statistics_level %></code>. Message rates are therefore
