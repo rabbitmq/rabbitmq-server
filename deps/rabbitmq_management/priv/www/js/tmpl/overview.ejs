@@ -27,7 +27,7 @@
     <td class="status">
       <div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>">
         <%= overview.fd_used %> / <%= overview.fd_total %>
-        <sub>(used/available)</sub>
+        <sub>(used / available)</sub>
       </div>
     </td>
   </tr>
@@ -36,7 +36,7 @@
     <td class="status">
       <div class="<%= fmt_color(overview.proc_used / overview.proc_total) %>">
         <%= overview.proc_used %> / <%= overview.proc_total %>
-        <sub>(used/available)</sub>
+        <sub>(used / available)</sub>
       </div>
     </td>
   </tr>
@@ -46,7 +46,7 @@
     <td class="status">
       <div class="<%= fmt_color(overview.mem_used / overview.mem_total) %>">
         <%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %>
-        <sub>(used/available)</sub>
+        <sub>(used / high watermark)</sub>
       </div>
     </td>
   </tr>
