@@ -30,13 +30,12 @@
 -behaviour(amqp_gen_connection).
 
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
-         info_keys/0, handle_message/2, closing_state_set/3,
-         channels_terminated/1]).
+         info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
 -record(state, {user,
                 vhost,
                 collector,
-                closing_reason = false %% false | Reason
+                closing_reason %% undefined | Reason
                }).
 
 -define(INFO_KEYS, [type]).
@@ -55,7 +54,7 @@ do(_Method, _State) ->
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 
-closing_state_set(_ChannelCloseType, Reason, State) ->
+closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
 
 channels_terminated(State = #state{closing_reason = Reason,

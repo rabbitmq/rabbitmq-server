@@ -30,8 +30,7 @@
 -behaviour(amqp_gen_connection).
 
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
-         info_keys/0, handle_message/2, closing_state_set/3,
-         channels_terminated/1]).
+         info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
@@ -41,7 +40,7 @@
                 heartbeat,
                 writer0,
                 frame_max,
-                closing_reason = false, %% false | Reason
+                closing_reason, %% undefined | Reason
                 waiting_socket_close = false}).
 
 -define(INFO_KEYS, [type, heartbeat, frame_max, sock]).
@@ -82,7 +81,7 @@ handle_message({channel_exit, _, Reason}, State) ->
 handle_message(timeout, State) ->
     {stop, heartbeat_timeout, State}.
 
-closing_state_set(_ChannelCloseType, Reason, State) ->
+closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
 
 channels_terminated(State = #state{closing_reason =

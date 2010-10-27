@@ -237,6 +237,5 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
 
 signal_channels_connection_closing(ChannelCloseType,
                                    #state{map_pid_num = MapPN}) ->
-    dict:fold(fun (Pid, _, _) ->
-                      amqp_channel:connection_closing(Pid, ChannelCloseType)
-              end, none, MapPN).
+    [amqp_channel:connection_closing(Pid, ChannelCloseType)
+        || Pid <- dict:fetch_keys(MapPN)].

@@ -569,7 +569,7 @@ handle_cast({method, Method, Content}, State) ->
 %% @private
 handle_cast({connection_closing, CloseType},
             #state{rpc_requests = RpcQueue,
-                   closing = Closing} = State) ->
+                   closing      = Closing} = State) ->
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
             erlang:send_after(?TIMEOUT_FLUSH, self(),
@@ -580,7 +580,7 @@ handle_cast({connection_closing, CloseType},
             erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
                               {shutdown, timed_out_waiting_close_ok,
                                connection_closing}),
-            {noreply, State};
+            {noreply, State#state{closing = connection}};
         _ ->
             {stop, connection_closing, State}
     end.

@@ -137,8 +137,8 @@ behaviour_info(callbacks) ->
      %% handle_message(Message, State) -> CallbackReply
      {handle_message, 2},
 
-     %% closing_state_set(flush|abrupt, Reason, State) -> CallbackReply
-     {closing_state_set, 3},
+     %% closing(flush|abrupt, Reason, State) -> CallbackReply
+     {closing, 3},
 
      %% channels_terminated(State) -> CallbackReply
      {channels_terminated, 1}
@@ -305,8 +305,7 @@ set_closing_state(ChannelCloseType, NewClosing,
             true  -> NewClosing;
             false -> CurClosing
         end,
-    callback(closing_state_set,
-             [ChannelCloseType, closing_to_reason(ResClosing)],
+    callback(closing, [ChannelCloseType, closing_to_reason(ResClosing)],
              State#state{closing = ResClosing}).
 
 closing_priority(false)                                     -> 99;
