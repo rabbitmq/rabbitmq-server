@@ -308,12 +308,13 @@ vertices(_Module, Steps) ->
     [{StepName, {StepName, Atts}} || {StepName, Atts} <- Steps].
 
 edges(_Module, Steps) ->
-    lists:flatten(
-      [[[{StepName, PrecedingStepName}
-         || {requires, PrecedingStepName} <- Atts],
-        [{SucceedingStepName, StepName}
-         || {enables, SucceedingStepName} <- Atts]]
-       || {StepName, Atts} <- Steps]).
+    [case Key of
+         requires -> {StepName, OtherStep};
+         enables  -> {OtherStep, StepName}
+     end || {StepName, Atts} <- Steps,
+            Key <- [requires, enables],
+            {Key1, OtherStep} <- Atts,
+            Key1 =:= Key].
 
 graph_build_error({vertex, duplicate, StepName}) ->
     boot_error("Duplicate boot step name: ~w~n", [StepName]);

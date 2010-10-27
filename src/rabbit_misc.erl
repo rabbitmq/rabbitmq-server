@@ -737,36 +737,31 @@ module_attributes(Module) ->
     end.
 
 all_module_attributes(Name) ->
-    AllApps = [App || {App, _, _} <- application:loaded_applications()],
-    Modules = lists:usort(
-                lists:append([Modules
-                              || {ok, Modules} <-
-                                     [application:get_key(App, modules)
-                                      || App <- AllApps]])),
+    Modules =
+        lists:usort(
+          lists:append(
+            [Modules || {App, _, _}   <- application:loaded_applications(),
+                        {ok, Modules} <- [application:get_key(App, modules)]])),
     lists:foldl(
       fun (Module, Acc) ->
-              case lists:append(
-                     [Atts || {N, Atts} <- module_attributes(Module),
-                              N =:= Name]) of
+              case lists:append([Atts || {N, Atts} <- module_attributes(Module),
+                                         N =:= Name]) of
                   []   -> Acc;
-                  Atts -> dict:update(Module, fun (Old) -> Atts ++ Old end,
-                                      Atts, Acc)
+                  Atts -> [{Module, Atts} | Acc]
               end
-      end, dict:new(), Modules).
+      end, [], Modules).
+
 
 build_acyclic_graph(VertexFun, EdgeFun, ErrorFun, Graph) ->
     G = digraph:new([acyclic]),
-    dict:fold(
-      fun (Module, Values, _Acc) ->
-              [case digraph:vertex(G, Vertex) of
-                   false -> digraph:add_vertex(G, Vertex, Label);
-                   _     -> ErrorFun({vertex, duplicate, Vertex})
-               end || {Vertex, Label} <- VertexFun(Module, Values)]
-      end, ok, Graph),
-    dict:fold(fun (Module, Values, _Acc) ->
-                      [case digraph:add_edge(G, From, To) of
-                           {error, E} -> ErrorFun({edge, E, From, To});
-                           _          -> ok
-                       end || {From, To} <- EdgeFun(Module, Values)]
-              end, ok, Graph),
+    [ case digraph:vertex(G, Vertex) of
+          false -> digraph:add_vertex(G, Vertex, Label);
+          _     -> ErrorFun({vertex, duplicate, Vertex})
+      end || {Module, Atts} <- Graph,
+             {Vertex, Label} <- VertexFun(Module, Atts) ],
+    [ case digraph:add_edge(G, From, To) of
+          {error, E} -> ErrorFun({edge, E, From, To});
+          _          -> ok
+      end || {Module, Atts} <- Graph,
+             {From, To} <- EdgeFun(Module, Atts) ],
     G.
