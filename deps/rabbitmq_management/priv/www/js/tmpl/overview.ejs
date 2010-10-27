@@ -57,7 +57,7 @@
 
 <div class="section">
 <h2>Listening on</h2>
-<div class="hider">
+<div class="hider updatable">
 <table class="list">
   <tr>
     <th>Host</th>
@@ -75,6 +75,35 @@ for (var i = 0; i < overview.listeners.length; i++) {
      <td>
        <%= listener.port %>
        <sub><%= listener.protocol %></sub>
+     </td>
+   </tr>
+<% } %>
+</table>
+</div>
+</div>
+
+<div class="section<% if (!nodes_interesting) { %>-hidden<% } %>">
+<h2>Cluster nodes</h2>
+<div class="hider updatable">
+<table class="list">
+  <tr>
+    <th>Name</th>
+    <th>Type</th>
+    <th>Running</th>
+  </tr>
+<%
+for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td>
+       <%= node.name %>
+     </td>
+     <td>
+       <%= node.type %>
+     </td>
+     <td class="c">
+       <%= fmt_boolean(node.running) %>
      </td>
    </tr>
 <% } %>

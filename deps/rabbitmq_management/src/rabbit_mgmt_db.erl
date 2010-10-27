@@ -304,10 +304,10 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
               pget(peer_port, Stats)]),
     handle_created(
       connection_stats, [{name, Name} | Stats],
-      [{fun rabbit_mgmt_format:ip/1,       [address, peer_address]},
-       {fun rabbit_mgmt_format:pid/1,      [pid]},
-       {fun rabbit_mgmt_format:protocol/1, [protocol]},
-       {fun rabbit_mgmt_format:table/1,    [client_properties]}], State);
+      [{fun rabbit_mgmt_format:ip/1,           [address, peer_address]},
+       {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
+       {fun rabbit_mgmt_format:protocol/1,     [protocol]},
+       {fun rabbit_mgmt_format:table/1,        [client_properties]}], State);
 
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
@@ -327,7 +327,9 @@ handle_event(#event{type = channel_created, props = Stats},
                                      pget(peer_port,    Conn),
                                      pget(number,       Stats)]),
     handle_created(channel_stats, [{name, Name}|Stats],
-                   [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
+                   [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
+                    {fun rabbit_mgmt_format:pid/1,          [connection]}],
+                   State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
