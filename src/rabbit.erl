@@ -312,9 +312,8 @@ edges(_Module, Steps) ->
          requires -> {StepName, OtherStep};
          enables  -> {OtherStep, StepName}
      end || {StepName, Atts} <- Steps,
-            Key <- [requires, enables],
-            {Key1, OtherStep} <- Atts,
-            Key1 =:= Key].
+            {Key, OtherStep} <- Atts,
+            Key =:= requires orelse Key =:= enables].
 
 graph_build_error({vertex, duplicate, StepName}) ->
     boot_error("Duplicate boot step name: ~w~n", [StepName]);
