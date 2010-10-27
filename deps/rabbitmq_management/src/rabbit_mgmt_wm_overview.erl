@@ -43,9 +43,16 @@ to_json(ReqData, Context) ->
           %% level to switch features on / off in the UI.
           [{node,             node()},
            {statistics_level, StatsLevel},
+           {statistics_db_node, stats_db_node()},
            {listeners,        [rabbit_mgmt_format:listener(L)
                                || L <- rabbit_networking:active_listeners()]}],
       ReqData, Context).
+
+stats_db_node() ->
+    case global:whereis_name(rabbit_mgmt_db) of
+        undefined -> not_running;
+        Pid       -> node(Pid)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

@@ -78,9 +78,12 @@ for (var i = 0; i < nodes.length; i++) {
 <% } %>
 </table>
 
+<% if (nodes_interesting) { %>
 <p>
-  Management plugin running on node <b><%= overview.node %></b>
+  You are connected to: <b><%= overview.node %></b>.<br/>
+  Statistics database on: <b><%= overview.statistics_db_node %></b>.
 </p>
+<% } %>
 
 </div>
 </div>
