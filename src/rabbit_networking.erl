@@ -41,7 +41,7 @@
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
--export([tcp_listener_started/2, tcp_listener_stopped/2,
+-export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
 
 -include("rabbit.hrl").
@@ -160,14 +160,14 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     {IPAddress, Name}.
 
 start_tcp_listener(Host, Port) ->
-    start_listener(Host, Port, "TCP Listener",
+    start_listener(Host, Port, amqp, "TCP Listener",
                    {?MODULE, start_client, []}).
 
 start_ssl_listener(Host, Port, SslOpts) ->
-    start_listener(Host, Port, "SSL Listener",
+    start_listener(Host, Port, 'amqp/ssl', "SSL Listener",
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
-start_listener(Host, Port, Label, OnConnect) ->
+start_listener(Host, Port, Protocol, Label, OnConnect) ->
     {IPAddress, Name} =
         check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
@@ -175,8 +175,8 @@ start_listener(Host, Port, Label, OnConnect) ->
                {Name,
                 {tcp_listener_sup, start_link,
                  [IPAddress, Port, ?RABBIT_TCP_OPTS ,
-                  {?MODULE, tcp_listener_started, []},
-                  {?MODULE, tcp_listener_stopped, []},
+                  {?MODULE, tcp_listener_started, [Protocol]},
+                  {?MODULE, tcp_listener_stopped, [Protocol]},
                   OnConnect, Label]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
@@ -188,19 +188,19 @@ stop_tcp_listener(Host, Port) ->
     ok = supervisor:delete_child(rabbit_sup, Name),
     ok.
 
-tcp_listener_started(IPAddress, Port) ->
+tcp_listener_started(Protocol, IPAddress, Port) ->
     ok = mnesia:dirty_write(
            rabbit_listener,
            #listener{node = node(),
-                     protocol = tcp,
+                     protocol = Protocol,
                      host = tcp_host(IPAddress),
                      port = Port}).
 
-tcp_listener_stopped(IPAddress, Port) ->
+tcp_listener_stopped(Protocol, IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
            rabbit_listener,
            #listener{node = node(),
-                     protocol = tcp,
+                     protocol = Protocol,
                      host = tcp_host(IPAddress),
                      port = Port}).
 
