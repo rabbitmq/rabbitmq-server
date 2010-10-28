@@ -34,7 +34,7 @@
 -export([parse_destination/1, parse_routing_information/1,
          create_message_id/3, parse_message_id/1]).
 -export([longstr_field/2]).
--export([ack_mode/1]).
+-export([ack_mode/1, consumer_tag/1]).
 
 -include("rabbit_stomp_frame.hrl").
 
@@ -46,6 +46,19 @@
 
 longstr_field(K, V) ->
     {list_to_binary(K), longstr, list_to_binary(V)}.
+
+consumer_tag(Frame) ->
+    case rabbit_stomp_frame:header(Frame, "id") of
+        {ok, Str} ->
+            {ok, list_to_binary("T_" ++ Str)};
+        not_found ->
+            case rabbit_stomp_frame:header(Frame, "destination") of
+                {ok, DestHdr} ->
+                    {ok, list_to_binary("Q_" ++ DestHdr)};
+                not_found ->
+                    {error, missing_destination_header}
+            end
+    end.
 
 ack_mode(Frame) ->
     case rabbit_stomp_frame:header(Frame, "ack", "auto") of

@@ -27,6 +27,14 @@
 %% Header Parsing Tests
 %%--------------------------------------------------------------------
 
+longstr_field_test() ->
+    {<<"ABC">>, longstr, <<"DEF">>} =
+        rabbit_stomp_util:longstr_field("ABC", "DEF").
+
+%%--------------------------------------------------------------------
+%% Frame Parsing Tests
+%%--------------------------------------------------------------------
+
 ack_mode_auto_test() ->
     Frame = #stomp_frame{headers = [{"ack", "auto"}]},
     auto = rabbit_stomp_util:ack_mode(Frame).
@@ -39,9 +47,17 @@ ack_mode_client_test() ->
     Frame = #stomp_frame{headers = [{"ack", "client"}]},
     client = rabbit_stomp_util:ack_mode(Frame).
 
-longstr_field_test() ->
-    {<<"ABC">>, longstr, <<"DEF">>} =
-        rabbit_stomp_util:longstr_field("ABC", "DEF").
+consumer_tag_id_test() ->
+    Frame = #stomp_frame{headers = [{"id", "foo"}]},
+    {ok, <<"T_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+
+consumer_tag_destination_test() ->
+    Frame = #stomp_frame{headers = [{"destination", "foo"}]},
+    {ok, <<"Q_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+
+consumer_tag_invalid_test() ->
+    Frame = #stomp_frame{headers = []},
+    {error, missing_destination_header} = rabbit_stomp_util:consumer_tag(Frame).
 
 %%--------------------------------------------------------------------
 %% Destination Parsing Tests

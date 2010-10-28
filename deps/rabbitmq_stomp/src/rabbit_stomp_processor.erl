@@ -252,12 +252,7 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
-    ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
-                      {ok, Str} ->
-                          list_to_binary("T_" ++ Str);
-                      not_found ->
-                          list_to_binary("Q_" ++ DestHdr)
-                  end,
+    {ok, ConsumerTag} = rabbit_stomp_util:consumer_tag(Frame),
 
     amqp_channel:subscribe(Channel,
                            #'basic.consume'{
