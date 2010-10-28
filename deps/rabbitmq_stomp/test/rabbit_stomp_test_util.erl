@@ -21,15 +21,54 @@
 -module(rabbit_stomp_test_util).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
 %%--------------------------------------------------------------------
-%% Header Parsing Tests
+%% Header Processing Tests
 %%--------------------------------------------------------------------
 
 longstr_field_test() ->
     {<<"ABC">>, longstr, <<"DEF">>} =
         rabbit_stomp_util:longstr_field("ABC", "DEF").
+
+message_headers_test() ->
+    Destination = "/queue/foo",
+    SessionId = "1234567",
+
+    Delivery = #'basic.deliver'{
+      consumer_tag = <<"Q_123">>,
+      delivery_tag = 123},
+
+    Properties = #'P_basic'{
+      headers          = [{<<"str">>, longstr, <<"foo">>},
+                          {<<"int">>, signedint, 123}],
+      content_type     = <<"text/plain">>,
+      content_encoding = <<"UTF-8">>,
+      delivery_mode    = 2,
+      priority         = 1,
+      correlation_id   = 123,
+      reply_to         = <<"something">>,
+      message_id       = <<"M123">>},
+
+    Headers = rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+
+    Expected = [
+                {"destination", Destination},
+                {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},
+                {"content-type", "text/plain"},
+                {"content-encoding", "UTF-8"},
+                {"delivery-mode", "2"},
+                {"priority", "1"},
+                {"correlation-id", "123"},
+                {"reply-to", "something"},
+                {"amqp-message-id", "M123"},
+                {"X-str", "foo"},
+                {"X-int", "123"}
+               ],
+
+    [] = lists:subtract(Headers, Expected).
 
 %%--------------------------------------------------------------------
 %% Frame Parsing Tests
@@ -122,10 +161,6 @@ queue_with_escaped_name_test() ->
 valid_exchange_with_escaped_name_and_pattern_test() ->
     {ok, {exchange, {"te/st", "pa/tt/ern"}}} =
         parse_destination("/exchange/te%2Fst/pa%2Ftt%2Fern").
-
-create_message_id_test() ->
-    [<<"baz">>, "@@", "abc", "@@", "123"] =
-        rabbit_stomp_util:create_message_id(<<"baz">>, "abc", 123).
 
 parse_valid_message_id_test() ->
     {ok, {<<"bar">>, "abc", 123}} =

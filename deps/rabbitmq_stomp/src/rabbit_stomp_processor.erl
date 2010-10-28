@@ -315,44 +315,16 @@ ensure_receipt(Frame, State) ->
         not_found -> State
     end.
 
-send_delivery(#'basic.deliver'{consumer_tag = ConsumerTag,
-                               delivery_tag = DeliveryTag},
-              #'P_basic'{headers          = Headers,
-                         content_type     = ContentType,
-                         content_encoding = ContentEncoding,
-                         delivery_mode    = DeliveryMode,
-                         priority         = Priority,
-                         correlation_id   = CorrelationId,
-                         reply_to         = ReplyTo,
-                         message_id       = MessageId},
-              Body, State = #state{session_id    = SessionId,
-                                   subscriptions = Subs}) ->
+send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
+              Properties, Body,
+              State = #state{session_id    = SessionId,
+                             subscriptions = Subs}) ->
    {Destination, _SubChannel} = dict:fetch(ConsumerTag, Subs),
 
    send_frame(
       "MESSAGE",
-      [{"destination", Destination},
-       %% TODO append ContentEncoding as ContentType;
-       %% charset=ContentEncoding?  The STOMP SEND handler could also
-       %% parse "content-type" to split it, perhaps?
-       {"message-id", rabbit_stomp_util:create_message_id(ConsumerTag,
-                                                          SessionId,
-                                                          DeliveryTag)}]
-      ++ maybe_header("content-type", ContentType)
-      ++ maybe_header("content-encoding", ContentEncoding)
-      ++ case ConsumerTag of
-             <<"Q_",  _/binary>> -> [];
-             <<"T_", Id/binary>> -> [{"subscription", binary_to_list(Id)}]
-         end
-      ++ adhoc_convert_headers(case Headers of
-                                   undefined -> [];
-                                   _         -> Headers
-                               end)
-      ++ maybe_header("delivery-mode", DeliveryMode)
-      ++ maybe_header("priority", Priority)
-      ++ maybe_header("correlation-id", CorrelationId)
-      ++ maybe_header("reply-to", ReplyTo)
-      ++ maybe_header("amqp-message-id", MessageId),
+      rabbit_stomp_util:message_headers(Destination, SessionId,
+                                        Delivery, Properties),
       Body,
       State).
 
@@ -398,26 +370,6 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
     amqp_connection:close(Connection),
     State#state{channel = none, connection = none}.
 
-
-%% TODO: shuffle this off to util. In fact, can we shuffle off the
-%% entire message header construction?
-maybe_header(_Key, undefined) ->
-    [];
-maybe_header(Key, Value) when is_binary(Value) ->
-    [{Key, binary_to_list(Value)}];
-maybe_header(Key, Value) when is_integer(Value) ->
-    [{Key, integer_to_list(Value)}];
-maybe_header(_Key, _Value) ->
-    [].
-
-adhoc_convert_headers(Headers) ->
-    lists:foldr(fun ({K, longstr, V}, Acc) ->
-                        [{"X-" ++ binary_to_list(K), binary_to_list(V)} | Acc];
-                    ({K, signedint, V}, Acc) ->
-                        [{"X-" ++ binary_to_list(K), integer_to_list(V)} | Acc];
-                    (_, Acc) ->
-                        Acc
-                end, [], Headers).
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
