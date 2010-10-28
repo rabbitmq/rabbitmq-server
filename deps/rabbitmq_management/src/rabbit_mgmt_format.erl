@@ -21,11 +21,11 @@
 %%
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, pid/1, ip/1, table/1, tuple/1, timestamp/1]).
+-export([format/2, print/2, pid/1, ip/1, amqp_table/1, tuple/1, timestamp/1]).
 -export([protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, binding/1, url/2, application/1]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
--export([args_type/1, listener/1]).
+-export([args_type/1, listener/1, properties/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -61,8 +61,12 @@ pid(none)                 -> none.
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(inet_parse:ntoa(IP)).
 
-table(unknown) -> unknown;
-table(Table)   -> {struct, [{Name, tuple(Value)} ||
+properties(unknown) -> unknown;
+properties(Table)   -> {struct, [{Name, tuple(Value)} ||
+                                    {Name, Value} <- Table]}.
+
+amqp_table(unknown) -> unknown;
+amqp_table(Table)   -> {struct, [{Name, tuple(Value)} ||
                                {Name, _Type, Value} <- Table]}.
 
 tuple(unknown)                    -> unknown;
@@ -179,8 +183,8 @@ application({Application, Description, Version}) ->
      {version, list_to_binary(Version)}].
 
 exchange(X) ->
-    format(X, [{fun resource/1, [name]},
-               {fun table/1,    [arguments]}]).
+    format(X, [{fun resource/1,   [name]},
+               {fun amqp_table/1, [arguments]}]).
 
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
@@ -198,9 +202,9 @@ queue(#amqqueue{name            = Name,
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
        {pid,         Pid}],
-      [{fun pid/1,      [pid, owner_pid]},
-       {fun resource/1, [name]},
-       {fun table/1,    [arguments]}]).
+      [{fun pid/1,        [pid, owner_pid]},
+       {fun resource/1,   [name]},
+       {fun amqp_table/1, [arguments]}]).
 
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
 %% there are no per-exchange / queue / etc variants for the latter. Therefore
@@ -217,4 +221,4 @@ binding(#binding{source      = S,
        {arguments,        Args},
        {properties_key, pack_binding_props(Key, Args)}],
       [{fun (Res) -> resource(source, Res) end, [source]},
-       {fun table/1,                            [arguments]}]).
+       {fun amqp_table/1,                       [arguments]}]).
