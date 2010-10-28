@@ -316,7 +316,7 @@ ensure_receipt(Frame, State) ->
     end.
 
 send_delivery(#'basic.deliver'{consumer_tag = ConsumerTag,
-                            delivery_tag = DeliveryTag},
+                               delivery_tag = DeliveryTag},
               #'P_basic'{headers          = Headers,
                          content_type     = ContentType,
                          content_encoding = ContentEncoding,
