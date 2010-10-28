@@ -31,8 +31,7 @@
 -export([get_queues/1, get_connections/0, get_connection/1,
          get_overview/0, get_channels/0, get_channel/1]).
 
--export([group_sum/2]).
-
+%% TODO can these not be exported any more?
 -export([pget/2, add/2, rates/5]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -144,21 +143,21 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
                          {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
     end.
 
-%% sum(Table, Keys) ->
-%%     lists:foldl(fun (Stats, Acc) ->
-%%                         [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
-%%                 end,
-%%                 [{Key, 0} || Key <- Keys],
-%%                 [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
+%% List = [{ [{channel, Pid}, ...], [{deliver, 123}, ...] } ...]
+group_sum([], List) ->
+    lists:foldl(fun ({_, Item1}, Item0) ->
+                        gs_update(Item0, Item1)
+                end, [], List);
 
-group_sum(GroupBy, List) ->
-    lists:foldl(fun ({Ids, Item0}, Acc) ->
-                        Id = [{G, pget(G, Ids)} || G <- GroupBy],
-                        dict:update(Id, fun(Item1) ->
-                                                gs_update(Item0, Item1)
-                                        end,
-                                    Item0, Acc)
-                end, dict:new(), List).
+group_sum([Group | Groups], List) ->
+    D = lists:foldl(
+          fun (Next = {Ids, _}, Dict) ->
+                  Id = {Group, pget(Group, Ids)},
+                  dict:update(Id, fun(Cur) -> [Next | Cur] end, [Next], Dict)
+          end, dict:new(), List),
+    dict:map(fun(_, SubList) ->
+                     group_sum(Groups, SubList)
+             end, D).
 
 gs_update(Item0, Item1) ->
     Keys = sets:to_list(sets:from_list(
@@ -216,18 +215,21 @@ augment_connection_pid(Pid, Tables) ->
      {peer_port,    pget(peer_port,    Conn)},
      {name,         pget(name,         Conn)}].
 
-%% augment_queue_pid(Pid, Tables) ->
-%%     Q = lookup_element(
-%%           orddict:fetch(queue_stats, Tables), NB  this won't work any more
-%%           {Pid, create}),
-%%     [{name, pget(name, Q)},
-%%      {vhost, pget(vhost, Q)}].
+augment_queue_pid(Pid, _Tables) ->
+    %% TODO This should be in rabbit_amqqueue?
+    [Q] = mnesia:dirty_match_object(
+            rabbit_queue,
+            #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}),
+    Name = Q#amqqueue.name,
+    [{name,  Name#resource.name},
+     {vhost, Name#resource.virtual_host}].
 
 augment_msg_stats(Stats, Tables) ->
     [augment_msg_stats_items(Props, Tables) || Props <- Stats].
 
 augment_msg_stats_items(Props, Tables) ->
-    augment(Props, [{connection, fun augment_connection_pid/2}], Tables).
+    augment(Props, [{connection, fun augment_connection_pid/2},
+                    {queue,      fun augment_queue_pid/2}], Tables).
 
 %%----------------------------------------------------------------------------
 
@@ -246,7 +248,9 @@ handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
               Q <- Qs2],
-    {reply, Qs3, State};
+    {reply, augment_stats(
+              Qs3, [{channel_queue_stats, [queue], message_stats, queue}],
+              Tables), State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(connection_stats, Tables),
@@ -262,27 +266,29 @@ handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
 handle_call(get_channels, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Stats = merge_created_stats(Table),
-    FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
-    FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
-    {reply, augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
-     State};
+    {reply, augment_stats(
+              Stats,
+              [{channel_queue_stats,   [channel], message_stats, channel},
+               {channel_exchange_stats,[channel], message_stats, channel}],
+              Tables), State};
 
 handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(channel_stats, Tables),
     Id = name_to_id(Table, Name),
     Chs = [lookup_element(Table, {Id, create})],
-    %% TODO extract commonality between this and get_channels
     Stats = merge_created_stats(Chs, Table),
-    FineQ = get_fine_stats(channel_queue_stats,    [channel], Tables),
-    FineX = get_fine_stats(channel_exchange_stats, [channel], Tables),
-    [Res] = augment_msg_stats(merge_fine_stats(Stats, [FineQ, FineX]), Tables),
+    [Res] =
+        augment_stats(
+          Stats,
+          [{channel_queue_stats,          [channel], message_stats, channel},
+           {channel_exchange_stats,       [channel], message_stats, channel},
+           {channel_queue_stats, [channel, queue], deliveries_by_queue, channel}],
+          Tables),
     {reply, result_or_error(Res), State};
 
 handle_call(get_overview, _From, State = #state{tables = Tables}) ->
-    FineQ = extract_singleton_fine_stats(
-              get_fine_stats(channel_queue_stats, [], Tables)),
-    FineX = extract_singleton_fine_stats(
-              get_fine_stats(channel_exchange_stats, [], Tables)),
+    FineQ = get_fine_stats(channel_queue_stats, [], Tables),
+    FineX = get_fine_stats(channel_exchange_stats, [], Tables),
     {reply, [{message_stats, FineX ++ FineQ}], State};
 
 handle_call(_Request, _From, State) ->
@@ -457,25 +463,35 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
     [{channel, ChPid}, {queue, QPid},
      {exchange, [{name, XName}, {vhost, XVhost}]}].
 
-merge_fine_stats(Stats, []) ->
-    Stats;
-merge_fine_stats(Stats, [Dict | Dicts]) ->
-    merge_fine_stats([merge_fine_stats0(Props, Dict) || Props <- Stats], Dicts).
+augment_stats(Stats, FineSpecs, Tables) ->
+    FineStats = [{AttachName, AttachBy,
+                  get_fine_stats(FineStatsType, GroupBy, Tables)}
+                 || {FineStatsType, GroupBy, AttachName, AttachBy}
+                        <- FineSpecs],
+    augment_msg_stats(merge_fine_stats(Stats, FineStats, Tables), Tables).
 
-merge_fine_stats0(Props, Dict) ->
+merge_fine_stats(Stats, [], _Tables) ->
+    Stats;
+merge_fine_stats(Stats, [{AttachName, AttachBy, Dict} | Rest], Tables) ->
+    merge_fine_stats([merge_fine_stats0(AttachName, AttachBy,
+                                        Props, Dict, Tables)
+                      || Props <- Stats], Rest, Tables).
+
+merge_fine_stats0(AttachName, AttachBy, Props, Dict, Tables) ->
     Id = pget(pid, Props),
-    case dict:find([{channel, Id}], Dict) of
-        {ok, Stats} -> [{message_stats, pget(message_stats, Props, []) ++
-                             Stats} |
-                        proplists:delete(message_stats, Props)];
+    case dict:find({AttachBy, Id}, Dict) of
+        {ok, Stats} -> [{AttachName, pget(AttachName, Props, []) ++
+                             augment_fine_stats(Stats, Tables)} |
+                        proplists:delete(AttachName, Props)];
         error       -> Props
     end.
 
-extract_singleton_fine_stats(Dict) ->
-    case dict:to_list(Dict) of
-        []            -> [];
-        [{[], Stats}] -> Stats
-    end.
+augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
+    [[{stats, augment_fine_stats(Stats, Tables)} |
+      augment_msg_stats_items([IdTuple], Tables)]
+     || {IdTuple, Stats} <- dict:to_list(Dict)];
+augment_fine_stats(Stats, _Tables) ->
+    Stats.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
