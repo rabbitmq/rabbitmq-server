@@ -51,8 +51,14 @@
 
 start_link() ->
     case gen_server:start_link({global, ?MODULE}, ?MODULE, [], []) of
-        {error, {already_started, _}} -> ignore;
-        Else                          -> Else
+        {error, {already_started, Pid}} ->
+            rabbit_log:info(
+              "Statistics database already registered at ~p.~n", [Pid]),
+            ignore;
+        Else ->
+            rabbit_log:info(
+              "Statistics database started.~n", []),
+            Else
     end.
 
 event(Event) ->

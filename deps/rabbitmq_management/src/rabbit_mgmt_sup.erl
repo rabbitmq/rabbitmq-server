@@ -29,7 +29,10 @@ init([]) ->
     ExternalStats = {rabbit_mgmt_external_stats,
                      {rabbit_mgmt_external_stats, start_link, []},
                      permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    {ok, {{one_for_one, 10, 10}, [ExternalStats]}}.
+    DBMonitor = {rabbit_mgmt_db_monitor,
+                 {rabbit_mgmt_db_monitor, start_link, []},
+                 permanent, 5000, worker, [rabbit_mgmt_db_monitor]},
+    {ok, {{one_for_one, 10, 10}, [ExternalStats, DBMonitor]}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
