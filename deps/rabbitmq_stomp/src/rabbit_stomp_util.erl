@@ -34,6 +34,9 @@
 -export([parse_destination/1, parse_routing_information/1,
          create_message_id/3, parse_message_id/1]).
 -export([longstr_field/2]).
+-export([ack_mode/1]).
+
+-include("rabbit_stomp_frame.hrl").
 
 -define(QUEUE_PREFIX, "/queue").
 -define(TOPIC_PREFIX, "/topic").
@@ -43,6 +46,12 @@
 
 longstr_field(K, V) ->
     {list_to_binary(K), longstr, list_to_binary(V)}.
+
+ack_mode(Frame) ->
+    case rabbit_stomp_frame:header(Frame, "ack", "auto") of
+        "auto"   -> auto;
+        "client" -> client
+    end.
 
 create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
     [ConsumerTag,

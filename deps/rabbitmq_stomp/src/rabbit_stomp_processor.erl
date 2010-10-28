@@ -249,10 +249,7 @@ do_subscribe(Destination, DestHdr, Frame,
               end,
 
     %% TODO: Util method
-    AckMode = case rabbit_stomp_frame:header(Frame, "ack", "auto") of
-                  "auto"   -> auto;
-                  "client" -> client
-              end,
+    AckMode = rabbit_stomp_util:ack_mode(Frame),
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 

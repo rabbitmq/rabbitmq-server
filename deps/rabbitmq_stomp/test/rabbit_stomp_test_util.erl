@@ -21,6 +21,31 @@
 -module(rabbit_stomp_test_util).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("rabbit_stomp_frame.hrl").
+
+%%--------------------------------------------------------------------
+%% Header Parsing Tests
+%%--------------------------------------------------------------------
+
+ack_mode_auto_test() ->
+    Frame = #stomp_frame{headers = [{"ack", "auto"}]},
+    auto = rabbit_stomp_util:ack_mode(Frame).
+
+ack_mode_auto_default_test() ->
+    Frame = #stomp_frame{headers = []},
+    auto = rabbit_stomp_util:ack_mode(Frame).
+
+ack_mode_client_test() ->
+    Frame = #stomp_frame{headers = [{"ack", "client"}]},
+    client = rabbit_stomp_util:ack_mode(Frame).
+
+longstr_field_test() ->
+    {<<"ABC">>, longstr, <<"DEF">>} =
+        rabbit_stomp_util:longstr_field("ABC", "DEF").
+
+%%--------------------------------------------------------------------
+%% Destination Parsing Tests
+%%--------------------------------------------------------------------
 
 valid_queue_test() ->
     {ok, {queue, "test"}} = parse_destination("/queue/test").
@@ -94,5 +119,8 @@ parse_invalid_message_id_test() ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id("blah").
 
+%%--------------------------------------------------------------------
+%% Test Helpers
+%%--------------------------------------------------------------------
 parse_destination(Destination) ->
     rabbit_stomp_util:parse_destination(Destination).
