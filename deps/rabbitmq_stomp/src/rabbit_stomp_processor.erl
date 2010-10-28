@@ -271,25 +271,11 @@ do_subscribe(Destination, DestHdr, Frame,
                      dict:store(ConsumerTag, {DestHdr, Channel}, Subs)}}.
 
 do_send(Destination, _DestHdr,
-        Frame = #stomp_frame{headers     = Headers,
-                             body_iolist = BodyFragments},
+        Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel}) ->
     {ok, _Q} = ensure_queue(send, Destination, Channel),
 
-    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
-    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
-
-
-    Props = #'P_basic'{
-      content_type     = BinH("content-type",     <<"text/plain">>),
-      content_encoding = BinH("content-encoding", undefined),
-      delivery_mode    = IntH("delivery-mode",    undefined),
-      priority         = IntH("priority",         undefined),
-      correlation_id   = BinH("correlation-id",   undefined),
-      reply_to         = BinH("reply-to",         undefined),
-      message_id       = BinH("amqp-message-id",  undefined),
-      headers          = [rabbit_stomp_util:longstr_field(K, V) ||
-                             {"X-" ++ K, V} <- Headers]},
+    Props = rabbit_stomp_util:message_properties(Frame),
 
     {Exchange, RoutingKey} =
         rabbit_stomp_util:parse_routing_information(Destination),

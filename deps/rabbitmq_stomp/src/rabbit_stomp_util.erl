@@ -34,7 +34,7 @@
 -export([parse_destination/1, parse_routing_information/1,
          parse_message_id/1]).
 -export([longstr_field/2]).
--export([ack_mode/1, consumer_tag/1, message_headers/4]).
+-export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -44,9 +44,6 @@
 -define(EXCHANGE_PREFIX, "/exchange").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
-
-longstr_field(K, V) ->
-    {list_to_binary(K), longstr, list_to_binary(V)}.
 
 %%--------------------------------------------------------------------
 %% Frame and Header Parsing
@@ -70,6 +67,21 @@ ack_mode(Frame) ->
         "auto"   -> auto;
         "client" -> client
     end.
+
+message_properties(Frame = #stomp_frame{headers = Headers}) ->
+    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
+    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
+
+
+    #'P_basic'{
+      content_type     = BinH("content-type",     <<"text/plain">>),
+      content_encoding = BinH("content-encoding", undefined),
+      delivery_mode    = IntH("delivery-mode",    undefined),
+      priority         = IntH("priority",         undefined),
+      correlation_id   = BinH("correlation-id",   undefined),
+      reply_to         = BinH("reply-to",         undefined),
+      message_id       = BinH("amqp-message-id",  undefined),
+      headers          = [longstr_field(K, V) || {"X-" ++ K, V} <- Headers]}.
 
 message_headers(Destination, SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -117,6 +129,9 @@ parse_message_id(MessageId) ->
     end.
 
 %% ---- Header processing helpers ----
+
+longstr_field(K, V) ->
+    {list_to_binary(K), longstr, list_to_binary(V)}.
 
 maybe_header(_Key, undefined) ->
     [];

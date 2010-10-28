@@ -32,6 +32,33 @@ longstr_field_test() ->
     {<<"ABC">>, longstr, <<"DEF">>} =
         rabbit_stomp_util:longstr_field("ABC", "DEF").
 
+message_properties_test() ->
+    Headers = [
+                {"content-type", "text/plain"},
+                {"content-encoding", "UTF-8"},
+                {"delivery-mode", "2"},
+                {"priority", "1"},
+                {"correlation-id", "123"},
+                {"reply-to", "something"},
+                {"amqp-message-id", "M123"},
+                {"X-str", "foo"},
+                {"X-int", "123"}
+              ],
+
+    #'P_basic'{
+                content_type = <<"text/plain">>,
+                content_encoding = <<"UTF-8">>,
+                delivery_mode = 2,
+                priority = 1,
+                correlation_id = <<"123">>,
+                reply_to = <<"something">>,
+                message_id = <<"M123">>,
+                headers = [
+                           {<<"str">>, longstr, <<"foo">>},
+                           {<<"int">>, longstr, <<"123">>}]
+                } =
+        rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
+
 message_headers_test() ->
     Destination = "/queue/foo",
     SessionId = "1234567",
