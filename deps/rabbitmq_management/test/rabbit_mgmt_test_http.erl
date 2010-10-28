@@ -34,7 +34,7 @@
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
-    [<<"0.0.0.0:5672">>] = pget(bound_to, http_get("/overview")),
+    true = 0 < length(pget(listeners, http_get("/overview"))),
     %% TODO uncomment when priv works in test
     %%http_get(""),
     %% Just for coverage
