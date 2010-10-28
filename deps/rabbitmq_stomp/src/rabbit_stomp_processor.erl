@@ -252,7 +252,6 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
-    %% TODO: Util method
     ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, Str} ->
                           list_to_binary("T_" ++ Str);
