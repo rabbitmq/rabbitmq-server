@@ -31,7 +31,7 @@
 -compile([export_all]).
 
 -record(publish, {q, x, routing_key, bind_key, payload,
-                 mandatory = false, immediate = false}).
+                  mandatory = false, immediate = false}).
 
 %% The latch constant defines how many processes are spawned in order
 %% to run certain functionality in parallel. It follows the standard
