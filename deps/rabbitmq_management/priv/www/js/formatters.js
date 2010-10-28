@@ -78,6 +78,14 @@ function fmt_table_short(table) {
     return res;
 }
 
+function fmt_table_long(table) {
+    var res = '<table class="facts">';
+    for (k in table) {
+        res += '<tr><th>' + k + '</th><td>' + table[k] + '</td>';
+    }
+    return res + '</table>';
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt"' : '';
 }
