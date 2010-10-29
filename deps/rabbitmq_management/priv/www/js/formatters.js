@@ -1,4 +1,9 @@
 UNKNOWN_REPR = '<span class="unknown">?</span>';
+DESCRIPTOR_THRESHOLDS=[[0.75, 'red'],
+		       [0.5, 'yellow'],
+		       [-Infinity, 'green']];
+MEMORY_THRESHOLDS=[[1.0, 'red'],
+		   [-Infinity, 'green']];
 
 function fmt_string(str) {
     if (str == undefined) return UNKNOWN_REPR;
@@ -31,12 +36,19 @@ function fmt_boolean(b) {
     return b ? "&#9679;" : "&#9675;";
 }
 
-function fmt_color(r) {
+function fmt_color(r, thresholds) {
     if (r == undefined) return '';
+    if (thresholds == undefined) thresholds = DESCRIPTOR_THRESHOLDS;
 
-    if (r > 0.75) return 'red';
-    else if (r > 0.5) return 'yellow';
-    else return 'green';
+    for (var i in thresholds) {
+	var threshold = thresholds[i][0];
+	var color = thresholds[i][1];
+
+	if (r > threshold) {
+	    return color;
+	}
+    }
+    return '';
 }
 
 function fmt_rate(obj, name) {

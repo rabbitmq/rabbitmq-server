@@ -44,7 +44,8 @@
   <tr>
     <th>Memory</th>
     <td class="status">
-      <div class="<%= fmt_color(overview.mem_used / overview.mem_total) %>">
+      <div class="<%= fmt_color(overview.mem_used / overview.mem_total,
+                      MEMORY_THRESHOLDS) %>">
         <%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %>
         <sub>(used / high watermark)</sub>
       </div>
