@@ -42,7 +42,7 @@
       </xsl:choose>
       <p>
          For more general documentation, please see the
-        <a href="admin-guide.html">administrator's guide</a>.
+        <a href="../admin-guide.html">administrator's guide</a>.
       </p>
 
       <doc:toc class="compact">

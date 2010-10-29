@@ -30,7 +30,7 @@
 %%
 
 -record(user, {username, password, is_admin}).
--record(permission, {scope, configure, write, read}).
+-record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
 
@@ -73,6 +73,8 @@
 -record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, timestamp}).
+
+-record(message_properties, {expiry}).
 
 %%----------------------------------------------------------------------------
 
