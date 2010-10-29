@@ -49,7 +49,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     X0 = exchange(ReqData),
-    [X] = rabbit_mgmt_db:get_exchanges([X0]),
+    [X] = rabbit_mgmt_db:get_exchange(X0),
     rabbit_mgmt_util:reply(X, ReqData, Context).
 
 accept_content(ReqData, Context) ->

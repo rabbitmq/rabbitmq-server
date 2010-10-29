@@ -28,7 +28,8 @@
 
 -export([event/1]).
 
--export([get_queues/1, get_exchanges/1, get_connections/0, get_connection/1,
+-export([get_queues/1, get_queue/1, get_exchanges/1, get_exchange/1,
+         get_connections/0, get_connection/1,
          get_overview/0, get_channels/0, get_channel/1]).
 
 %% TODO can these not be exported any more?
@@ -64,9 +65,23 @@
     {channel_queue_exchange_stats, [queue], message_stats, queue}]).
 
 -define(
+   FINE_STATS_QUEUE_DETAIL,
+   [{channel_queue_stats,          [queue],           message_stats, queue},
+    {channel_queue_exchange_stats, [queue],           message_stats, queue},
+    {channel_queue_stats,          [queue, channel],  deliveries, queue},
+    {channel_queue_exchange_stats, [queue, exchange], incoming, queue}]).
+
+-define(
    FINE_STATS_EXCHANGE_LIST,
    [{channel_exchange_stats,       [exchange], message_stats_in,  exchange},
     {channel_queue_exchange_stats, [exchange], message_stats_out, exchange}]).
+
+-define(
+   FINE_STATS_EXCHANGE_DETAIL,
+   [{channel_exchange_stats,       [exchange], message_stats_in,   exchange},
+    {channel_queue_exchange_stats, [exchange], message_stats_out,  exchange},
+    {channel_exchange_stats,       [exchange, channel],  incoming, exchange},
+    {channel_queue_exchange_stats, [exchange, queue],    outgoing, exchange}]).
 
 -define(FINE_STATS_NONE, []).
 
@@ -99,10 +114,16 @@ event(Event) ->
     gen_server:cast(?MODULE, {event, Event}).
 
 get_queues(Qs) ->
-    gen_server:call(?MODULE, {get_queues, Qs}, infinity).
+    gen_server:call(?MODULE, {get_queues, Qs, list}, infinity).
+
+get_queue(Q) ->
+    gen_server:call(?MODULE, {get_queues, [Q], detail}, infinity).
 
 get_exchanges(Xs) ->
-    gen_server:call(?MODULE, {get_exchanges, Xs}, infinity).
+    gen_server:call(?MODULE, {get_exchanges, Xs, list}, infinity).
+
+get_exchange(X) ->
+    gen_server:call(?MODULE, {get_exchanges, [X], detail}, infinity).
 
 get_connections() ->
     gen_server:call(?MODULE, get_connections, infinity).
@@ -217,17 +238,18 @@ augment(K, Items, Fun, Tables) ->
         Id      -> {Key, Fun(Id, Tables)}
     end.
 
-%% augment_channel_pid(Pid, Tables) ->
-%%     Ch = lookup_element(
-%%            orddict:fetch(channel_stats, Tables),
-%%            {Pid, create}),
-%%     Conn = lookup_element(
-%%              orddict:fetch(connection_stats, Tables),
-%%              {pget(connection, Ch), create}),
-%%     [{number, pget(number, Ch)},
-%%      {connection_name, pget(name, Conn)},
-%%      {peer_address, pget(peer_address, Conn)},
-%%      {peer_port, pget(peer_port, Conn)}].
+augment_channel_pid(Pid, Tables) ->
+    Ch = lookup_element(
+           orddict:fetch(channel_stats, Tables),
+           {Pid, create}),
+    Conn = lookup_element(
+             orddict:fetch(connection_stats, Tables),
+             {pget(connection, Ch), create}),
+    [{number,          pget(number, Ch)},
+     {name,            pget(name, Ch)},
+     {connection_name, pget(name, Conn)},
+     {peer_address,    pget(peer_address, Conn)},
+     {peer_port,       pget(peer_port, Conn)}].
 
 augment_connection_pid(Pid, Tables) ->
     Conn = lookup_element(orddict:fetch(connection_stats, Tables),
@@ -250,6 +272,7 @@ augment_msg_stats(Stats, Tables) ->
 
 augment_msg_stats_items(Props, Tables) ->
     augment(Props, [{connection, fun augment_connection_pid/2},
+                    {channel,    fun augment_channel_pid/2},
                     {queue,      fun augment_queue_pid/2}], Tables).
 
 %%----------------------------------------------------------------------------
@@ -260,16 +283,25 @@ init([]) ->
                            [{Key, ets:new(anon, [private])} ||
                                Key <- ?TABLES])}}.
 
-handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
-    Qs1 = merge_stats(Qs0, ?FINE_STATS_QUEUE_LIST, queue_stats, Tables),
+handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
+    FineStats = case Mode of
+                    list   -> ?FINE_STATS_QUEUE_LIST;
+                    detail -> ?FINE_STATS_QUEUE_DETAIL
+                end,
+    Qs1 = merge_stats(Qs0, FineStats, queue_stats, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
               Q <- Qs2],
     {reply, Qs3, State};
 
-handle_call({get_exchanges, Xs}, _From, State = #state{tables = Tables}) ->
-    {reply, merge_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, none, Tables),
+handle_call({get_exchanges, Xs, Mode}, _From,
+            State = #state{tables = Tables}) ->
+    FineStats = case Mode of
+                    list   -> ?FINE_STATS_EXCHANGE_LIST;
+                    detail -> ?FINE_STATS_EXCHANGE_DETAIL
+                end,
+    {reply, merge_stats(Xs, FineStats, none, Tables),
      State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->

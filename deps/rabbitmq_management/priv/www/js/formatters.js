@@ -149,7 +149,7 @@ function message_rates(stats_lists) {
             for (var i in items) {
                 var key = items[i][1];
                 var name = (map && key in map) ? map[key] : items[i][0];
-                if (key in stats) {
+                if (key + '_details' in stats) {
                     res += '<div class="highlight">' + name;
                     res += '<strong>' +
                         Math.round(stats[key + '_details'].rate) +

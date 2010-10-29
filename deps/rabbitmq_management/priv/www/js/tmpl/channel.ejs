@@ -1,17 +1,7 @@
 <h1>Channel: <b><%= channel.name %></b></h1>
 
-<% if (statistics_level == 'fine') { %>
 <div class="section">
-<h2>Message Rates</h2>
-<div class="hider updatable">
-<%= message_rates([[channel.message_stats, {}]]) %>
-<span class="br"></span>
-</div>
-</div>
-<% } %>
-
-<div class="section">
-<h2>Overview</h2>
+<h2>Details</h2>
 <div class="hider updatable">
 <table class="list">
   <tr>
@@ -39,61 +29,34 @@
 </div>
 
 <% if (statistics_level == 'fine') { %>
+<div class="section">
+<h2>Message Rates</h2>
+<div class="hider updatable">
+<%= message_rates([[channel.message_stats, {}]]) %>
+<span class="br"></span>
+</div>
+</div>
+<% } %>
+
+<% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
 <h2>Detailed Message Rates</h2>
 <div class="hider updatable">
-
 <table class="two-col-layout">
   <tr>
     <td>
-      <h3>Publishes</h3>
-      <% if ('publishes' in channel) { %>
-      <table class="list">
-        <tr>
-          <th>Exchange</th>
-          <th>publish</th>
-        </tr>
-        <%
-           for (var i = 0; i < channel.publishes.length; i++) {
-           var pub = channel.publishes[i];
-        %>
-           <tr<%= alt_rows(i)%>>
-             <td><%= link_exchange(pub.exchange.vhost, pub.exchange.name) %></td>
-             <td><%= fmt_rate(pub.stats, 'publish') %></td>
-           </tr>
-        <% } %>
-      </table>
-      <% } else { %>
-      <p> ... no publishes ...</p>
-      <% } %>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'channel',
+                  'object': channel.publishes,
+                  'label':  'Publishes'}) %>
     </td>
     <td>
-      <h3>Deliveries</h3>
-      <% if ('deliveries' in channel) { %>
-      <table class="list">
-        <tr>
-          <th>Queue</th>
-          <th>deliver / get</th>
-          <th>ack</th>
-        </tr>
-        <%
-           for (var i = 0; i < channel.deliveries.length; i++) {
-           var del = channel.deliveries[i];
-        %>
-           <tr<%= alt_rows(i)%>>
-             <td><%= link_queue(del.queue_details.vhost, del.queue_details.name) %></td>
-             <td><%= fmt_rate(del.stats, 'deliver_get') %></td>
-             <td><%= fmt_rate(del.stats, 'ack') %></td>
-           </tr>
-        <% } %>
-      </table>
-      <% } else { %>
-      <p> ... no deliveries ...</p>
-      <% } %>
+      <%= format('msg-detail-deliveries',
+                 {'mode':   'channel',
+                  'object': channel.deliveries}) %>
     </td>
   </tr>
 </table>
-
 <span class="br"></span>
 </div>
 </div>

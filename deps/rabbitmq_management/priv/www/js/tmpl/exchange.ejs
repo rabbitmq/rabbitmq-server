@@ -1,5 +1,27 @@
 <h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b></h1>
 
+<div class="section">
+  <h2>Details</h2>
+  <div class="hider">
+    <table class="list">
+      <tr>
+        <th>Virtual host</th>
+        <th>Type</th>
+        <th>Durable</th>
+        <th>Auto delete</th>
+        <th>Arguments</th>
+      </tr>
+      <tr>
+        <td><%= exchange.vhost %></td>
+        <td><%= exchange.type %></td>
+        <td><%= fmt_boolean(exchange.durable) %></td>
+        <td><%= fmt_boolean(exchange.auto_delete) %></td>
+        <td><%= fmt_table_short(exchange.arguments) %></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
 <% if (statistics_level == 'fine') { %>
 <div class="section">
 <h2>Message Rates</h2>
@@ -16,21 +38,31 @@
 </div>
 <% } %>
 
-<div class="section">
-  <h2>Overview</h2>
-  <div class="hider">
-    <table class="facts">
-      <tr><th>Virtual host</th><td><%= exchange.vhost %></td></tr>
-      <tr><th>Type</th><td><%= exchange.type %></td></tr>
-      <tr><th>Durable</th><td><%= fmt_boolean(exchange.durable) %></td></tr>
-      <tr><th>Auto delete</th><td><%= fmt_boolean(exchange.auto_delete) %></td></tr>
-      <tr>
-        <th>Arguments</th>
-        <td><%= fmt_table_short(exchange.arguments) %></td>
-      </tr>
-    </table>
-  </div>
+<% if (statistics_level == 'fine') { %>
+<div class="section-hidden">
+<h2>Detailed Message Rates</h2>
+<div class="hider updatable">
+<table class="two-col-layout">
+  <tr>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'exchange-incoming',
+                  'object': exchange.incoming,
+                  'label':  'Incoming'}) %>
+    </td>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'exchange-outgoing',
+                  'object': exchange.outgoing,
+                  'label':  'Outgoing'}) %>
+    </td>
+  </tr>
+</table>
+<span class="br"></span>
 </div>
+</div>
+<% } %>
+
 
 <div class="section">
   <h2>Bindings</h2>
