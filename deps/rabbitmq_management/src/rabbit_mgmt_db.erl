@@ -53,9 +53,10 @@
 
 -define(
    FINE_STATS_CHANNEL_DETAIL,
-   [{channel_queue_stats,   [channel],        message_stats,       channel},
-    {channel_exchange_stats,[channel],        message_stats,       channel},
-    {channel_queue_stats,   [channel, queue], deliveries_by_queue, channel}]).
+   [{channel_queue_stats,    [channel],           message_stats, channel},
+    {channel_exchange_stats, [channel],           message_stats, channel},
+    {channel_exchange_stats, [channel, exchange], publishes,     channel},
+    {channel_queue_stats,    [channel, queue],    deliveries,    channel}]).
 
 -define(
    FINE_STATS_QUEUE_LIST,
