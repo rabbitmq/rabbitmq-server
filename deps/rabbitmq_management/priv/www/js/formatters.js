@@ -1,9 +1,7 @@
 UNKNOWN_REPR = '<span class="unknown">?</span>';
 DESCRIPTOR_THRESHOLDS=[[0.75, 'red'],
-		       [0.5, 'yellow'],
-		       [-Infinity, 'green']];
-MEMORY_THRESHOLDS=[[1.0, 'red'],
-		   [-Infinity, 'green']];
+		       [0.5, 'yellow']];
+MEMORY_THRESHOLDS=[[1.0, 'red']];
 
 function fmt_string(str) {
     if (str == undefined) return UNKNOWN_REPR;
@@ -48,7 +46,7 @@ function fmt_color(r, thresholds) {
 	    return color;
 	}
     }
-    return '';
+    return 'green';
 }
 
 function fmt_rate(obj, name) {
