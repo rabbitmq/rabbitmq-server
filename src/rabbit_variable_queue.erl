@@ -1401,46 +1401,40 @@ maybe_deltas_to_betas(State = #vqstate {
                         delta                = Delta,
                         q3                   = Q3,
                         index_state          = IndexState,
-                        target_ram_msg_count = TargetRamMsgCount,
                         transient_threshold  = TransientThreshold }) ->
-    case bpqueue:is_empty(Q3) orelse (TargetRamMsgCount /= 0) of
-        false ->
-            State;
-        true ->
-            #delta { start_seq_id = DeltaSeqId,
-                     count        = DeltaCount,
-                     end_seq_id   = DeltaSeqIdEnd } = Delta,
-            DeltaSeqId1 =
-                lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
-                           DeltaSeqIdEnd]),
-            {List, IndexState1} =
-                rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
-            {Q3a, IndexState2} = betas_from_index_entries(
-                                   List, TransientThreshold, IndexState1),
-            State1 = State #vqstate { index_state = IndexState2 },
-            case bpqueue:len(Q3a) of
+    #delta { start_seq_id = DeltaSeqId,
+             count        = DeltaCount,
+             end_seq_id   = DeltaSeqIdEnd } = Delta,
+    DeltaSeqId1 =
+        lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
+                   DeltaSeqIdEnd]),
+    {List, IndexState1} =
+        rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
+    {Q3a, IndexState2} =
+        betas_from_index_entries(List, TransientThreshold, IndexState1),
+    State1 = State #vqstate { index_state = IndexState2 },
+    case bpqueue:len(Q3a) of
+        0 ->
+            %% we ignored every message in the segment due to it being
+            %% transient and below the threshold
+            maybe_deltas_to_betas(
+              State1 #vqstate {
+                delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
+        Q3aLen ->
+            Q3b = bpqueue:join(Q3, Q3a),
+            case DeltaCount - Q3aLen of
                 0 ->
-                    %% we ignored every message in the segment due to
-                    %% it being transient and below the threshold
-                    maybe_deltas_to_betas(
-                      State #vqstate {
-                        delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
-                Q3aLen ->
-                    Q3b = bpqueue:join(Q3, Q3a),
-                    case DeltaCount - Q3aLen of
-                        0 ->
-                            %% delta is now empty, but it wasn't
-                            %% before, so can now join q2 onto q3
-                            State1 #vqstate { q2    = bpqueue:new(),
-                                              delta = ?BLANK_DELTA,
-                                              q3    = bpqueue:join(Q3b, Q2) };
-                        N when N > 0 ->
-                            Delta1 = #delta { start_seq_id = DeltaSeqId1,
-                                              count        = N,
-                                              end_seq_id   = DeltaSeqIdEnd },
-                            State1 #vqstate { delta = Delta1,
-                                              q3    = Q3b }
-                    end
+                    %% delta is now empty, but it wasn't before, so
+                    %% can now join q2 onto q3
+                    State1 #vqstate { q2    = bpqueue:new(),
+                                      delta = ?BLANK_DELTA,
+                                      q3    = bpqueue:join(Q3b, Q2) };
+                N when N > 0 ->
+                    Delta1 = #delta { start_seq_id = DeltaSeqId1,
+                                      count        = N,
+                                      end_seq_id   = DeltaSeqIdEnd },
+                    State1 #vqstate { delta = Delta1,
+                                      q3    = Q3b }
             end
     end.
 
