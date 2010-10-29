@@ -189,6 +189,9 @@ stop_tcp_listener(Host, Port) ->
     ok.
 
 tcp_listener_started(IPAddress, Port) ->
+    %% We need the ip to distinguish e.g. 0.0.0.0 and 127.0.0.1
+    %% We need the host so we can distinguish multiple instances of the above
+    %% in a cluster.
     ok = mnesia:dirty_write(
            rabbit_listener,
            #listener{node = node(),
