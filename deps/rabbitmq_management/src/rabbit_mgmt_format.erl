@@ -100,10 +100,11 @@ user(User) ->
      {administrator, User#user.is_admin}].
 
 listener(#listener{node = Node, protocol = Protocol,
-                   host = Host, port = Port}) ->
+                   host = Host, ip_address = IPAddress, port = Port}) ->
     [{node, Node},
      {protocol, Protocol},
      {host, list_to_binary(Host)},
+     {ip_address, ip(IPAddress)},
      {port, Port}].
 
 pack_binding_props(<<"">>, []) ->
