@@ -57,7 +57,8 @@
     {channel_queue_stats,   [channel, queue], deliveries_by_queue, channel}]).
 
 -define(FINE_STATS_QUEUE_LIST,
-        [{channel_queue_stats, [queue], message_stats, queue}]).
+        [{channel_queue_stats,          [queue], message_stats, queue},
+         {channel_queue_exchange_stats, [queue], message_stats, queue}]).
 
 -define(FINE_STATS_NONE, []).
 

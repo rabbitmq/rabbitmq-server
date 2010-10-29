@@ -9,9 +9,7 @@
    <th><%= fmt_sort('Virtual host', 'vhost') %></th>
    <th><%= fmt_sort('Name',         'name') %></th>
    <th><%= fmt_sort('Type',         'type') %></th>
-   <th><%= fmt_sort('Durable',      'durable') %></th>
-   <th><%= fmt_sort('Auto delete',  'auto_delete') %></th>
-   <th>Arguments</th>
+   <th>Parameters</th>
   </tr>
  </thead>
  <tbody>
@@ -22,10 +20,8 @@
   <tr<%= alt_rows(i)%>>
    <td><%= link_vhost(exchange.vhost) %></td>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
-   <td><%= exchange.type %></td>
-   <td class="c"><%= fmt_boolean(exchange.durable) %></td>
-   <td class="c"><%= fmt_boolean(exchange.auto_delete) %></td>
-   <td><%= fmt_table_short(exchange.arguments) %></td>
+   <td class="c"><%= exchange.type %></td>
+   <td class="c"><%= fmt_parameters(exchange) %></td>
   </tr>
   <% } %>
  </tbody>

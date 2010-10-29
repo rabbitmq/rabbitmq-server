@@ -1,47 +1,45 @@
 <h1>Queue <b><%= queue.name %></b></h1>
 
+<% if (statistics_level == 'fine') { %>
+<div class="section">
+<h2>Message Rates</h2>
+<div class="hider updatable">
+<%= message_rates(queue.message_stats) %>
+<span class="br"></span>
+</div>
+</div>
+<% } %>
+
 <div class="section">
   <h2>Overview</h2>
   <div class="hider updatable">
-    <table class="facts">
+    <table class="list">
       <tr>
         <th>Virtual host</th>
-        <td><%= queue.vhost %></td>
-      </tr>
-      <tr>
         <th>Durable</th>
-        <td><%= fmt_boolean(queue.durable) %></td>
-      </tr>
-      <tr>
         <th>Auto delete</th>
-        <td><%= fmt_boolean(queue.auto_delete) %></td>
+        <th>Exclusive owner</th>
+        <th>Consumers</th>
+        <th>Memory</th>
+        <th>Messages</th>
+        <th>Arguments</th>
       </tr>
       <tr>
-        <th>Exclusive owner</th>
+        <td><%= queue.vhost %></td>
+        <td><%= fmt_boolean(queue.durable) %></td>
+        <td><%= fmt_boolean(queue.auto_delete) %></td>
         <td>
           <% if (queue.owner_pid != 'none') { %>
           <%= link_conn(queue.owner_pid_details.name) %>
           <% } %>
         </td>
-      </tr>
-      <tr>
-        <th>Consumers</th>
         <td><%= fmt_string(queue.consumers) %></td>
-      </tr>
-      <tr>
-        <th>Memory</th>
         <td><%= fmt_bytes(queue.memory) %></td>
-      </tr>
-      <tr>
-        <th>Messages</th>
         <td>
           <%= fmt_string(queue.messages_ready) %> ready<br/>
           <%= fmt_string(queue.messages_unacknowledged) %> unacknowledged<br/>
           <%= fmt_string(queue.messages) %> total
         </td>
-      </tr>
-      <tr>
-        <th>Arguments</th>
         <td><%= fmt_table_short(queue.arguments) %></td>
       </tr>
     </table>

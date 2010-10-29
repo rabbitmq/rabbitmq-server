@@ -31,6 +31,21 @@ function fmt_boolean(b) {
     return b ? "&#9679;" : "&#9675;";
 }
 
+function fmt_parameters(obj) {
+    var res = '';
+    if (obj.durable) {
+        res += '<acronym title="Durable">D</acronym> ';
+    }
+    if (obj.auto_delete) {
+        res += '<acronym title="Auto-delete">AD</acronym> ';
+    }
+    var args = fmt_table_short(obj.arguments);
+    if (args != '') {
+        res += '<p>' + args + '</p>';
+    }
+    return res;
+}
+
 function fmt_color(r) {
     if (r == undefined) return '';
 
@@ -39,19 +54,22 @@ function fmt_color(r) {
     else return 'green';
 }
 
-function fmt_rate(obj, name) {
-    return fmt_rate0(obj, name, fmt_num);
+function fmt_rate(obj, name, show_total) {
+    return fmt_rate0(obj, name, fmt_num, show_total);
 }
 
 function fmt_rate_bytes(obj, name) {
-    return fmt_rate0(obj, name, fmt_bytes);
+    return fmt_rate0(obj, name, fmt_bytes, true);
 }
 
-function fmt_rate0(obj, name, fmt) {
+function fmt_rate0(obj, name, fmt, show_total) {
     if (obj == undefined || obj[name] == undefined) return '';
-    var res = '<sub>(' + fmt(obj[name]) + ' total)</sub>';
+    var res = '';
     if (obj[name + '_details'] != undefined) {
-        res = fmt(obj[name + '_details'].rate) + '/s' + res;
+        res = fmt(obj[name + '_details'].rate) + '/s';
+    }
+    if (show_total) {
+        res += '<sub>(' + fmt(obj[name]) + ' total)</sub>';
     }
     return res;
 }
