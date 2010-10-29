@@ -46,6 +46,21 @@
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
 -define(FINE_STATS, [publish, ack, deliver_get] ++ ?DELIVER_GET).
 
+-define(FINE_STATS_CHANNEL_LIST,
+        [{channel_queue_stats,   [channel], message_stats, channel},
+         {channel_exchange_stats,[channel], message_stats, channel}]).
+
+-define(
+   FINE_STATS_CHANNEL_DETAIL,
+   [{channel_queue_stats,   [channel],        message_stats,       channel},
+    {channel_exchange_stats,[channel],        message_stats,       channel},
+    {channel_queue_stats,   [channel, queue], deliveries_by_queue, channel}]).
+
+-define(FINE_STATS_QUEUE_LIST,
+        [{channel_queue_stats, [queue], message_stats, queue}]).
+
+-define(FINE_STATS_NONE, []).
+
 %%----------------------------------------------------------------------------
 
 start_link() ->
@@ -116,12 +131,6 @@ lookup_element(Table, Key) ->
 lookup_element(Table, Key, Pos) ->
     try ets:lookup_element(Table, Key, Pos)
     catch error:badarg -> []
-    end.
-
-name_to_id(Table, Name) ->
-    case ets:match(Table, {{'$1', create}, '_', Name}) of
-        []     -> none;
-        [[Id]] -> Id
     end.
 
 result_or_error([]) -> error;
@@ -233,8 +242,6 @@ augment_msg_stats_items(Props, Tables) ->
 
 %%----------------------------------------------------------------------------
 
-%% TODO some sort of generalised query mechanism for the coarse stats?
-
 init([]) ->
     rabbit_mgmt_db_handler:add_handler(),
     {ok, #state{tables = orddict:from_list(
@@ -243,47 +250,31 @@ init([]) ->
 
 handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    Qs1 = merge_created_stats(Qs0, Table),
+    Qs1 = merge_stats(Qs0, ?FINE_STATS_QUEUE_LIST, queue_stats, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
               Q <- Qs2],
-    {reply, augment_stats(
-              Qs3, [{channel_queue_stats, [queue], message_stats, queue}],
-              Tables), State};
+    {reply, Qs3, State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(connection_stats, Tables),
-    {reply, [zero_old_rates(S) || S <- merge_created_stats(Table)], State};
+    Conns = created_events(connection_stats, Tables),
+    {reply, merge_stats(Conns, ?FINE_STATS_NONE, connection_stats, Tables),
+     State};
 
 handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(connection_stats, Tables),
-    Id = name_to_id(Table, Name),
-    {reply, result_or_error(lookup_element(Table, {Id, create}) ++
-                                zero_old_rates(
-                                  lookup_element(Table, {Id, stats}))), State};
+    Conns = created_event(Name, connection_stats, Tables),
+    [Res] = merge_stats(Conns, ?FINE_STATS_NONE, connection_stats, Tables),
+    {reply, result_or_error(Res), State};
 
 handle_call(get_channels, _From, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(channel_stats, Tables),
-    Stats = merge_created_stats(Table),
-    {reply, augment_stats(
-              Stats,
-              [{channel_queue_stats,   [channel], message_stats, channel},
-               {channel_exchange_stats,[channel], message_stats, channel}],
-              Tables), State};
+    Chs = created_events(channel_stats, Tables),
+    Res = merge_stats(Chs, ?FINE_STATS_CHANNEL_LIST, channel_stats, Tables),
+    {reply, Res, State};
 
 handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(channel_stats, Tables),
-    Id = name_to_id(Table, Name),
-    Chs = [lookup_element(Table, {Id, create})],
-    Stats = merge_created_stats(Chs, Table),
-    [Res] =
-        augment_stats(
-          Stats,
-          [{channel_queue_stats,          [channel], message_stats, channel},
-           {channel_exchange_stats,       [channel], message_stats, channel},
-           {channel_queue_stats, [channel, queue], deliveries_by_queue, channel}],
-          Tables),
+    Chs = created_event(Name, channel_stats, Tables),
+    [Res] = merge_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, channel_stats, Tables),
     {reply, result_or_error(Res), State};
 
 handle_call(get_overview, _From, State = #state{tables = Tables}) ->
@@ -441,13 +432,17 @@ fine_stats_key(ChPid, {QPid, X})              -> {ChPid, id(QPid), X};
 fine_stats_key(ChPid, QPid) when is_pid(QPid) -> {ChPid, id(QPid)};
 fine_stats_key(ChPid, X)                      -> {ChPid, X}.
 
-merge_created_stats(Table) ->
-    merge_created_stats(
-      [Facts || {{_, create}, Facts, _Name} <- ets:tab2list(Table)],
-      Table).
+created_event(Name, Type, Tables) ->
+    Table = orddict:fetch(Type, Tables),
+    Id = case ets:match(Table, {{'$1', create}, '_', Name}) of
+             []    -> none;
+             [[I]] -> I
+         end,
+    [lookup_element(Table, {Id, create})].
 
-merge_created_stats(In, Table) ->
-    [Facts ++ lookup_element(Table, {pget(pid, Facts), stats}) || Facts <- In].
+created_events(Type, Tables) ->
+    [Facts || {{_, create}, Facts, _Name}
+                  <- ets:tab2list(orddict:fetch(Type, Tables))].
 
 get_fine_stats(Type, GroupBy, Tables) ->
     Table = orddict:fetch(Type, Tables),
@@ -463,12 +458,17 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
     [{channel, ChPid}, {queue, QPid},
      {exchange, [{name, XName}, {vhost, XVhost}]}].
 
-augment_stats(Stats, FineSpecs, Tables) ->
+merge_stats(Objs, FineSpecs, Type, Tables) ->
+    Table = orddict:fetch(Type, Tables),
+    WithCoarse =
+        [Obj ++
+             zero_old_rates(lookup_element(Table, {pget(pid, Obj), stats}))
+         || Obj <- Objs],
     FineStats = [{AttachName, AttachBy,
                   get_fine_stats(FineStatsType, GroupBy, Tables)}
                  || {FineStatsType, GroupBy, AttachName, AttachBy}
                         <- FineSpecs],
-    augment_msg_stats(merge_fine_stats(Stats, FineStats, Tables), Tables).
+    augment_msg_stats(merge_fine_stats(WithCoarse, FineStats, Tables), Tables).
 
 merge_fine_stats(Stats, [], _Tables) ->
     Stats;
