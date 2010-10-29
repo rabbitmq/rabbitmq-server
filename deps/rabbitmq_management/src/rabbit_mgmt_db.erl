@@ -28,7 +28,7 @@
 
 -export([event/1]).
 
--export([get_queues/1, get_connections/0, get_connection/1,
+-export([get_queues/1, get_exchanges/1, get_connections/0, get_connection/1,
          get_overview/0, get_channels/0, get_channel/1]).
 
 %% TODO can these not be exported any more?
@@ -46,9 +46,10 @@
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
 -define(FINE_STATS, [publish, ack, deliver_get] ++ ?DELIVER_GET).
 
--define(FINE_STATS_CHANNEL_LIST,
-        [{channel_queue_stats,   [channel], message_stats, channel},
-         {channel_exchange_stats,[channel], message_stats, channel}]).
+-define(
+   FINE_STATS_CHANNEL_LIST,
+   [{channel_queue_stats,   [channel], message_stats, channel},
+    {channel_exchange_stats,[channel], message_stats, channel}]).
 
 -define(
    FINE_STATS_CHANNEL_DETAIL,
@@ -56,9 +57,15 @@
     {channel_exchange_stats,[channel],        message_stats,       channel},
     {channel_queue_stats,   [channel, queue], deliveries_by_queue, channel}]).
 
--define(FINE_STATS_QUEUE_LIST,
-        [{channel_queue_stats,          [queue], message_stats, queue},
-         {channel_queue_exchange_stats, [queue], message_stats, queue}]).
+-define(
+   FINE_STATS_QUEUE_LIST,
+   [{channel_queue_stats,          [queue], message_stats, queue},
+    {channel_queue_exchange_stats, [queue], message_stats, queue}]).
+
+-define(
+   FINE_STATS_EXCHANGE_LIST,
+   [{channel_exchange_stats,       [exchange], message_stats_in,  exchange},
+    {channel_queue_exchange_stats, [exchange], message_stats_out, exchange}]).
 
 -define(FINE_STATS_NONE, []).
 
@@ -92,6 +99,9 @@ event(Event) ->
 
 get_queues(Qs) ->
     gen_server:call(?MODULE, {get_queues, Qs}, infinity).
+
+get_exchanges(Xs) ->
+    gen_server:call(?MODULE, {get_exchanges, Xs}, infinity).
 
 get_connections() ->
     gen_server:call(?MODULE, get_connections, infinity).
@@ -250,13 +260,16 @@ init([]) ->
                                Key <- ?TABLES])}}.
 
 handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(queue_stats, Tables),
     Qs1 = merge_stats(Qs0, ?FINE_STATS_QUEUE_LIST, queue_stats, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
               Q <- Qs2],
     {reply, Qs3, State};
+
+handle_call({get_exchanges, Xs}, _From, State = #state{tables = Tables}) ->
+    {reply, merge_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, none, Tables),
+     State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
@@ -460,11 +473,16 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
      {exchange, [{name, XName}, {vhost, XVhost}]}].
 
 merge_stats(Objs, FineSpecs, Type, Tables) ->
-    Table = orddict:fetch(Type, Tables),
     WithCoarse =
-        [Obj ++
-             zero_old_rates(lookup_element(Table, {pget(pid, Obj), stats}))
-         || Obj <- Objs],
+        case Type of
+            none ->
+                Objs;
+            _ ->
+                Table = orddict:fetch(Type, Tables),
+                [Obj ++ zero_old_rates(
+                          lookup_element(Table, {pget(pid, Obj), stats}))
+                 || Obj <- Objs]
+        end,
     FineStats = [{AttachName, AttachBy,
                   get_fine_stats(FineStatsType, GroupBy, Tables)}
                  || {FineStatsType, GroupBy, AttachName, AttachBy}
@@ -479,7 +497,12 @@ merge_fine_stats(Stats, [{AttachName, AttachBy, Dict} | Rest], Tables) ->
                       || Props <- Stats], Rest, Tables).
 
 merge_fine_stats0(AttachName, AttachBy, Props, Dict, Tables) ->
-    Id = pget(pid, Props),
+    Id = case AttachBy of
+             exchange ->
+                 [{name, pget(name, Props)}, {vhost, pget(vhost, Props)}];
+             _ ->
+                 pget(pid, Props)
+         end,
     case dict:find({AttachBy, Id}, Dict) of
         {ok, Stats} -> [{AttachName, pget(AttachName, Props, []) ++
                              augment_fine_stats(Stats, Tables)} |
