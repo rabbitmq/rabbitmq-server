@@ -8,7 +8,7 @@
 
   <!-- Copy every element through with local name only -->
   <xsl:template match="*">
-    <xsl:element name="{local-name()}" namespace="http://www.w3.org/1999/xhtml">
+    <xsl:element name="{local-name()}" namespace="">
       <xsl:apply-templates select="@*|node()"/>
     </xsl:element>
   </xsl:template>
