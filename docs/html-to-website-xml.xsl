@@ -1,6 +1,7 @@
 <?xml version='1.0'?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 xmlns:doc="http://www.rabbitmq.com/namespaces/ad-hoc/doc"
+                xmlns="http://www.w3.org/1999/xhtml"
                 version='1.0'>
 
 <xsl:param name="original"/>
@@ -10,10 +11,16 @@
 <xsl:template match="*"/>
 
 <!-- Copy every element through -->
-<xsl:template match="@*|node()">
-  <xsl:copy><xsl:apply-templates select="@*|node()"/></xsl:copy>
+<xsl:template match="*">
+  <xsl:element name="{name()}" namespace="http://www.w3.org/1999/xhtml">
+    <xsl:apply-templates select="@*|node()"/>
+  </xsl:element>
 </xsl:template>
 
+<xsl:template match="@*">
+  <xsl:copy/>
+</xsl:template>
+  
 <!-- Copy the root node, and munge the outer part of the page -->
 <xsl:template match="/html">
 <xsl:processing-instruction name="xml-stylesheet">type="text/xml" href="page.xsl"</xsl:processing-instruction>
