@@ -9,7 +9,7 @@
   <tr>
     <th colspan="2">Overview</th>
     <th colspan="3">Messages</th>
-    <th colspan="4">Parameters</th>
+    <th colspan="<% if (nodes_interesting) { %>5<% } else { %>4<% } %>">Parameters</th>
   </tr>
   <tr>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
@@ -21,6 +21,9 @@
     <th><%= fmt_sort('Auto delete',  'auto_delete') %></th>
     <th><%= fmt_sort('Exclusive',    'owner_pid_details.name') %></th>
     <th>Arguments</th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',         'node') %></th>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -42,6 +45,9 @@
      <% } %>
    </td>
    <td><%= fmt_table_short(queue.arguments) %></td>
+<% if (nodes_interesting) { %>
+   <td><%= queue.node %></td>
+<% } %>
   </tr>
   <% } %>
  </tbody>

@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_overview).
+-module(rabbit_mgmt_wm_nodes).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
@@ -34,25 +34,22 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Overview = rabbit_mgmt_db:get_overview(),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_mgmt_util:reply(
-      Overview ++
-          %% NB: node and stats level duplicate what's in /nodes but we want
-          %% to (a) know which node we're talking to and (b) use the stats
-          %% level to switch features on / off in the UI.
-          [{node,             node()},
-           {statistics_level, StatsLevel},
-           {statistics_db_node, stats_db_node()},
-           {listeners,        [rabbit_mgmt_format:listener(L)
-                               || L <- rabbit_networking:active_listeners()]}],
+    S = rabbit_mnesia:status(),
+    Nodes = proplists:get_value(nodes, S),
+    Types = proplists:get_keys(Nodes),
+    Running = proplists:get_value(running_nodes, S),
+    rabbit_mgmt_util:reply_list(
+      lists:append(
+        [[make_entry(Node, Type, lists:member(Node, Running))
+          || Node <- proplists:get_value(Type, Nodes)] || Type <- Types]),
       ReqData, Context).
 
-stats_db_node() ->
-    case global:whereis_name(rabbit_mgmt_db) of
-        undefined -> not_running;
-        Pid       -> node(Pid)
-    end.
+make_entry(Node, Type, Running) ->
+    [{name, Node}, {type, Type}, {running, Running}]
+        ++ case Running of
+               true -> rabbit_mgmt_external_stats:info(Node);
+               _    -> []
+           end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

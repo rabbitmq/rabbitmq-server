@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_sup).
+-module(rabbit_mgmt_global_sup).
 
 -behaviour(supervisor).
 
@@ -26,13 +26,16 @@
 -export([start_link/0]).
 
 init([]) ->
-    ExternalStats = {rabbit_mgmt_external_stats,
-                     {rabbit_mgmt_external_stats, start_link, []},
-                     permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    DBMonitor = {rabbit_mgmt_db_monitor,
-                 {rabbit_mgmt_db_monitor, start_link, []},
-                 permanent, 5000, worker, [rabbit_mgmt_db_monitor]},
-    {ok, {{one_for_one, 10, 10}, [ExternalStats, DBMonitor]}}.
+    DB = {rabbit_mgmt_db,
+          {rabbit_mgmt_db, start_link, []},
+          permanent, 5000, worker, [rabbit_mgmt_external_stats]},
+    {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    Res = case supervisor:start_link({global, ?MODULE}, ?MODULE, []) of
+              {error, {already_started, _}} -> ignore;
+              Else                          -> Else
+          end,
+    %% Needs to happen after we know the DB's up but before boot step finished
+    rabbit_mgmt_db_handler:add_handler(),
+    Res.

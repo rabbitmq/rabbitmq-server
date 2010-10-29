@@ -41,6 +41,9 @@ overview_test() ->
     http_get("/applications"),
     ok.
 
+nodes_test() ->
+    assert_list([[{type, <<"disc">>}, {running, true}]], http_get("/nodes")).
+
 auth_test() ->
     test_auth(?NOT_AUTHORISED, []),
     test_auth(?NOT_AUTHORISED, [auth_header("guest", "gust")]),
