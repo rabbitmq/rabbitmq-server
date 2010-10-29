@@ -20,8 +20,8 @@
 <% } else { %>
        <td><%= link_queue(del.queue_details.vhost, del.queue_details.name) %></td>
 <% } %>
-       <td><%= fmt_rate(del.stats, 'deliver_get') %></td>
-       <td><%= fmt_rate(del.stats, 'ack') %></td>
+       <td class="r"><%= fmt_rate(del.stats, 'deliver_get') %></td>
+       <td class="r"><%= fmt_rate(del.stats, 'ack') %></td>
      </tr>
 <% } %>
   <tr class="total">
