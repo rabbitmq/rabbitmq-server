@@ -63,7 +63,7 @@
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
--record(listener, {node, protocol, host, port}).
+-record(listener, {node, protocol, host, ip_address, port}).
 
 -record(basic_message, {exchange_name, routing_key, content, guid,
                         is_persistent}).
