@@ -237,26 +237,26 @@ server_properties() ->
     {ok, Version} = application:get_key(rabbit, vsn),
 
     %% Get any configuration-specified server properties
-    {ok, RawConfigServerProps} = application:get_env(rabbit, 
+    {ok, RawConfigServerProps} = application:get_env(rabbit,
                                                      server_properties),
 
-    %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms 
+    %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
     %% from the config and merge them with the generated built-in properties
-    NormalizedConfigServerProps = 
+    NormalizedConfigServerProps =
         [case X of
              {KeyAtom, Value} -> {atom_to_binary(KeyAtom, latin1),
                                   longstr,
                                   list_to_binary(Value)};
              {BinKey, Type, Value} -> {BinKey, Type, Value}
-         end || X <- RawConfigServerProps ++ 
-                    [{product,     Product}, 
+         end || X <- RawConfigServerProps ++
+                    [{product,     Product},
                      {version,     Version},
                      {platform,    "Erlang/OTP"},
                      {copyright,   ?COPYRIGHT_MESSAGE},
                      {information, ?INFORMATION_MESSAGE}]],
 
     %% Filter duplicated properties in favor of config file provided values
-    lists:usort(fun ({K1,_,_},{K2,_,_}) -> K1 =< K2 end,
+    lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).

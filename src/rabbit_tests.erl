@@ -1991,10 +1991,10 @@ test_configurable_server_properties() ->
     {ok, ServerProperties} = application:get_env(rabbit, server_properties),
 
     %% Helper functions
-    ConsProp = fun (X) -> application:set_env(rabbit, 
-                                              server_properties, 
+    ConsProp = fun (X) -> application:set_env(rabbit,
+                                              server_properties,
                                               [X | ServerProperties]) end,
-    IsPropPresent = fun (X) -> lists:member(X, 
+    IsPropPresent = fun (X) -> lists:member(X,
                                             rabbit_reader:server_properties())
                     end,
 
