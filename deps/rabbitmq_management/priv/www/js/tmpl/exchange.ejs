@@ -3,7 +3,7 @@
 <div class="section">
   <h2>Details</h2>
   <div class="hider">
-    <table class="list">
+    <table class="facts">
       <tr>
         <th>Virtual host</th>
         <th>Type</th>
@@ -23,38 +23,30 @@
 </div>
 
 <% if (statistics_level == 'fine') { %>
-<div class="section">
+<div class="section-hidden">
 <h2>Message Rates</h2>
 <div class="hider updatable">
-<%= message_rates([[exchange.message_stats_in,  {'publish':'Incoming'}],
-                   [exchange.message_stats_out, {'publish':'Outgoing'}]]) %>
-<p class="br">
+<p>
   The incoming rate is the rate at which messages are published
   directly to this exchange. The outgoing rate is the rate at which
   messages enter queues, having been published directly to this
   exchange.
 </p>
-</div>
-</div>
-<% } %>
-
-<% if (statistics_level == 'fine') { %>
-<div class="section-hidden">
-<h2>Detailed Message Rates</h2>
-<div class="hider updatable">
 <table class="two-col-layout">
   <tr>
     <td>
       <%= format('msg-detail-publishes',
                  {'mode':   'exchange-incoming',
                   'object': exchange.incoming,
-                  'label':  'Incoming'}) %>
+                  'label':  'Incoming',
+                  'totals': exchange.message_stats_in}) %>
     </td>
     <td>
       <%= format('msg-detail-publishes',
                  {'mode':   'exchange-outgoing',
                   'object': exchange.outgoing,
-                  'label':  'Outgoing'}) %>
+                  'label':  'Outgoing',
+                  'totals': exchange.message_stats_out}) %>
     </td>
   </tr>
 </table>

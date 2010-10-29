@@ -133,36 +133,31 @@ function link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
 }
 
-function message_rates(stats_lists) {
+function message_rates(stats) {
     var res = "";
-    var saw_keys = false;
-    for (var j in stats_lists) {
-        var stats = stats_lists[j][0];
-        var map = stats_lists[j][1];
-
-        if (keys(stats).length > 0) {
-            saw_keys = true;
-            var items = [['Publish', 'publish'], ['Deliver', 'deliver'],
-                         ['Acknowledge', 'ack'], ['Get', 'get'],
-                         ['Deliver (noack)', 'deliver_no_ack'],
-                         ['Get (noack)', 'get_no_ack']];
-            for (var i in items) {
-                var key = items[i][1];
-                var name = (map && key in map) ? map[key] : items[i][0];
-                if (key + '_details' in stats) {
-                    res += '<div class="highlight">' + name;
-                    res += '<strong>' +
-                        Math.round(stats[key + '_details'].rate) +
-                        '</strong>';
-                    res += 'msg/s</div>';
-                }
+    if (keys(stats).length > 0) {
+        var items = [['Publish', 'publish'], ['Deliver', 'deliver'],
+                     ['Acknowledge', 'ack'], ['Get', 'get'],
+                     ['Deliver (noack)', 'deliver_no_ack'],
+                     ['Get (noack)', 'get_no_ack']];
+        for (var i in items) {
+            var name = items[i][0];
+            var key = items[i][1] + '_details';
+            if (key in stats) {
+                res += '<div class="highlight">' + name;
+                res += '<strong>' + Math.round(stats[key].rate) + '</strong>';
+                res += 'msg/s</div>';
             }
         }
+
+        if (res == "") {
+            res = '<p>Waiting for message rates...</p>';
+        }
     }
-    if (res == "") {
-        res = saw_keys ?
-            '<p>Waiting for message rates...</p>' : '<p>Currently idle</p>';
+    else {
+        res = '<p>Currently idle</p>';
     }
+
     return res;
 }
 

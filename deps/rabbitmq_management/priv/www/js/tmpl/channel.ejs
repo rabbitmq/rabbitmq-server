@@ -3,7 +3,7 @@
 <div class="section">
 <h2>Details</h2>
 <div class="hider updatable">
-<table class="list">
+<table class="facts">
   <tr>
     <th>Connection</th>
     <th>Virtual host</th>
@@ -32,28 +32,20 @@
 <div class="section">
 <h2>Message Rates</h2>
 <div class="hider updatable">
-<%= message_rates([[channel.message_stats, {}]]) %>
-<span class="br"></span>
-</div>
-</div>
-<% } %>
-
-<% if (statistics_level == 'fine') { %>
-<div class="section-hidden">
-<h2>Detailed Message Rates</h2>
-<div class="hider updatable">
 <table class="two-col-layout">
   <tr>
     <td>
       <%= format('msg-detail-publishes',
                  {'mode':   'channel',
                   'object': channel.publishes,
-                  'label':  'Publishes'}) %>
+                  'label':  'Publishes',
+                  'totals': channel.message_stats}) %>
     </td>
     <td>
       <%= format('msg-detail-deliveries',
                  {'mode':   'channel',
-                  'object': channel.deliveries}) %>
+                  'object': channel.deliveries,
+                  'totals': channel.message_stats}) %>
     </td>
   </tr>
 </table>

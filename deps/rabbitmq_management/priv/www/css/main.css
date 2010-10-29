@@ -29,13 +29,22 @@ table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
 
+table.list-with-total { border-bottom: none; }
+table.list tr.total td { border: none; border-top: 1px solid #bbb; }
+table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: right; vertical-align: middle; }
+
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 sub { display: block; color: #888; }
 .unknown { color: #888; }
 
-table.facts th { text-align: right; font-weight: bold; }
-table.facts th, table.facts td { vertical-align: top; }
+table.facts { border-left: 1px solid #ccc; border-right: 1px solid #ddd; }
+table.facts th { color: black; padding: 10px; }
+table.facts td { padding: 10px 10px 10px 10px; }
+table.facts th, table.facts td { text-align: center; vertical-align: top; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
+
+table.facts-long th { text-align: right; font-weight: bold; }
+table.facts-long th, table.facts-long td { vertical-align: top; }
 
 tr.alt td {
     background: #eee;
@@ -49,9 +58,9 @@ td.status div.red * { color:white; }
 td.status div.yellow { background: yellow; }
 td.status div.green { background: lightgreen; }
 
-td.l { text-align: left; }
-td.c { text-align: center; }
-td.r { text-align: right; }
+td.l { text-align: left !important; }
+td.c { text-align: center !important; }
+td.r { text-align: right !important; }
 
 p.status-ok { color: #888; }
 p.status-error { background: #f44; border: 2px solid #800; color: white; margin-top: 50px !important; }

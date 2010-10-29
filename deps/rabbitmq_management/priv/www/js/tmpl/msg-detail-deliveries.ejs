@@ -1,6 +1,6 @@
 <h3>Deliveries</h3>
 <% if (object && object.length > 0) { %>
-<table class="list">
+<table class="list list-with-total">
   <tr>
 <% if (mode == 'queue') { %>
     <th>Channel</th>
@@ -24,6 +24,11 @@
        <td><%= fmt_rate(del.stats, 'ack') %></td>
      </tr>
 <% } %>
+  <tr class="total">
+    <th>Total:</th>
+    <td><span class="mini-highlight"><%= fmt_rate(totals, 'deliver_get') %></span></td>
+    <td><span class="mini-highlight"><%= fmt_rate(totals, 'ack') %></span></td>
+  </tr>
 </table>
 <% } else { %>
 <p> ... no deliveries ...</p>
