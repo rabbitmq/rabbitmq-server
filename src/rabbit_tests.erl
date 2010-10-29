@@ -73,6 +73,7 @@ all_tests() ->
     passed = test_user_management(),
     passed = test_server_status(),
     passed = maybe_run_cluster_dependent_tests(),
+    passed = test_configurable_server_properties(),
     passed.
 
 maybe_run_cluster_dependent_tests() ->
@@ -2046,4 +2047,57 @@ test_queue_recover() ->
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
+    passed.
+
+test_configurable_server_properties() ->
+    %% List of the names of the built-in properties do we expect to find
+    BuiltInPropNames = [<<"product">>, <<"version">>, <<"platform">>,
+                        <<"copyright">>, <<"information">>],
+
+    %% Verify that the built-in properties are initially present
+    ActualPropNames = [Key ||
+                         {Key, longstr, _} <- rabbit_reader:server_properties()],
+    true = lists:all(fun (X) -> lists:member(X, ActualPropNames) end,
+                     BuiltInPropNames),
+
+    %% Get the initial server properties configured in the environment
+    {ok, ServerProperties} = application:get_env(rabbit, server_properties),
+
+    %% Helper functions
+    ConsProp = fun (X) -> application:set_env(rabbit,
+                                              server_properties,
+                                              [X | ServerProperties]) end,
+    IsPropPresent = fun (X) -> lists:member(X,
+                                            rabbit_reader:server_properties())
+                    end,
+
+    %% Add a wholly new property of the simplified {KeyAtom, StringValue} form
+    NewSimplifiedProperty = {NewHareKey, NewHareVal} = {hare, "soup"},
+    ConsProp(NewSimplifiedProperty),
+    %% Do we find hare soup, appropriately formatted in the generated properties?
+    ExpectedHareImage = {list_to_binary(atom_to_list(NewHareKey)),
+                         longstr,
+                         list_to_binary(NewHareVal)},
+    true = IsPropPresent(ExpectedHareImage),
+
+    %% Add a wholly new property of the {BinaryKey, Type, Value} form
+    %% and check for it
+    NewProperty = {<<"new-bin-key">>, signedint, -1},
+    ConsProp(NewProperty),
+    %% Do we find the new property?
+    true = IsPropPresent(NewProperty),
+
+    %% Add a property that clobbers a built-in, and verify correct clobbering
+    {NewVerKey, NewVerVal} = NewVersion = {version, "X.Y.Z."},
+    {BinNewVerKey, BinNewVerVal} = {list_to_binary(atom_to_list(NewVerKey)),
+                                    list_to_binary(NewVerVal)},
+    ConsProp(NewVersion),
+    ClobberedServerProps = rabbit_reader:server_properties(),
+    %% Is the clobbering insert present?
+    true = IsPropPresent({BinNewVerKey, longstr, BinNewVerVal}),
+    %% Is the clobbering insert the only thing with the clobbering key?
+    [{BinNewVerKey, longstr, BinNewVerVal}] =
+        [E || {K, longstr, _V} = E <- ClobberedServerProps, K =:= BinNewVerKey],
+
+    application:set_env(rabbit, server_properties, ServerProperties),
     passed.
