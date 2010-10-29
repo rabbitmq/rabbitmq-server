@@ -194,6 +194,7 @@ tcp_listener_started(IPAddress, Port) ->
            #listener{node = node(),
                      protocol = tcp,
                      host = tcp_host(IPAddress),
+                     ip_address = IPAddress,
                      port = Port}).
 
 tcp_listener_stopped(IPAddress, Port) ->
@@ -202,6 +203,7 @@ tcp_listener_stopped(IPAddress, Port) ->
            #listener{node = node(),
                      protocol = tcp,
                      host = tcp_host(IPAddress),
+                     ip_address = IPAddress,
                      port = Port}).
 
 active_listeners() ->
