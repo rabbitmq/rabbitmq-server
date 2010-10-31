@@ -556,12 +556,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
-                                case IsPersistent of
-                                    true  -> MsgSeqNo;
-                                    false -> undefined
-                                end)),
-    State2 = process_routing_result(RoutingRes, DeliveredQPids, IsPersistent,
+          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message, MsgSeqNo)),
+    State2 = process_routing_result(RoutingRes, DeliveredQPids,
                                     MsgSeqNo, Message, State1),
     maybe_incr_stats([{ExchangeName, 1} |
                       [{{QPid, ExchangeName}, 1} ||
@@ -1245,19 +1241,17 @@ is_message_persistent(Content) ->
             IsPersistent
     end.
 
-process_routing_result(unroutable,    _,     _, MsgSeqNo, Message, State) ->
+process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
-process_routing_result(not_delivered, _,     _, MsgSeqNo, Message, State) ->
+process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
-process_routing_result(routed,       [],     _, MsgSeqNo,       _, State) ->
+process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
-process_routing_result(routed,        _,     _, undefined,      _, State) ->
+process_routing_result(routed,        _, undefined,      _, State) ->
     State;
-process_routing_result(routed,        _, false, MsgSeqNo,       _, State) ->
-    send_or_enqueue_ack(MsgSeqNo, undefined, State);
-process_routing_result(routed,    QPids,  true, MsgSeqNo,       _,
+process_routing_result(routed,    QPids, MsgSeqNo,       _,
                        State = #ch{queues_for_msg = QFM}) ->
     QFM1 = dict:store(MsgSeqNo, sets:from_list(QPids), QFM),
     [maybe_monitor(QPid) || QPid <- QPids],

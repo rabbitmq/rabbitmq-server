@@ -426,6 +426,9 @@ confirm_message(#basic_message{guid = Guid}, State) ->
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     State;
+record_confirm_message(#delivery{message = #basic_message{
+                                   is_persistent = false}}, State) ->
+    State;
 record_confirm_message(#delivery{msg_seq_no = MsgSeqNo,
                                  sender     = ChPid,
                                  message    = #basic_message{guid = Guid}},
@@ -447,9 +450,15 @@ run_message_queue(State) ->
     State2.
 
 attempt_delivery(#delivery{txn        = none,
+                           sender     = ChPid,
                            message    = Message,
                            msg_seq_no = MsgSeqNo},
                  State = #q{backing_queue = BQ}) ->
+    IsPersistent = Message#basic_message.is_persistent,
+    case IsPersistent of
+        false -> rabbit_channel:confirm(ChPid, MsgSeqNo);
+        _     -> ok
+    end,
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
@@ -460,8 +469,7 @@ attempt_delivery(#delivery{txn        = none,
                     BQ:publish_delivered(AckRequired, Message,
                                          ?BASE_MESSAGE_PROPERTIES
                                          #message_properties {
-                                            needs_confirming =
-                                                (MsgSeqNo =/= undefined)},
+                                            needs_confirming = IsPersistent },
                                          BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
