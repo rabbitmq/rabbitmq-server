@@ -37,6 +37,7 @@
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
+-export([change_password_hash/2]).
 -export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, clear_permissions/2,
          list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
@@ -51,6 +52,7 @@
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).
 -type(password() :: binary()).
+-type(password_hash() :: binary()).
 -type(regexp() :: binary()).
 -spec(check_login/2 ::
         (binary(), binary()) -> rabbit_types:user() |
@@ -70,6 +72,7 @@
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
+-spec(change_password_hash/2 :: (username(), password_hash()) -> 'ok').
 -spec(set_admin/1 :: (username()) -> 'ok').
 -spec(clear_admin/1 :: (username()) -> 'ok').
 -spec(list_users/0 :: () -> [username()]).
@@ -251,13 +254,20 @@ change_password(Username, Password) ->
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
 
+change_password_hash(Username, PasswordHash) ->
+    R = update_user(Username, fun(User) ->
+                                      User#user{ password_hash = PasswordHash }
+                              end),
+    rabbit_log:info("Changed password for user ~p~n", [Username]),
+    R.
+
 hash_password(Cleartext) ->
     Salt = make_salt(),
-    Hash = hash_password(Salt, Cleartext),
+    Hash = salted_md5(Salt, Cleartext),
     <<"MD5:", Salt/binary, ":", Hash/binary>>.
 
 check_password(Cleartext, <<"MD5:", Salt:8/binary, ":", Hash/binary>>) ->
-    Hash =:= hash_password(Salt, Cleartext).
+    Hash =:= salted_md5(Salt, Cleartext).
 
 make_salt() ->
     {A1,A2,A3} = now(),
@@ -265,7 +275,7 @@ make_salt() ->
     Salt0 = random:uniform(16#ffffffff),
     base64:encode(<<Salt0:32>>).
 
-hash_password(Salt, Cleartext)->
+salted_md5(Salt, Cleartext)->
     Salted = <<Salt/binary, Cleartext/binary>>,
     base64:encode(erlang:md5(Salted)).
 
