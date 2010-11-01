@@ -64,7 +64,7 @@
         (username(), password())
         -> {'ok', rabbit_types:user()} | 'refused').
 -spec(check_vhost_access/2 ::
-        (username(), rabbit_types:vhost())
+        (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
         (username(), rabbit_types:r(atom()), permission_atom())
@@ -161,7 +161,7 @@ internal_lookup_vhost_access(Username, VHostPath) ->
               end
       end).
 
-check_vhost_access(Username, VHostPath) ->
+check_vhost_access(#user{username = Username}, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     case internal_lookup_vhost_access(Username, VHostPath) of
         {ok, _R} ->
