@@ -206,7 +206,7 @@ do_connect(State0 = #state{params = #amqp_params{username = User,
         false -> exit(broker_not_found_in_vm)
     end,
     rabbit_access_control:user_pass_login(User, Pass),
-    rabbit_access_control:check_vhost_access(User, VHost),
+    rabbit_access_control:check_vhost_access(#user{username = User}, VHost),
     State1 = start_infrastructure(State0),
     State1#state{server_properties = rabbit_reader:server_properties()}.
 
