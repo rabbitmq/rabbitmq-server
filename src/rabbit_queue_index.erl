@@ -31,8 +31,9 @@
 
 -module(rabbit_queue_index).
 
--export([init/5, terminate/2, delete_and_terminate/1, publish/5,
-         deliver/2, ack/2, sync/2, flush/1, read/3,
+-export([init/2, shutdown_terms/1, recover/5,
+         terminate/2, delete_and_terminate/1,
+         publish/5, deliver/2, ack/2, sync/2, flush/1, read/3,
          next_segment_boundary/1, bounds/1, recover/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
@@ -202,10 +203,13 @@
 -type(startup_fun_state() ::
         {fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A}),
          A}).
+-type(shutdown_terms() :: [any()]).
 
--spec(init/5 :: (rabbit_amqqueue:name(), boolean(), boolean(),
-                 fun ((rabbit_guid:guid()) -> boolean()), on_sync_fun()) ->
-             {'undefined' | non_neg_integer(), [any()], qistate()}).
+-spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
+-spec(shutdown_terms/1 :: (rabbit_amqqueue:name()) -> shutdown_terms()).
+-spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
+                    fun ((rabbit_guid:guid()) -> boolean()), on_sync_fun()) ->
+             {'undefined' | non_neg_integer(), qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/5 :: (rabbit_guid:guid(), seq_id(),
@@ -222,8 +226,8 @@
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 ::
-        ([rabbit_amqqueue:name()]) -> {[[any()]], startup_fun_state()}).
+-spec(recover/1 :: ([rabbit_amqqueue:name()]) ->
+                        {[[any()]], startup_fun_state()}).
 
 -endif.
 
@@ -232,25 +236,27 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-init(Name, false, _MsgStoreRecovered, _ContainsCheckFun, OnSyncFun) ->
+init(Name, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     false = filelib:is_file(Dir), %% is_file == is file or dir
-    {0, [], State #qistate { on_sync = OnSyncFun }};
+    State #qistate { on_sync = OnSyncFun }.
 
-init(Name, true, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
+shutdown_terms(Name) ->
+    #qistate { dir = Dir } = blank_state(Name),
+    case read_shutdown_terms(Dir) of
+        {error, _}   -> [];
+        {ok, Terms1} -> Terms1
+    end.
+
+recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
-    Terms = case read_shutdown_terms(Dir) of
-                {error, _}   -> [];
-                {ok, Terms1} -> Terms1
-            end,
+    State1 = State #qistate { on_sync = OnSyncFun },
     CleanShutdown = detect_clean_shutdown(Dir),
-    {Count, State1} =
-        case CleanShutdown andalso MsgStoreRecovered of
-            true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
-                     init_clean(RecoveredCounts, State);
-            false -> init_dirty(CleanShutdown, ContainsCheckFun, State)
-        end,
-    {Count, Terms, State1 #qistate { on_sync = OnSyncFun }}.
+    case CleanShutdown andalso MsgStoreRecovered of
+        true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
+                 init_clean(RecoveredCounts, State1);
+        false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
+    end.
 
 terminate(Terms, State) ->
     {SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),

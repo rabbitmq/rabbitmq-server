@@ -589,22 +589,12 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">-s <replaceable>scope</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>vhostpath</term>
                 <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>scope</term>
-                <listitem><para>Scope of the permissions: either
-                <command>client</command> (the default) or
-                <command>all</command>.  This determines whether
-                permissions are checked for server-generated resource
-                names (<command>all</command>) or only for
-                client-specified resource names
-                (<command>client</command>).</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>user</term>

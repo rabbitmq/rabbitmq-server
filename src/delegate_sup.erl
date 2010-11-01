@@ -55,9 +55,11 @@ start_link() ->
 %%----------------------------------------------------------------------------
 
 init(_Args) ->
-    {ok, {{one_for_one, 10, 10},
-          [{Hash, {delegate, start_link, [Hash]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Hash <- lists:seq(0, delegate:process_count() - 1)]}}.
+    {ok, {{one_for_one, 10, 10}, specs(incoming) ++ specs(outgoing)}}.
+
+specs(Prefix) ->
+    [{{Prefix, Hash}, {delegate, start_link, [Prefix, Hash]},
+      transient, 16#ffffffff, worker, [delegate]} ||
+        Hash <- lists:seq(0, delegate:process_count() - 1)].
 
 %%----------------------------------------------------------------------------

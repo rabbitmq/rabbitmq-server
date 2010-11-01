@@ -34,7 +34,6 @@
 -include("rabbit.hrl").
 
 -include_lib("public_key/include/public_key.hrl").
--include_lib("ssl/src/ssl_int.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
 
