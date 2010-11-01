@@ -244,7 +244,7 @@ server_properties() ->
     %% from the config and merge them with the generated built-in properties
     NormalizedConfigServerProps =
         [case X of
-             {KeyAtom, Value} -> {atom_to_binary(KeyAtom, latin1),
+             {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
                                   longstr,
                                   list_to_binary(Value)};
              {BinKey, Type, Value} -> {BinKey, Type, Value}
