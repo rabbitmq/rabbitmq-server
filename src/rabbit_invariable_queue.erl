@@ -299,7 +299,7 @@ persist_acks(QName, true, Txn, AckTags, PA) ->
                  [{ack, {QName, Guid}} || Guid <- AckTags,
                                           begin
                                               {ok, {Msg, _MsgProps}}
-                                                  = dict:find(Guid, PA),
+                                                  = dict:fetch(Guid, PA),
                                               Msg #basic_message.is_persistent
                                           end]);
 persist_acks(_QName, _IsDurable, _Txn, _AckTags, _PA) ->
