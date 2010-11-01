@@ -453,9 +453,10 @@ attempt_delivery(#delivery{txn        = none,
                            sender     = ChPid,
                            message    = Message,
                            msg_seq_no = MsgSeqNo},
-                 State = #q{backing_queue = BQ}) ->
-    IsPersistent = Message#basic_message.is_persistent,
-    case IsPersistent of
+                 State = #q{backing_queue = BQ, q = Q}) ->
+    NeedsConfirming = Message#basic_message.is_persistent andalso
+                      Q#amqqueue.durable,
+    case NeedsConfirming of
         false -> rabbit_channel:confirm(ChPid, MsgSeqNo);
         _     -> ok
     end,
@@ -469,7 +470,7 @@ attempt_delivery(#delivery{txn        = none,
                     BQ:publish_delivered(AckRequired, Message,
                                          ?BASE_MESSAGE_PROPERTIES
                                          #message_properties {
-                                            needs_confirming = IsPersistent },
+                                            needs_confirming = NeedsConfirming },
                                          BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
