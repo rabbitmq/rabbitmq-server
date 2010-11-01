@@ -1236,7 +1236,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                          persistent_count  = PCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2 = #vqstate { pending_ack = PA }}) ->
-                  {ok, AckEntry} = dict:find(SeqId, PA),
+                  AckEntry = dict:fetch(SeqId, PA),
                   {accumulate_ack(SeqId, AckEntry, Acc),
                    Fun(AckEntry, State2 #vqstate {
                                    pending_ack = dict:erase(SeqId, PA) })}
