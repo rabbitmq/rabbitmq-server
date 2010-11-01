@@ -253,11 +253,11 @@ change_password(Username, Password) ->
 
 hash_password(Cleartext) ->
     Salt = make_salt(),
-    Hash = hash_password(Cleartext, Salt),
-    <<Salt/binary, Hash/binary>>.
+    Hash = hash_password(Salt, Cleartext),
+    <<"MD5:", Salt/binary, ":", Hash/binary>>.
 
-check_password(Cleartext, <<Salt:8/binary, Hash/binary>>) ->
-    Hash =:= hash_password(Cleartext, Salt).
+check_password(Cleartext, <<"MD5:", Salt:8/binary, ":", Hash/binary>>) ->
+    Hash =:= hash_password(Salt, Cleartext).
 
 make_salt() ->
     {A1,A2,A3} = now(),
@@ -265,9 +265,9 @@ make_salt() ->
     Salt0 = random:uniform(16#ffffffff),
     base64:encode(<<Salt0:32>>).
 
-hash_password(Cleartext, Salt) ->
+hash_password(Salt, Cleartext)->
     Salted = <<Salt/binary, Cleartext/binary>>,
-    base64:encode(sha2:hexdigest512(Salted)).
+    base64:encode(erlang:md5(Salted)).
 
 set_admin(Username) ->
     set_admin(Username, true).
