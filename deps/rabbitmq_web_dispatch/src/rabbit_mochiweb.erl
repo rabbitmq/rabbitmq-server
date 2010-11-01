@@ -4,6 +4,7 @@
 -export([register_handler/4, register_global_handler/1]).
 -export([register_context_handler/3, register_static_context/4]).
 -export([static_context_selector/1, static_context_handler/3, static_context_handler/2]).
+-export([register_authenticated_static_context/5]).
 
 ensure_started(App) ->
     case application:start(App) of
@@ -99,3 +100,27 @@ static_context_handler(Context, LocalPath) ->
                 "/" ++ P  -> Req:serve_file(P, LocalPath)
             end
     end.
+
+%% @doc Register a fully static but HTTP-authenticated context to
+%% serve content from a module-relative directory, with link to
+%% display in the global context.
+register_authenticated_static_context(Context, Module, FSPath, LinkDesc,
+                                      AuthFun) ->
+    RawHandler = static_context_handler(Context, Module, FSPath),
+    Unauthorized = {401, [{"WWW-Authenticate",
+                           "Basic realm=\"" ++ LinkDesc ++ "\""}], ""},
+    Handler =
+        fun (Req) ->
+                case rabbit_mochiweb_util:parse_auth_header(
+                       Req:get_header_value("authorization")) of
+                    [Username, Password] ->
+                        case AuthFun(Username, Password) of
+                            true -> RawHandler(Req);
+                            _    -> Req:respond(Unauthorized)
+                        end;
+                    _ ->
+                        Req:respond(Unauthorized)
+                end
+        end,
+    register_handler(static_context_selector(Context),
+                     Handler, Context, LinkDesc).
