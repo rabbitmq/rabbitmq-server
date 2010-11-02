@@ -33,8 +33,6 @@
 
 -export([start/0, stop/0]).
 
--define(DefaultPluginDir, "plugins").
--define(DefaultUnpackedPluginDir, "priv/plugins").
 -define(BaseApps, [rabbit]).
 
 %%----------------------------------------------------------------------------
