@@ -62,11 +62,9 @@ is_authorized_user(ReqData, Context, Item) ->
 is_authorized(ReqData, Context, Fun) ->
     Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
                     ReqData, Context},
-    case wrq:get_req_header("authorization", ReqData) of
-        "Basic " ++ Base64 ->
-            Str = base64:mime_decode_to_string(Base64),
-            [Username, Pass] =
-                [list_to_binary(S) || S <- string:tokens(Str, ":")],
+    case rabbit_mochiweb_util:parse_auth_header(
+           wrq:get_req_header("authorization", ReqData)) of
+        [Username, Pass] ->
             case rabbit_access_control:lookup_user(Username) of
                 {ok, User = #user{password = Pass1,
                                   is_admin = IsAdmin}} when Pass == Pass1  ->

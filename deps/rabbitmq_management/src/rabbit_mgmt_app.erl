@@ -23,6 +23,8 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
+
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 -define(CLI_PREFIX, "cli").
@@ -56,8 +58,14 @@ register_contexts() ->
       [{[?PREFIX | Path], F, A} ||
           {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()]),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
-    rabbit_mochiweb:register_static_context(?UI_PREFIX, ?MODULE, "priv/www",
-                                            "Management Console"),
+    rabbit_mochiweb:register_authenticated_static_context(
+      ?UI_PREFIX, ?MODULE, "priv/www", "RabbitMQ Management Console",
+     fun (U, P) ->
+            case rabbit_access_control:lookup_user(U) of
+                {ok, User = #user{password = P1}} when P == P1 -> true;
+                _                                              -> false
+            end
+     end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
                                              "HTTP API"),

@@ -37,8 +37,6 @@ overview_test() ->
     true = 0 < length(pget(listeners, http_get("/overview"))),
     %% TODO uncomment when priv works in test
     %%http_get(""),
-    %% Just for coverage
-    http_get("/applications"),
     ok.
 
 nodes_test() ->

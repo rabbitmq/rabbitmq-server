@@ -297,7 +297,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
-                 [{fun rabbit_mgmt_format:table/1,[backing_queue_status]}],
+                 [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]}],
                  [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
@@ -313,7 +313,7 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
       [{fun rabbit_mgmt_format:ip/1,           [address, peer_address]},
        {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
        {fun rabbit_mgmt_format:protocol/1,     [protocol]},
-       {fun rabbit_mgmt_format:table/1,        [client_properties]}], State);
+       {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
 
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
