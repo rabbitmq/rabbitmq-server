@@ -117,12 +117,12 @@
 
 -export_type([gc_state/0, file_num/0]).
 
--opaque(gc_state() :: #gc_state { dir              :: file:filename(),
-                                  index_module     :: atom(),
-                                  index_state      :: any(),
-                                  file_summary_ets :: ets:tid(),
-                                  msg_store        :: server()
-                                }).
+-type(gc_state() :: #gc_state { dir              :: file:filename(),
+                                index_module     :: atom(),
+                                index_state      :: any(),
+                                file_summary_ets :: ets:tid(),
+                                msg_store        :: server()
+                              }).
 
 -type(server() :: pid() | atom()).
 -type(client_ref() :: binary()).
