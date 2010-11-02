@@ -48,10 +48,9 @@ maybe_upgrade(Dir) ->
             G = load_graph(),
             case unknown_heads(CurrentHeads, G) of
                 [] ->
-                    Upgrades = upgrades_to_apply(CurrentHeads, G),
-                    case Upgrades of
-                        [] -> ok;
-                        _  -> apply_upgrades(Upgrades, Dir)
+                    case upgrades_to_apply(CurrentHeads, G) of
+                        []       -> ok;
+                        Upgrades -> apply_upgrades(Upgrades, Dir)
                     end;
                 Unknown ->
                     [warn("Data store has had future upgrade ~w applied." ++
