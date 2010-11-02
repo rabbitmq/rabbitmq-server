@@ -1,11 +1,13 @@
 var statistics_level;
 var user_administrator;
+var nodes_interesting;
 
 $(document).ready(function() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     user_administrator = user.administrator;
+    nodes_interesting = JSON.parse(sync_get('/nodes')).length > 1;
     setup_constant_events();
     update_vhosts();
     app.run();
@@ -49,7 +51,13 @@ function dispatcher() {
                 render(r, t, p);
             });
     }
-    path('#/', {'overview': '/overview', 'applications': '/applications'}, 'overview');
+    path('#/', {'overview': '/overview',
+                'nodes': '/nodes'}, 'overview');
+    this.get('#/nodes/:name', function() {
+            var name = esc(this.params['name']);
+            render({'node': '/nodes/' + name},
+                   'node', '');
+        });
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {

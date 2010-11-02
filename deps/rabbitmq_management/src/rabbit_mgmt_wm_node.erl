@@ -18,9 +18,10 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_wm_overview).
+-module(rabbit_mgmt_wm_node).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([resource_exists/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -33,35 +34,24 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
+resource_exists(ReqData, Context) ->
+    {case node0(ReqData) of
+         not_found -> false;
+         _         -> true
+     end, ReqData, Context}.
+
 to_json(ReqData, Context) ->
-    Overview = rabbit_mgmt_db:get_overview(),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_mgmt_util:reply(
-      Overview ++
-          %% NB: node and stats level duplicate what's in /nodes but we want
-          %% to (a) know which node we're talking to and (b) use the stats
-          %% level to switch features on / off in the UI.
-          [{node,               node()},
-           {management_version, version()},
-           {statistics_level,   StatsLevel},
-           {statistics_db_node, stats_db_node()},
-           {listeners,          [rabbit_mgmt_format:listener(L)
-                                 || L <- rabbit_networking:active_listeners()]}],
-      ReqData, Context).
+    rabbit_mgmt_util:reply(node0(ReqData), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-stats_db_node() ->
-    case global:whereis_name(rabbit_mgmt_db) of
-        undefined -> not_running;
-        Pid       -> node(Pid)
+node0(ReqData) ->
+    Name = list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))),
+    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(),
+               proplists:get_value(name, N) == Name] of
+        []     -> not_found;
+        [Node] -> Node
     end.
-
-version() ->
-    [Vsn] = [V || {A, _D, V} <- application:loaded_applications(),
-            A =:= rabbit_management],
-    list_to_binary(Vsn).
-

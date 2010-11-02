@@ -21,6 +21,9 @@
    </td>
  </tr>
 <% } %>
+<% if (nodes_interesting) { %>
+ <tr><th>Node</th><td><%= connection.node %></td></tr>
+<% } %>
  <tr><th>Channels</th><td><%= connection.channels %></td></tr>
  <tr><th>Virtual host</th><td><%= link_vhost(connection.vhost) %></td></tr>
  <tr><th>Username</th><td><%= link_user(connection.user) %></td></tr>

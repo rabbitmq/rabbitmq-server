@@ -28,7 +28,7 @@
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
--export([reply_list/3, reply_list/4, destination_type/1]).
+-export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -107,16 +107,21 @@ reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    Sort = case wrq:get_qs_value("sort", ReqData) of
+    reply(sort_list(Facts, DefaultSorts,
+                    wrq:get_qs_value("sort", ReqData),
+                    wrq:get_qs_value("sort_reverse", ReqData)),
+          ReqData, Context).
+
+sort_list(Facts, DefaultSorts, Sort, Reverse) ->
+    SortList = case Sort of
                undefined -> DefaultSorts;
                Extra     -> [Extra | DefaultSorts]
            end,
-    Facts1 = lists:sort(fun(A, B) -> compare(A, B, Sort) end, Facts),
-    Facts2 = case wrq:get_qs_value("sort_reverse", ReqData) of
-                 "true" -> lists:reverse(Facts1);
-                 _      -> Facts1
-             end,
-    reply(Facts2, ReqData, Context).
+    Sorted = lists:sort(fun(A, B) -> compare(A, B, SortList) end, Facts),
+    case Reverse of
+        "true" -> lists:reverse(Sorted);
+        _      -> Sorted
+    end.
 
 compare(_A, _B, []) ->
     true;

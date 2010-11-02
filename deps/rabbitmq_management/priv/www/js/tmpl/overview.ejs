@@ -11,54 +11,87 @@
 <% } %>
 
 <div class="section">
-<h2>System Information</h2>
+<h2>RabbitMQ Nodes</h2>
 <div class="hider updatable">
-<table class="facts">
+<table class="list">
   <tr>
-    <th>Erlang Nodename</th>
-    <td><%= overview.node %></td>
+    <th>Name</th>
+    <th>Mnesia Storage</th>
+    <th>OS Pid</th>
+    <th>
+      File Descriptors
+      <sub>(used / available)</sub>
+    </th>
+    <th>
+      Erlang Processes
+      <sub>(used / available)</sub>
+    </th>
+    <th>
+      Memory
+      <sub>(used / high watermark)</sub>
+    </th>
+    <th>Statistics</th>
   </tr>
-  <tr>
-    <th>Operating System PID</th>
-    <td><%= overview.os_pid %></td>
-  </tr>
-  <tr>
-    <th>File Descriptors</th>
-    <td class="status">
-      <div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>">
-        <%= overview.fd_used %> / <%= overview.fd_total %>
-        <sub>(used / available)</sub>
-      </div>
-    </td>
-  </tr>
-  <tr>
-    <th>Erlang Processes</th>
-    <td class="status">
-      <div class="<%= fmt_color(overview.proc_used / overview.proc_total) %>">
-        <%= overview.proc_used %> / <%= overview.proc_total %>
-        <sub>(used / available)</sub>
-      </div>
-    </td>
-  </tr>
-<% if (overview.mem_total != 'memory_monitoring_disabled') { %>
-  <tr>
-    <th>Memory</th>
-    <td class="status">
-      <div class="<%= fmt_color(overview.mem_used / overview.mem_total,
-                      MEMORY_THRESHOLDS) %>">
-        <%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %>
-        <sub>(used / high watermark)</sub>
-      </div>
-    </td>
-  </tr>
+<%
+for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td>
+       <%= link_node(node.name) %>
+     </td>
+     <td class="c">
+       <%= node.type %>
+     </td>
+<% if (node.running) { %>
+     <td class="c"><%= node.os_pid %></td>
+     <td class="status">
+       <div class="<%= fmt_color(node.fd_used / node.fd_total) %>">
+         <%= node.fd_used %> / <%= node.fd_total %>
+       </div>
+     </td>
+     <td class="status">
+       <div class="<%= fmt_color(node.proc_used / node.proc_total) %>">
+         <%= node.proc_used %> / <%= node.proc_total %>
+       </div>
+     </td>
+     <td class="status">
+<% if (node.mem_total != 'memory_monitoring_disabled') { %>
+       <div class="<%= fmt_color(node.mem_used / node.mem_limit,
+                                 MEMORY_THRESHOLDS) %>">
+         <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>
+       </div>
+<% } else { %>
+       <%= fmt_bytes(node.mem_used) %>
+<% } %>
+     </td>
+     <td class="c">
+       <%= node.statistics_level %>
+     </td>
+<% } else { %>
+     <td class="status" colspan="5">
+       <div class="red">
+         Node not running
+       </div>
+     </td>
+   </tr>
+<% } %>
 <% } %>
 </table>
+
+<% if (nodes_interesting) { %>
+<p>
+  You are connected to: <b><%= overview.node %></b>.<br/>
+  Statistics database on: <b><%= overview.statistics_db_node %></b>.
+</p>
+<% } %>
+
 </div>
 </div>
 
 <div class="section">
 <h2>Listening on</h2>
-<div class="hider">
+<div class="hider updatable">
 <table class="list">
   <tr>
     <th>Host</th>
@@ -84,29 +117,6 @@ for (var i = 0; i < overview.listeners.length; i++) {
    </tr>
 <% } %>
 </table>
-</div>
-</div>
-
-<div class="section-hidden">
-<h2>Applications</h2>
-<div class="hider">
-<table class="list">
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Version</th>
-    </tr>
-  </thead>
-  <tbody>
-    <% for (var i = 0; i < applications.length; i++) { %>
-       <tr<%= alt_rows(i)%>>
-         <td><abbr title="<%= applications[i].description %>"><%= applications[i].name %></abbr></td>
-         <td><%= applications[i].version %></td>
-       </tr>
-    <% } %>
-  </tbody>
-</table>
-<span class="br"></span>
 </div>
 </div>
 

@@ -50,48 +50,37 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    ensure_statistics_enabled(),
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(
-                         rabbit_management, force_fine_statistics),
-    {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    case {ForceStats, StatsLevel} of
-        {true,  fine} ->
-            ok;
-        {true,  _} ->
-            application:set_env(rabbit, collect_statistics, fine),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to fine.~n");
-        {false, none} ->
-            application:set_env(rabbit, collect_statistics, coarse),
-            rabbit_log:info("Management plugin upgraded statistics"
-                            " to coarse.~n");
-        {_, _} ->
-            ok
+    case gen_server:start_link({global, ?MODULE}, ?MODULE, [], []) of
+        {error, {already_started, Pid}} ->
+            rabbit_log:info(
+              "Statistics database already registered at ~p.~n", [Pid]),
+            ignore;
+        Else ->
+            rabbit_log:info(
+              "Statistics database started.~n", []),
+            Else
     end.
 
 event(Event) ->
-    gen_server:cast(?MODULE, {event, Event}).
+    gen_server:cast({global, ?MODULE}, {event, Event}).
 
 get_queues(Qs) ->
-    gen_server:call(?MODULE, {get_queues, Qs}, infinity).
+    gen_server:call({global, ?MODULE}, {get_queues, Qs}, infinity).
 
 get_connections() ->
-    gen_server:call(?MODULE, get_connections, infinity).
+    gen_server:call({global, ?MODULE}, get_connections, infinity).
 
 get_connection(Name) ->
-    gen_server:call(?MODULE, {get_connection, Name}, infinity).
+    gen_server:call({global, ?MODULE}, {get_connection, Name}, infinity).
 
 get_channels() ->
-    gen_server:call(?MODULE, get_channels, infinity).
+    gen_server:call({global, ?MODULE}, get_channels, infinity).
 
 get_channel(Name) ->
-    gen_server:call(?MODULE, {get_channel, Name}, infinity).
+    gen_server:call({global, ?MODULE}, {get_channel, Name}, infinity).
 
 get_overview() ->
-    gen_server:call(?MODULE, get_overview, infinity).
+    gen_server:call({global, ?MODULE}, get_overview, infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -234,7 +223,6 @@ augment_msg_stats_items(Props, Tables) ->
 %% TODO some sort of generalised query mechanism for the coarse stats?
 
 init([]) ->
-    rabbit_mgmt_db_handler:add_handler(),
     {ok, #state{tables = orddict:from_list(
                            [{Key, ets:new(anon, [private])} ||
                                Key <- ?TABLES])}}.
@@ -322,10 +310,10 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
               pget(peer_port, Stats)]),
     handle_created(
       connection_stats, [{name, Name} | Stats],
-      [{fun rabbit_mgmt_format:ip/1,         [address, peer_address]},
-       {fun rabbit_mgmt_format:pid/1,        [pid]},
-       {fun rabbit_mgmt_format:protocol/1,   [protocol]},
-       {fun rabbit_mgmt_format:amqp_table/1, [client_properties]}], State);
+      [{fun rabbit_mgmt_format:ip/1,           [address, peer_address]},
+       {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
+       {fun rabbit_mgmt_format:protocol/1,     [protocol]},
+       {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
 
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
@@ -345,7 +333,9 @@ handle_event(#event{type = channel_created, props = Stats},
                                      pget(peer_port,    Conn),
                                      pget(number,       Stats)]),
     handle_created(channel_stats, [{name, Name}|Stats],
-                   [{fun rabbit_mgmt_format:pid/1, [pid, connection]}], State);
+                   [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
+                    {fun rabbit_mgmt_format:pid/1,          [connection]}],
+                   State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->

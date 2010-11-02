@@ -44,6 +44,12 @@
         <th>Arguments</th>
         <td><%= fmt_table_short(queue.arguments) %></td>
       </tr>
+<% if (nodes_interesting) { %>
+      <tr>
+        <th>Node</th>
+        <td><%= queue.node %></td>
+      </tr>
+<% } %>
     </table>
   </div>
 </div>
