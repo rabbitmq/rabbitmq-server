@@ -4,7 +4,8 @@
 -export([start/2,stop/1]).
 
 start(normal, []) ->
-    rabbit_mochiweb:register_static_context("rabbit_mochiweb_test", ?MODULE, "priv/www"),
+    rabbit_mochiweb:register_static_context(
+      "rabbit_mochiweb_test", ?MODULE, "priv/www", "Test"),
     {ok, spawn(fun() -> receive _ -> ok end end)}.
 
 stop(_State) ->

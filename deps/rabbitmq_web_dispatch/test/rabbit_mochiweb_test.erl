@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 query_static_resource_test() ->
-  %%?debugFmt("~p~n", [application:start(rabbit_mochiweb)]),
-  %%{ok, Result} = http:request("http://localhost:8000/rabbit_mochiweb_test/index.html"),
-  %% TODO
+  %% TODO this is a fairly rubbish test
+  {ok, _Result} =
+        http:request("http://localhost:55672/rabbit_mochiweb_test/index.html"),
   ok.
