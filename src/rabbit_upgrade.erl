@@ -49,9 +49,9 @@ maybe_upgrade(Dir) ->
             case unknown_heads(CurrentHeads, G) of
                 [] ->
                     Upgrades = upgrades_to_apply(CurrentHeads, G),
-                    case length(Upgrades) of
-                        0 -> ok;
-                        _ -> apply_upgrades(Upgrades, Dir)
+                    case Upgrades of
+                        [] -> ok;
+                        _  -> apply_upgrades(Upgrades, Dir)
                     end;
                 Unknown ->
                     [warn("Data store has had future upgrade ~w applied." ++
@@ -117,7 +117,7 @@ apply_upgrades(Upgrades, Dir) ->
             ok = file:close(Lock),
             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
             info("Upgrades: All applied~n", []),
-            write_version(Dir),
+            ok = write_version(Dir),
             ok = file:delete(LockFile);
         {ok, _FI} ->
             exit(previous_upgrade_failed);
