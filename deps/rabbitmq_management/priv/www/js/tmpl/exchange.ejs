@@ -1,20 +1,60 @@
 <h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b></h1>
 
 <div class="section">
-  <h2>Overview</h2>
+  <h2>Details</h2>
   <div class="hider">
     <table class="facts">
-      <tr><th>Virtual host</th><td><%= exchange.vhost %></td></tr>
-      <tr><th>Type</th><td><%= exchange.type %></td></tr>
-      <tr><th>Durable</th><td><%= fmt_boolean(exchange.durable) %></td></tr>
-      <tr><th>Auto delete</th><td><%= fmt_boolean(exchange.auto_delete) %></td></tr>
       <tr>
+        <th>Virtual host</th>
+        <th>Type</th>
+        <th>Durable</th>
+        <th>Auto delete</th>
         <th>Arguments</th>
+      </tr>
+      <tr>
+        <td><%= exchange.vhost %></td>
+        <td><%= exchange.type %></td>
+        <td><%= fmt_boolean(exchange.durable) %></td>
+        <td><%= fmt_boolean(exchange.auto_delete) %></td>
         <td><%= fmt_table_short(exchange.arguments) %></td>
       </tr>
     </table>
   </div>
 </div>
+
+<% if (statistics_level == 'fine') { %>
+<div class="section-hidden">
+<h2>Message Rates</h2>
+<div class="hider updatable">
+<p>
+  The incoming rate is the rate at which messages are published
+  directly to this exchange. The outgoing rate is the rate at which
+  messages enter queues, having been published directly to this
+  exchange.
+</p>
+<table class="two-col-layout">
+  <tr>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'exchange-incoming',
+                  'object': exchange.incoming,
+                  'label':  'Incoming',
+                  'totals': exchange.message_stats_in}) %>
+    </td>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'exchange-outgoing',
+                  'object': exchange.outgoing,
+                  'label':  'Outgoing',
+                  'totals': exchange.message_stats_out}) %>
+    </td>
+  </tr>
+</table>
+<span class="br"></span>
+</div>
+</div>
+<% } %>
+
 
 <div class="section">
   <h2>Bindings</h2>

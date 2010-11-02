@@ -5,28 +5,38 @@
 <div class="hider updatable">
 
 <table class="facts">
+<tr>
 <% if (connection.recv_oct_details) { %>
- <tr>
    <th>From client</th>
+<% } %>
+<% if (connection.send_oct_details) { %>
+   <th>To client</th>
+<% } %>
+ <th>Channels</th>
+ <th>Virtual host</th>
+ <th>Username</th>
+ <th>Protocol</th>
+ <th>State</th>
+ <th>Timeout</th>
+</tr>
+<tr>
+<% if (connection.recv_oct_details) { %>
    <td>
      <span class="mini-highlight"><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</span>
    </td>
- </tr>
 <% } %>
 <% if (connection.send_oct_details) { %>
- <tr>
-   <th>To client</th>
    <td>
      <span class="mini-highlight"><%= fmt_bytes(connection.send_oct_details.rate) %>/s</span>
    </td>
- </tr>
 <% } %>
- <tr><th>Channels</th><td><%= connection.channels %></td></tr>
- <tr><th>Virtual host</th><td><%= link_vhost(connection.vhost) %></td></tr>
- <tr><th>Username</th><td><%= link_user(connection.user) %></td></tr>
- <tr><th>Protocol</th><td><%= connection.protocol %></td></tr>
- <tr><th>State</th><td><%= connection.state %></td></tr>
- <tr><th>Timeout</th><td><%= connection.timeout %></td></tr>
+ <td><%= connection.channels %></td>
+ <td><%= link_vhost(connection.vhost) %></td>
+ <td><%= link_user(connection.user) %></td>
+ <td><%= connection.protocol %></td>
+ <td><%= connection.state %></td>
+ <td><%= connection.timeout %></td>
+</tr>
 </table>
 </div>
 </div>
