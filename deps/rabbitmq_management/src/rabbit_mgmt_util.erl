@@ -64,20 +64,17 @@ is_authorized(ReqData, Context, Fun) ->
                     ReqData, Context},
     case rabbit_mochiweb_util:parse_auth_header(
            wrq:get_req_header("authorization", ReqData)) of
-        [Username, Pass] ->
-            case rabbit_access_control:lookup_user(Username) of
-                {ok, User = #user{password = Pass1,
-                                  is_admin = IsAdmin}} when Pass == Pass1  ->
-                    case Fun(User) of
+        [User, Pass] ->
+            case rabbit_access_control:check_user_pass_login(User, Pass) of
+                {ok, U = #user{is_admin = IsAdmin}} ->
+                    case Fun(U) of
                         true  -> {true, ReqData,
-                                  Context#context{username = Username,
+                                  Context#context{username = User,
                                                   password = Pass,
                                                   is_admin = IsAdmin}};
                         false -> Unauthorized
                     end;
-                {ok, #user{}} ->
-                    Unauthorized;
-                {error, _} ->
+                refused ->
                     Unauthorized
             end;
         _ ->

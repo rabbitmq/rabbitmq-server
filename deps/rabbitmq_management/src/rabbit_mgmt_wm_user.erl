@@ -23,7 +23,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, put_user/3]).
+         delete_resource/2, put_user/3, put_user_hashed/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -74,12 +74,29 @@ user(ReqData) ->
     rabbit_access_control:lookup_user(rabbit_mgmt_util:id(user, ReqData)).
 
 put_user(User, Password, IsAdmin) ->
+    put_user0(
+      User, IsAdmin,
+      fun (User0) ->
+              rabbit_access_control:change_password(User0, Password)
+      end).
+
+put_user_hashed(User, PasswordHash64, IsAdmin) ->
+    PasswordHash = base64:decode(PasswordHash64),
+    put_user0(
+      User, IsAdmin,
+      fun (User0) ->
+              rabbit_access_control:change_password_hash(User0, PasswordHash)
+      end).
+
+put_user0(User, IsAdmin, PWFun) ->
     case rabbit_access_control:lookup_user(User) of
-        {ok, _} ->
-            rabbit_access_control:change_password(User, Password);
         {error, not_found} ->
-            rabbit_access_control:add_user(User, Password)
+            rabbit_access_control:add_user(
+              User, rabbit_guid:binstring_guid("tmp_"));
+        _ ->
+            ok
     end,
+    PWFun(User),
     case rabbit_mgmt_util:parse_bool(IsAdmin) of
         true  -> rabbit_access_control:set_admin(User);
         false -> rabbit_access_control:clear_admin(User)

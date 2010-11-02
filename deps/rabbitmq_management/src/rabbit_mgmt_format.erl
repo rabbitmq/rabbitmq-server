@@ -100,7 +100,7 @@ permissions({User, VHost, Conf, Write, Read}) ->
 
 user(User) ->
     [{name,          User#user.username},
-     {password,      User#user.password},
+     {password_hash, base64:encode(User#user.password_hash)},
      {administrator, User#user.is_admin}].
 
 listener(#listener{node = Node, protocol = Protocol,

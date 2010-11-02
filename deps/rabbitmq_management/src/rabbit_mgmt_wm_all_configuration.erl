@@ -152,7 +152,7 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password, administrator]},
+    [{users,       [name, password_hash, administrator]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
@@ -184,9 +184,9 @@ clean_value(A)           -> A.
 %%--------------------------------------------------------------------
 
 add_user(User) ->
-    rabbit_mgmt_wm_user:put_user(pget(name,          User),
-                                 pget(password,      User),
-                                 pget(administrator, User)).
+    rabbit_mgmt_wm_user:put_user_hashed(pget(name,          User),
+                                        pget(password_hash, User),
+                                        pget(administrator, User)).
 
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
