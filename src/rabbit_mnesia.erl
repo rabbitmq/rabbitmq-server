@@ -372,33 +372,39 @@ init_db(ClusterNodes, Force) ->
                     end;
                 _ -> ok
             end,
-            case Nodes of
-                [] ->
-                    case mnesia:system_info(use_dir) of
-                        true ->
-                            case mnesia:system_info(db_nodes) of
-                                [_] -> wait_for_tables(),
-                                       rabbit_upgrade:maybe_upgrade(dir());
-                                _   -> ok
-                            end,
-                            case check_schema_integrity() of
-                                ok ->
-                                    ok;
-                                {error, Reason} ->
-                                    %% NB: we cannot use rabbit_log here since
-                                    %% it may not have been started yet
-                                    error_logger:warning_msg(
-                                      "schema integrity check failed: ~p~n"
-                                      "moving database to backup location "
-                                      "and recreating schema from scratch~n",
-                                      [Reason]),
-                                    ok = move_db(),
-                                    ok = create_schema()
-                            end;
-                        false ->
+            case {Nodes, mnesia:system_info(use_dir),
+                  mnesia:system_info(db_nodes)} of
+                {[], true, [_]} ->
+                    %% True single disc node, attempt upgrade
+                    wait_for_tables(),
+                    rabbit_upgrade:maybe_upgrade(dir()),
+                    case check_schema_integrity() of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            throw({schema_invalid_after_upgrade, Reason})
+                    end;
+                {[], true, _} ->
+                    %% First disc node in cluster, verify schema
+                    case check_schema_integrity() of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            %% NB: we cannot use rabbit_log here since
+                            %% it may not have been started yet
+                            error_logger:warning_msg(
+                              "schema integrity check failed: ~p~n"
+                              "moving database to backup location "
+                              "and recreating schema from scratch~n",
+                              [Reason]),
+                            ok = move_db(),
                             ok = create_schema()
                     end;
-                [_|_] ->
+                {[], false, _} ->
+                    %% First RAM node in cluster, start from scratch
+                    ok = create_schema();
+                {[_|_], _, _} ->
+                    %% Subsequent node in cluster, catch up
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
