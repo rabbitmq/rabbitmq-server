@@ -229,7 +229,6 @@
           len,
           persistent_count,
 
-          duration_target,
           target_ram_msg_count,
           ram_msg_count,
           ram_msg_count_prev,
@@ -317,7 +316,6 @@
              persistent_count     :: non_neg_integer(),
 
              transient_threshold  :: non_neg_integer(),
-             duration_target      :: number() | 'infinity',
              target_ram_msg_count :: non_neg_integer() | 'infinity',
              ram_msg_count        :: non_neg_integer(),
              ram_msg_count_prev   :: non_neg_integer(),
@@ -689,8 +687,7 @@ set_ram_duration_target(DurationTarget,
             infinity  -> infinity;
             _         -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
         end,
-    State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1,
-                              duration_target      = DurationTarget },
+    State1 = State #vqstate { target_ram_msg_count = TargetRamMsgCount1 },
     a(case TargetRamMsgCount1 == infinity orelse
           (TargetRamMsgCount =/= infinity andalso
            TargetRamMsgCount1 >= TargetRamMsgCount) of
@@ -705,7 +702,6 @@ ram_duration(State = #vqstate {
                in_counter         = InCount,
                out_counter        = OutCount,
                ram_msg_count      = RamMsgCount,
-               duration_target    = DurationTarget,
                ram_msg_count_prev = RamMsgCountPrev }) ->
     Now = now(),
     {AvgEgressRate,   Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
@@ -718,18 +714,16 @@ ram_duration(State = #vqstate {
                          (2 * (AvgEgressRate + AvgIngressRate))
         end,
 
-    {Duration, set_ram_duration_target(
-                 DurationTarget,
-                 State #vqstate {
-                   rates              = Rates #rates {
-                                          egress      = Egress1,
-                                          ingress     = Ingress1,
-                                          avg_egress  = AvgEgressRate,
-                                          avg_ingress = AvgIngressRate,
-                                          timestamp   = Now },
-                   in_counter         = 0,
-                   out_counter        = 0,
-                   ram_msg_count_prev = RamMsgCount })}.
+    {Duration, State #vqstate {
+                 rates              = Rates #rates {
+                                        egress      = Egress1,
+                                        ingress     = Ingress1,
+                                        avg_egress  = AvgEgressRate,
+                                        avg_ingress = AvgIngressRate,
+                                        timestamp   = Now },
+                 in_counter         = 0,
+                 out_counter        = 0,
+                 ram_msg_count_prev = RamMsgCount }}.
 
 needs_idle_timeout(State = #vqstate { on_sync = ?BLANK_SYNC }) ->
     {Res, _State} = reduce_memory_use(fun (_Quota, State1) -> State1 end,
@@ -977,7 +971,6 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       len                  = DeltaCount1,
       persistent_count     = DeltaCount1,
 
-      duration_target      = infinity,
       target_ram_msg_count = infinity,
       ram_msg_count        = 0,
       ram_msg_count_prev   = 0,
