@@ -74,12 +74,12 @@ register_contexts() ->
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     rabbit_mochiweb:register_authenticated_static_context(
       ?UI_PREFIX, ?MODULE, "priv/www", "RabbitMQ Management Console",
-     fun (U, P) ->
-            case rabbit_access_control:lookup_user(U) of
-                {ok, User = #user{password = P1}} when P == P1 -> true;
-                _                                              -> false
-            end
-     end),
+      fun (U, P) ->
+              case rabbit_access_control:check_user_pass_login(U, P) of
+                  {ok, _} -> true;
+                  _       -> false
+              end
+      end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
                                              "HTTP API"),
