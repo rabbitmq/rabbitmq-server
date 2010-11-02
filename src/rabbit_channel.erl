@@ -233,7 +233,7 @@ handle_cast({method, Method, Content}, State) ->
     end;
 
 handle_cast({flushed, QPid}, State) ->
-    {noreply, queue_blocked(QPid, State)};
+    {noreply, queue_blocked(QPid, State), hibernate};
 
 handle_cast(terminate, State) ->
     {stop, normal, State};
@@ -258,11 +258,12 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
     {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
+     hibernate}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
-    {noreply, queue_blocked(QPid, State)}.
+    {noreply, queue_blocked(QPid, State), hibernate}.
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
