@@ -206,7 +206,7 @@ handle_cast({thunk, Thunk}, State) ->
     {noreply, State, hibernate}.
 
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {noreply, State, hibernate}.
 
 terminate(_Reason, _State) ->
     ok.
