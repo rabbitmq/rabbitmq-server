@@ -96,7 +96,7 @@ permissions({User, VHost, Conf, Write, Read}) ->
 
 user(User) ->
     [{name,          User#user.username},
-     {password_hash, User#user.password_hash},
+     {password_hash, base64:encode(User#user.password_hash)},
      {administrator, User#user.is_admin}].
 
 pack_binding_props(<<"">>, []) ->

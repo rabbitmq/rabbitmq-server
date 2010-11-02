@@ -76,15 +76,16 @@ user(ReqData) ->
 put_user(User, Password, IsAdmin) ->
     put_user0(
       User, IsAdmin,
-      fun (User) ->
-              rabbit_access_control:change_password(User, Password)
+      fun (User0) ->
+              rabbit_access_control:change_password(User0, Password)
       end).
 
-put_user_hashed(User, PasswordHash, IsAdmin) ->
+put_user_hashed(User, PasswordHash64, IsAdmin) ->
+    PasswordHash = base64:decode(PasswordHash64),
     put_user0(
       User, IsAdmin,
-      fun (User) ->
-              rabbit_access_control:change_password_hash(User, PasswordHash)
+      fun (User0) ->
+              rabbit_access_control:change_password_hash(User0, PasswordHash)
       end).
 
 put_user0(User, IsAdmin, PWFun) ->
