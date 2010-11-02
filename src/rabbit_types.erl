@@ -146,9 +146,9 @@
 -type(protocol() :: 'rabbit_framing_amqp_0_8' | 'rabbit_framing_amqp_0_9_1').
 
 -type(user() ::
-      #user{username :: rabbit_access_control:username(),
-            password :: rabbit_access_control:password(),
-            is_admin :: boolean()}).
+      #user{username      :: rabbit_access_control:username(),
+            password_hash :: rabbit_access_control:password_hash(),
+            is_admin      :: boolean()}).
 
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).
