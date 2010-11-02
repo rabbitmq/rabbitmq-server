@@ -60,7 +60,10 @@ make_entry(Node, Type, Running) ->
            end.
 
 applications(Node) ->
-    rabbit_mgmt_util:sort_list(
-      [rabbit_mgmt_format:application(A) ||
-          A <- application:which_applications()],
-      [], "name", false).
+    case rpc:call(Node, application, which_applications, []) of
+        {badrpc, _Reason} -> [];
+        Applications      -> rabbit_mgmt_util:sort_list(
+                               [rabbit_mgmt_format:application(A) ||
+                                   A <- Applications],
+                               [], "name", false)
+    end.
