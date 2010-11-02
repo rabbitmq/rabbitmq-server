@@ -994,7 +994,7 @@ handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     emit_stats(State),
     State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     assert_invariant(State1),
-    {noreply, State1}.
+    {noreply, State1, hibernate}.
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
