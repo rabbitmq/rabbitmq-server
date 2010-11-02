@@ -25,8 +25,8 @@
 dispatcher() ->
     [{[],                                                          rabbit_mgmt_wm_help, []},
      {["overview"],                                                rabbit_mgmt_wm_overview, []},
-     {["applications"],                                            rabbit_mgmt_wm_applications, []},
      {["nodes"],                                                   rabbit_mgmt_wm_nodes, []},
+     {["nodes", node],                                             rabbit_mgmt_wm_node, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_all_configuration, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},

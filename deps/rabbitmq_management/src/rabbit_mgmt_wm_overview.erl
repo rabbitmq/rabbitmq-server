@@ -41,12 +41,18 @@ to_json(ReqData, Context) ->
           %% NB: node and stats level duplicate what's in /nodes but we want
           %% to (a) know which node we're talking to and (b) use the stats
           %% level to switch features on / off in the UI.
-          [{node,             node()},
-           {statistics_level, StatsLevel},
+          [{node,               node()},
+           {management_version, version()},
+           {statistics_level,   StatsLevel},
            {statistics_db_node, stats_db_node()},
-           {listeners,        [rabbit_mgmt_format:listener(L)
-                               || L <- rabbit_networking:active_listeners()]}],
+           {listeners,          [rabbit_mgmt_format:listener(L)
+                                 || L <- rabbit_networking:active_listeners()]}],
       ReqData, Context).
+
+is_authorized(ReqData, Context) ->
+    rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+%%--------------------------------------------------------------------
 
 stats_db_node() ->
     case global:whereis_name(rabbit_mgmt_db) of
@@ -54,5 +60,8 @@ stats_db_node() ->
         Pid       -> node(Pid)
     end.
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+version() ->
+    [Vsn] = [V || {A, _D, V} <- application:loaded_applications(),
+            A =:= rabbit_management],
+    list_to_binary(Vsn).
+

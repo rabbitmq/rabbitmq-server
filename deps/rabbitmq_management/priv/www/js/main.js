@@ -52,8 +52,12 @@ function dispatcher() {
             });
     }
     path('#/', {'overview': '/overview',
-                'applications': '/applications',
                 'nodes': '/nodes'}, 'overview');
+    this.get('#/nodes/:name', function() {
+            var name = esc(this.params['name']);
+            render({'node': '/nodes/' + name},
+                   'node', '');
+        });
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {

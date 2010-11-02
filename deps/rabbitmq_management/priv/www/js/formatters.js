@@ -121,6 +121,10 @@ function link_user(name) {
     return link_to(name, '#/users/' + esc(name))
 }
 
+function link_node(name) {
+    return link_to(name, '#/nodes/' + esc(name))
+}
+
 function link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
 }

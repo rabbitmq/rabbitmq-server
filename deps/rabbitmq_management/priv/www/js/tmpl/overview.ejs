@@ -38,7 +38,7 @@ for (var i = 0; i < nodes.length; i++) {
 %>
    <tr<%= alt_rows(i)%>>
      <td>
-       <%= node.name %>
+       <%= link_node(node.name) %>
      </td>
      <td class="c">
        <%= node.type %>
@@ -117,29 +117,6 @@ for (var i = 0; i < overview.listeners.length; i++) {
    </tr>
 <% } %>
 </table>
-</div>
-</div>
-
-<div class="section-hidden">
-<h2>Applications</h2>
-<div class="hider">
-<table class="list">
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Version</th>
-    </tr>
-  </thead>
-  <tbody>
-    <% for (var i = 0; i < applications.length; i++) { %>
-       <tr<%= alt_rows(i)%>>
-         <td><abbr title="<%= applications[i].description %>"><%= applications[i].name %></abbr></td>
-         <td><%= applications[i].version %></td>
-       </tr>
-    <% } %>
-  </tbody>
-</table>
-<span class="br"></span>
 </div>
 </div>
 

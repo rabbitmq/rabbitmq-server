@@ -21,6 +21,7 @@
 -module(rabbit_mgmt_wm_nodes).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([all_nodes/0]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -34,22 +35,32 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
+    rabbit_mgmt_util:reply_list(all_nodes(), ReqData, Context).
+
+is_authorized(ReqData, Context) ->
+    rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+%%--------------------------------------------------------------------
+
+all_nodes() ->
     S = rabbit_mnesia:status(),
     Nodes = proplists:get_value(nodes, S),
     Types = proplists:get_keys(Nodes),
     Running = proplists:get_value(running_nodes, S),
-    rabbit_mgmt_util:reply_list(
-      lists:append(
-        [[make_entry(Node, Type, lists:member(Node, Running))
-          || Node <- proplists:get_value(Type, Nodes)] || Type <- Types]),
-      ReqData, Context).
+    lists:append(
+      [[make_entry(Node, Type, lists:member(Node, Running))
+        || Node <- proplists:get_value(Type, Nodes)] || Type <- Types]).
 
 make_entry(Node, Type, Running) ->
     [{name, Node}, {type, Type}, {running, Running}]
         ++ case Running of
-               true -> rabbit_mgmt_external_stats:info(Node);
+               true -> rabbit_mgmt_external_stats:info(Node) ++
+                           [{applications, applications(Node)}];
                _    -> []
            end.
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+applications(Node) ->
+    rabbit_mgmt_util:sort_list(
+      [rabbit_mgmt_format:application(A) ||
+          A <- application:which_applications()],
+      [], "name", false).
