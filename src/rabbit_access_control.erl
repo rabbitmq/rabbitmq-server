@@ -247,12 +247,7 @@ delete_user(Username) ->
     R.
 
 change_password(Username, Password) ->
-    R = update_user(Username, fun(User) ->
-                                      User#user{
-                                        password_hash = hash_password(Password)}
-                              end),
-    rabbit_log:info("Changed password for user ~p~n", [Username]),
-    R.
+    change_password_hash(Username, hash_password(Password)).
 
 change_password_hash(Username, PasswordHash) ->
     R = update_user(Username, fun(User) ->
@@ -272,8 +267,8 @@ check_password(Cleartext, <<Salt:4/binary, Hash/binary>>) ->
 make_salt() ->
     {A1,A2,A3} = now(),
     random:seed(A1, A2, A3),
-    Salt0 = random:uniform(16#ffffffff),
-    <<Salt0:32>>.
+    Salt = random:uniform(16#ffffffff),
+    <<Salt:32>>.
 
 salted_md5(Salt, Cleartext) ->
     Salted = <<Salt/binary, Cleartext/binary>>,
