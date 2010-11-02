@@ -203,8 +203,7 @@ basic_return_test(Connection) ->
             #amqp_msg{payload = Payload2} = Content,
             ?assertMatch(Payload, Payload2);
         WhatsThis ->
-            %% TODO investigate where this comes from
-            ?LOG_INFO("Spurious message ~p~n", [WhatsThis])
+            exit({bad_message, WhatsThis})
     after 2000 ->
         exit(no_return_received)
     end,
@@ -225,16 +224,15 @@ channel_multi_open_close_test(Connection) ->
             try amqp_connection:open_channel(Connection) of
                 {ok, Ch}           -> try amqp_channel:close(Ch) of
                                           ok                 -> ok;
-                                          connection_closing -> ok
+                                          closing            -> ok
                                       catch
-                                          exit:{normal, _} -> ok;
-                                          exit:{noproc, _} -> ok
+                                          exit:{noproc, _}             -> ok;
+                                          exit:{connection_closing, _} -> ok
                                       end;
-                closing            -> ok;
-                connection_closing -> ok
+                closing            -> ok
             catch
-                exit:{normal, _} -> ok;
-                exit:{noproc, _} -> ok
+                exit:{noproc, _}             -> ok;
+                exit:{connection_closing, _} -> ok
             end
         end) || _ <- lists:seq(1, 50)],
     erlang:yield(),

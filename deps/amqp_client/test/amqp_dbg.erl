@@ -29,8 +29,7 @@
 
 -export([tracer/0, all/0, c_all/0]).
 -export([supervision/0, c_supervision/0,
-         network_connection_lifecycle/0, c_network_connection_lifecycle/0,
-         direct_connection_lifecycle/0, c_direct_connection_lifecycle/0,
+         connection_lifecycle/0, c_connection_lifecycle/0,
          channels_manager_lifecycle/0, c_channels_manager_lifecycle/0,
          channel_lifecycle/0, c_channel_lifecycle/0,
          methods/0, c_methods/0]).
@@ -53,17 +52,11 @@ supervision() ->
 c_supervision() ->
     ctpl_list(sup_args()).
 
-network_connection_lifecycle() ->
-    tpl_list(ncl_args()).
+connection_lifecycle() ->
+    tpl_list(cl_args()).
 
-c_network_connection_lifecycle() ->
-    ctpl_list(ncl_args()).
-
-direct_connection_lifecycle() ->
-    tpl_list(dcl_args()).
-
-c_direct_connection_lifecycle() ->
-    ctpl_list(dcl_args()).
+c_connection_lifecycle() ->
+    ctpl_list(cl_args()).
 
 channels_manager_lifecycle() ->
     tpl_list(cml_args()).
@@ -88,7 +81,7 @@ c_methods() ->
 %%---------------------------------------------------------------------------
 
 all_args() ->
-    sup_args() ++ ncl_args() ++ dcl_args() ++ cml_args() ++ cl_args() ++
+    sup_args() ++ ncl_args() ++ cml_args() ++ cl_args() ++
         m_args().
 
 sup_args() ->
@@ -99,27 +92,20 @@ sup_args() ->
      {amqp_channel_sup, start_link, return_ms()},
      {amqp_network_connection, start_infrastructure, return_ms()},
      {amqp_network_connection, start_heartbeat, return_ms()},
-     {amqp_direct_connection, start_infrastructure, return_ms()},
      {amqp_channel, start_writer, return_ms()}].
 
 ncl_args() ->
     [{amqp_main_reader, start_link, return_ms()},
-     {amqp_network_connection, set_closing_state, []},
-     {amqp_network_connection, all_channels_terminated, []},
-     {amqp_network_connection, do_connect, []},
-     {amqp_network_connection, terminate, []}].
-
-dcl_args() ->
-    [{amqp_direct_connection, set_closing_state, []},
-     {amqp_direct_connection, all_channels_terminated, []},
-     {amqp_direct_connection, do_connect, []},
-     {amqp_direct_connection, terminate, []}].
+     {amqp_gen_connection, set_closing_state, []},
+     {amqp_gen_connection, handle_channels_terminated, []},
+     {amqp_network_connection, connect, []},
+     {amqp_direct_connection, connect, []},
+     {amqp_gen_connection, terminate, []}].
 
 cml_args() ->
-     [{amqp_channels_manager, open_channel, return_ms()},
+     [{amqp_channels_manager, handle_open_channel, return_ms()},
       {amqp_channels_manager, handle_channel_down, []},
-      {amqp_channels_manager, signal_channels, []},
-      {amqp_channels_manager, signal_connection, []}].
+      {amqp_channels_manager, signal_channels_connection_closing, []}].
 
 cl_args() ->
     [{amqp_channel, init, []},
@@ -129,8 +115,8 @@ cl_args() ->
 m_args() ->
     [{amqp_channel, do, return_ms()},
      {amqp_channel, handle_method, []},
+     {amqp_gen_connection, handle_method, []},
      {amqp_network_connection, do, return_ms()},
-     {amqp_network_connection, handle_method, []},
      {amqp_network_connection, handshake_recv, return_ms()}].
 
 tpl_list(ArgsList) ->

@@ -75,13 +75,12 @@ hard_error_test(Connection) ->
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{{connection_closing, _}, _} = Reason ->
+        exit:{connection_closing, _} ->
             %% Network case
-            ?assertMatch({{connection_closing,
-                           {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _},
-                         Reason);
+            ok;
         exit:Reason ->
             %% Direct case
+            %% TODO: fix error code in the direct case
             ?assertMatch({{server_initiated_hard_close, ?NOT_IMPLEMENTED, _}, _},
                          Reason)
     end,
@@ -91,10 +90,7 @@ hard_error_test(Connection) ->
             %% TODO fix error code in the direct case
             killed -> ok;
             %% Network case
-            _      -> ?assertMatch(
-                         {connection_closing,
-                          {server_initiated_close, ?NOT_IMPLEMENTED, _}},
-                         OtherExit)
+            _      -> ?assertMatch(connection_closing, OtherExit)
         end
     end,
     test_util:wait_for_death(Channel),
@@ -147,7 +143,7 @@ shortstr_overflow_field_test(Connection) ->
     test_util:setup_exchange(Channel, Q, X, Key),
     ?assertExit(_, amqp_channel:subscribe(
                        Channel, #'basic.consume'{queue = Q, no_ack = true,
-                                                  consumer_tag = SentString},
+                                                 consumer_tag = SentString},
                        self())),
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection),
@@ -180,7 +176,7 @@ command_invalid_over_channel0_test(Connection) ->
 assert_down_with_error(MonitorRef, CodeAtom) ->
     receive
         {'DOWN', MonitorRef, process, _, Reason} ->
-            {error, Code, _} = Reason,
+            {server_misbehaved, Code, _} = Reason,
             ?assertMatch(CodeAtom, ?PROTOCOL:amqp_exception(Code))
     after 2000 ->
         exit(did_not_die)
@@ -206,6 +202,5 @@ no_permission_test() ->
     assert_fail_start_with_params(Params).
 
 assert_fail_start_with_params(Params) ->
-    {error, {auth_failure_likely, _}} =
-        amqp_connection:start(network, Params),
+    {error, {auth_failure_likely, _}} = amqp_connection:start(network, Params),
     ok.

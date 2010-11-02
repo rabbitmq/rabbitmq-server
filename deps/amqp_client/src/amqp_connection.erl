@@ -40,9 +40,6 @@
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
--define(COMMON_INFO_KEYS,
-        [type, server_properties, is_closing, amqp_params, num_channels]).
-
 %%---------------------------------------------------------------------------
 %% Type Definitions
 %%---------------------------------------------------------------------------
@@ -101,18 +98,11 @@ start(Type) ->
 start(Type, AmqpParams) ->
     amqp_client:start(),
     {ok, _Sup, Connection} =
-        amqp_sup:start_connection_sup(Type, AmqpParams),
-    Module = case Type of direct  -> amqp_direct_connection;
-                          network -> amqp_network_connection
-             end,
-    try Module:connect(Connection) of
-        ok -> {ok, Connection}
-    catch
-        exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
-            {error, Reason};
-        exit:Reason ->
-            {error, {auth_failure_likely, Reason}}
-    end.
+        amqp_sup:start_connection_sup(
+            Type, case Type of direct  -> amqp_direct_connection;
+                               network -> amqp_network_connection
+                  end, AmqpParams),
+    amqp_gen_connection:connect(Connection).
 
 %%---------------------------------------------------------------------------
 %% Commands
@@ -136,15 +126,7 @@ open_channel(ConnectionPid) ->
 %% value is 0.<br/>
 %% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber) ->
-    case command(ConnectionPid, {open_channel, ChannelNumber}) of
-        {ok, ChannelPid} ->
-            case amqp_channel:call(ChannelPid, #'channel.open'{}) of
-                #'channel.open_ok'{} -> {ok, ChannelPid};
-                Error                -> Error
-            end;
-        Error ->
-            Error
-    end.
+    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber).
 
 %% @spec (ConnectionPid) -> ok | Error
 %% where
@@ -166,7 +148,7 @@ close(ConnectionPid, Code, Text) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    command(ConnectionPid, {close, Close}).
+    amqp_gen_connection:close(ConnectionPid, Close).
 
 %%---------------------------------------------------------------------------
 %% Other functions
@@ -191,16 +173,18 @@ close(ConnectionPid, Code, Text) ->
 %%    connection</li>
 %%<li>num_channels - returns the number of channels currently open under the
 %%    connection (excluding channel 0)</li>
-%%<li>channel_max - returns the channel_max value negotiated with the server
-%%    (only for the network connection)</li>
+%%<li>channel_max - returns the channel_max value negotiated with the
+%%    server</li>
 %%<li>heartbeat - returns the heartbeat value negotiated with the server
 %%    (only for the network connection)</li>
+%%<li>frame_max - returns the frame_max value negotiated with the
+%%    server (only for the network connection)</li>
 %%<li>sock - returns the socket for the network connection (for use with
 %%    e.g. inet:sockname/1) (only for the network connection)</li>
 %%<li>any other value - throws an exception</li>
 %%</ul>
 info(ConnectionPid, Items) ->
-    gen_server:call(ConnectionPid, {info, Items}, infinity).
+    amqp_gen_connection:info(ConnectionPid, Items).
 
 %% @spec (ConnectionPid) -> Items
 %% where
@@ -212,7 +196,7 @@ info(ConnectionPid, Items) ->
 %% direct). Use info_keys/0 to get a list of info keys that can be used for
 %% any connection.
 info_keys(ConnectionPid) ->
-    gen_server:call(ConnectionPid, info_keys, infinity).
+    amqp_gen_connection:info_keys(ConnectionPid).
 
 %% @spec () -> Items
 %% where
@@ -223,11 +207,4 @@ info_keys(ConnectionPid) ->
 %% Other info keys may exist for a specific type. To get the full list of
 %% atoms that can be used for a certain connection, use info_keys/1.
 info_keys() ->
-    ?COMMON_INFO_KEYS.
-
-%%---------------------------------------------------------------------------
-%% Internal plumbing
-%%---------------------------------------------------------------------------
-
-command(ConnectionPid, Command) ->
-    gen_server:call(ConnectionPid, {command, Command}, infinity).
+    amqp_gen_connection:info_keys().

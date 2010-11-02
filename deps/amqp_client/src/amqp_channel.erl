@@ -34,7 +34,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/3]).
+-export([start_link/3, connection_closing/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -253,10 +253,8 @@ do_rpc(State = #state{rpc_requests = RequestQueue,
             State1;
         empty ->
             case Closing of
-                {connection, Reason} ->
-                    self() ! {shutdown, {connection_closing, Reason}};
-                _ ->
-                    ok
+                connection -> self() ! {shutdown, connection_closing};
+                _          -> ok
             end,
             State
     end.
@@ -322,9 +320,9 @@ build_content(#amqp_msg{props = Props, payload = Payload}) ->
     rabbit_basic:build_content(Props, Payload).
 
 check_block(_Method, _AmqpMsg, #state{closing = just_channel}) ->
-    channel_closing;
-check_block(_Method, _AmqpMsg, #state{closing = {connection, _}}) ->
-    connection_closing;
+    closing;
+check_block(_Method, _AmqpMsg, #state{closing = connection}) ->
+    closing;
 check_block(_Method, none, #state{}) ->
     ok;
 check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
@@ -334,12 +332,6 @@ check_block(_Method, _AmqpMsg, #state{}) ->
 
 shutdown_with_reason({_, 200, _}, State) ->
     {stop, normal, State};
-shutdown_with_reason({connection_closing, {_, 200, _}}, State) ->
-    {stop, normal, State};
-shutdown_with_reason({connection_closing, normal}, State) ->
-    {stop, normal, State};
-shutdown_with_reason({connection_closing, _} = Reason, State) ->
-    {stop, Reason, State};
 shutdown_with_reason(Reason, State) ->
     {stop, Reason, State}.
 
@@ -347,16 +339,16 @@ is_connection_method(Method) ->
     {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
     ?PROTOCOL:lookup_class_name(ClassId) == connection.
 
-send_error(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
-    {HardError, _, Close} =
-        rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL),
-    if HardError -> {stop, {send_hard_error, AmqpError}, State};
-       true      -> ?LOG_WARN("Channel (~p) flushing and closing due to soft "
-                              "error caused by the server ~p~n",
-                              [self(), AmqpError]),
-                    Self = self(),
-                    spawn(fun() -> call(Self, Close) end),
-                    {noreply, State}
+server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
+    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
+        {true, _, _} ->
+            {stop, {server_misbehaved, AmqpError}, State};
+        {false, _, Close} ->
+            ?LOG_WARN("Channel (~p) flushing and closing due to soft "
+                      "error caused by the server ~p~n", [self(), AmqpError]),
+            Self = self(),
+            spawn(fun() -> call(Self, Close) end),
+            {noreply, State}
     end.
 
 %%---------------------------------------------------------------------------
@@ -365,11 +357,12 @@ send_error(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
 
 handle_method(Method, Content, State = #state{closing = Closing}) ->
     case is_connection_method(Method) of
-        true -> send_error(#amqp_error{name        = command_invalid,
-                                       explanation = "connection method on "
-                                                     "non-zero channel",
-                                       method      = element(1, Method)},
-                           State);
+        true -> server_misbehaved(
+                    #amqp_error{name        = command_invalid,
+                                explanation = "connection method on "
+                                              "non-zero channel",
+                                method      = element(1, Method)},
+                    State);
         false -> Drop = case {Closing, Method} of
                             {just_channel, #'channel.close'{}}    -> false;
                             {just_channel, #'channel.close_ok'{}} -> false;
@@ -446,6 +439,10 @@ handle_method1(Method, Content, State) ->
 start_link(Driver, ChannelNumber, SWF) ->
     gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
 
+%% @private
+connection_closing(Pid, ChannelCloseType) ->
+    gen_server:cast(Pid, {connection_closing, ChannelCloseType}).
+
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -481,7 +478,7 @@ handle_call({call, Method, AmqpMsg}, From, State) ->
 %% @private
 handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
             From, State = #state{tagged_sub_requests = Tagged,
-                                 anon_sub_requests = Anon}) ->
+                                 anon_sub_requests   = Anon}) ->
     case check_block(Method, none, State) of
         ok ->
             {NewMethod, NewState} =
@@ -564,7 +561,29 @@ handle_cast({notify_sent, _Peer}, State) ->
 %% to this gen_server instance
 %% @private
 handle_cast({method, Method, Content}, State) ->
-    handle_method(Method, Content, State).
+    handle_method(Method, Content, State);
+
+%% Handles the situation when the connection closes without closing the channel
+%% beforehand. The channel must block all further RPCs,
+%% flush the RPC queue (optional), and terminate
+%% @private
+handle_cast({connection_closing, CloseType},
+            #state{rpc_requests = RpcQueue,
+                   closing      = Closing} = State) ->
+    case {CloseType, Closing, queue:is_empty(RpcQueue)} of
+        {flush, false, false} ->
+            erlang:send_after(?TIMEOUT_FLUSH, self(),
+                              {shutdown, timed_out_flushing_channel,
+                               connection_closing}),
+            {noreply, State#state{closing = connection}};
+        {flush, just_channel, false} ->
+            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
+                              {shutdown, timed_out_waiting_close_ok,
+                               connection_closing}),
+            {noreply, State#state{closing = connection}};
+        _ ->
+            {stop, connection_closing, State}
+    end.
 
 %% These callbacks are invoked when a direct channel sends messages
 %% to this gen_server instance
@@ -605,41 +624,17 @@ handle_info({shutdown, Reason}, State) ->
     shutdown_with_reason(Reason, State);
 
 %% @private
-handle_info({shutdown, FailShutdownReason, InitialReason},
+handle_info({shutdown, FailShutdownReason, connection_closing},
             #state{number = Number} = State) ->
     case FailShutdownReason of
-        {connection_closing, timed_out_flushing_channel} ->
+        timed_out_flushing_channel ->
             ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
                       "closing~n", [Number]);
-        {connection_closing, timed_out_waiting_close_ok} ->
+        timed_out_waiting_close_ok ->
             ?LOG_WARN("Channel ~p closing: timed out waiting for "
                       "channel.close_ok while connection closing~n", [Number])
     end,
-    {stop, {FailShutdownReason, InitialReason}, State};
-
-%% Handles the situation when the connection closes without closing the channel
-%% beforehand. The channel must block all further RPCs,
-%% flush the RPC queue (optional), and terminate
-%% @private
-handle_info({connection_closing, CloseType, Reason},
-            #state{rpc_requests = RpcQueue,
-                   closing = Closing} = State) ->
-    case {CloseType, Closing, queue:is_empty(RpcQueue)} of
-        {flush, false, false} ->
-            erlang:send_after(?TIMEOUT_FLUSH, self(),
-                              {shutdown,
-                               {connection_closing, timed_out_flushing_channel},
-                               Reason}),
-            {noreply, State#state{closing = {connection, Reason}}};
-        {flush, just_channel, false} ->
-            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
-                              {shutdown,
-                               {connection_closing, timed_out_waiting_close_ok},
-                               Reason}),
-            {noreply, State};
-        _ ->
-            shutdown_with_reason({connection_closing, Reason}, State)
-    end;
+    {stop, FailShutdownReason, State};
 
 %% @private
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
