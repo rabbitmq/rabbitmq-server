@@ -150,17 +150,17 @@ declare(XName, Type, Durable, AutoDelete, Args) ->
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
+    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
     Module.
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
-    case rabbit_exchange_type_registry:binary_to_type(TypeBin) of
+    case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
         T ->
-            case rabbit_exchange_type_registry:lookup_module(T) of
+            case rabbit_registry:lookup_module(exchange, T) of
                 {error, not_found} -> rabbit_misc:protocol_error(
                                         command_invalid,
                                         "invalid exchange type '~s'", [T]);

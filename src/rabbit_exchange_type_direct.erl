@@ -41,9 +41,9 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type direct"},
-                    {mfa,         {rabbit_exchange_type_registry, register,
-                                   [<<"direct">>, ?MODULE]}},
-                    {requires,    rabbit_exchange_type_registry},
+                    {mfa,         {rabbit_registry, register,
+                                   [exchange, <<"direct">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
 description() ->
