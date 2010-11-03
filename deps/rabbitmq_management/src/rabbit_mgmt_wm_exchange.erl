@@ -48,9 +48,9 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(
-      rabbit_mgmt_format:exchange(rabbit_exchange:info(exchange(ReqData))),
-      ReqData, Context).
+    X0 = exchange(ReqData),
+    [X] = rabbit_mgmt_db:get_exchange(X0),
+    rabbit_mgmt_util:reply(X, ReqData, Context).
 
 accept_content(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(exchange, ReqData),
@@ -83,7 +83,8 @@ exchange(ReqData) ->
         not_found -> not_found;
         VHost     -> Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
                      case rabbit_exchange:lookup(Name) of
-                         {ok, X}            -> X;
+                         {ok, X}            -> rabbit_mgmt_format:exchange(
+                                                 rabbit_exchange:info(X));
                          {error, not_found} -> not_found
                      end
     end.

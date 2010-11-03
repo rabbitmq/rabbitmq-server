@@ -41,7 +41,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Xs = exchanges(ReqData),
+    Xs = rabbit_mgmt_db:get_exchanges(exchanges(ReqData)),
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_util:filter_vhost(Xs, ReqData, Context),
       ReqData, Context).

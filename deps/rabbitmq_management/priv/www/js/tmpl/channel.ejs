@@ -1,29 +1,55 @@
 <h1>Channel: <b><%= channel.name %></b></h1>
 
+<div class="section">
+<h2>Details</h2>
+<div class="hider updatable">
+<table class="facts">
+  <tr>
+    <th>Connection</th>
+    <th>Virtual host</th>
+    <th>Username</th>
+    <th>Transactional</th>
+    <th>Prefetch count</th>
+    <th>Acks uncommitted</th>
+    <th>Messages unacknowledged</th>
+    <th>Client blocked</th>
+  </tr>
+  <tr>
+    <td><%= link_conn(channel.connection_details.name) %></td>
+    <td><%= channel.vhost %></td>
+    <td><%= channel.user %></td>
+    <td><%= fmt_boolean(channel.transactional) %></td>
+    <td><%= channel.prefetch_count %></td>
+    <td><%= channel.acks_uncommitted %></td>
+    <td><%= channel.messages_unacknowledged %></td>
+    <td><%= fmt_boolean(channel.client_flow_blocked) %></td>
+  </tr>
+</table>
+</div>
+</div>
+
 <% if (statistics_level == 'fine') { %>
 <div class="section">
 <h2>Message Rates</h2>
 <div class="hider updatable">
-<%= message_rates(channel.message_stats) %>
+<table class="two-col-layout">
+  <tr>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'channel',
+                  'object': channel.publishes,
+                  'label':  'Publishes',
+                  'totals': channel.message_stats}) %>
+    </td>
+    <td>
+      <%= format('msg-detail-deliveries',
+                 {'mode':   'channel',
+                  'object': channel.deliveries,
+                  'totals': channel.message_stats}) %>
+    </td>
+  </tr>
+</table>
 <span class="br"></span>
 </div>
 </div>
 <% } %>
-
-<div class="section">
-<h2>Overview</h2>
-<div class="hider updatable">
-<table class="facts">
- <tr><th>Connection</th><td><%= link_conn(channel.connection_details.name) %></td></tr>
- <tr><th>Virtual host</th><td><%= channel.vhost %></td></tr>
- <tr><th>Username</th><td><%= channel.user %></td></tr>
- <tr><th>Transactional</th><td><%= fmt_boolean(channel.transactional) %></td></tr>
- <tr><th>Prefetch count</th><td><%= channel.prefetch_count %></td></tr>
- <tr><th>Acks uncommitted</th><td><%= channel.acks_uncommitted %></td></tr>
- <tr><th>Messages unacknowledged</th><td><%= channel.messages_unacknowledged %></td></tr>
-<% if ('client_flow_blocked' in channel) { %>
- <tr><th>Client blocked</th><td><%= fmt_boolean(channel.client_flow_blocked) %></td></tr>
-<% } %>
-</table>
-</div>
-</div>

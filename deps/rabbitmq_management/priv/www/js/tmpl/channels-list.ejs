@@ -61,11 +61,9 @@
     <td class="c"><%= channel.prefetch_count %></td>
     <td class="c"><%= channel.messages_unacknowledged %></td>
 <% if (statistics_level == 'fine') { %>
-    <td class="l"><%= fmt_rate(channel.message_stats, 'publish') %></td>
-    <td class="l"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
-    <td class="l">
-      <%= fmt_rate(channel.message_stats, 'ack') %>
-    </td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
 <% } %>
   </tr>
   <% } %>
