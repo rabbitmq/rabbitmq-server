@@ -26,7 +26,9 @@
 -compile([export_all]).
 
 -define(TESTS, [test_queues, test_connections, test_channels, test_overview,
-                test_channel_rates, test_rate_zeroing]).
+                test_channel_rates, test_rate_zeroing,
+                test_channel_aggregation, test_exchange_aggregation,
+                test_queue_aggregation]).
 
 -define(X, <<"">>).
 
@@ -140,7 +142,7 @@ test_channels(Conn, Chan) ->
 
 test_channel_rates(Conn, Chan) ->
     Q = declare_queue(Chan),
-    X2 = <<"rates-exch">>,
+    X2 = <<"channel-rates-exch">>,
     declare_exchange(Chan, X2),
     bind_queue(Chan, X2, Q),
     publish(Chan, ?X, Q, 5),
@@ -184,91 +186,72 @@ assert_ch_rate(Conn, ChNum, Rates) ->
     [assert_close(Exp, pget(rate, pget(Type, Stats)))
      || {Type, Exp} <- Rates].
 
-%% TODO rethink this test
-%% test_aggregation(Conn, Chan) ->
-%%     {ok, Conn2} = amqp_connection:start(network),
-%%     {ok, Chan2} = amqp_connection:open_channel(Conn2),
+test_channel_aggregation(Conn, Chan) ->
+    X1 = <<"channel-aggregation-exch1">>,
+    X2 = <<"channel-aggregation-exch2">>,
+    declare_exchange(Chan, X1),
+    declare_exchange(Chan, X2),
+    publish(Chan, X1, <<"">>, 10),
+    publish(Chan, X2, <<"">>, 100),
 
-%%     X = <<"aggregation">>,
-%%     declare_exchange(Chan, X),
-%%     Qs = [declare_queue(Chan) || _ <- lists:seq(1, 10)],
-%%     [bind_queue(Chan, X, Q) || Q <- Qs],
+    [fun() ->
+             Ch = get_channel(Conn, 1),
+             110 = pget(publish, pget(message_stats, Ch)),
+             assert_aggregated(exchange, [{name,X1}, {vhost,<<"/">>}],
+                               [{publish, 10}], pget(publishes, Ch)),
+             assert_aggregated(exchange, [{name,X2}, {vhost,<<"/">>}],
+                               [{publish, 100}], pget(publishes, Ch))
+     end].
 
-%%     [publish(Chan, X, Q, 1) || Q <- Qs],
-%%     [publish(Chan2, X, Q, 10) || Q <- Qs],
-%%     [consume(Chan, Q, 5, true, false) || Q <- Qs],
+test_exchange_aggregation(Conn, Chan) ->
+    X1 = <<"exchange-aggregation">>,
+    declare_exchange(Chan, X1),
+    Q1 = declare_queue(Chan),
+    Q2 = declare_queue(Chan),
+    bind_queue(Chan, X1, Q1),
+    bind_queue(Chan, X1, Q2),
+    publish(Chan, X1, Q1, 10),
+    publish(Chan, X1, Q2, 100),
 
-%%     fun() ->
-%%             Get = fun(Type, GroupBy) ->
-%%                           rabbit_mgmt_db:get_msg_stats(
-%%                             Type, GroupBy, ignored, ignored)
-%%                   end,
+    [fun() ->
+             X = get_exchange(X1),
+             110 = pget(publish, pget(message_stats_in, X)),
+             110 = pget(publish, pget(message_stats_out, X)),
+             assert_aggregated(queue_details, [{name,Q1}, {vhost,<<"/">>}],
+                               [{publish, 10}], pget(outgoing, X)),
+             assert_aggregated(queue_details, [{name,Q2}, {vhost,<<"/">>}],
+                               [{publish, 100}], pget(outgoing, X))
+     end].
 
-%%             Port = local_port(Conn),
-%%             Port2 = local_port(Conn2),
+test_queue_aggregation(Conn, Chan) ->
+    X1 = <<"queue-aggregation-1">>,
+    X2 = <<"queue-aggregation-2">>,
+    declare_exchange(Chan, X1),
+    declare_exchange(Chan, X2),
+    Q1 = declare_queue(Chan),
+    bind_queue(Chan, X1, Q1),
+    bind_queue(Chan, X2, Q1),
+    publish(Chan, X1, Q1, 10),
+    publish(Chan, X2, Q1, 100),
 
-%%             QByC = Get(channel_queue_stats, "channel"),
-%%             QByCStats = find_stats_by_local_port(Port, QByC),
-%%             50 = pget(deliver, QByCStats),
-%%             50 = pget(ack, QByCStats),
+    [fun() ->
+             Q = get_queue(Q1),
+             110 = pget(publish, pget(message_stats, Q)),
+             assert_aggregated(exchange, [{name,X1}, {vhost,<<"/">>}],
+                               [{publish, 10}], pget(incoming, Q)),
+             assert_aggregated(exchange, [{name,X2}, {vhost,<<"/">>}],
+                               [{publish, 100}], pget(incoming, Q))
+     end].
 
-%%             QByQ = Get(channel_queue_stats, "queue"),
-%%             [begin
-%%                  QStats = find_by_queue(Q, QByQ),
-%%                  5 = pget(deliver, QStats),
-%%                  5 = pget(ack, QStats)
-%%              end || Q <- Qs],
-
-%%             XByC = Get(channel_exchange_stats, "channel"),
-%%             XByCStats = find_stats_by_local_port(Port, XByC),
-%%             XByCStats2 = find_stats_by_local_port(Port2, XByC),
-%%             10 = pget(publish, XByCStats),
-%%             100 = pget(publish, XByCStats2),
-
-%%             XByX = Get(channel_exchange_stats, "exchange"),
-%%             XByXStats = find_by_exchange(X, XByX),
-%%             110 = pget(publish, XByXStats),
-
-%%             QXByC = Get(channel_queue_exchange_stats, "channel"),
-%%             QXByCStats = find_stats_by_local_port(Port, QXByC),
-%%             QXByCStats2 = find_stats_by_local_port(Port2, QXByC),
-%%             10 = pget(publish, QXByCStats),
-%%             100 = pget(publish, QXByCStats2),
-
-%%             QXByQ = Get(channel_queue_exchange_stats, "queue"),
-%%             [begin
-%%                  QStats = find_by_queue(Q, QXByQ),
-%%                  11 = pget(publish, QStats)
-%%              end || Q <- Qs],
-
-%%             QXByX = Get(channel_queue_exchange_stats, "exchange"),
-%%             QXByXStats = find_by_exchange(X, QXByX),
-%%             110 = pget(publish, QXByXStats),
-
-%%             amqp_channel:close(Chan2),
-%%             amqp_connection:close(Conn2)
-%%     end.
-
+assert_aggregated(Key, Val, Exp, List) ->
+    [Act] = [pget(stats, I) || I <- List, pget(Key, I) == Val],
+    [ActVal = pget(Type, Exp) || {Type, ActVal} <- Act].
 
 %%---------------------------------------------------------------------------
 
 find_by_name(Name, Items) ->
     [Thing] = lists:filter(fun(Item) -> pget(name, Item) == Name end, Items),
     Thing.
-
-%% find_by_queue(Q, Items) ->
-%%     [{_Ids, Stats}] = lists:filter(
-%%                         fun({Ids, _Stats}) ->
-%%                                 pget(name, pget(queue_details, Ids)) == Q
-%%                         end, Items),
-%%     Stats.
-
-%% find_by_exchange(X, Items) ->
-%%     [{_Ids, Stats}] = lists:filter(
-%%                         fun({Ids, _Stats}) ->
-%%                                 pget(name, pget(exchange, Ids)) == X
-%%                         end, Items),
-%%     Stats.
 
 find_conn_by_local_port(Port, Items) ->
     [Conn] = lists:filter(
@@ -283,6 +266,16 @@ get_channel(C, Number) ->
     rabbit_mgmt_db:get_channel(list_to_binary(
                                  "127.0.0.1:" ++ integer_to_list(Port) ++ ":" ++
                                      integer_to_list(Number))).
+
+get_exchange(XName) ->
+    X = rabbit_mgmt_wm_exchange:exchange(<<"/">>, XName),
+    [Res] = rabbit_mgmt_db:get_exchange(X),
+    Res.
+
+get_queue(QName) ->
+    Q = rabbit_mgmt_wm_queue:queue(<<"/">>, QName),
+    [Res] = rabbit_mgmt_db:get_queue(Q),
+    Res.
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =

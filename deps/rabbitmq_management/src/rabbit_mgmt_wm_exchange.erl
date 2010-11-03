@@ -23,7 +23,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2]).
+         delete_resource/2, exchange/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -81,12 +81,15 @@ is_authorized(ReqData, Context) ->
 exchange(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
-        VHost     -> Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
-                     case rabbit_exchange:lookup(Name) of
-                         {ok, X}            -> rabbit_mgmt_format:exchange(
-                                                 rabbit_exchange:info(X));
-                         {error, not_found} -> not_found
-                     end
+        VHost     -> exchange(VHost, id(ReqData))
+    end.
+
+exchange(VHost, XName) ->
+    Name = rabbit_misc:r(VHost, exchange, XName),
+    case rabbit_exchange:lookup(Name) of
+        {ok, X}            -> rabbit_mgmt_format:exchange(
+                                rabbit_exchange:info(X));
+        {error, not_found} -> not_found
     end.
 
 id(ReqData) ->
