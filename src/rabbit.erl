@@ -128,6 +128,13 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_external_stats,
+                   [{description, "external statistics"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_external_stats]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
