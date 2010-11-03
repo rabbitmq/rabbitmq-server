@@ -969,6 +969,7 @@ handle_cast(update_ram_duration, State = #q{backing_queue = BQ,
     io:format("RamDuration~p~n", [RamDuration]),
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
+    io:format("Desired duration:~p~n", [DesiredDuration]),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     noreply(State#q{rate_timer_ref = just_measured,
                     backing_queue_state = BQS2});
@@ -1025,11 +1026,15 @@ handle_info(Info, State) ->
     ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
+handle_post_hibernate(_) ->
+    io:format("hello~n").
+
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
     {hibernate, State};
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS,
                                 stats_timer = StatsTimer}) ->
+    io:format("Hibernating~p~n", [self()]),
     BQS1 = BQ:handle_pre_hibernate(BQS),
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration =
