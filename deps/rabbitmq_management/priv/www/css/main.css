@@ -106,7 +106,7 @@ input[type=submit], button { padding: 8px; background-color: #aaf; border-radius
 
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
-acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -moz-border-radius: 2px; cursor: pointer; }
+acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -moz-border-radius: 2px; border: none; cursor: pointer; }
 
 table.bindings { margin-bottom: 2em; }
 td.binding-endpoint span.object { border: 2px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
