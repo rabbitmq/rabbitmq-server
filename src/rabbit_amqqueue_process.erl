@@ -239,6 +239,7 @@ stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
     State#q{sync_timer_ref = undefined}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
+    io:format("Ensuring rate timer~n"),
     {ok, TRef} = timer:apply_after(
                    ?RAM_DURATION_UPDATE_INTERVAL,
                    rabbit_amqqueue, update_ram_duration,
@@ -963,7 +964,9 @@ handle_cast({flush, ChPid}, State) ->
 
 handle_cast(update_ram_duration, State = #q{backing_queue = BQ,
                                             backing_queue_state = BQS}) ->
+    io:format("Before ram duration~n"),
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
+    io:format("RamDuration~p~n", [RamDuration]),
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
