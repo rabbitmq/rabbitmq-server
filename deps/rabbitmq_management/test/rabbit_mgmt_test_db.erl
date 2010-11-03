@@ -26,7 +26,7 @@
 -compile([export_all]).
 
 -define(TESTS, [test_queues, test_connections, test_channels, test_overview,
-                test_rates, test_rate_zeroing]).
+                test_channel_rates, test_rate_zeroing]).
 
 -define(X, <<"">>).
 
@@ -128,8 +128,7 @@ test_channels(Conn, Chan) ->
     consume(Chan, Q, 1, false, true),
 
     [fun() ->
-             Channels = rabbit_mgmt_db:get_channels(),
-             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
+             Stats = pget(message_stats, get_channel(Conn, 1)),
              1 = pget(get, Stats),
              1 = pget(get_no_ack, Stats),
              2 = pget(ack, Stats),
@@ -139,7 +138,7 @@ test_channels(Conn, Chan) ->
              10 = pget(publish, Stats)
     end].
 
-test_rates(Conn, Chan) ->
+test_channel_rates(Conn, Chan) ->
     Q = declare_queue(Chan),
     X2 = <<"rates-exch">>,
     declare_exchange(Chan, X2),
@@ -153,16 +152,15 @@ test_rates(Conn, Chan) ->
      fun() ->
              publish(Chan, ?X, Q, 5),
              publish(Chan, X2, Q, 5),
-             assert_close(1, publish_rate(Conn, 1))
+             assert_ch_rate(Conn, 1, [{publish_details, 1}])
      end,
      fun() ->
              publish(Chan, X2, Q, 5),
-             assert_close(2, publish_rate(Conn, 1))
+             assert_ch_rate(Conn, 1, [{publish_details, 2}])
      end,
      fun() ->
-             assert_close(1, publish_rate(Conn, 1)),
-             Channels = rabbit_mgmt_db:get_channels(),
-             Stats = pget(message_stats, find_channel(Conn, 1, Channels)),
+             assert_ch_rate(Conn, 1, [{publish_details, 1}]),
+             Stats = pget(message_stats, get_channel(Conn, 1)),
              30 = pget(publish, Stats)
      end].
 
@@ -174,16 +172,17 @@ test_rate_zeroing(Conn, Chan) ->
              publish(Chan, ?X, Q, 5)
      end,
      fun() ->
-             assert_close(1, publish_rate(Conn, 1))
+             assert_ch_rate(Conn, 1, [{publish_details, 1}])
      end,
      fun() ->
-             assert_close(0, publish_rate(Conn, 1))
+             assert_ch_rate(Conn, 1, [{publish_details, 0}])
      end].
 
-publish_rate(Conn, ChNum) ->
-    Channels = rabbit_mgmt_db:get_channels(),
-    Stats = pget(message_stats, find_channel(Conn, ChNum, Channels)),
-    pget(rate, pget(publish_details, Stats)).
+assert_ch_rate(Conn, ChNum, Rates) ->
+    Ch = get_channel(Conn, ChNum),
+    Stats = pget(message_stats, Ch),
+    [assert_close(Exp, pget(rate, pget(Type, Stats)))
+     || {Type, Exp} <- Rates].
 
 %% TODO rethink this test
 %% test_aggregation(Conn, Chan) ->
@@ -279,16 +278,11 @@ find_conn_by_local_port(Port, Items) ->
                end, Items),
     Conn.
 
-find_channel(C, Number, Items) ->
+get_channel(C, Number) ->
     Port = local_port(C),
-    [Chan] = lists:filter(
-               fun(Chan) ->
-                       Conn = pget(connection_details, Chan),
-                       pget(peer_port, Conn) == Port andalso
-                           pget(peer_address, Conn) == <<"127.0.0.1">> andalso
-                           pget(number, Chan) == Number
-               end, Items),
-    Chan.
+    rabbit_mgmt_db:get_channel(list_to_binary(
+                                 "127.0.0.1:" ++ integer_to_list(Port) ++ ":" ++
+                                     integer_to_list(Number))).
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =
