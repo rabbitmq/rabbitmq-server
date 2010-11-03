@@ -33,7 +33,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([check_login/2, user_pass_login/2, check_user_pass_login/2,
+-export([auth_mechanisms/1, check_login/2, check_user_pass_login/2,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
@@ -54,12 +54,10 @@
 -type(password() :: binary()).
 -type(password_hash() :: binary()).
 -type(regexp() :: binary()).
+-spec(auth_mechanisms/1 :: (rabbit_networking:socket()) -> binary()).
 -spec(check_login/2 ::
         (binary(), binary()) -> rabbit_types:user() |
                                 rabbit_types:channel_exit()).
--spec(user_pass_login/2 ::
-        (username(), password())
-        -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
         -> {'ok', rabbit_types:user()} | 'refused').
@@ -99,54 +97,51 @@
 
 %%----------------------------------------------------------------------------
 
-%% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
-%% apparently, by OpenAMQ.
-check_login(<<"PLAIN">>, Response) ->
-    [User, Pass] = [list_to_binary(T) ||
-                       T <- string:tokens(binary_to_list(Response), [0])],
-    user_pass_login(User, Pass);
-%% AMQPLAIN, as used by Qpid Python test suite. The 0-8 spec actually
-%% defines this as PLAIN, but in 0-9 that definition is gone, instead
-%% referring generically to "SASL security mechanism", i.e. the above.
-check_login(<<"AMQPLAIN">>, Response) ->
-    LoginTable = rabbit_binary_parser:parse_table(Response),
-    case {lists:keysearch(<<"LOGIN">>, 1, LoginTable),
-          lists:keysearch(<<"PASSWORD">>, 1, LoginTable)} of
-        {{value, {_, longstr, User}},
-         {value, {_, longstr, Pass}}} ->
-            user_pass_login(User, Pass);
-        _ ->
-            %% Is this an information leak?
-            rabbit_misc:protocol_error(
-              access_refused,
-              "AMQPPLAIN auth info ~w is missing LOGIN or PASSWORD field",
-              [LoginTable])
-    end;
+auth_mechanisms(Sock) ->
+    Mechanisms =
+        [atom_to_list(Name)
+         || {Name, Mechanism} <- rabbit_registry:lookup_all(auth_mechanism),
+        Mechanism:should_offer(Sock)],
+    list_to_binary(string:join(Mechanisms, " ")).
 
-check_login(Mechanism, _Response) ->
-    rabbit_misc:protocol_error(
-      access_refused, "unsupported authentication mechanism '~s'",
-      [Mechanism]).
-
-user_pass_login(User, Pass) ->
-    ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
-    case check_user_pass_login(User, Pass) of
-        refused ->
+check_login(MechanismBin, Response) ->
+    Mechanism = mechanism_to_module(MechanismBin),
+    State = Mechanism:init(),
+    case Mechanism:handle_response(Response, State) of
+        {refused, Username} ->
             rabbit_misc:protocol_error(
-              access_refused, "login refused for user '~s'", [User]);
-        {ok, U} ->
-            U
+              access_refused, "login refused for user '~s'", [Username]);
+        {protocol_error, Msg, Args} ->
+            rabbit_misc:protocol_error(access_refused, Msg, Args);
+        {ok, User} ->
+            User
     end.
 
-check_user_pass_login(User, Pass) ->
-    case lookup_user(User) of
-        {ok, U} ->
-            case check_password(Pass, U#user.password_hash) of
-                true -> {ok, U};
+mechanism_to_module(TypeBin) ->
+    case rabbit_registry:binary_to_type(TypeBin) of
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "unknown authentication mechanism '~s'",
+              [TypeBin]);
+        T ->
+            case rabbit_registry:lookup_module(auth_mechanism, T) of
+                {error, not_found} -> rabbit_misc:protocol_error(
+                                        command_invalid,
+                                        "invalid authentication mechanism '~s'",
+                                        [T]);
+                {ok, Module}       -> Module
+            end
+    end.
+
+check_user_pass_login(Username, Pass) ->
+    case lookup_user(Username) of
+        {ok, User} ->
+            case check_password(Pass, User#user.password_hash) of
+                true -> {ok, User};
                 _    -> refused
             end;
         {error, not_found} ->
-            refused
+            {refused, Username}
     end.
 
 internal_lookup_vhost_access(Username, VHostPath) ->
