@@ -692,7 +692,6 @@ set_ram_duration_target(DurationTarget,
                               #rates { avg_egress  = AvgAckEgressRate,
                                        avg_ingress = AvgAckIngressRate },
                           target_ram_msg_count = TargetRamMsgCount }) ->
-    io:format("set:~p~n", [DurationTarget]),
     Rate = AvgEgressRate + AvgIngressRate + AvgAckEgressRate
         + AvgAckIngressRate,
     TargetRamMsgCount1 =
@@ -705,7 +704,7 @@ set_ram_duration_target(DurationTarget,
           (TargetRamMsgCount =/= infinity andalso
            TargetRamMsgCount1 >= TargetRamMsgCount) of
           true  -> State1;
-          false -> io:format("Reducing~n"), reduce_memory_use(State1)
+          false -> reduce_memory_use(State1)
       end).
 
 ram_duration(State = #vqstate {
@@ -722,7 +721,6 @@ ram_duration(State = #vqstate {
                ram_msg_count_prev = RamMsgCountPrev,
                ram_ack_index      = RamAckIndex,
                ram_ack_count_prev = RamAckCountPrev }) ->
-    io:format("Ram duration~n"),
     Now = now(),
     {AvgEgressRate,   Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
     {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
@@ -744,7 +742,6 @@ ram_duration(State = #vqstate {
                                    AvgAckEgressRate + AvgAckIngressRate))
         end,
 
-    io:format("Duration:~p~n", [Duration]),
     {Duration, State #vqstate {
                  rates              = Rates #rates {
                                         egress      = Egress1,
@@ -1372,7 +1369,6 @@ reduce_ack_memory_use(_AckFun, State = #vqstate { target_ram_msg_count = infinit
 reduce_ack_memory_use(AckFun, State = #vqstate {target_ram_msg_count = TargetRamMsgCount,
                                         ram_msg_count = RamMsgCount,
                                         ram_ack_index = RamAckIndex} ) ->
-    io:format("RAI:~p,TRMC:~p,RMC:~p~n", [gb_trees:size(RamAckIndex), TargetRamMsgCount, RamMsgCount]),
     PermittedAckCount = case TargetRamMsgCount > RamMsgCount of
                             true  -> TargetRamMsgCount - RamMsgCount;
                             false -> 0
