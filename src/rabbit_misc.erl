@@ -64,6 +64,7 @@
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
+-export([now_ms/0]).
 
 -import(mnesia).
 -import(lists).
@@ -184,6 +185,7 @@
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
+-spec(now_ms/0 :: () -> integer()).
 
 -endif.
 
@@ -721,3 +723,6 @@ get_flag(K, [Nk | As]) ->
     {[Nk | As1], V};
 get_flag(_, []) ->
     {[], false}.
+
+now_ms() ->
+    timer:now_diff(now(), {0,0,0}) div 1000.

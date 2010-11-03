@@ -149,7 +149,7 @@ init([]) ->
 
 
 handle_call({info, Items}, _From, State0) ->
-    State = case (rabbit_mgmt_util:now_ms() - State0#state.time_ms >
+    State = case (rabbit_misc:now_ms() - State0#state.time_ms >
                       ?REFRESH_RATIO) of
                 true  -> internal_update(State0);
                 false -> State0
@@ -173,5 +173,5 @@ code_change(_, State, _) -> {ok, State}.
 %%--------------------------------------------------------------------
 
 internal_update(State) ->
-    State#state{time_ms   = rabbit_mgmt_util:now_ms(),
-                fd_used   = get_used_fd()}.
+    State#state{time_ms = rabbit_misc:now_ms(),
+                fd_used = get_used_fd()}.
