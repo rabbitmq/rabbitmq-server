@@ -420,15 +420,14 @@ basic_qos_test(Connection, Prefetch) ->
     Workers = [5, 50],
     Parent = self(),
     {ok, Chan} = amqp_connection:open_channel(Connection),
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Chan, #'queue.declare'{}),
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Chan, #'queue.declare'{}),
     Kids = [spawn(
             fun() ->
                 {ok, Channel} = amqp_connection:open_channel(Connection),
                 amqp_channel:call(Channel,
-                                 #'basic.qos'{prefetch_count = Prefetch}),
-                amqp_channel:subscribe(Channel,
-                                       #'basic.consume'{queue = Q},
+                                  #'basic.qos'{prefetch_count = Prefetch}),
+                amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
                                        self()),
                 Parent ! finished,
                 sleeping_consumer(Channel, Sleep, Parent)
@@ -437,7 +436,7 @@ basic_qos_test(Connection, Prefetch) ->
     spawn(fun() -> {ok, Channel} = amqp_connection:open_channel(Connection),
                    producer_loop(Channel, Q, Messages)
           end),
-    {Res, ok} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
+    {Res, _} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
     amqp_channel:close(Chan),
