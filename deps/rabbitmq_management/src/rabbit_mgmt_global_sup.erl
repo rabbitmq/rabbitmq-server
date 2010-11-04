@@ -37,5 +37,5 @@ start_link() ->
               Else                          -> Else
           end,
     %% Needs to happen after we know the DB's up but before boot step finished
-    rabbit_mgmt_db_handler:add_handler(),
+    rabbit_mgmt_db_handler:add_handler(rabbit_management),
     Res.

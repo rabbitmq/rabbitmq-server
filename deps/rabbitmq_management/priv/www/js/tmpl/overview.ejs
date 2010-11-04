@@ -43,7 +43,19 @@ for (var i = 0; i < nodes.length; i++) {
      <td class="c">
        <%= node.type %>
      </td>
-<% if (node.running) { %>
+<% if (!node.running) { %>
+     <td class="status" colspan="5">
+       <div class="red">
+         Node not running
+       </div>
+     </td>
+<% } else if (node.external_stats_not_running) { %>
+     <td class="status" colspan="5">
+       <div class="red">
+         Management plugin not installed
+       </div>
+     </td>
+<% } else { %>
      <td class="c"><%= node.os_pid %></td>
      <td class="status">
        <div class="<%= fmt_color(node.fd_used / node.fd_total) %>">
@@ -66,20 +78,10 @@ for (var i = 0; i < nodes.length; i++) {
 <% } %>
      </td>
      <td class="c status">
-<% if (node.statistics_level == 'none') { %>
-       <div class="red">none <acronym title="Message rates and queue statistics from this node will not be reported.">(?)</acronym></div>
-<% } else { %>
        <%= node.statistics_level %>
+     </td>
 <% } %>
-     </td>
-<% } else { %>
-     <td class="status" colspan="5">
-       <div class="red">
-         Node not running
-       </div>
-     </td>
    </tr>
-<% } %>
 <% } %>
 </table>
 

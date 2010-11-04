@@ -45,7 +45,11 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 info(Node) ->
-    gen_server2:call({?MODULE, Node}, {info, ?KEYS}, infinity).
+    try
+        gen_server2:call({?MODULE, Node}, {info, ?KEYS}, infinity)
+    catch
+        exit:{noproc, _} -> [{external_stats_not_running, true}]
+    end.
 
 %%--------------------------------------------------------------------
 

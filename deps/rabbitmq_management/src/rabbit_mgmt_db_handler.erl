@@ -22,22 +22,21 @@
 
 -behaviour(gen_event).
 
--export([add_handler/0]).
+-export([add_handler/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
 %%----------------------------------------------------------------------------
 
-add_handler() ->
-    ensure_statistics_enabled(),
+add_handler(App) ->
+    ensure_statistics_enabled(App),
     gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
-ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(
-                         rabbit_management, force_fine_statistics),
+ensure_statistics_enabled(App) ->
+    {ok, ForceStats} = application:get_env(App, force_fine_statistics),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->
