@@ -1258,7 +1258,6 @@ record_pending_ack(#msg_status { seq_id        = SeqId,
                      ram_ack_index  = RAI1,
                      ack_in_counter = AckInCount + 1}.
 
-%% TODO: On remove, need to prevent any seqids that
 remove_pending_ack(KeepPersistent,
                    State = #vqstate { pending_ack       = PA,
                                       index_state       = IndexState,
