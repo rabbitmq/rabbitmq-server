@@ -377,29 +377,21 @@ init_db(ClusterNodes, Force) ->
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
                     wait_for_tables(),
-                    rabbit_upgrade:maybe_upgrade(),
-                    case check_schema_integrity() of
+                    case rabbit_upgrade:maybe_upgrade() of
                         ok ->
-                            ok;
-                        {error, Reason} ->
-                            throw({schema_invalid_after_upgrade, Reason})
+                            case check_schema_integrity() of
+                                ok ->
+                                    ok;
+                                {error, Reason} ->
+                                    throw({schema_invalid_after_upgrade,
+                                           Reason})
+                            end;
+                        version_not_available ->
+                            schema_ok_or_move()
                     end;
                 {[], true, _} ->
                     %% First disc node in cluster, verify schema
-                    case check_schema_integrity() of
-                        ok ->
-                            ok;
-                        {error, Reason} ->
-                            %% NB: we cannot use rabbit_log here since
-                            %% it may not have been started yet
-                            error_logger:warning_msg(
-                              "schema integrity check failed: ~p~n"
-                              "moving database to backup location "
-                              "and recreating schema from scratch~n",
-                              [Reason]),
-                            ok = move_db(),
-                            ok = create_schema()
-                    end;
+                    schema_ok_or_move();
                 {[], false, _} ->
                     %% First RAM node in cluster, start from scratch
                     ok = create_schema();
@@ -432,6 +424,22 @@ init_db(ClusterNodes, Force) ->
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster,
                            ClusterNodes, Reason}})
+    end.
+
+schema_ok_or_move() ->
+    case check_schema_integrity() of
+        ok ->
+            ok;
+        {error, Reason} ->
+            %% NB: we cannot use rabbit_log here since
+            %% it may not have been started yet
+            error_logger:warning_msg(
+              "schema integrity check failed: ~p~n"
+              "moving database to backup location "
+              "and recreating schema from scratch~n",
+              [Reason]),
+            ok = move_db(),
+            ok = create_schema()
     end.
 
 create_schema() ->

@@ -32,7 +32,7 @@
 
 -ifdef(use_specs).
 
--spec(maybe_upgrade/0 :: () -> 'ok').
+-spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
 -spec(read_version/0 ::
         () -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_version/0 :: () -> 'ok').
@@ -62,7 +62,7 @@ maybe_upgrade() ->
             true = digraph:delete(G),
             ok;
         {error, enoent} ->
-            ok
+            version_not_available
     end.
 
 read_version() ->
