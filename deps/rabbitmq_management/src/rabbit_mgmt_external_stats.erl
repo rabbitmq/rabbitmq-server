@@ -35,6 +35,9 @@
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
                mem_used, mem_limit, proc_used, proc_total, statistics_level]).
 
+%% Be careful about depending on rabbit_mgmt_* here, as it is compiled into
+%% rabbitmq-management-cluster-remote
+
 %%--------------------------------------------------------------------
 
 -record(state, {time_ms, fd_used, fd_total}).
@@ -153,7 +156,7 @@ init([]) ->
 
 
 handle_call({info, Items}, _From, State0) ->
-    State = case (rabbit_mgmt_util:now_ms() - State0#state.time_ms >
+    State = case (now_ms() - State0#state.time_ms >
                       ?REFRESH_RATIO) of
                 true  -> internal_update(State0);
                 false -> State0
@@ -177,5 +180,8 @@ code_change(_, State, _) -> {ok, State}.
 %%--------------------------------------------------------------------
 
 internal_update(State) ->
-    State#state{time_ms   = rabbit_mgmt_util:now_ms(),
+    State#state{time_ms   = now_ms(),
                 fd_used   = get_used_fd()}.
+
+now_ms() ->
+    timer:now_diff(now(), {0,0,0}) div 1000.
