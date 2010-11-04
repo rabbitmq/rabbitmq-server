@@ -1,0 +1,9 @@
+{application, rabbit_management_cluster_remote,
+ [{description, "RabbitMQ Management Cluster Remote"},
+  {vsn, "%%VSN%%"},
+  {modules, [rabbit_mgmt_cluster_remote_app,
+             rabbit_mgmt_db_handler]}, %% TODO generate automatically.
+  {registered, []},
+  {mod, {rabbit_mgmt_cluster_remote_app, []}},
+  {env, [{force_fine_statistics, true}]},
+  {applications, [kernel, stdlib, rabbit]}]}.
