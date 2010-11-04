@@ -1307,7 +1307,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                                                orddict:new(), GuidsByStore)),
     State1 #vqstate { index_state      = IndexState1,
                       persistent_count = PCount1,
-                      ack_out_counter  = AckOutCount - length(AckTags) }.
+                      ack_out_counter  = AckOutCount + length(AckTags) }.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
@@ -1348,10 +1348,20 @@ find_persistent_count(LensByStore) ->
 %% conversion is needed. That in turn could cause an infinite loop.
 reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun, State) ->
     {ReduceAck, State1} = reduce_ack_memory_use(AckFun, State),
-    {Reduce, State2} = case chunk_size(State1 #vqstate.ram_msg_count,
-                                       State1 #vqstate.target_ram_msg_count) of
-                           0  -> {ReduceAck, State1};
-                           S1 -> {true, AlphaBetaFun(S1, State1)}
+
+    {Reduce, State2} = case ReduceAck of
+                           true ->
+                               %% Don't want to reduce the number of
+                               %% ram messages if we might yet be able
+                               %% to reduce more acks.
+                               {true, State1};
+                           false ->
+                               case chunk_size(
+                                      State1 #vqstate.ram_msg_count,
+                                      State1 #vqstate.target_ram_msg_count) of
+                                   0  -> {false, State1};
+                                   S1 -> {true, AlphaBetaFun(S1, State1)}
+                               end
                        end,
     case State2 #vqstate.target_ram_msg_count of
         infinity -> {Reduce, State2};

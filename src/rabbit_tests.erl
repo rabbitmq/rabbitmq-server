@@ -1865,8 +1865,39 @@ test_variable_queue() ->
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
-              fun test_dropwhile/1]],
+              fun test_dropwhile/1,
+              fun test_variable_queue_ack_limiting/1]],
     passed.
+
+test_variable_queue_ack_limiting(VQ0) ->
+    %% start by sending in a bunch of messages <
+    Len = 1024,
+    VQ1 = variable_queue_publish(false, Len, VQ0),
+
+    %% squeeze and relax queue
+    Churn = Len div 32,
+    VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
+
+    %% update stats for duration
+    {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
+
+    %% fetch half the messages
+    {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
+
+    VQ5 = check_variable_queue_status(VQ4, [{len           , Len div 2},
+                                            {ram_ack_count , Len div 2},
+                                            {ram_msg_count , Len div 2}]),
+
+    %% quarter the allowed duration
+    VQ6 = check_variable_queue_status(
+            rabbit_variable_queue:set_ram_duration_target(Duration / 4, VQ5),
+            [{len, Len div 2},
+             {target_ram_msg_count, Len div 8},
+             {ram_msg_count, Len div 8},
+             {ram_ack_count, 0}]),
+
+    VQ6.
+
 
 test_dropwhile(VQ0) ->
     Count = 10,
