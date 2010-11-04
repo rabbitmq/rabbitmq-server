@@ -21,7 +21,7 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade/1, write_version/1]).
+-export([maybe_upgrade/0, read_version/0, write_version/0, desired_version/0]).
 
 -include("rabbit.hrl").
 
@@ -32,8 +32,11 @@
 
 -ifdef(use_specs).
 
--spec(maybe_upgrade/1 :: (file:filename()) -> 'ok').
--spec(write_version/1 :: (file:filename()) -> 'ok').
+-spec(maybe_upgrade/0 :: () -> 'ok').
+-spec(read_version/0 ::
+        () -> {'ok', [any()]} | rabbit_types:error(any())).
+-spec(write_version/0 :: () -> 'ok').
+-spec(desired_version/0 :: () -> [any()]).
 
 -endif.
 
@@ -42,15 +45,15 @@
 %% Try to upgrade the schema. If no information on the existing schema could
 %% be found, do nothing. rabbit_mnesia:check_schema_integrity() will catch the
 %% problem.
-maybe_upgrade(Dir) ->
-    case rabbit_misc:read_term_file(schema_filename(Dir)) of
-        {ok, [CurrentHeads]} ->
+maybe_upgrade() ->
+    case read_version() of
+        {ok, CurrentHeads} ->
             G = load_graph(),
             case unknown_heads(CurrentHeads, G) of
                 [] ->
                     case upgrades_to_apply(CurrentHeads, G) of
                         []       -> ok;
-                        Upgrades -> apply_upgrades(Upgrades, Dir)
+                        Upgrades -> apply_upgrades(Upgrades)
                     end;
                 Unknown ->
                     [warn("Data store has had future upgrade ~w applied." ++
@@ -62,11 +65,21 @@ maybe_upgrade(Dir) ->
             ok
     end.
 
-write_version(Dir) ->
-    G = load_graph(),
-    ok = rabbit_misc:write_term_file(schema_filename(Dir), [heads(G)]),
-    true = digraph:delete(G),
+read_version() ->
+    case rabbit_misc:read_term_file(schema_filename()) of
+        {ok, [Heads]} -> {ok, Heads};
+        {error, E}    -> {error, E}
+    end.
+
+write_version() ->
+    ok = rabbit_misc:write_term_file(schema_filename(), [desired_version()]),
     ok.
+
+desired_version() ->
+    G = load_graph(),
+    Version = heads(G),
+    true = digraph:delete(G),
+    Version.
 
 %% -------------------------------------------------------------------
 
@@ -103,12 +116,12 @@ upgrades_to_apply(Heads, G) ->
      || StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
 
 heads(G) ->
-    [V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0].
+    lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).
 
 %% -------------------------------------------------------------------
 
-apply_upgrades(Upgrades, Dir) ->
-    LockFile = lock_filename(Dir),
+apply_upgrades(Upgrades) ->
+    LockFile = lock_filename(),
     case file:read_file_info(LockFile) of
         {error, enoent} ->
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
@@ -116,7 +129,7 @@ apply_upgrades(Upgrades, Dir) ->
             ok = file:close(Lock),
             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
             info("Upgrades: All applied~n", []),
-            ok = write_version(Dir),
+            ok = write_version(),
             ok = file:delete(LockFile);
         {ok, _FI} ->
             exit(previous_upgrade_failed);
@@ -130,11 +143,11 @@ apply_upgrade({M, F}) ->
 
 %% -------------------------------------------------------------------
 
-schema_filename(Dir) ->
-    filename:join(Dir, ?VERSION_FILENAME).
+schema_filename() ->
+    filename:join(dir(), ?VERSION_FILENAME).
 
-lock_filename(Dir) ->
-    filename:join(Dir, ?LOCK_FILENAME).
+lock_filename() ->
+    filename:join(dir(), ?LOCK_FILENAME).
 
 %% NB: we cannot use rabbit_log here since it may not have been started yet
 info(Msg, Args) ->
@@ -142,3 +155,6 @@ info(Msg, Args) ->
 
 warn(Msg, Args) ->
     error_logger:warning_msg(Msg, Args).
+
+dir() ->
+    rabbit_mnesia:dir().

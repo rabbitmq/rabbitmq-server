@@ -377,7 +377,7 @@ init_db(ClusterNodes, Force) ->
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
                     wait_for_tables(),
-                    rabbit_upgrade:maybe_upgrade(dir()),
+                    rabbit_upgrade:maybe_upgrade(),
                     case check_schema_integrity() of
                         ok ->
                             ok;
@@ -403,8 +403,19 @@ init_db(ClusterNodes, Force) ->
                 {[], false, _} ->
                     %% First RAM node in cluster, start from scratch
                     ok = create_schema();
-                {[_|_], _, _} ->
+                {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
+                    LocalVersion = rabbit_upgrade:desired_version(),
+                    {ok, RemoteVersion} = rpc:call(
+                                            AnotherNode,
+                                            rabbit_upgrade, read_version, []),
+                    case LocalVersion  of
+                        RemoteVersion ->
+                            ok;
+                        _ ->
+                            exit({schema_mismatch, LocalVersion, RemoteVersion})
+                    end,
+                    ok = rabbit_upgrade:write_version(),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
@@ -413,8 +424,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ok = ensure_schema_integrity(),
-                    ok = rabbit_upgrade:write_version(dir())
+                    ok = ensure_schema_integrity()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -433,7 +443,7 @@ create_schema() ->
     ok = create_tables(),
     ok = ensure_schema_integrity(),
     ok = wait_for_tables(),
-    ok = rabbit_upgrade:write_version(dir()).
+    ok = rabbit_upgrade:write_version().
 
 move_db() ->
     mnesia:stop(),
