@@ -1898,7 +1898,6 @@ test_variable_queue_ack_limiting(VQ0) ->
 
     VQ6.
 
-
 test_dropwhile(VQ0) ->
     Count = 10,
 
