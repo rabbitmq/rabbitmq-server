@@ -65,8 +65,12 @@ for (var i = 0; i < nodes.length; i++) {
        <%= fmt_bytes(node.mem_used) %>
 <% } %>
      </td>
-     <td class="c">
+     <td class="c status">
+<% if (node.statistics_level == 'none') { %>
+       <div class="red">none <acronym title="Message rates and queue statistics from this node will not be reported.">(?)</acronym></div>
+<% } else { %>
        <%= node.statistics_level %>
+<% } %>
      </td>
 <% } else { %>
      <td class="status" colspan="5">
