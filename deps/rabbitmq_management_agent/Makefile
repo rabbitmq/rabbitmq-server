@@ -10,9 +10,7 @@ START_RABBIT_IN_TESTS=true
 TEST_COMMANDS=
 
 EXTRA_TARGETS=ebin/rabbit_mgmt_external_stats.beam \
-	ebin/rabbit_mgmt_db_handler.beam \
-	ebin/rabbit_mgmt_util.beam \
-	ebin/rabbit_mgmt_format.beam \
+	ebin/rabbit_mgmt_db_handler.beam
 
 include ../include.mk
 
