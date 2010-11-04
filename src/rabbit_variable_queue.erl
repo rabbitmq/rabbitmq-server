@@ -1248,7 +1248,7 @@ record_pending_ack(#msg_status { seq_id        = SeqId,
                                       ack_in_counter  = AckInCount}) ->
     {AckEntry, RAI1} =
         case MsgOnDisk of
-            true  ->
+            true ->
                 {{IsPersistent, Guid, MsgProps}, RAI};
             false ->
                 {MsgStatus, gb_trees:insert(SeqId, Guid, RAI)}
@@ -1364,11 +1364,14 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun, State) ->
                     end
     end.
 
-reduce_ack_memory_use(_AckFun, State = #vqstate { target_ram_msg_count = infinity }) ->
+reduce_ack_memory_use(_AckFun,
+                      State = #vqstate { target_ram_msg_count = infinity }) ->
     {false, State};
-reduce_ack_memory_use(AckFun, State = #vqstate {target_ram_msg_count = TargetRamMsgCount,
-                                        ram_msg_count = RamMsgCount,
-                                        ram_ack_index = RamAckIndex} ) ->
+reduce_ack_memory_use(AckFun,
+                      State = #vqstate {
+                        target_ram_msg_count = TargetRamMsgCount,
+                        ram_msg_count        = RamMsgCount,
+                        ram_ack_index        = RamAckIndex} ) ->
     PermittedAckCount = case TargetRamMsgCount > RamMsgCount of
                             true  -> TargetRamMsgCount - RamMsgCount;
                             false -> 0
@@ -1395,7 +1398,7 @@ limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
             {_, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
             limit_ram_acks(Quota - 1,
                            State1 #vqstate {
-                             pending_ack =
+                             pending_ack   =
                                  dict:store(SeqId, {false, Guid, MsgProps}, PA),
                              ram_ack_index = RAI1 })
     end.
