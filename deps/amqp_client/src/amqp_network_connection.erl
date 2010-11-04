@@ -135,45 +135,34 @@ connect(AmqpParams = #amqp_params{ssl_options = SslOpts,
 try_handshake(AmqpParams, SIF, ChMgr, State) ->
     try handshake(AmqpParams, SIF, ChMgr, State) of
         Return -> Return
-    catch
-        exit:socket_closed_unexpectedly = Reason ->
-            {error, {auth_failure_likely, Reason}};
-        _:Reason ->
-            {error, Reason}
+    catch _:Reason -> {error, Reason}
     end.
 
 handshake(AmqpParams, SIF, ChMgr, State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
     {SHF, State1} = start_infrastructure(SIF, ChMgr, State0),
-    {ServerProperties, ChannelMax, State2} =
-        network_handshake(AmqpParams, State1),
-    start_heartbeat(SHF, State2),
-    {ok, ServerProperties, ChannelMax, State2}.
+    network_handshake(AmqpParams, SHF, State1).
 
 start_infrastructure(SIF, ChMgr, State = #state{sock = Sock}) ->
     {ok, {_MainReader, _Framing, Writer, SHF}} = SIF(Sock, ChMgr),
     {SHF, State#state{writer0 = Writer}}.
 
-network_handshake(AmqpParams, State) ->
-    Start = handshake_recv(),
-    #'connection.start'{server_properties = ServerProperties} = Start,
+network_handshake(AmqpParams, SHF, State0) ->
+    Start = #'connection.start'{server_properties = ServerProperties} =
+        handshake_recv(expecting_start),
     ok = check_version(Start),
-    do2(start_ok(AmqpParams), State),
-    Tune = handshake_recv(),
-    TuneOk = negotiate_values(Tune, AmqpParams),
-    do2(TuneOk, State),
-    ConnectionOpen =
-        #'connection.open'{virtual_host = AmqpParams#amqp_params.virtual_host},
-    do2(ConnectionOpen, State),
-    #'connection.open_ok'{} = handshake_recv(),
-    #'connection.tune_ok'{channel_max = ChannelMax,
-                          frame_max   = FrameMax,
-                          heartbeat   = Heartbeat} = TuneOk,
-    {ServerProperties, ChannelMax, State#state{heartbeat = Heartbeat,
-                                               frame_max = FrameMax}}.
-
-start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
-    SHF(Sock, Heartbeat).
+    do2(start_ok(AmqpParams), State0),
+    Tune = handshake_recv(expecting_tune),
+    {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, SHF, State0),
+    do2(TuneOk, State1),
+    do2(#'connection.open'{virtual_host = AmqpParams#amqp_params.virtual_host},
+        State1),
+    Params = {ServerProperties, ChannelMax, State1},
+    case handshake_recv(expecting_open_ok) of
+        #'connection.open_ok'{}                     -> {ok, Params};
+        {closing, #amqp_error{} = AmqpError, Error} -> {closing, Params,
+                                                        AmqpError, Error}
+    end.
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->
@@ -185,21 +174,26 @@ check_version(#'connection.start'{version_major = Major,
                                   version_minor = Minor}) ->
     exit({protocol_version_mismatch, Major, Minor}).
 
-negotiate_values(#'connection.tune'{channel_max = ServerChannelMax,
-                                    frame_max   = ServerFrameMax,
-                                    heartbeat   = ServerHeartbeat},
-                 #amqp_params{channel_max = ClientChannelMax,
-                              frame_max   = ClientFrameMax,
-                              heartbeat   = ClientHeartbeat}) ->
-    #'connection.tune_ok'{
-        channel_max = negotiate_max_value(ClientChannelMax, ServerChannelMax),
-        frame_max   = negotiate_max_value(ClientFrameMax, ServerFrameMax),
-        heartbeat   = negotiate_max_value(ClientHeartbeat, ServerHeartbeat)}.
-
-negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
-    lists:max([Client, Server]);
-negotiate_max_value(Client, Server) ->
-    lists:min([Client, Server]).
+tune(#'connection.tune'{channel_max = ServerChannelMax,
+                        frame_max   = ServerFrameMax,
+                        heartbeat   = ServerHeartbeat},
+     #amqp_params{channel_max = ClientChannelMax,
+                  frame_max   = ClientFrameMax,
+                  heartbeat   = ClientHeartbeat},
+     SHF,
+     State = #state{sock = Sock}) ->
+    [ChannelMax, Heartbeat, FrameMax] =
+        lists:zipwith(fun (Client, Server) when Client =:= 0; Server =:= 0 ->
+                              lists:max([Client, Server]);
+                          (Client, Server) ->
+                              lists:min([Client, Server])
+                      end, [ClientChannelMax, ClientHeartbeat, ClientFrameMax],
+                           [ServerChannelMax, ServerHeartbeat, ServerFrameMax]),
+    SHF(Sock, Heartbeat),
+    {#'connection.tune_ok'{channel_max = ChannelMax,
+                           frame_max   = FrameMax,
+                           heartbeat   = Heartbeat},
+     ChannelMax, State#state{heartbeat = Heartbeat, frame_max = FrameMax}}.
 
 start_ok(#amqp_params{username          = Username,
                       password          = Password,
@@ -227,16 +221,46 @@ client_properties(UserProperties) ->
                     lists:keystore(K, 1, Acc, Tuple)
                 end, Default, UserProperties).
 
-handshake_recv() ->
+handshake_recv(Phase) ->
     receive
         {'$gen_cast', {method, Method, none}} ->
-            Method;
+            case {Phase, Method} of
+                {expecting_start, #'connection.start'{}} ->
+                    Method;
+                {expecting_tune, #'connection.tune'{}} ->
+                    Method;
+                {expecting_open_ok, #'connection.open_ok'{}} ->
+                    Method;
+                {expecting_open_ok, _} ->
+                    {closing,
+                     #amqp_error{name        = command_invalid,
+                                 explanation = "was expecting "
+                                               "connection.open_ok"},
+                     {error, {unexpected_method, Method, Phase}}};
+                _ ->
+                    exit({unexpected_method, Method, Phase})
+            end;
         socket_closed ->
-            exit(socket_closed_unexpectedly);
+            case Phase of expecting_tune    -> exit(auth_failure);
+                          expecting_open_ok -> exit(access_refused);
+                          _                 -> exit({socket_closed_unexpectedly,
+                                                     Phase})
+            end;
         {socket_error, _} = SocketError ->
-            exit(SocketError);
+            exit({SocketError, Phase});
+        timeout ->
+            exit(heartbeat_timeout);
         Other ->
             exit({handshake_recv_unexpected_message, Other})
     after ?HANDSHAKE_RECEIVE_TIMEOUT ->
-        exit(handshake_receive_timed_out)
+        case Phase of
+            expecting_open_ok ->
+                {closing,
+                 #amqp_error{name        = internal_error,
+                             explanation = "handshake timed out waiting "
+                                           "connection.open_ok"},
+                 {error, handshake_receive_timed_out}};
+            _ ->
+                exit(handshake_receive_timed_out)
+        end
     end.

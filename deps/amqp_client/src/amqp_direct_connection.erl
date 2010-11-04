@@ -74,21 +74,26 @@ info_keys() ->
 connect(AmqpParams, SIF, _ChMgr, State) ->
     try do_connect(AmqpParams, SIF, State) of
         Return -> Return
-    catch
-        exit:#amqp_error{name = access_refused} -> {error, auth_failure};
-        _:Reason                                -> {error, Reason}
+    catch _:Reason -> {error, Reason}
     end.
 
 do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
            SIF, State) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
-        true  -> rabbit_access_control:user_pass_login(User, Pass),
-                 rabbit_access_control:check_vhost_access(
-                         #user{username = User}, VHost),
-                 {ok, Collector} = SIF(),
-                 {ok, rabbit_reader:server_properties(), 0,
-                  State#state{user = User,
-                              vhost = VHost,
-                              collector = Collector}};
-        false -> {error, broker_not_found_in_vm}
-    end.
+        true  -> ok;
+        false -> exit(broker_not_found_in_vm)
+    end,
+    try rabbit_access_control:user_pass_login(User, Pass) of
+        _ -> ok
+    catch exit:#amqp_error{name = access_refused} -> exit(auth_failure)
+    end,
+    try rabbit_access_control:check_vhost_access(
+        #user{username = User}, VHost) of
+            _ -> ok
+    catch exit:#amqp_error{name = access_refused} -> exit(access_refused)
+    end,
+    {ok, Collector} = SIF(),
+    {ok, {rabbit_reader:server_properties(), 0,
+          State#state{user = User,
+                      vhost = VHost,
+                      collector = Collector}}}.

@@ -182,25 +182,21 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
         exit(did_not_die)
     end.
 
-non_existent_user_test() ->
+non_existent_user_test(StartConnectionFun) ->
     Params = #amqp_params{username = test_util:uuid(),
                           password = test_util:uuid()},
-    assert_fail_start_with_params(Params).
+    ?assertMatch({error, auth_failure}, StartConnectionFun(Params)).
 
-invalid_password_test() ->
+invalid_password_test(StartConnectionFun) ->
     Params = #amqp_params{username = <<"guest">>,
                           password = test_util:uuid()},
-    assert_fail_start_with_params(Params).
+    ?assertMatch({error, auth_failure}, StartConnectionFun(Params)).
 
-non_existent_vhost_test() ->
+non_existent_vhost_test(StartConnectionFun) ->
     Params = #amqp_params{virtual_host = test_util:uuid()},
-    assert_fail_start_with_params(Params).
+    ?assertMatch({error, access_refused}, StartConnectionFun(Params)).
 
-no_permission_test() ->
+no_permission_test(StartConnectionFun) ->
     Params = #amqp_params{username = <<"test_user_no_perm">>,
                           password = <<"test_user_no_perm">>},
-    assert_fail_start_with_params(Params).
-
-assert_fail_start_with_params(Params) ->
-    {error, {auth_failure_likely, _}} = amqp_connection:start(network, Params),
-    ok.
+    ?assertMatch({error, access_refused}, StartConnectionFun(Params)).
