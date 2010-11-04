@@ -84,7 +84,7 @@ do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  -> rabbit_access_control:user_pass_login(User, Pass),
                  rabbit_access_control:check_vhost_access(
-                         #user{username = User, password = Pass}, VHost),
+                     #user{username = User}, VHost),
                  {ok, Collector} = SIF(),
                  {ok, rabbit_reader:server_properties(), 0,
                   State#state{user = User,
