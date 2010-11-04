@@ -1,0 +1,44 @@
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ Management Console.
+%%
+%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
+%%
+%%   Copyright (C) 2010 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+-module(rabbit_mgmt_cluster_remote_app).
+
+-behaviour(application).
+-export([start/2, stop/1]).
+
+%% Make sure our database is hooked in *before* listening on the network or
+%% recovering queues (i.e. so there can't be any events fired before it starts).
+-rabbit_boot_step({rabbit_mgmt_db_handler,
+                   [{description, "management statistics database link"},
+                    {mfa,         {rabbit_mgmt_db_handler, add_handler,
+                                   [rabbit_management_cluster_remote]}},
+                    {requires,    rabbit_event},
+                    {enables,     queue_sup_queue_recovery}]}).
+
+
+start(_Type, _StartArgs) ->
+    log_startup(),
+    rabbit_mgmt_cluster_remote_sup:start_link().
+
+stop(_State) ->
+    ok.
+
+log_startup() ->
+    rabbit_log:info("Management cluster remote started.~n", []).
