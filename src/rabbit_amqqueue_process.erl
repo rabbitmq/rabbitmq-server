@@ -239,7 +239,6 @@ stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
     State#q{sync_timer_ref = undefined}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    io:format("Ensuring rate timer~n"),
     {ok, TRef} = timer:apply_after(
                    ?RAM_DURATION_UPDATE_INTERVAL,
                    rabbit_amqqueue, update_ram_duration,
@@ -964,12 +963,9 @@ handle_cast({flush, ChPid}, State) ->
 
 handle_cast(update_ram_duration, State = #q{backing_queue = BQ,
                                             backing_queue_state = BQS}) ->
-    io:format("Before ram duration~n"),
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    io:format("RamDuration~p~n", [RamDuration]),
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    io:format("Desired duration:~p~n", [DesiredDuration]),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     noreply(State#q{rate_timer_ref = just_measured,
                     backing_queue_state = BQS2});
@@ -1031,7 +1027,6 @@ handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS,
                                 stats_timer = StatsTimer}) ->
-    io:format("Hibernating~p~n", [self()]),
     BQS1 = BQ:handle_pre_hibernate(BQS),
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration =
