@@ -413,7 +413,8 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ok = ensure_schema_integrity()
+                    ok = ensure_schema_integrity(),
+                    ok = rabbit_upgrade:write_version(dir())
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
