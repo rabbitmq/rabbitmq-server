@@ -89,12 +89,14 @@
 %%
 %% The duration indicated to us by the memory_monitor is used to
 %% calculate, given our current ingress and egress rates, how many
-%% messages we should hold in RAM. When we need to push alphas to
-%% betas or betas to gammas, we favour writing out messages that are
-%% further from the head of the queue. This minimises writes to disk,
-%% as the messages closer to the tail of the queue stay in the queue
-%% for longer, thus do not need to be replaced as quickly by sending
-%% other messages to disk.
+%% messages we should hold in RAM. We track the ingress and egress
+%% rates for both messages and pending acks and rates for both are
+%% included when calculating the number of messages to hold in
+%% RAM. When we need to push alphas to betas or betas to gammas, we
+%% favour writing out messages that are further from the head of the
+%% queue. This minimises writes to disk, as the messages closer to the
+%% tail of the queue stay in the queue for longer, thus do not need to
+%% be replaced as quickly by sending other messages to disk.
 %%
 %% Whilst messages are pushed to disk and forgotten from RAM as soon
 %% as requested by a new setting of the queue RAM duration, the
