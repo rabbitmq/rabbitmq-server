@@ -64,7 +64,7 @@ handle_call(_Request, State) ->
 
 handle_event(Event, State) ->
 %%    io:format("Got event ~p~n", [Event]),
-    rabbit_mgmt_db:event(Event),
+    gen_server:cast({global, rabbit_mgmt_db}, {event, Event}),
     {ok, State}.
 
 handle_info(_Info, State) ->
