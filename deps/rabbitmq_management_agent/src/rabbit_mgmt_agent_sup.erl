@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_cluster_remote_sup).
+-module(rabbit_mgmt_agent_sup).
 
 -behaviour(supervisor).
 

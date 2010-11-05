@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_cluster_remote_app).
+-module(rabbit_mgmt_agent_app).
 
 -behaviour(application).
 -export([start/2, stop/1]).
@@ -26,16 +26,16 @@
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
 -rabbit_boot_step({rabbit_mgmt_db_handler,
-                   [{description, "management statistics database link"},
+                   [{description, "management agent"},
                     {mfa,         {rabbit_mgmt_db_handler, add_handler,
-                                   [rabbit_management_cluster_remote]}},
+                                   []}},
                     {requires,    rabbit_event},
                     {enables,     queue_sup_queue_recovery}]}).
 
 
 start(_Type, _StartArgs) ->
     log_startup(),
-    rabbit_mgmt_cluster_remote_sup:start_link().
+    rabbit_mgmt_agent_sup:start_link().
 
 stop(_State) ->
     ok.
