@@ -1,6 +1,6 @@
 @title AMQP Client for Erlang
-@author Rabbit Technologies Ltd. <support@rabbitmq.com>
-@copyright 2010 Rabbit Technologies Ltd.
+@author VMware Inc. <support@rabbitmq.com>
+@copyright 2010 VMware, Inc.
 
 @version %%VERSION%%
 
