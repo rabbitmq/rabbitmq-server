@@ -24,7 +24,7 @@
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
--export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
+-export([bad_request/3, id/2, parse_bool/1]).
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
@@ -80,9 +80,6 @@ is_authorized(ReqData, Context, Fun) ->
         _ ->
             Unauthorized
     end.
-
-now_ms() ->
-    rabbit_mgmt_format:timestamp(now()).
 
 vhost(ReqData) ->
     case id(vhost, ReqData) of

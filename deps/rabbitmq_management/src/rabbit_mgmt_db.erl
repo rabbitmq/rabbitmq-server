@@ -471,7 +471,7 @@ zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
     case is_details(Key) of
-        true  -> Age = rabbit_mgmt_util:now_ms() - pget(last_event, Val),
+        true  -> Age = rabbit_misc:now_ms() - pget(last_event, Val),
                  {Key, case Age > ?STATS_INTERVAL * 1.5 of
                            true  -> pset(rate, 0, Val);
                            false -> Val
