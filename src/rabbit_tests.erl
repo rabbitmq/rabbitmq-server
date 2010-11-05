@@ -1879,7 +1879,7 @@ test_variable_queue_ack_limiting(VQ0) ->
     VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
 
     %% update stats for duration
-    {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
+    {_Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
 
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
@@ -1890,10 +1890,10 @@ test_variable_queue_ack_limiting(VQ0) ->
 
     %% quarter the allowed duration
     VQ6 = check_variable_queue_status(
-            rabbit_variable_queue:set_ram_duration_target(Duration / 4, VQ5),
+            rabbit_variable_queue:set_ram_duration_target(0, VQ5),
             [{len, Len div 2},
-             {target_ram_msg_count, Len div 8},
-             {ram_msg_count, Len div 8},
+             {target_ram_msg_count, 0},
+             {ram_msg_count, 0},
              {ram_ack_count, 0}]),
 
     VQ6.
