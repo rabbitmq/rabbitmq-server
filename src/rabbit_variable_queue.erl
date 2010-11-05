@@ -168,6 +168,22 @@
 %% the latter) are both cheap and do require any scanning through qi
 %% segments.
 %%
+%% Pending acks are recorded in memory either as the tuple {SeqId,
+%% Guid, MsgProps} (tuple form) or as the message itself (message
+%% form). Acks for persistent messages are always stored in the tuple
+%% form. Acks for transient messages are also stored in tuple form if
+%% the message has been forgotten to disk as part of the memory
+%% reduction process. For transient messages that haven't already been
+%% written to disk, acks are stored in message form to avoid the
+%% overhead of writing to disk.
+%%
+%% During memory reduction, messages stored as transient ack records
+%% are pushed out to disk before messages in the queue. More
+%% precisely, messages from the queue will not be pushed out to disk
+%% while the number of messages stored for acks is greater than
+%% zero. Messages for acks are written to disk in batches of at most
+%% ?IO_BATCH_SIZE.
+%%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
 %% msg_store.)
@@ -1347,7 +1363,20 @@ find_persistent_count(LensByStore) ->
 %% perpetually reporting the need for a conversion when no such
 %% conversion is needed. That in turn could cause an infinite loop.
 reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun, State) ->
-    {ReduceAck, State1} = reduce_ack_memory_use(AckFun, State),
+    {Reduce, State2} = case reduce_ack_memory_use(AckFun, State) of
+                           {true, State1} ->
+                               %% Don't want to reduce the number of
+                               %% ram messages if we might yet be able
+                               %% to reduce more acks.
+                               {true, State1};
+                           {false, State1} ->
+                               case chunk_size(
+                                      State1 #vqstate.ram_msg_count,
+                                      State1 #vqstate.target_ram_msg_count) of
+                                   0  -> {false, State1};
+                                   S1 -> {true, AlphaBetaFun(S1, State1)}
+                               end
+                       end,
 
     {Reduce, State2} = case ReduceAck of
                            true ->
