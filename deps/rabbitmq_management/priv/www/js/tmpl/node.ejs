@@ -1,0 +1,59 @@
+<h1>Node <b><%= node.name %></b></h1>
+
+<div class="section">
+<h2>Overview</h2>
+<div class="hider updatable">
+  <!-- TODO make this class="facts" when 23370 is merged. -->
+  <table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Mnesia Storage</th>
+      <th>OS Pid</th>
+      <th>
+        File Descriptors
+        <sub>(used / available)</sub>
+      </th>
+      <th>
+        Erlang Processes
+        <sub>(used / available)</sub>
+      </th>
+      <th>
+        Memory
+        <sub>(used / high watermark)</sub>
+      </th>
+      <th>Statistics</th>
+    </tr>
+    <tr>
+    <%= format('node-row', {'node': node})  %>
+    </tr>
+  </table>
+</div>
+</div>
+
+<div class="section">
+<h2>Applications</h2>
+<div class="hider updatable">
+<% if (node.running) { %>
+<table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Version</th>
+    </tr>
+    <%
+      for (var j = 0; j < node.applications.length; j++) {
+        var application = node.applications[j];
+    %>
+       <tr<%= alt_rows(j)%>>
+         <td>
+           <abbr title="<%= application.description %>">
+             <%= application.name %></abbr>
+         </td>
+         <td><%= application.version %></td>
+       </tr>
+    <% } %>
+</table>
+<% } else {%>
+<p>...node not running...</p>
+<% } %>
+</div>
+</div>

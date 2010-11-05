@@ -6,6 +6,9 @@
     <table class="facts">
       <tr>
         <th>Virtual host</th>
+<% if (nodes_interesting) { %>
+        <th>Node</th>
+<% } %>
         <th>Durable</th>
         <th>Auto delete</th>
         <th>Exclusive owner</th>
@@ -16,6 +19,9 @@
       </tr>
       <tr>
         <td><%= queue.vhost %></td>
+<% if (nodes_interesting) { %>
+        <td><%= queue.node %></td>
+<% } %>
         <td><%= fmt_boolean(queue.durable) %></td>
         <td><%= fmt_boolean(queue.auto_delete) %></td>
         <td>

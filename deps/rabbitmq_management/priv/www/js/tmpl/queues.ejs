@@ -7,7 +7,7 @@
 <table class="list">
  <thead>
   <tr>
-    <th colspan="4">Overview</th>
+    <th colspan="<% if (nodes_interesting) { %>5<% } else { %>4<% } %>">Overview</th>
     <th colspan="3">Messages</th>
 <% if (statistics_level == 'fine') { %>
     <th colspan="3">Message rates</th>
@@ -16,6 +16,9 @@
   <tr>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
     <th><%= fmt_sort('Name',         'name') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',         'node') %></th>
+<% } %>
     <th><%= fmt_sort('Exclusive',    'owner_pid_details.name') %></th>
     <th>Parameters</th>
     <th><%= fmt_sort('Ready',        'messages_ready') %></th>
@@ -36,6 +39,9 @@
   <tr<%= alt_rows(i) %>>
    <td><%= link_vhost(queue.vhost) %></td>
    <td><%= link_queue(queue.vhost, queue.name) %></td>
+<% if (nodes_interesting) { %>
+   <td><%= queue.node %></td>
+<% } %>
    <td>
      <% if (queue.owner_pid != 'none') { %>
      <%= link_conn(queue.owner_pid_details.name) %>

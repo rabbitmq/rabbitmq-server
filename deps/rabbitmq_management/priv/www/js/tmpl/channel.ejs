@@ -6,6 +6,9 @@
 <table class="facts">
   <tr>
     <th>Connection</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
     <th>Virtual host</th>
     <th>Username</th>
     <th>Transactional</th>
@@ -16,6 +19,9 @@
   </tr>
   <tr>
     <td><%= link_conn(channel.connection_details.name) %></td>
+<% if (nodes_interesting) { %>
+    <td><%= channel.node %></td>
+<% } %>
     <td><%= channel.vhost %></td>
     <td><%= channel.user %></td>
     <td><%= fmt_boolean(channel.transactional) %></td>

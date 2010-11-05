@@ -12,6 +12,9 @@
 <% if (connection.send_oct_details) { %>
    <th>To client</th>
 <% } %>
+<% if (nodes_interesting) { %>
+ <th>Node</th>
+<% } %>
  <th>Channels</th>
  <th>Virtual host</th>
  <th>Username</th>
@@ -29,6 +32,9 @@
    <td>
      <span class="mini-highlight"><%= fmt_bytes(connection.send_oct_details.rate) %>/s</span>
    </td>
+<% } %>
+<% if (nodes_interesting) { %>
+ <td><%= connection.node %></td>
 <% } %>
  <td><%= connection.channels %></td>
  <td><%= link_vhost(connection.vhost) %></td>

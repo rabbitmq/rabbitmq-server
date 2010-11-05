@@ -5,11 +5,14 @@
 <table class="list">
  <thead>
   <tr>
-   <th colspan="3">Network</th>
+   <th colspan="<% if (nodes_interesting) { %>4<% } else { %>3<% } %>">Network</th>
    <th colspan="4">Overview</th>
   </tr>
   <tr>
     <th><%= fmt_sort('Peer address', 'name') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',         'node') %></th>
+<% } %>
     <th><%= fmt_sort('From client',  'recv_oct_details.rate') %></th>
     <th><%= fmt_sort('To client',    'send_oct_details.rate') %></th>
     <th><%= fmt_sort('Channels',     'channels') %></th>
@@ -25,6 +28,9 @@
 %>
   <tr<%= alt_rows(i)%>>
     <td><%= link_conn(connection.name) %></td>
+<% if (nodes_interesting) { %>
+    <td><%= connection.node %></td>
+<% } %>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
     <td><%= connection.channels %></td>

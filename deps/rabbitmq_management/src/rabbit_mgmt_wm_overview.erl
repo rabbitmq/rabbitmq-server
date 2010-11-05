@@ -28,19 +28,34 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    OSStats = rabbit_mgmt_external_stats:info(),
     Overview = rabbit_mgmt_db:get_overview(),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     rabbit_mgmt_util:reply(
-      OSStats ++ Overview ++
-          [{node,             node()},
-           {os_pid,           list_to_binary(os:getpid())},
-           {mem_ets,          erlang:memory(ets)},
-           {mem_binary,       erlang:memory(binary)},
-           {statistics_level, StatsLevel},
-           {listeners,        [rabbit_mgmt_format:listener(L)
-                               || L <- rabbit_networking:active_listeners()]}],
+      Overview ++
+          %% NB: node and stats level duplicate what's in /nodes but we want
+          %% to (a) know which node we're talking to and (b) use the stats
+          %% level to switch features on / off in the UI.
+          [{node,               node()},
+           {management_version, version()},
+           {statistics_level,   StatsLevel},
+           {statistics_db_node, stats_db_node()},
+           {listeners,          [rabbit_mgmt_format:listener(L)
+                                 || L <- rabbit_networking:active_listeners()]}],
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+%%--------------------------------------------------------------------
+
+stats_db_node() ->
+    case global:whereis_name(rabbit_mgmt_db) of
+        undefined -> not_running;
+        Pid       -> node(Pid)
+    end.
+
+version() ->
+    [Vsn] = [V || {A, _D, V} <- application:loaded_applications(),
+            A =:= rabbit_management],
+    list_to_binary(Vsn).
+
