@@ -391,21 +391,34 @@ init_db(ClusterNodes, Force) ->
                     end;
                 {[], true, _} ->
                     %% First disc node in cluster, verify schema
-                    schema_ok_or_move();
+                    DesiredVersion = rabbit_upgrade:desired_version(),
+                    case rabbit_upgrade:read_version() of
+                        {ok, DiscVersion} ->
+                            case DesiredVersion of
+                                DiscVersion ->
+                                    ok;
+                                _ ->
+                                    recreate_schema({DesiredVersion,
+                                                     DiscVersion})
+                            end,
+                            ok = check_schema_integrity();
+                        {error, _} ->
+                            schema_ok_or_move()
+                    end;
                 {[], false, _} ->
                     %% First RAM node in cluster, start from scratch
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
-                    LocalVersion = rabbit_upgrade:desired_version(),
-                    {ok, RemoteVersion} = rpc:call(
+                    DesiredVersion = rabbit_upgrade:desired_version(),
+                    {ok, DiscVersion} = rpc:call(
                                             AnotherNode,
                                             rabbit_upgrade, read_version, []),
-                    case LocalVersion  of
-                        RemoteVersion ->
+                    case DesiredVersion  of
+                        DiscVersion ->
                             ok;
                         _ ->
-                            exit({schema_mismatch, LocalVersion, RemoteVersion})
+                            exit({schema_mismatch, DesiredVersion, DiscVersion})
                     end,
                     ok = rabbit_upgrade:write_version(),
                     IsDiskNode = ClusterNodes == [] orelse
@@ -431,16 +444,17 @@ schema_ok_or_move() ->
         ok ->
             ok;
         {error, Reason} ->
-            %% NB: we cannot use rabbit_log here since
-            %% it may not have been started yet
-            error_logger:warning_msg(
-              "schema integrity check failed: ~p~n"
-              "moving database to backup location "
-              "and recreating schema from scratch~n",
-              [Reason]),
-            ok = move_db(),
-            ok = create_schema()
+            recreate_schema(Reason)
     end.
+
+recreate_schema(Reason) ->
+    %% NB: we cannot use rabbit_log here since it may not have been
+    %% started yet
+    error_logger:warning_msg("schema integrity check failed: ~p~n"
+                             "moving database to backup location "
+                             "and recreating schema from scratch~n", [Reason]),
+    ok = move_db(),
+    ok = create_schema().
 
 create_schema() ->
     mnesia:stop(),
