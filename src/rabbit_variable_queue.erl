@@ -91,7 +91,7 @@
 %% calculate, given our current ingress and egress rates, how many
 %% messages we should hold in RAM. We track the ingress and egress
 %% rates for both messages and pending acks and rates for both are
-%% included when calculating the number of messages to hold in
+%% considered when calculating the number of messages to hold in
 %% RAM. When we need to push alphas to betas or betas to gammas, we
 %% favour writing out messages that are further from the head of the
 %% queue. This minimises writes to disk, as the messages closer to the
@@ -179,12 +179,13 @@
 %% written to disk, acks are stored in message form to avoid the
 %% overhead of writing to disk.
 %%
-%% During memory reduction, messages stored as transient ack records
-%% are pushed out to disk before messages in the queue. More
-%% precisely, messages from the queue will not be pushed out to disk
-%% while the number of messages stored for acks is greater than
-%% zero. Messages for acks are written to disk in batches of at most
-%% ?IO_BATCH_SIZE.
+%% During memory reduction, acks stored in message form are converted
+%% to tuple form, and the corresponding messages are pushed out to
+%% disk. Message form acks are always pushed to disk before messages
+%% stored in the queue. More precisely, messages from the queue will
+%% not be pushed out to disk while the number of messages form acks is
+%% greater than zero. Message form acks are converted to tuple form in
+%% batches of at most ?IO_BATCH_SIZE.
 %%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
