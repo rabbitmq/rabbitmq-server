@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_registry).
+-module(rabbit_registry).
 
 -behaviour(gen_server).
 
@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([register/2, binary_to_type/1, lookup_module/1]).
+-export([register/3, binary_to_type/1, lookup_module/2]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
@@ -46,11 +46,11 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(register/2 :: (binary(), atom()) -> 'ok').
+-spec(register/3 :: (atom(), binary(), atom()) -> 'ok').
 -spec(binary_to_type/1 ::
         (binary()) -> atom() | rabbit_types:error('not_found')).
--spec(lookup_module/1 ::
-        (atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
+-spec(lookup_module/2 ::
+        (atom(), atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
 
 -endif.
 
@@ -61,8 +61,8 @@ start_link() ->
 
 %%---------------------------------------------------------------------------
 
-register(TypeName, ModuleName) ->
-    gen_server:call(?SERVER, {register, TypeName, ModuleName}).
+register(Class, TypeName, ModuleName) ->
+    gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}).
 
 %% This is used with user-supplied arguments (e.g., on exchange
 %% declare), so we restrict it to existing atoms only.  This means it
@@ -74,8 +74,8 @@ binary_to_type(TypeBin) when is_binary(TypeBin) ->
         TypeAtom              -> TypeAtom
     end.
 
-lookup_module(T) when is_atom(T) ->
-    case ets:lookup(?ETS_NAME, T) of
+lookup_module(Class, T) when is_atom(T) ->
+    case ets:lookup(?ETS_NAME, {Class, T}) of
         [{_, Module}] ->
             {ok, Module};
         [] ->
@@ -87,11 +87,11 @@ lookup_module(T) when is_atom(T) ->
 internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
     list_to_atom(binary_to_list(TypeBin)).
 
-internal_register(TypeName, ModuleName)
-  when is_binary(TypeName), is_atom(ModuleName) ->
+internal_register(Class, TypeName, ModuleName)
+  when is_atom(Class), is_binary(TypeName), is_atom(ModuleName) ->
     ok = sanity_check_module(ModuleName),
     true = ets:insert(?ETS_NAME,
-                      {internal_binary_to_type(TypeName), ModuleName}),
+                      {{Class, internal_binary_to_type(TypeName)}, ModuleName}),
     ok.
 
 sanity_check_module(Module) ->
@@ -112,8 +112,8 @@ init([]) ->
     ?ETS_NAME = ets:new(?ETS_NAME, [protected, set, named_table]),
     {ok, none}.
 
-handle_call({register, TypeName, ModuleName}, _From, State) ->
-    ok = internal_register(TypeName, ModuleName),
+handle_call({register, Class, TypeName, ModuleName}, _From, State) ->
+    ok = internal_register(Class, TypeName, ModuleName),
     {reply, ok, State};
 handle_call(Request, _From, State) ->
     {stop, {unhandled_call, Request}, State}.

@@ -305,7 +305,7 @@ table_for_resource(#resource{kind = queue})    -> rabbit_queue.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
+    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
     Module.
 
 contains(Table, MatchHead) ->
