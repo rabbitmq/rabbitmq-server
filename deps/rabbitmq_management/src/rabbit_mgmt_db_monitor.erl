@@ -36,9 +36,18 @@ acquire_monitor() ->
     case global:whereis_name(rabbit_mgmt_db) of
         undefined ->
             timer:sleep(1000),
-            acquire_monitor();
+            gen_server:cast(?MODULE, acquire_monitor);
         Pid ->
-            erlang:monitor(process, Pid)
+            %% Don't monitor on same node - otherwise we can restart
+            %% it just as we're going down. Then everyone else will
+            %% lose the race at the first restart but not be able to
+            %% require the monitor since the pid never really comes
+            %% back up
+            SelfNode = node(self()),
+            case node(Pid) of
+                SelfNode -> ok;
+                _        -> erlang:monitor(process, Pid)
+            end
     end.
 
 %%----------------------------------------------------------------------------
@@ -49,20 +58,21 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {reply, not_understood, State}.
 
+handle_cast(acquire_monitor, State) ->
+    acquire_monitor(),
+    {noreply, State};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-%% We're mainly interested in the noconnection reason, since otherwise
-%% the supervisor on the remote node will restart the process
-handle_info({'DOWN', _MonitorRef, _Type, _Object, noconnection}, _State) ->
+%% In theory we're only interested in the noconnection case here since
+%% the global sup will restart it normally but during graceful
+%% shutdown the process goes down normally first (and we never get
+%% another message), so we have to try to restart it anyway.
+handle_info({'DOWN', _MonitorRef, _Type, _Object, _Info}, _State) ->
     rabbit_log:info("Statistics database node down.~n", []),
     ok = rabbit_sup:stop_child(rabbit_mgmt_global_sup),
     ok = rabbit_sup:start_child(rabbit_mgmt_global_sup),
-    {noreply, acquire_monitor()};
-
-handle_info({'DOWN', _MonitorRef, _Type, _Object, _Info}, _State) ->
-    rabbit_log:info(
-      "Statistics database down, reacquiring monitor.~n", []),
     {noreply, acquire_monitor()};
 
 handle_info(_Info, State) ->
