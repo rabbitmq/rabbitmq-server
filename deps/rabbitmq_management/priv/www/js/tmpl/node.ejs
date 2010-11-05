@@ -23,47 +23,10 @@
       </th>
       <th>Statistics</th>
     </tr>
-    <tr<%= alt_rows(i)%>>
-      <td>
-        <%= node.name %>
-      </td>
-      <td class="c">
-        <%= node.type %>
-      </td>
-<% if (node.running) { %>
-      <td class="c"><%= node.os_pid %></td>
-      <td class="status">
-        <div class="<%= fmt_color(node.fd_used / node.fd_total) %>">
-<%= node.fd_used %> / <%= node.fd_total %>
-        </div>
-      </td>
-      <td class="status">
-        <div class="<%= fmt_color(node.proc_used / node.proc_total) %>">
-          <%= node.proc_used %> / <%= node.proc_total %>
-        </div>
-      </td>
-      <td class="status">
-<% if (node.mem_total != 'memory_monitoring_disabled') { %>
-       <div class="<%= fmt_color(node.mem_used / node.mem_limit,
-                                 MEMORY_THRESHOLDS) %>">
-         <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>
-       </div>
-<% } else { %>
-       <%= fmt_bytes(node.mem_used) %>
-<% } %>
-      </td>
-      <td class="c">
-       <%= node.statistics_level %>
-      </td>
-<% } else { %>
-      <td class="status" colspan="5">
-        <div class="red">
-          Node not running
-        </div>
-      </td>
+    <tr>
+    <%= format('node-row', {'node': node})  %>
     </tr>
-<% } %>
-</table>
+  </table>
 </div>
 </div>
 
