@@ -172,7 +172,7 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
     case OldTimestamp == [] orelse not proplists:is_defined(Key, OldStats) of
         true  -> unknown;
         false -> Diff = pget(Key, Stats) - pget(Key, OldStats),
-                 Name = list_to_atom(atom_to_list(Key) ++ "_details"),
+                 Name = details_key(Key),
                  Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) /
                                     1000000),
                  {Name, [{rate, Rate},
@@ -196,8 +196,7 @@ group_sum([Group | Groups], List) ->
              end, D).
 
 gs_update(Item0, Item1) ->
-    Keys = sets:to_list(sets:from_list(
-                          [K || {K, _} <- Item0 ++ Item1])),
+    Keys = lists:usort([K || {K, _} <- Item0 ++ Item1]),
     [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))} ||
         Key <- Keys].
 
@@ -225,7 +224,7 @@ augment(Items, Funs, Tables) ->
     [{K, V} || {K, V} <- Augmented, V =/= unknown].
 
 augment(K, Items, Fun, Tables) ->
-    Key = list_to_atom(atom_to_list(K) ++ "_details"),
+    Key = details_key(K),
     case pget(K, Items) of
         none    -> {Key, unknown};
         unknown -> {Key, unknown};
@@ -558,3 +557,6 @@ maybe_zero_rate({Key, Val}) ->
 
 is_details(Key) ->
     lists:suffix("_details", atom_to_list(Key)).
+
+details_key(Key) ->
+    list_to_atom(atom_to_list(Key) ++ "_details").
