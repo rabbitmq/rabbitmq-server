@@ -41,4 +41,4 @@ stop(_State) ->
     ok.
 
 log_startup() ->
-    rabbit_log:info("Management cluster remote started.~n", []).
+    rabbit_log:info("Management agent started.~n", []).
