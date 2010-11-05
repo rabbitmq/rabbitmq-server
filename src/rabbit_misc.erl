@@ -185,7 +185,7 @@
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
--spec(now_ms/0 :: () -> integer()).
+-spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
 
