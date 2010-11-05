@@ -691,11 +691,12 @@ handle_input(Callback, Data, _State) ->
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                  Protocol,
                  State = #v1{sock = Sock, connection = Connection}) ->
-    Start = #'connection.start'{ version_major = ProtocolMajor,
-                                 version_minor = ProtocolMinor,
-                                 server_properties = server_properties(),
-                                 mechanisms = <<"PLAIN AMQPLAIN">>,
-                                 locales = <<"en_US">> },
+    Start = #'connection.start'{
+      version_major = ProtocolMajor,
+      version_minor = ProtocolMinor,
+      server_properties = server_properties(),
+      mechanisms = rabbit_access_control:auth_mechanisms(Sock),
+      locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
     {State#v1{connection = Connection#connection{
                              timeout_sec = ?NORMAL_TIMEOUT,

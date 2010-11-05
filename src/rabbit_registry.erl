@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([register/3, binary_to_type/1, lookup_module/2]).
+-export([register/3, binary_to_type/1, lookup_module/2, lookup_all/1]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
@@ -51,6 +51,7 @@
         (binary()) -> atom() | rabbit_types:error('not_found')).
 -spec(lookup_module/2 ::
         (atom(), atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
+-spec(lookup_all/1 :: (atom()) -> [atom()]).
 
 -endif.
 
@@ -82,6 +83,9 @@ lookup_module(Class, T) when is_atom(T) ->
             {error, not_found}
     end.
 
+lookup_all(Class) ->
+    [{K, V} || [K, V] <- ets:match(?ETS_NAME, {{Class, '$1'}, '$2'})].
+
 %%---------------------------------------------------------------------------
 
 internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
@@ -89,22 +93,25 @@ internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
 
 internal_register(Class, TypeName, ModuleName)
   when is_atom(Class), is_binary(TypeName), is_atom(ModuleName) ->
-    ok = sanity_check_module(ModuleName),
+    ok = sanity_check_module(class_module(Class), ModuleName),
     true = ets:insert(?ETS_NAME,
                       {{Class, internal_binary_to_type(TypeName)}, ModuleName}),
     ok.
 
-sanity_check_module(Module) ->
-    case catch lists:member(rabbit_exchange_type,
+sanity_check_module(ClassModule, Module) ->
+    case catch lists:member(ClassModule,
                             lists:flatten(
                               [Bs || {Attr, Bs} <-
                                          Module:module_info(attributes),
                                      Attr =:= behavior orelse
                                          Attr =:= behaviour])) of
         {'EXIT', {undef, _}}  -> {error, not_module};
-        false                 -> {error, not_exchange_type};
+        false                 -> {error, {not_type, ClassModule}};
         true                  -> ok
     end.
+
+class_module(exchange)       -> rabbit_exchange_type;
+class_module(auth_mechanism) -> rabbit_auth_mechanism.
 
 %%---------------------------------------------------------------------------
 
