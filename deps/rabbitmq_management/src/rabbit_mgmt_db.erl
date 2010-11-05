@@ -20,8 +20,6 @@
 
 -export([start_link/0]).
 
--export([event/1]).
-
 -export([get_queues/1, get_queue/1, get_exchanges/1, get_exchange/1,
          get_connections/0, get_connection/1,
          get_overview/0, get_channels/0, get_channel/1]).
@@ -92,9 +90,6 @@ start_link() ->
               "Statistics database started.~n", []),
             Else
     end.
-
-event(Event) ->
-    gen_server:cast({global, ?MODULE}, {event, Event}).
 
 get_queues(Qs) ->
     gen_server:call({global, ?MODULE}, {get_queues, Qs, list}, infinity).
