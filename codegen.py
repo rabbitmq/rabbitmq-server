@@ -348,9 +348,11 @@ def genErl(spec):
     print "%% Various types"
     print "-ifdef(use_specs)."
 
-    print """-export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
-              amqp_method_name/0, amqp_method/0, amqp_class_id/0,
-              amqp_value/0, amqp_array/0, amqp_exception/0, amqp_property_record/0]).
+    print """-export_type([amqp_field_type/0, amqp_property_type/0,
+              amqp_table/0, amqp_array/0, amqp_value/0,
+              amqp_method_name/0, amqp_method/0, amqp_method_record/0,
+              amqp_method_field_name/0, amqp_property_record/0,
+              amqp_exception/0, amqp_exception_code/0, amqp_class_id/0]).
 
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
