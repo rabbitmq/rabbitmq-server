@@ -357,8 +357,7 @@ handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
   when ?is_simple(State) ->
     {ok, NState} = do_restart(RestartType, Reason, Child, State),
     {noreply, NState};
-handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
-  when not (?is_simple(State)) ->
+handle_cast({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
         {value, Child} ->
             {ok, NState} = do_restart(RestartType, Reason, Child, State),
