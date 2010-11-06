@@ -62,9 +62,10 @@
         (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
         -> 'ok').
 -spec(send_command_sync/2 ::
-        (pid(), rabbit_framing:amqp_method()) -> 'ok').
+        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(send_command_sync/3 ::
-        (pid(), rabbit_framing:amqp_method(), rabbit_types:content()) -> 'ok').
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
+        -> 'ok').
 -spec(send_command_and_notify/5 ::
         (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
          rabbit_types:content())
