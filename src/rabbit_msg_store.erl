@@ -130,7 +130,7 @@
 -type(client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      file_handle_cache  :: dict:dictionary(),
+                      file_handle_cache  :: dict(),
                       index_state        :: any(),
                       index_module       :: atom(),
                       dir                :: file:filename(),

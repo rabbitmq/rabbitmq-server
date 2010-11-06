@@ -60,7 +60,7 @@
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
 
--opaque(deletions() :: dict:dictionary()).
+-opaque(deletions() :: dict()).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
