@@ -179,8 +179,7 @@
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
--spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
-                             orddict:dictionary()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
