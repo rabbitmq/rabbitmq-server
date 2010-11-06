@@ -177,7 +177,7 @@
          format_status/2]).
 
 %% Internal exports
--export([init_it/6, print_event/3]).
+-export([init_it/6]).
 
 -import(error_logger, [format/2]).
 
@@ -612,7 +612,7 @@ process_msg(Msg,
         _Msg when Debug =:= [] ->
             handle_msg(Msg, GS2State);
         _Msg ->
-            Debug1 = sys:handle_debug(Debug, {?MODULE, print_event},
+            Debug1 = sys:handle_debug(Debug, fun print_event/3,
                                       Name, {in, Msg}),
             handle_msg(Msg, GS2State #gs2_state { debug = Debug1 })
     end.
@@ -838,13 +838,13 @@ handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                        time  = Time1,
                                        debug = Debug1});
         {noreply, NState} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state {state = NState,
                                       time  = infinity,
                                       debug = Debug1});
         {noreply, NState, Time1} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state {state = NState,
                                       time  = Time1,
@@ -866,13 +866,13 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
                                                         debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state { state = NState,
                                        time  = infinity,
                                        debug = Debug1 });
         {noreply, NState, Time1} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
@@ -894,7 +894,7 @@ handle_common_termination(Reply, Msg, GS2State) ->
 reply(Name, {To, Tag}, Reply, State, Debug) ->
     reply({To, Tag}, Reply),
     sys:handle_debug(
-      Debug, {?MODULE, print_event}, Name, {out, Reply, To, State}).
+      Debug, fun print_event/3, Name, {out, Reply, To, State}).
 
 
 %%-----------------------------------------------------------------
