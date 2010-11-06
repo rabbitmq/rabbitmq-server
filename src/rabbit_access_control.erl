@@ -47,7 +47,7 @@
 
 -ifdef(use_specs).
 
--export_type([username/0, password/0]).
+-export_type([username/0, password/0, password_hash/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).
