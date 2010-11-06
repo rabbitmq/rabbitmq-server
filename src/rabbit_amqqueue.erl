@@ -162,7 +162,7 @@
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
+-spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 
 -endif.
 
