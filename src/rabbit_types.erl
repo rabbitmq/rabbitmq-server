@@ -143,7 +143,7 @@
 
 -type(connection() :: pid()).
 
--type(protocol() :: 'rabbit_framing_amqp_0_8' | 'rabbit_framing_amqp_0_9_1').
+-type(protocol() :: rabbit_framing:protocol()).
 
 -type(user() ::
       #user{username      :: rabbit_access_control:username(),
