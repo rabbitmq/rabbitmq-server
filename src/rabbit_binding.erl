@@ -96,7 +96,7 @@
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
                          {'undefined' | rabbit_types:exchange(),
                           'deleted' | 'not_deleted',
-                          deletions()}, deletions()) -> deletions()).
+                          bindings()}, deletions()) -> deletions()).
 -spec(new_deletions/0 :: () -> deletions()).
 
 -endif.
