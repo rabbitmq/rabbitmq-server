@@ -192,10 +192,13 @@
 
 -ifdef(use_specs).
 
--spec(handle_common_termination/3 ::
-      (any(), atom(), #gs2_state{}) -> no_return()).
+-type(gs2_state() :: #gs2_state{}).
 
--spec(hibernate/1 :: (#gs2_state{}) -> no_return()).
+-spec(handle_common_termination/3 ::
+        (any(), atom(), gs2_state()) -> no_return()).
+-spec(hibernate/1 :: (gs2_state()) -> no_return()).
+-spec(pre_hibernate/1 :: (gs2_state()) -> no_return()).
+-spec(system_terminate/4 :: (_, _, _, gs2_state()) -> no_return()).
 
 -endif.
 
@@ -902,10 +905,6 @@ reply(Name, {To, Tag}, Reply, State, Debug) ->
 %%-----------------------------------------------------------------
 system_continue(Parent, Debug, GS2State) ->
     loop(GS2State #gs2_state { parent = Parent, debug = Debug }).
-
--ifdef(use_specs).
--spec system_terminate(_, _, _, [_]) -> no_return().
--endif.
 
 system_terminate(Reason, _Parent, Debug, GS2State) ->
     terminate(Reason, [], GS2State #gs2_state { debug = Debug }).
