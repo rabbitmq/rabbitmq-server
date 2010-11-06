@@ -94,7 +94,7 @@
 -spec(process_deletions/1 :: (deletions()) -> 'ok').
 -spec(combine_deletions/2 :: (deletions(), deletions()) -> deletions()).
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
-                         {'undefined' | rabbit_types:binding_source(),
+                         {'undefined' | rabbit_types:exchange(),
                           'deleted' | 'not_deleted',
                           deletions()}, deletions()) -> deletions()).
 -spec(new_deletions/0 :: () -> deletions()).
