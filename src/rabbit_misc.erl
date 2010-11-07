@@ -129,8 +129,8 @@
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (file:filename() | atom()) -> ok_or_error()).
--spec(report_cover/1 :: (file:filename() | atom()) -> 'ok').
+-spec(enable_cover/1 :: (file:filename() | [atom(), ...]) -> ok_or_error()).
+-spec(report_cover/1 :: (file:filename() | [atom(), ...]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
