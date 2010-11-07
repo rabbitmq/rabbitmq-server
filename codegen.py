@@ -420,7 +420,7 @@ def genErl(spec):
         (amqp_method_name(), binary()) -> amqp_method_record() | rabbit_types:connection_exit()).
 -spec(decode_properties/2 :: (non_neg_integer(), binary()) -> amqp_property_record()).
 -spec(encode_method_fields/1 :: (amqp_method_record()) -> binary()).
--spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
+-spec(encode_properties/1 :: (amqp_property_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
 -endif. % use_specs
