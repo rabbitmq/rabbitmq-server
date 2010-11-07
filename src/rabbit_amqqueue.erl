@@ -361,7 +361,7 @@ consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers, infinity).
 
 consumers_all(VHostPath) ->
-    lists:concat(
+    lists:append(
       map(VHostPath,
           fun (Q) -> [{Q#amqqueue.name, ChPid, ConsumerTag, AckRequired} ||
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
