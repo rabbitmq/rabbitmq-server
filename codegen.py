@@ -240,8 +240,6 @@ def genErl(spec):
             elif type == 'table':
                 print "  F%d = rabbit_binary_parser:parse_table(F%dTab)," % \
                       (f.index, f.index)
-            elif type == 'shortstr':
-                print "  if F%dLen > 255 -> exit(method_field_shortstr_overflow); true -> ok end," % (f.index)
             else:
                 pass
 
