@@ -3,7 +3,7 @@
 use Net::Stomp;
 my $stomp = Net::Stomp->new({hostname=>'localhost', port=>'61613'});
 $stomp->connect({login=>'guest', passcode=>'guest', prefetch=>1});
-$stomp->subscribe({'destination'=>'foo', 'ack'=>'client'});
+$stomp->subscribe({'destination'=>'/queue/foo', 'ack'=>'client'});
 while (1) {
     my $frame = $stomp->receive_frame;
     print $frame->body . "\n";
