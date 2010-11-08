@@ -379,48 +379,23 @@ init_db(ClusterNodes, Force) ->
                     wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
                         ok ->
-                            case check_schema_integrity() of
-                                ok ->
-                                    ok;
-                                {error, Reason} ->
-                                    throw({schema_invalid_after_upgrade,
-                                           Reason})
-                            end;
+                            schema_ok_or_exit();
                         version_not_available ->
                             schema_ok_or_move()
                     end;
                 {[], true, _} ->
-                    %% First disc node in cluster, verify schema
-                    DesiredVersion = rabbit_upgrade:desired_version(),
-                    case rabbit_upgrade:read_version() of
-                        {ok, DiscVersion} ->
-                            case DesiredVersion of
-                                DiscVersion ->
-                                    ok;
-                                _ ->
-                                    recreate_schema({DesiredVersion,
-                                                     DiscVersion})
-                            end,
-                            ok = check_schema_integrity();
-                        {error, _} ->
-                            schema_ok_or_move()
-                    end;
+                    %% "Master" (i.e. without config) disc node in cluster,
+                    %% verify schema
+                    wait_for_tables(),
+                    version_ok_or_exit(rabbit_upgrade:read_version()),
+                    schema_ok_or_exit();
                 {[], false, _} ->
                     %% First RAM node in cluster, start from scratch
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
-                    DesiredVersion = rabbit_upgrade:desired_version(),
-                    {ok, DiscVersion} = rpc:call(
-                                            AnotherNode,
-                                            rabbit_upgrade, read_version, []),
-                    case DesiredVersion  of
-                        DiscVersion ->
-                            ok;
-                        _ ->
-                            exit({schema_mismatch, DesiredVersion, DiscVersion})
-                    end,
-                    ok = rabbit_upgrade:write_version(),
+                    version_ok_or_exit(
+                      rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
@@ -429,7 +404,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ok = ensure_schema_integrity()
+                    schema_ok_or_exit()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -444,17 +419,37 @@ schema_ok_or_move() ->
         ok ->
             ok;
         {error, Reason} ->
-            recreate_schema(Reason)
+            %% NB: we cannot use rabbit_log here since it may not have been
+            %% started yet
+            error_logger:warning_msg("schema integrity check failed: ~p~n"
+                                     "moving database to backup location "
+                                     "and recreating schema from scratch~n",
+                                     [Reason]),
+            ok = move_db(),
+            ok = create_schema()
     end.
 
-recreate_schema(Reason) ->
-    %% NB: we cannot use rabbit_log here since it may not have been
-    %% started yet
-    error_logger:warning_msg("schema integrity check failed: ~p~n"
-                             "moving database to backup location "
-                             "and recreating schema from scratch~n", [Reason]),
-    ok = move_db(),
-    ok = create_schema().
+version_ok_or_exit(V) ->
+    DesiredVersion = rabbit_upgrade:desired_version(),
+    case V of
+        {ok, DiscVersion} ->
+            case DesiredVersion of
+                DiscVersion ->
+                    ok;
+                _ ->
+                    exit({schema_mismatch, DesiredVersion, DiscVersion})
+            end;
+        {error, _} ->
+            ok = rabbit_upgrade:write_version()
+    end.
+
+schema_ok_or_exit() ->
+    case check_schema_integrity() of
+        ok ->
+            ok;
+        {error, Reason} ->
+            exit({schema_invalid, Reason})
+    end.
 
 create_schema() ->
     mnesia:stop(),
