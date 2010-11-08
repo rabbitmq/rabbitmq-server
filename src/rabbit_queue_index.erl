@@ -191,7 +191,7 @@
                               })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict:dictionary(), [segment()]}).
--type(on_sync_fun() :: fun (([rabbit_guid:guid()]) -> ok)).
+-type(on_sync_fun() :: fun ((gb_set()) -> ok)).
 -type(qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
@@ -717,7 +717,7 @@ deliver_or_ack(Kind, SeqIds, State) ->
                                     end, State1, SeqIds)).
 
 notify_sync(State = #qistate { unsynced_guids = UG, on_sync = OnSyncFun }) ->
-    OnSyncFun(UG),
+    OnSyncFun(gb_sets:from_list(UG)),
     State #qistate { unsynced_guids = [] }.
 
 %%----------------------------------------------------------------------------

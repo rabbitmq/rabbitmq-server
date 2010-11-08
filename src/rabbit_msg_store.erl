@@ -144,7 +144,7 @@
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
          A}).
--type(guid_fun() :: fun (([rabbit_guid:guid()]) -> any())).
+-type(guid_fun() :: fun ((gb_set()) -> any())).
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
@@ -397,7 +397,8 @@ read(Guid,
 
 contains(Guid, CState) -> server_call(CState, {contains, Guid}).
 remove([],    _CState) -> ok;
-remove(Guids,  CState) -> server_cast(CState, {remove, Guids}).
+remove(Guids, CState = #client_msstate { client_ref = CRef }) ->
+    server_cast(CState, {remove, CRef, Guids}).
 release([],   _CState) -> ok;
 release(Guids, CState) -> server_cast(CState, {release, Guids}).
 sync(Guids, K, CState) -> server_cast(CState, {sync, Guids, K}).
@@ -696,7 +697,10 @@ handle_cast({write, CRef, Guid},
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     CTG1 = case dict:find(CRef, CODC) of
-               {ok, _} -> rabbit_misc:dict_cons(CRef, Guid, CTG);
+               {ok, _} -> dict:update(CRef, fun(Guids) ->
+                                                    gb_sets:add(Guid, Guids)
+                                            end,
+                                      gb_sets:empty(), CTG);
                error   -> CTG
            end,
     State1 = State #msstate { cref_to_guids = CTG1 },
@@ -722,17 +726,18 @@ handle_cast({write, CRef, Guid},
             ok = index_update_ref_count(Guid, RefCount + 1, State1),
             CTG2 = case {dict:find(CRef, CODC), File} of
                        {{ok, _},   CurFile} -> CTG1;
-                       {{ok, Fun}, _}       -> Fun([Guid]), CTG;
+                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid)), CTG;
                        _                    -> CTG1
                    end,
             noreply(State #msstate { cref_to_guids = CTG2 })
     end;
 
-handle_cast({remove, Guids}, State) ->
+handle_cast({remove, CRef, Guids}, State) ->
     State1 = lists:foldl(
                fun (Guid, State2) -> remove_message(Guid, State2) end,
                State, Guids),
-    noreply(maybe_compact(State1));
+    State2 = client_confirm(CRef, gb_sets:from_list(Guids), State1),
+    noreply(maybe_compact(State2));
 
 handle_cast({release, Guids}, State =
                 #msstate { dedup_cache_ets = DedupCacheEts }) ->
@@ -856,17 +861,19 @@ stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
 
 internal_sync(State = #msstate { current_file_handle    = CurHdl,
                                  on_sync                = Syncs,
-                                 client_ondisk_callback = CODC,
                                  cref_to_guids          = CTG }) ->
     State1 = stop_sync_timer(State),
-    CGs = dict:fold(fun (_CRef, [],    NS) -> NS;
-                        (CRef,  Guids, NS) -> [{CRef, Guids} | NS]
+    CGs = dict:fold(fun (CRef, Guids, NS) ->
+                            case gb_sets:is_empty(Guids) of
+                                true  -> NS;
+                                false -> [{CRef, Guids} | NS]
+                            end
                     end, [], CTG),
     if Syncs =:= [] andalso CGs =:= [] -> ok;
        true                            -> file_handle_cache:sync(CurHdl)
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    [(dict:fetch(CRef, CODC))(Guids) || {CRef, Guids} <- CGs],
+    [client_confirm(CRef, Guids, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
 
@@ -1045,6 +1052,25 @@ safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
 orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
     orddict:store(Key, Val, Dict).
+
+client_confirm(CRef, Guids,
+               State = #msstate { client_ondisk_callback = CODC,
+                                  cref_to_guids          = CTG }) ->
+    case dict:find(CRef, CODC) of
+        {ok, Fun} -> Fun(Guids),
+                     CTG1 = case dict:find(CRef, CTG) of
+                                {ok, Gs} ->
+                                    Guids1 = gb_sets:difference(Gs, Guids),
+                                    case gb_sets:is_empty(Guids1) of
+                                        true  -> dict:erase(CRef, CTG);
+                                        false -> dict:store(CRef, Guids1, CTG)
+                                    end;
+                                error    -> CTG
+                            end,
+                     State #msstate { cref_to_guids = CTG1 };
+        error -> State
+    end.
+
 
 %%----------------------------------------------------------------------------
 %% file helper functions

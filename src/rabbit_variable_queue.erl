@@ -1312,12 +1312,11 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
 msgs_confirmed(GuidSet, State) ->
     {remove_confirms(GuidSet, State), {confirm, gb_sets:to_list(GuidSet)}}.
 
-msgs_written_to_disk(QPid, Guids) ->
+msgs_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
                                    msg_indices_on_disk = MIOD,
                                    unconfirmed         = UC }) ->
-                    GuidSet = gb_sets:from_list(Guids),
                     msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
                                    State #vqstate {
                                      msgs_on_disk =
@@ -1325,12 +1324,11 @@ msgs_written_to_disk(QPid, Guids) ->
                                            gb_sets:union(MOD, GuidSet), UC) })
             end).
 
-msg_indices_written_to_disk(QPid, Guids) ->
+msg_indices_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
                                    msg_indices_on_disk = MIOD,
                                    unconfirmed         = UC }) ->
-                    GuidSet = gb_sets:from_list(Guids),
                     msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
                                    State #vqstate {
                                      msg_indices_on_disk =
