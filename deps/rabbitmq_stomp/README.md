@@ -129,18 +129,21 @@ To run simplistic test suite and see the code coverage type:
 
     make cover
 
-After successfull run, you should be able to see output similar to:
+After successful run, you should be able to see output similar to:
 
     ............
     ----------------------------------------------------------------------
-    Ran 12 tests in 0.300s
-    [...]
+    Ran 32 tests in 38.309s
+
+    OK
+
     **** Code coverage ****
      54.55 rabbit_stomp
-     80.88 rabbit_stomp_frame
-     74.87 rabbit_stomp_server
+     75.00 rabbit_stomp_frame
+     84.24 rabbit_stomp_server
     100.00 rabbit_stomp_sup
-     75.72 'TOTAL'
+     89.29 rabbit_stomp_util
+     81.73 'TOTAL'
 
 The view the code coverage, see html files in .cover:
 
