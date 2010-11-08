@@ -25,7 +25,7 @@
         <td><%= fmt_boolean(queue.durable) %></td>
         <td><%= fmt_boolean(queue.auto_delete) %></td>
         <td>
-          <% if (queue.owner_pid != 'none') { %>
+          <% if (queue.owner_pid_details != undefined) { %>
           <%= link_conn(queue.owner_pid_details.name) %>
           <% } %>
         </td>

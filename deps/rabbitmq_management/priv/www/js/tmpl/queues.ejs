@@ -43,7 +43,7 @@
    <td><%= queue.node %></td>
 <% } %>
    <td>
-     <% if (queue.owner_pid != 'none') { %>
+     <% if (queue.owner_pid_details != undefined) { %>
      <%= link_conn(queue.owner_pid_details.name) %>
      <% } %>
    </td>

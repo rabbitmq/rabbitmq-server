@@ -92,31 +92,41 @@ start_link() ->
     end.
 
 get_queues(Qs) ->
-    gen_server:call({global, ?MODULE}, {get_queues, Qs, list}, infinity).
+    safe_call({get_queues, Qs, list}, Qs).
 
 get_queue(Q) ->
-    gen_server:call({global, ?MODULE}, {get_queues, [Q], detail}, infinity).
+    safe_call({get_queues, [Q], detail}, [Q]).
 
 get_exchanges(Xs) ->
-    gen_server:call({global, ?MODULE}, {get_exchanges, Xs, list}, infinity).
+    safe_call({get_exchanges, Xs, list}, Xs).
 
 get_exchange(X) ->
-    gen_server:call({global, ?MODULE}, {get_exchanges, [X], detail}, infinity).
+    safe_call({get_exchanges, [X], detail}, [X]).
 
 get_connections() ->
-    gen_server:call({global, ?MODULE}, get_connections, infinity).
+    safe_call(get_connections).
 
 get_connection(Name) ->
-    gen_server:call({global, ?MODULE}, {get_connection, Name}, infinity).
+    safe_call({get_connection, Name}).
 
 get_channels() ->
-    gen_server:call({global, ?MODULE}, get_channels, infinity).
+    safe_call(get_channels).
 
 get_channel(Name) ->
-    gen_server:call({global, ?MODULE}, {get_channel, Name}, infinity).
+    safe_call({get_channel, Name}).
 
 get_overview() ->
-    gen_server:call({global, ?MODULE}, get_overview, infinity).
+    safe_call(get_overview).
+
+safe_call(Term) ->
+    safe_call(Term, []).
+
+safe_call(Term, Item) ->
+    try
+        gen_server:call({global, ?MODULE}, Term, infinity)
+    catch exit:{noproc, _} ->
+            Item
+    end.
 
 %%----------------------------------------------------------------------------
 

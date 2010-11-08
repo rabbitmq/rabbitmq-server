@@ -40,10 +40,12 @@
 </table>
 
 <% if (nodes_interesting) { %>
-<p>
-  You are connected to: <b><%= overview.node %></b>.<br/>
-  Statistics database on: <b><%= overview.statistics_db_node %></b>.
-</p>
+<p>You are connected to: <b><%= overview.node %></b>.</p>
+<% if (overview.statistics_db_node == 'not_running') { %>
+  <p class="status-error">Statistics database node could not be contacted. Message rates and queue lengths will not be shown.</p>
+<% } else { %>
+  <p>Statistics database on: <b><%= overview.statistics_db_node %></b>.</b>
+<% } %>
 <% } %>
 
 </div>
