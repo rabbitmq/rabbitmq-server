@@ -39,6 +39,7 @@
          code_change/3]).
 
 -export([register/3, binary_to_type/1, lookup_module/2, lookup_all/1]).
+-export([remove_disabled/0]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
@@ -52,6 +53,7 @@
 -spec(lookup_module/2 ::
         (atom(), atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
 -spec(lookup_all/1 :: (atom()) -> [atom()]).
+-spec(remove_disabled/0 :: () -> 'ok').
 
 -endif.
 
@@ -86,6 +88,9 @@ lookup_module(Class, T) when is_atom(T) ->
 lookup_all(Class) ->
     [{K, V} || [K, V] <- ets:match(?ETS_NAME, {{Class, '$1'}, '$2'})].
 
+remove_disabled() ->
+    gen_server:call(?SERVER, remove_disabled).
+
 %%---------------------------------------------------------------------------
 
 internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
@@ -113,6 +118,21 @@ sanity_check_module(ClassModule, Module) ->
 class_module(exchange)       -> rabbit_exchange_type;
 class_module(auth_mechanism) -> rabbit_auth_mechanism.
 
+internal_remove_disabled() ->
+    Classes = lists:usort(lists:flatten(
+                            ets:match(?ETS_NAME, {{'$1', '_'}, '_'}))),
+    [internal_remove_disabled(Class) || Class <- Classes],
+    ok.
+
+internal_remove_disabled(Class) ->
+    case application:get_env(list_to_atom(
+                               atom_to_list(Class) ++ "_plugins_disable")) of
+        undefined ->
+            ok;
+        {ok, List} ->
+            [true = ets:delete(?ETS_NAME, {Class, Key}) || Key <- List]
+    end.
+
 %%---------------------------------------------------------------------------
 
 init([]) ->
@@ -122,6 +142,11 @@ init([]) ->
 handle_call({register, Class, TypeName, ModuleName}, _From, State) ->
     ok = internal_register(Class, TypeName, ModuleName),
     {reply, ok, State};
+
+handle_call(remove_disabled, _From, State) ->
+    ok = internal_remove_disabled(),
+    {reply, ok, State};
+
 handle_call(Request, _From, State) ->
     {stop, {unhandled_call, Request}, State}.
 

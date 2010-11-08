@@ -128,6 +128,12 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({check_disabled_plugins,
+                   [{description, "disabled plugins check"},
+                    {mfa,         {rabbit_registry, remove_disabled, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
