@@ -178,9 +178,18 @@ clean_value(A)           -> A.
 %%--------------------------------------------------------------------
 
 add_user(User) ->
-    rabbit_mgmt_wm_user:put_user_hashed(pget(name,          User),
-                                        pget(password_hash, User),
-                                        pget(administrator, User)).
+    case proplists:is_defined(password_hash, User) of
+        true ->
+            %% ver > 2.1.1
+            rabbit_mgmt_wm_user:put_user_hashed(pget(name,          User),
+                                                pget(password_hash, User),
+                                                pget(administrator, User));
+        false ->
+            %% ver == 2.1.1
+            rabbit_mgmt_wm_user:put_user(pget(name,          User),
+                                         pget(password,      User),
+                                         pget(administrator, User))
+    end.
 
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
