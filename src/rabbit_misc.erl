@@ -129,8 +129,8 @@
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (file:filename() | [atom(), ...]) -> ok_or_error()).
--spec(report_cover/1 :: (file:filename() | [atom(), ...]) -> 'ok').
+-spec(enable_cover/1 :: ([file:filename() | atom()]) -> ok_or_error()).
+-spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -268,29 +268,30 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
-enable_cover() ->
-    enable_cover(".").
+enable_cover() -> enable_cover(["."]).
 
-enable_cover([Root]) when is_atom(Root) ->
-    enable_cover(atom_to_list(Root));
-enable_cover(Root) ->
-    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
-        {error,Reason} -> {error,Reason};
-        _ -> ok
-    end.
+enable_cover(Dirs) ->
+    lists:foldl(fun (Dir, ok) ->
+                        case cover:compile_beam_directory(
+                               filename:join(lists:concat([Dir]),"ebin")) of
+                            {error, _} = Err -> Err;
+                            _                -> ok
+                        end;
+                    (_Dir, Err) ->
+                        Err
+                end, ok, Dirs).
 
 start_cover(NodesS) ->
     {ok, _} = cover:start([makenode(N) || N <- NodesS]),
     ok.
 
-report_cover() ->
-    report_cover(".").
+report_cover() -> report_cover(["."]).
 
-report_cover([Root]) when is_atom(Root) ->
-    report_cover(atom_to_list(Root));
-report_cover(Root) ->
+report_cover(Dirs) -> [report_cover1(lists:concat([Dir])) || Dir <- Dirs], ok.
+
+report_cover1(Root) ->
     Dir = filename:join(Root, "cover"),
-    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
+    ok = filelib:ensure_dir(filename:join(Dir, "junk")),
     lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
     {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
