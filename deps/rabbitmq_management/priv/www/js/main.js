@@ -1,6 +1,7 @@
 var statistics_level;
 var user_administrator;
 var nodes_interesting;
+var vhosts_interesting;
 
 $(document).ready(function() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
@@ -8,6 +9,7 @@ $(document).ready(function() {
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     user_administrator = user.administrator;
     nodes_interesting = JSON.parse(sync_get('/nodes')).length > 1;
+    vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     setup_constant_events();
     update_vhosts();
     app.run();
@@ -28,10 +30,18 @@ function setup_constant_events() {
             current_vhost = $(this).val();
             update();
         });
+    if (!vhosts_interesting) {
+        $('#vhost-form').hide();
+    }
 }
 
 function update_vhosts() {
     var vhosts = JSON.parse(sync_get('/vhosts'));
+    vhosts_interesting = vhosts.length > 1;
+    if (vhosts_interesting)
+        $('#vhost-form').show();
+    else
+        $('#vhost-form').hide();
     var select = $('#show-vhost').get(0);
     select.options.length = vhosts.length + 1;
     var index = 0;
