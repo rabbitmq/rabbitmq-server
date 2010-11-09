@@ -38,7 +38,10 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, connection, subscriptions}).
+-record(state, {socket, session_id, channel, connection, subscriptions,
+                version}).
+
+-define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -61,22 +64,32 @@ init([Sock]) ->
        session_id    = none,
        channel       = none,
        connection    = none,
-       subscriptions = dict:new()}
+       subscriptions = dict:new(),
+       version       = none}
     }.
 
 terminate(_Reason, State) ->
     shutdown_channel_and_connection(State).
 
 handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
-    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
-    with_error_unwrapping(
-      fun() ->
-              do_login(rabbit_stomp_frame:header(Frame, "login"),
-                       rabbit_stomp_frame:header(Frame, "passcode"),
-                       rabbit_stomp_frame:header(Frame, "host",
-                                                 binary_to_list(DefaultVHost)),
+    case negotiate_version(Frame) of
+        {ok, Version} ->
+            {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
+            with_error_unwrapping(
+              fun(StateN) ->
+                      do_login(
+                        rabbit_stomp_frame:header(Frame, "login"),
+                        rabbit_stomp_frame:header(Frame, "passcode"),
+                        rabbit_stomp_frame:header(Frame, "host",
+                                                  binary_to_list(DefaultVHost)),
+                        StateN)
+              end, State#state{version = Version});
+        {error, no_common_version} ->
+            send_error("Version mismatch",
+                       "Supported versions are %s",
+                       string:join(?SUPPORTED_VERSIONS, ","),
                        State)
-      end, State);
+    end;
 
 handle_cast(_Request, State = #state{channel = none}) ->
     {noreply, send_error("Illegal command",
@@ -86,8 +99,8 @@ handle_cast(_Request, State = #state{channel = none}) ->
 handle_cast({Command, Frame}, State) ->
     ensure_receipt(Frame, State),
     with_error_unwrapping(
-      fun() ->
-              handle_frame(Command, Frame, State)
+      fun(StateN) ->
+              handle_frame(Command, Frame, StateN)
       end, State).
 
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -295,6 +308,13 @@ do_send(Destination, _DestHdr,
             {noreply, send_method(Method, Props, BodyFragments, State)}
     end.
 
+negotiate_version(Frame) ->
+    ClientVers = re:split(
+                   rabbit_stomp_frame:header(Frame, "accept-version", "1.0"),
+                   ",",
+                   [{return, list}]),
+    rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
+
 ensure_receipt(Frame, State) ->
     case rabbit_stomp_frame:header(Frame, "receipt") of
         {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
@@ -326,7 +346,7 @@ send_method(Method, Properties, BodyFragments,
     State.
 
 with_error_unwrapping(Fun, State) ->
-    case catch Fun() of
+    case catch Fun(State) of
         {'EXIT',
          {{server_initiated_close, ReplyCode, Explanation}, _}} ->
             {noreply,
@@ -516,7 +536,9 @@ send_priv_error(Message, Detail, ServerPrivateDetail, State) ->
                            "Server private detail: ~p~n",
                            [Message, Detail, ServerPrivateDetail]),
     send_frame("ERROR", [{"message", Message},
-                         {"content-type", "text/plain"}], Detail, State).
+                         {"content-type", "text/plain"},
+                         {"version", string:join(?SUPPORTED_VERSIONS, ",")}],
+                         Detail, State).
 
 send_priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
     send_priv_error(Message, lists:flatten(io_lib:format(Format, Args)),

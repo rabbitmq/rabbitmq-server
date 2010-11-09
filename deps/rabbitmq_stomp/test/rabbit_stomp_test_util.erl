@@ -105,27 +105,27 @@ negotiate_version_no_common_test() ->
         rabbit_stomp_util:negotiate_version(["1.2"],["1.3"]).
 
 negotiate_version_simple_common_test() ->
-    "1.2" =
+    {ok, "1.2"} =
         rabbit_stomp_util:negotiate_version(["1.2"],["1.2"]).
 
 negotiate_version_two_choice_common_test() ->
-    "1.3" =
+    {ok, "1.3"} =
         rabbit_stomp_util:negotiate_version(["1.2", "1.3"],["1.2", "1.3"]).
 
 negotiate_version_two_choice_common_out_of_order_test() ->
-    "1.3" =
+    {ok, "1.3"} =
         rabbit_stomp_util:negotiate_version(["1.3", "1.2"],["1.2", "1.3"]).
 
 negotiate_version_two_choice_big_common_test() ->
-    "1.20.23" =
+    {ok, "1.20.23"} =
         rabbit_stomp_util:negotiate_version(["1.20.23", "1.30.456"],
                                             ["1.20.23", "1.30.457"]).
 negotiate_version_choice_mismatched_length_test() ->
-    "1.2.3" =
+    {ok, "1.2.3"} =
         rabbit_stomp_util:negotiate_version(["1.2", "1.2.3"],
                                             ["1.2.3", "1.2"]).
 negotiate_version_choice_duplicates_test() ->
-    "1.2" =
+    {ok, "1.2"} =
         rabbit_stomp_util:negotiate_version(["1.2", "1.2"],
                                             ["1.2", "1.2"]).
 %%--------------------------------------------------------------------

@@ -137,9 +137,9 @@ negotiate_version(ClientVers, ServerVers) ->
         [] ->
             {error, no_common_version};
         [H|T] ->
-            lists:foldl(fun(Ver, AccN) ->
+            {ok, lists:foldl(fun(Ver, AccN) ->
                                 max_version(Ver, AccN)
-                        end, H, T)
+                        end, H, T)}
     end.
 
 max_version(V, V) ->
@@ -157,7 +157,7 @@ find_max_version({V1, [X]}, {V2, [Y]}) ->
     end;
 find_max_version({_V1, []}, {V2, Y}) when length(Y) > 0 ->
     V2;
-find_max_version({V1, X}, {V2, []}) when length(X) > 0 ->
+find_max_version({V1, X}, {_V2, []}) when length(X) > 0 ->
     V1.
 
 %% ---- Header processing helpers ----
