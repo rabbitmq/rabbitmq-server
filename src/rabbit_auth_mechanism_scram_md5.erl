@@ -39,7 +39,7 @@
 -include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "auth mechanism plain"},
+                   [{description, "auth mechanism scram-md5"},
                     {mfa,         {rabbit_registry, register,
                                    [auth_mechanism, <<"RABBIT-SCRAM-MD5">>,
                                     ?MODULE]}},
