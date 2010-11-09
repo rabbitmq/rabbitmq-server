@@ -43,12 +43,13 @@
 -export_type([heartbeaters/0]).
 
 -type(heartbeaters() :: rabbit_types:maybe({pid(), pid()})).
+-type(callback_fun() :: fun (() -> any())).
 
 -spec(start_heartbeat_sender/3 ::
-        (pid(), rabbit_net:socket(), non_neg_integer()) ->
+        (rabbit_net:socket(), non_neg_integer(), callback_fun()) ->
                                        rabbit_types:ok(pid())).
 -spec(start_heartbeat_receiver/3 ::
-        (pid(), rabbit_net:socket(), non_neg_integer()) ->
+        (rabbit_net:socket(), non_neg_integer(), callback_fun()) ->
                                          rabbit_types:ok(pid())).
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
@@ -58,24 +59,23 @@
 
 %%----------------------------------------------------------------------------
 
-start_heartbeat_sender(_Parent, Sock, TimeoutSec) ->
+start_heartbeat_sender(Sock, TimeoutSec, SendFun) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
     %% 2 * TimeoutSec before sending a heartbeat in the boundary case
     %% where the last message was sent just after a heartbeat.
     heartbeater(
       {Sock, TimeoutSec * 1000 div 2, send_oct, 0,
        fun () ->
-               catch rabbit_net:send(
-                       Sock, rabbit_binary_generator:build_heartbeat_frame()),
+               SendFun(),
                continue
        end}).
 
-start_heartbeat_receiver(Parent, Sock, TimeoutSec) ->
+start_heartbeat_receiver(Sock, TimeoutSec, TimeoutFun) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
     heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1, fun () ->
-                                                               Parent ! timeout,
+                                                               TimeoutFun(),
                                                                stop
                                                        end}).
 
