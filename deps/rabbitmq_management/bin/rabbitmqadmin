@@ -24,7 +24,7 @@ import json
 import os
 
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
-            'users', 'vhosts', 'permissions']
+            'users', 'vhosts', 'permissions', 'nodes']
 
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
@@ -332,6 +332,10 @@ class Lister:
                 if type(item[key]) == dict:
                     if depth < max_depth:
                         add(column, depth + 1, item[key], fun)
+                elif type(item[key]) == list:
+                    # TODO - ATM this is only applications inside nodes. Not
+                    # sure how to handle this sensibly.
+                    pass
                 else:
                     fun(column, item[key])
 
