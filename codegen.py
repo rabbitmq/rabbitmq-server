@@ -240,8 +240,6 @@ def genErl(spec):
             elif type == 'table':
                 print "  F%d = rabbit_binary_parser:parse_table(F%dTab)," % \
                       (f.index, f.index)
-            elif type == 'shortstr':
-                print "  if F%dLen > 255 -> exit(method_field_shortstr_overflow); true -> ok end," % (f.index)
             else:
                 pass
 
@@ -278,8 +276,7 @@ def genErl(spec):
                 print "  F%dTab = rabbit_binary_generator:generate_table(F%d)," % (f.index, f.index)
                 print "  F%dLen = size(F%dTab)," % (f.index, f.index)
             elif type == 'shortstr':
-                print "  F%dLen = size(F%d)," % (f.index, f.index)
-                print "  if F%dLen > 255 -> exit(method_field_shortstr_overflow); true -> ok end," % (f.index)
+                print "  F%dLen = shortstr_size(F%d)," % (f.index, f.index)
             elif type == 'longstr':
                 print "  F%dLen = size(F%d)," % (f.index, f.index)
             else:
@@ -426,6 +423,12 @@ def genErl(spec):
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
 bitvalue(undefined) -> 0.
+
+shortstr_size(S) ->
+    case size(S) of
+        Len when Len =< 255 -> Len;
+        _                   -> exit(method_field_shortstr_overflow)
+    end.
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'
