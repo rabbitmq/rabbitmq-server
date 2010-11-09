@@ -73,7 +73,7 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
       fun() ->
               do_login(rabbit_stomp_frame:header(Frame, "login"),
                        rabbit_stomp_frame:header(Frame, "passcode"),
-                       rabbit_stomp_frame:header(Frame, "virtual-host",
+                       rabbit_stomp_frame:header(Frame, "host",
                                                  binary_to_list(DefaultVHost)),
                        State)
       end, State);
