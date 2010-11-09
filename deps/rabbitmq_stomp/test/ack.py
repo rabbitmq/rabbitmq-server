@@ -136,3 +136,17 @@ class TestAck(base.BaseTest):
         finally:
             conn3.stop()
 
+    def test_topic_prefetch(self):
+        d = "/topic/prefetch-test"
+
+        # subscribe and send message
+        self.listener.reset(6) ## expecting 6 messages
+        self.conn.subscribe(destination=d, ack='client',
+                            headers={'prefetch-count': '5'})
+
+        for x in range(10):
+            self.conn.send("test" + str(x), destination=d)
+
+        self.assertFalse(self.listener.await(5),
+                         "Should not have been able to see 6 messages")
+        self.assertEquals(5, len(self.listener.messages))
