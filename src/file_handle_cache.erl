@@ -149,7 +149,9 @@
 %% never asked to return them, and they are not managed in any way by
 %% the server. It is simply a mechanism to ensure that processes that
 %% need file descriptors such as sockets can do so in such a way that
-%% the overall number of open file descriptors is managed.
+%% the overall number of open file descriptors is managed. (Caution:
+%% obtain/0 should currently be used only for sockets, because of how
+%% the obtain limit is computed.)
 %%
 %% The callers of register_callback/3, obtain/0, and the argument of
 %% transfer/1 are monitored, reducing the count of handles in use
@@ -820,7 +822,16 @@ init([]) ->
                         Lim      -> lists:max([2, Lim - ?RESERVED_FOR_OTHERS])
                     end
             end,
-    ObtainLimit = obtain_limit(Limit),
+    ObtainLimit = case os:type() of
+		      {win32, _OsName} ->
+			  %% Obtains are used only for sockets, and the Windows
+			  %% implementation has no limit on sockets.
+			  infinity;
+		      _ ->
+			  %% Non-Windows systems are the normal case; socket
+			  %% limits are included in the regular limits.
+			  obtain_limit(Limit)
+		  end,
     error_logger:info_msg("Limiting to approx ~p file handles (~p sockets)~n",
                           [Limit, ObtainLimit]),
     Clients = ets:new(?CLIENT_ETS_TABLE, [set, private, {keypos, #cstate.pid}]),
