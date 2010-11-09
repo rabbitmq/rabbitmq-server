@@ -315,6 +315,20 @@ ch_record(ChPid) ->
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C).
 
+%% If the channel record we're considering submitting to the process dictionary
+%% has no consumers, has no pending acks, and doesn't have a transaction, we
+%% should delete its record rather than storing it.
+update_ch_record(C = #cr{consumer_count = ConsumerCount,
+                         limiter_pid    = LimiterPid,
+                         acktags        = ChAckTags,
+                         txn            = Txn}) ->
+    case {sets:size(ChAckTags), ConsumerCount, Txn} of
+        {0, 0, none} -> demonitor_and_erase_ch(C),
+                        ok = rabbit_limiter:unregister(LimiterPid, self());
+        _            -> store_ch_record(C)
+    end.
+
+
 all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
 
@@ -1042,18 +1056,6 @@ demonitor_and_erase_ch(#cr{ch_pid      = ChPid,
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}).
 
-%% If the channel record we're considering submitting to the process dictionary
-%% has no consumers, has no pending acks, and doesn't have a transaction, we
-%% should delete its record rather than storing it.
-replace_or_erase_ch(C = #cr{consumer_count = ConsumerCount,
-                            limiter_pid    = LimiterPid,
-                            acktags        = ChAckTags,
-                            txn            = Txn}) ->
-    case {sets:size(ChAckTags), ConsumerCount, Txn} of
-        {0, 0, undefined} -> demonitor_and_erase_ch(C),
-                             ok = rabbit_limiter:unregister(LimiterPid, self());
-        _                 -> store_ch_record(C)
-    end.
 
              
     
