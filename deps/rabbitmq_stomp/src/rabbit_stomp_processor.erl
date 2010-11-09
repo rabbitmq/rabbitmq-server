@@ -85,10 +85,10 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
                         StateN)
               end, State#state{version = Version});
         {error, no_common_version} ->
-            send_error("Version mismatch",
-                       "Supported versions are %s",
-                       string:join(?SUPPORTED_VERSIONS, ","),
-                       State)
+            {noreply, send_error("Version mismatch",
+                                 "Supported versions are ~s\n",
+                                 [string:join(?SUPPORTED_VERSIONS, ",")],
+                                 State)}
     end;
 
 handle_cast(_Request, State = #state{channel = none}) ->
