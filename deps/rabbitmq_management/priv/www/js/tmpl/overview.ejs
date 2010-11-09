@@ -11,6 +11,25 @@
 <% } %>
 
 <div class="section">
+<h2>Total Queued Messages</h2>
+<div class="hider updatable">
+  <div class="highlight">
+    Ready
+    <strong><%= overview.queue_totals.messages_ready %></strong>
+  </div>
+  <div class="highlight">
+    Unacknowledged
+    <strong><%= overview.queue_totals.messages_unacknowledged %></strong>
+  </div>
+  <div class="highlight">
+    Total
+    <strong><%= overview.queue_totals.messages %></strong>
+  </div>
+<span class="br"></span>
+</div>
+</div>
+
+<div class="section">
 <h2>RabbitMQ Nodes</h2>
 <div class="hider updatable">
 <table class="list">

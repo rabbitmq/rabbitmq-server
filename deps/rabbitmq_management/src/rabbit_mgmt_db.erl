@@ -173,6 +173,13 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
                          {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
     end.
 
+sum(Table, Keys) ->
+    lists:foldl(fun (Stats, Acc) ->
+                        [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
+                end,
+                [{Key, 0} || Key <- Keys],
+                [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
+
 %% List = [{ [{channel, Pid}, ...], [{deliver, 123}, ...] } ...]
 group_sum([], List) ->
     lists:foldl(fun ({_, Item1}, Item0) ->
@@ -313,7 +320,11 @@ handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
 handle_call(get_overview, _From, State = #state{tables = Tables}) ->
     FineQ = get_fine_stats(channel_queue_stats, [], Tables),
     FineX = get_fine_stats(channel_exchange_stats, [], Tables),
-    {reply, [{message_stats, FineX ++ FineQ}], State};
+    Totals0 = sum(orddict:fetch(queue_stats, Tables),
+                  [messages_ready, messages_unacknowledged]),
+    Totals = [{messages, add(pget(messages_ready, Totals0),
+                             pget(messages_unacknowledged, Totals0))}|Totals0],
+    {reply, [{message_stats, FineX ++ FineQ}, {queue_totals, Totals}], State};
 
 handle_call(_Request, _From, State) ->
     {reply, not_understood, State}.
