@@ -460,9 +460,10 @@ ensure_queue(send, {topic, _}, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
     {ok, undefined}.
 
-ensure_queue_binding(Queue, {"", Queue}, _Channel) ->
+ensure_queue_binding(QueueBin, {"", Queue}, _Channel) ->
     %% i.e., we should only be asked to bind to the default exchange a
     %% queue with its own name
+    QueueBin = list_to_binary(Queue),
     ok;
 ensure_queue_binding(Queue, {Exchange, RoutingKey}, Channel) ->
     #'queue.bind_ok'{} =
