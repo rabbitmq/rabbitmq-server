@@ -31,20 +31,29 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server).
 
--export([start_link/1, process_frame/2]).
+-export([start_link/1, process_frame/2, heartbeat/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, connection, subscriptions,
-                version}).
+-record(state, {socket, session_id, channel,
+                connection, subscriptions, version,
+                server_heartbeat,
+                client_heartbeat,
+                client_heartbeat_interval,
+                client_heartbeat_timer_ref,
+                client_last_activity,
+                client_missed_heartbeats}).
 
 -record(subscription, {dest_hdr, channel, ack_mode, multi_ack}).
 
+-record(heartbeat, {timer_ref, interval, last_activity}).
+
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
+-define(MAX_MISSED_HEARTBEATS, 2).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -55,6 +64,9 @@ start_link(Sock) ->
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server:cast(Pid, {Command, Frame}).
 
+heartbeat(Pid) ->
+    gen_server:cast(Pid, heartbeat_received).
+
 %%----------------------------------------------------------------------------
 %% Basic gen_server callbacks
 %%----------------------------------------------------------------------------
@@ -63,15 +75,19 @@ init([Sock]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
-       socket        = Sock,
-       session_id    = none,
-       channel       = none,
-       connection    = none,
-       subscriptions = dict:new(),
-       version       = none}
+       socket                   = Sock,
+       session_id               = none,
+       channel                  = none,
+       connection               = none,
+       subscriptions            = dict:new(),
+       version                  = none,
+       server_heartbeat         = undefined,
+       client_heartbeat         = undefined,
+       client_missed_heartbeats = 0}
     }.
 
 terminate(_Reason, State) ->
+    %% TODO: shutdown the timers gracefully
     shutdown_channel_and_connection(State).
 
 handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
@@ -84,7 +100,10 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
                         rabbit_stomp_frame:header(Frame, "login"),
                         rabbit_stomp_frame:header(Frame, "passcode"),
                         rabbit_stomp_frame:header(Frame, "host",
-                                                  binary_to_list(DefaultVHost)),
+                                                  binary_to_list(
+                                                    DefaultVHost)),
+                        rabbit_stomp_frame:header(Frame, "heartbeat",
+                                                  "0,0"),
                         StateN)
               end, State#state{version = Version});
         {error, no_common_version} ->
@@ -104,7 +123,40 @@ handle_cast({Command, Frame}, State) ->
     with_error_unwrapping(
       fun(StateN) ->
               handle_frame(Command, Frame, StateN)
-      end, State).
+      end, signal_activity(client, State));
+
+handle_cast(heartbeat_received, State) ->
+    {noreply, signal_activity(client, State)};
+
+handle_cast(send_heartbeat, State) ->
+    {noreply, send_heartbeat(State)};
+
+handle_cast(missed_heartbeat,
+            State = #state{client_missed_heartbeats = Missed}) ->
+    Missed1 = Missed + 1,
+    case Missed1 =:= ?MAX_MISSED_HEARTBEATS of
+        true ->
+            {stop, missed_heartbeats, State};
+        false ->
+            {noreply, State#state{client_missed_heartbeats = Missed1}}
+    end.
+
+handle_info({heartbeat_tick, Side, HeartbeatMsg}, State) ->
+    #heartbeat{last_activity = LastActivity,
+               interval      = Interval} =
+        case Side of
+            server -> State#state.server_heartbeat;
+            client -> State#state.client_heartbeat
+        end,
+
+    case timer:now_diff(now(), LastActivity) > Interval of
+        true ->
+            gen_server:cast(self(), HeartbeatMsg);
+        false ->
+            ok
+    end,
+    {noreply, State};
+
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
@@ -232,7 +284,7 @@ with_destination(Command, Frame, State, Fun) ->
                             State)}
     end.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
+do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, State) ->
     {ok, Connection} = amqp_connection:start(
                          direct, #amqp_params{
                            username     = list_to_binary(Login),
@@ -240,15 +292,18 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
                            virtual_host = list_to_binary(VirtualHost)}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
-    {noreply, send_frame("CONNECTED",
-                    [{"session", SessionId}],
-                    "",
-                    State#state{session_id = SessionId,
-                                channel    = Channel,
-                                connection = Connection})};
-do_login(_, _, _, State) ->
-    {noreply, send_error("Bad CONNECT", "Missing login or passcode header(s)\n",
-                    State)}.
+    {{SX, SY}, State1} = ensure_heartbeats(Heartbeat, State),
+    {noreply,
+     send_frame("CONNECTED",
+                [{"session", SessionId},
+                 {"heartbeat", io_lib:format("~B,~B", [SX, SY])}],
+                "",
+                State1#state{session_id = SessionId,
+                            channel    = Channel,
+                            connection = Connection})};
+do_login(_, _, _, _, State) ->
+    send_error("Bad CONNECT", "Missing login or passcode header(s)\n",
+                    State).
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
@@ -467,6 +522,40 @@ perform_transaction_action({Channel, Method}, State) ->
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
+%%--------------------------------------------------------------------
+%% Heartbeat Management
+%%--------------------------------------------------------------------
+
+ensure_heartbeats(Heartbeats, State) ->
+    [CX, CY] = [list_to_integer(X) ||
+                   X <- re:split(Heartbeats, ",", [{return, list}])],
+
+    {{CY, CX},
+     State#state{
+       server_heartbeat = heartbeat(server, CY, send_heartbeat),
+       client_heartbeat = heartbeat(client, CX, missed_heartbeat)}}.
+
+heartbeat(Side, Interval, HeartbeatMsg) when Interval > 0 ->
+    %% We store the interval in microseconds for later comparison
+    %% against timer:now_diff.
+    #heartbeat{interval = Interval * 1000,
+               last_activity = now(),
+               timer_ref =
+                   timer:send_interval(Interval div 2,
+                                       {heartbeat_tick, Side, HeartbeatMsg})};
+heartbeat(_Side, _Interval, _HeartbeatMsg) ->
+    undefined.
+
+signal_activity(server, State = #state{server_heartbeat = undefined}) ->
+    State;
+signal_activity(server, State = #state{server_heartbeat = Heartbeat}) ->
+    State#state{server_heartbeat = Heartbeat#heartbeat{last_activity = now()}};
+
+signal_activity(client, State = #state{client_heartbeat = undefined}) ->
+    State;
+signal_activity(client, State = #state{client_heartbeat = Heartbeat}) ->
+    State#state{client_heartbeat = Heartbeat#heartbeat{last_activity = now()}}.
+
 %%----------------------------------------------------------------------------
 %% Queue and Binding Setup
 %%----------------------------------------------------------------------------
@@ -527,13 +616,24 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     %% shortly anyway. See bug 21365.
     %% io:format("Sending ~p~n", [Frame]),
     case gen_tcp:send(Sock, rabbit_stomp_frame:serialize(Frame)) of
-        ok -> State;
+        ok -> signal_activity(server, State);
         {error, closed} -> State;
         {error, enotconn} -> State;
         {error, Code} ->
             error_logger:error_msg("Error sending STOMP frame ~p: ~p~n",
                                    [Frame#stomp_frame.command,
                                     Code]),
+            State
+    end.
+
+send_heartbeat(State = #state{socket = Sock}) ->
+    case gen_tcp:send(Sock, <<0>>) of
+        ok -> signal_activity(server, State);
+        {error, closed} -> State;
+        {error, enotconn} -> State;
+        {error, Code} ->
+            error_logger:error_msg("Error sending heartbeat: ~p~n",
+                                   [Code]),
             State
     end.
 

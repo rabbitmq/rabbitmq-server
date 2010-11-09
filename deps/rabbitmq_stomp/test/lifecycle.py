@@ -48,6 +48,21 @@ class TestLifecycle(base.BaseTest):
         finally:
             new_conn.disconnect()
 
+    def test_heartbeat_disconnects_client(self):
+        self.conn.disconnect()
+        new_conn = self.create_connection(heartbeat="1500,0")
+        try:
+            self.assertTrue(new_conn.is_connected())
+            time.sleep(1)
+            self.assertTrue(new_conn.is_connected())
+            time.sleep(3)
+            self.assertFalse(new_conn.is_connected())
+        finally:
+            if new_conn.is_connected():
+                new_conn.disconnect()
+
+
+
     def test_unsupported_version(self):
         self.conn.disconnect()
         new_conn = stomp.Connection(user="guest",
