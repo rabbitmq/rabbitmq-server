@@ -1,4 +1,4 @@
-body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 .br { clear: both; display: block; }
 #logo { width: 204px; height: 37px; margin-bottom: 20px; background: url(../img/rabbitmqlogo.png); }
 #login { float: right; color: #444; }
@@ -18,12 +18,13 @@ h1 { font-size: 2em; font-weight: normal; padding: 0; }
 b { color: black; font-weight: normal; }
 
 table { border-collapse: collapse; }
+table th { font-weight: normal; color: black; }
 table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 5em; width: auto; }
 table.list th, table.list td { vertical-align: top; }
 
 table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1em; }
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
-table.list th { text-align: center; font-weight: bold; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
+table.list th { text-align: center; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
 table.list td a { display: block; width: 100%; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
@@ -46,13 +47,10 @@ table.facts th, table.facts td { text-align: center; vertical-align: top; border
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-tr.alt td {
-    background: #eee;
-    background: -moz-linear-gradient(center top, #f0f0f0 0%,#e0e0e0 100%);
-    background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f0f0f0),color-stop(1, #e0e0e0));
-}
+tr.alt1 td { background: #eee; }
+tr.alt2 td { background: #fff; }
 
-td.status div { padding: 5px; text-align: center; font-weight: bold; border-radius: 5px; -moz-border-radius: 5px; }
+td.status div { padding: 5px; text-align: center; border-radius: 5px; -moz-border-radius: 5px; }
 td.status div.red { background: #F62817; color:white; }
 td.status div.red * { color:white; }
 td.status div.yellow { background: yellow; }
@@ -113,3 +111,19 @@ td.binding-endpoint span.object { border: 2px solid #bbb; padding: 10px; border-
 td.binding-endpoint span.arrow { font-size: 200%; }
 
 #scratch { display: none; }
+
+tr.alt1 td {
+    background: -moz-linear-gradient(center top, #f0f0f0 0%,#e0e0e0 100%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f0f0f0),color-stop(1, #e0e0e0));
+}
+
+tr.alt2 td {
+    background: -moz-linear-gradient(center top, #f8f8f8 0%,#ffffff 100%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f8f8f8),color-stop(1, #ffffff));
+}
+
+.highlight, .mini-highlight {
+    background: -moz-linear-gradient(center top, #f0f0f0 0%,#e0e0e0 100%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f0f0f0),color-stop(1, #e0e0e0));
+    border: 2px solid #e0e0e0;
+}

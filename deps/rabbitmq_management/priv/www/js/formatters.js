@@ -139,7 +139,7 @@ function fmt_rabbit_version(applications) {
 }
 
 function alt_rows(i) {
-    return (i % 2 == 0) ? ' class="alt"' : '';
+    return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
 
 function esc(str) {

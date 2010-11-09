@@ -136,7 +136,7 @@ def make_parser():
     parser.add_option("-q", "--quiet", action="store_false", dest="verbose",
                       default=True, help="suppress status messages")
     parser.add_option("-f", "--format", dest="format", default="table",
-                      help="format for listing commands - one of [pretty_json, raw_json, table, tsv, long]  [default: %default]")
+                      help="format for listing commands - one of [pretty_json, raw_json, table, tsv, long, kvp]  [default: %default]")
     parser.add_option("-d", "--depth", dest="depth", default="1",
                       help="maximum depth to recurse for listing tables [default: %default]")
 
@@ -300,6 +300,8 @@ def format_list(json_list, options):
         formatter = LongList
     elif format == "table":
         formatter = TableList
+    elif format == "kvp":
+        formatter = KeyValueList
     assert_usage(formatter != None,
                  "Format {0} not recognised".format(format))
     formatter_instance = formatter(options)
@@ -418,6 +420,18 @@ class TableList(Lister):
         for w in col_widths:
             txt += ("-" * (w + 2)) + "+"
         print txt
+
+class KeyValueList(Lister):
+    def __init__(self, options):
+        self.options = options
+
+    def display_list(self, columns, table):
+        for i in xrange(0, len(table)):
+            row = []
+            for j in xrange(0, len(columns)):
+                row.append("{0}=\"{1}\"".format(columns[j], table[i][j]))
+            print " ".join(row)
+
 
 if __name__ == "__main__":
     main()
