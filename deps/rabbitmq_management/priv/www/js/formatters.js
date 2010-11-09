@@ -114,6 +114,30 @@ function fmt_table_long(table) {
     return res + '</table>';
 }
 
+function fmt_uptime(u) {
+    var uptime = Math.floor(u / 1000);
+    var sec = uptime % 60;
+    var min = Math.floor(uptime / 60) % 60;
+    var hour = Math.floor(uptime / 3600) % 24;
+    var day = Math.floor(uptime / 86400);
+
+    if (day > 0)
+        return day + 'd ' + hour + 'h';
+    else if (hour > 0)
+        return hour + 'h ' + min + 'm';
+    else
+        return min + 'm ' + sec + 's';
+}
+
+function fmt_rabbit_version(applications) {
+    for (var i in applications) {
+        if (applications[i].name == 'rabbit') {
+            return applications[i].version;
+        }
+    }
+    return 'unknown';
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt"' : '';
 }

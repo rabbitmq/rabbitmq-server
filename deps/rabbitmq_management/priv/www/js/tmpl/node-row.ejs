@@ -1,9 +1,3 @@
-     <td>
-       <%= link_node(node.name) %>
-     </td>
-     <td class="c">
-       <%= node.type %>
-     </td>
 <% if (!node.running) { %>
      <td class="status" colspan="5">
        <div class="red">
@@ -17,7 +11,6 @@
        </div>
      </td>
 <% } else { %>
-     <td class="c"><%= node.os_pid %></td>
      <td class="status">
        <div class="<%= fmt_color(node.fd_used / node.fd_total) %>">
          <%= node.fd_used %> / <%= node.fd_total %>
@@ -38,7 +31,13 @@
        <%= fmt_bytes(node.mem_used) %>
 <% } %>
      </td>
-     <td class="c status">
-       <%= node.statistics_level %>
+     <td class="r">
+       <%= fmt_uptime(node.uptime) %>
+     </td>
+     <td>
+       <%= fmt_rabbit_version(node.applications) %> / <%= node.erlang_version %>
      </td>
 <% } %>
+     <td class="c">
+       <%= node.type %>
+     </td>

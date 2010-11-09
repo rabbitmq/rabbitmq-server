@@ -16,8 +16,6 @@
 <table class="list">
   <tr>
     <th>Name</th>
-    <th>Mnesia Storage</th>
-    <th>OS Pid</th>
     <th>
       File Descriptors
       <sub>(used / available)</sub>
@@ -30,10 +28,18 @@
       Memory
       <sub>(used / high watermark)</sub>
     </th>
-    <th>Statistics</th>
+    <th>Uptime</th>
+    <th>
+      Version
+      <sub>(RabbitMQ / Erlang)</sub>
+    </th>
+    <th>Mnesia Storage</th>
   </tr>
 <% for (var i = 0; i < nodes.length; i++) { %>
    <tr<%= alt_rows(i)%>>
+     <td>
+       <%= link_node(nodes[i].name) %>
+     </td>
     <%= format('node-row', {'node': nodes[i]})  %>
    </tr>
 <% } %>

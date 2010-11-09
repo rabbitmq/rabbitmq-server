@@ -3,11 +3,10 @@
 <div class="section">
 <h2>Overview</h2>
 <div class="hider updatable">
+  <h3>Basic</h3>
+
   <table class="facts">
     <tr>
-      <th>Name</th>
-      <th>Mnesia Storage</th>
-      <th>OS Pid</th>
       <th>
         File Descriptors
         <sub>(used / available)</sub>
@@ -20,14 +19,43 @@
         Memory
         <sub>(used / high watermark)</sub>
       </th>
-      <th>Statistics</th>
+      <th>Uptime</th>
+      <th>
+        Version
+        <sub>(RabbitMQ / Erlang)</sub>
+      </th>
+      <th>Mnesia Storage</th>
     </tr>
     <tr>
     <%= format('node-row', {'node': node})  %>
     </tr>
   </table>
+
+  <h3>More</h3>
+
+  <table class="facts">
+    <tr>
+      <th>OS Pid</th>
+      <th>Statistics</th>
+      <th>Run Queue</th>
+      <th>Processors</th>
+    </tr>
+    <tr>
+     <td class="c"><%= node.os_pid %></td>
+     <td class="c">
+       <%= node.statistics_level %>
+     </td>
+     <td class="r">
+       <%= node.run_queue %>
+     </td>
+     <td class="r">
+       <%= node.processors %>
+     </td>
+    </tr>
+  </table>
 </div>
 </div>
+
 
 <div class="section">
 <h2>Applications</h2>
