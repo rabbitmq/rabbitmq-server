@@ -42,7 +42,7 @@ class TestLifecycle(base.BaseTest):
 
     def test_connect_version_1_1(self):
         self.conn.disconnect()
-        new_conn = self.create_connection(version="1.1")
+        new_conn = self.create_connection(version="1.1,1.0")
         try:
             self.assertTrue(new_conn.is_connected())
         finally:
