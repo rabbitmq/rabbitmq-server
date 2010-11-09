@@ -1052,5 +1052,4 @@ demonitor_and_erase_ch(#cr{ch_pid      = ChPid,
     erase({ch, ChPid}).
 
 
-             
-    
+            
