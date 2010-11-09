@@ -514,10 +514,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
-        #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
-            acktags = ChAckTags} ->
-            erlang:demonitor(MonitorRef),
-            erase({ch, ChPid}),
+        C = #cr{ch_pid = ChPid, txn = Txn, acktags = ChAckTags} ->
+            demonitor_and_erase_ch(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
@@ -840,12 +838,9 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
-            store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            case ConsumerCount of
-                1 -> ok = rabbit_limiter:unregister(LimiterPid, self());
-                _ -> ok
-            end,
+        C = #cr{consumer_count = ConsumerCount} ->
+            C1 = C#cr{consumer_count = ConsumerCount-1},
+            update_ch_record(C1),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
