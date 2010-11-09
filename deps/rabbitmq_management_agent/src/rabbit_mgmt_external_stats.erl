@@ -33,7 +33,8 @@
 
 -define(REFRESH_RATIO, 5000).
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
-               mem_used, mem_limit, proc_used, proc_total, statistics_level]).
+               mem_used, mem_limit, proc_used, proc_total, statistics_level,
+               erlang_version, uptime, run_queue, processors]).
 
 %%--------------------------------------------------------------------
 
@@ -130,17 +131,21 @@ get_memory_limit() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(os_pid,      _State)                       -> list_to_binary(os:getpid());
-i(mem_ets,     _State)                       -> erlang:memory(ets);
-i(mem_binary,  _State)                       -> erlang:memory(binary);
-i(fd_used,     #state{fd_used    = FdUsed})  -> FdUsed;
-i(fd_total,    #state{fd_total   = FdTotal}) -> FdTotal;
-i(mem_used,    _State)                       -> erlang:memory(total);
-i(mem_limit,   _State)                       -> get_memory_limit();
-i(proc_used,   _State)                       -> erlang:system_info(
-                                                  process_count);
-i(proc_total,  _State)                       -> erlang:system_info(
-                                                  process_limit);
+i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
+i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
+i(os_pid,         _State) -> list_to_binary(os:getpid());
+i(mem_ets,        _State) -> erlang:memory(ets);
+i(mem_binary,     _State) -> erlang:memory(binary);
+i(mem_used,       _State) -> erlang:memory(total);
+i(mem_limit,      _State) -> get_memory_limit();
+i(proc_used,      _State) -> erlang:system_info(process_count);
+i(proc_total,     _State) -> erlang:system_info(process_limit);
+i(erlang_version, _State) -> list_to_binary(erlang:system_info(otp_release));
+i(run_queue,      _State) -> erlang:statistics(run_queue);
+i(processors,     _State) -> erlang:system_info(logical_processors_available);
+i(uptime, _State) ->
+    {Total, _} = erlang:statistics(wall_clock),
+    Total;
 i(statistics_level, _State) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     StatsLevel.
