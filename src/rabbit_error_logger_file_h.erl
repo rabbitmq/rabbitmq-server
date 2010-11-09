@@ -42,6 +42,39 @@
 %% The first init/1 additionally allows for simple log rotation
 %% when the suffix is not the empty string.
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/2 :: (_,_) -> {'ok',_,_}).
+-spec(handle_event/2 :: (_,_) -> {'ok',_}).
+-spec(handle_info/2 ::
+	(_,_) ->
+			    'remove_handler' |
+			    {'ok',_} |
+			    {'swap_handler','install_prev',[],_,'go_back'}).
+-spec(init/1 ::
+	(atom() | 
+	 [atom() | [any()] | char()] |
+	 {atom() |
+	  [atom() | [any()] | char()] |
+	  {atom() |
+	   [atom() | [any()] | char()] |
+	   {atom() | [any()] | {_,_},'error' | [] | {_,_}},
+	   _},
+	  'error' |
+	  [] |
+	  {'error_logger',_}}) ->
+		     {'error',atom()} |
+		     {'ok',
+		      {pid() | {_,_,_},atom() | [any()],'error_logger' | []}}).
+-spec(terminate/2 :: (_,_) -> []).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of

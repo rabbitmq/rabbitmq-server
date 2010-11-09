@@ -42,6 +42,26 @@
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(boot/0 :: () -> 'ok').
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/2 :: (_,_) -> {'ok','not_understood',_}).
+-spec(handle_event/2 :: (_,_) -> {'ok',_}).
+-spec(handle_info/2 :: (_,_) -> {'ok',_}).
+-spec(init/1 ::
+	([binary() | #resource{},...]) ->
+		     {'ok',
+		      #resource{virtual_host::binary() | #resource{},
+				kind::'exchange',name::<<_:128>>}}).
+-spec(terminate/2 :: (_,_) -> 'terminated_ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 boot() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     ok = error_logger:add_report_handler(?MODULE, [DefaultVHost]).

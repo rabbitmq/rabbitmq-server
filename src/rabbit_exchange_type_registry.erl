@@ -52,6 +52,15 @@
 -spec(lookup_module/1 ::
         (atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 ::
+	(_,_,_) ->
+			    {'reply','ok',_} | {'stop',{'unhandled_call',_},_}).
+-spec(handle_cast/2 :: (_,_) -> {'stop',{'unhandled_cast',_},_}).
+-spec(handle_info/2 :: (_,_) -> {'stop',{'unhandled_info',_},_}).
+-spec(init/1 :: ([]) -> {'ok','none'}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%---------------------------------------------------------------------------

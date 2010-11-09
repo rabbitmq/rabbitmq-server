@@ -40,6 +40,24 @@
 
 -record(state, {callback, sock, ref}).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_}).
+-spec(handle_cast/2 ::
+	(_,_) -> {'noreply',_} | {'stop',{'cannot_accept',_},#state{}}).
+-spec(handle_info/2 ::
+	(_,_) ->
+			    {'noreply',_} |
+			    {'stop','normal' | {'cannot_accept',_},#state{}}).
+-spec(init/1 :: ({_,_}) -> {'ok',#state{}}).
+-spec(start_link/2 :: (_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
+-endif.
+
 %%--------------------------------------------------------------------
 
 start_link(Callback, LSock) ->

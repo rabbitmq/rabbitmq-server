@@ -33,6 +33,17 @@
 
 -export([behaviour_info/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(behaviour_info/1 ::
+	(_) -> 'undefined' | [{atom(),0 | 1 | 2 | 3 | 4},...]).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 behaviour_info(callbacks) ->
     [
      %% Called on startup with a list of durable queue names. The

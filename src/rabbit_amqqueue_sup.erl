@@ -41,6 +41,22 @@
 
 -define(SERVER, ?MODULE).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(init/1 ::
+ ([]) ->
+		   {'ok',
+		    {{'simple_one_for_one_terminate',10,10},
+		     [{_,_,_,_,_,_},...]}}).
+-spec(start_child/1 :: (_) -> any()).
+-spec(start_link/0 :: () -> 'ignore' | {'error',_} | {'ok',pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link() ->
     supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 

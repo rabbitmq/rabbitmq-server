@@ -42,6 +42,32 @@
 %% The first init/1 additionally allows for simple log rotation
 %% when the suffix is not the empty string.
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/2 :: (_,_) -> {'error','bad_query'}).
+-spec(handle_event/2 :: (_,_) -> {'ok',_}).
+-spec(handle_info/2 :: (_,_) -> 'remove_handler' | {'ok',_}).
+-spec(init/1 ::
+	(atom() |
+	 [atom() | [any()] | char()] |
+	 {atom() |
+	  [atom() | [any()] | char()] |
+	  {atom() |
+	   [atom() | [any()] | char()] |
+	   {atom() | [any()] | {_,_},_},
+	   _},
+	  _}) ->
+		     {'error',atom()} |
+		     {'ok',{pid() | {_,_,_},atom() | [any()],_}}).
+-spec(terminate/2 :: (_,{pid() | {'file_descriptor',atom(),_},_,_}) -> []).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 %% Used only when swapping handlers and performing
 %% log rotation
 init({{File, Suffix}, []}) ->

@@ -41,6 +41,17 @@
 
 %%----------------------------------------------------------------------------
 
+-record(lim, {prefetch_count = 0,
+              ch_pid,
+              blocked = false,
+              queues = dict:new(), % QPid -> {MonitorRef, Notify}
+              volume = 0}).
+%% 'Notify' is a boolean that indicates whether a queue should be
+%% notified of a change in the limit or volume that may allow it to
+%% deliver more messages via the limiter's channel.
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -type(maybe_pid() :: pid() | 'undefined').
@@ -57,18 +68,32 @@
 -spec(unblock/1 :: (maybe_pid()) -> 'ok' | 'stopped').
 -spec(is_blocked/1 :: (maybe_pid()) -> boolean()).
 
+-spec(code_change/3 :: (_,_,_) -> any()).
+-spec(handle_call/3 ::
+	('block' |
+	 'get_limit' |
+	 'is_blocked' |
+	 'unblock' |
+	 {'limit',_} |
+	 {'can_send',_,_},
+	 _,
+	 #lim{}) ->
+			    {'reply',_,#lim{}} |
+			    {'stop','normal','stopped',#lim{}}).
+-spec(handle_cast/2 ::
+	({'ack',_} | {'register',_} | {'unregister',_},#lim{}) ->
+			    {'noreply',#lim{}}).
+-spec(handle_info/2 ::
+	({'DOWN',_,_,_,_},#lim{queues::dict()}) ->
+			    {'noreply',#lim{queues::dict()}}).
+-spec(init/1 ::
+	([any(),...]) ->
+		     {'ok',
+		      #lim{prefetch_count::0,blocked::'false',queues::dict()}}).
+-spec(prioritise_call/3 :: (_,_,_) -> 0 | 9).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
-
-%%----------------------------------------------------------------------------
-
--record(lim, {prefetch_count = 0,
-              ch_pid,
-              blocked = false,
-              queues = dict:new(), % QPid -> {MonitorRef, Notify}
-              volume = 0}).
-%% 'Notify' is a boolean that indicates whether a queue should be
-%% notified of a change in the limit or volume that may allow it to
-%% deliver more messages via the limiter's channel.
 
 %%----------------------------------------------------------------------------
 %% API

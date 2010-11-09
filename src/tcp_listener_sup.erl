@@ -37,6 +37,28 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(init/1 ::
+ ({{integer(),integer(),integer(),integer()} | {_,_,_,_,_,_,_,_},
+   number(),
+   _,
+   _,
+   _,
+   _,
+   _,
+   _}) ->
+		   {'ok',{{'one_for_all',10,10},[{_,_,_,_,_,_},...]}}).
+-spec(start_link/7 :: (_,_,_,_,_,_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_link/8 ::
+	(_,_,_,_,_,_,_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
            AcceptCallback, Label) ->
     start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,

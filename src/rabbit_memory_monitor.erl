@@ -94,6 +94,22 @@
         (pid(), float() | 'infinity') -> number() | 'infinity').
 -spec(stop/0 :: () -> 'ok').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 ::
+	(_,_,_) ->
+			    {'noreply',_} |
+			    {'reply',
+			     'ok',
+			     #state{queue_durations::atom() | ets:tid()}}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_} | {'stop','normal',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 ::
+	([]) ->
+		     {'ok',
+		      #state{memory_limit::number(),
+			     desired_duration::'infinity' | float()}}).
+-spec(terminate/2 :: (_,#state{timer::timer:tref()}) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

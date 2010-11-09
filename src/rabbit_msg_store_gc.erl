@@ -60,6 +60,25 @@
 -spec(stop/1 :: (pid()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: ('stop',_,_) -> {'stop','normal','ok',_}).
+-spec(handle_cast/2 ::
+	({'delete',_} |
+	 {'no_readers',_} |
+	 {'set_maximum_since_use',_} |
+	 {'combine',_,_},
+	 _) ->
+			    {'noreply',_,'hibernate'}).
+-spec(handle_info/2 :: (_,_) -> {'stop',{'unhandled_info',_},_}).
+-spec(init/1 ::
+	([any(),...]) ->
+		     {'ok',
+		      #state{pending_no_readers::dict()},
+		      'hibernate',
+		      {'backoff',1000,1000,10000}}).
+-spec(prioritise_cast/2 :: (_,_) -> 0 | 8).
+-spec(terminate/2 :: (_,_) -> any()).
+
 -endif.
 
 %%----------------------------------------------------------------------------

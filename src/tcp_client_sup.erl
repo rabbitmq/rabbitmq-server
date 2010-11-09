@@ -37,6 +37,24 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(init/1 ::
+	({_,_,_}) ->
+		     {'ok',
+		      {{'simple_one_for_one_terminate',10,10},
+		       [{_,_,_,_,_,_},...]}}).
+-spec(start_link/1 :: (_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_link/2 ::
+	({'global',_} | {'local',atom()},_) ->
+			   'ignore' | {'error',_} | {'ok',pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Callback) ->
     supervisor2:start_link(?MODULE, Callback).
 

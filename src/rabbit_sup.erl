@@ -42,6 +42,24 @@
 
 -define(SERVER, ?MODULE).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(init/1 :: ([]) -> {'ok',{{'one_for_all',0,1},[]}}).
+-spec(start_child/1 :: (atom() | tuple()) -> 'ok').
+-spec(start_child/2 :: (atom() | tuple(),[any()]) -> 'ok').
+-spec(start_child/3 :: (_,atom() | tuple(),[any()]) -> 'ok').
+-spec(start_link/0 :: () -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_restartable_child/1 :: (atom()) -> 'ok').
+-spec(start_restartable_child/2 :: (atom(),_) -> 'ok').
+-spec(stop_child/1 ::
+	(_) -> 'ok' | {'error','not_found' | 'running' | 'simple_one_for_one'}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 

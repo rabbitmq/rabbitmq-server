@@ -100,6 +100,53 @@
 -define(is_terminate_simple(State),
         State#state.strategy =:= simple_one_for_one_terminate).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(behaviour_info/1 :: (_) -> 'undefined' | [{'init',1},...]).
+-spec(check_childspecs/1 :: (_) -> 'ok' | {'error',_}).
+-spec(code_change/3 :: (_,#state{module::atom() | tuple()},_) -> any()).
+-spec(delayed_restart/2 :: (atom() | pid() | {atom(),_},_) -> 'ok').
+-spec(delete_child/2 :: (_,_) -> any()).
+-spec(find_child/2 :: (_,_) -> [any()]).
+-spec(handle_call/3 ::
+	('which_children' | {_,_},_,_) ->
+			    {'reply',
+			     'ok' |
+			     [{_,_,_,_}] |
+			     {'error',_} |
+			     {'ok','undefined' | pid()} |
+			     {'ok',pid(),_},
+			     _}).
+-spec(handle_cast/2 ::
+	('null' | {'delayed_restart',{_,_,_}},_) -> {'noreply',_}).
+-spec(handle_info/2 ::
+	(_,_) -> {'noreply',_} | {'stop','shutdown',{_,_,_,_,_,_,_,_,_,_}}).
+-spec(init/1 ::
+	({_,atom() | tuple(),_}) ->
+		     'ignore' |
+		     {'ok',#state{}} |
+		     {'stop',
+		      'shutdown' |
+		      {'bad_return',{atom() | tuple(),'init',_}} |
+		      {'bad_start_spec',_} |
+		      {'start_spec',_} |
+		      {'supervisor_data',_}}).
+-spec(restart_child/2 :: (_,_) -> any()).
+-spec(start_child/2 :: (_,_) -> any()).
+-spec(start_link/2 :: (_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_link/3 ::
+	({'global',_} | {'local',atom()},_,_) ->
+			   'ignore' | {'error',_} | {'ok',pid()}).
+-spec(terminate/2 :: (_,#state{children::maybe_improper_list()}) -> 'ok').
+-spec(terminate_child/2 :: (_,_) -> any()).
+-spec(which_children/1 :: (_) -> any()).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 behaviour_info(callbacks) ->
     [{init,1}];
 behaviour_info(_Other) ->

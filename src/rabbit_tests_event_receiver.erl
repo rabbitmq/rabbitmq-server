@@ -36,6 +36,25 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/2 :: (_,_) -> {'ok','not_understood',_}).
+-spec(handle_event/2 ::
+	(_,atom() | pid() | port() | {atom(),atom()}) ->
+			     {'ok',atom() | pid() | port() | {atom(),atom()}}).
+-spec(handle_info/2 :: (_,_) -> {'ok',_}).
+-spec(init/1 :: ([any(),...]) -> {'ok',_}).
+-spec(start/1 :: (_) -> any()).
+-spec(stop/0 :: () -> any()).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start(Pid) ->
     gen_event:add_handler(rabbit_event, ?MODULE, [Pid]).
 

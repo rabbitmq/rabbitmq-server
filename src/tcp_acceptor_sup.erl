@@ -37,6 +37,18 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(init/1 ::
+	(_) -> {'ok',{{'simple_one_for_one',10,10},[{_,_,_,_,_,_},...]}}).
+-spec(start_link/2 :: (atom(),_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Name, Callback) ->
     supervisor:start_link({local,Name}, ?MODULE, Callback).
 

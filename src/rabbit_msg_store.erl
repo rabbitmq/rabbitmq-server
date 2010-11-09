@@ -167,6 +167,48 @@
                               non_neg_integer()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> non_neg_integer()).
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 ::
+	('client_terminate' |
+	 'successfully_recovered_state' |
+	 {'contains',_} |
+	 {'new_client_state',_} |
+	 {'read',_},
+	 _,
+	 _) ->
+			    {'noreply',_,'hibernate' | 0} |
+			    {'reply',_,_,'hibernate' | 0}).
+-spec(handle_cast/2 ::
+	('sync' |
+	 {'client_delete',_} |
+	 {'release',[any()]} |
+	 {'remove',[any()]} |
+	 {'set_maximum_since_use',_} |
+	 {'write',_} |
+	 {'delete_file',_,number()} |
+	 {'sync',[any()],_} |
+	 {'combine_files',_,_,number()},
+	 _) ->
+			    {'noreply',_,'hibernate' | 0}).
+-spec(handle_info/2 ::
+	('timeout' | {'EXIT',_,_},_) ->
+			    {'noreply',_,'hibernate' | 0} | {'stop',_,_}).
+-spec(init/1 ::
+	([any(),...]) ->
+		     {'ok',_,'hibernate',{'backoff',1000,1000,10000}}).
+-spec(prioritise_call/3 :: (_,_,_) -> 0 | 2 | 7).
+-spec(prioritise_cast/2 :: (_,_) -> 0 | 8).
+-spec(terminate/2 ::
+	(_,
+	 #msstate{dir::string(),
+		  index_module::atom() | tuple(),
+		  file_handles_ets::atom() | ets:tid(),
+		  file_summary_ets::atom() | ets:tid(),
+		  dedup_cache_ets::atom() | ets:tid(),
+		  cur_file_cache_ets::atom() | ets:tid(),
+		  client_refs::set()}) ->
+			  #msstate{file_handle_cache::dict()}).
+
 -endif.
 
 %%----------------------------------------------------------------------------

@@ -89,6 +89,54 @@
 -spec(queue_content/1 ::
         (rabbit_amqqueue:name()) -> [{rabbit_types:message(), boolean()}]).
 
+-spec(code_change/3 ::
+	(_,#pstate{},_) ->
+			    {'ok',
+			     #pstate{deadline::'infinity',
+				     pending_logs::[],
+				     pending_replies::[]}}).
+-spec(handle_call/3 ::
+	(_,_,_) ->
+			    {'noreply',_} |
+			    {'noreply',
+			     #pstate{deadline::'infinity' |
+					       {number(),number(),number()},
+				     pending_logs::maybe_improper_list()},
+			     _} |
+			    {'reply',
+			     'ok' | [{_,_,_}],
+			     #pstate{deadline::'infinity' |
+					       {number(),number(),number()}},
+			     _}).
+-spec(handle_cast/2 ::
+	(_,_) ->
+			    {'noreply',_} |
+			    {'noreply',
+			     #pstate{deadline::'infinity' |
+					       {number(),number(),number()},
+				     pending_logs::maybe_improper_list()},
+			     _}).
+-spec(handle_info/2 ::
+	(_,_) ->
+			    {'noreply',_} |
+			    {'noreply',
+			     #pstate{deadline::'infinity' |
+					       {number(),number(),number()},
+				     pending_logs::maybe_improper_list()},
+			     _}).
+-spec(init/1 ::
+	([any(),...]) ->
+		     {'ok',
+		      #pstate{entry_count::0,
+			      deadline::'infinity',
+			      pending_logs::[],
+			      pending_replies::[],
+			      snapshot::#psnapshot{transactions::dict(),
+						   messages::atom() | ets:tid(),
+						   queues::atom() |
+							   ets:tid()}}}).
+-spec(terminate/2 :: (_,#pstate{}) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

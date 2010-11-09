@@ -60,6 +60,14 @@
 -spec(error/1 :: (string()) -> 'ok').
 -spec(error/2 :: (string(), [any()]) -> 'ok').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 :: ([]) -> {'ok','none'}).
+-spec(message/4 :: (_,_,_,_) -> 'ok').
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

@@ -41,6 +41,10 @@
 
 %%----------------------------------------------------------------------------
 
+-record(state, {}).
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -type(name() :: term()).
@@ -52,6 +56,12 @@
 -spec(get_members/1 :: (name()) -> [pid()]).
 
 -spec(sync/0 :: () -> 'ok').
+
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_} | {'reply','ok',_}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 :: ([]) -> {'ok',#state{}}).
+-spec(terminate/2 :: (_,_) -> 'ok').
 
 -endif.
 
@@ -88,8 +98,6 @@ sync() ->
 %%%
 %%% Callback functions from gen_server
 %%%
-
--record(state, {}).
 
 init([]) ->
     pg_local_table = ets:new(pg_local_table, [ordered_set, protected, named_table]),

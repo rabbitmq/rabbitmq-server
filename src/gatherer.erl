@@ -40,6 +40,10 @@
 
 %%----------------------------------------------------------------------------
 
+-record(gstate, { forks, values, blocked }).
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
@@ -49,16 +53,32 @@
 -spec(in/2 :: (pid(), any()) -> 'ok').
 -spec(out/1 :: (pid()) -> {'value', any()} | 'empty').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) ->
+			    {'noreply',
+			     #gstate{values::queue(),blocked::queue()},
+			     'hibernate'} |
+			    {'stop',{'unexpected_call',_},_} |
+			    {'reply',
+			     'empty' | 'ok' | {'value',_},
+			     #gstate{},'hibernate'} |
+			    {'stop','normal','ok',_}).
+-spec(handle_cast/2 :: (_,_) ->
+			    {'noreply',#gstate{},'hibernate'} |
+			    {'stop',{'unexpected_cast',_},_}).
+-spec(handle_info/2 :: (_,_) -> {'stop',{'unexpected_info',_},_}).
+-spec(init/1 :: ([]) ->
+		     {'ok',
+		      #gstate{forks::0,values::queue(),blocked::queue()},
+		      'hibernate',{'backoff',1000,1000,10000}}).
+-spec(terminate/2 :: (_,_) -> any()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
 
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
-
-%%----------------------------------------------------------------------------
-
--record(gstate, { forks, values, blocked }).
 
 %%----------------------------------------------------------------------------
 

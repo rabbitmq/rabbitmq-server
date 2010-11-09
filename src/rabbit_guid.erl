@@ -57,6 +57,13 @@
 -spec(string_guid/1 :: (any()) -> string()).
 -spec(binstring_guid/1 :: (any()) -> binary()).
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_} | {'reply',_,#state{}}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 :: ([any(),...]) -> {'ok',#state{}}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

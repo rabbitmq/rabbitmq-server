@@ -52,6 +52,17 @@
 
 -spec(process_count/0 :: () -> non_neg_integer()).
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 ::
+	({'thunk',fun(() -> any())},_,_) -> {'reply',_,_,'hibernate'}).
+-spec(handle_cast/2 ::
+	({'thunk',fun(() -> any())},_) -> {'noreply',_,'hibernate'}).
+-spec(handle_info/2 ::
+	(_,_) -> {'noreply',_}).
+-spec(init/1 ::
+	([]) -> {'ok','no_state','hibernate',{'backoff',1000,1000,10000}}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

@@ -80,6 +80,93 @@
              txn,
              unsent_message_count}).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: ('consumers' |
+			'info' |
+			'purge' |
+			'stat' |
+			{'info',_} |
+			{'init',_} |
+			{'maybe_run_queue_via_backing_queue',
+			 fun((_) -> any())} |
+                        {'notify_down',_} |
+                        {'basic_get',_,boolean()} |
+                        {'commit',_,_} |
+                        {'delete',_,_} |
+                        {'requeue',_,_} |
+                        {'basic_cancel',_,_,_} |
+                        {'deliver',_,_,_} |
+                        {'deliver_immediately',_,_,_} |
+                        {'basic_consume',_,_,_,_,_,_},
+                        _,
+                        #q{}) ->
+                               {'noreply',#q{},'hibernate' | 0} |
+                               {'stop',
+                                'normal',
+                                #q{q::#amqqueue{exclusive_owner::identifier()},
+                                                backing_queue::atom() |
+                                                               tuple()}} |
+                               {'reply',_,#q{},'hibernate' | 0} |
+                               {'stop',
+                                'normal',
+                                'not_found' |
+                                'ok' |
+                                {'existing',_} |
+                                {'ok',_},
+                                #q{}}).
+-spec(handle_cast/2 ::
+	('delete_immediately' |
+	 'drop_expired' |
+	 'emit_stats' |
+	 'maybe_expire' |
+	 'update_ram_duration' |
+	 {'flush',atom() | pid() | {atom(),_}} |
+	 {'notify_sent',_} |
+	 {'set_maximum_since_use',_} |
+	 {'set_ram_duration_target',_} |
+	 {'unblock',_} | {'limit',_,_} |
+	 {'rollback',_,_} |
+	 {'ack',_,_,_} |
+	 {'deliver',_,_,_} |
+	 {'reject',_,_,_},
+	 _) ->
+			    {'noreply',
+			     #q{active_consumers::queue(),
+				stats_timer::{'state',_,'undefined'}}} |
+			    {'noreply',#q{},'hibernate' | 0} |
+			    {'stop','normal',_}).
+-spec(handle_info/2 ::
+	(_,_) ->
+			    {'noreply',#q{},'hibernate' | 0} | {'stop',_,_}).
+-spec(handle_pre_hibernate/1:: (#q{}) -> {'hibernate',#q{}}).
+-spec(info_keys/0 :: () -> [atom(),...]).
+-spec(init/1 ::
+	(#amqqueue{}) ->
+		     {'ok',
+		      #q{q::#amqqueue{pid::pid()},
+			 exclusive_consumer::'none',
+			 has_had_consumers::'false',
+			 active_consumers::queue(),
+			 blocked_consumers::queue(),
+			 stats_timer::{'state',_,'undefined'}},
+		      'hibernate',
+		      {'backoff',1000,1000,10000}}).
+-spec(prioritise_call/3 :: (_,_,_) -> 0 | 6 | 9).
+-spec(prioritise_cast/2 :: (_,_) -> 0 | 7 | 8).
+-spec(prioritise_info/2 :: (_,_) -> 0 | 8).
+-spec(start_link/1 :: (_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(terminate/2 ::
+	(_,#q{rate_timer_ref::'just_measured' | 'undefined' | timer:tref()}) ->
+			  #q{}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 -define(STATISTICS_KEYS,
         [pid,
          exclusive_consumer_pid,

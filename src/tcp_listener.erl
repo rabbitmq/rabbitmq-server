@@ -40,6 +40,81 @@
 
 -record(state, {sock, on_startup, on_shutdown, label}).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 ::
+	({'asn1' |
+	  'cdr' |
+	  'false' |
+	  'fcgi' |
+	  'http' |
+	  'http_bin' |
+	  'line' |
+	  'once' |
+	  'raw' |
+	  'sunrm' |
+	  'tpkt' |
+	  'true' |
+	  integer() |
+	  {byte(),byte(),byte(),byte()} |
+	  {char(),char(),char(),char(),char(),char(),char(),char()},
+	  char(),
+	  ['binary' |
+	   'inet' |
+	   'inet6' |
+	   'list' |
+	   {atom(),
+	    'asn1' |
+	    'cdr' |
+	    'false' |
+	    'fcgi' |
+	    'http' |
+	    'http_bin' |
+	    'line' |
+	    'once' |
+	    'raw' |
+	    'sunrm' |
+	    'tpkt' |
+	    'true' |
+	    integer() |
+	    {_,_,_,_} |
+	    {_,_,_,_,_,_,_,_}} |
+	   {'raw',non_neg_integer(),non_neg_integer(),binary()}],
+	  _,
+	  _,
+	  {_,_,_},
+	  _,
+	  _}) ->
+		     {'ok',
+		      #state{sock::port(),on_startup::{_,_,_}}} |
+		     {'stop',
+		      {'cannot_listen',
+		       {byte(),byte(),byte(),byte()} |
+		       {char(),
+			char(),
+			char(),
+			char(),
+			char(),
+			char(),
+			char(),
+			char()},
+		       char(),
+		       atom()}}).
+-spec(start_link/8 ::
+	(_,_,_,_,_,_,_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(terminate/2 ::
+	(_,
+	 #state{sock::port(),on_shutdown::{atom() | tuple(),atom(),[any()]}}) ->
+			  any()).
+
+-endif.
+
 %%--------------------------------------------------------------------
 
 start_link(IPAddress, Port, SocketOpts,

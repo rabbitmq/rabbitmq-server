@@ -100,6 +100,68 @@
 -spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(flush/1 :: (_) -> any()).
+-spec(handle_call/3 ::
+	(_,_,#ch{}) ->
+			    {'noreply',#ch{},'hibernate'} |
+			    {'reply',
+			     'ok' |
+			     [{'acks_uncommitted' |
+			       'client_flow_blocked' |
+			       'connection' |
+			       'consumer_count' |
+			       'messages_unacknowledged' |
+			       'number' |
+			       'pid' |
+			       'prefetch_count' |
+			       'transactional' |
+			       'user' |
+			       'vhost',
+			       _}] |
+			     {'error',_} |
+			     {'ok',[{_,_}]},
+			     #ch{},
+			     'hibernate'}).
+-spec(handle_cast/2 ::
+	('emit_stats' |
+	 'terminate' |
+	 {'command',_} |
+	 {'flushed',_} |
+	 {'method',_,_} |
+	 {'deliver',
+	  _,
+	  boolean(),
+	  {_,_,_,_,#basic_message{exchange_name::{_,_,_,_}}}},_) ->
+			    {'noreply',#ch{}} |
+			    {'noreply',#ch{},'hibernate'} |
+			    {'stop','normal' | {_,[{_,_,_}]},_}).
+-spec(handle_info/2 ::
+	({'DOWN',_,'process',_,_},#ch{blocking::dict()}) ->
+			    {'noreply',#ch{blocking::dict()}}).
+-spec(handle_pre_hibernate/1 ::
+	(#ch{stats_timer::{'state',_,_}}) ->
+				     {'hibernate',
+				      #ch{stats_timer::{'state',_,_}}}).
+-spec(init/1 ::
+	([any(),...]) ->
+		     {'ok',
+		      #ch{state::'starting',
+			  transaction_id::'none',
+			  tx_participants::set(),
+			  next_tag::1,
+			  uncommitted_ack_q::queue(),
+			  unacked_message_q::queue(),
+			  most_recently_declared_queue::<<>>,
+			  consumer_mapping::dict(),
+			  blocking::dict(),
+			  stats_timer::{'state',_,'undefined'}},
+		      'hibernate',
+		      {'backoff',1000,1000,10000}}).
+-spec(prioritise_call/3 :: (_,_,_) -> 0 | 9).
+-spec(prioritise_cast/2 :: (_,_) -> 0 | 7).
+-spec(terminate/2 :: (_,#ch{}) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

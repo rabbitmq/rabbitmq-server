@@ -45,6 +45,12 @@
 -spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
                               {'ok', pid(), pid()}).
 
+-spec(init/1 ::
+	([]) ->
+		     {'ok',
+		      {{'simple_one_for_one_terminate',0,1},
+		       [{_,_,_,_,_,_},...]}}).
+
 -endif.
 
 %%----------------------------------------------------------------------------

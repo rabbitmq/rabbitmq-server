@@ -40,6 +40,20 @@
 
 -define(SERVER, ?MODULE).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 :: ([]) -> {'ok','no_state'}).
+-spec(start_link/0 :: () -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
+-endif.
+
 %%--------------------------------------------------------------------
 
 start_link() ->

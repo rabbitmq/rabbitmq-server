@@ -50,12 +50,40 @@
 
 %%----------------------------------------------------------------------------
 
+-record(state, { available, pending }).
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 -spec(submit_async/1 ::
       (fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
+
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 ::
+	(_,_,_) ->
+			    {'noreply',
+			     #state{available::queue(),pending::queue()},
+			     'hibernate'} |
+			    {'stop',{'unexpected_call',_},_} |
+			    {'reply',
+			     'undefined' | pid(),
+			     #state{available::queue()},'hibernate'}).
+-spec(handle_cast/2 ::
+	(_,_) ->
+			    {'noreply',#state{},'hibernate'} |
+			    {'stop',{'unexpected_cast',_},_}).
+-spec(handle_info/2 :: (_,_) -> {'stop',{'unexpected_info',_},_}).
+-spec(idle/1 :: (_) -> 'ok').
+-spec(init/1 ::
+	([]) ->
+		     {'ok',
+		      #state{available::queue(),pending::queue()},
+		      'hibernate',
+		      {'backoff',1000,1000,10000}}).
+-spec(terminate/2 :: (_,_) -> any()).
 
 -endif.
 
@@ -64,8 +92,6 @@
 -define(SERVER, ?MODULE).
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
-
--record(state, { available, pending }).
 
 %%----------------------------------------------------------------------------
 

@@ -82,6 +82,13 @@
 -spec(get_vm_memory_high_watermark/0 :: () -> float()).
 -spec(set_vm_memory_high_watermark/1 :: (float()) -> 'ok').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 :: (_,_,_) -> {'noreply',_} | {'reply',_,#state{}}).
+-spec(handle_cast/2 :: (_,_) -> {'noreply',_}).
+-spec(handle_info/2 :: (_,_) -> {'noreply',_}).
+-spec(init/1 :: ([number(),...]) -> {'ok',#state{alarmed::boolean()}}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

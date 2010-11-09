@@ -49,6 +49,16 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), mfa_tuple()) -> boolean()).
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/2 :: (_,_) -> {'ok','false' | 'not_understood' | 'true',_}).
+-spec(handle_event/2 :: (_,_) -> {'ok',_}).
+-spec(handle_info/2 :: (_,_) -> {'ok',_}).
+-spec(init/1 :: ([]) ->
+		     {'ok',
+		      #alarms{alertees::dict(),
+			      vm_memory_high_watermark::'false'}}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

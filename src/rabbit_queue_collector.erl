@@ -50,6 +50,21 @@
 -spec(register/2 :: (pid(), rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 
+-spec(code_change/3 :: (_,_,_) -> {'ok',_}).
+-spec(handle_call/3 ::
+	('delete_all' |
+	 {'register',#amqqueue{pid::atom() | pid() | {atom(),atom()}}},
+	 _,
+	 #state{queues::dict()}) ->
+			    {'noreply',#state{queues::dict()}} |
+			    {'reply','ok',#state{queues::dict()}}).
+-spec(handle_cast/2 :: (_,_) -> {'stop',{'unhandled_cast',_},_}).
+-spec(handle_info/2 ::
+	({'DOWN',_,'process',_,_},#state{queues::dict()}) ->
+			    {'noreply',#state{queues::dict()}}).
+-spec(init/1 :: ([]) -> {'ok',#state{queues::dict()}}).
+-spec(terminate/2 :: (_,_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------
