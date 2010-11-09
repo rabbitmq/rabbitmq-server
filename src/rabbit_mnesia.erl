@@ -394,6 +394,7 @@ init_db(ClusterNodes, Force) ->
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
+                    version_ok_or_exit(rabbit_upgrade:read_version()),
                     version_ok_or_exit(
                       rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
