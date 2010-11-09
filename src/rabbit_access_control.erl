@@ -33,7 +33,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([auth_mechanisms/1, check_login/2, check_user_pass_login/2,
+-export([auth_mechanisms/1, check_user_pass_login/2, make_salt/0,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
@@ -55,12 +55,10 @@
 -type(password_hash() :: binary()).
 -type(regexp() :: binary()).
 -spec(auth_mechanisms/1 :: (rabbit_networking:socket()) -> binary()).
--spec(check_login/2 ::
-        (binary(), binary()) -> rabbit_types:user() |
-                                rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
         -> {'ok', rabbit_types:user()} | 'refused').
+-spec(make_salt/0 :: () -> binary()).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
@@ -103,35 +101,6 @@ auth_mechanisms(Sock) ->
          || {Name, Mechanism} <- rabbit_registry:lookup_all(auth_mechanism),
         Mechanism:should_offer(Sock)],
     list_to_binary(string:join(Mechanisms, " ")).
-
-check_login(MechanismBin, Response) ->
-    Mechanism = mechanism_to_module(MechanismBin),
-    State = Mechanism:init(),
-    case Mechanism:handle_response(Response, State) of
-        {refused, Username} ->
-            rabbit_misc:protocol_error(
-              access_refused, "login refused for user '~s'", [Username]);
-        {protocol_error, Msg, Args} ->
-            rabbit_misc:protocol_error(access_refused, Msg, Args);
-        {ok, User} ->
-            User
-    end.
-
-mechanism_to_module(TypeBin) ->
-    case rabbit_registry:binary_to_type(TypeBin) of
-        {error, not_found} ->
-            rabbit_misc:protocol_error(
-              command_invalid, "unknown authentication mechanism '~s'",
-              [TypeBin]);
-        T ->
-            case rabbit_registry:lookup_module(auth_mechanism, T) of
-                {error, not_found} -> rabbit_misc:protocol_error(
-                                        command_invalid,
-                                        "invalid authentication mechanism '~s'",
-                                        [T]);
-                {ok, Module}       -> Module
-            end
-    end.
 
 check_user_pass_login(Username, Pass) ->
     case lookup_user(Username) of

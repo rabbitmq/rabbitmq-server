@@ -60,7 +60,8 @@
 
 -record(v1, {parent, sock, connection, callback, recv_length, recv_ref,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun}).
+             channel_sup_sup_pid, start_heartbeat_fun, auth_mechanism,
+             auth_state}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -301,7 +302,9 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                             stats_timer         =
                                 rabbit_event:init_stats_timer(),
                             channel_sup_sup_pid = ChannelSupSupPid,
-                            start_heartbeat_fun = StartHeartbeatFun
+                            start_heartbeat_fun = StartHeartbeatFun,
+                            auth_mechanism      = none,
+                            auth_state          = none
                            },
                         handshake, 8))
     catch
@@ -744,19 +747,21 @@ handle_method0(MethodName, FieldsBin,
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response,
                                       client_properties = ClientProperties},
-               State = #v1{connection_state = starting,
-                           connection = Connection =
-                               #connection{protocol = Protocol},
-                           sock = Sock}) ->
-    User = rabbit_access_control:check_login(Mechanism, Response),
-    Tune = #'connection.tune'{channel_max = 0,
-                              frame_max = ?FRAME_MAX,
-                              heartbeat = 0},
-    ok = send_on_channel0(Sock, Tune, Protocol),
-    State#v1{connection_state = tuning,
-             connection = Connection#connection{
-                            user = User,
-                            client_properties = ClientProperties}};
+               State0 = #v1{connection_state = starting,
+                            connection = Connection}) ->
+    AuthMechanism = auth_mechanism_to_module(Mechanism),
+    State = State0#v1{auth_mechanism   = AuthMechanism,
+                      auth_state       = AuthMechanism:init(),
+                      connection_state = securing,
+                      connection       =
+                          Connection#connection{
+                            client_properties = ClientProperties}},
+    auth_phase(Response, State);
+
+handle_method0(#'connection.secure_ok'{response = Response},
+               State = #v1{connection_state = securing}) ->
+    auth_phase(Response, State);
+
 handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
@@ -825,6 +830,47 @@ handle_method0(_Method, #v1{connection_state = S}) ->
 
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
+
+auth_mechanism_to_module(TypeBin) ->
+    case rabbit_registry:binary_to_type(TypeBin) of
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "unknown authentication mechanism '~s'",
+              [TypeBin]);
+        T ->
+            case rabbit_registry:lookup_module(auth_mechanism, T) of
+                {error, not_found} -> rabbit_misc:protocol_error(
+                                        command_invalid,
+                                        "invalid authentication mechanism '~s'",
+                                        [T]);
+                {ok, Module}       -> Module
+            end
+    end.
+
+auth_phase(Response,
+           State = #v1{auth_mechanism = AuthMechanism,
+                       auth_state = AuthState,
+                       connection = Connection =
+                           #connection{protocol = Protocol},
+                       sock = Sock}) ->
+    case AuthMechanism:handle_response(Response, AuthState) of
+        {refused, Username} ->
+            rabbit_misc:protocol_error(
+              access_refused, "login refused for user '~s'", [Username]);
+        {protocol_error, Msg, Args} ->
+            rabbit_misc:protocol_error(access_refused, Msg, Args);
+        {challenge, Challenge, AuthState1} ->
+            Secure = #'connection.secure'{challenge = Challenge},
+            ok = send_on_channel0(Sock, Secure, Protocol),
+            State#v1{auth_state = AuthState1};
+        {ok, User} ->
+            Tune = #'connection.tune'{channel_max = 0,
+                                      frame_max = ?FRAME_MAX,
+                                      heartbeat = 0},
+            ok = send_on_channel0(Sock, Tune, Protocol),
+            State#v1{connection_state = tuning,
+                     connection = Connection#connection{user = User}}
+    end.
 
 %%--------------------------------------------------------------------------
 
