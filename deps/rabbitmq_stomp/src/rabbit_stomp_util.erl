@@ -35,6 +35,7 @@
          parse_message_id/1]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
+-export([negotiate_version/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -127,6 +128,37 @@ parse_message_id(MessageId) ->
         _ ->
             {error, invalid_message_id}
     end.
+
+negotiate_version(ClientVers, ServerVers) ->
+    Common = lists:filter(fun(Ver) ->
+                                  lists:member(Ver, ServerVers)
+                          end, ClientVers),
+    case Common of
+        [] ->
+            {error, no_common_version};
+        [H|T] ->
+            {ok, lists:foldl(fun(Ver, AccN) ->
+                                max_version(Ver, AccN)
+                        end, H, T)}
+    end.
+
+max_version(V, V) ->
+    V;
+max_version(V1, V2) ->
+    Split = fun(X) -> re:split(X, "\\.", [{return, list}]) end,
+    find_max_version({V1, Split(V1)}, {V2, Split(V2)}).
+
+find_max_version({V1, [X|T1]}, {V2, [X|T2]}) ->
+    find_max_version({V1, T1}, {V2, T2});
+find_max_version({V1, [X]}, {V2, [Y]}) ->
+    case list_to_integer(X) >= list_to_integer(Y) of
+        true  -> V1;
+        false -> V2
+    end;
+find_max_version({_V1, []}, {V2, Y}) when length(Y) > 0 ->
+    V2;
+find_max_version({V1, X}, {_V2, []}) when length(X) > 0 ->
+    V1.
 
 %% ---- Header processing helpers ----
 
