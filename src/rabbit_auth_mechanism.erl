@@ -46,7 +46,15 @@ behaviour_info(callbacks) ->
      %% object to be passed through all the stages of authentication.
      {init, 0},
 
-     %% Handle a stage of authentication
+     %% Handle a stage of authentication. Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {challenge, Challenge, NextState}
+     %%     Another round is needed. Here's the state I want next time.
+     %% {protocol_error, Msg, Args}
+     %%     Client got the protocol wrong. Log and die.
+     %% {refused, Username}
+     %%     Client failed authentication. Log and die.
      {handle_response, 2}
     ];
 behaviour_info(_Other) ->
