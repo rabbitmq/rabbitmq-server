@@ -65,8 +65,9 @@ consumer_tag(Frame) ->
 
 ack_mode(Frame) ->
     case rabbit_stomp_frame:header(Frame, "ack", "auto") of
-        "auto"   -> auto;
-        "client" -> client
+        "auto"              -> {auto, false};
+        "client"            -> {client, true};
+        "client-individual" -> {client, false}
     end.
 
 message_properties(Frame = #stomp_frame{headers = Headers}) ->

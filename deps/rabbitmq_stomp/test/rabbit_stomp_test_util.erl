@@ -134,15 +134,19 @@ negotiate_version_choice_duplicates_test() ->
 
 ack_mode_auto_test() ->
     Frame = #stomp_frame{headers = [{"ack", "auto"}]},
-    auto = rabbit_stomp_util:ack_mode(Frame).
+    {auto, _} = rabbit_stomp_util:ack_mode(Frame).
 
 ack_mode_auto_default_test() ->
     Frame = #stomp_frame{headers = []},
-    auto = rabbit_stomp_util:ack_mode(Frame).
+    {auto, _} = rabbit_stomp_util:ack_mode(Frame).
 
 ack_mode_client_test() ->
     Frame = #stomp_frame{headers = [{"ack", "client"}]},
-    client = rabbit_stomp_util:ack_mode(Frame).
+    {client, true} = rabbit_stomp_util:ack_mode(Frame).
+
+ack_mode_client_individual_test() ->
+    Frame = #stomp_frame{headers = [{"ack", "client-individual"}]},
+    {client, false} = rabbit_stomp_util:ack_mode(Frame).
 
 consumer_tag_id_test() ->
     Frame = #stomp_frame{headers = [{"id", "foo"}]},

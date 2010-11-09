@@ -41,7 +41,10 @@
 -record(state, {socket, session_id, channel, connection, subscriptions,
                 version}).
 
+-record(subscription, {dest_hdr, channel, ack_mode, multi_ack}).
+
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
+-define(DEFAULT_QUEUE_PREFETCH, 1).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -156,10 +159,12 @@ handle_frame("ACK", Frame, State = #state{session_id    = SessionId,
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, SessionId, DeliveryTag}} ->
-                    {_DestHdr, SubChannel} = dict:fetch(ConsumerTag, Subs),
+                    #subscription{channel   = SubChannel,
+                                  multi_ack = IsMulti} =
+                        dict:fetch(ConsumerTag, Subs),
 
                     Method = #'basic.ack'{delivery_tag = DeliveryTag,
-                                          multiple = false},
+                                          multiple     = IsMulti},
 
                     case transactional(Frame) of
                         {yes, Transaction} ->
@@ -250,18 +255,22 @@ do_subscribe(Destination, DestHdr, Frame,
                             connection    = Connection,
                             channel       = MainChannel}) ->
 
-    Channel = case Destination of
-                  {queue, _} ->
+    Prefetch = rabbit_stomp_frame:integer_header(Frame, "prefetch-count",
+                                                 default_prefetch(Destination)),
+
+    Channel = case Prefetch of
+                  undefined ->
+                      MainChannel;
+                  _ ->
                       {ok, Channel1} = amqp_connection:open_channel(Connection),
                       amqp_channel:call(Channel1,
                                         #'basic.qos'{prefetch_size  = 0,
-                                                     prefetch_count = 1,
+                                                     prefetch_count = Prefetch,
                                                      global         = false}),
-                      Channel1;
-                  _ -> MainChannel
+                      Channel1
               end,
 
-    AckMode = rabbit_stomp_util:ack_mode(Frame),
+    {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
@@ -281,7 +290,12 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {noreply,
      State#state{subscriptions =
-                     dict:store(ConsumerTag, {DestHdr, Channel}, Subs)}}.
+                     dict:store(ConsumerTag,
+                                #subscription{dest_hdr  = DestHdr,
+                                              channel   = Channel,
+                                              ack_mode  = AckMode,
+                                              multi_ack = IsMulti},
+                                Subs)}}.
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
@@ -325,7 +339,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
-   {Destination, _SubChannel} = dict:fetch(ConsumerTag, Subs),
+   #subscription{dest_hdr = Destination} = dict:fetch(ConsumerTag, Subs),
 
    send_frame(
       "MESSAGE",
@@ -363,7 +377,7 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
                                                connection    = Connection,
                                                subscriptions = Subs}) ->
     dict:fold(
-      fun(_ConsumerTag, {_DestHdr, SubChannel}, Acc) ->
+      fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
               case SubChannel of
                   Channel -> Acc;
                   _ ->
@@ -376,6 +390,10 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
     amqp_connection:close(Connection),
     State#state{channel = none, connection = none}.
 
+default_prefetch({queue, _}) ->
+    ?DEFAULT_QUEUE_PREFETCH;
+default_prefetch(_) ->
+    undefined.
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
