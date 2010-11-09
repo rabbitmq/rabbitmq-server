@@ -39,7 +39,6 @@ start_link(Listeners) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
 init([Listeners]) ->
-    io:format("Listeners:~p~n", [Listeners]),
     ChildSpecs = [
                   {rabbit_stomp_client_sup_sup,
                    {tcp_client_sup, start_link,
