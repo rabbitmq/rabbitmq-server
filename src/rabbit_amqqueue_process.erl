@@ -378,7 +378,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                                  end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
-                    maybe_store_ch_record(NewC),
+                    true = maybe_store_ch_record(NewC),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         case ch_record_state_transition(C, NewC) of
                             ok    -> {queue:in(QEntry, ActiveConsumersTail),
@@ -397,7 +397,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     deliver_msgs_to_consumers(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
-                    maybe_store_ch_record(C#cr{is_limit_active = true}),
+                    true = maybe_store_ch_record(C#cr{is_limit_active = true}),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         move_consumers(ChPid,
                                        ActiveConsumers,
@@ -496,7 +496,7 @@ possibly_unblock(State, ChPid, Update) ->
             State;
         C ->
             NewC = Update(C),
-            maybe_store_ch_record(NewC),
+            true = maybe_store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
                 unblock -> {NewBlockedConsumers, NewActiveConsumers} =
@@ -787,8 +787,9 @@ handle_call({basic_get, ChPid, NoAck}, _From,
         {{Message, IsDelivered, AckTag, Remaining}, State2} ->
             case AckRequired of
                 true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                         maybe_store_ch_record(
-                           C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
+                         true = maybe_store_ch_record(
+                                  C#cr{acktags = sets:add_element(AckTag,
+                                                                  ChAckTags)});
                 false -> ok
             end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
@@ -806,8 +807,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
             C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
-            maybe_store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                       limiter_pid = LimiterPid}),
+            true = maybe_store_ch_record(C#cr{consumer_count = ConsumerCount +1,
+                                              limiter_pid = LimiterPid}),
             ok = case ConsumerCount of
                      0 -> rabbit_limiter:register(LimiterPid, self());
                      _ -> ok
