@@ -66,7 +66,8 @@ start_link() ->
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link,
-                    [ChannelSupSupPid, Collector, start_heartbeat_fun(SupPid)]},
+                    [ChannelSupSupPid, Collector,
+                     rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 
@@ -78,14 +79,3 @@ reader(Pid) ->
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
 
-start_heartbeat_fun(SupPid) ->
-    SendFun = fun(Sock) ->
-                      Frame = rabbit_binary_generator:build_heartbeat_frame(),
-                      catch rabbit_net:send(Sock, Frame)
-              end,
-
-    Parent = self(),
-    TimeoutFun = fun() ->
-                         Parent ! timeout
-                 end,
-    rabbit_heartbeat:start_heartbeat_fun(SupPid, SendFun, TimeoutFun).

@@ -32,7 +32,7 @@
 -module(rabbit_heartbeat).
 
 -export([start_heartbeat_sender/3, start_heartbeat_receiver/3,
-         start_heartbeat_fun/3, pause_monitor/1, resume_monitor/1]).
+         start_heartbeat_fun/1, pause_monitor/1, resume_monitor/1]).
 
 -include("rabbit.hrl").
 
@@ -45,21 +45,22 @@
 
 -type(heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}).
 
--type(send_fun() :: fun ((rabbit_net:socket()) -> any())).
--type(timeout_fun() :: fun (() -> any())).
+-type(heartbeat_callback() :: fun (() -> any())).
+
 -type(start_heartbeat_fun() ::
-        fun((rabbit_net:socket(), non_neg_integer(), non_neg_integer()) ->
+        fun((rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
+             non_neg_integer(), heartbeat_callback()) ->
                    no_return())).
 
 -spec(start_heartbeat_sender/3 ::
-        (rabbit_net:socket(), non_neg_integer(), send_fun()) ->
+        (rabbit_net:socket(), non_neg_integer(), heartbeat_callback()) ->
                                        rabbit_types:ok(pid())).
 -spec(start_heartbeat_receiver/3 ::
-        (rabbit_net:socket(), non_neg_integer(), timeout_fun()) ->
+        (rabbit_net:socket(), non_neg_integer(), heartbeat_callback()) ->
                                          rabbit_types:ok(pid())).
 
--spec(start_heartbeat_fun/3 ::
-        (pid(), send_fun(), timeout_fun()) -> start_heartbeat_fun()).
+-spec(start_heartbeat_fun/1 ::
+        (pid()) -> start_heartbeat_fun()).
 
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
@@ -76,21 +77,21 @@ start_heartbeat_sender(Sock, TimeoutSec, SendFun) ->
     heartbeater(
       {Sock, TimeoutSec * 1000 div 2, send_oct, 0,
        fun () ->
-               SendFun(Sock),
+               SendFun(),
                continue
        end}).
 
-start_heartbeat_receiver(Sock, TimeoutSec, TimeoutFun) ->
+start_heartbeat_receiver(Sock, TimeoutSec, ReceiveFun) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
     heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1, fun () ->
-                                                               TimeoutFun(),
+                                                               ReceiveFun(),
                                                                stop
                                                        end}).
 
-start_heartbeat_fun(SupPid, SendFun, ReceiveFun) ->
-    fun (Sock, SendTimeoutSec, ReceiveTimeoutSec) ->
+start_heartbeat_fun(SupPid) ->
+    fun (Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->
             {ok, Sender} =
                 start_heartbeater(SendTimeoutSec, SupPid, Sock,
                                   SendFun, heartbeat_sender,

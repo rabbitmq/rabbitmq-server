@@ -768,7 +768,19 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            Heartbeater = SHF(Sock, ClientHeartbeat, ClientHeartbeat),
+            SendFun =
+                fun() ->
+                        Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                        catch rabbit_net:send(Sock, Frame)
+                end,
+
+            Parent = self(),
+            ReceiveFun =
+                fun() ->
+                        Parent ! timeout
+                end,
+            Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
+                              ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,
