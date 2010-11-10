@@ -2,16 +2,15 @@
 <table class="list">
     <tr>
       <th>Name</th>
+      <th>Description</th>
     </tr>
     <%
       for (var i = 0; i < list.length; i++) {
         var item = list[i];
     %>
        <tr<%= alt_rows(i)%>>
-         <td>
-           <abbr title="<%= item.description %>">
-             <%= item.name %></abbr>
-         </td>
+         <td><%= item.name %></td>
+         <td><%= item.description %></td>
        </tr>
     <% } %>
 </table>
