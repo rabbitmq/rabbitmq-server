@@ -891,7 +891,7 @@ cert_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> '';
         {error, no_peercert} -> '';
-        {ok, Cert}           -> F(Cert)
+        {ok, Cert}           -> list_to_binary(F(Cert))
     end.
 
 %%--------------------------------------------------------------------------
