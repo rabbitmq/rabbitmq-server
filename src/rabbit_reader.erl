@@ -698,7 +698,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
       server_properties = server_properties(),
-      mechanisms = rabbit_access_control:auth_mechanisms(Sock),
+      mechanisms = auth_mechanisms_binary(Sock),
       locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
     {State#v1{connection = Connection#connection{
@@ -748,8 +748,9 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response,
                                       client_properties = ClientProperties},
                State0 = #v1{connection_state = starting,
-                            connection = Connection}) ->
-    AuthMechanism = auth_mechanism_to_module(Mechanism),
+                            connection       = Connection,
+                            sock             = Sock}) ->
+    AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     State = State0#v1{auth_mechanism   = AuthMechanism,
                       auth_state       = AuthMechanism:init(),
                       connection_state = securing,
@@ -831,21 +832,32 @@ handle_method0(_Method, #v1{connection_state = S}) ->
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
-auth_mechanism_to_module(TypeBin) ->
+auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown authentication mechanism '~s'",
               [TypeBin]);
         T ->
-            case rabbit_registry:lookup_module(auth_mechanism, T) of
-                {error, not_found} -> rabbit_misc:protocol_error(
-                                        command_invalid,
-                                        "invalid authentication mechanism '~s'",
-                                        [T]);
-                {ok, Module}       -> Module
+            case {lists:member(T, auth_mechanisms(Sock)),
+                  rabbit_registry:lookup_module(auth_mechanism, T)} of
+                {true, {ok, Module}} ->
+                    Module;
+                _ ->
+                    rabbit_misc:protocol_error(
+                      command_invalid,
+                      "invalid authentication mechanism '~s'", [T])
             end
     end.
+
+auth_mechanisms(Sock) ->
+    [Name || {Name, Mechanism} <- rabbit_registry:lookup_all(auth_mechanism),
+             Mechanism:should_offer(Sock)].
+
+auth_mechanisms_binary(Sock) ->
+    list_to_binary(
+            string:join(
+              [atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
 
 auth_phase(Response,
            State = #v1{auth_mechanism = AuthMechanism,

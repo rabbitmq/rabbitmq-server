@@ -33,7 +33,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([auth_mechanisms/1, check_user_pass_login/2, make_salt/0,
+-export([check_user_pass_login/2, make_salt/0,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
@@ -54,7 +54,6 @@
 -type(password() :: binary()).
 -type(password_hash() :: binary()).
 -type(regexp() :: binary()).
--spec(auth_mechanisms/1 :: (rabbit_networking:socket()) -> binary()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
         -> {'ok', rabbit_types:user()} | 'refused').
@@ -94,13 +93,6 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
-auth_mechanisms(Sock) ->
-    Mechanisms =
-        [atom_to_list(Name)
-         || {Name, Mechanism} <- rabbit_registry:lookup_all(auth_mechanism),
-        Mechanism:should_offer(Sock)],
-    list_to_binary(string:join(Mechanisms, " ")).
 
 check_user_pass_login(Username, Pass) ->
     case lookup_user(Username) of
