@@ -34,9 +34,11 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, should_offer/1, init/0, handle_response/2]).
+-export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include("rabbit_auth_mechanism_spec.hrl").
+
+-include_lib("public_key/include/public_key.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "auth mechanism external"},
@@ -45,27 +47,42 @@
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
-%% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
-%% apparently, by OpenAMQ.
+-record(state, {username = undefined}).
+
+%% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
+%% established by means external to the mechanism". We define that to
+%% mean the peer certificate's subject's CN.
 
 description() ->
     [{name, <<"EXTERNAL">>},
      {description, <<"SASL EXTERNAL authentication mechanism">>}].
 
+%% TODO: safety check, don't offer unless verify_peer set
 should_offer(Sock) ->
-    Cert = case rabbit_net:peercert(Sock) of
-        nossl                -> 'not_ssl';
-        {error, no_peercert} -> 'no_peer_cert';
-        {ok, C}           -> C
-    end,
+    case peer_subject(Sock) of
+        none -> false;
+        _    -> true
+    end.
 
-    io:format("Sock: ~p~n", [{Sock, Cert}]),
-    true.
+init(Sock) ->
+    {ok, C} = rabbit_net:peercert(Sock),
+    CN = case rabbit_ssl:peer_cert_subject_item(C, ?'id-at-commonName') of
+             not_found -> not_found;
+             CN0       -> list_to_binary(CN0)
+         end,
+    #state{username = CN}.
 
-init() ->
-    [].
+handle_response(_Response, #state{username = Username}) ->
+    case Username of
+        not_found -> {refused, Username};
+        _         -> rabbit_access_control:lookup_user(Username)
+    end.
 
-handle_response(Response, _State) ->
-    [User, Pass] = [list_to_binary(T) ||
-                       T <- string:tokens(binary_to_list(Response), [0])],
-    rabbit_access_control:check_user_pass_login(User, Pass).
+%%--------------------------------------------------------------------------
+
+peer_subject(Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl                -> none;
+        {error, no_peercert} -> none;
+        {ok, C}              -> rabbit_ssl:peer_cert_subject(C)
+    end.

@@ -752,7 +752,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                             sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     State = State0#v1{auth_mechanism   = AuthMechanism,
-                      auth_state       = AuthMechanism:init(),
+                      auth_state       = AuthMechanism:init(Sock),
                       connection_state = securing,
                       connection       =
                           Connection#connection{

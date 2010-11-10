@@ -34,7 +34,7 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, should_offer/1, init/0, handle_response/2]).
+-export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include("rabbit_auth_mechanism_spec.hrl").
 
@@ -67,7 +67,7 @@ description() ->
 should_offer(_Sock) ->
     true.
 
-init() ->
+init(_Sock) ->
     #state{}.
 
 handle_response(Username, State = #state{username = undefined}) ->

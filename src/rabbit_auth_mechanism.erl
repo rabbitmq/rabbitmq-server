@@ -44,7 +44,7 @@ behaviour_info(callbacks) ->
 
      %% Called before authentication starts. Should create a state
      %% object to be passed through all the stages of authentication.
-     {init, 0},
+     {init, 1},
 
      %% Handle a stage of authentication. Possible responses:
      %% {ok, User}
