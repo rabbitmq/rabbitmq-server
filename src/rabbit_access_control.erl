@@ -33,7 +33,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([check_user_pass_login/2, make_salt/0,
+-export([user_pass_login/2, check_user_pass_login/2, make_salt/0,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
@@ -54,6 +54,9 @@
 -type(password() :: binary()).
 -type(password_hash() :: binary()).
 -type(regexp() :: binary()).
+-spec(user_pass_login/2 ::
+        (username(), password())
+        -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
         -> {'ok', rabbit_types:user()} | 'refused').
@@ -93,6 +96,16 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+user_pass_login(User, Pass) ->
+    ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
+    case check_user_pass_login(User, Pass) of
+        {refused, _} ->
+            rabbit_misc:protocol_error(
+              access_refused, "login refused for user '~s'", [User]);
+        {ok, U} ->
+            U
+    end.
 
 check_user_pass_login(Username, Pass) ->
     case lookup_user(Username) of
