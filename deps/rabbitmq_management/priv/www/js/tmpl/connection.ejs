@@ -19,6 +19,7 @@
  <th>Virtual host</th>
  <th>Username</th>
  <th>Protocol</th>
+ <th>Authentication</th>
  <th>State</th>
  <th>Timeout</th>
 </tr>
@@ -40,6 +41,7 @@
  <td><%= link_vhost(connection.vhost) %></td>
  <td><%= link_user(connection.user) %></td>
  <td><%= connection.protocol %></td>
+ <td><%= connection.auth_mechanism %></td>
  <td><%= connection.state %></td>
  <td><%= connection.timeout %></td>
 </tr>
