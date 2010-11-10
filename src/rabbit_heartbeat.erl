@@ -41,11 +41,15 @@
 -ifdef(use_specs).
 
 -export_type([heartbeaters/0]).
+-export_type([start_heartbeat_fun/0]).
 
--type(heartbeaters() :: rabbit_types:maybe({pid(), pid()})).
+-type(heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}).
 
 -type(send_fun() :: fun ((rabbit_net:socket()) -> any())).
 -type(timeout_fun() :: fun (() -> any())).
+-type(start_heartbeat_fun() ::
+        fun((rabbit_net:socket(), non_neg_integer(), non_neg_integer()) ->
+                   no_return())).
 
 -spec(start_heartbeat_sender/3 ::
         (rabbit_net:socket(), non_neg_integer(), send_fun()) ->
@@ -55,9 +59,7 @@
                                          rabbit_types:ok(pid())).
 
 -spec(start_heartbeat_fun/3 ::
-        (pid(), send_fun(), timeout_fun()) ->
-                                    fun((rabbit_net:socket(), non_neg_integer())
-                                        -> heartbeaters())).
+        (pid(), send_fun(), timeout_fun()) -> start_heartbeat_fun()).
 
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
@@ -87,38 +89,40 @@ start_heartbeat_receiver(Sock, TimeoutSec, TimeoutFun) ->
                                                                stop
                                                        end}).
 
-start_heartbeat_fun(SupPid, SendFun, TimeoutFun) ->
-    fun (_Sock, 0) ->
-            none;
-        (Sock, TimeoutSec) ->
+start_heartbeat_fun(SupPid, SendFun, ReceiveFun) ->
+    fun (Sock, SendTimeoutSec, ReceiveTimeoutSec) ->
             {ok, Sender} =
-                supervisor2:start_child(
-                  SupPid, {heartbeat_sender,
-                           {rabbit_heartbeat, start_heartbeat_sender,
-                            [Sock, TimeoutSec, SendFun]},
-                           transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                start_heartbeater(SendTimeoutSec, SupPid, Sock,
+                                  SendFun, heartbeat_sender,
+                                  start_heartbeat_sender),
             {ok, Receiver} =
-                supervisor2:start_child(
-                  SupPid, {heartbeat_receiver,
-                           {rabbit_heartbeat, start_heartbeat_receiver,
-                            [Sock, TimeoutSec, TimeoutFun]},
-                           transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
+                start_heartbeater(ReceiveTimeoutSec, SupPid, Sock,
+                                  ReceiveFun, heartbeat_receiver,
+                                  start_heartbeat_receiver),
             {Sender, Receiver}
     end.
 
-pause_monitor(none) ->
+pause_monitor({_Sender, none}) ->
     ok;
 pause_monitor({_Sender, Receiver}) ->
     Receiver ! pause,
     ok.
 
-resume_monitor(none) ->
+resume_monitor({_Sender, none}) ->
     ok;
 resume_monitor({_Sender, Receiver}) ->
     Receiver ! resume,
     ok.
 
 %%----------------------------------------------------------------------------
+start_heartbeater(0, _SupPid, _Sock, _TimeoutFun, _Name, _Callback) ->
+    {ok, none};
+start_heartbeater(TimeoutSec, SupPid, Sock, TimeoutFun, Name, Callback) ->
+    supervisor2:start_child(
+      SupPid, {Name,
+               {rabbit_heartbeat, Callback,
+                [Sock, TimeoutSec, TimeoutFun]},
+               transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}).
 
 heartbeater(Params) ->
     {ok, proc_lib:spawn_link(fun () -> heartbeater(Params, {0, 0}) end)}.
