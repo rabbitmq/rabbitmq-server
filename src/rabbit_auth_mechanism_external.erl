@@ -75,7 +75,10 @@ init(Sock) ->
 handle_response(_Response, #state{username = Username}) ->
     case Username of
         not_found -> {refused, Username};
-        _         -> rabbit_access_control:lookup_user(Username)
+        _         -> case rabbit_access_control:lookup_user(Username) of
+                         {ok, User}         -> {ok, User};
+                         {error, not_found} -> {refused, Username}
+                     end
     end.
 
 %%--------------------------------------------------------------------------
