@@ -315,22 +315,22 @@ ch_record(ChPid) ->
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C).
 
-%% If the channel record we're considering submitting to the process
-%% dictionary has no consumers, has no pending acks, and doesn't have
-%% a transaction, we should delete its record rather than storing it.
-%% If the ch record was stored, this function returns true; otherwise,
-%% the ch record is erased and this function returns false.
 maybe_store_ch_record(C = #cr{consumer_count = ConsumerCount,
                               limiter_pid    = LimiterPid,
                               acktags        = ChAckTags,
                               txn            = Txn}) ->
     case {sets:size(ChAckTags), ConsumerCount, Txn} of
-        {0, 0, none} -> demonitor_and_erase_ch_record(C),
+        {0, 0, none} -> erase_ch_record(C),
                         ok = rabbit_limiter:unregister(LimiterPid, self()),
                         false;
         _            -> store_ch_record(C),
                         true
     end.
+
+erase_ch_record(#cr{ch_pid      = ChPid,
+                    monitor_ref = MonitorRef}) ->
+    erlang:demonitor(MonitorRef),
+    erase({ch, ChPid}).
 
 all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
@@ -496,7 +496,7 @@ possibly_unblock(State, ChPid, Update) ->
             State;
         C ->
             NewC = Update(C),
-            true = maybe_store_ch_record(NewC),
+            maybe_store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
                 unblock -> {NewBlockedConsumers, NewActiveConsumers} =
@@ -518,7 +518,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
         not_found ->
             {ok, State};
         C = #cr{ch_pid = ChPid, txn = Txn, acktags = ChAckTags} ->
-            demonitor_and_erase_ch_record(C),
+            erase_ch_record(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
@@ -843,8 +843,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount} ->
-            C1 = C#cr{consumer_count = ConsumerCount-1},
-            maybe_store_ch_record(C1),
+            maybe_store_ch_record(C#cr{consumer_count = ConsumerCount-1}),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -1049,8 +1048,3 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS2},
     {hibernate, stop_rate_timer(State1)}.
-
-demonitor_and_erase_ch_record(#cr{ch_pid      = ChPid,
-                                  monitor_ref = MonitorRef}) ->
-    erlang:demonitor(MonitorRef),
-    erase({ch, ChPid}).
