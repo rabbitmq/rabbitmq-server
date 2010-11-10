@@ -122,16 +122,15 @@ heads(G) ->
 
 apply_upgrades(Upgrades) ->
     LockFile = lock_filename(),
-    case file:read_file_info(LockFile) of
-        {error, enoent} ->
-            info("Upgrades: ~w to apply~n", [length(Upgrades)]),
-            {ok, Lock} = file:open(LockFile, [write]),
+    case file:open(LockFile, [write, exclusive]) of
+        {ok, Lock} ->
             ok = file:close(Lock),
+            info("Upgrades: ~w to apply~n", [length(Upgrades)]),
             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
             info("Upgrades: All applied~n", []),
             ok = write_version(),
             ok = file:delete(LockFile);
-        {ok, _FI} ->
+        {error, eexist} ->
             exit(previous_upgrade_failed);
         {error, _} = Error ->
             exit(Error)
