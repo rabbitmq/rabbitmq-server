@@ -59,25 +59,17 @@ start_link_network(Sock, Connection, ChMgr) ->
            transient, ?MAX_WAIT, worker, [amqp_main_reader]}),
     {ok, Sup, {MainReader, Framing, Writer}}.
 
-start_heartbeat_fun(Sup) ->
-    fun (_Sock, 0) ->
-            none;
-        (Sock, Timeout) ->
-            Connection = self(),
-            {ok, _} = supervisor2:start_child(
-                        Sup,
-                        {heartbeat_sender, {rabbit_heartbeat,
-                                            start_heartbeat_sender,
-                                            [Connection, Sock, Timeout]},
-                         transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-            {ok, _} = supervisor2:start_child(
-                        Sup,
-                        {heartbeat_receiver, {rabbit_heartbeat,
-                                              start_heartbeat_receiver,
-                                              [Connection, Sock, Timeout]},
-                         transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-            ok
-    end.
+start_heartbeat_fun(SupPid) ->
+    SendFun = fun(Sock) ->
+                      Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                      catch rabbit_net:send(Sock, Frame)
+              end,
+
+    Connection = self(),
+    TimeoutFun = fun() ->
+                         Connection ! timeout
+                 end,
+    rabbit_heartbeat:start_heartbeat_fun(SupPid, SendFun, TimeoutFun).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
