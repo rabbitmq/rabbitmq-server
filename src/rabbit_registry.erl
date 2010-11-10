@@ -52,7 +52,7 @@
         (binary()) -> atom() | rabbit_types:error('not_found')).
 -spec(lookup_module/2 ::
         (atom(), atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
--spec(lookup_all/1 :: (atom()) -> [atom()]).
+-spec(lookup_all/1 :: (atom()) -> [{atom(), atom()}]).
 -spec(remove_disabled/0 :: () -> 'ok').
 
 -endif.

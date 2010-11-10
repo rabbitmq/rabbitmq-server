@@ -49,7 +49,8 @@
 -spec(peer_cert_issuer/1        :: (certificate()) -> string()).
 -spec(peer_cert_subject/1       :: (certificate()) -> string()).
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
--spec(peer_cert_subject_item/2  :: (certificate(), atom()) -> string()).
+-spec(peer_cert_subject_item/2  ::
+        (certificate(), tuple()) -> string() | 'not_found').
 
 -endif.
 
