@@ -125,7 +125,7 @@ apply_upgrades(Upgrades) ->
     case file:read_file_info(LockFile) of
         {error, enoent} ->
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
-            {ok, Lock} = file:open(LockFile, write),
+            {ok, Lock} = file:open(LockFile, [write]),
             ok = file:close(Lock),
             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
             info("Upgrades: All applied~n", []),
