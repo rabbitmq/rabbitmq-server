@@ -350,6 +350,17 @@ check_write_permitted(Resource, #ch{username = Username}) ->
 check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
+check_internal_exchange(#exchange{name     = Name,
+                                  internal = IsInternal}) ->
+    case IsInternal of
+        true  ->
+            rabbit_misc:protocol_error(access_refused,
+                                       "cannot publish to internal exchange: "
+                                          ++ "~p~n",
+                                       [Name]);
+        false -> ok
+    end.
+
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
@@ -444,6 +455,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
+    check_internal_exchange(Exchange),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
@@ -689,7 +701,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   passive = false,
                                   durable = Durable,
                                   auto_delete = AutoDelete,
-                                  internal = false,
+                                  internal = Internal,
                                   nowait = NoWait,
                                   arguments = Args},
               _, State = #ch{virtual_host = VHostPath}) ->
@@ -712,10 +724,11 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                         CheckedType,
                                         Durable,
                                         AutoDelete,
+                                        Internal,
                                         Args)
         end,
     ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
-                                            AutoDelete, Args),
+                                            AutoDelete, Internal, Args),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
