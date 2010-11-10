@@ -2,18 +2,19 @@
 %% -*- erlang -*-
 -mode(compile).
 
-main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
-    ErlDirContents = filelib:wildcard("*.erl", ErlDir),
-    ErlFiles = [filename:join(ErlDir, FileName) || FileName <- ErlDirContents],
+main([TargetFile, EbinDir | ErlsAndHrls ]) ->
+    ErlFiles = lists:filter(fun (Path) -> lists:suffix(".erl", Path) end,
+                            ErlsAndHrls),
     Modules = sets:from_list(
                 [list_to_atom(filename:basename(FileName, ".erl")) ||
-                    FileName <- ErlDirContents]),
-    Headers = sets:from_list(
-                [filename:join(IncludeDir, FileName) ||
-                    FileName <- filelib:wildcard("*.hrl", IncludeDir)]),
+                    FileName <- ErlFiles]),
+    HrlFiles = lists:filter(fun (Path) -> lists:suffix(".hrl", Path) end,
+                            ErlsAndHrls),
+    IncludeDirs = lists:usort([filename:dirname(Path) || Path <- HrlFiles]),
+    Headers = sets:from_list(HrlFiles),
     Deps = lists:foldl(
              fun (Path, Deps1) ->
-                     dict:store(Path, detect_deps(IncludeDir, EbinDir,
+                     dict:store(Path, detect_deps(IncludeDirs, EbinDir,
                                                   Modules, Headers, Path),
                                 Deps1)
              end, dict:new(), ErlFiles),
@@ -33,8 +34,8 @@ main([IncludeDir, ErlDir, EbinDir, TargetFile]) ->
     ok = file:sync(Hdl),
     ok = file:close(Hdl).
 
-detect_deps(IncludeDir, EbinDir, Modules, Headers, Path) ->
-    {ok, Forms} = epp:parse_file(Path, [IncludeDir], [{use_specs, true}]),
+detect_deps(IncludeDirs, EbinDir, Modules, Headers, Path) ->
+    {ok, Forms} = epp:parse_file(Path, IncludeDirs, [{use_specs, true}]),
     lists:foldl(
       fun ({attribute, _LineNumber, Attribute, Behaviour}, Deps)
           when Attribute =:= behaviour orelse Attribute =:= behavior ->
