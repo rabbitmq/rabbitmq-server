@@ -43,14 +43,22 @@
 -export_type([heartbeaters/0]).
 
 -type(heartbeaters() :: rabbit_types:maybe({pid(), pid()})).
--type(callback_fun() :: fun (() -> any())).
+
+-type(send_fun() :: fun ((rabbit_net:socket()) -> any())).
+-type(timeout_fun() :: fun (() -> any())).
 
 -spec(start_heartbeat_sender/3 ::
-        (rabbit_net:socket(), non_neg_integer(), callback_fun()) ->
+        (rabbit_net:socket(), non_neg_integer(), send_fun()) ->
                                        rabbit_types:ok(pid())).
 -spec(start_heartbeat_receiver/3 ::
-        (rabbit_net:socket(), non_neg_integer(), callback_fun()) ->
+        (rabbit_net:socket(), non_neg_integer(), timeout_fun()) ->
                                          rabbit_types:ok(pid())).
+
+-spec(start_heartbeat_fun/3 ::
+        (pid(), send_fun(), timeout_fun()) ->
+                                    fun((rabbit_net:socket(), non_neg_integer())
+                                        -> heartbeaters())).
+
 
 -spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
 -spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
