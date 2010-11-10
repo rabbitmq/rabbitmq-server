@@ -34,7 +34,8 @@
 -define(REFRESH_RATIO, 5000).
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
                mem_used, mem_limit, proc_used, proc_total, statistics_level,
-               erlang_version, uptime, run_queue, processors]).
+               erlang_version, uptime, run_queue, processors, exchange_types,
+               auth_mechanisms]).
 
 %%--------------------------------------------------------------------
 
@@ -148,7 +149,14 @@ i(uptime, _State) ->
     Total;
 i(statistics_level, _State) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    StatsLevel.
+    StatsLevel;
+i(exchange_types, _State) ->
+    types_to_descriptions(rabbit_registry:lookup_all(exchange));
+i(auth_mechanisms, _State) ->
+    types_to_descriptions(rabbit_registry:lookup_all(auth_mechanism)).
+
+types_to_descriptions(Types) ->
+    [Module:description() || {_, Module} <- Types].
 
 %%--------------------------------------------------------------------
 
