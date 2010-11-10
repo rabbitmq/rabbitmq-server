@@ -1,4 +1,5 @@
 %%   The contents of this file are subject to the Mozilla Public License
+
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
 %%   http://www.mozilla.org/MPL/
@@ -35,7 +36,8 @@
 
 -ifdef(use_specs).
 
--export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
+-export_type([txn/0, maybe/1, info/0, infos/0, info_key/0, info_keys/0,
+              message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
@@ -95,7 +97,10 @@
 -type(txn() :: rabbit_guid:guid()).
 
 -type(info_key() :: atom()).
+-type(info_keys() :: [info_key()]).
+
 -type(info() :: {info_key(), any()}).
+-type(infos() :: [info()]).
 
 -type(amqp_error() ::
       #amqp_error{name        :: rabbit_framing:amqp_exception(),
