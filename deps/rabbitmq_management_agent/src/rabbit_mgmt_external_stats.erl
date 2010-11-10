@@ -142,7 +142,7 @@ i(proc_used,      _State) -> erlang:system_info(process_count);
 i(proc_total,     _State) -> erlang:system_info(process_limit);
 i(erlang_version, _State) -> list_to_binary(erlang:system_info(otp_release));
 i(run_queue,      _State) -> erlang:statistics(run_queue);
-i(processors,     _State) -> erlang:system_info(logical_processors_available);
+i(processors,     _State) -> erlang:system_info(logical_processors);
 i(uptime, _State) ->
     {Total, _} = erlang:statistics(wall_clock),
     Total;
