@@ -68,7 +68,7 @@
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
                               peer_cert_subject, peer_cert_issuer,
-                              peer_cert_validity,
+                              peer_cert_validity, auth_mechanism,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
@@ -907,6 +907,10 @@ i(protocol, #v1{connection = #connection{protocol = none}}) ->
     none;
 i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
     Protocol:version();
+i(auth_mechanism, #v1{auth_mechanism = none}) ->
+    none;
+i(auth_mechanism, #v1{auth_mechanism = Mechanism}) ->
+    proplists:get_value(name, Mechanism:description());
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
     Username;
 i(user, #v1{connection = #connection{user = none}}) ->
