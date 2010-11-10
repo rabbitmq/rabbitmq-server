@@ -165,7 +165,16 @@ network_handshake(AmqpParams, State) ->
                                                frame_max = FrameMax}}.
 
 start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
-    SHF(Sock, Heartbeat).
+    SendFun = fun() ->
+                      Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                      catch rabbit_net:send(Sock, Frame)
+              end,
+
+    Connection = self(),
+    ReceiveFun = fun() ->
+                         Connection ! timeout
+                 end,
+    SHF(Sock, Heartbeat, SendFun, Heartbeat, ReceiveFun).
 
 check_version(#'connection.start'{version_major = ?PROTOCOL_VERSION_MAJOR,
                                   version_minor = ?PROTOCOL_VERSION_MINOR}) ->

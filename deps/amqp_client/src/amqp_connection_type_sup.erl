@@ -60,16 +60,7 @@ start_link_network(Sock, Connection, ChMgr) ->
     {ok, Sup, {MainReader, Framing, Writer}}.
 
 start_heartbeat_fun(SupPid) ->
-    SendFun = fun(Sock) ->
-                      Frame = rabbit_binary_generator:build_heartbeat_frame(),
-                      catch rabbit_net:send(Sock, Frame)
-              end,
-
-    Connection = self(),
-    TimeoutFun = fun() ->
-                         Connection ! timeout
-                 end,
-    rabbit_heartbeat:start_heartbeat_fun(SupPid, SendFun, TimeoutFun).
+    rabbit_heartbeat:start_heartbeat_fun(SupPid).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
