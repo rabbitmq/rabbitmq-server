@@ -1,0 +1,20 @@
+<% if (node.running) { %>
+<table class="list">
+    <tr>
+      <th>Name</th>
+    </tr>
+    <%
+      for (var i = 0; i < list.length; i++) {
+        var item = list[i];
+    %>
+       <tr<%= alt_rows(i)%>>
+         <td>
+           <abbr title="<%= item.description %>">
+             <%= item.name %></abbr>
+         </td>
+       </tr>
+    <% } %>
+</table>
+<% } else {%>
+<p>...node not running...</p>
+<% } %>
