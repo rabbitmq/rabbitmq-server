@@ -126,7 +126,8 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 	    touch $@; \
 	else \
 	    dialyzer --output_plt $@ --build_plt \
-	      --apps kernel stdlib sasl mnesia os_mon ssl eunit tools; \
+		--apps erts kernel stdlib compiler sasl os_mon mnesia tools \
+		  public_key crypto ssl; \
 	fi
 
 clean:
