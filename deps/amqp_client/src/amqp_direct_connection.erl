@@ -67,8 +67,10 @@ connect(AmqpParams, SIF, _ChMgr, State) ->
     try do_connect(AmqpParams, SIF, State) of
         Return -> Return
     catch
-        exit:#amqp_error{name = access_refused} -> {error, auth_failure};
-        _:Reason                                -> {error, Reason}
+        exit:#amqp_error{name = access_refused} ->
+            {error, auth_failure};
+        _:Reason ->
+            {error, {Reason, erlang:get_stacktrace()}}
     end.
 
 do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
