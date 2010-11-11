@@ -162,11 +162,7 @@
 
 -ifdef(use_specs).
 
--type(start_heartbeat_fun() ::
-        fun ((rabbit_net:socket(), non_neg_integer()) ->
-                    rabbit_heartbeat:heartbeaters())).
-
--spec(start_link/3 :: (pid(), pid(), start_heartbeat_fun()) ->
+-spec(start_link/3 :: (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun()) ->
                            rabbit_types:ok(pid())).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
@@ -177,9 +173,10 @@
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/4 :: (pid(), pid(), pid(), start_heartbeat_fun()) -> no_return()).
+-spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
+                -> no_return()).
 -spec(start_connection/7 ::
-        (pid(), pid(), pid(), start_heartbeat_fun(), any(),
+        (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun(), any(),
          rabbit_net:socket(),
          fun ((rabbit_net:socket()) ->
                      rabbit_types:ok_or_error2(
@@ -771,7 +768,19 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            Heartbeater = SHF(Sock, ClientHeartbeat),
+            SendFun =
+                fun() ->
+                        Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                        catch rabbit_net:send(Sock, Frame)
+                end,
+
+            Parent = self(),
+            ReceiveFun =
+                fun() ->
+                        Parent ! timeout
+                end,
+            Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
+                              ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,
