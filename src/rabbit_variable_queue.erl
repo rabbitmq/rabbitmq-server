@@ -258,7 +258,6 @@
           persistent_count,
 
           target_ram_msg_count,
-          target_ram_ack_count,
           ram_msg_count,
           ram_msg_count_prev,
           ram_ack_count_prev,
@@ -351,7 +350,6 @@
 
              transient_threshold  :: non_neg_integer(),
              target_ram_msg_count :: non_neg_integer() | 'infinity',
-             target_ram_ack_count :: non_neg_integer() | 'infinity',
              ram_msg_count        :: non_neg_integer(),
              ram_msg_count_prev   :: non_neg_integer(),
              ram_index_count      :: non_neg_integer(),
