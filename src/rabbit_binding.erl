@@ -60,7 +60,7 @@
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
 
--opaque(deletions() :: dict:dictionary()).
+-opaque(deletions() :: dict()).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
@@ -94,9 +94,9 @@
 -spec(process_deletions/1 :: (deletions()) -> 'ok').
 -spec(combine_deletions/2 :: (deletions(), deletions()) -> deletions()).
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
-                         {'undefined' | rabbit_types:binding_source(),
+                         {'undefined' | rabbit_types:exchange(),
                           'deleted' | 'not_deleted',
-                          deletions()}, deletions()) -> deletions()).
+                          bindings()}, deletions()) -> deletions()).
 -spec(new_deletions/0 :: () -> deletions()).
 
 -endif.

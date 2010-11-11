@@ -163,7 +163,7 @@
 -ifdef(use_specs).
 
 -type(start_heartbeat_fun() ::
-        fun ((rabbit_networking:socket(), non_neg_integer()) ->
+        fun ((rabbit_net:socket(), non_neg_integer()) ->
                     rabbit_heartbeat:heartbeaters())).
 
 -spec(start_link/3 :: (pid(), pid(), start_heartbeat_fun()) ->
@@ -180,10 +180,10 @@
 -spec(init/4 :: (pid(), pid(), pid(), start_heartbeat_fun()) -> no_return()).
 -spec(start_connection/7 ::
         (pid(), pid(), pid(), start_heartbeat_fun(), any(),
-         rabbit_networking:socket(),
-         fun ((rabbit_networking:socket()) ->
+         rabbit_net:socket(),
+         fun ((rabbit_net:socket()) ->
                      rabbit_types:ok_or_error2(
-                       rabbit_networking:socket(), any()))) -> no_return()).
+                       rabbit_net:socket(), any()))) -> no_return()).
 
 -endif.
 
