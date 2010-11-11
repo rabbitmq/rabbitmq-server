@@ -32,7 +32,7 @@
 
 -ifdef(use_specs).
 
--spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available' | no_return()).
 -spec(read_version/0 ::
         () -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_version/0 :: () -> 'ok').
