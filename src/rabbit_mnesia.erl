@@ -250,12 +250,12 @@ ensure_mnesia_dir() ->
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
         yes -> ok;
-        no -> throw({error, mnesia_not_running})
+        no  -> throw({error, mnesia_not_running})
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
-        no -> ok;
+        no  -> ok;
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
@@ -430,19 +430,15 @@ schema_ok_or_move() ->
             ok = create_schema()
     end.
 
-version_ok_or_exit(V) ->
-    DesiredVersion = rabbit_upgrade:desired_version(),
-    case V of
-        {ok, DiscVersion} ->
-            case DesiredVersion of
-                DiscVersion ->
-                    ok;
-                _ ->
-                    exit({schema_mismatch, DesiredVersion, DiscVersion})
-            end;
-        {error, _} ->
-            ok = rabbit_upgrade:write_version()
-    end.
+version_ok_or_exit({ok, DiscVersion}) ->
+    case rabbit_upgrade:desired_version() of
+        DiscVersion ->
+            ok;
+        DesiredVersion ->
+            exit({schema_mismatch, DesiredVersion, DiscVersion})
+    end;
+version_ok_or_exit({error, _}) ->
+    ok = rabbit_upgrade:write_version().
 
 schema_ok_or_exit() ->
     case check_schema_integrity() of
