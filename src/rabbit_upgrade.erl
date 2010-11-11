@@ -152,8 +152,5 @@ lock_filename() ->
 info(Msg, Args) ->
     error_logger:info_msg(Msg, Args).
 
-warn(Msg, Args) ->
-    error_logger:warning_msg(Msg, Args).
-
 dir() ->
     rabbit_mnesia:dir().
