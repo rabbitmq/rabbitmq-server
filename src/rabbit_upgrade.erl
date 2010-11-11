@@ -38,9 +38,6 @@
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> [atom()]).
 
-%% only here to shut dialyzer up
--spec(apply_upgrades/1 :: ([{atom(), atom()}]) -> 'ok' | no_return()).
-
 -endif.
 
 %% -------------------------------------------------------------------
