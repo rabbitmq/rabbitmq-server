@@ -64,6 +64,7 @@
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
+-export([all_module_attributes/1, build_acyclic_graph/4]).
 -export([now_ms/0]).
 
 -import(mnesia).
@@ -183,6 +184,7 @@
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
+-spec(all_module_attributes/1 :: (atom()) -> dict:dictionary()).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
@@ -725,3 +727,45 @@ get_flag(_, []) ->
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.
+
+module_attributes(Module) ->
+    case catch Module:module_info(attributes) of
+        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+                      [Module]),
+            [];
+        {'EXIT', Reason} ->
+            exit(Reason);
+        V ->
+            V
+    end.
+
+all_module_attributes(Name) ->
+    Modules =
+        lists:usort(
+          lists:append(
+            [Modules || {App, _, _}   <- application:loaded_applications(),
+                        {ok, Modules} <- [application:get_key(App, modules)]])),
+    lists:foldl(
+      fun (Module, Acc) ->
+              case lists:append([Atts || {N, Atts} <- module_attributes(Module),
+                                         N =:= Name]) of
+                  []   -> Acc;
+                  Atts -> [{Module, Atts} | Acc]
+              end
+      end, [], Modules).
+
+
+build_acyclic_graph(VertexFun, EdgeFun, ErrorFun, Graph) ->
+    G = digraph:new([acyclic]),
+    [ case digraph:vertex(G, Vertex) of
+          false -> digraph:add_vertex(G, Vertex, Label);
+          _     -> ErrorFun({vertex, duplicate, Vertex})
+      end || {Module, Atts} <- Graph,
+             {Vertex, Label} <- VertexFun(Module, Atts) ],
+    [ case digraph:add_edge(G, From, To) of
+          {error, E} -> ErrorFun({edge, E, From, To});
+          _          -> ok
+      end || {Module, Atts} <- Graph,
+             {From, To} <- EdgeFun(Module, Atts) ],
+    G.
