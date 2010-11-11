@@ -1437,8 +1437,9 @@ limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
         false ->
             {SeqId, Guid, RAI1} = gb_trees:take_largest(RAI),
             MsgStatus = #msg_status {
-              guid      = Guid, %% ASSERTION
-              msg_props = MsgProps } = dict:fetch(SeqId, PA),
+              guid          = Guid, %% ASSERTION
+              is_persistent = false, %% ASSERTION
+              msg_props     = MsgProps } = dict:fetch(SeqId, PA),
             {_, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
             limit_ram_acks(Quota - 1,
                            State1 #vqstate {
