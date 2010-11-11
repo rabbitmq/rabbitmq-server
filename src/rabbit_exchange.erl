@@ -176,7 +176,7 @@ assert_equivalence(X = #exchange{ durable     = Durable,
 assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
                    _Args) ->
     rabbit_misc:protocol_error(
-      not_allowed,
+      precondition_failed,
       "cannot redeclare ~s with different type, durable or autodelete value",
       [rabbit_misc:rs(Name)]).
 
