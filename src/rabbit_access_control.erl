@@ -37,7 +37,7 @@
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
--export([change_password_hash/2]).
+-export([change_password_hash/2, hash_password/1]).
 -export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, clear_permissions/2,
          list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
@@ -73,6 +73,7 @@
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
 -spec(change_password_hash/2 :: (username(), password_hash()) -> 'ok').
+-spec(hash_password/1 :: (password()) -> password_hash()).
 -spec(set_admin/1 :: (username()) -> 'ok').
 -spec(clear_admin/1 :: (username()) -> 'ok').
 -spec(list_users/0 :: () -> [{username(), boolean()}]).

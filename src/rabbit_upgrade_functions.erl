@@ -24,28 +24,60 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({remove_user_scope, []}).
+-rabbit_upgrade({remove_user_scope,  []}).
+-rabbit_upgrade({hash_passwords,     []}).
+-rabbit_upgrade({add_ip_to_listener, []}).
 
 %% -------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(remove_user_scope/0 :: () -> 'ok').
+-spec(remove_user_scope/0  :: () -> 'ok').
+-spec(hash_passwords/0     :: () -> 'ok').
+-spec(add_ip_to_listener/0 :: () -> 'ok').
 
 -endif.
 
 %%--------------------------------------------------------------------
 
 remove_user_scope() ->
-    {atomic, ok} = mnesia:transform_table(
-                     rabbit_user_permission,
-                     fun (Perm = #user_permission{
-                            permission = {permission,
-                                          _Scope, Conf, Write, Read}}) ->
-                             Perm#user_permission{
-                               permission = #permission{configure = Conf,
-                                                        write     = Write,
-                                                        read      = Read}}
-                     end,
-                     record_info(fields, user_permission)),
+    mnesia(
+      rabbit_user_permission,
+      fun (Perm = #user_permission{
+             permission = {permission,
+                           _Scope, Conf, Write, Read}}) ->
+              Perm#user_permission{
+                permission = #permission{configure = Conf,
+                                         write     = Write,
+                                         read      = Read}}
+      end,
+      record_info(fields, user_permission)).
+
+hash_passwords() ->
+    mnesia(
+      rabbit_user,
+      fun ({user, Username, Password, IsAdmin}) ->
+              Hash = rabbit_access_control:hash_password(Password),
+              #user{username      = Username,
+                    password_hash = Hash,
+                    is_admin      = IsAdmin}
+      end,
+      record_info(fields, user)).
+
+add_ip_to_listener() ->
+    mnesia(
+      rabbit_listener,
+      fun ({listener, Node, Protocol, Host, Port}) ->
+              #listener{node       = Node,
+                        protocol   = Protocol,
+                        host       = Host,
+                        ip_address = {0,0,0,0},
+                        port       = Port}
+      end,
+      record_info(fields, listener)).
+
+%%--------------------------------------------------------------------
+
+mnesia(TableName, Fun, RecordInfo) ->
+    {atomic, ok} = mnesia:transform_table(TableName, Fun, RecordInfo),
     ok.
