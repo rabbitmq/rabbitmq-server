@@ -42,9 +42,9 @@
 
 %% -------------------------------------------------------------------
 
-%% Try to upgrade the schema. If no information on the existing schema could
-%% be found, do nothing. rabbit_mnesia:check_schema_integrity() will catch the
-%% problem.
+%% Try to upgrade the schema. If no information on the existing schema
+%% could be found, do nothing. rabbit_mnesia:check_schema_integrity()
+%% will catch the problem.
 maybe_upgrade() ->
     case read_version() of
         {ok, CurrentHeads} ->
@@ -56,8 +56,8 @@ maybe_upgrade() ->
                         Upgrades -> apply_upgrades(Upgrades)
                     end;
                 Unknown ->
-                    [warn("Data store has had future upgrade ~w applied." ++
-                              " Will not upgrade.~n", [U]) || U <- Unknown]
+                    [warn("Data store has had future upgrade ~w applied."
+                          " Will not upgrade.~n", [U]) || U <- Unknown]
             end,
             true = digraph:delete(G),
             ok;
@@ -148,7 +148,8 @@ schema_filename() ->
 lock_filename() ->
     filename:join(dir(), ?LOCK_FILENAME).
 
-%% NB: we cannot use rabbit_log here since it may not have been started yet
+%% NB: we cannot use rabbit_log here since it may not have been
+%% started yet
 info(Msg, Args) ->
     error_logger:info_msg(Msg, Args).
 
