@@ -32,11 +32,14 @@
 
 -ifdef(use_specs).
 
--spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available' | no_return()).
+-spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
 -spec(read_version/0 ::
         () -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_version/0 :: () -> 'ok').
--spec(desired_version/0 :: () -> [any()]).
+-spec(desired_version/0 :: () -> [atom()]).
+
+%% only here to shut dialyzer up
+-spec(apply_upgrades/1 :: ([{atom(), atom()}]) -> 'ok' | no_return()).
 
 -endif.
 

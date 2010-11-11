@@ -76,7 +76,7 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, module_attributes/0, modules_attributes/0]).
+-export_type([resource_name/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -84,9 +84,6 @@
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
--type(module_attributes() :: [term()]).
--type(modules_attributes() :: [{atom(), module_attributes()}]).
-
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -187,7 +184,15 @@
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
--spec(all_module_attributes/1 :: (atom()) -> modules_attributes()).
+-spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-type(graph_vertex_fun() ::
+        fun ((atom(), [term()]) -> {digraph:vertex(), digraph:label()})).
+-type(graph_edge_fun() ::
+        fun ((atom(), [term()]) -> {digraph:vertex(), digraph:vertex()})).
+-type(graph_error_fun() :: fun ((any()) -> any() | no_return())).
+-spec(build_acyclic_graph/4 :: (graph_vertex_fun(), graph_edge_fun(),
+                                graph_error_fun(), [{atom(), [term()]}]) ->
+                                    digraph()).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
