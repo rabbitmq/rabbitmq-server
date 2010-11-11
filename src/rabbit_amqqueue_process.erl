@@ -315,26 +315,21 @@ ch_record(ChPid) ->
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C).
 
-%% If the channel record we're considering submitting to the process
-%% dictionary has no consumers, has no pending acks, and doesn't have
-%% a transaction, we should delete its record rather than storing it.
-%% If the ch record was stored, this function returns true; otherwise,
-%% the ch record is erased and this function returns false.
 maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
-                              limiter_pid          = LimiterPid,
                               acktags              = ChAckTags,
                               txn                  = Txn,
                               unsent_message_count = UnsentMessageCount}) ->
     case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount, Txn} of
         {0, 0, 0, none} -> demonitor_and_erase_ch_record(C),
-                           ok = rabbit_limiter:unregister(LimiterPid, self()),
                            false;
         _               -> store_ch_record(C),
                            true
     end.
 
 demonitor_and_erase_ch_record(#cr{ch_pid      = ChPid,
+                                  limiter_pid = LimiterPid,
                                   monitor_ref = MonitorRef}) ->
+    ok = rabbit_limiter:unregister(LimiterPid, self()),
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}).
 
@@ -851,16 +846,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         C = #cr{consumer_count = ConsumerCount,
                 limiter_pid    = LimiterPid} ->
             C1 = C#cr{consumer_count = ConsumerCount-1},
-            %% The consumer count falling to zero is a sufficient
-            %% condition for unregistering the limiter regardless of
-            %% whether or not we can dispose of the ch record
-            %% entirely.
-            C2 = case ConsumerCount-1 of 
-                0 -> ok = rabbit_limiter:unregister(LimiterPid, self()),
-                     C1#cr{limiter_pid = undefined};
-                _ -> C1
-            end,
-            maybe_store_ch_record(C2),
+            maybe_store_ch_record(
+              case ConsumerCount of
+                  1 -> ok = rabbit_limiter:unregister(LimiterPid, self()),
+                       C1#cr{limiter_pid = undefined};
+                  _ -> C1
+              end),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
