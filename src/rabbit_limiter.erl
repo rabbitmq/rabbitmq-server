@@ -41,6 +41,17 @@
 
 %%----------------------------------------------------------------------------
 
+-record(lim, {prefetch_count = 0,
+              ch_pid,
+              blocked = false,
+              queues = dict:new(), % QPid -> {MonitorRef, Notify}
+              volume = 0}).
+%% 'Notify' is a boolean that indicates whether a queue should be
+%% notified of a change in the limit or volume that may allow it to
+%% deliver more messages via the limiter's channel.
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -type(maybe_pid() :: pid() | 'undefined').
@@ -58,17 +69,6 @@
 -spec(is_blocked/1 :: (maybe_pid()) -> boolean()).
 
 -endif.
-
-%%----------------------------------------------------------------------------
-
--record(lim, {prefetch_count = 0,
-              ch_pid,
-              blocked = false,
-              queues = dict:new(), % QPid -> {MonitorRef, Notify}
-              volume = 0}).
-%% 'Notify' is a boolean that indicates whether a queue should be
-%% notified of a change in the limit or volume that may allow it to
-%% deliver more messages via the limiter's channel.
 
 %%----------------------------------------------------------------------------
 %% API

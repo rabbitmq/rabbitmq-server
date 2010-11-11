@@ -33,6 +33,29 @@
 
 -export([behaviour_info/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(behaviour_info/1 ::
+	(_) ->
+			       'undefined' |
+			       [{'add_binding' |
+				 'assert_args_equivalence' |
+				 'create' |
+				 'delete' |
+				 'description' |
+				 'recover' |
+				 'remove_bindings' |
+				 'route' |
+				 'validate',
+				 0 | 1 | 2},
+				...]).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 behaviour_info(callbacks) ->
     [
      {description, 0},

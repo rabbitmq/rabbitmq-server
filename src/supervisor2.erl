@@ -100,6 +100,28 @@
 -define(is_terminate_simple(State),
         State#state.strategy =:= simple_one_for_one_terminate).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(behaviour_info/1 :: (_) -> 'undefined' | [{'init',1},...]).
+-spec(check_childspecs/1 :: (_) -> 'ok' | {'error',_}).
+-spec(delayed_restart/2 :: (atom() | pid() | {atom(),_},_) -> 'ok').
+-spec(delete_child/2 :: (_,_) -> any()).
+-spec(find_child/2 :: (_,_) -> [any()]).
+-spec(restart_child/2 :: (_,_) -> any()).
+-spec(start_child/2 :: (_,_) -> any()).
+-spec(start_link/2 :: (_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_link/3 ::
+	({'global',_} | {'local',atom()},_,_) ->
+			   'ignore' | {'error',_} | {'ok',pid()}).
+-spec(terminate_child/2 :: (_,_) -> any()).
+-spec(which_children/1 :: (_) -> any()).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 behaviour_info(callbacks) ->
     [{init,1}];
 behaviour_info(_Other) ->

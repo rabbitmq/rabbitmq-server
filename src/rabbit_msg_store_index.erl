@@ -33,6 +33,29 @@
 
 -export([behaviour_info/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(behaviour_info/1 ::
+	(_) ->
+			       'undefined' |
+			       [{'delete' |
+				 'delete_by_file' |
+				 'insert' |
+				 'lookup' |
+				 'new' |
+				 'recover' |
+				 'terminate' |
+				 'update' |
+				 'update_fields',
+				 1 | 2 | 3},
+				...]).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 behaviour_info(callbacks) ->
     [{new,            1},
      {recover,        1},

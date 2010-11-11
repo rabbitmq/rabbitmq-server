@@ -100,6 +100,8 @@
 -spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 
+-spec(flush/1 :: (_) -> any()).
+
 -endif.
 
 %%----------------------------------------------------------------------------

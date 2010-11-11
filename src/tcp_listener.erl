@@ -40,6 +40,15 @@
 
 -record(state, {sock, on_startup, on_shutdown, label}).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/8 ::
+	(_,_,_,_,_,_,_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+
+-endif.
+
 %%--------------------------------------------------------------------
 
 start_link(IPAddress, Port, SocketOpts,

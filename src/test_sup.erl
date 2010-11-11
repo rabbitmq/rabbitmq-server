@@ -36,6 +36,17 @@
 -export([test_supervisor_delayed_restart/0,
          init/1, start_child/0]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_child/0 :: () -> {'ok',pid()}).
+-spec(test_supervisor_delayed_restart/0 :: () -> 'passed').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 test_supervisor_delayed_restart() ->
     passed = with_sup(simple_one_for_one_terminate,
                       fun (SupPid) ->

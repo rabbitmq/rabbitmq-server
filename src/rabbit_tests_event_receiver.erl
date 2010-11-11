@@ -36,6 +36,17 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start/1 :: (_) -> any()).
+-spec(stop/0 :: () -> any()).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start(Pid) ->
     gen_event:add_handler(rabbit_event, ?MODULE, [Pid]).
 

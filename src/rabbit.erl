@@ -200,6 +200,8 @@
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

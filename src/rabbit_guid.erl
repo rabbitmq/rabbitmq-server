@@ -52,7 +52,6 @@
 
 -type(guid() :: binary()).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(guid/0 :: () -> guid()).
 -spec(string_guid/1 :: (any()) -> string()).
 -spec(binstring_guid/1 :: (any()) -> binary()).

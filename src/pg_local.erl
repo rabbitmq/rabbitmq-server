@@ -41,11 +41,14 @@
 
 %%----------------------------------------------------------------------------
 
+-record(state, {}).
+
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -type(name() :: term()).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(start/0 :: () -> {'ok', pid()} | {'error', any()}).
 -spec(join/2 :: (name(), pid()) -> 'ok').
 -spec(leave/2 :: (name(), pid()) -> 'ok').
@@ -88,8 +91,6 @@ sync() ->
 %%%
 %%% Callback functions from gen_server
 %%%
-
--record(state, {}).
 
 init([]) ->
     pg_local_table = ets:new(pg_local_table, [ordered_set, protected, named_table]),

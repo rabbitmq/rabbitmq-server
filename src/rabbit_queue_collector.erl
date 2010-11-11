@@ -46,7 +46,6 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(register/2 :: (pid(), rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 

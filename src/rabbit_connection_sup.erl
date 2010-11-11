@@ -43,7 +43,6 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid(), pid()}).
 -spec(reader/1 :: (pid()) -> pid()).
 
 -endif.

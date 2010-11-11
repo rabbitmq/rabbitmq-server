@@ -69,6 +69,20 @@
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 
+-spec(table_names/0 ::
+	() ->
+			    ['rabbit_durable_exchange' |
+			     'rabbit_durable_queue' |
+			     'rabbit_durable_route' |
+			     'rabbit_exchange' |
+			     'rabbit_listener' |
+			     'rabbit_queue' |
+			     'rabbit_reverse_route' |
+			     'rabbit_route' |
+			     'rabbit_user' |
+			     'rabbit_user_permission' |
+			     'rabbit_vhost']).
+
 -endif.
 
 %%----------------------------------------------------------------------------

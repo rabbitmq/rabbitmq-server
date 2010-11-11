@@ -202,12 +202,10 @@
          A}).
 -type(shutdown_terms() :: [any()]).
 
--spec(init/1 :: (rabbit_amqqueue:name()) -> qistate()).
 -spec(shutdown_terms/1 :: (rabbit_amqqueue:name()) -> shutdown_terms()).
 -spec(recover/4 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     fun ((rabbit_guid:guid()) -> boolean())) ->
              {'undefined' | non_neg_integer(), qistate()}).
--spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
 -spec(publish/5 :: (rabbit_guid:guid(), seq_id(),
                     rabbit_types:message_properties(), boolean(), qistate())

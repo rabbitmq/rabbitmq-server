@@ -37,6 +37,18 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/7 :: (_,_,_,_,_,_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+-spec(start_link/8 ::
+	(_,_,_,_,_,_,_,_) -> 'ignore' | {'error',_} | {'ok',pid()}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
            AcceptCallback, Label) ->
     start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,

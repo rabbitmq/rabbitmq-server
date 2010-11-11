@@ -57,7 +57,6 @@
                     rabbit_msg_store:file_num()) -> 'ok').
 -spec(delete/2 :: (pid(), rabbit_msg_store:file_num()) -> 'ok').
 -spec(no_readers/2 :: (pid(), rabbit_msg_store:file_num()) -> 'ok').
--spec(stop/1 :: (pid()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 
 -endif.
