@@ -1498,7 +1498,7 @@ permitted_ram_index_count(#vqstate { len   = Len,
     BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
 
 chunk_size(Current, Permitted)
-  when Permitted >= Current ->
+  when Permitted =:= infinity orelse Permitted >= Current ->
     0;
 chunk_size(Current, Permitted) ->
     lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
