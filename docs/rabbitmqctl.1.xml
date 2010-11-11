@@ -847,6 +847,10 @@
                 <listitem><para>Whether the exchange will be deleted automatically when no longer used.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>internal</term>
+                <listitem><para>Whether the exchange is internal, i.e. cannot be directly published to by a client.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Exchange arguments.</para></listitem>
               </varlistentry>
