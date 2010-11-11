@@ -2,14 +2,14 @@
 %% -*- erlang -*-
 -mode(compile).
 
-main([TargetFile, EbinDir | ErlsAndHrls ]) ->
-    ErlFiles = lists:filter(fun (Path) -> lists:suffix(".erl", Path) end,
-                            ErlsAndHrls),
+%% We expect the list of Erlang source and header files to arrive on stdin
+main([TargetFile, EbinDir]) ->
+    ErlsAndHrls = string:tokens(io:get_line(""), " \n"),
+    ErlFiles = [F || F <- ErlsAndHrls, lists:suffix(".erl", F)],
     Modules = sets:from_list(
                 [list_to_atom(filename:basename(FileName, ".erl")) ||
                     FileName <- ErlFiles]),
-    HrlFiles = lists:filter(fun (Path) -> lists:suffix(".hrl", Path) end,
-                            ErlsAndHrls),
+    HrlFiles = [F || F <- ErlsAndHrls, lists:suffix(".hrl", F)],
     IncludeDirs = lists:usort([filename:dirname(Path) || Path <- HrlFiles]),
     Headers = sets:from_list(HrlFiles),
     Deps = lists:foldl(
