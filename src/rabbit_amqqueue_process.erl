@@ -320,18 +320,19 @@ maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
                               txn                  = Txn,
                               unsent_message_count = UnsentMessageCount}) ->
     case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount, Txn} of
-        {0, 0, 0, none} -> demonitor_and_erase_ch_record(C),
+        {0, 0, 0, none} -> ok = erase_ch_record(C),
                            false;
         _               -> store_ch_record(C),
                            true
     end.
 
-demonitor_and_erase_ch_record(#cr{ch_pid      = ChPid,
-                                  limiter_pid = LimiterPid,
-                                  monitor_ref = MonitorRef}) ->
+erase_ch_record(#cr{ch_pid      = ChPid,
+                    limiter_pid = LimiterPid,
+                    monitor_ref = MonitorRef}) ->
     ok = rabbit_limiter:unregister(LimiterPid, self()),
     erlang:demonitor(MonitorRef),
-    erase({ch, ChPid}).
+    erase({ch, ChPid}),
+    ok.
 
 all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
@@ -519,7 +520,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
         not_found ->
             {ok, State};
         C = #cr{ch_pid = ChPid, txn = Txn, acktags = ChAckTags} ->
-            demonitor_and_erase_ch_record(C),
+            ok = erase_ch_record(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
@@ -809,7 +810,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
             true = maybe_store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                              limiter_pid = LimiterPid}),
+                                              limiter_pid    = LimiterPid}),
             ok = case ConsumerCount of
                      0 -> rabbit_limiter:register(LimiterPid, self());
                      _ -> ok
@@ -845,7 +846,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount,
                 limiter_pid    = LimiterPid} ->
-            C1 = C#cr{consumer_count = ConsumerCount-1},
+            C1 = C#cr{consumer_count = ConsumerCount -1},
             maybe_store_ch_record(
               case ConsumerCount of
                   1 -> ok = rabbit_limiter:unregister(LimiterPid, self()),

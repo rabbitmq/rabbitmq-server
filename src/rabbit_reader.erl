@@ -163,14 +163,14 @@
 -ifdef(use_specs).
 
 -type(start_heartbeat_fun() ::
-        fun ((rabbit_networking:socket(), non_neg_integer()) ->
+        fun ((rabbit_net:socket(), non_neg_integer()) ->
                     rabbit_heartbeat:heartbeaters())).
 
 -spec(start_link/3 :: (pid(), pid(), start_heartbeat_fun()) ->
                            rabbit_types:ok(pid())).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (pid()) -> [rabbit_types:info()]).
--spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (pid()) -> rabbit_types:infos()).
+-spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
@@ -180,10 +180,10 @@
 -spec(init/4 :: (pid(), pid(), pid(), start_heartbeat_fun()) -> no_return()).
 -spec(start_connection/7 ::
         (pid(), pid(), pid(), start_heartbeat_fun(), any(),
-         rabbit_networking:socket(),
-         fun ((rabbit_networking:socket()) ->
+         rabbit_net:socket(),
+         fun ((rabbit_net:socket()) ->
                      rabbit_types:ok_or_error2(
-                       rabbit_networking:socket(), any()))) -> no_return()).
+                       rabbit_net:socket(), any()))) -> no_return()).
 
 -endif.
 
