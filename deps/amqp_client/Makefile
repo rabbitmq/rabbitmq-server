@@ -46,9 +46,8 @@ distribution: documentation source_tarball package
 
 RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
 
-dialyze: $(RABBIT_PLT) $(TARGETS) $(TEST_TARGETS)
-	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
-        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
+dialyze: $(RABBIT_PLT) $(TARGETS)
+	dialyzer --plt $(RABBIT_PLT) --no_native -Wrace_conditions $(TARGETS)
 
 .PHONY: $(RABBIT_PLT)
 $(RABBIT_PLT):
