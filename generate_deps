@@ -2,9 +2,11 @@
 %% -*- erlang -*-
 -mode(compile).
 
-%% We expect the list of Erlang source and header files to arrive on stdin
+%% We expect the list of Erlang source and header files to arrive on
+%% stdin, with the entries colon-separated.
 main([TargetFile, EbinDir]) ->
-    ErlsAndHrls = string:tokens(io:get_line(""), ":\n"),
+    ErlsAndHrls = [ string:strip(S,left) ||
+                      S <- string:tokens(io:get_line(""), ":\n")],
     ErlFiles = [F || F <- ErlsAndHrls, lists:suffix(".erl", F)],
     Modules = sets:from_list(
                 [list_to_atom(filename:basename(FileName, ".erl")) ||
