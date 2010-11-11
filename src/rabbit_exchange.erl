@@ -91,7 +91,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
+-define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
     Xs = rabbit_misc:table_fold(
@@ -220,6 +220,7 @@ i(name,        #exchange{name        = Name})       -> Name;
 i(type,        #exchange{type        = Type})       -> Type;
 i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
+i(internal,    #exchange{internal    = Internal})   -> Internal;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
