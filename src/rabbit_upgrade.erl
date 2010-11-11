@@ -56,8 +56,7 @@ maybe_upgrade() ->
                         Upgrades -> apply_upgrades(Upgrades)
                     end;
                 Unknown ->
-                    [warn("Data store has had future upgrade ~w applied."
-                          " Will not upgrade.~n", [U]) || U <- Unknown]
+                    exit({future_upgrades_found, Unknown})
             end,
             true = digraph:delete(G),
             ok;
