@@ -366,9 +366,6 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
       [{fun rabbit_mgmt_format:ip/1,           [address, peer_address]},
        {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
        {fun rabbit_mgmt_format:protocol/1,     [protocol]},
-       {fun list_to_binary/1,                  [peer_cert_issuer,
-                                                peer_cert_subject,
-                                                peer_cert_validity]},
        {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
 
 handle_event(#event{type = connection_stats, props = Stats,
