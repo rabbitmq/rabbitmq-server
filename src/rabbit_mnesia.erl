@@ -44,9 +44,6 @@
 
 -include("rabbit.hrl").
 
--define(SCHEMA_VERSION_SET, []).
--define(SCHEMA_VERSION_FILENAME, "schema_version").
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -94,9 +91,6 @@ init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
-    ok = rabbit_misc:write_term_file(filename:join(
-                                       dir(), ?SCHEMA_VERSION_FILENAME),
-                                     [?SCHEMA_VERSION_SET]),
     ok.
 
 is_db_empty() ->
@@ -256,12 +250,12 @@ ensure_mnesia_dir() ->
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
         yes -> ok;
-        no -> throw({error, mnesia_not_running})
+        no  -> throw({error, mnesia_not_running})
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
-        no -> ok;
+        no  -> ok;
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
@@ -340,10 +334,8 @@ read_cluster_nodes_config() ->
     case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
-            case application:get_env(cluster_nodes) of
-                undefined -> [];
-                {ok, ClusterNodes} -> ClusterNodes
-            end;
+            {ok, ClusterNodes} = application:get_env(rabbit, cluster_nodes),
+            ClusterNodes;
         {error, Reason} ->
             throw({error, {cannot_read_cluster_nodes_config,
                            FileName, Reason}})
@@ -380,28 +372,31 @@ init_db(ClusterNodes, Force) ->
                     end;
                 _ -> ok
             end,
-            case Nodes of
-                [] ->
-                    case mnesia:system_info(use_dir) of
-                        true ->
-                            case check_schema_integrity() of
-                                ok ->
-                                    ok;
-                                {error, Reason} ->
-                                    %% NB: we cannot use rabbit_log here since
-                                    %% it may not have been started yet
-                                    error_logger:warning_msg(
-                                      "schema integrity check failed: ~p~n"
-                                      "moving database to backup location "
-                                      "and recreating schema from scratch~n",
-                                      [Reason]),
-                                    ok = move_db(),
-                                    ok = create_schema()
-                            end;
-                        false ->
-                            ok = create_schema()
+            case {Nodes, mnesia:system_info(use_dir),
+                  mnesia:system_info(db_nodes)} of
+                {[], true, [_]} ->
+                    %% True single disc node, attempt upgrade
+                    wait_for_tables(),
+                    case rabbit_upgrade:maybe_upgrade() of
+                        ok ->
+                            schema_ok_or_exit();
+                        version_not_available ->
+                            schema_ok_or_move()
                     end;
-                [_|_] ->
+                {[], true, _} ->
+                    %% "Master" (i.e. without config) disc node in cluster,
+                    %% verify schema
+                    wait_for_tables(),
+                    version_ok_or_exit(rabbit_upgrade:read_version()),
+                    schema_ok_or_exit();
+                {[], false, _} ->
+                    %% First RAM node in cluster, start from scratch
+                    ok = create_schema();
+                {[AnotherNode|_], _, _} ->
+                    %% Subsequent node in cluster, catch up
+                    version_ok_or_exit(rabbit_upgrade:read_version()),
+                    version_ok_or_exit(
+                      rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
@@ -410,7 +405,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ok = ensure_schema_integrity()
+                    schema_ok_or_exit()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -418,6 +413,39 @@ init_db(ClusterNodes, Force) ->
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster,
                            ClusterNodes, Reason}})
+    end.
+
+schema_ok_or_move() ->
+    case check_schema_integrity() of
+        ok ->
+            ok;
+        {error, Reason} ->
+            %% NB: we cannot use rabbit_log here since it may not have been
+            %% started yet
+            error_logger:warning_msg("schema integrity check failed: ~p~n"
+                                     "moving database to backup location "
+                                     "and recreating schema from scratch~n",
+                                     [Reason]),
+            ok = move_db(),
+            ok = create_schema()
+    end.
+
+version_ok_or_exit({ok, DiscVersion}) ->
+    case rabbit_upgrade:desired_version() of
+        DiscVersion ->
+            ok;
+        DesiredVersion ->
+            exit({schema_mismatch, DesiredVersion, DiscVersion})
+    end;
+version_ok_or_exit({error, _}) ->
+    ok = rabbit_upgrade:write_version().
+
+schema_ok_or_exit() ->
+    case check_schema_integrity() of
+        ok ->
+            ok;
+        {error, Reason} ->
+            exit({schema_invalid, Reason})
     end.
 
 create_schema() ->
@@ -428,7 +456,8 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables().
+    ok = wait_for_tables(),
+    ok = rabbit_upgrade:write_version().
 
 move_db() ->
     mnesia:stop(),

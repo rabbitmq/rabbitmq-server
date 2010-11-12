@@ -85,7 +85,7 @@ post-destroot {
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
-    foreach var {CONFIG_FILE CLUSTER_CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
+    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
         reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
             ${realsbin}/rabbitmq-multi \
             ${realsbin}/rabbitmq-server \

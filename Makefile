@@ -3,6 +3,7 @@ TMPDIR ?= /tmp
 RABBITMQ_NODENAME ?= rabbit
 RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
+RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
 DEPS_FILE=deps.mk
@@ -92,7 +93,7 @@ all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
-	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $@
+	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
@@ -110,27 +111,23 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_8) $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
-	$(ERL_EBIN) -eval \
-		"rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\")." \
-		    -eval \
-		"init:stop()."
-
-
+	dialyzer --plt $(BASIC_PLT) --no_native \
+	  -Wrace_conditions $(BEAM_TARGETS)
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
 
 $(RABBIT_PLT): $(BEAM_TARGETS) $(BASIC_PLT)
-	cp $(BASIC_PLT) $@
-	$(ERL_EBIN) -eval \
-	    "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:add_to_plt(\"$@\", \"$(BEAM_TARGETS)\"))."
+	dialyzer --plt $(BASIC_PLT) --output_plt $@ --no_native \
+	  --add_to_plt $(BEAM_TARGETS)
 
 $(BASIC_PLT): $(BEAM_TARGETS)
 	if [ -f $@ ]; then \
 	    touch $@; \
 	else \
-	    $(ERL_EBIN) -eval \
-	        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:create_basic_plt(\"$@\"))."; \
+	    dialyzer --output_plt $@ --build_plt \
+		--apps erts kernel stdlib compiler sasl os_mon mnesia tools \
+		  public_key crypto ssl; \
 	fi
 
 clean:
@@ -150,7 +147,8 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
+	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)"
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \

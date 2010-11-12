@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2, maybe_expire/1]).
+         set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -56,7 +56,7 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(EXPIRES_TYPES, [byte, short, signedint, long]).
+-define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
 
 %%----------------------------------------------------------------------------
 
@@ -97,14 +97,14 @@
 -spec(with_exclusive_access_or_die/3 ::
         (name(), pid(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (rabbit_types:amqqueue()) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (rabbit_types:amqqueue()) -> rabbit_types:infos()).
 -spec(info/2 ::
-        (rabbit_types:amqqueue(), [rabbit_types:info_key()])
-        -> [rabbit_types:info()]).
--spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
--spec(info_all/2 :: (rabbit_types:vhost(), [rabbit_types:info_key()])
-                    -> [[rabbit_types:info()]]).
+        (rabbit_types:amqqueue(), rabbit_types:info_keys())
+        -> rabbit_types:infos()).
+-spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
+                    -> [rabbit_types:infos()]).
 -spec(consumers/1 ::
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean()}]).
@@ -162,7 +162,7 @@
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
+-spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 
 -endif.
 
@@ -310,18 +310,30 @@ check_declare_arguments(QueueName, Args) ->
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <- [{<<"x-expires">>, fun check_expires_argument/1}]],
+     end || {Key, Fun} <-
+                [{<<"x-expires">>,     fun check_expires_argument/1},
+                 {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
     ok.
 
-check_expires_argument(undefined) ->
+check_expires_argument(Val) ->
+    check_integer_argument(Val,
+                           expires_not_of_acceptable_type,
+                           expires_zero_or_less).
+
+check_message_ttl_argument(Val) ->
+    check_integer_argument(Val,
+                           ttl_not_of_acceptable_type,
+                           ttl_zero_or_less).
+
+check_integer_argument(undefined, _, _) ->
     ok;
-check_expires_argument({Type, Expires}) when Expires > 0 ->
-    case lists:member(Type, ?EXPIRES_TYPES) of
+check_integer_argument({Type, Val}, InvalidTypeError, _) when Val > 0 ->
+    case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {expires_not_of_acceptable_type, Type, Expires}}
+        false -> {error, {InvalidTypeError, Type, Val}}
     end;
-check_expires_argument({_Type, _Expires}) ->
-    {error, expires_zero_or_less}.
+check_integer_argument({_Type, _Val}, _, ZeroOrLessError) ->
+    {error, ZeroOrLessError}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
@@ -349,7 +361,7 @@ consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers, infinity).
 
 consumers_all(VHostPath) ->
-    lists:concat(
+    lists:append(
       map(VHostPath,
           fun (Q) -> [{Q#amqqueue.name, ChPid, ConsumerTag, AckRequired} ||
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
@@ -465,6 +477,9 @@ set_maximum_since_use(QPid, Age) ->
 
 maybe_expire(QPid) ->
     gen_server2:cast(QPid, maybe_expire).
+
+drop_expired(QPid) ->
+    gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
     rabbit_binding:process_deletions(

@@ -41,7 +41,7 @@
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/3]).
 
--export([tcp_listener_started/2, tcp_listener_stopped/2,
+-export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
 
 -include("rabbit.hrl").
@@ -67,21 +67,21 @@
 
 -spec(start/0 :: () -> 'ok').
 -spec(start_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (hostname(), ip_port(), [rabbit_types:info()])
+-spec(start_ssl_listener/3 :: (hostname(), ip_port(), rabbit_types:infos())
                               -> 'ok').
 -spec(stop_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
--spec(connection_info_keys/0 :: () -> [rabbit_types:info_key()]).
+-spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(connection_info/1 ::
-        (rabbit_types:connection()) -> [rabbit_types:info()]).
+        (rabbit_types:connection()) -> rabbit_types:infos()).
 -spec(connection_info/2 ::
-        (rabbit_types:connection(), [rabbit_types:info_key()])
-        -> [rabbit_types:info()]).
--spec(connection_info_all/0 :: () -> [[rabbit_types:info()]]).
+        (rabbit_types:connection(), rabbit_types:info_keys())
+        -> rabbit_types:infos()).
+-spec(connection_info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(connection_info_all/1 ::
-        ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
+        (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/3 ::
@@ -160,14 +160,14 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     {IPAddress, Name}.
 
 start_tcp_listener(Host, Port) ->
-    start_listener(Host, Port, "TCP Listener",
+    start_listener(Host, Port, amqp, "TCP Listener",
                    {?MODULE, start_client, []}).
 
 start_ssl_listener(Host, Port, SslOpts) ->
-    start_listener(Host, Port, "SSL Listener",
+    start_listener(Host, Port, 'amqp/ssl', "SSL Listener",
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
-start_listener(Host, Port, Label, OnConnect) ->
+start_listener(Host, Port, Protocol, Label, OnConnect) ->
     {IPAddress, Name} =
         check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
     {ok,_} = supervisor:start_child(
@@ -175,8 +175,8 @@ start_listener(Host, Port, Label, OnConnect) ->
                {Name,
                 {tcp_listener_sup, start_link,
                  [IPAddress, Port, ?RABBIT_TCP_OPTS ,
-                  {?MODULE, tcp_listener_started, []},
-                  {?MODULE, tcp_listener_stopped, []},
+                  {?MODULE, tcp_listener_started, [Protocol]},
+                  {?MODULE, tcp_listener_stopped, [Protocol]},
                   OnConnect, Label]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
@@ -188,20 +188,25 @@ stop_tcp_listener(Host, Port) ->
     ok = supervisor:delete_child(rabbit_sup, Name),
     ok.
 
-tcp_listener_started(IPAddress, Port) ->
+tcp_listener_started(Protocol, IPAddress, Port) ->
+    %% We need the ip to distinguish e.g. 0.0.0.0 and 127.0.0.1
+    %% We need the host so we can distinguish multiple instances of the above
+    %% in a cluster.
     ok = mnesia:dirty_write(
            rabbit_listener,
            #listener{node = node(),
-                     protocol = tcp,
+                     protocol = Protocol,
                      host = tcp_host(IPAddress),
+                     ip_address = IPAddress,
                      port = Port}).
 
-tcp_listener_stopped(IPAddress, Port) ->
+tcp_listener_stopped(Protocol, IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
            rabbit_listener,
            #listener{node = node(),
-                     protocol = tcp,
+                     protocol = Protocol,
                      host = tcp_host(IPAddress),
+                     ip_address = IPAddress,
                      port = Port}).
 
 active_listeners() ->

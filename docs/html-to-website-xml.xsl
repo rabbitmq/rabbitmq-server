@@ -17,7 +17,7 @@
 <!-- Copy the root node, and munge the outer part of the page -->
 <xsl:template match="/html">
 <xsl:processing-instruction name="xml-stylesheet">type="text/xml" href="page.xsl"</xsl:processing-instruction>
-<html xmlns:doc="http://www.rabbitmq.com/namespaces/ad-hoc/doc">
+<html xmlns:doc="http://www.rabbitmq.com/namespaces/ad-hoc/doc" xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <title><xsl:value-of select="document($original)/refentry/refnamediv/refname"/><xsl:if test="document($original)/refentry/refmeta/manvolnum">(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</xsl:if> manual page</title>
   </head>
@@ -42,7 +42,7 @@
       </xsl:choose>
       <p>
          For more general documentation, please see the
-        <a href="admin-guide.html">administrator's guide</a>.
+        <a href="../admin-guide.html">administrator's guide</a>.
       </p>
 
       <doc:toc class="compact">

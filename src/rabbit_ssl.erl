@@ -34,7 +34,6 @@
 -include("rabbit.hrl").
 
 -include_lib("public_key/include/public_key.hrl").
--include_lib("ssl/src/ssl_int.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
 
@@ -86,8 +85,8 @@ peer_cert_validity(Cert) ->
 
 cert_info(F, Cert) ->
     F(case public_key:pkix_decode_cert(Cert, otp) of
-          {ok, DecCert} -> DecCert;
-          DecCert       -> DecCert
+          {ok, DecCert} -> DecCert; %%pre R14B
+          DecCert       -> DecCert  %%R14B onwards
       end).
 
 %%--------------------------------------------------------------------------
