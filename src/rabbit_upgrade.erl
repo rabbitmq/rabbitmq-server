@@ -66,8 +66,8 @@ maybe_upgrade() ->
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [Heads]} -> {ok, Heads};
-        {error, E}    -> {error, E}
+        {ok, [Heads]}     -> {ok, Heads};
+        {error, _E} = Err -> Err
     end.
 
 write_version() ->
