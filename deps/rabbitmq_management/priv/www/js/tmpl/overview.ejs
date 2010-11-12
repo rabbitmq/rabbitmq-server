@@ -29,6 +29,7 @@
 </div>
 </div>
 
+<% if (user_administrator) { %>
 <div class="section">
 <h2>RabbitMQ Nodes</h2>
 <div class="hider updatable">
@@ -178,4 +179,6 @@ for (var i = 0; i < overview.listeners.length; i++) {
 <span class="br"></span>
 </div>
 </div>
+<% } %>
+
 <% } %>

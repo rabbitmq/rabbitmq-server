@@ -27,21 +27,29 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    Overview = rabbit_mgmt_db:get_overview(),
+to_json(ReqData, Context = #context{is_admin = IsAdmin}) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_mgmt_util:reply(
-      Overview ++
-          %% NB: node and stats level duplicate what's in /nodes but we want
-          %% to (a) know which node we're talking to and (b) use the stats
-          %% level to switch features on / off in the UI.
-          [{node,               node()},
-           {management_version, version()},
-           {statistics_level,   StatsLevel},
-           {statistics_db_node, stats_db_node()},
-           {listeners,          [rabbit_mgmt_format:listener(L)
-                                 || L <- rabbit_networking:active_listeners()]}],
-      ReqData, Context).
+    %% NB: node and stats level duplicate what's in /nodes but we want
+    %% to (a) know which node we're talking to and (b) use the stats
+    %% level to switch features on / off in the UI.
+    Overview0 = rabbit_mgmt_db:get_overview() ++
+        [{management_version, version()},
+         {statistics_level,   StatsLevel}],
+    Overview =
+        case IsAdmin of
+            true ->
+                Listeners = [rabbit_mgmt_format:listener(L)
+                             || L <- rabbit_networking:active_listeners()],
+                Overview0 ++
+                    [{management_version, version()},
+                     {statistics_level,   StatsLevel},
+                     {node,               node()},
+                     {statistics_db_node, stats_db_node()},
+                     {listeners,          Listeners}];
+                   _ ->
+                       Overview0
+               end,
+    rabbit_mgmt_util:reply(Overview, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

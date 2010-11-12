@@ -8,7 +8,8 @@ $(document).ready(function() {
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     user_administrator = user.administrator;
-    nodes_interesting = JSON.parse(sync_get('/nodes')).length > 1;
+    nodes_interesting = user_administrator &&
+        JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     setup_constant_events();
     update_vhosts();
@@ -61,8 +62,13 @@ function dispatcher() {
                 render(r, t, p);
             });
     }
-    path('#/', {'overview': '/overview',
-                'nodes': '/nodes'}, 'overview');
+    this.get('#/', function() {
+            var reqs = {'overview': '/overview'};
+            if (user_administrator) {
+                reqs['nodes'] = '/nodes';
+            }
+            render(reqs, 'overview', '#/');
+        });
     this.get('#/nodes/:name', function() {
             var name = esc(this.params['name']);
             render({'node': '/nodes/' + name},
