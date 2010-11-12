@@ -81,14 +81,19 @@ match_request([{Selector, Handler, _Link}|Rest], Req) ->
 
 listing_fallback_handler(Req) ->
     HTMLPrefix =
-        "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">" ++
-        "<head><title>RabbitMQ Web Server</title></head>" ++
-        "<body><h1>RabbitMQ Web Server</h1><ul>",
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">"
+        "<head><title>RabbitMQ Web Server</title></head>"
+        "<body><h1>RabbitMQ Web Server</h1><p>Contexts available:</p><ul>",
     HTMLSuffix = "</ul></body></html>",
     Contexts = [{"/" ++ P, D} || {P, D} <- gen_server:call(?MODULE, list)],
     List =
-        [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc])
-         || {Path, Desc} <- Contexts, Desc =/= none] ++
-        [io_lib:format("<li>~s</li>", [Path])
-         || {Path, Desc} <- Contexts, Desc == none],
+        case Contexts of
+            [] ->
+                "<li>No contexts installed</li>";
+            _ ->
+                [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc])
+                 || {Path, Desc} <- Contexts, Desc =/= none] ++
+                    [io_lib:format("<li>~s</li>", [Path])
+                     || {Path, Desc} <- Contexts, Desc == none]
+        end,
     Req:respond({200, [], HTMLPrefix ++ List ++ HTMLSuffix}).
