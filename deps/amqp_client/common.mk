@@ -176,7 +176,7 @@ $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
-	escript $(BROKER_DIR)/generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $@
+	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript $(BROKER_DIR)/generate_deps $@ $(EBIN_DIR)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) | $(DEPS_FILE)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
