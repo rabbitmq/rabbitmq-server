@@ -378,8 +378,12 @@ init_db(ClusterNodes, Force) ->
                     %% True single disc node, attempt upgrade
                     wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok                    -> ensure_schema_ok();
-                        version_not_available -> schema_ok_or_move()
+                        ok ->
+                            ensure_schema_ok();
+                        version_not_available ->
+                            schema_ok_or_move();
+                        {error, Reason} ->
+                            throw({error, {upgrade_failed, Reason}})
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,

@@ -32,7 +32,8 @@
 
 -ifdef(use_specs).
 
--spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available' |
+                               rabbit_types:error(any())).
 -spec(read_version/0 ::
         () -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_version/0 :: () -> 'ok').
@@ -49,17 +50,17 @@ maybe_upgrade() ->
     case read_version() of
         {ok, CurrentHeads} ->
             G = load_graph(),
-            case unknown_heads(CurrentHeads, G) of
-                [] ->
-                    case upgrades_to_apply(CurrentHeads, G) of
-                        []       -> ok;
-                        Upgrades -> apply_upgrades(Upgrades)
-                    end;
-                Unknown ->
-                    exit({future_upgrades_found, Unknown})
-            end,
-            true = digraph:delete(G),
-            ok;
+            try
+                case unknown_heads(CurrentHeads, G) of
+                    []      -> case upgrades_to_apply(CurrentHeads, G) of
+                                   []       -> ok;
+                                   Upgrades -> apply_upgrades(Upgrades)
+                               end;
+                    Unknown -> {error, {future_upgrades_found, Unknown}}
+                end
+            after
+                true = digraph:delete(G)
+            end;
         {error, enoent} ->
             version_not_available
     end.
@@ -94,9 +95,11 @@ edges(_Module, Steps) ->
     [{Require, StepName} || {StepName, Requires} <- Steps, Require <- Requires].
 
 graph_build_error({vertex, duplicate, StepName}) ->
-    exit({duplicate_upgrade, StepName});
-graph_build_error({edge, E, From, To}) ->
-    exit({E, From, To}).
+    throw({error, {duplicate_upgrade, StepName}});
+graph_build_error({edge, {bad_vertex, StepName}, _From, _To}) ->
+    throw({error, {dependency_on_unknown_upgrade_step, StepName}});
+graph_build_error({edge, {bad_edge, Path}, _From, _To}) ->
+    throw({error, {cycle_in_upgrade_steps, Path}}).
 
 unknown_heads(Heads, G) ->
     [H || H <- Heads, digraph:vertex(G, H) =:= false].
@@ -130,9 +133,9 @@ apply_upgrades(Upgrades) ->
             ok = write_version(),
             ok = file:delete(LockFile);
         {error, eexist} ->
-            exit(previous_upgrade_failed);
+            {error, previous_upgrade_failed};
         {error, _} = Error ->
-            exit(Error)
+            Error
     end.
 
 apply_upgrade({M, F}) ->
