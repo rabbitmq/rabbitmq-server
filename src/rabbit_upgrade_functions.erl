@@ -40,44 +40,39 @@
 
 %%--------------------------------------------------------------------
 
+%% It's a bad idea to use records or record_info here, even for the
+%% destination form. Because in the future, the destination form of
+%% your current transform may not match the reocrd any more, and it
+%% would be messy to have to go back and fix old transforms at that
+%% point.
+
 remove_user_scope() ->
     mnesia(
       rabbit_user_permission,
-      fun (Perm = #user_permission{
-             permission = {permission,
-                           _Scope, Conf, Write, Read}}) ->
-              Perm#user_permission{
-                permission = #permission{configure = Conf,
-                                         write     = Write,
-                                         read      = Read}}
+      fun ({user_permission, UV, {permission, _Scope, Conf, Write, Read}}) ->
+              {user_permission, UV, {permission, Conf, Write, Read}}
       end,
-      record_info(fields, user_permission)).
+      [user_vhost, permission]).
 
 hash_passwords() ->
     mnesia(
       rabbit_user,
       fun ({user, Username, Password, IsAdmin}) ->
               Hash = rabbit_access_control:hash_password(Password),
-              #user{username      = Username,
-                    password_hash = Hash,
-                    is_admin      = IsAdmin}
+              {user, Username, Hash, IsAdmin}
       end,
-      record_info(fields, user)).
+      [username, password_hash, is_admin]).
 
 add_ip_to_listener() ->
     mnesia(
       rabbit_listener,
       fun ({listener, Node, Protocol, Host, Port}) ->
-              #listener{node       = Node,
-                        protocol   = Protocol,
-                        host       = Host,
-                        ip_address = {0,0,0,0},
-                        port       = Port}
+              {listener, Node, Protocol, Host, {0,0,0,0}, Port}
       end,
-      record_info(fields, listener)).
+      [node, protocol, host, ip_address, port]).
 
 %%--------------------------------------------------------------------
 
-mnesia(TableName, Fun, RecordInfo) ->
-    {atomic, ok} = mnesia:transform_table(TableName, Fun, RecordInfo),
+mnesia(TableName, Fun, FieldList) ->
+    {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList),
     ok.
