@@ -66,8 +66,8 @@ parse_headers([$\r | Rest], ParseState = #hstate{state = State})
     parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = []}) ->
     parse_headers(Rest, ParseState);
-parse_headers([0 | Rest], _ParseState = #hstate{state = command, acc = []}) ->
-    {heartbeat, Rest};
+parse_headers([0 | Rest], ParseState = #hstate{state = command, acc = []}) ->
+    parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = Acc}) ->
     parse_headers(Rest, ParseState#hstate{state = key, acc = [],
                                           command = lists:reverse(Acc)});
@@ -158,7 +158,7 @@ finalize_body(_State = #bstate{chunk = Chunk, chunks = Chunks}) ->
 finalize_chunk(Chunk) ->
     list_to_binary(lists:reverse(Chunk)).
 
-accumulate_byte(Ch, NewRemaining,
+accumulate_byte(Ch, NewRemaining, 
                 State = #bstate{chunk = Chunk,
                                 chunks = Chunks,
                                 chunksize = ?CHUNK_SIZE_LIMIT}) ->
@@ -195,10 +195,8 @@ parse(Rest, {headers, HState}) ->
     case parse_headers(Rest, HState) of
         {more, HState1} ->
             {more, {headers, HState1}};
-        {heartbeat, Rest1} ->
-            {heartbeat, Rest1};
         {ok, Command, Headers, Rest1} ->
-            parse(Rest1,
+            parse(Rest1, 
                   #stomp_frame{command = Command,
                                headers = Headers,
                                body_iolist = initial_body_state(Headers)});
