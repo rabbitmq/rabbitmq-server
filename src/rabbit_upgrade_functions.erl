@@ -42,7 +42,7 @@
 
 %% It's a bad idea to use records or record_info here, even for the
 %% destination form. Because in the future, the destination form of
-%% your current transform may not match the reocrd any more, and it
+%% your current transform may not match the record any more, and it
 %% would be messy to have to go back and fix old transforms at that
 %% point.
 
