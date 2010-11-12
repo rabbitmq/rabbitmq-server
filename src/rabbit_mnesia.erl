@@ -361,16 +361,15 @@ init_db(ClusterNodes, Force) ->
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
-                false ->
-                    FailedClusterNodes = ProperClusterNodes -- Nodes,
-                    case FailedClusterNodes of
-                        [] -> ok;
-                        _ ->
-                            throw({error, {failed_to_cluster_with,
-                                           FailedClusterNodes,
-                                           "Mnesia could not connect to some nodes."}})
-                    end;
-                _ -> ok
+                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
+                         case FailedClusterNodes of
+                             [] -> ok;
+                             _  -> throw({error, {failed_to_cluster_with,
+                                                  FailedClusterNodes,
+                                                  "Mnesia could not connect "
+                                                  "to some nodes."}})
+                         end;
+                true  -> ok
             end,
             case {Nodes, mnesia:system_info(use_dir),
                   mnesia:system_info(db_nodes)} of
@@ -413,8 +412,7 @@ init_db(ClusterNodes, Force) ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
-            throw({error, {unable_to_join_cluster,
-                           ClusterNodes, Reason}})
+            throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
     end.
 
 schema_ok_or_move() ->

@@ -93,7 +93,7 @@ all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
-	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $@
+	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
