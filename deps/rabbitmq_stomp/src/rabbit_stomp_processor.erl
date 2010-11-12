@@ -104,6 +104,7 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
                                                     DefaultVHost)),
                         rabbit_stomp_frame:header(Frame, "heartbeat",
                                                   "0,0"),
+                        Version,
                         StateN)
               end, State#state{version = Version});
         {error, no_common_version} ->
@@ -284,7 +285,7 @@ with_destination(Command, Frame, State, Fun) ->
                             State)}
     end.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, State) ->
+do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
     {ok, Connection} = amqp_connection:start(
                          direct, #amqp_params{
                            username     = list_to_binary(Login),
@@ -296,12 +297,13 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, State) ->
     {noreply,
      send_frame("CONNECTED",
                 [{"session", SessionId},
-                 {"heartbeat", io_lib:format("~B,~B", [SX, SY])}],
+                 {"heartbeat", io_lib:format("~B,~B", [SX, SY])},
+                 {"version", Version}],
                 "",
                 State1#state{session_id = SessionId,
                             channel    = Channel,
                             connection = Connection})};
-do_login(_, _, _, _, State) ->
+do_login(_, _, _, _, _, State) ->
     send_error("Bad CONNECT", "Missing login or passcode header(s)\n",
                     State).
 
