@@ -378,23 +378,25 @@ init_db(ClusterNodes, Force) ->
                     wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
                         ok ->
-                            schema_ok_or_exit();
+                            ensure_schema_ok();
                         version_not_available ->
-                            schema_ok_or_move()
+                            schema_ok_or_move();
+                        {error, Reason} ->
+                            throw({error, {upgrade_failed, Reason}})
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
                     wait_for_tables(),
-                    version_ok_or_exit(rabbit_upgrade:read_version()),
-                    schema_ok_or_exit();
+                    ensure_version_ok(rabbit_upgrade:read_version()),
+                    ensure_schema_ok();
                 {[], false, _} ->
                     %% First RAM node in cluster, start from scratch
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
-                    version_ok_or_exit(rabbit_upgrade:read_version()),
-                    version_ok_or_exit(
+                    ensure_version_ok(rabbit_upgrade:read_version()),
+                    ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
@@ -404,7 +406,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    schema_ok_or_exit()
+                    ensure_schema_ok()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -428,22 +430,19 @@ schema_ok_or_move() ->
             ok = create_schema()
     end.
 
-version_ok_or_exit({ok, DiscVersion}) ->
+ensure_version_ok({ok, DiscVersion}) ->
     case rabbit_upgrade:desired_version() of
-        DiscVersion ->
-            ok;
-        DesiredVersion ->
-            exit({schema_mismatch, DesiredVersion, DiscVersion})
+        DiscVersion    ->  ok;
+        DesiredVersion ->  throw({error, {schema_mismatch,
+                                          DesiredVersion, DiscVersion}})
     end;
-version_ok_or_exit({error, _}) ->
+ensure_version_ok({error, _}) ->
     ok = rabbit_upgrade:write_version().
 
-schema_ok_or_exit() ->
+ensure_schema_ok() ->
     case check_schema_integrity() of
-        ok ->
-            ok;
-        {error, Reason} ->
-            exit({schema_invalid, Reason})
+        ok              -> ok;
+        {error, Reason} -> throw({error, {schema_invalid, Reason}})
     end.
 
 create_schema() ->

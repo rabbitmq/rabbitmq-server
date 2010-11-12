@@ -315,43 +315,43 @@ edges(_Module, Steps) ->
             {Key, OtherStep} <- Atts,
             Key =:= requires orelse Key =:= enables].
 
-graph_build_error({vertex, duplicate, StepName}) ->
-    boot_error("Duplicate boot step name: ~w~n", [StepName]);
-graph_build_error({edge, Reason, From, To}) ->
-    boot_error(
-      "Could not add boot step dependency of ~w on ~w:~n~s",
-      [To, From,
-       case Reason of
-           {bad_vertex, V} ->
-               io_lib:format("Boot step not registered: ~w~n", [V]);
-           {bad_edge, [First | Rest]} ->
-               [io_lib:format("Cyclic dependency: ~w", [First]),
-                [io_lib:format(" depends on ~w", [Next]) || Next <- Rest],
-                io_lib:format(" depends on ~w~n", [First])]
-       end]).
-
 sort_boot_steps(UnsortedSteps) ->
-    G = rabbit_misc:build_acyclic_graph(
-          fun vertices/2, fun edges/2, fun graph_build_error/1, UnsortedSteps),
-
-    %% Use topological sort to find a consistent ordering (if there is
-    %% one, otherwise fail).
-    SortedStepsRev = [begin
-                          {StepName, Step} = digraph:vertex(G, StepName),
-                          Step
-                      end || StepName <- digraph_utils:topsort(G)],
-    SortedSteps = lists:reverse(SortedStepsRev),
-
-    digraph:delete(G),
-
-    %% Check that all mentioned {M,F,A} triples are exported.
-    case [{StepName, {M,F,A}}
-          || {StepName, Attributes} <- SortedSteps,
-             {mfa, {M,F,A}} <- Attributes,
-             not erlang:function_exported(M, F, length(A))] of
-        []               -> SortedSteps;
-        MissingFunctions -> boot_error("Boot step functions not exported: ~p~n",
-                                       [MissingFunctions])
+    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
+                                         UnsortedSteps) of
+        {ok, G} ->
+            %% Use topological sort to find a consistent ordering (if
+            %% there is one, otherwise fail).
+            SortedSteps = lists:reverse(
+                            [begin
+                                 {StepName, Step} = digraph:vertex(G, StepName),
+                                 Step
+                             end || StepName <- digraph_utils:topsort(G)]),
+            digraph:delete(G),
+            %% Check that all mentioned {M,F,A} triples are exported.
+            case [{StepName, {M,F,A}} ||
+                     {StepName, Attributes} <- SortedSteps,
+                     {mfa, {M,F,A}}         <- Attributes,
+                     not erlang:function_exported(M, F, length(A))] of
+                []               -> SortedSteps;
+                MissingFunctions -> boot_error(
+                                      "Boot step functions not exported: ~p~n",
+                                      [MissingFunctions])
+            end;
+        {error, {vertex, duplicate, StepName}} ->
+            boot_error("Duplicate boot step name: ~w~n", [StepName]);
+        {error, {edge, Reason, From, To}} ->
+            boot_error(
+              "Could not add boot step dependency of ~w on ~w:~n~s",
+              [To, From,
+               case Reason of
+                   {bad_vertex, V} ->
+                       io_lib:format("Boot step not registered: ~w~n", [V]);
+                   {bad_edge, [First | Rest]} ->
+                       [io_lib:format("Cyclic dependency: ~w", [First]),
+                        [io_lib:format(" depends on ~w", [Next]) ||
+                            Next <- Rest],
+                        io_lib:format(" depends on ~w~n", [First])]
+               end])
     end.
 
 %%---------------------------------------------------------------------------
