@@ -21,7 +21,7 @@
 -export([start_link/0]).
 
 -export([get_queues/1, get_queue/1, get_exchanges/1, get_exchange/1,
-         get_connections/0, get_connection/1,
+         get_connections/0, get_connection/1, get_overview/1,
          get_overview/0, get_channels/0, get_channel/1]).
 
 %% TODO can these not be exported any more?
@@ -115,8 +115,11 @@ get_channels() ->
 get_channel(Name) ->
     safe_call({get_channel, Name}).
 
+get_overview(Username) ->
+    safe_call({get_overview, Username}).
+
 get_overview() ->
-    safe_call(get_overview).
+    safe_call({get_overview, all}).
 
 safe_call(Term) ->
     safe_call(Term, []).
@@ -173,12 +176,11 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
                          {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
     end.
 
-sum(Table, Keys) ->
+sum(List, Keys) ->
     lists:foldl(fun (Stats, Acc) ->
                         [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
                 end,
-                [{Key, 0} || Key <- Keys],
-                [Value || {_Key, Value, _TS} <- ets:tab2list(Table)]).
+                [{Key, 0} || Key <- Keys], List).
 
 %% List = [{ [{channel, Pid}, ...], [{deliver, 123}, ...] } ...]
 group_sum([], List) ->
@@ -317,14 +319,28 @@ handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     [Res] = merge_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, channel_stats, Tables),
     {reply, result_or_error(Res), State};
 
-handle_call(get_overview, _From, State = #state{tables = Tables}) ->
-    FineQ = get_fine_stats(channel_queue_stats, [], Tables),
-    FineX = get_fine_stats(channel_exchange_stats, [], Tables),
-    Totals0 = sum(orddict:fetch(queue_stats, Tables),
-                  [messages_ready, messages_unacknowledged]),
+handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
+    VHosts = case Username of
+                 all -> rabbit_access_control:list_vhosts();
+                 _   -> rabbit_mgmt_util:vhosts(Username)
+             end,
+    Qs0 = lists:append(
+            [[rabbit_mgmt_format:queue(Q) || Q <- rabbit_amqqueue:list(V)]
+             || V <- VHosts]),
+    Qs1 = merge_stats(Qs0, ?FINE_STATS_NONE, queue_stats, Tables),
+    Totals0 = sum(Qs1, [messages_ready, messages_unacknowledged]),
     Totals = [{messages, add(pget(messages_ready, Totals0),
                              pget(messages_unacknowledged, Totals0))}|Totals0],
-    {reply, [{message_stats, FineX ++ FineQ}, {queue_totals, Totals}], State};
+    F = fun(Type) ->
+                get_fine_stats(
+                  [],
+                  [R || R = {{_, #resource{virtual_host = V}}, _, _}
+                            <- ets:tab2list(orddict:fetch(Type, Tables)),
+                        lists:member(V, VHosts)])
+        end,
+    {reply, [{message_stats,
+              F(channel_exchange_stats) ++ F(channel_queue_stats)},
+             {queue_totals, Totals}], State};
 
 handle_call(_Request, _From, State) ->
     {reply, not_understood, State}.
@@ -491,9 +507,11 @@ created_events(Type, Tables) ->
                   <- ets:tab2list(orddict:fetch(Type, Tables))].
 
 get_fine_stats(Type, GroupBy, Tables) ->
-    Table = orddict:fetch(Type, Tables),
+    get_fine_stats(GroupBy, ets:tab2list(orddict:fetch(Type, Tables))).
+
+get_fine_stats(GroupBy, List) ->
     All = [{format_id(Id), zero_old_rates(Stats)} ||
-              {Id, Stats, _Timestamp} <- ets:tab2list(Table)],
+              {Id, Stats, _Timestamp} <- List],
     group_sum(GroupBy, All).
 
 format_id({ChPid, #resource{name=XName, virtual_host=XVhost}}) ->
