@@ -18,7 +18,7 @@
 
 -include("amqp_client.hrl").
 
--export([plain/3, amqplain/3]).
+-export([plain/3, amqplain/3, external/3]).
 
 %%---------------------------------------------------------------------------
 
@@ -35,3 +35,8 @@ amqplain(none, #amqp_params{username = Username,
     LoginTable = [{<<"LOGIN">>,    longstr, Username},
                   {<<"PASSWORD">>, longstr, Password}],
     {rabbit_binary_generator:generate_table(LoginTable), _State}.
+
+external(none, _, init) ->
+    {<<"EXTERNAL">>, []};
+external(none, _, _State) ->
+    {<<"">>, _State}.
