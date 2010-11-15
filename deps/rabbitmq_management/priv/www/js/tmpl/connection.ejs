@@ -19,6 +19,7 @@
  <th>Virtual host</th>
  <th>Username</th>
  <th>Protocol</th>
+ <th>SSL</th>
  <th>State</th>
  <th>Timeout</th>
 </tr>
@@ -40,6 +41,7 @@
  <td><%= link_vhost(connection.vhost) %></td>
  <td><%= link_user(connection.user) %></td>
  <td><%= connection.protocol %></td>
+ <td><%= fmt_boolean(connection.ssl) %></td>
  <td><%= connection.state %></td>
  <td><%= connection.timeout %></td>
 </tr>
@@ -53,6 +55,28 @@
     <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
   </div>
 </div>
+
+<% if (connection.ssl && connection.peer_cert_issuer != '') { %>
+<div class="section">
+<h2>Peer Certificate</h2>
+<div class="hider">
+
+<table class="facts">
+<tr>
+  <th>Issuer</th>
+  <th>Subject</th>
+  <th>Validity</th>
+</tr>
+<tr>
+  <td><%= connection.peer_cert_issuer %></td>
+  <td><%= connection.peer_cert_subject %></td>
+  <td><%= connection.peer_cert_validity %></td>
+</tr>
+</table>
+
+</div>
+</div>
+<% } %>
 
 <div class="section-hidden">
 <h2>Client Library</h2>
