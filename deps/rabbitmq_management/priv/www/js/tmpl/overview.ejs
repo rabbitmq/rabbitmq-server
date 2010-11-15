@@ -1,18 +1,9 @@
 <h1>Overview</h1>
 
-<% if (statistics_level == 'fine') { %>
 <div class="section">
-<h2>Message Rates</h2>
+<h2>Totals</h2>
 <div class="hider updatable">
-<%= message_rates(overview.message_stats) %>
-<span class="br"></span>
-</div>
-</div>
-<% } %>
-
-<div class="section">
-<h2>Total Queued Messages</h2>
-<div class="hider updatable">
+  <h3>Queued Messages</h3>
   <div class="highlight">
     Ready
     <strong><%= overview.queue_totals.messages_ready %></strong>
@@ -25,6 +16,11 @@
     Total
     <strong><%= overview.queue_totals.messages %></strong>
   </div>
+<span class="br"></span>
+<% if (statistics_level == 'fine') { %>
+  <h3>Message Rates</h3>
+  <%= message_rates(overview.message_stats) %>
+<% } %>
 <span class="br"></span>
 </div>
 </div>
