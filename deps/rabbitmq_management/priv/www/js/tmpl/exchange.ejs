@@ -9,6 +9,7 @@
         <th>Type</th>
         <th>Durable</th>
         <th>Auto delete</th>
+        <th>Internal</th>
         <th>Arguments</th>
       </tr>
       <tr>
@@ -16,6 +17,7 @@
         <td><%= exchange.type %></td>
         <td><%= fmt_boolean(exchange.durable) %></td>
         <td><%= fmt_boolean(exchange.auto_delete) %></td>
+        <td><%= fmt_boolean(exchange.internal) %></td>
         <td><%= fmt_table_short(exchange.arguments) %></td>
       </tr>
     </table>
