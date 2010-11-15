@@ -854,19 +854,12 @@ auth_mechanisms(Sock) ->
     {ok, Configured} = application:get_env(auth_mechanisms),
     [Name || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
              Module:should_offer(Sock),
-             auth_mechanism_offer(Name, Configured)].
+             lists:any(fun (N) -> N == Name end, Configured)].
 
 auth_mechanisms_binary(Sock) ->
     list_to_binary(
             string:join(
               [atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
-
-auth_mechanism_offer(Name, Configured) ->
-    case [Name0 || {Name0, _Opts} <- Configured,
-                   Name == Name0] of
-        [] -> false;
-        _  -> true
-    end.
 
 auth_phase(Response,
            State = #v1{auth_mechanism = AuthMechanism,
