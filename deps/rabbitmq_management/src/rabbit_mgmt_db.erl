@@ -170,7 +170,8 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
                  Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) /
                                     1000000),
                  {Name, [{rate, Rate},
-                         {last_event, rabbit_mgmt_format:timestamp(Timestamp)}]}
+                         {last_event,
+                          rabbit_mgmt_format:timestamp_ms(Timestamp)}]}
     end.
 
 sum(Table, Keys) ->
@@ -350,7 +351,8 @@ code_change(_OldVsn, State, _Extra) ->
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
-                 [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]}],
+                 [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
+                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
                  [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
@@ -392,7 +394,9 @@ handle_event(#event{type = channel_created, props = Stats},
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
-    handle_stats(channel_stats, Stats, Timestamp, [], [], State),
+    handle_stats(channel_stats, Stats, Timestamp,
+                 [{fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
+                 [], State),
     [handle_fine_stats(Type, Stats, Timestamp, State) ||
         Type <- ?FINE_STATS_TYPES],
     {ok, State};

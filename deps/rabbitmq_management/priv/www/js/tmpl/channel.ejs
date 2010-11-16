@@ -16,6 +16,7 @@
     <th>Acks uncommitted</th>
     <th>Messages unacknowledged</th>
     <th>Client blocked</th>
+    <th>Status</th>
   </tr>
   <tr>
     <td><%= link_conn(channel.connection_details.name) %></td>
@@ -29,6 +30,7 @@
     <td><%= channel.acks_uncommitted %></td>
     <td><%= channel.messages_unacknowledged %></td>
     <td><%= fmt_boolean(channel.client_flow_blocked) %></td>
+    <td><%= fmt_idle_long(channel) %></td>
   </tr>
 </table>
 </div>
