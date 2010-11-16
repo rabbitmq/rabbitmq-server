@@ -256,8 +256,8 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
 
 do_rpc(State = #state{rpc_requests = Q,
                       closing      = Closing}) ->
-    case queue:peek(Q) of
-        {value, {From, Method, Content}} ->
+    case queue:out(Q) of
+        {{value, {From, Method, Content}}, NewQ} ->
             State1 = pre_do(Method, Content, State),
             DoRet = do(Method, Content, State1),
             case ?PROTOCOL:is_method_synchronous(Method) of
@@ -268,15 +268,14 @@ do_rpc(State = #state{rpc_requests = Q,
                              %% Do not reply if error in do. Expecting
                              %% {channel_exit, ...}
                          end,
-                         {{value, _}, NewQ} = queue:out(Q),
                          do_rpc(State1#state{rpc_requests = NewQ})
             end;
-        empty ->
+        {empty, NewQ} ->
             case Closing of
                 connection -> self() ! {shutdown, connection_closing};
                 _          -> ok
             end,
-            State
+            State#state{rpc_requests = NewQ}
     end.
 
 pre_do(#'channel.open'{}, _Content, State) ->
