@@ -47,7 +47,7 @@
 
 -ifdef(use_specs).
 
--export_type([username/0, password/0]).
+-export_type([username/0, password/0, password_hash/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).
@@ -73,7 +73,7 @@
 -spec(change_password_hash/2 :: (username(), password_hash()) -> 'ok').
 -spec(set_admin/1 :: (username()) -> 'ok').
 -spec(clear_admin/1 :: (username()) -> 'ok').
--spec(list_users/0 :: () -> [username()]).
+-spec(list_users/0 :: () -> [{username(), boolean()}]).
 -spec(lookup_user/1 ::
         (username()) -> rabbit_types:ok(rabbit_types:user())
                             | rabbit_types:error('not_found')).

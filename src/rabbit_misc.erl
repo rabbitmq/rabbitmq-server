@@ -64,6 +64,7 @@
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
+-export([all_module_attributes/1, build_acyclic_graph/4]).
 -export([now_ms/0]).
 
 -import(mnesia).
@@ -83,6 +84,12 @@
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
+-type(digraph_label() :: term()).
+-type(graph_vertex_fun() ::
+        fun ((atom(), [term()]) -> {digraph:vertex(), digraph_label()})).
+-type(graph_edge_fun() ::
+        fun ((atom(), [term()]) -> {digraph:vertex(), digraph:vertex()})).
+-type(graph_error_fun() :: fun ((any()) -> any() | no_return())).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -129,8 +136,8 @@
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
--spec(report_cover/1 :: (file:filename()) -> 'ok').
+-spec(enable_cover/1 :: ([file:filename() | atom()]) -> ok_or_error()).
+-spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -178,13 +185,15 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(dict_cons/3 :: (any(), any(), dict:dictionary()) ->
-                          dict:dictionary()).
--spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
-                             orddict:dictionary()).
+-spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
+-spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-spec(build_acyclic_graph/4 :: (graph_vertex_fun(), graph_edge_fun(),
+                                graph_error_fun(), [{atom(), [term()]}]) ->
+                                    digraph()).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
@@ -270,29 +279,30 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
-enable_cover() ->
-    enable_cover(".").
+enable_cover() -> enable_cover(["."]).
 
-enable_cover([Root]) when is_atom(Root) ->
-    enable_cover(atom_to_list(Root));
-enable_cover(Root) ->
-    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
-        {error,Reason} -> {error,Reason};
-        _ -> ok
-    end.
+enable_cover(Dirs) ->
+    lists:foldl(fun (Dir, ok) ->
+                        case cover:compile_beam_directory(
+                               filename:join(lists:concat([Dir]),"ebin")) of
+                            {error, _} = Err -> Err;
+                            _                -> ok
+                        end;
+                    (_Dir, Err) ->
+                        Err
+                end, ok, Dirs).
 
 start_cover(NodesS) ->
     {ok, _} = cover:start([makenode(N) || N <- NodesS]),
     ok.
 
-report_cover() ->
-    report_cover(".").
+report_cover() -> report_cover(["."]).
 
-report_cover([Root]) when is_atom(Root) ->
-    report_cover(atom_to_list(Root));
-report_cover(Root) ->
+report_cover(Dirs) -> [report_cover1(lists:concat([Dir])) || Dir <- Dirs], ok.
+
+report_cover1(Root) ->
     Dir = filename:join(Root, "cover"),
-    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
+    ok = filelib:ensure_dir(filename:join(Dir, "junk")),
     lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
     {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
@@ -726,3 +736,45 @@ get_flag(_, []) ->
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.
+
+module_attributes(Module) ->
+    case catch Module:module_info(attributes) of
+        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+                      [Module]),
+            [];
+        {'EXIT', Reason} ->
+            exit(Reason);
+        V ->
+            V
+    end.
+
+all_module_attributes(Name) ->
+    Modules =
+        lists:usort(
+          lists:append(
+            [Modules || {App, _, _}   <- application:loaded_applications(),
+                        {ok, Modules} <- [application:get_key(App, modules)]])),
+    lists:foldl(
+      fun (Module, Acc) ->
+              case lists:append([Atts || {N, Atts} <- module_attributes(Module),
+                                         N =:= Name]) of
+                  []   -> Acc;
+                  Atts -> [{Module, Atts} | Acc]
+              end
+      end, [], Modules).
+
+
+build_acyclic_graph(VertexFun, EdgeFun, ErrorFun, Graph) ->
+    G = digraph:new([acyclic]),
+    [ case digraph:vertex(G, Vertex) of
+          false -> digraph:add_vertex(G, Vertex, Label);
+          _     -> ErrorFun({vertex, duplicate, Vertex})
+      end || {Module, Atts} <- Graph,
+             {Vertex, Label} <- VertexFun(Module, Atts) ],
+    [ case digraph:add_edge(G, From, To) of
+          {error, E} -> ErrorFun({edge, E, From, To});
+          _          -> ok
+      end || {Module, Atts} <- Graph,
+             {From, To} <- EdgeFun(Module, Atts) ],
+    G.
