@@ -187,22 +187,18 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                               lists:min([Client, Server])
                       end, [ClientChannelMax, ClientHeartbeat, ClientFrameMax],
                            [ServerChannelMax, ServerHeartbeat, ServerFrameMax]),
-    start_heartbeat(SHF, State),
+    NewState = State#state{heartbeat = Heartbeat, frame_max = FrameMax},
+    start_heartbeat(SHF, NewState),
     {#'connection.tune_ok'{channel_max = ChannelMax,
                            frame_max   = FrameMax,
-                           heartbeat   = Heartbeat},
-     ChannelMax, State#state{heartbeat = Heartbeat, frame_max = FrameMax}}.
+                           heartbeat   = Heartbeat}, ChannelMax, NewState}.
 
 start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
-    SendFun = fun() ->
-                      Frame = rabbit_binary_generator:build_heartbeat_frame(),
-                      catch rabbit_net:send(Sock, Frame)
+    SendFun = fun () -> Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                        catch rabbit_net:send(Sock, Frame)
               end,
-
     Connection = self(),
-    ReceiveFun = fun() ->
-                         Connection ! heartbeat_timeout
-                 end,
+    ReceiveFun = fun () -> Connection ! heartbeat_timeout end,
     SHF(Sock, Heartbeat, SendFun, Heartbeat, ReceiveFun).
 
 start_ok(#amqp_params{username          = Username,
