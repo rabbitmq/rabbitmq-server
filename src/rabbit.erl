@@ -291,11 +291,10 @@ run_boot_step({StepName, Attributes}) ->
             io:format("-- ~s~n", [Description]);
         MFAs ->
             io:format("starting ~-60s ...", [Description]),
-            [case catch apply(M,F,A) of
-                 {'EXIT', Reason} ->
-                     boot_error("FAILED~nReason: ~p~n", [Reason]);
-                 ok ->
-                     ok
+            [try
+                 apply(M,F,A)
+             catch
+                 _:Reason -> boot_error("FAILED~nReason: ~p~n", [Reason])
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
