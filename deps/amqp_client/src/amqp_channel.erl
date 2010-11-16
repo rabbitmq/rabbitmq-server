@@ -218,6 +218,25 @@ register_default_consumer(Channel, Consumer) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
+handle_method_call(Method, AmqpMsg, From, State) ->
+    case {Method, From, check_block(Method, AmqpMsg, State)} of
+        {#'basic.consume'{}, none, _} ->
+            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. "
+                      "Use subscribe/3 instead!~n", [self(), Method]),
+            {noreply, State};
+        {#'basic.consume'{}, _, _} ->
+            {reply, {error, use_subscribe}, State};
+        {_, _, ok} ->
+            {noreply,
+             rpc_top_half(Method, build_content(AmqpMsg), From, State)};
+        {_, none, BlockReply} ->
+            ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
+                      "Reason: ~p~n", [self(), Method, BlockReply]),
+            {noreply, State};
+        {_, _, BlockReply} ->
+            {reply, BlockReply, State}
+    end.
+
 rpc_top_half(Method, Content, From,
              State0 = #state{rpc_requests = RequestQueue}) ->
     State1 = State0#state{
@@ -235,13 +254,23 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     end,
     do_rpc(State#state{rpc_requests = RequestQueue1}).
 
-do_rpc(State = #state{rpc_requests = RequestQueue,
+do_rpc(State = #state{rpc_requests = Q,
                       closing      = Closing}) ->
-    case queue:peek(RequestQueue) of
-        {value, {_From, Method, Content}} ->
+    case queue:peek(Q) of
+        {value, {From, Method, Content}} ->
             State1 = pre_do(Method, Content, State),
-            do(Method, Content, State1),
-            State1;
+            DoRet = do(Method, Content, State1),
+            case ?PROTOCOL:is_method_synchronous(Method) of
+                true  -> State1;
+                false -> case {From, DoRet} of
+                             {none, _} -> ok;
+                             {_, ok}   -> gen_server:reply(From, ok)
+                             %% Do not reply if error in do. Expecting
+                             %% {channel_exit, ...}
+                         end,
+                         {{value, _}, NewQ} = queue:out(Q),
+                         do_rpc(State1#state{rpc_requests = NewQ})
+            end;
         empty ->
             case Closing of
                 connection -> self() ! {shutdown, connection_closing};
@@ -320,11 +349,6 @@ check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
     blocked;
 check_block(_Method, _AmqpMsg, #state{}) ->
     ok.
-
-shutdown_with_reason({_, 200, _}, State) ->
-    {stop, normal, State};
-shutdown_with_reason(Reason, State) ->
-    {stop, Reason, State}.
 
 is_connection_method(Method) ->
     {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
@@ -448,22 +472,7 @@ init([Sup, Driver, ChannelNumber, SWF]) ->
 %% Standard implementation of the call/{2,3} command
 %% @private
 handle_call({call, Method, AmqpMsg}, From, State) ->
-    case {Method, check_block(Method, AmqpMsg, State)} of
-        {#'basic.consume'{}, _} ->
-            {reply, {error, use_subscribe}, State};
-        {_, ok} ->
-            Content = build_content(AmqpMsg),
-            case ?PROTOCOL:is_method_synchronous(Method) of
-                true  -> {noreply, rpc_top_half(Method, Content, From, State)};
-                false -> case do(Method, Content, State) of
-                             ok -> {reply, ok, State};
-                             %% Error. Expect a {channel_exit, _, _} message
-                             _  -> {noreply, State}
-                         end
-            end;
-        {_, BlockReply} ->
-            {reply, BlockReply, State}
-    end;
+    handle_method_call(Method, AmqpMsg, From, State);
 
 %% Standard implementation of the subscribe/3 command
 %% @private
@@ -503,28 +512,8 @@ handle_call({send_command_sync, Method}, From, State) ->
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
-handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
-    case {Method, check_block(Method, AmqpMsg, State)} of
-        {#'basic.consume'{}, _} ->
-            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. "
-                      "Use subscribe/3 instead!~n", [self(), Method]),
-            {noreply, State};
-        {_, ok} ->
-            Content = build_content(AmqpMsg),
-            case ?PROTOCOL:is_method_synchronous(Method) of
-                true  -> ?LOG_WARN("Channel (~p): casting synchronous method "
-                                   "~p.~n"
-                                   "The reply will be ignored!~n",
-                                   [self(), Method]),
-                         {noreply, rpc_top_half(Method, Content, none, State)};
-                false -> do(Method, Content, State),
-                         {noreply, State}
-            end;
-        {_, BlockReply} ->
-            ?LOG_WARN("Channel (~p): discarding method in cast ~p.~n"
-                      "Reason: ~p~n", [self(), Cast, BlockReply]),
-            {noreply, State}
-    end;
+handle_cast({cast, Method, AmqpMsg}, State) ->
+    handle_method_call(Method, AmqpMsg, none, State);
 
 %% Registers a handler to process return messages
 %% @private
@@ -611,8 +600,11 @@ handle_info({channel_exit, _FrPidOrChNumber, Reason},
     end;
 
 %% @private
+handle_info({shutdown, {_, 200, _}}, State) ->
+    {stop, normal, State};
+%% @private
 handle_info({shutdown, Reason}, State) ->
-    shutdown_with_reason(Reason, State);
+    {stop, Reason, State};
 
 %% @private
 handle_info({shutdown, FailShutdownReason, connection_closing},

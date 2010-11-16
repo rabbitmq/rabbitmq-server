@@ -65,8 +65,14 @@ channel_lifecycle_test() ->
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
 
-command_serialization_test() ->
-    test_util:command_serialization_test(new_connection()).
+sync_method_serialization_test() ->
+    test_util:sync_method_serialization_test(new_connection()).
+
+async_sync_method_serialization_test() ->
+    test_util:async_sync_method_serialization_test(new_connection()).
+
+sync_async_method_serialization_test() ->
+    test_util:sync_async_method_serialization_test(new_connection()).
 
 recover_after_cancel_test() ->
     test_util:recover_after_cancel_test(new_connection()).
