@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_auth_mechanism_scram_md5).
+-module(rabbit_auth_mechanism_cr_demo).
 -include("rabbit.hrl").
 
 -behaviour(rabbit_auth_mechanism).
@@ -39,30 +39,24 @@
 -include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "auth mechanism scram-md5"},
+                   [{description, "auth mechanism cr-demo"},
                     {mfa,         {rabbit_registry, register,
-                                   [auth_mechanism, <<"RABBIT-SCRAM-MD5">>,
+                                   [auth_mechanism, <<"RABBIT-CR-DEMO">>,
                                     ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
--record(state, {username = undefined, salt2 = undefined}).
+-record(state, {username = undefined}).
 
+%% Provides equivalent security to PLAIN but demos use of Connection.Secure(Ok)
 %% START-OK: Username
-%% SECURE: {Salt1, Salt2} (where Salt1 is the salt from the db and
-%% Salt2 differs every time)
-%% SECURE-OK: md5(Salt2 ++ md5(Salt1 ++ Password))
-
-%% The second salt is there to defend against replay attacks. The
-%% first is needed since the passwords are salted in the db.
-
-%% This is only somewhat improved security over PLAIN (if you can
-%% break MD5 you can still replay attack) but it's better than nothing
-%% and mostly there to prove the use of SECURE / SECURE-OK frames.
+%% SECURE: "Please tell me your password"
+%% SECURE-OK: Password
 
 description() ->
-    [{name, <<"RABBIT-SCRAM-MD5">>},
-     {description, <<"RabbitMQ SCRAM-MD5 authentication mechanism">>}].
+    [{name, <<"RABBIT-CR-DEMO">>},
+     {description, <<"RabbitMQ Demo challenge-response authentication "
+                     "mechanism">>}].
 
 should_offer(_Sock) ->
     true.
@@ -70,26 +64,9 @@ should_offer(_Sock) ->
 init(_Sock) ->
     #state{}.
 
-handle_response(Username, State = #state{username = undefined}) ->
-    case rabbit_access_control:lookup_user(Username) of
-        {ok, User} ->
-            <<Salt1:4/binary, _/binary>> = User#user.password_hash,
-            Salt2 = rabbit_access_control:make_salt(),
-            {challenge, <<Salt1/binary, Salt2/binary>>,
-             State#state{username = Username, salt2 = Salt2}};
-        {error, not_found} ->
-            {refused, Username} %% TODO information leak
-    end;
+handle_response(Response, State = #state{username = undefined}) ->
+    {challenge, <<"Please tell me your password">>,
+     State#state{username = Response}};
 
-handle_response(Response, #state{username = Username, salt2 = Salt2}) ->
-    case rabbit_access_control:lookup_user(Username) of
-        {ok, User} ->
-            <<_:4/binary, Hash/binary>> = User#user.password_hash,
-            Expected = erlang:md5(<<Salt2/binary, Hash/binary>>),
-            case Response of
-                Expected -> {ok, User};
-                _        -> {refused, Username}
-            end;
-        {error, not_found} ->
-            {refused, Username}
-    end.
+handle_response(Response, #state{username = Username}) ->
+    rabbit_access_control:check_user_pass_login(Username, Response).
