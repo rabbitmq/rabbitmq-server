@@ -84,7 +84,8 @@ write_version() ->
     ok.
 
 desired_version() ->
-    with_upgrade_graph(fun (G) -> {ok, heads(G)} end).
+    {ok, Version} = with_upgrade_graph(fun (G) -> {ok, heads(G)} end),
+    Version.
 
 %% -------------------------------------------------------------------
 
