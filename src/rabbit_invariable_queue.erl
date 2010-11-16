@@ -52,7 +52,7 @@
 -type(state() :: #iv_state { queue       :: queue(),
                              qname       :: rabbit_amqqueue:name(),
                              len         :: non_neg_integer(),
-                             pending_ack :: dict:dictionary()
+                             pending_ack :: dict()
                            }).
 -include("rabbit_backing_queue_spec.hrl").
 

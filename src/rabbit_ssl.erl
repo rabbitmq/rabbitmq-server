@@ -85,8 +85,8 @@ peer_cert_validity(Cert) ->
 
 cert_info(F, Cert) ->
     F(case public_key:pkix_decode_cert(Cert, otp) of
-          {ok, DecCert} -> DecCert;
-          DecCert       -> DecCert
+          {ok, DecCert} -> DecCert; %%pre R14B
+          DecCert       -> DecCert  %%R14B onwards
       end).
 
 %%--------------------------------------------------------------------------
