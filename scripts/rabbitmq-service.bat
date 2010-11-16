@@ -192,7 +192,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
 -extra !STAR!
 
-set RABBITMQ_BOOT_FILE=!RABBITMQ_MNESIA_DIR!\plugins-scratch\rabbit
+set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
 if not exist "!RABBITMQ_BOOT_FILE!.boot" (
     echo Custom Boot File "!RABBITMQ_BOOT_FILE!.boot" is missing.
     exit /B 1
