@@ -32,5 +32,4 @@
          {cluster_nodes, []},
          {server_properties, []},
          {collect_statistics, none},
-         {auth_mechanisms, [{'PLAIN', []},
-                            {'AMQPLAIN', []}]} ]} ]}.
+         {auth_mechanisms, ['PLAIN', 'AMQPLAIN']} ]} ]}.
