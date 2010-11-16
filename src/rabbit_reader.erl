@@ -65,7 +65,7 @@
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
 
--define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
+-define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
                               peer_cert_validity,
                               protocol, user, vhost, timeout, frame_max,
@@ -848,6 +848,8 @@ i(peer_address, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
 i(peer_port, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
+i(ssl, #v1{sock = Sock}) ->
+    rabbit_net:is_ssl(Sock);
 i(peer_cert_issuer, #v1{sock = Sock}) ->
     cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
 i(peer_cert_subject, #v1{sock = Sock}) ->
@@ -898,7 +900,7 @@ cert_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> '';
         {error, no_peercert} -> '';
-        {ok, Cert}           -> F(Cert)
+        {ok, Cert}           -> list_to_binary(F(Cert))
     end.
 
 %%--------------------------------------------------------------------------

@@ -84,6 +84,12 @@
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
+-type(digraph_label() :: term()).
+-type(graph_vertex_fun() ::
+        fun ((atom(), [term()]) -> {digraph:vertex(), digraph_label()})).
+-type(graph_edge_fun() ::
+        fun ((atom(), [term()]) -> {digraph:vertex(), digraph:vertex()})).
+-type(graph_error_fun() :: fun ((any()) -> any() | no_return())).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -184,7 +190,10 @@
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
--spec(all_module_attributes/1 :: (atom()) -> dict:dictionary()).
+-spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-spec(build_acyclic_graph/4 :: (graph_vertex_fun(), graph_edge_fun(),
+                                graph_error_fun(), [{atom(), [term()]}]) ->
+                                    digraph()).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.

@@ -36,7 +36,7 @@
 -spec(read_version/0 ::
         () -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_version/0 :: () -> 'ok').
--spec(desired_version/0 :: () -> [any()]).
+-spec(desired_version/0 :: () -> [atom()]).
 
 -endif.
 
