@@ -57,11 +57,22 @@ description() ->
     [{name, <<"EXTERNAL">>},
      {description, <<"SASL EXTERNAL authentication mechanism">>}].
 
-%% TODO: safety check, don't offer unless verify_peer set
 should_offer(Sock) ->
     case peer_subject(Sock) of
-        none -> false;
-        _    -> true
+        none ->
+            false;
+        _ ->
+            {ok, Opts} = application:get_env(ssl_options),
+            case {proplists:get_value(fail_if_no_peer_cert, Opts),
+                  proplists:get_value(verify, Opts)} of
+                {true, verify_peer} ->
+                    true;
+                {F, V} ->
+                    rabbit_log:warning("EXTERNAL mechanism disabled, "
+                                       "fail_if_no_peer_cert=~p; "
+                                       "verify=~p~n", [F, V]),
+                    false
+            end
     end.
 
 init(Sock) ->
