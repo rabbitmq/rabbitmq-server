@@ -207,11 +207,10 @@ login(Params = #amqp_params{auth_mechanisms = ClientMechanisms,
                             client_properties = UserProps},
       ServerMechanismsStr, State) ->
     ServerMechanisms = string:tokens(binary_to_list(ServerMechanismsStr), " "),
-    case lists:filter(fun ({{N, _}, _}) ->
-                              lists:member(binary_to_list(N), ServerMechanisms)
-                      end,
-                      [{M(none, Params, init), M} || M <- ClientMechanisms]) of
-        [{{Name, MState0}, Mech}|_] ->
+    case [{N, S, F} || F <- ClientMechanisms,
+                       {N, S} <- [F(none, Params, init)],
+                       lists:member(binary_to_list(N), ServerMechanisms)] of
+        [{Name, MState0, Mech}|_] ->
             {Resp, MState1} = Mech(none, Params, MState0),
             StartOk = #'connection.start_ok'{
               client_properties = client_properties(UserProps),
