@@ -32,11 +32,22 @@
 
 -ifdef(use_specs).
 
--spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
--spec(read_version/0 ::
-        () -> {'ok', [any()]} | rabbit_types:error(any())).
+-type(step() :: atom()).
+-type(version() :: [step()]).
+
+-type(upgrade_definition_error() ::
+        {'duplicate_upgrade_step', step()} |
+        {'dependency_on_unknown_upgrade_step', step()} |
+        {'cycle_in_upgrade_steps', [step()]}).
+
+-spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available' |
+                               rabbit_types:error(
+                                 upgrade_definition_error() |
+                                 {'future_upgrades_founds', [step()]})).
+-spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
--spec(desired_version/0 :: () -> [atom()]).
+-spec(desired_version/0 :: () -> rabbit_types:ok_or_error2(
+                                   version(), upgrade_definition_error())).
 
 -endif.
 
@@ -48,26 +59,24 @@
 maybe_upgrade() ->
     case read_version() of
         {ok, CurrentHeads} ->
-            G = load_graph(),
-            case unknown_heads(CurrentHeads, G) of
-                [] ->
-                    case upgrades_to_apply(CurrentHeads, G) of
-                        []       -> ok;
-                        Upgrades -> apply_upgrades(Upgrades)
-                    end;
-                Unknown ->
-                    exit({future_upgrades_found, Unknown})
-            end,
-            true = digraph:delete(G),
-            ok;
+            with_upgrade_graph(
+              fun (G) ->
+                      case unknown_heads(CurrentHeads, G) of
+                          []      -> case upgrades_to_apply(CurrentHeads, G) of
+                                         []       -> ok;
+                                         Upgrades -> apply_upgrades(Upgrades)
+                                     end;
+                          Unknown -> {error, {future_upgrades_found, Unknown}}
+                      end
+              end);
         {error, enoent} ->
             version_not_available
     end.
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [Heads]} -> {ok, Heads};
-        {error, E}    -> {error, E}
+        {ok, [Heads]}    -> {ok, Heads};
+        {error, _} = Err -> Err
     end.
 
 write_version() ->
@@ -75,17 +84,27 @@ write_version() ->
     ok.
 
 desired_version() ->
-    G = load_graph(),
-    Version = heads(G),
-    true = digraph:delete(G),
+    {ok, Version} = with_upgrade_graph(fun (G) -> {ok, heads(G)} end),
     Version.
 
 %% -------------------------------------------------------------------
 
-load_graph() ->
-    Upgrades = rabbit_misc:all_module_attributes(rabbit_upgrade),
-    rabbit_misc:build_acyclic_graph(
-      fun vertices/2, fun edges/2, fun graph_build_error/1, Upgrades).
+with_upgrade_graph(Fun) ->
+    case rabbit_misc:build_acyclic_graph(
+           fun vertices/2, fun edges/2,
+           rabbit_misc:all_module_attributes(rabbit_upgrade)) of
+        {ok, G} -> try
+                       Fun(G)
+                   after
+                       true = digraph:delete(G)
+                   end;
+        {error, {vertex, duplicate, StepName}} ->
+            {error, {duplicate_upgrade_step, StepName}};
+        {error, {edge, {bad_vertex, StepName}, _From, _To}} ->
+            {error, {dependency_on_unknown_upgrade_step, StepName}};
+        {error, {edge, {bad_edge, StepNames}, _From, _To}} ->
+            {error, {cycle_in_upgrade_steps, StepNames}}
+    end.
 
 vertices(Module, Steps) ->
     [{StepName, {Module, StepName}} || {StepName, _Reqs} <- Steps].
@@ -93,10 +112,6 @@ vertices(Module, Steps) ->
 edges(_Module, Steps) ->
     [{Require, StepName} || {StepName, Requires} <- Steps, Require <- Requires].
 
-graph_build_error({vertex, duplicate, StepName}) ->
-    exit({duplicate_upgrade, StepName});
-graph_build_error({edge, E, From, To}) ->
-    exit({E, From, To}).
 
 unknown_heads(Heads, G) ->
     [H || H <- Heads, digraph:vertex(G, H) =:= false].
@@ -111,8 +126,8 @@ upgrades_to_apply(Heads, G) ->
                   sets:from_list(digraph_utils:reaching(Heads, G)))),
     %% Form a subgraph from that list and find a topological ordering
     %% so we can invoke them in order.
-    [element(2, digraph:vertex(G, StepName))
-     || StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
+    [element(2, digraph:vertex(G, StepName)) ||
+        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
 
 heads(G) ->
     lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).
@@ -130,9 +145,9 @@ apply_upgrades(Upgrades) ->
             ok = write_version(),
             ok = file:delete(LockFile);
         {error, eexist} ->
-            exit(previous_upgrade_failed);
+            {error, previous_upgrade_failed};
         {error, _} = Error ->
-            exit(Error)
+            Error
     end.
 
 apply_upgrade({M, F}) ->
@@ -141,16 +156,12 @@ apply_upgrade({M, F}) ->
 
 %% -------------------------------------------------------------------
 
-schema_filename() ->
-    filename:join(dir(), ?VERSION_FILENAME).
+dir() -> rabbit_mnesia:dir().
 
-lock_filename() ->
-    filename:join(dir(), ?LOCK_FILENAME).
+schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
+
+lock_filename()   -> filename:join(dir(), ?LOCK_FILENAME).
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet
-info(Msg, Args) ->
-    error_logger:info_msg(Msg, Args).
-
-dir() ->
-    rabbit_mnesia:dir().
+info(Msg, Args) -> error_logger:info_msg(Msg, Args).
