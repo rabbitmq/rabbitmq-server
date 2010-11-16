@@ -270,7 +270,7 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     rabbit_event:if_enabled(StatsTimer,
                             fun () ->
                                     internal_emit_stats(
-                                      State, [{idle_since, erlang:now()}])
+                                      State, [{idle_since, now()}])
                             end),
     {hibernate,
      State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
