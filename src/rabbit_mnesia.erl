@@ -380,9 +380,7 @@ init_db(ClusterNodes, Force) ->
                         ok ->
                             ensure_schema_ok();
                         version_not_available ->
-                            schema_ok_or_move();
-                        {error, Reason} ->
-                            throw({error, {upgrade_failed, Reason}})
+                            schema_ok_or_move()
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,

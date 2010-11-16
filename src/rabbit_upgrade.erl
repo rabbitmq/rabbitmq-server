@@ -35,19 +35,10 @@
 -type(step() :: atom()).
 -type(version() :: [step()]).
 
--type(upgrade_definition_error() ::
-        {'duplicate_upgrade_step', step()} |
-        {'dependency_on_unknown_upgrade_step', step()} |
-        {'cycle_in_upgrade_steps', [step()]}).
-
--spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available' |
-                               rabbit_types:error(
-                                 upgrade_definition_error() |
-                                 {'future_upgrades_founds', [step()]})).
+-spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
--spec(desired_version/0 :: () -> rabbit_types:ok_or_error2(
-                                   version(), upgrade_definition_error())).
+-spec(desired_version/0 :: () -> version()).
 
 -endif.
 
@@ -66,7 +57,8 @@ maybe_upgrade() ->
                                          []       -> ok;
                                          Upgrades -> apply_upgrades(Upgrades)
                                      end;
-                          Unknown -> {error, {future_upgrades_found, Unknown}}
+                          Unknown -> throw({error,
+                                            {future_upgrades_found, Unknown}})
                       end
               end);
         {error, enoent} ->
@@ -84,8 +76,7 @@ write_version() ->
     ok.
 
 desired_version() ->
-    {ok, Version} = with_upgrade_graph(fun (G) -> {ok, heads(G)} end),
-    Version.
+    with_upgrade_graph(fun (G) -> heads(G) end).
 
 %% -------------------------------------------------------------------
 
@@ -99,11 +90,11 @@ with_upgrade_graph(Fun) ->
                        true = digraph:delete(G)
                    end;
         {error, {vertex, duplicate, StepName}} ->
-            {error, {duplicate_upgrade_step, StepName}};
+            throw({error, {duplicate_upgrade_step, StepName}});
         {error, {edge, {bad_vertex, StepName}, _From, _To}} ->
-            {error, {dependency_on_unknown_upgrade_step, StepName}};
+            throw({error, {dependency_on_unknown_upgrade_step, StepName}});
         {error, {edge, {bad_edge, StepNames}, _From, _To}} ->
-            {error, {cycle_in_upgrade_steps, StepNames}}
+            throw({error, {cycle_in_upgrade_steps, StepNames}})
     end.
 
 vertices(Module, Steps) ->
@@ -145,9 +136,9 @@ apply_upgrades(Upgrades) ->
             ok = write_version(),
             ok = file:delete(LockFile);
         {error, eexist} ->
-            {error, previous_upgrade_failed};
+            throw({error, previous_upgrade_failed});
         {error, _} = Error ->
-            Error
+            throw(Error)
     end.
 
 apply_upgrade({M, F}) ->
