@@ -1,26 +1,17 @@
-#   The contents of this file are subject to the Mozilla Public License
-#   Version 1.1 (the "License"); you may not use this file except in
-#   compliance with the License. You may obtain a copy of the License at
-#   http://www.mozilla.org/MPL/
+# The contents of this file are subject to the Mozilla Public License
+# Version 1.1 (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
 #
-#   Software distributed under the License is distributed on an "AS IS"
-#   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-#   License for the specific language governing rights and limitations
-#   under the License.
+# Software distributed under the License is distributed on an "AS IS"
+# basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+# License for the specific language governing rights and limitations
+# under the License.
 #
-#   The Original Code is the RabbitMQ Erlang Client.
+# The Original Code is RabbitMQ.
 #
-#   The Initial Developers of the Original Code are LShift Ltd.,
-#   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-#
-#   Portions created by LShift Ltd., Cohesive Financial
-#   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-#   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-#   Technologies Ltd.; 
-#
-#   All Rights Reserved.
-#
-#   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+# The Initial Developer of the Original Code is VMware, Inc.
+# Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 #
 
 VERSION=0.0.0
@@ -55,9 +46,8 @@ distribution: documentation source_tarball package
 
 RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
 
-dialyze: $(RABBIT_PLT) $(TARGETS) $(TEST_TARGETS)
-	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
-        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
+dialyze: $(RABBIT_PLT) $(TARGETS)
+	dialyzer --plt $(RABBIT_PLT) --no_native -Wrace_conditions $(TARGETS)
 
 .PHONY: $(RABBIT_PLT)
 $(RABBIT_PLT):

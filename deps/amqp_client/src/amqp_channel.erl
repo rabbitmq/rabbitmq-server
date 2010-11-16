@@ -1,26 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 %%
 
 %% @doc This module encapsulates the client's view of an AMQP
@@ -265,8 +256,8 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
 
 do_rpc(State = #state{rpc_requests = Q,
                       closing      = Closing}) ->
-    case queue:peek(Q) of
-        {value, {From, Method, Content}} ->
+    case queue:out(Q) of
+        {{value, {From, Method, Content}}, NewQ} ->
             State1 = pre_do(Method, Content, State),
             DoRet = do(Method, Content, State1),
             case ?PROTOCOL:is_method_synchronous(Method) of
@@ -277,15 +268,14 @@ do_rpc(State = #state{rpc_requests = Q,
                              %% Do not reply if error in do. Expecting
                              %% {channel_exit, ...}
                          end,
-                         {{value, _}, NewQ} = queue:out(Q),
                          do_rpc(State1#state{rpc_requests = NewQ})
             end;
-        empty ->
+        {empty, NewQ} ->
             case Closing of
                 connection -> self() ! {shutdown, connection_closing};
                 _          -> ok
             end,
-            State
+            State#state{rpc_requests = NewQ}
     end.
 
 pre_do(#'channel.open'{}, _Content, State) ->
