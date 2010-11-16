@@ -59,7 +59,7 @@
         -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
-        -> {'ok', rabbit_types:user()} | 'refused').
+        -> {'ok', rabbit_types:user()} | {'refused', username()}).
 -spec(make_salt/0 :: () -> binary()).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())

@@ -30,6 +30,13 @@
 %%
 -ifdef(use_specs).
 
-%% TODO
+-spec(description/0 :: () -> [{atom(), any()}]).
+-spec(should_offer/1 :: (rabbit_net:socket()) -> boolean()).
+-spec(init/1 :: (rabbit_net:socket()) -> any()).
+-spec(handle_response/2 :: (binary(), any()) ->
+                                {'ok', rabbit_types:user()} |
+                                {'challenge', binary(), any()} |
+                                {'protocol_error', string(), [any()]} |
+                                {'refused', rabbit_access_control:username()}).
 
 -endif.
