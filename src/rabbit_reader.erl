@@ -626,7 +626,7 @@ analyze_frame(_Type, _Body, _Protocol) ->
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
-                      PayloadSize + 1};
+                      PayloadSize + 1));
 
 handle_input({frame_payload, Type, Channel, PayloadSize},
              PayloadAndMarker, State) ->
