@@ -50,7 +50,7 @@
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
--export([intersperse/2, upmap/2, map_in_order/2]).
+-export([upmap/2, map_in_order/2]).
 -export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
@@ -155,7 +155,6 @@
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
--spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
@@ -413,10 +412,6 @@ tcp_name(Prefix, IPAddress, Port)
       lists:flatten(
         io_lib:format("~w_~s:~w",
                       [Prefix, inet_parse:ntoa(IPAddress), Port]))).
-
-intersperse(_, []) -> [];
-intersperse(_, [E]) -> [E];
-intersperse(Sep, [E|T]) -> [E, Sep | intersperse(Sep, T)].
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
