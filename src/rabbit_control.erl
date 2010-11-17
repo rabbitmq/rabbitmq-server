@@ -94,9 +94,7 @@ start() ->
             halt();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
-                        [lists:flatten(
-                           rabbit_misc:intersperse(
-                             " ", [atom_to_list(Command) | Args]))]),
+                        [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
@@ -321,7 +319,7 @@ display_info_list(Other, _) ->
     Other.
 
 display_row(Row) ->
-    io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
+    io:fwrite(string:join(Row, "\t")),
     io:nl().
 
 -define(IS_U8(X),  (X >= 0 andalso X =< 255)).
@@ -346,8 +344,6 @@ format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
                      Value) when is_binary(TableEntryKey) andalso
                                  is_atom(TableEntryType) ->
     io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
-format_info_item([C|_] = Value) when is_number(C), C >= 32, C =< 255 ->
-    Value;
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 

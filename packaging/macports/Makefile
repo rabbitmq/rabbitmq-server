@@ -1,7 +1,9 @@
-TARBALL_DIR=../../dist
-TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
+TARBALL_SRC_DIR=../../dist
+TARBALL_BIN_DIR=../../packaging/generic-unix/
+TARBALL_SRC=$(wildcard $(TARBALL_SRC_DIR)/rabbitmq-server-[0-9.]*.tar.gz)
+TARBALL_BIN=$(wildcard $(TARBALL_BIN_DIR)/rabbitmq-server-generic-unix-[0-9.]*.tar.gz)
 COMMON_DIR=../common
-VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+VERSION=$(shell echo $(TARBALL_SRC) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
 
 # The URL at which things really get deployed
 REAL_WEB_URL=http://www.rabbitmq.com/
@@ -23,10 +25,7 @@ dirs:
 	mkdir -p $(DEST)/files
 
 $(DEST)/Portfile: Portfile.in
-	for algo in md5 sha1 rmd160 ; do \
-          checksum=$$(openssl $$algo $(TARBALL_DIR)/$(TARBALL) | awk '{print $$NF}') ; \
-	  echo "s|@$$algo@|$$checksum|g" ; \
-	done >checksums.sed
+	./make-checksums.sh $(TARBALL_SRC) $(TARBALL_BIN) > checksums.sed
 	sed -e "s|@VERSION@|$(VERSION)|g;s|@BASE_URL@|$(REAL_WEB_URL)|g" \
 	    -f checksums.sed <$^ >$@
 	rm checksums.sed
