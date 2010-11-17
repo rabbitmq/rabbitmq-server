@@ -34,7 +34,7 @@
 
 -export([async_recv/3, close/1, controlling_process/2,
         getstat/2, peername/1, peercert/1, port_command/2,
-        send/2, sockname/1]).
+        send/2, sockname/1, is_ssl/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -65,6 +65,7 @@
 -spec(sockname/1 ::
         (socket())
         -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
+-spec(is_ssl/1 :: (socket()) -> boolean()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
         -> ok_val_or_error([{stat_option(), integer()}])).
@@ -133,3 +134,6 @@ sockname(Sock) when ?IS_SSL(Sock) ->
     ssl:sockname(Sock#ssl_socket.ssl);
 sockname(Sock) when is_port(Sock) ->
     inet:sockname(Sock).
+
+is_ssl(Sock) ->
+    ?IS_SSL(Sock).

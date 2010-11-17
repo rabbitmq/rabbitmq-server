@@ -190,7 +190,7 @@
                                unacked         :: non_neg_integer()
                               })).
 -type(seq_id() :: integer()).
--type(seg_dict() :: {dict:dictionary(), [segment()]}).
+-type(seg_dict() :: {dict(), [segment()]}).
 -type(on_sync_fun() :: fun ((gb_set()) -> ok)).
 -type(qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),

@@ -308,7 +308,7 @@
              q3                   :: bpqueue:bpqueue(),
              q4                   :: queue(),
              next_seq_id          :: seq_id(),
-             pending_ack          :: dict:dictionary(),
+             pending_ack          :: dict(),
              index_state          :: any(),
              msg_store_clients    :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},

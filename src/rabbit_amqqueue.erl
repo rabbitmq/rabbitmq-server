@@ -98,14 +98,14 @@
 -spec(with_exclusive_access_or_die/3 ::
         (name(), pid(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (rabbit_types:amqqueue()) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (rabbit_types:amqqueue()) -> rabbit_types:infos()).
 -spec(info/2 ::
-        (rabbit_types:amqqueue(), [rabbit_types:info_key()])
-        -> [rabbit_types:info()]).
--spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
--spec(info_all/2 :: (rabbit_types:vhost(), [rabbit_types:info_key()])
-                    -> [[rabbit_types:info()]]).
+        (rabbit_types:amqqueue(), rabbit_types:info_keys())
+        -> rabbit_types:infos()).
+-spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
+                    -> [rabbit_types:infos()]).
 -spec(consumers/1 ::
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean()}]).
@@ -165,7 +165,7 @@
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(pseudo_queue/2 :: (binary(), pid()) -> rabbit_types:amqqueue()).
+-spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 
 -endif.
 
@@ -364,7 +364,7 @@ consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers, infinity).
 
 consumers_all(VHostPath) ->
-    lists:concat(
+    lists:append(
       map(VHostPath,
           fun (Q) -> [{Q#amqqueue.name, ChPid, ConsumerTag, AckRequired} ||
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]

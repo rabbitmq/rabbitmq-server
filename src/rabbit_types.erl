@@ -35,7 +35,8 @@
 
 -ifdef(use_specs).
 
--export_type([txn/0, maybe/1, info/0, info_key/0, message/0, basic_message/0,
+-export_type([txn/0, maybe/1, info/0, infos/0, info_key/0, info_keys/0,
+              message/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
@@ -96,7 +97,10 @@
 -type(txn() :: rabbit_guid:guid()).
 
 -type(info_key() :: atom()).
+-type(info_keys() :: [info_key()]).
+
 -type(info() :: {info_key(), any()}).
+-type(infos() :: [info()]).
 
 -type(amqp_error() ::
       #amqp_error{name        :: rabbit_framing:amqp_exception(),
@@ -144,7 +148,7 @@
 
 -type(connection() :: pid()).
 
--type(protocol() :: 'rabbit_framing_amqp_0_8' | 'rabbit_framing_amqp_0_9_1').
+-type(protocol() :: rabbit_framing:protocol()).
 
 -type(user() ::
       #user{username      :: rabbit_access_control:username(),
