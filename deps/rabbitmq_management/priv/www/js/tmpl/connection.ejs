@@ -6,46 +6,61 @@
 
 <table class="facts">
 <tr>
+  <th>From client</th>
+  <td>
 <% if (connection.recv_oct_details) { %>
-   <th>From client</th>
+    <span class="mini-highlight"><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</span>
 <% } %>
-<% if (connection.send_oct_details) { %>
-   <th>To client</th>
-<% } %>
-<% if (nodes_interesting) { %>
- <th>Node</th>
-<% } %>
- <th>Channels</th>
- <th>Virtual host</th>
- <th>Username</th>
- <th>Protocol</th>
- <th>SSL</th>
- <th>State</th>
- <th>Timeout</th>
+  </td>
 </tr>
 <tr>
-<% if (connection.recv_oct_details) { %>
-   <td>
-     <span class="mini-highlight"><%= fmt_bytes(connection.recv_oct_details.rate) %>/s</span>
-   </td>
-<% } %>
+  <th>To client</th>
+  <td>
 <% if (connection.send_oct_details) { %>
-   <td>
-     <span class="mini-highlight"><%= fmt_bytes(connection.send_oct_details.rate) %>/s</span>
-   </td>
+    <span class="mini-highlight"><%= fmt_bytes(connection.send_oct_details.rate) %>/s</span>
+  </td>
 <% } %>
+</tr>
+</table>
+
+<table class="facts">
 <% if (nodes_interesting) { %>
- <td><%= connection.node %></td>
+<tr>
+  <th>Node</th>
+  <td><%= connection.node %></td>
+</tr>
 <% } %>
- <td><%= connection.channels %></td>
+<% if (vhosts_interesting) { %>
+<tr>
+ <th>Virtual host</th>
  <td><%= link_vhost(connection.vhost) %></td>
+</tr>
+<% } %>
+<tr>
+ <th>Username</th>
  <td><%= link_user(connection.user) %></td>
+</tr>
+<tr>
+ <th>Protocol</th>
  <td><%= connection.protocol %></td>
+</tr>
+<tr>
+ <th>SSL</th>
  <td><%= fmt_boolean(connection.ssl) %></td>
+</tr>
+</table>
+
+<table class="facts">
+<tr>
+ <th>State</th>
  <td><%= connection.state %></td>
+</tr>
+<tr>
+ <th>Timeout</th>
  <td><%= connection.timeout %></td>
 </tr>
 </table>
+<span class="br"></span>
 </div>
 </div>
 
@@ -62,17 +77,20 @@
 <div class="hider">
 
 <table class="facts">
-<tr>
-  <th>Issuer</th>
-  <th>Subject</th>
-  <th>Validity</th>
-</tr>
-<tr>
-  <td><%= connection.peer_cert_issuer %></td>
-  <td><%= connection.peer_cert_subject %></td>
-  <td><%= connection.peer_cert_validity %></td>
-</tr>
+  <tr>
+    <th>Issuer</th>
+    <td><%= connection.peer_cert_issuer %></td>
+  </tr>
+  <tr>
+    <th>Subject</th>
+    <td><%= connection.peer_cert_subject %></td>
+  </tr>
+  <tr>
+    <th>Validity</th>
+    <td><%= connection.peer_cert_validity %></td>
+  </tr>
 </table>
+<span class="br"></span>
 
 </div>
 </div>

@@ -6,33 +6,56 @@
 <table class="facts">
   <tr>
     <th>Connection</th>
+    <td><%= link_conn(channel.connection_details.name) %></td>
+  </tr>
 <% if (nodes_interesting) { %>
+  <tr>
     <th>Node</th>
+    <td><%= channel.node %></td>
+  </tr>
 <% } %>
+<% if (vhosts_interesting) { %>
+  <tr>
     <th>Virtual host</th>
+    <td><%= channel.vhost %></td>
+  </tr>
+<% } %>
+  <tr>
     <th>Username</th>
-    <th>Transactional</th>
-    <th>Prefetch count</th>
-    <th>Acks uncommitted</th>
-    <th>Messages unacknowledged</th>
-    <th>Client blocked</th>
-    <th>Status</th>
+    <td><%= channel.user %></td>
   </tr>
   <tr>
-    <td><%= link_conn(channel.connection_details.name) %></td>
-<% if (nodes_interesting) { %>
-    <td><%= channel.node %></td>
-<% } %>
-    <td><%= channel.vhost %></td>
-    <td><%= channel.user %></td>
+    <th>Transactional</th>
     <td><%= fmt_boolean(channel.transactional) %></td>
+  </tr>
+</table>
+
+<table class="facts">
+  <tr>
+    <th>Prefetch count</th>
     <td><%= channel.prefetch_count %></td>
+  </tr>
+  <tr>
+    <th>Acks uncommitted</th>
     <td><%= channel.acks_uncommitted %></td>
+  </tr>
+  <tr>
+    <th>Messages unacknowledged</th>
     <td><%= channel.messages_unacknowledged %></td>
+  </tr>
+</table>
+
+<table class="facts">
+  <tr>
+    <th>Client blocked</th>
     <td><%= fmt_boolean(channel.client_flow_blocked) %></td>
+  </tr>
+  <tr>
+    <th>Status</th>
     <td><%= fmt_idle_long(channel) %></td>
   </tr>
 </table>
+<span class="br"></span>
 </div>
 </div>
 
