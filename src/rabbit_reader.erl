@@ -45,10 +45,6 @@
 
 -export([emit_stats/1]).
 
--import(gen_tcp).
--import(inet).
--import(prim_inet).
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
