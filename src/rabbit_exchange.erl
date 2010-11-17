@@ -69,14 +69,14 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (rabbit_types:exchange()) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
-        (rabbit_types:exchange(), [rabbit_types:info_key()])
-        -> [rabbit_types:info()]).
--spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
--spec(info_all/2 ::(rabbit_types:vhost(), [rabbit_types:info_key()])
-                    -> [[rabbit_types:info()]]).
+        (rabbit_types:exchange(), rabbit_types:info_keys())
+        -> rabbit_types:infos()).
+-spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
+                    -> [rabbit_types:infos()]).
 -spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                    -> {rabbit_router:routing_result(), [pid()]}).
 -spec(delete/2 ::
