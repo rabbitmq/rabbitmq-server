@@ -136,10 +136,12 @@ def make_parser():
     parser.add_option("-q", "--quiet", action="store_false", dest="verbose",
                       default=True, help="suppress status messages")
     parser.add_option("-f", "--format", dest="format", default="table",
-                      help="format for listing commands - one of [pretty_json, raw_json, table, tsv, long, kvp]  [default: %default]")
+                      help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]  [default: %default]")
     parser.add_option("-d", "--depth", dest="depth", default="1",
                       help="maximum depth to recurse for listing tables [default: %default]")
-
+    parser.add_option("--bash-completion", action="store_true",
+                      dest="bash_completion", default=False,
+                      help="Print bash completion script")
 
 def assert_usage(expr, error):
     if not expr:
@@ -156,6 +158,9 @@ def column_sort_key(col):
 def main():
     make_parser()
     (options, args) = parser.parse_args()
+    if options.bash_completion:
+        print_bash_completion()
+        exit(0)
     assert_usage(len(args) > 0, 'Action not specified')
     mgmt = Management(options, args[1:])
     mode = "invoke_" + args[0]
@@ -294,14 +299,8 @@ def format_list(json_list, options):
         enc = json.JSONEncoder(False, False, True, True, True, 2)
         print enc.encode(json.loads(json_list))
         return
-    elif format == "tsv":
-        formatter = TSVList
-    elif format == "long":
-        formatter = LongList
-    elif format == "table":
-        formatter = TableList
-    elif format == "kvp":
-        formatter = KeyValueList
+    else:
+        formatter = FORMATS[format]
     assert_usage(formatter != None,
                  "Format {0} not recognised".format(format))
     formatter_instance = formatter(options)
@@ -436,6 +435,113 @@ class KeyValueList(Lister):
                 row.append("{0}=\"{1}\"".format(columns[j], table[i][j]))
             print " ".join(row)
 
+# TODO handle spaces etc in completable names
+class BashList(Lister):
+    def __init__(self, options):
+        self.options = options
+
+    def display_list(self, columns, table):
+        ix = None
+        for i in xrange(0, len(columns)):
+            if columns[i] == 'name':
+                ix = i
+        if ix is not None:
+            res = []
+            for row in table:
+                res.append(row[ix])
+            print " ".join(res)
+
+FORMATS = {
+    'raw_json'    : None, # Special cased
+    'pretty_json' : None, # Ditto
+    'tsv'         : TSVList,
+    'long'        : LongList,
+    'table'       : TableList,
+    'kvp'         : KeyValueList,
+    'bash'        : BashList
+}
+
+def print_bash_completion():
+    script = """# This is a bash completion script for rabbitmqadmin.
+# Redirect it to a file, then source it or copy it to /etc/bash_completion.d
+# to get tab completion. rabbitmqadmin must be on your PATH for this to work.
+_rabbitmqadmin()
+{
+    local cur prev opts base
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    opts="list declare delete close purge import export"
+    fargs="--help --host --port --vhost --username --password --format --depth"
+
+    case "${prev}" in
+	list)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(LISTABLE) + """' -- ${cur}) )
+            return 0
+            ;;
+	declare)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(DECLARABLE.keys()) + """' -- ${cur}) )
+            return 0
+            ;;
+	delete)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(DELETABLE.keys()) + """' -- ${cur}) )
+            return 0
+            ;;
+	close)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(CLOSABLE.keys()) + """' -- ${cur}) )
+            return 0
+            ;;
+	purge)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(PURGABLE.keys()) + """' -- ${cur}) )
+            return 0
+            ;;
+	export)
+	    COMPREPLY=( $(compgen -f ${cur}) )
+            return 0
+            ;;
+	import)
+	    COMPREPLY=( $(compgen -f ${cur}) )
+            return 0
+            ;;
+	--host)
+	    COMPREPLY=( $(compgen -A hostname ${cur}) )
+            return 0
+            ;;
+	--vhost)
+            opts="$(rabbitmqadmin -q -f bash list vhosts)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+	--username)
+            opts="$(rabbitmqadmin -q -f bash list users)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+	--format)
+	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
+            return 0
+            ;;
+
+"""
+    for l in LISTABLE:
+        key = l[0:len(l) - 1]
+        script += "        " + key + """)
+            opts="$(rabbitmqadmin -q -f bash list """ + l + """)"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            return 0
+            ;;
+"""
+    script += """        *)
+        ;;
+    esac
+
+   COMPREPLY=($(compgen -W "${opts} ${fargs}" -- ${cur}))
+   return 0
+}
+complete -F _rabbitmqadmin rabbitmqadmin
+"""
+    print script
 
 if __name__ == "__main__":
     main()
