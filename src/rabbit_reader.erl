@@ -318,7 +318,6 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     done.
 
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
-    %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
             {State1, Callback1, Length1} =
@@ -564,7 +563,6 @@ handle_frame(Type, Channel, Payload,
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
-            %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {ch_fr_pid, ChFrPid} ->
                     ok = rabbit_framing_channel:process(ChFrPid, AnalyzedFrame),
@@ -628,18 +626,16 @@ analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
-    %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
     {ensure_stats_timer(State), {frame_payload, Type, Channel, PayloadSize},
      PayloadSize + 1};
 
-handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, State) ->
+handle_input({frame_payload, Type, Channel, PayloadSize},
+             PayloadAndMarker, State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            %%?LOGDEBUG("Frame completed: ~p/~p/~p~n", [Type, Channel, Payload]),
-            NewState = handle_frame(Type, Channel, Payload, State),
-            {NewState, frame_header, 7};
+            {handle_frame(Type, Channel, Payload, State), frame_header, 7};
         _ ->
-            throw({bad_payload, PayloadAndMarker})
+            throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
 
 %% The two rules pertaining to version negotiation:
