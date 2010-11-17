@@ -41,8 +41,8 @@ message_properties_test() ->
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
                 {"amqp-message-id", "M123"},
-                {"X-str", "foo"},
-                {"X-int", "123"}
+                {"str", "foo"},
+                {"int", "123"}
               ],
 
     #'P_basic'{
@@ -91,8 +91,8 @@ message_headers_test() ->
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
                 {"amqp-message-id", "M123"},
-                {"X-str", "foo"},
-                {"X-int", "123"}
+                {"str", "foo"},
+                {"int", "123"}
                ],
 
     [] = lists:subtract(Headers, Expected).

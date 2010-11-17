@@ -97,8 +97,11 @@ class Latch(object):
    def await(self, timeout=None):
       try:
          self.cond.acquire()
-         self.cond.wait(timeout)
-         return self.count == 0
+         if self.count == 0:
+            return True
+         else:
+            self.cond.wait(timeout)
+            return self.count == 0
       finally:
          self.cond.release()
 

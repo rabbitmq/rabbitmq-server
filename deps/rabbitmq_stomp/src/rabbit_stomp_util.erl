@@ -45,6 +45,13 @@
 -define(EXCHANGE_PREFIX, "/exchange").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
+-define(HEADER_CONTENT_TYPE, "content-type").
+-define(HEADER_CONTENT_ENCODING, "content-encoding").
+-define(HEADER_DELIVERY_MODE, "delivery-mode").
+-define(HEADER_PRIORITY, "priority").
+-define(HEADER_CORRELATION_ID, "correlation-id").
+-define(HEADER_REPLY_TO, "reply-to").
+-define(HEADER_AMQP_MESSAGE_ID, "amqp-message-id").
 
 %%--------------------------------------------------------------------
 %% Frame and Header Parsing
@@ -74,16 +81,16 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
     BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
     IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
 
-
     #'P_basic'{
-      content_type     = BinH("content-type",     <<"text/plain">>),
-      content_encoding = BinH("content-encoding", undefined),
-      delivery_mode    = IntH("delivery-mode",    undefined),
-      priority         = IntH("priority",         undefined),
-      correlation_id   = BinH("correlation-id",   undefined),
-      reply_to         = BinH("reply-to",         undefined),
-      message_id       = BinH("amqp-message-id",  undefined),
-      headers          = [longstr_field(K, V) || {"X-" ++ K, V} <- Headers]}.
+      content_type     = BinH(?HEADER_CONTENT_TYPE,     <<"text/plain">>),
+      content_encoding = BinH(?HEADER_CONTENT_ENCODING, undefined),
+      delivery_mode    = IntH(?HEADER_DELIVERY_MODE,    undefined),
+      priority         = IntH(?HEADER_PRIORITY,         undefined),
+      correlation_id   = BinH(?HEADER_CORRELATION_ID,   undefined),
+      reply_to         = BinH(?HEADER_REPLY_TO,         undefined),
+      message_id       = BinH(?HEADER_AMQP_MESSAGE_ID,  undefined),
+      headers          = [longstr_field(K, V) ||
+                             {K, V} <- Headers, user_header(K)]}.
 
 message_headers(Destination, SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -103,8 +110,8 @@ message_headers(Destination, SessionId,
        {"message-id", create_message_id(ConsumerTag,
                                         SessionId,
                                         DeliveryTag)}]
-      ++ maybe_header("content-type", ContentType)
-      ++ maybe_header("content-encoding", ContentEncoding)
+      ++ maybe_header(?HEADER_CONTENT_TYPE, ContentType)
+      ++ maybe_header(?HEADER_CONTENT_ENCODING, ContentEncoding)
       ++ case ConsumerTag of
              <<"Q_",  _/binary>> -> [];
              <<"T_", Id/binary>> -> [{"subscription", binary_to_list(Id)}]
@@ -113,11 +120,24 @@ message_headers(Destination, SessionId,
                                    undefined -> [];
                                    _         -> Headers
                                end)
-      ++ maybe_header("delivery-mode", DeliveryMode)
-      ++ maybe_header("priority", Priority)
-      ++ maybe_header("correlation-id", CorrelationId)
-      ++ maybe_header("reply-to", ReplyTo)
-      ++ maybe_header("amqp-message-id", MessageId).
+      ++ maybe_header(?HEADER_DELIVERY_MODE, DeliveryMode)
+      ++ maybe_header(?HEADER_PRIORITY, Priority)
+      ++ maybe_header(?HEADER_CORRELATION_ID, CorrelationId)
+      ++ maybe_header(?HEADER_REPLY_TO, ReplyTo)
+      ++ maybe_header(?HEADER_AMQP_MESSAGE_ID, MessageId).
+
+user_header(Hdr)
+  when Hdr =:= ?HEADER_CONTENT_TYPE orelse
+       Hdr =:= ?HEADER_CONTENT_ENCODING orelse
+       Hdr =:= ?HEADER_DELIVERY_MODE orelse
+       Hdr =:= ?HEADER_PRIORITY orelse
+       Hdr =:= ?HEADER_CORRELATION_ID orelse
+       Hdr =:= ?HEADER_REPLY_TO orelse
+       Hdr =:= ?HEADER_AMQP_MESSAGE_ID orelse
+       Hdr =:= "destination" ->
+    false;
+user_header(_) ->
+    true.
 
 parse_message_id(MessageId) ->
     {ok, Pieces} = regexp:split(MessageId, ?MESSAGE_ID_SEPARATOR),
@@ -177,9 +197,9 @@ maybe_header(_Key, _Value) ->
 
 adhoc_convert_headers(Headers) ->
     lists:foldr(fun ({K, longstr, V}, Acc) ->
-                        [{"X-" ++ binary_to_list(K), binary_to_list(V)} | Acc];
+                        [{binary_to_list(K), binary_to_list(V)} | Acc];
                     ({K, signedint, V}, Acc) ->
-                        [{"X-" ++ binary_to_list(K), integer_to_list(V)} | Acc];
+                        [{binary_to_list(K), integer_to_list(V)} | Acc];
                     (_, Acc) ->
                         Acc
                 end, [], Headers).
