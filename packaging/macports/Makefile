@@ -38,9 +38,7 @@ $(DEST)/Portfile: Portfile.in
 # needs vars such as HOME to be set.  So we have to set them
 # explicitly.
 macports: dirs $(DEST)/Portfile
-	for f in rabbitmq-asroot-script-wrapper rabbitmq-script-wrapper ; do \
-	  cp $(COMMON_DIR)/$$f $(DEST)/files ; \
-	done
+	cp $(COMMON_DIR)/rabbitmq-script-wrapper $(DEST)/files
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|SHELL=/bin/sh HOME=/var/lib/rabbitmq USER=rabbitmq LOGNAME=rabbitmq PATH="$$(eval `PATH=MACPORTS_PREFIX/bin /usr/libexec/path_helper -s`; echo $$PATH)" su -m rabbitmq -c|' \
 	    $(DEST)/files/rabbitmq-script-wrapper
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
