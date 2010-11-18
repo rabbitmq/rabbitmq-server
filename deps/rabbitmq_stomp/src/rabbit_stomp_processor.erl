@@ -46,7 +46,6 @@
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
--define(MAX_MISSED_HEARTBEATS, 2).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -75,7 +74,6 @@ init([Sock, StartHeartbeatFun]) ->
     }.
 
 terminate(_Reason, State) ->
-    %% TODO: shutdown the timers gracefully
     shutdown_channel_and_connection(State).
 
 handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
@@ -500,7 +498,8 @@ ensure_heartbeats(Heartbeats,
                          gen_server:cast(Pid, client_timeout)
                  end,
 
-    {SendTimeout, ReceiveTimeout} = {millis_to_seconds(CY), millis_to_seconds(CX)},
+    {SendTimeout, ReceiveTimeout} =
+        {millis_to_seconds(CY), millis_to_seconds(CX)},
 
     SHF(Sock, SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
 
