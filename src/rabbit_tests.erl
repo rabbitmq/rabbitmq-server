@@ -1870,7 +1870,7 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_ack_limiting(VQ0) ->
-    %% start by sending in a bunch of messages <
+    %% start by sending in a bunch of messages
     Len = 1024,
     VQ1 = variable_queue_publish(false, Len, VQ0),
 
@@ -1884,11 +1884,11 @@ test_variable_queue_ack_limiting(VQ0) ->
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
 
-    VQ5 = check_variable_queue_status(VQ4, [{len           , Len div 2},
-                                            {ram_ack_count , Len div 2},
-                                            {ram_msg_count , Len div 2}]),
+    VQ5 = check_variable_queue_status(VQ4, [{len          , Len div 2},
+                                            {ram_ack_count, Len div 2},
+                                            {ram_msg_count, Len div 2}]),
 
-    %% quarter the allowed duration
+    %% ensure all acks go to disk on 0 duration target
     VQ6 = check_variable_queue_status(
             rabbit_variable_queue:set_ram_duration_target(0, VQ5),
             [{len, Len div 2},
