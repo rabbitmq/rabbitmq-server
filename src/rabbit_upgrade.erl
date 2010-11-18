@@ -66,8 +66,8 @@ maybe_upgrade() ->
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [Heads]} -> {ok, Heads};
-        {error, E}    -> {error, E}
+        {ok, [Heads]}    -> {ok, Heads};
+        {error, _} = Err -> Err
     end.
 
 write_version() ->
@@ -111,8 +111,8 @@ upgrades_to_apply(Heads, G) ->
                   sets:from_list(digraph_utils:reaching(Heads, G)))),
     %% Form a subgraph from that list and find a topological ordering
     %% so we can invoke them in order.
-    [element(2, digraph:vertex(G, StepName))
-     || StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
+    [element(2, digraph:vertex(G, StepName)) ||
+        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
 
 heads(G) ->
     lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).
@@ -141,16 +141,12 @@ apply_upgrade({M, F}) ->
 
 %% -------------------------------------------------------------------
 
-schema_filename() ->
-    filename:join(dir(), ?VERSION_FILENAME).
+dir() -> rabbit_mnesia:dir().
 
-lock_filename() ->
-    filename:join(dir(), ?LOCK_FILENAME).
+schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
+
+lock_filename()   -> filename:join(dir(), ?LOCK_FILENAME).
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet
-info(Msg, Args) ->
-    error_logger:info_msg(Msg, Args).
-
-dir() ->
-    rabbit_mnesia:dir().
+info(Msg, Args) -> error_logger:info_msg(Msg, Args).
