@@ -126,6 +126,7 @@ apply_upgrades(Upgrades) ->
             ok = file:close(Lock),
             BackupDir = dir() ++ "-upgrade-backup",
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
+            mnesia:stop(),
             case rabbit_misc:recursive_copy(dir(), BackupDir) of
                 ok ->
                     %% We need to make the backup after creating the lock file
@@ -141,6 +142,8 @@ apply_upgrades(Upgrades) ->
                     ok = file:delete(LockFile),
                     exit({could_not_back_up_mnesia_dir, E})
             end,
+            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+            rabbit_mnesia:wait_for_tables(),
             info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
             [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
             info("Upgrades: All upgrades applied successfully~n", []),

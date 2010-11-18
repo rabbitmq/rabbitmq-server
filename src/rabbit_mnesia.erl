@@ -34,7 +34,7 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0]).
+         is_clustered/0, empty_ram_only_tables/0, wait_for_tables/0]).
 
 -export([table_names/0]).
 
@@ -65,6 +65,7 @@
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
+-spec(wait_for_tables/0 :: () -> 'ok').
 
 -endif.
 
