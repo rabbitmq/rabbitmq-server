@@ -27,8 +27,7 @@
 -rabbit_upgrade({remove_user_scope,  []}).
 -rabbit_upgrade({hash_passwords,     []}).
 -rabbit_upgrade({add_ip_to_listener, []}).
--rabbit_upgrade({add_internal_to_exchange, []}).
--rabbit_upgrade({add_internal_to_durable_exchange, []}).
+-rabbit_upgrade({add_internal_to_exchange_and_durable_exchange, []}).
 
 %% -------------------------------------------------------------------
 
@@ -37,8 +36,7 @@
 -spec(remove_user_scope/0  :: () -> 'ok').
 -spec(hash_passwords/0     :: () -> 'ok').
 -spec(add_ip_to_listener/0 :: () -> 'ok').
--spec(add_internal_to_exchange/0 :: () -> 'ok').
--spec(add_internal_to_durable_exchange/0 :: () -> 'ok').
+-spec(add_internal_to_exchange_and_durable_exchange/0 :: () -> 'ok').
 
 -endif.
 
@@ -75,20 +73,18 @@ add_ip_to_listener() ->
       end,
       [node, protocol, host, ip_address, port]).
 
-add_internal_to_exchange() ->
-    mnesia(
-      rabbit_exchange,
-      fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
-              {exchange, Name, Type, Durable, AutoDelete, false, Args}
-      end,
-      [name, type, durable, auto_delete, internal, arguments]).
-
-add_internal_to_durable_exchange() ->
+add_internal_to_exchange_and_durable_exchange() ->
+    AddInternalFun =
+        fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
+                {exchange, Name, Type, Durable, AutoDelete, false, Args}
+        end,
+    ok = mnesia(
+           rabbit_exchange,
+           AddInternalFun,
+           [name, type, durable, auto_delete, internal, arguments]),
     mnesia(
       rabbit_durable_exchange,
-      fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
-              {exchange, Name, Type, Durable, AutoDelete, false, Args}
-      end,
+      AddInternalFun,
       [name, type, durable, auto_delete, internal, arguments]).
 
 %%--------------------------------------------------------------------
