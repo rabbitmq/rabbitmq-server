@@ -27,8 +27,10 @@
       <tr>
         <th>Exclusive owner</th>
         <td>
-          <% if (queue.owner_pid_details != undefined) { %>
-          <%= link_conn(queue.owner_pid_details.name) %>
+          <% if (queue.owner_pid_details == undefined) { %>
+            None
+          <% } else { %>
+            <%= link_conn(queue.owner_pid_details.name) %>
           <% } %>
         </td>
       </tr>
