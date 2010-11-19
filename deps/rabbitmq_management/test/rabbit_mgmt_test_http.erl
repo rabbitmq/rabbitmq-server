@@ -453,8 +453,8 @@ permissions_amqp_test() ->
 
 get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(network, #amqp_params{
-                                        username = Username,
-                                        password = Password}),
+                                        username = list_to_binary(Username),
+                                        password = list_to_binary(Password)}),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     ConnPath = binary_to_list(
                  rabbit_mgmt_format:print(
