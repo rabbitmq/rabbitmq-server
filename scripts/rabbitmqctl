@@ -30,14 +30,8 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-if [ "SunOS" = `uname -s` ]
-then
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
-    NODENAME=rabbit@`echo $HOSTNAME | sed 's/\\..*//'`
-else
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
-    NODENAME=rabbit@${HOSTNAME%%.*}
-fi
+[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
+NODENAME=rabbit@${HOSTNAME%%.*}
 
 . `dirname $0`/rabbitmq-env
 
