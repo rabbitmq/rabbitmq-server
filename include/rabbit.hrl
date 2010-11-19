@@ -29,7 +29,11 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--record(user, {username, is_admin, auth_backend, impl}).
+-record(user, {username,
+               is_admin,
+               auth_backend, %% Module this user came from
+               impl          %% Scratch space for that module
+              }).
 
 %% TODO mnesia-upgrade this
 -record(internal_user, {username, password_hash, is_admin}).

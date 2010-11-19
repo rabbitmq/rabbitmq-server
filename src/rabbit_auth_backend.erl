@@ -35,13 +35,15 @@
 
 behaviour_info(callbacks) ->
     [
-     %% A description.
+     %% A description (TODO should this be here if we're not using registry?).
      {description, 0},
 
      %% TODO should we abstract out username / password?
      {check_user_pass_login, 2},
 
-     {check_vhost_access, 2}
+     {check_vhost_access, 2},
+
+     {check_resource_access, 3}
     ];
 behaviour_info(_Other) ->
     undefined.

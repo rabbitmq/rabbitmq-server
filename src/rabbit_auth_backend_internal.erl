@@ -34,7 +34,9 @@
 
 -behaviour(rabbit_auth_backend).
 
--export([description/0, check_user_pass_login/2, check_vhost_access/2]).
+-export([description/0]).
+-export([check_user_pass_login/2, check_vhost_access/2,
+         check_resource_access/3]).
 
 %%-include("rabbit_auth_backend_spec.hrl").
 
@@ -69,3 +71,28 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
                   [_R] -> ok
               end
       end).
+
+check_resource_access(#user{username = Username},
+                      #resource{virtual_host = VHostPath, name = Name},
+                      Permission) ->
+    case mnesia:dirty_read({rabbit_user_permission,
+                            #user_vhost{username     = Username,
+                                        virtual_host = VHostPath}}) of
+        [] ->
+            false;
+        [#user_permission{permission = P}] ->
+            PermRegexp =
+                case element(permission_index(Permission), P) of
+                    %% <<"^$">> breaks Emacs' erlang mode
+                    <<"">> -> <<$^, $$>>;
+                    RE     -> RE
+                end,
+            case re:run(Name, PermRegexp, [{capture, none}]) of
+                match    -> true;
+                nomatch  -> false
+            end
+    end.
+
+permission_index(configure) -> #permission.configure;
+permission_index(write)     -> #permission.write;
+permission_index(read)      -> #permission.read.

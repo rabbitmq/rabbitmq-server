@@ -117,9 +117,10 @@ check_user_pass_login(Username, Password) ->
               {ok, User}
       end, {refused, Username}, Modules).
 
-check_vhost_access(User = #user{username = Username}, VHostPath) ->
+check_vhost_access(User = #user{ username     = Username,
+                                 auth_backend = Module }, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
-    case internal_lookup_vhost_access(User, VHostPath) of
+    case Module:check_vhost_access(User, VHostPath) of
         ok ->
             ok;
         not_found ->
@@ -128,43 +129,17 @@ check_vhost_access(User = #user{username = Username}, VHostPath) ->
               [VHostPath, Username])
     end.
 
-internal_lookup_vhost_access(User, VHostPath) ->
-    rabbit_auth_backend_internal:check_vhost_access(User, VHostPath).
-
-permission_index(configure) -> #permission.configure;
-permission_index(write)     -> #permission.write;
-permission_index(read)      -> #permission.read.
-
-check_resource_access(User,
-                      R = #resource{kind = exchange, name = <<"">>},
+check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
-    check_resource_access(User,
-                          R#resource{name = <<"amq.default">>},
+    check_resource_access(User, R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(_User = #user{username = Username},
-                      R = #resource{virtual_host = VHostPath, name = Name},
-                      Permission) ->
-    Res = case mnesia:dirty_read({rabbit_user_permission,
-                                  #user_vhost{username     = Username,
-                                              virtual_host = VHostPath}}) of
-              [] ->
-                  false;
-              [#user_permission{permission = P}] ->
-                  PermRegexp =
-                      case element(permission_index(Permission), P) of
-                          %% <<"^$">> breaks Emacs' erlang mode
-                          <<"">> -> <<$^, $$>>;
-                          RE     -> RE
-                      end,
-                  case re:run(Name, PermRegexp, [{capture, none}]) of
-                      match    -> true;
-                      nomatch  -> false
-                  end
-          end,
-    if Res  -> ok;
-       true -> rabbit_misc:protocol_error(
-                 access_refused, "access to ~s refused for user '~s'",
-                 [rabbit_misc:rs(R), Username])
+check_resource_access(User = #user{username = Username, auth_backend = Module},
+                      Resource, Permission) ->
+    case Module:check_resource_access(User, Resource, Permission) of
+        true  -> ok;
+        false -> rabbit_misc:protocol_error(
+                   access_refused, "access to ~s refused for user '~s'",
+                   [rabbit_misc:rs(Resource), Username])
     end.
 
 %%----------------------------------------------------------------------------
