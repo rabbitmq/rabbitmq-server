@@ -112,8 +112,8 @@ check_user_pass_login(Username, Pass) ->
     case lookup_user(Username) of
         {ok, User} ->
             case check_password(Pass, User#user.password_hash) of
-                true -> {ok, User};
-                _    -> refused
+                true -> {ok,      User};
+                _    -> {refused, Username}
             end;
         {error, not_found} ->
             {refused, Username}
