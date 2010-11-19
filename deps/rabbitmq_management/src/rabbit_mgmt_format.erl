@@ -100,9 +100,9 @@ permissions({User, VHost, Conf, Write, Read}) ->
      {read,      Read}].
 
 user(User) ->
-    [{name,          User#user.username},
-     {password_hash, base64:encode(User#user.password_hash)},
-     {administrator, User#user.is_admin}].
+    [{name,          User#internal_user.username},
+     {password_hash, base64:encode(User#internal_user.password_hash)},
+     {administrator, User#internal_user.is_admin}].
 
 listener(#listener{node = Node, protocol = Protocol,
                    host = Host, ip_address = IPAddress, port = Port}) ->
