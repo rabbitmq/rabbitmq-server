@@ -48,6 +48,8 @@ done
 
 SCRIPT_DIR=`dirname $SCRIPT_PATH`
 RABBITMQ_HOME="${SCRIPT_DIR}/.."
+[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
+NODENAME=rabbit@${HOSTNAME%%.*}
 
 # Load configuration from the rabbitmq.conf file
 [ -f /etc/rabbitmq/rabbitmq.conf ] && . /etc/rabbitmq/rabbitmq.conf
