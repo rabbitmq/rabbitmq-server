@@ -29,7 +29,10 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--record(user, {username, password_hash, is_admin}).
+-record(user, {username, is_admin, auth_backend, impl}).
+
+%% TODO mnesia-upgrade this
+-record(internal_user, {username, password_hash, is_admin}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).

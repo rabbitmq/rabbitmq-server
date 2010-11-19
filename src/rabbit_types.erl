@@ -149,10 +149,11 @@
 
 -type(protocol() :: rabbit_framing:protocol()).
 
--type(user() ::
-      #user{username      :: rabbit_access_control:username(),
-            password_hash :: rabbit_access_control:password_hash(),
-            is_admin      :: boolean()}).
+%% TODO this is the wrong kind
+-type(user() ::#user{}).
+      %% #user{username      :: rabbit_access_control:username(),
+      %%       password_hash :: rabbit_access_control:password_hash(),
+      %%       is_admin      :: boolean()}).
 
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).
