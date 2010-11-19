@@ -29,8 +29,14 @@
 ##
 ##   Contributor(s): ______________________________________.
 ##
-[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
-NODENAME=rabbit@${HOSTNAME%%.*}
+if [ "SunOS" = `uname -s` ]
+then
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
+    NODENAME=rabbit@`echo $HOSTNAME | sed 's/\\..*//'`
+else
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
+    NODENAME=rabbit@${HOSTNAME%%.*}
+fi
 SCRIPT_HOME=$(dirname $0)
 PIDS_FILE=/var/lib/rabbitmq/pids
 MULTI_ERL_ARGS=
