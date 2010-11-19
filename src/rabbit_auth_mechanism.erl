@@ -35,7 +35,7 @@
 
 behaviour_info(callbacks) ->
     [
-     %% A description. Currently unused, may find its way into mgmt one day.
+     %% A description.
      {description, 0},
 
      %% If this mechanism is enabled, should it be offered for a given socket?
