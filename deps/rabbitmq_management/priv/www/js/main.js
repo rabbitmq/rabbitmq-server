@@ -337,7 +337,7 @@ function postprocess() {
             }
         });
     $('#download-configuration').click(function() {
-            var path = '/api/all-configuration?download=' +
+            var path = '../api/all-configuration?download=' +
                 esc($('#download-filename').val());
             window.location = path;
             setTimeout('app.run()');
@@ -401,7 +401,7 @@ function update_multifields() {
 function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
-        with_req('/api' + reqs[key], function(resp) {
+        with_req('../api' + reqs[key], function(resp) {
                 acc[key] = jQuery.parseJSON(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
@@ -500,7 +500,7 @@ function sync_req(type, params0, path_template) {
         return false;
     }
     var req = xmlHttpRequest();
-    req.open(type, '/api' + path, false);
+    req.open(type, '../api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
         if (type == 'GET')
