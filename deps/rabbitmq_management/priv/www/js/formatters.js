@@ -138,6 +138,23 @@ function fmt_rabbit_version(applications) {
     return 'unknown';
 }
 
+function fmt_idle(obj) {
+    if (obj.idle_since == undefined) {
+        return 'Active';
+    } else {
+        return '<acronym title="Idle since ' + obj.idle_since +
+            '">Idle</acronym>';
+    }
+}
+
+function fmt_idle_long(obj) {
+    if (obj.idle_since == undefined) {
+        return 'Active';
+    } else {
+        return 'Idle since<br/>' + obj.idle_since;
+    }
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }

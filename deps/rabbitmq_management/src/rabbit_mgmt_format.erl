@@ -16,6 +16,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, pid/1, ip/1, amqp_table/1, tuple/1, timestamp/1]).
+-export([timestamp_ms/1]).
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, binding/1, url/2, application/1]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
@@ -79,10 +80,16 @@ protocol({Major, Minor, 0})        -> print("~w-~w", [Major, Minor]);
 protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
                                             [Major, Minor, Revision]).
 
+timestamp_ms(unknown) ->
+    unknown;
+timestamp_ms(Timestamp) ->
+    timer:now_diff(Timestamp, {0,0,0}) div 1000.
+
 timestamp(unknown) ->
     unknown;
 timestamp(Timestamp) ->
-    timer:now_diff(Timestamp, {0,0,0}) div 1000.
+    {{Y, M, D}, {H, Min, S}} = calendar:now_to_local_time(Timestamp),
+    print("~w-~w-~w ~w:~w:~w", [Y, M, D, H, Min, S]).
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).

@@ -1,24 +1,25 @@
 <h1>Exchange: <b><%= fmt_exchange(exchange.name) %></b></h1>
 
 <div class="section">
-  <h2>Details</h2>
-  <div class="hider">
+  <h2>Overview</h2>
+  <div class="hider updatable">
     <table class="facts">
       <tr>
-        <th>Virtual host</th>
         <th>Type</th>
-        <th>Durable</th>
-        <th>Auto delete</th>
-        <th>Arguments</th>
+        <td><%= exchange.type %></td>
       </tr>
       <tr>
-        <td><%= exchange.vhost %></td>
-        <td><%= exchange.type %></td>
-        <td><%= fmt_boolean(exchange.durable) %></td>
-        <td><%= fmt_boolean(exchange.auto_delete) %></td>
-        <td><%= fmt_table_short(exchange.arguments) %></td>
+        <th>Parameters</th>
+        <td><%= fmt_parameters(exchange) %></td>
       </tr>
+<% if (vhosts_interesting) { %>
+      <tr>
+        <th>Virtual host</th>
+        <td><%= exchange.vhost %></td>
+      </tr>
+<% } %>
     </table>
+    <span class="br"></span>
   </div>
 </div>
 
@@ -56,7 +57,7 @@
 <% } %>
 
 
-<div class="section">
+<div class="section-hidden">
   <h2>Bindings</h2>
   <div class="hider updatable">
 <% if (exchange.name == "") { %>

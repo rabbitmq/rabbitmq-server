@@ -67,7 +67,7 @@ register_contexts() ->
           {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()]),
     application:set_env(webmachine, error_handler, webmachine_error_handler),
     rabbit_mochiweb:register_authenticated_static_context(
-      ?UI_PREFIX, ?MODULE, "priv/www", "RabbitMQ Management Console",
+      ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
       fun (U, P) ->
               case rabbit_access_control:check_user_pass_login(U, P) of
                   {ok, _} -> true;
@@ -76,10 +76,10 @@ register_contexts() ->
       end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              fun webmachine_mochiweb:loop/1,
-                                             "HTTP API"),
+                                             "Management: HTTP API"),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
-                                            "Command Line Tool").
+                                            "Management: Command Line Tool").
 setup_wm_logging() ->
     {ok, LogDir} = application:get_env(rabbit_management, http_log_dir),
     case LogDir of
