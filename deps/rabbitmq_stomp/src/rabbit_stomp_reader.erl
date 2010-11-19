@@ -51,9 +51,9 @@ init(ProcessorPid) ->
                                   [self(), PeerAddressS, PeerPort]),
             ParseState = rabbit_stomp_frame:initial_state(),
             try
-                ?MODULE:mainloop(#reader_state{socket        = Sock,
-                                               parse_state   = ParseState,
-                                               processor     = ProcessorPid})
+                mainloop(#reader_state{socket        = Sock,
+                                       parse_state   = ParseState,
+                                       processor     = ProcessorPid})
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
                                       [self(), PeerAddressS, PeerPort])
@@ -70,14 +70,14 @@ mainloop(State) ->
     end.
 
 process_received_bytes([], State) ->
-    ?MODULE:mainloop(State);
+    mainloop(State);
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
                          parse_state = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
-            ?MODULE:mainloop(State#reader_state{parse_state = ParseState1});
+            mainloop(State#reader_state{parse_state = ParseState1});
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
