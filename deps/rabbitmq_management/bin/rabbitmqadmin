@@ -22,6 +22,7 @@ import urllib
 import base64
 import json
 import os
+import socket
 
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
             'users', 'vhosts', 'permissions', 'nodes']
@@ -169,6 +170,10 @@ def main():
     method = getattr(mgmt, "invoke_%s" % args[0])
     method()
 
+def die(str):
+    sys.stderr.write("*** {0}".format(str))
+    exit(1)
+
 class Management:
     def __init__(self, options, args):
         self.options = options
@@ -193,9 +198,18 @@ class Management:
                                                    self.options.password)}
         if body != "":
             headers["Content-Type"] = "application/json"
-        conn.request(method, "/api%s" % path, body, headers)
+        try:
+            conn.request(method, "/api%s" % path, body, headers)
+        except socket.error as e:
+            die("Could not connect: {0}".format(e))
         resp = conn.getresponse()
-        if resp.status < 200 or resp.status >= 400:
+        if resp.status == 400:
+            die(json.loads(resp.read())['reason'])
+        if resp.status == 401:
+            die("Access refused: {0}".format(path))
+        if resp.status == 404:
+            die("Not found: {0}".format(path))
+        if resp.status < 200 or resp.status > 400:
             raise Exception("Received %d %s for path %s\n%s"
                             % (resp.status, resp.reason, path, resp.read()))
         return resp.read()
