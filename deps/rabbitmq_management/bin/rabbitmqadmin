@@ -265,20 +265,19 @@ class Management:
         mandatory = root[obj_type]['mandatory']
         optional = root[obj_type]['optional']
         args = self.args[1:]
-        assert_usage(len(args) >= len(mandatory),
-                     '{0} mandatory arguments required'.format(len(mandatory)))
         payload = {}
-        for i in xrange(0, len(mandatory)):
-            payload[mandatory[i]] = args[i]
         for k in optional.keys():
             payload[k] = optional[k]
-        for optional_arg in args[len(mandatory):]:
-            assert_usage("=" in optional_arg,
-                         'Optional argument {0} not in format name=value'.format(optional_arg))
-            (name, value) = optional_arg.split("=")
-            assert_usage(name in optional.keys(),
-                         'Optional argument {0} not recognised'.format(name))
+        for arg in args:
+            assert_usage("=" in arg,
+                         'Argument "{0}" not in format name=value'.format(arg))
+            (name, value) = arg.split("=")
+            assert_usage(name in mandatory or name in optional.keys(),
+                         'Argument "{0}" not recognised'.format(name))
             payload[name] = value
+        for m in mandatory:
+            assert_usage(m in payload.keys(),
+                         'mandatory argument "{0}" required'.format(m))
         payload['arguments'] = {}
         payload['vhost'] = self.options.vhost or '/'
         uri_args = {}
