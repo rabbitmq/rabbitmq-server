@@ -1,0 +1,71 @@
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ.
+%%
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+
+-module(rabbit_auth_backend_internal).
+-include("rabbit.hrl").
+
+-behaviour(rabbit_auth_backend).
+
+-export([description/0, check_user_pass_login/2, check_vhost_access/2]).
+
+%%-include("rabbit_auth_backend_spec.hrl").
+
+%% Our internal user database
+
+description() ->
+    [{name, <<"Internal">>},
+     {description, <<"Internal user / password database">>}].
+
+check_user_pass_login(Username, Password) ->
+    case rabbit_access_control:lookup_user(Username) of
+        {ok, User = #internal_user{password_hash = Hash, is_admin = IsAdmin}} ->
+            case rabbit_access_control:check_password(Password, Hash) of
+                true -> {ok, #user{username     = Username,
+                                   is_admin     = IsAdmin,
+                                   auth_backend = ?MODULE,
+                                   impl         = User}};
+                _    -> {refused, Username}
+            end;
+        {error, not_found} ->
+            {refused, Username}
+    end.
+
+check_vhost_access(#user{username = Username}, VHostPath) ->
+    %% TODO: use dirty ops instead
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read({rabbit_user_permission,
+                                #user_vhost{username     = Username,
+                                            virtual_host = VHostPath}}) of
+                  []   -> not_found;
+                  [_R] -> ok
+              end
+      end).
