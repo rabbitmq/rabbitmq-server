@@ -35,7 +35,7 @@
 -behaviour(rabbit_auth_backend).
 
 -export([description/0]).
--export([check_user_pass_login/2, check_vhost_access/2,
+-export([check_user_login/2, check_vhost_access/2,
          check_resource_access/3]).
 
 %%-include("rabbit_auth_backend_spec.hrl").
@@ -46,10 +46,21 @@ description() ->
     [{name, <<"Internal">>},
      {description, <<"Internal user / password database">>}].
 
-check_user_pass_login(Username, Password) ->
+check_user_login(Username, []) ->
+    internal_check_user_login(Username, fun() -> true end);
+check_user_login(Username, [{password, Password}]) ->
+    internal_check_user_login(
+      Username,
+      fun(#internal_user{password_hash = Hash}) ->
+	      rabbit_access_control:check_password(Password, Hash)
+      end);
+check_user_login(Username, AuthProps) ->
+    exit({unknown_auth_props, Username, AuthProps}).
+
+internal_check_user_login(Username, Fun) ->
     case rabbit_access_control:lookup_user(Username) of
-        {ok, User = #internal_user{password_hash = Hash, is_admin = IsAdmin}} ->
-            case rabbit_access_control:check_password(Password, Hash) of
+        {ok, User = #internal_user{is_admin = IsAdmin}} ->
+            case Fun(User) of
                 true -> {ok, #user{username     = Username,
                                    is_admin     = IsAdmin,
                                    auth_backend = ?MODULE,

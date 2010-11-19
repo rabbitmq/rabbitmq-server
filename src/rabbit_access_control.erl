@@ -33,8 +33,9 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([user_pass_login/2, check_user_pass_login/2, make_salt/0,
-         check_password/2, check_vhost_access/2, check_resource_access/3]).
+-export([user_pass_login/2, check_user_pass_login/2, check_user_login/2, 
+	 make_salt/0, check_password/2, check_vhost_access/2,
+	 check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
 -export([change_password_hash/2]).
@@ -109,10 +110,13 @@ user_pass_login(User, Pass) ->
     end.
 
 check_user_pass_login(Username, Password) ->
+    check_user_login(Username, [{password, Password}]).
+
+check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     lists:foldl(
       fun(Module, {refused, _}) ->
-              Module:check_user_pass_login(Username, Password);
+              Module:check_user_login(Username, AuthProps);
          (_, {ok, User}) ->
               {ok, User}
       end, {refused, Username}, Modules).
