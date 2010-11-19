@@ -65,8 +65,7 @@ start() ->
                     halt();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
                     print_error("invalid command '~s'",
-                                [lists:flatten(
-                                   rabbit_misc:intersperse(" ", FullCommand))]),
+                                [string:join(FullCommand, " ")]),
                     usage();
                 timeout ->
                     print_error("timeout starting some nodes.", []),
