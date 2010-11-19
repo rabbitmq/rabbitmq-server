@@ -70,11 +70,11 @@ make_listener_specs(Listeners) ->
 
       end, [], Listeners).
 
-listener_started(_IPAddress, _Port) ->
-    ok.
+listener_started(IPAddress, Port) ->
+    rabbit_networking:tcp_listener_started(stomp, IPAddress, Port).
 
-listener_stopped(_IPAddress, _Port) ->
-    ok.
+listener_stopped(IPAddress, Port) ->
+    rabbit_networking:tcp_listener_stopped(stomp, IPAddress, Port).
 
 start_client(Sock) ->
     {ok, SupPid, ReaderPid} =
