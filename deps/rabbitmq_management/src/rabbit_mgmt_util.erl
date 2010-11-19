@@ -19,7 +19,7 @@
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1]).
--export([with_decode/4, not_found/3, amqp_request/4]).
+-export([with_decode/4, not_found/3, amqp_request/4, props_to_method/2]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
@@ -234,16 +234,17 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
 
 props_to_method(MethodName, Props, Transformers, Extra) ->
     Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- Props],
-    Transformers1 = Transformers ++
-        [{fun (Args) -> [{arguments, args(Args)}] end, [arguments]}],
     props_to_method(
-      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, Transformers1)).
+      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, Transformers)).
 
 props_to_method(MethodName, Props) ->
+    Props1 = rabbit_mgmt_format:format(
+               Props,
+               [{fun (Args) -> [{arguments, args(Args)}] end, [arguments]}]),
     FieldNames = ?FRAMING:method_fieldnames(MethodName),
     {Res, _Idx} = lists:foldl(
                     fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props) of
+                            NewR = case proplists:get_value(K, Props1) of
                                        undefined -> R;
                                        V         -> setelement(Idx, R, V)
                                    end,
