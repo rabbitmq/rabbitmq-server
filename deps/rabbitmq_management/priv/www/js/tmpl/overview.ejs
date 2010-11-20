@@ -147,11 +147,6 @@ for (var i = 0; i < overview.listeners.length; i++) {
 <div class="section-hidden administrator-only">
 <h2>Import / Export Configuration</h2>
 <div class="hider">
-  <p>
-    The configuration consists of users, virtual hosts, permissions,
-    exchanges, queues and bindings. It does not include the contents of
-    queues.
-  </p>
   <form action="/api/all-configuration" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
@@ -161,9 +156,11 @@ for (var i = 0; i < overview.listeners.length; i++) {
             <label for="download-filename">Filename for download:</label><br/>
             <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
           </p>
-          <p>
-            Note: exclusive queues will not be exported.
-          </p>
+	  <sub>
+	    The configuration consists of users, virtual hosts, permissions,
+	    exchanges, queues and bindings. It does not include the contents of
+	    queues. Exclusive queues will not be exported.
+          </sub>
         </td>
         <td>
           <h3>Import</h3>
@@ -171,11 +168,11 @@ for (var i = 0; i < overview.listeners.length; i++) {
             <label>Configuration file:</label><br/>
             <input type="file" name="file"/>
           </p>
-          <p>
-            Note: The configuration that is imported will be merged with
+          <sub>
+            The configuration that is imported will be merged with
             the current configuration. If an error occurs during import,
             any configuration changes made will not be rolled back.
-          </p>
+          </sub>
         </td>
       </tr>
       <tr>
