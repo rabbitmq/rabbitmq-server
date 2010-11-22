@@ -1,14 +1,37 @@
 Currently this needs bug23455 in the server, erlang client, and management (if
 you're using that). Build it like any other plugin.
 
-Example config stanza:
+This plugin has quite a few configuration options. Most have sensible defaults.
+An example configuration file stanza looks like:
 
   {rabbit_auth_backend_ldap,
     [ {servers,         ["my-ldap-server1", "my-ldap-server-2"]},
-      {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"} ] },
+      {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"}
+      {use_ssl,         false},
+      {port,            389},
+      {log,             false} ] }
 
-The user_dn_pattern must contain exactly one instance of "~s". This will be
-where the username supplied by the client is subsitituted.
+
+The options are:
+
+servers
+  List of LDAP servers to attempt to bind to, in order.
+
+user_dn_pattern
+  Pattern for a user's DN. Must contain exactly one instance of "~s". This
+  will be where the username supplied by the client is subsitituted.
+
+use_ssl
+  Whether to use LDAPS. Uses the same SSL configuration as elsewhere in
+  RabbitMQ.
+
+port
+  Port on which to connect to LDAP servers.
+
+log
+  Set to true to cause LDAP traffic to be written to the RabbitMQ log. You
+  probably only want to use this for debugging, especially since it will
+  usually cause passwords to be written to the logs.
 
 Currently all users authenticated by LDAP:
 

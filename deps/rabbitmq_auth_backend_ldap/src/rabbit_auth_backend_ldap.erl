@@ -49,7 +49,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, { servers, user_dn_pattern }).
+-record(state, { servers, user_dn_pattern, ssl, log, port }).
 
 %%--------------------------------------------------------------------
 
@@ -84,13 +84,31 @@ check_resource_access(#user{username = _Username},
 init([]) ->
     {ok, Servers}       = application:get_env(servers),
     {ok, UserDnPattern} = application:get_env(user_dn_pattern),
+    {ok, SSL}           = application:get_env(use_ssl),
+    {ok, Log}           = application:get_env(log),
+    {ok, Port}          = application:get_env(server_port),
     {ok, #state{ servers         = Servers,
-                 user_dn_pattern = UserDnPattern }}.
+                 user_dn_pattern = UserDnPattern,
+                 ssl             = SSL,
+                 log             = Log,
+                 port            = Port }}.
 
 handle_call({login, Username, Password}, _From,
             State = #state{ servers         = Servers,
-                            user_dn_pattern = UserDnPattern}) ->
-    case eldap:open(Servers, []) of
+                            user_dn_pattern = UserDnPattern,
+                            ssl             = SSL,
+                            log             = Log,
+                            port            = Port }) ->
+    Opts0 = [{ssl, SSL}, {port, Port}],
+    Opts = case Log of
+               true ->
+                   [{log, fun(1, S, A) -> rabbit_log:warning(S, A);
+                             (2, S, A) -> rabbit_log:info   (S, A)
+                          end} | Opts0];
+               _ ->
+                   Opts0
+           end,
+    case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
             Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
             Reply = case eldap:simple_bind(LDAP, Dn, Password) of
