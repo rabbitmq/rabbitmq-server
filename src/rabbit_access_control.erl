@@ -116,7 +116,14 @@ check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     lists:foldl(
       fun(Module, {refused, _}) ->
-              Module:check_user_login(Username, AuthProps);
+              case Module:check_user_login(Username, AuthProps) of
+                  {error, E} ->
+                      rabbit_log:warning("~p failed authenticating ~p: ~p~n",
+                                         [Module, Username, E]),
+                      {refused, Username};
+                  Else ->
+                      Else
+              end;
          (_, {ok, User}) ->
               {ok, User}
       end, {refused, Username}, Modules).
