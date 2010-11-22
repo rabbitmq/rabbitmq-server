@@ -125,9 +125,9 @@ check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     case Module:check_vhost_access(User, VHostPath) of
-        ok ->
+        true ->
             ok;
-        not_found ->
+        false ->
             rabbit_misc:protocol_error(
               access_refused, "access to vhost '~s' refused for user '~s'",
               [VHostPath, Username])

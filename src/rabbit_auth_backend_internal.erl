@@ -78,8 +78,8 @@ check_vhost_access(#user{username = Username}, VHostPath) ->
               case mnesia:read({rabbit_user_permission,
                                 #user_vhost{username     = Username,
                                             virtual_host = VHostPath}}) of
-                  []   -> not_found;
-                  [_R] -> ok
+                  []   -> false;
+                  [_R] -> true
               end
       end).
 
