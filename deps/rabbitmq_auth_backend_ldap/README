@@ -1,0 +1,19 @@
+Currently this needs bug23455 in the server, erlang client, and management (if
+you're using that). Build it like any other plugin.
+
+Example config stanza:
+
+  {rabbit_auth_backend_ldap,
+    [ {servers,         ["my-ldap-server1", "my-ldap-server-2"]},
+      {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"} ] },
+
+The user_dn_pattern must contain exactly one instance of "~s". This will be
+where the username supplied by the client is subsitituted.
+
+Currently all users authenticated by LDAP:
+
+ * Are not administrators.
+ * Can connect to any vhost.
+ * Can do anything within a vhost.
+
+These last two limitations will probably get removed at some point.

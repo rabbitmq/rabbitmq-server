@@ -1,8 +1,10 @@
+%% -*- erlang -*-
 {application, rabbit_auth_backend_ldap,
  [{description, "RabbitMQ LDAP Authentication Backend"},
   {vsn, "%%VSN%%"},
-  {modules, [rabbit_auth_backend_ldap]}, %% TODO generate automatically.
+  {modules, [rabbit_auth_backend_ldap_app]}, %% TODO generate automatically.
   {registered, []},
-  {mod, {rabbit_auth_backend_ldap, []}},
-  {env, []},
+  {mod, {rabbit_auth_backend_ldap_app, []}},
+  {env, [ {servers,         ["ldap"]},
+          {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"} ]},
   {applications, [kernel, stdlib]}]}.

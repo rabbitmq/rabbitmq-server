@@ -1,5 +1,6 @@
 PACKAGE=rabbitmq-auth-backend-ldap
 APPNAME=rabbit_auth_backend_ldap
+DEPS=rabbitmq-server rabbitmq-erlang-client
 
 ELDAP_DIR=eldap
 ELDAP_URI=https://github.com/etnt/eldap.git
