@@ -39,7 +39,7 @@
 %%-include("rabbit_auth_backend_spec.hrl").
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
 
 -behaviour(gen_server).
 
@@ -71,7 +71,7 @@ check_user_login(Username, [{password, Password}]) ->
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
-check_vhost_access(#user{username = _Username}, _VHostPath) ->
+check_vhost_access(#user{username = _Username}, _VHostPath, _Permission) ->
     true.
 
 check_resource_access(#user{username = _Username},
