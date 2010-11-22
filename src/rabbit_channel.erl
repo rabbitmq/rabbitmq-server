@@ -65,7 +65,7 @@
         [pid,
          connection,
          number,
-         username,
+         user,
          vhost]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
@@ -1150,7 +1150,7 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid,            _)                                 -> self();
 i(connection,     #ch{reader_pid       = ReaderPid}) -> ReaderPid;
 i(number,         #ch{channel          = Channel})   -> Channel;
-i(username,       #ch{user             = User})      -> User#user.username;
+i(user,           #ch{user             = User})      -> User#user.username;
 i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
 i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
