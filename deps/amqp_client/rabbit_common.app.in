@@ -12,6 +12,7 @@
              rabbit_binary_parser,
              rabbit_channel,
              rabbit_exchange_type,
+             rabbit_auth_backend,
              rabbit_auth_mechanism,
              rabbit_misc,
              rabbit_net,
