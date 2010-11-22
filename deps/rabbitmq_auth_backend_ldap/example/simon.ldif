@@ -10,10 +10,6 @@ dn: ou=people,dc=example,dc=com
 objectClass: organizationalUnit
 ou: people
 
-dn: ou=groups,dc=example,dc=com
-objectClass: organizationalUnit
-ou: groups
-
 dn: cn=Simon MacMullen,ou=people,dc=example,dc=com
 objectClass: person
 cn: Simon MacMullen
