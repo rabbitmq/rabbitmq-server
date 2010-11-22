@@ -41,7 +41,7 @@
 %>
   <tr<%= alt_rows(i) %>>
 <% if (vhosts_interesting) { %>
-   <td><%= link_vhost(queue.vhost) %></td>
+   <td><%= queue.vhost %></td>
 <% } %>
    <td><%= link_queue(queue.vhost, queue.name) %></td>
 <% if (nodes_interesting) { %>

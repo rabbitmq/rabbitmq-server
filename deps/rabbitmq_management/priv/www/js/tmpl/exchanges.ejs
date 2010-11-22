@@ -24,7 +24,7 @@
 %>
   <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
-   <td><%= link_vhost(exchange.vhost) %></td>
+   <td><%= exchange.vhost %></td>
 <% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
    <td class="c"><%= exchange.type %></td>

@@ -61,9 +61,9 @@
 <% } %>
 <% if (mode == 'standalone') { %>
 <% if (vhosts_interesting) { %>
-    <td class="c"><%= link_vhost(channel.vhost) %></td>
+    <td class="c"><%= channel.vhost %></td>
 <% } %>
-    <td class="c"><%= link_user(channel.user) %></td>
+    <td class="c"><%= channel.user %></td>
 <% } %>
     <td class="c">
       <%= fmt_boolean(channel.transactional) %>
