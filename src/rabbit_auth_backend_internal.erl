@@ -35,8 +35,7 @@
 -behaviour(rabbit_auth_backend).
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/2,
-         check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
 
 %%-include("rabbit_auth_backend_spec.hrl").
 
@@ -71,7 +70,10 @@ internal_check_user_login(Username, Fun) ->
             {refused, Username}
     end.
 
-check_vhost_access(#user{username = Username}, VHostPath) ->
+check_vhost_access(#user{is_admin = true},    _VHostPath, read) ->
+    true;
+
+check_vhost_access(#user{username = Username}, VHostPath, write) ->
     %% TODO: use dirty ops instead
     rabbit_misc:execute_mnesia_transaction(
       fun () ->

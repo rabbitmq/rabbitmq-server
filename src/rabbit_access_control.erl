@@ -35,7 +35,7 @@
 
 -export([user_pass_login/2, check_user_pass_login/2, check_user_login/2, 
 	 make_salt/0, check_password/2, check_vhost_access/2,
-	 check_resource_access/3]).
+	 check_resource_access/3, list_vhosts/1]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
 -export([change_password_hash/2]).
@@ -131,7 +131,7 @@ check_user_login(Username, AuthProps) ->
 check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
-    case Module:check_vhost_access(User, VHostPath) of
+    case Module:check_vhost_access(User, VHostPath, write) of
         true ->
             ok;
         false ->
@@ -152,6 +152,11 @@ check_resource_access(User = #user{username = Username, auth_backend = Module},
                    access_refused, "access to ~s refused for user '~s'",
                    [rabbit_misc:rs(Resource), Username])
     end.
+
+list_vhosts(User = #user{auth_backend = Module}) ->
+    lists:filter(fun(VHost) ->
+                         Module:check_vhost_access(User, VHost, read)
+                 end, list_vhosts()).
 
 %%----------------------------------------------------------------------------
 

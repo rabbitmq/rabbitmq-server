@@ -40,7 +40,7 @@ behaviour_info(callbacks) ->
 
      {check_user_login, 2},
 
-     {check_vhost_access, 2},
+     {check_vhost_access, 3},
 
      {check_resource_access, 3}
     ];
