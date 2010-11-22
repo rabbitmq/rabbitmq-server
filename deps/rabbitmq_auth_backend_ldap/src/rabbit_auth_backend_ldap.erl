@@ -108,19 +108,23 @@ handle_call({login, Username, Password}, _From,
                _ ->
                    Opts0
            end,
+    Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
-            Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
-            Reply = case eldap:simple_bind(LDAP, Dn, Password) of
-                        ok ->
-                            {ok, #user{username     = Username,
-                                       is_admin     = false,
-                                       auth_backend = ?MODULE,
-                                       impl         = none}};
-                        {error, invalidCredentials} ->
-                            {refused, Username};
-                        {error, _} = E ->
-                            E
+            Reply = try
+                        case eldap:simple_bind(LDAP, Dn, Password) of
+                            ok ->
+                                {ok, #user{username     = Username,
+                                           is_admin     = false,
+                                           auth_backend = ?MODULE,
+                                           impl         = none}};
+                            {error, invalidCredentials} ->
+                                {refused, Username};
+                            {error, _} = E ->
+                                E
+                        end
+                    after
+                        eldap:close(LDAP)
                     end,
             {reply, Reply, State};
         Error ->
