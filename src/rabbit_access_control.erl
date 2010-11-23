@@ -118,7 +118,7 @@ check_user_login(Username, AuthProps) ->
       fun(Module, {refused, _}) ->
               case Module:check_user_login(Username, AuthProps) of
                   {error, E} ->
-                      rabbit_log:warning("~p failed authenticating ~p: ~p~n",
+                      rabbit_log:warning("~s failed authenticating ~s: ~p~n",
                                          [Module, Username, E]),
                       {refused, Username};
                   Else ->
@@ -131,14 +131,12 @@ check_user_login(Username, AuthProps) ->
 check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
-    case Module:check_vhost_access(User, VHostPath, write) of
-        true ->
-            ok;
-        false ->
-            rabbit_misc:protocol_error(
-              access_refused, "access to vhost '~s' refused for user '~s'",
-              [VHostPath, Username])
-    end.
+    check_access(
+      fun() -> Module:check_vhost_access(User, VHostPath, write)  end,
+      "~s failed checking vhost access to ~s for ~s: ~p~n",
+      [Module, VHostPath, Username],
+      "access to vhost '~s' refused for user '~s'",
+      [VHostPath, Username]).
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
@@ -146,17 +144,41 @@ check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                           Permission);
 check_resource_access(User = #user{username = Username, auth_backend = Module},
                       Resource, Permission) ->
-    case Module:check_resource_access(User, Resource, Permission) of
-        true  -> ok;
-        false -> rabbit_misc:protocol_error(
-                   access_refused, "access to ~s refused for user '~s'",
-                   [rabbit_misc:rs(Resource), Username])
+    check_access(
+      fun() -> Module:check_resource_access(User, Resource, Permission) end,
+      "~s failed checking resource access to ~s for ~s: ~p~n",
+      [Module, Resource, Username],
+      "access to ~s refused for user '~s'",
+      [rabbit_misc:rs(Resource), Username]).
+
+check_access(Fun, ErrStr, ErrArgs, RefStr, RefArgs) ->
+    Allow = case Fun() of
+                {error, _} = E ->
+                    rabbit_log:error(ErrStr, ErrArgs ++ [E]),
+                    false;
+                Else ->
+                    Else
+            end,
+    case Allow of
+        true ->
+            ok;
+        false ->
+            rabbit_misc:protocol_error(access_refused, RefStr, RefArgs)
     end.
 
-list_vhosts(User = #user{auth_backend = Module}) ->
-    lists:filter(fun(VHost) ->
-                         Module:check_vhost_access(User, VHost, read)
-                 end, list_vhosts()).
+list_vhosts(User = #user{username = Username, auth_backend = Module}) ->
+    lists:filter(
+      fun(VHost) ->
+              case Module:check_vhost_access(User, VHost, read) of
+                  {error, _} = E ->
+                      rabbit_log:warning("~w failed checking vhost access "
+                                         "to ~s for ~s: ~p~n",
+                                         [Module, VHost, Username, E]),
+                      false;
+                  Else ->
+                      Else
+              end
+      end, list_vhosts()).
 
 %% TODO move almost everything below this line to rabbit_auth_backend_internal
 %%----------------------------------------------------------------------------
