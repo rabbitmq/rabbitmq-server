@@ -87,17 +87,17 @@
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
--spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
+-spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (pid()) -> [rabbit_types:info()]).
--spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
--spec(info_all/0 :: () -> [[rabbit_types:info()]]).
--spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (pid()) -> rabbit_types:infos()).
+-spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
+-spec(info_all/0 :: () -> [rabbit_types:infos()]).
+-spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -267,9 +267,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    rabbit_event:if_enabled(StatsTimer, fun () ->
-                                                internal_emit_stats(State)
-                                        end),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    internal_emit_stats(
+                                      State, [{idle_since, now()}])
+                            end),
     {hibernate,
      State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
@@ -1201,11 +1203,14 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
+internal_emit_stats(State) ->
+    internal_emit_stats(State, []).
+
+internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->
-            rabbit_event:notify(channel_stats, CoarseStats);
+            rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
         fine ->
             FineStats =
                 [{channel_queue_stats,
@@ -1215,7 +1220,8 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
-            rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
+            rabbit_event:notify(channel_stats,
+                                Extra ++ CoarseStats ++ FineStats)
     end.
 
 erase_queue_stats(QPid) ->

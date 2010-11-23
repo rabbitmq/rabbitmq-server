@@ -65,8 +65,7 @@ start() ->
                     halt();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
                     print_error("invalid command '~s'",
-                                [lists:flatten(
-                                   rabbit_misc:intersperse(" ", FullCommand))]),
+                                [string:join(FullCommand, " ")]),
                     usage();
                 timeout ->
                     print_error("timeout starting some nodes.", []),
@@ -227,11 +226,11 @@ run_rabbitmq_server_unix() ->
 
 run_rabbitmq_server_win32() ->
     Cmd = filename:nativename(os:find_executable("cmd")),
-    CmdLine = "\"" ++ getenv("RABBITMQ_SCRIPT_HOME")
-                                         ++ "\\rabbitmq-server.bat\" -noinput",
+    CmdLine = "\"" ++ getenv("RABBITMQ_SCRIPT_HOME") ++
+              "\\rabbitmq-server.bat\" -noinput -detached",
     erlang:open_port({spawn_executable, Cmd},
                      [{arg0, Cmd}, {args, ["/q", "/s", "/c", CmdLine]},
-                      nouse_stdio, hide]).
+                      nouse_stdio]).
 
 is_rabbit_running(Node, RpcTimeout) ->
     case rpc:call(Node, rabbit, status, [], RpcTimeout) of
@@ -315,7 +314,7 @@ is_dead(Pid) ->
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
-                                          PidS ++ "\""),
+                                          PidS ++ "\" 2>&1"),
                              case re:run(Res, "erl\\.exe", [{capture, none}]) of
                                  match -> false;
                                  _     -> true

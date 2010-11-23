@@ -315,6 +315,25 @@ ch_record(ChPid) ->
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C).
 
+maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
+                              acktags              = ChAckTags,
+                              txn                  = Txn,
+                              unsent_message_count = UnsentMessageCount}) ->
+    case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount, Txn} of
+        {0, 0, 0, none} -> ok = erase_ch_record(C),
+                           false;
+        _               -> store_ch_record(C),
+                           true
+    end.
+
+erase_ch_record(#cr{ch_pid      = ChPid,
+                    limiter_pid = LimiterPid,
+                    monitor_ref = MonitorRef}) ->
+    ok = rabbit_limiter:unregister(LimiterPid, self()),
+    erlang:demonitor(MonitorRef),
+    erase({ch, ChPid}),
+    ok.
+
 all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
 
@@ -361,7 +380,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                                  end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
-                    store_ch_record(NewC),
+                    true = maybe_store_ch_record(NewC),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         case ch_record_state_transition(C, NewC) of
                             ok    -> {queue:in(QEntry, ActiveConsumersTail),
@@ -380,7 +399,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     deliver_msgs_to_consumers(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
-                    store_ch_record(C#cr{is_limit_active = true}),
+                    true = maybe_store_ch_record(C#cr{is_limit_active = true}),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         move_consumers(ChPid,
                                        ActiveConsumers,
@@ -479,7 +498,7 @@ possibly_unblock(State, ChPid, Update) ->
             State;
         C ->
             NewC = Update(C),
-            store_ch_record(NewC),
+            maybe_store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
                 unblock -> {NewBlockedConsumers, NewActiveConsumers} =
@@ -500,10 +519,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
-        #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
-            acktags = ChAckTags} ->
-            erlang:demonitor(MonitorRef),
-            erase({ch, ChPid}),
+        C = #cr{ch_pid = ChPid, txn = Txn, acktags = ChAckTags} ->
+            ok = erase_ch_record(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
@@ -562,7 +579,7 @@ commit_transaction(Txn, From, ChPid, State = #q{backing_queue       = BQ,
     %% by the channel.
     C = #cr{acktags = ChAckTags} = lookup_ch(ChPid),
     ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-    store_ch_record(C#cr{acktags = ChAckTags1, txn = none}),
+    maybe_store_ch_record(C#cr{acktags = ChAckTags1, txn = none}),
     State#q{backing_queue_state = BQS1}.
 
 rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
@@ -652,7 +669,10 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 emit_stats(State) ->
-    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
+    emit_stats(State, []).
+
+emit_stats(State, Extra) ->
+    rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
 
@@ -772,8 +792,9 @@ handle_call({basic_get, ChPid, NoAck}, _From,
         {{Message, IsDelivered, AckTag, Remaining}, State2} ->
             case AckRequired of
                 true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                         store_ch_record(
-                           C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
+                         true = maybe_store_ch_record(
+                                  C#cr{acktags = sets:add_element(AckTag,
+                                                                  ChAckTags)});
                 false -> ok
             end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
@@ -791,8 +812,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
             C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
-            store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                 limiter_pid = LimiterPid}),
+            true = maybe_store_ch_record(C#cr{consumer_count = ConsumerCount +1,
+                                              limiter_pid    = LimiterPid}),
             ok = case ConsumerCount of
                      0 -> rabbit_limiter:register(LimiterPid, self());
                      _ -> ok
@@ -826,12 +847,15 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
-            store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            case ConsumerCount of
-                1 -> ok = rabbit_limiter:unregister(LimiterPid, self());
-                _ -> ok
-            end,
+        C = #cr{consumer_count = ConsumerCount,
+                limiter_pid    = LimiterPid} ->
+            C1 = C#cr{consumer_count = ConsumerCount -1},
+            maybe_store_ch_record(
+              case ConsumerCount of
+                  1 -> ok = rabbit_limiter:unregister(LimiterPid, self()),
+                       C1#cr{limiter_pid = undefined};
+                  _ -> C1
+              end),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -880,7 +904,7 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
             noreply(State);
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            store_ch_record(C#cr{acktags = ChAckTags1}),
+            maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(requeue_and_run(AckTags, State))
     end;
 
@@ -904,7 +928,7 @@ handle_cast({ack, Txn, AckTags, ChPid},
                             {C#cr{acktags = ChAckTags1}, BQ:ack(AckTags, BQS)};
                     _    -> {C#cr{txn = Txn}, BQ:tx_ack(Txn, AckTags, BQS)}
                 end,
-            store_ch_record(C1),
+            maybe_store_ch_record(C1),
             noreply(State#q{backing_queue_state = BQS1})
     end;
 
@@ -915,7 +939,7 @@ handle_cast({reject, AckTags, Requeue, ChPid},
             noreply(State);
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            store_ch_record(C#cr{acktags = ChAckTags1}),
+            maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
                         false -> BQS1 = BQ:ack(AckTags, BQS),
@@ -1032,7 +1056,10 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    rabbit_event:if_enabled(StatsTimer, fun () -> emit_stats(State) end),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    emit_stats(State, [{idle_since, now()}])
+                            end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS2},
     {hibernate, stop_rate_timer(State1)}.

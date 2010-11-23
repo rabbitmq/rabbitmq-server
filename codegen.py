@@ -240,8 +240,6 @@ def genErl(spec):
             elif type == 'table':
                 print "  F%d = rabbit_binary_parser:parse_table(F%dTab)," % \
                       (f.index, f.index)
-            elif type == 'shortstr':
-                print "  if F%dLen > 255 -> exit(method_field_shortstr_overflow); true -> ok end," % (f.index)
             else:
                 pass
 
@@ -278,8 +276,7 @@ def genErl(spec):
                 print "  F%dTab = rabbit_binary_generator:generate_table(F%d)," % (f.index, f.index)
                 print "  F%dLen = size(F%dTab)," % (f.index, f.index)
             elif type == 'shortstr':
-                print "  F%dLen = size(F%d)," % (f.index, f.index)
-                print "  if F%dLen > 255 -> exit(method_field_shortstr_overflow); true -> ok end," % (f.index)
+                print "  F%dLen = shortstr_size(F%d)," % (f.index, f.index)
             elif type == 'longstr':
                 print "  F%dLen = size(F%d)," % (f.index, f.index)
             else:
@@ -348,9 +345,11 @@ def genErl(spec):
     print "%% Various types"
     print "-ifdef(use_specs)."
 
-    print """-export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
-              amqp_method_name/0, amqp_method/0, amqp_class_id/0,
-              amqp_value/0, amqp_array/0, amqp_exception/0, amqp_property_record/0]).
+    print """-export_type([amqp_field_type/0, amqp_property_type/0,
+              amqp_table/0, amqp_array/0, amqp_value/0,
+              amqp_method_name/0, amqp_method/0, amqp_method_record/0,
+              amqp_method_field_name/0, amqp_property_record/0,
+              amqp_exception/0, amqp_exception_code/0, amqp_class_id/0]).
 
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
@@ -418,7 +417,7 @@ def genErl(spec):
         (amqp_method_name(), binary()) -> amqp_method_record() | rabbit_types:connection_exit()).
 -spec(decode_properties/2 :: (non_neg_integer(), binary()) -> amqp_property_record()).
 -spec(encode_method_fields/1 :: (amqp_method_record()) -> binary()).
--spec(encode_properties/1 :: (amqp_method_record()) -> binary()).
+-spec(encode_properties/1 :: (amqp_property_record()) -> binary()).
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
 -endif. % use_specs
@@ -426,6 +425,12 @@ def genErl(spec):
 bitvalue(true) -> 1;
 bitvalue(false) -> 0;
 bitvalue(undefined) -> 0.
+
+shortstr_size(S) ->
+    case size(S) of
+        Len when Len =< 255 -> Len;
+        _                   -> exit(method_field_shortstr_overflow)
+    end.
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'

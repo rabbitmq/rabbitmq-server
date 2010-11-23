@@ -45,10 +45,6 @@
 
 -export([emit_stats/1]).
 
--import(gen_tcp).
--import(inet).
--import(prim_inet).
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
@@ -65,7 +61,7 @@
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
 
--define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
+-define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
                               peer_cert_validity,
                               protocol, user, vhost, timeout, frame_max,
@@ -162,28 +158,25 @@
 
 -ifdef(use_specs).
 
--type(start_heartbeat_fun() ::
-        fun ((rabbit_networking:socket(), non_neg_integer()) ->
-                    rabbit_heartbeat:heartbeaters())).
-
--spec(start_link/3 :: (pid(), pid(), start_heartbeat_fun()) ->
+-spec(start_link/3 :: (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun()) ->
                            rabbit_types:ok(pid())).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (pid()) -> [rabbit_types:info()]).
--spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (pid()) -> rabbit_types:infos()).
+-spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/4 :: (pid(), pid(), pid(), start_heartbeat_fun()) -> no_return()).
+-spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
+                -> no_return()).
 -spec(start_connection/7 ::
-        (pid(), pid(), pid(), start_heartbeat_fun(), any(),
-         rabbit_networking:socket(),
-         fun ((rabbit_networking:socket()) ->
+        (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun(), any(),
+         rabbit_net:socket(),
+         fun ((rabbit_net:socket()) ->
                      rabbit_types:ok_or_error2(
-                       rabbit_networking:socket(), any()))) -> no_return()).
+                       rabbit_net:socket(), any()))) -> no_return()).
 
 -endif.
 
@@ -325,13 +318,10 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     done.
 
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
-    %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
-            {State1, Callback1, Length1} =
-                handle_input(State#v1.callback, Data,
-                             State#v1{recv_ref = none}),
-            mainloop(Deb, switch_callback(State1, Callback1, Length1));
+            mainloop(Deb, handle_input(State#v1.callback, Data,
+                                       State#v1{recv_ref = none}));
         {inet_async, Sock, Ref, {error, closed}} ->
             if State#v1.connection_state =:= closed ->
                     State;
@@ -571,7 +561,6 @@ handle_frame(Type, Channel, Payload,
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
-            %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {ch_fr_pid, ChFrPid} ->
                     ok = rabbit_framing_channel:process(ChFrPid, AnalyzedFrame),
@@ -635,18 +624,18 @@ analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
-    %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
-    {ensure_stats_timer(State), {frame_payload, Type, Channel, PayloadSize},
-     PayloadSize + 1};
+    ensure_stats_timer(
+      switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
+                      PayloadSize + 1));
 
-handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, State) ->
+handle_input({frame_payload, Type, Channel, PayloadSize},
+             PayloadAndMarker, State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            %%?LOGDEBUG("Frame completed: ~p/~p/~p~n", [Type, Channel, Payload]),
-            NewState = handle_frame(Type, Channel, Payload, State),
-            {NewState, frame_header, 7};
+            handle_frame(Type, Channel, Payload,
+                         switch_callback(State, frame_header, 7));
         _ ->
-            throw({bad_payload, PayloadAndMarker})
+            throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
 
 %% The two rules pertaining to version negotiation:
@@ -697,11 +686,11 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                                  mechanisms = <<"PLAIN AMQPLAIN">>,
                                  locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
-    {State#v1{connection = Connection#connection{
-                             timeout_sec = ?NORMAL_TIMEOUT,
-                             protocol = Protocol},
-              connection_state = starting},
-     frame_header, 7}.
+    switch_callback(State#v1{connection = Connection#connection{
+                                            timeout_sec = ?NORMAL_TIMEOUT,
+                                            protocol = Protocol},
+                             connection_state = starting},
+                    frame_header, 7).
 
 refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
@@ -771,7 +760,19 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            Heartbeater = SHF(Sock, ClientHeartbeat),
+            SendFun =
+                fun() ->
+                        Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                        catch rabbit_net:send(Sock, Frame)
+                end,
+
+            Parent = self(),
+            ReceiveFun =
+                fun() ->
+                        Parent ! timeout
+                end,
+            Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
+                              ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,
@@ -839,6 +840,8 @@ i(peer_address, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
 i(peer_port, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
+i(ssl, #v1{sock = Sock}) ->
+    rabbit_net:is_ssl(Sock);
 i(peer_cert_issuer, #v1{sock = Sock}) ->
     cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
 i(peer_cert_subject, #v1{sock = Sock}) ->
@@ -889,7 +892,7 @@ cert_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> '';
         {error, no_peercert} -> '';
-        {ok, Cert}           -> F(Cert)
+        {ok, Cert}           -> list_to_binary(F(Cert))
     end.
 
 %%--------------------------------------------------------------------------

@@ -68,14 +68,14 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (rabbit_types:exchange()) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
-        (rabbit_types:exchange(), [rabbit_types:info_key()])
-        -> [rabbit_types:info()]).
--spec(info_all/1 :: (rabbit_types:vhost()) -> [[rabbit_types:info()]]).
--spec(info_all/2 ::(rabbit_types:vhost(), [rabbit_types:info_key()])
-                    -> [[rabbit_types:info()]]).
+        (rabbit_types:exchange(), rabbit_types:info_keys())
+        -> rabbit_types:infos()).
+-spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
+                    -> [rabbit_types:infos()]).
 -spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                    -> {rabbit_router:routing_result(), [pid()]}).
 -spec(delete/2 ::
@@ -228,7 +228,7 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 publish(X = #exchange{name = XName}, Delivery) ->
     rabbit_router:deliver(
-      route(Delivery, {queue:from_list([X]), sets:from_list([XName]), []}),
+      route(Delivery, {queue:from_list([X]), XName, []}),
       Delivery).
 
 route(Delivery, {WorkList, SeenXs, QNames}) ->
@@ -252,13 +252,22 @@ process_alternate(_X, Results) ->
     Results.
 
 process_route(#resource{kind = exchange} = XName,
+              {_WorkList, XName, _QNames} = Acc) ->
+    Acc;
+process_route(#resource{kind = exchange} = XName,
+              {WorkList, #resource{kind = exchange} = SeenX, QNames}) ->
+    {case lookup(XName) of
+         {ok, X}            -> queue:in(X, WorkList);
+         {error, not_found} -> WorkList
+     end, gb_sets:from_list([SeenX, XName]), QNames};
+process_route(#resource{kind = exchange} = XName,
               {WorkList, SeenXs, QNames} = Acc) ->
-    case sets:is_element(XName, SeenXs) of
+    case gb_sets:is_element(XName, SeenXs) of
         true  -> Acc;
         false -> {case lookup(XName) of
                       {ok, X}            -> queue:in(X, WorkList);
                       {error, not_found} -> WorkList
-                  end, sets:add_element(XName, SeenXs), QNames}
+                  end, gb_sets:add_element(XName, SeenXs), QNames}
     end;
 process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->

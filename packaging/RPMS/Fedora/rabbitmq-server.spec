@@ -9,8 +9,7 @@ Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{v
 Source1: rabbitmq-server.init
 Source2: rabbitmq-script-wrapper
 Source3: rabbitmq-server.logrotate
-Source4: rabbitmq-asroot-script-wrapper
-Source5: rabbitmq-server.ocf
+Source4: rabbitmq-server.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
 BuildRequires: erlang >= R12B-3, python-simplejson, xmlto, libxslt
@@ -29,8 +28,7 @@ scalable implementation of an AMQP broker.
 %define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
 %define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
-%define _rabbit_asroot_wrapper %{_builddir}/`basename %{S:4}`
-%define _rabbit_server_ocf %{_builddir}/`basename %{S:5}`
+%define _rabbit_server_ocf %{_builddir}/`basename %{S:4}`
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -40,8 +38,7 @@ scalable implementation of an AMQP broker.
 
 %build
 cp %{S:2} %{_rabbit_wrapper}
-cp %{S:4} %{_rabbit_asroot_wrapper}
-cp %{S:5} %{_rabbit_server_ocf}
+cp %{S:4} %{_rabbit_server_ocf}
 make %{?_smp_mflags}
 
 %install
