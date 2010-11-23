@@ -16,6 +16,10 @@ $(EBIN_DIR)/eldap.beam: $(ELDAP_DIR)/$(EBIN_DIR)/eldap.beam
 $(ELDAP_DIR)/$(EBIN_DIR)/eldap.beam: $(ELDAP_DIR)
 	make -C $(ELDAP_DIR)
 
+$(EBIN_DIR)/rabbit_auth_backend_ldap.beam:: $(ELDAP_DIR)/include/eldap.hrl
+
+$(ELDAP_DIR)/include/eldap.hrl: $(ELDAP_DIR)
+
 $(ELDAP_DIR):
 	git clone $(ELDAP_URI) $@
 	(cd $@ && git checkout $(ELDAP_REVISION)) || rm -rf $@

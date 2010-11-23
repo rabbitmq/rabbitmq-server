@@ -33,6 +33,7 @@
 
 %% Connect to an LDAP server for authentication and authorisation
 
+-include_lib("eldap/include/eldap.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_auth_backend).
@@ -72,29 +73,82 @@ check_user_login(Username, [{password, Password}]) ->
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
-check_vhost_access(#user{username = Username}, VHost, Permission) ->
-    gen_server:call(?SERVER, {check_vhost, [{username,   Username},
-                                            {vhost,      VHost},
-                                            {permission, Permission}]},
+check_vhost_access(User = #user{username = Username}, VHost, Permission) ->
+    gen_server:call(?SERVER, {check_vhost, User, [{username,   Username},
+                                                  {vhost,      VHost},
+                                                  {permission, Permission}]},
                     infinity).
 
-check_resource_access(#user{username = Username},
+check_resource_access(User = #user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
-    gen_server:call(?SERVER, {check_resource, [{username,   Username},
-                                               {vhost,      VHost},
-                                               {res_type,   Type},
-                                               {res_name,   Name},
-                                               {permission, Permission}]},
+    gen_server:call(?SERVER, {check_resource, User, [{username,   Username},
+                                                     {vhost,      VHost},
+                                                     {res_type,   Type},
+                                                     {res_name,   Name},
+                                                     {permission, Permission}]},
                     infinity).
 
 %%--------------------------------------------------------------------
 
-evaluate({constant, Bool}, _Args) ->
+evaluate({constant, Bool}, _Args, _LDAP) ->
     Bool;
 
-evaluate(Q, Args) ->
+evaluate({exists, DnPattern}, Args, LDAP) ->
+    Dn = rabbit_auth_backend_ldap_util:fill(DnPattern, Args),
+    Base = {base, Dn},
+    Scope = {scope, eldap:baseObject()},
+    %% eldap forces us to have a filter. objectClass should always be there.
+    Filter = {filter, eldap:present("objectClass")},
+    case eldap:search(LDAP, [Base, Filter, Scope]) of
+        {ok, #eldap_search_result{entries = Entries}} ->
+            length(Entries) > 0;
+        {error, _} ->
+            false
+    end;
+
+evaluate(Q, Args, _LDAP) ->
     {error, {unrecognised_query, Q, Args}}.
+
+evaluate_ldap(#user{username = U, impl = P}, Q, Args, State) ->
+    with_ldap(U, P, fun(LDAP) -> evaluate(Q, Args, LDAP) end, State).
+
+%% TODO - ATM we create and destroy a new LDAP connection on every
+%% call. This could almost certainly be more efficient.
+with_ldap(Username, Password, Fun,
+          State = #state{ servers         = Servers,
+                          user_dn_pattern = UserDnPattern,
+                          ssl             = SSL,
+                          log             = Log,
+                          port            = Port }) ->
+    Opts0 = [{ssl, SSL}, {port, Port}],
+    Opts = case Log of
+               true ->
+                   [{log, fun(1, S, A) -> rabbit_log:warning(S, A);
+                             (2, S, A) -> rabbit_log:info   (S, A)
+                          end} | Opts0];
+               _ ->
+                   Opts0
+           end,
+    Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
+    case eldap:open(Servers, Opts) of
+        {ok, LDAP} ->
+            Reply = try
+                        case eldap:simple_bind(LDAP, Dn, Password) of
+                            ok ->
+                                Fun(LDAP);
+                            {error, invalidCredentials} ->
+                                {refused, Username};
+                            {error, _} = E ->
+                                E
+                        end
+                    after
+                        eldap:close(LDAP)
+                    end,
+            {reply, Reply, State};
+        Error ->
+            {reply, Error, State}
+    end.
 
 %%--------------------------------------------------------------------
 
@@ -117,59 +171,28 @@ init([]) ->
                  port                  = Port }}.
 
 handle_call({login, Username, Password}, _From,
-            State = #state{ servers         = Servers,
-                            user_dn_pattern = UserDnPattern,
-                            is_admin_query  = IsAdminQuery,
-                            ssl             = SSL,
-                            log             = Log,
-                            port            = Port }) ->
-    Opts0 = [{ssl, SSL}, {port, Port}],
-    Opts = case Log of
-               true ->
-                   [{log, fun(1, S, A) -> rabbit_log:warning(S, A);
-                             (2, S, A) -> rabbit_log:info   (S, A)
-                          end} | Opts0];
-               _ ->
-                   Opts0
-           end,
-    Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
-    %% TODO - ATM we create and destroy a new LDAP connection on every
-    %% call. This could almost certainly be more efficient.
-    case eldap:open(Servers, Opts) of
-        {ok, LDAP} ->
-            Reply = try
-                        case eldap:simple_bind(LDAP, Dn, Password) of
-                            ok ->
-                                case evaluate(IsAdminQuery,
-                                              [{username, Username}]) of
-                                    {error, _} = E ->
-                                        E;
-                                    IsAdmin ->
-                                        {ok, #user{username     = Username,
-                                                   is_admin     = IsAdmin,
-                                                   auth_backend = ?MODULE,
-                                                   impl         = none}}
-                                end;
-                            {error, invalidCredentials} ->
-                                {refused, Username};
-                            {error, _} = E ->
-                                E
-                        end
-                    after
-                        eldap:close(LDAP)
-                    end,
-            {reply, Reply, State};
-        Error ->
-            {reply, Error, State}
-    end;
+            State = #state{ is_admin_query = IsAdminQuery }) ->
+    with_ldap(
+      Username, Password,
+      fun(LDAP) ->
+              case evaluate(IsAdminQuery, [{username, Username}], LDAP) of
+                  {error, _} = E ->
+                      E;
+                  IsAdmin ->
+                      {ok, #user{username     = Username,
+                                 is_admin     = IsAdmin,
+                                 auth_backend = ?MODULE,
+                                 impl         = Password}}
+              end
+      end, State);
 
-handle_call({check_vhost, Args},
+handle_call({check_vhost, User, Args},
             _From, State = #state{vhost_access_query = Q}) ->
-    {reply, evaluate(Q, Args), State};
+    evaluate_ldap(User, Q, Args, State);
 
-handle_call({check_resource, Args},
+handle_call({check_resource, User, Args},
             _From, State = #state{resource_access_query = Q}) ->
-    {reply, evaluate(Q, Args), State};
+    evaluate_ldap(User, Q, Args, State);
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
