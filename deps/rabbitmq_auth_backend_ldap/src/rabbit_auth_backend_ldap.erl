@@ -49,7 +49,8 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, { servers, user_dn_pattern, ssl, log, port }).
+-record(state, { servers, user_dn_pattern, vhost_access_query,
+                 resource_access_query, is_admin_query, ssl, log, port }).
 
 %%--------------------------------------------------------------------
 
@@ -71,31 +72,54 @@ check_user_login(Username, [{password, Password}]) ->
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
-check_vhost_access(#user{username = _Username}, _VHostPath, _Permission) ->
-    true.
+check_vhost_access(#user{username = Username}, VHost, Permission) ->
+    gen_server:call(?SERVER, {check_vhost, [{username,   Username},
+                                            {vhost,      VHost},
+                                            {permission, Permission}]},
+                    infinity).
 
-check_resource_access(#user{username = _Username},
-                      #resource{virtual_host = _VHostPath, name = _Name},
-                      _Permission) ->
-    true.
+check_resource_access(#user{username = Username},
+                      #resource{virtual_host = VHost, kind = Type, name = Name},
+                      Permission) ->
+    gen_server:call(?SERVER, {check_resource, [{username,   Username},
+                                               {vhost,      VHost},
+                                               {res_type,   Type},
+                                               {res_name,   Name},
+                                               {permission, Permission}]},
+                    infinity).
+
+%%--------------------------------------------------------------------
+
+evaluate({constant, Bool}, _Args) ->
+    Bool;
+
+evaluate(Q, Args) ->
+    {error, {unrecognised_query, Q, Args}}.
 
 %%--------------------------------------------------------------------
 
 init([]) ->
-    {ok, Servers}       = application:get_env(servers),
-    {ok, UserDnPattern} = application:get_env(user_dn_pattern),
-    {ok, SSL}           = application:get_env(use_ssl),
-    {ok, Log}           = application:get_env(log),
-    {ok, Port}          = application:get_env(server_port),
-    {ok, #state{ servers         = Servers,
-                 user_dn_pattern = UserDnPattern,
-                 ssl             = SSL,
-                 log             = Log,
-                 port            = Port }}.
+    {ok, Servers}        = application:get_env(servers),
+    {ok, UserDnPattern}  = application:get_env(user_dn_pattern),
+    {ok, VHostAccess}    = application:get_env(vhost_access_query),
+    {ok, ResourceAccess} = application:get_env(resource_access_query),
+    {ok, IsAdmin}        = application:get_env(is_admin_query),
+    {ok, SSL}            = application:get_env(use_ssl),
+    {ok, Log}            = application:get_env(log),
+    {ok, Port}           = application:get_env(server_port),
+    {ok, #state{ servers               = Servers,
+                 user_dn_pattern       = UserDnPattern,
+                 vhost_access_query    = VHostAccess,
+                 resource_access_query = ResourceAccess,
+                 is_admin_query        = IsAdmin,
+                 ssl                   = SSL,
+                 log                   = Log,
+                 port                  = Port }}.
 
 handle_call({login, Username, Password}, _From,
             State = #state{ servers         = Servers,
                             user_dn_pattern = UserDnPattern,
+                            is_admin_query  = IsAdminQuery,
                             ssl             = SSL,
                             log             = Log,
                             port            = Port }) ->
@@ -109,15 +133,23 @@ handle_call({login, Username, Password}, _From,
                    Opts0
            end,
     Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
+    %% TODO - ATM we create and destroy a new LDAP connection on every
+    %% call. This could almost certainly be more efficient.
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
             Reply = try
                         case eldap:simple_bind(LDAP, Dn, Password) of
                             ok ->
-                                {ok, #user{username     = Username,
-                                           is_admin     = false,
-                                           auth_backend = ?MODULE,
-                                           impl         = none}};
+                                case evaluate(IsAdminQuery,
+                                              [{username, Username}]) of
+                                    {error, _} = E ->
+                                        E;
+                                    IsAdmin ->
+                                        {ok, #user{username     = Username,
+                                                   is_admin     = IsAdmin,
+                                                   auth_backend = ?MODULE,
+                                                   impl         = none}}
+                                end;
                             {error, invalidCredentials} ->
                                 {refused, Username};
                             {error, _} = E ->
@@ -130,6 +162,14 @@ handle_call({login, Username, Password}, _From,
         Error ->
             {reply, Error, State}
     end;
+
+handle_call({check_vhost, Args},
+            _From, State = #state{vhost_access_query = Q}) ->
+    {reply, evaluate(Q, Args), State};
+
+handle_call({check_resource, Args},
+            _From, State = #state{resource_access_query = Q}) ->
+    {reply, evaluate(Q, Args), State};
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.

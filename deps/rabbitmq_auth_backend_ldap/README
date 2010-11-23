@@ -6,7 +6,7 @@ An example configuration file stanza looks like:
 
   {rabbit_auth_backend_ldap,
     [ {servers,         ["my-ldap-server1", "my-ldap-server-2"]},
-      {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"}
+      {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"},
       {use_ssl,         false},
       {port,            389},
       {log,             false} ] }
