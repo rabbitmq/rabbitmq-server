@@ -1,42 +1,151 @@
-Currently this needs bug23455 in the server, erlang client, and management (if
-you're using that). Build it like any other plugin.
+Overview
+========
 
-This plugin has quite a few configuration options. Most have sensible defaults.
-An example configuration file stanza looks like:
+Currently this needs bug23455 in the server, Erlang client, and
+Management Plugin (if you're using that). Build and install it like
+any other plugin (see http://www.rabbitmq.com/plugin-development.html).
 
+To use this plugin, some editing of the RabbitMQ configuration file is
+required. You must enable it, and then configure it.
+
+Enabling the plugin
+===================
+
+To enable the plugin, set the value of the "auth_backends" configuration item
+for the "rabbit" application to include "rabbit_auth_backend_ldap".
+"auth_backends" is a list of authorisation providers to try in order.
+
+Therefore a complete RabbitMQ configuration that enables this plugin would
+look like:
+
+[{rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]}].
+
+to use only LDAP, or:
+
+[{rabbit,
+  [{auth_backends, [rabbit_auth_backend_ldap, rabbit_auth_backend_internal]}]
+ }].
+
+to use LDAP and the internal database.
+
+Configuring the plugin
+======================
+
+You must then configure the plugin. This plugin has quite a few configuration
+options. Most have sensible-ish defaults. An example configuration file
+with all options specified might look like:
+
+[
+  {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
   {rabbit_auth_backend_ldap,
-    [ {servers,         ["my-ldap-server1", "my-ldap-server-2"]},
-      {user_dn_pattern, "cn=~s,ou=People,dc=example,dc=com"},
-      {use_ssl,         false},
-      {port,            389},
-      {log,             false} ] }
-
+   [ {servers,               ["my-ldap-server"]},
+     {user_dn_pattern,       "cn=~s,ou=People,dc=example,dc=com"},
+     {vhost_access_query,    {exists,
+                              "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
+     {resource_access_query, {constant, true}},
+     {is_admin_query,        {constant, false}},
+     {use_ssl,               false},
+     {port,                  389},
+     {log,                   false} ] }
+].
 
 The options are:
 
 servers
-  List of LDAP servers to attempt to bind to, in order.
+-------
+
+Default: ["ldap"]
+
+List of LDAP servers to attempt to bind to, in order. You almost certainly
+want to change this.
 
 user_dn_pattern
-  Pattern for a user's DN. Must contain exactly one instance of "~s". This
-  will be where the username supplied by the client is subsitituted.
+---------------
+
+Default: "cn=~s,ou=People,dc=example,dc=com"
+
+Pattern for a user's DN. Must contain exactly one instance of "~s". This will
+be where the username supplied by the client is substituted. You almost
+certainly want to change this.
+
+vhost_access_query
+------------------
+
+Default: {constant, true}
+
+resource_access_query
+---------------------
+
+Default: {constant, true}
+
+is_admin_query
+--------------
+
+Default: {constant, false}
+
+These three options define how authorisation works. Each defines a query that
+will determine whether a user has access to a vhost, a resource
+(e.g. exchange, queue, binding) or is considered an administrator.
+
+A query can be in one of two forms:
+
+  {constant, Bool}
+    This will always return either true or false. The default configuration
+    therefore allows all users to access all objects in all vhosts, but does
+    not make them administrators.
+
+  {exists, Pattern}
+    This will substitute variables into the pattern, and return true if there
+    exists an object with the resulting DN *which the user has permission to
+    read*. Substitution occurs with ${} syntax. The vhost_access_query in the
+    example configuration above therefore allows you to control access to
+    vhosts by controlling the read ACLs of OUs in a vhosts OU.
+
+    The different queries allow different substitutions:
+
+    vhost_access_query:      ${username}
+                             ${vhost}
+                             ${permission} (read, i.e. see it in the management
+                                            plugin, or write, i.e. log in)
+
+    resource_access_query:   ${username}
+                             ${vhost}
+                             ${res_type} (i.e. exchange, queue, binding)
+                             ${res_name}
+                             ${permission} (i.e. configure, write, read)
+
+    is_admin_query:          ${username}
 
 use_ssl
-  Whether to use LDAPS. Uses the same SSL configuration as elsewhere in
-  RabbitMQ.
+-------
+
+Default: false
+
+Whether to use LDAP over SSL. Uses the same SSL configuration as elsewhere in
+RabbitMQ.
 
 port
-  Port on which to connect to LDAP servers.
+----
+
+Default: 389
+
+Port on which to connect to the LDAP servers.
 
 log
-  Set to true to cause LDAP traffic to be written to the RabbitMQ log. You
-  probably only want to use this for debugging, especially since it will
-  usually cause passwords to be written to the logs.
+---
 
-Currently all users authenticated by LDAP:
+Default: false
 
- * Are not administrators.
- * Can connect to any vhost.
- * Can do anything within a vhost.
+Set to true to cause LDAP traffic to be written to the RabbitMQ log. You
+probably only want to use this for debugging, especially since it will usually
+cause passwords to be written to the logs.
 
-These last two limitations will probably get removed at some point.
+
+Limitations
+===========
+
+Currently this plugin is very chatty with LDAP connections.
+
+Login without passwords (e.g. using SASL EXTERNAL) is not yet supported.
+
+There probably need to be several more types of queries.

@@ -130,6 +130,7 @@ with_ldap(Username, Password, Fun,
                _ ->
                    Opts0
            end,
+    %% TODO do this the same as other args!
     Dn = lists:flatten(io_lib:format(UserDnPattern, [Username])),
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
