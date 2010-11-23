@@ -656,8 +656,12 @@ check_invalid_method(#'channel.close'{}) ->
     {use_close_function, "Use close/{1,3} instead"};
 check_invalid_method(#'basic.consume'{}) ->
     {use_subscribe_function, "Use subscribe/3 instead"};
-check_invalid_method(_) ->
-    ok.
+check_invalid_method(Method) ->
+    case is_connection_method(Method) of
+        true  -> {connection_methods_not_allowed,
+                  "Sending connection methods is not allowed"};
+        false -> ok
+    end.
 
 is_connection_method(Method) ->
     {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
