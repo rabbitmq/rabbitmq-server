@@ -1,9 +1,9 @@
-
 TMPDIR ?= /tmp
 
 RABBITMQ_NODENAME ?= rabbit
 RABBITMQ_SERVER_START_ARGS ?=
 RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
+RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
 DEPS_FILE=deps.mk
@@ -92,12 +92,13 @@ endif
 all: $(TARGETS)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
-	escript generate_deps $(INCLUDE_DIR) $(SOURCE_DIR) \$$\(EBIN_DIR\) $@
+	rm -f $@
+	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
 
-$(EBIN_DIR)/%.beam:
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl | $(DEPS_FILE)
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8)
@@ -110,23 +111,23 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_8) $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
-	$(ERL_EBIN) -eval \
-		"rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(BASIC_PLT)\", \"$(BEAM_TARGETS)\"))."
+	dialyzer --plt $(BASIC_PLT) --no_native \
+	  -Wrace_conditions $(BEAM_TARGETS)
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
 create-plt: $(RABBIT_PLT)
 
 $(RABBIT_PLT): $(BEAM_TARGETS) $(BASIC_PLT)
-	cp $(BASIC_PLT) $@
-	$(ERL_EBIN) -eval \
-	    "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:add_to_plt(\"$@\", \"$(BEAM_TARGETS)\"))."
+	dialyzer --plt $(BASIC_PLT) --output_plt $@ --no_native \
+	  --add_to_plt $(BEAM_TARGETS)
 
 $(BASIC_PLT): $(BEAM_TARGETS)
 	if [ -f $@ ]; then \
 	    touch $@; \
 	else \
-	    $(ERL_EBIN) -eval \
-	        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:create_basic_plt(\"$@\"))."; \
+	    dialyzer --output_plt $@ --build_plt \
+		--apps erts kernel stdlib compiler sasl os_mon mnesia tools \
+		  public_key crypto ssl; \
 	fi
 
 clean:
@@ -146,7 +147,8 @@ BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)"
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
+	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)"
 
 run: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
@@ -178,6 +180,14 @@ stop-rabbit-on-node: all
 
 force-snapshot: all
 	echo "rabbit_persister:force_snapshot()." | $(ERL_CALL)
+
+set-memory-alarm: all
+	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \
+	$(ERL_CALL)
+
+clear-memory-alarm: all
+	echo "alarm_handler:clear_alarm(vm_memory_high_watermark)." | \
+	$(ERL_CALL)
 
 stop-node:
 	-$(ERL_CALL) -q
@@ -229,7 +239,7 @@ distclean: clean
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
 	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	    xmlto man -o $(DOCS_DIR) $$opt $<.tmp && \
+	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
 	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
 
@@ -257,14 +267,20 @@ $(SOURCE_DIR)/%_usage.erl:
 
 docs_all: $(MANPAGES) $(WEB_MANPAGES)
 
-install: all docs_all install_dirs
+install: install_bin install_docs
+
+install_bin: all install_dirs
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi rabbitmq-activate-plugins rabbitmq-deactivate-plugins; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
+	mkdir -p $(TARGET_DIR)/plugins
+	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
+
+install_docs: docs_all install_dirs
 	for section in 1 5; do \
 		mkdir -p $(MAN_DIR)/man$$section; \
 		for manpage in $(DOCS_DIR)/*.$$section.gz; do \
@@ -298,11 +314,6 @@ else
 TESTABLEGOALS:=$(MAKECMDGOALS)
 endif
 
-ifneq "$(strip $(TESTABLEGOALS))" "$(DEPS_FILE)"
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
-ifeq "$(strip $(wildcard $(DEPS_FILE)))" ""
-$(info $(shell $(MAKE) $(DEPS_FILE)))
-endif
-include $(DEPS_FILE)
-endif
+-include $(DEPS_FILE)
 endif

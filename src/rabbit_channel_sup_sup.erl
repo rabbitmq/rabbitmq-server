@@ -29,45 +29,35 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_hooks).
+-module(rabbit_channel_sup_sup).
 
--export([start/0]).
--export([subscribe/3, unsubscribe/2, trigger/2, notify_remote/5]).
+-behaviour(supervisor2).
 
--define(TableName, rabbit_hooks).
+-export([start_link/0, start_channel/2]).
+
+-export([init/1]).
+
+%%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(start/0 :: () -> 'ok').
--spec(subscribe/3 :: (atom(), atom(), {atom(), atom(), list()}) -> 'ok').
--spec(unsubscribe/2 :: (atom(), atom()) -> 'ok').
--spec(trigger/2 :: (atom(), list()) -> 'ok').
--spec(notify_remote/5 :: (atom(), atom(), list(), pid(), list()) -> 'ok').
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
+                              {'ok', pid(), pid()}).
 
 -endif.
 
-start() ->
-    ets:new(?TableName, [bag, public, named_table]),
-    ok.
+%%----------------------------------------------------------------------------
 
-subscribe(Hook, HandlerName, Handler) ->
-    ets:insert(?TableName, {Hook, HandlerName, Handler}),
-    ok.
+start_link() ->
+    supervisor2:start_link(?MODULE, []).
 
-unsubscribe(Hook, HandlerName) ->
-    ets:match_delete(?TableName, {Hook, HandlerName, '_'}),
-    ok.
+start_channel(Pid, Args) ->
+    supervisor2:start_child(Pid, [Args]).
 
-trigger(Hook, Args) ->
-    Hooks = ets:lookup(?TableName, Hook),
-    [case catch apply(M, F, [Hook, Name, Args | A]) of
-        {'EXIT', Reason} ->
-            rabbit_log:warning("Failed to execute handler ~p for hook ~p: ~p",
-                               [Name, Hook, Reason]);
-        _ -> ok
-     end || {_, Name, {M, F, A}} <- Hooks],
-    ok.
+%%----------------------------------------------------------------------------
 
-notify_remote(Hook, HandlerName, Args, Pid, PidArgs) ->
-    Pid ! {rabbitmq_hook, [Hook, HandlerName, Args | PidArgs]},
-    ok.
+init([]) ->
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{channel_sup, {rabbit_channel_sup, start_link, []},
+            temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.

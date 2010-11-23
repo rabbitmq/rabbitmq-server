@@ -29,21 +29,53 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(tcp_client_sup).
+-module(rabbit_connection_sup).
 
 -behaviour(supervisor2).
 
--export([start_link/1, start_link/2]).
+-export([start_link/0, reader/1]).
 
 -export([init/1]).
 
-start_link(Callback) ->
-    supervisor2:start_link(?MODULE, Callback).
+-include("rabbit.hrl").
 
-start_link(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, Callback).
+%%----------------------------------------------------------------------------
 
-init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
-          [{tcp_client, {M,F,A},
-            temporary, infinity, supervisor, [M]}]}}.
+-ifdef(use_specs).
+
+-spec(start_link/0 :: () -> {'ok', pid(), pid()}).
+-spec(reader/1 :: (pid()) -> pid()).
+
+-endif.
+
+%%--------------------------------------------------------------------------
+
+start_link() ->
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, Collector} =
+        supervisor2:start_child(
+          SupPid,
+          {collector, {rabbit_queue_collector, start_link, []},
+           intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
+    {ok, ChannelSupSupPid} =
+        supervisor2:start_child(
+          SupPid,
+          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
+    {ok, ReaderPid} =
+        supervisor2:start_child(
+          SupPid,
+          {reader, {rabbit_reader, start_link,
+                    [ChannelSupSupPid, Collector,
+                     rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
+           intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
+    {ok, SupPid, ReaderPid}.
+
+reader(Pid) ->
+    hd(supervisor2:find_child(Pid, reader)).
+
+%%--------------------------------------------------------------------------
+
+init([]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.
+

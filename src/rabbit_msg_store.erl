@@ -33,14 +33,16 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, write/4, read/3, contains/2, remove/2, release/2,
-         sync/3, client_init/2, client_terminate/1,
-         client_delete_and_terminate/3, successfully_recovered_state/1]).
+-export([start_link/4, successfully_recovered_state/1,
+         client_init/2, client_terminate/1, client_delete_and_terminate/1,
+         client_ref/1,
+         write/3, read/2, contains/2, remove/2, release/2, sync/3]).
 
--export([sync/1, gc_done/4, set_maximum_since_use/2, gc/3]). %% internal
+-export([sync/1, set_maximum_since_use/2,
+         has_readers/2, combine_files/3, delete_file/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -74,7 +76,6 @@
           sum_valid_data,         %% sum of valid data in all files
           sum_file_size,          %% sum of file sizes
           pending_gc_completion,  %% things to do once GC completes
-          gc_active,              %% is the GC currently working?
           gc_pid,                 %% pid of our GC
           file_handles_ets,       %% tid of the shared file handles table
           file_summary_ets,       %% tid of the file summary table
@@ -86,7 +87,9 @@
          }).
 
 -record(client_msstate,
-        { file_handle_cache,
+        { server,
+          client_ref,
+          file_handle_cache,
           index_state,
           index_module,
           dir,
@@ -98,17 +101,36 @@
          }).
 
 -record(file_summary,
-        {file, valid_total_size, contiguous_top, left, right, file_size,
-         locked, readers}).
+        {file, valid_total_size, left, right, file_size, locked, readers}).
+
+-record(gc_state,
+        { dir,
+          index_module,
+          index_state,
+          file_summary_ets,
+          msg_store
+        }).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
+-export_type([gc_state/0, file_num/0]).
+
+-type(gc_state() :: #gc_state { dir              :: file:filename(),
+                                index_module     :: atom(),
+                                index_state      :: any(),
+                                file_summary_ets :: ets:tid(),
+                                msg_store        :: server()
+                              }).
+
 -type(server() :: pid() | atom()).
+-type(client_ref() :: binary()).
 -type(file_num() :: non_neg_integer()).
 -type(client_msstate() :: #client_msstate {
-                      file_handle_cache  :: dict:dictionary(),
+                      server             :: server(),
+                      client_ref         :: client_ref(),
+                      file_handle_cache  :: dict(),
                       index_state        :: any(),
                       index_module       :: atom(),
                       dir                :: file:filename(),
@@ -123,28 +145,27 @@
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
-         startup_fun_state()) ->
-                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
--spec(write/4 :: (server(), rabbit_guid:guid(), msg(), client_msstate()) ->
-                      rabbit_types:ok(client_msstate())).
--spec(read/3 :: (server(), rabbit_guid:guid(), client_msstate()) ->
-                     {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
--spec(contains/2 :: (server(), rabbit_guid:guid()) -> boolean()).
--spec(remove/2 :: (server(), [rabbit_guid:guid()]) -> 'ok').
--spec(release/2 :: (server(), [rabbit_guid:guid()]) -> 'ok').
--spec(sync/3 :: (server(), [rabbit_guid:guid()], fun (() -> any())) -> 'ok').
--spec(gc_done/4 :: (server(), non_neg_integer(), file_num(), file_num()) ->
-                        'ok').
--spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
--spec(client_init/2 :: (server(), binary()) -> client_msstate()).
--spec(client_terminate/1 :: (client_msstate()) -> 'ok').
--spec(client_delete_and_terminate/3 ::
-        (client_msstate(), server(), binary()) -> 'ok').
+         startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
+-spec(client_init/2 :: (server(), client_ref()) -> client_msstate()).
+-spec(client_terminate/1 :: (client_msstate()) -> 'ok').
+-spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
+-spec(client_ref/1 :: (client_msstate()) -> client_ref()).
+-spec(write/3 :: (rabbit_guid:guid(), msg(), client_msstate()) -> 'ok').
+-spec(read/2 :: (rabbit_guid:guid(), client_msstate()) ->
+             {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
+-spec(contains/2 :: (rabbit_guid:guid(), client_msstate()) -> boolean()).
+-spec(remove/2 :: ([rabbit_guid:guid()], client_msstate()) -> 'ok').
+-spec(release/2 :: ([rabbit_guid:guid()], client_msstate()) -> 'ok').
+-spec(sync/3 :: ([rabbit_guid:guid()], fun (() -> any()), client_msstate()) ->
+             'ok').
 
--spec(gc/3 :: (non_neg_integer(), non_neg_integer(),
-               {ets:tid(), file:filename(), atom(), any()}) ->
-                   'concurrent_readers' | non_neg_integer()).
+-spec(sync/1 :: (server()) -> 'ok').
+-spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
+-spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
+-spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
+                              'ok').
+-spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> 'ok').
 
 -endif.
 
@@ -160,8 +181,7 @@
 %%        {Guid, RefCount, File, Offset, TotalSize}
 %%        By default, it's in ets, but it's also pluggable.
 %% FileSummary: this is an ets table which maps File to #file_summary{}:
-%%        {File, ValidTotalSize, ContiguousTop, Left, Right,
-%%         FileSize, Locked, Readers}
+%%        {File, ValidTotalSize, Left, Right, FileSize, Locked, Readers}
 %%
 %% The basic idea is that messages are appended to the current file up
 %% until that file becomes too big (> file_size_limit). At that point,
@@ -177,9 +197,7 @@
 %%
 %% As messages are removed from files, holes appear in these
 %% files. The field ValidTotalSize contains the total amount of useful
-%% data left in the file, whilst ContiguousTop contains the amount of
-%% valid data right at the start of each file. These are needed for
-%% garbage collection.
+%% data left in the file. This is needed for garbage collection.
 %%
 %% When we discover that a file is now empty, we delete it. When we
 %% discover that it can be combined with the useful data in either its
@@ -225,9 +243,7 @@
 %% above B (i.e. truncate to the limit of the good contiguous region
 %% at the start of the file), then write C and D on top and then write
 %% E, F and G from the right file on top. Thus contiguous blocks of
-%% good data at the bottom of files are not rewritten (yes, this is
-%% the data the size of which is tracked by the ContiguousTop
-%% variable. Judicious use of a mirror is required).
+%% good data at the bottom of files are not rewritten.
 %%
 %% +-------+    +-------+         +-------+
 %% |   X   |    |   G   |         |   G   |
@@ -315,56 +331,16 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
                            [Server, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
-write(Server, Guid, Msg,
-      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
-    ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
-    {gen_server2:cast(Server, {write, Guid, Msg}), CState}.
-
-read(Server, Guid,
-     CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
-                                cur_file_cache_ets = CurFileCacheEts }) ->
-    %% 1. Check the dedup cache
-    case fetch_and_increment_cache(DedupCacheEts, Guid) of
-        not_found ->
-            %% 2. Check the cur file cache
-            case ets:lookup(CurFileCacheEts, Guid) of
-                [] ->
-                    Defer = fun() -> {gen_server2:pcall(
-                                        Server, 2, {read, Guid}, infinity),
-                                      CState} end,
-                    case index_lookup(Guid, CState) of
-                        not_found   -> Defer();
-                        MsgLocation -> client_read1(Server, MsgLocation, Defer,
-                                                    CState)
-                    end;
-                [{Guid, Msg, _CacheRefCount}] ->
-                    %% Although we've found it, we don't know the
-                    %% refcount, so can't insert into dedup cache
-                    {{ok, Msg}, CState}
-            end;
-        Msg ->
-            {{ok, Msg}, CState}
-    end.
-
-contains(Server, Guid) -> gen_server2:call(Server, {contains, Guid}, infinity).
-remove(_Server, [])    -> ok;
-remove(Server, Guids)  -> gen_server2:cast(Server, {remove, Guids}).
-release(_Server, [])   -> ok;
-release(Server, Guids) -> gen_server2:cast(Server, {release, Guids}).
-sync(Server, Guids, K) -> gen_server2:cast(Server, {sync, Guids, K}).
-sync(Server)           -> gen_server2:pcast(Server, 8, sync). %% internal
-
-gc_done(Server, Reclaimed, Source, Destination) ->
-    gen_server2:pcast(Server, 8, {gc_done, Reclaimed, Source, Destination}).
-
-set_maximum_since_use(Server, Age) ->
-    gen_server2:pcast(Server, 8, {set_maximum_since_use, Age}).
+successfully_recovered_state(Server) ->
+    gen_server2:call(Server, successfully_recovered_state, infinity).
 
 client_init(Server, Ref) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
         gen_server2:call(Server, {new_client_state, Ref}, infinity),
-    #client_msstate { file_handle_cache  = dict:new(),
+    #client_msstate { server             = Server,
+                      client_ref         = Ref,
+                      file_handle_cache  = dict:new(),
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = Dir,
@@ -376,31 +352,77 @@ client_init(Server, Ref) ->
 
 client_terminate(CState) ->
     close_all_handles(CState),
-    ok.
+    ok = server_call(CState, client_terminate).
 
-client_delete_and_terminate(CState, Server, Ref) ->
-    ok = client_terminate(CState),
-    ok = gen_server2:call(Server, {delete_client, Ref}, infinity).
+client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
+    close_all_handles(CState),
+    ok = server_cast(CState, {client_delete, Ref}).
 
-successfully_recovered_state(Server) ->
-    gen_server2:call(Server, successfully_recovered_state, infinity).
+client_ref(#client_msstate { client_ref = Ref }) -> Ref.
+
+write(Guid, Msg,
+      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+    ok = update_msg_cache(CurFileCacheEts, Guid, Msg),
+    ok = server_cast(CState, {write, Guid}).
+
+read(Guid,
+     CState = #client_msstate { dedup_cache_ets    = DedupCacheEts,
+                                cur_file_cache_ets = CurFileCacheEts }) ->
+    %% 1. Check the dedup cache
+    case fetch_and_increment_cache(DedupCacheEts, Guid) of
+        not_found ->
+            %% 2. Check the cur file cache
+            case ets:lookup(CurFileCacheEts, Guid) of
+                [] ->
+                    Defer = fun() ->
+                                    {server_call(CState, {read, Guid}), CState}
+                            end,
+                    case index_lookup_positive_ref_count(Guid, CState) of
+                        not_found   -> Defer();
+                        MsgLocation -> client_read1(MsgLocation, Defer, CState)
+                    end;
+                [{Guid, Msg, _CacheRefCount}] ->
+                    %% Although we've found it, we don't know the
+                    %% refcount, so can't insert into dedup cache
+                    {{ok, Msg}, CState}
+            end;
+        Msg ->
+            {{ok, Msg}, CState}
+    end.
+
+contains(Guid, CState) -> server_call(CState, {contains, Guid}).
+remove([],    _CState) -> ok;
+remove(Guids,  CState) -> server_cast(CState, {remove, Guids}).
+release([],   _CState) -> ok;
+release(Guids, CState) -> server_cast(CState, {release, Guids}).
+sync(Guids, K, CState) -> server_cast(CState, {sync, Guids, K}).
+
+sync(Server) ->
+    gen_server2:cast(Server, sync).
+
+set_maximum_since_use(Server, Age) ->
+    gen_server2:cast(Server, {set_maximum_since_use, Age}).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
 %%----------------------------------------------------------------------------
 
-client_read1(Server,
-             #msg_location { guid = Guid, file = File } = MsgLocation,
-             Defer,
+server_call(#client_msstate { server = Server }, Msg) ->
+    gen_server2:call(Server, Msg, infinity).
+
+server_cast(#client_msstate { server = Server }, Msg) ->
+    gen_server2:cast(Server, Msg).
+
+client_read1(#msg_location { guid = Guid, file = File } = MsgLocation, Defer,
              CState = #client_msstate { file_summary_ets = FileSummaryEts }) ->
     case ets:lookup(FileSummaryEts, File) of
         [] -> %% File has been GC'd and no longer exists. Go around again.
-            read(Server, Guid, CState);
+            read(Guid, CState);
         [#file_summary { locked = Locked, right = Right }] ->
-            client_read2(Server, Locked, Right, MsgLocation, Defer, CState)
+            client_read2(Locked, Right, MsgLocation, Defer, CState)
     end.
 
-client_read2(_Server, false, undefined, _MsgLocation, Defer, _CState) ->
+client_read2(false, undefined, _MsgLocation, Defer, _CState) ->
     %% Although we've already checked both caches and not found the
     %% message there, the message is apparently in the
     %% current_file. We can only arrive here if we are trying to read
@@ -411,12 +433,12 @@ client_read2(_Server, false, undefined, _MsgLocation, Defer, _CState) ->
     %% contents of the current file, thus reads from the current file
     %% will end up here and will need to be deferred.
     Defer();
-client_read2(_Server, true, _Right, _MsgLocation, Defer, _CState) ->
+client_read2(true, _Right, _MsgLocation, Defer, _CState) ->
     %% Of course, in the mean time, the GC could have run and our msg
     %% is actually in a different file, unlocked. However, defering is
     %% the safest and simplest thing to do.
     Defer();
-client_read2(Server, false, _Right,
+client_read2(false, _Right,
              MsgLocation = #msg_location { guid = Guid, file = File },
              Defer,
              CState = #client_msstate { file_summary_ets = FileSummaryEts }) ->
@@ -425,10 +447,10 @@ client_read2(Server, false, _Right,
     %% finished.
     safe_ets_update_counter(
       FileSummaryEts, File, {#file_summary.readers, +1},
-      fun (_) -> client_read3(Server, MsgLocation, Defer, CState) end,
-      fun () -> read(Server, Guid, CState) end).
+      fun (_) -> client_read3(MsgLocation, Defer, CState) end,
+      fun () -> read(Guid, CState) end).
 
-client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
+client_read3(#msg_location { guid = Guid, file = File }, Defer,
              CState = #client_msstate { file_handles_ets = FileHandlesEts,
                                         file_summary_ets = FileSummaryEts,
                                         dedup_cache_ets  = DedupCacheEts,
@@ -452,7 +474,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
     %% too).
     case ets:lookup(FileSummaryEts, File) of
         [] -> %% GC has deleted our file, just go round again.
-            read(Server, Guid, CState);
+            read(Guid, CState);
         [#file_summary { locked = true }] ->
             %% If we get a badarg here, then the GC has finished and
             %% deleted our file. Try going around again. Otherwise,
@@ -463,7 +485,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
             %% unlocks the dest)
             try Release(),
                 Defer()
-            catch error:badarg -> read(Server, Guid, CState)
+            catch error:badarg -> read(Guid, CState)
             end;
         [#file_summary { locked = false }] ->
             %% Ok, we're definitely safe to continue - a GC involving
@@ -486,9 +508,14 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
                         read_from_disk(MsgLocation, CState1, DedupCacheEts),
                     Release(), %% this MUST NOT fail with badarg
                     {{ok, Msg}, CState2};
-                MsgLocation -> %% different file!
+                #msg_location {} = MsgLocation -> %% different file!
                     Release(), %% this MUST NOT fail with badarg
-                    client_read1(Server, MsgLocation, Defer, CState)
+                    client_read1(MsgLocation, Defer, CState);
+                not_found -> %% it seems not to exist. Defer, just to be sure.
+                    try Release() %% this can badarg, same as locked case, above
+                    catch error:badarg -> ok
+                    end,
+                    Defer()
             end
     end.
 
@@ -496,7 +523,7 @@ client_read3(Server, #msg_location { guid = Guid, file = File }, Defer,
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
+init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
 
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
@@ -507,11 +534,32 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     {ok, IndexModule} = application:get_env(msg_store_index_module),
     rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
 
-    {AllCleanShutdown, IndexState, ClientRefs1} =
-        recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server),
+    AttemptFileSummaryRecovery =
+        case ClientRefs of
+            undefined -> ok = rabbit_misc:recursive_delete([Dir]),
+                         ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+                         false;
+            _         -> ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+                         recover_crashed_compactions(Dir)
+        end,
 
+    %% if we found crashed compactions we trust neither the
+    %% file_summary nor the location index. Note the file_summary is
+    %% left empty here if it can't be recovered.
     {FileSummaryRecovered, FileSummaryEts} =
-        recover_file_summary(AllCleanShutdown, Dir, Server),
+        recover_file_summary(AttemptFileSummaryRecovery, Dir),
+
+    {CleanShutdown, IndexState, ClientRefs1} =
+        recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
+                                      ClientRefs, Dir, Server),
+    %% CleanShutdown => msg location index and file_summary both
+    %% recovered correctly.
+    true = case {FileSummaryRecovered, CleanShutdown} of
+               {true, false} -> ets:delete_all_objects(FileSummaryEts);
+               _             -> true
+           end,
+    %% CleanShutdown <=> msg location index and file_summary both
+    %% recovered correctly.
 
     DedupCacheEts   = ets:new(rabbit_msg_store_dedup_cache, [set, public]),
     FileHandlesEts  = ets:new(rabbit_msg_store_shared_file_handles,
@@ -530,34 +578,21 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
                        sync_timer_ref         = undefined,
                        sum_valid_data         = 0,
                        sum_file_size          = 0,
-                       pending_gc_completion  = [],
-                       gc_active              = false,
+                       pending_gc_completion  = orddict:new(),
                        gc_pid                 = undefined,
                        file_handles_ets       = FileHandlesEts,
                        file_summary_ets       = FileSummaryEts,
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
                        client_refs            = ClientRefs1,
-                       successfully_recovered = AllCleanShutdown,
+                       successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit
                       },
 
-    ok = case AllCleanShutdown of
-             true  -> ok;
-             false -> count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State)
-         end,
-
-    FileNames =
-        sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION, Dir)),
-    TmpFileNames =
-        sort_file_names(filelib:wildcard("*" ++ ?FILE_EXTENSION_TMP, Dir)),
-    ok = recover_crashed_compactions(Dir, FileNames, TmpFileNames),
-
-    %% There should be no more tmp files now, so go ahead and load the
-    %% whole lot
-    Files = [filename_to_num(FileName) || FileName <- FileNames],
+    %% If we didn't recover the msg location index then we need to
+    %% rebuild it now.
     {Offset, State1 = #msstate { current_file = CurFile }} =
-        build_index(FileSummaryRecovered, Files, State),
+        build_index(CleanShutdown, StartupFunState, State),
 
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
@@ -565,21 +600,38 @@ init([Server, BaseDir, ClientRefs, {MsgRefDeltaGen, MsgRefDeltaGenInit}]) ->
     {ok, Offset} = file_handle_cache:position(CurHdl, Offset),
     ok = file_handle_cache:truncate(CurHdl),
 
-    {ok, GCPid} = rabbit_msg_store_gc:start_link(Dir, IndexState, IndexModule,
-                                                 FileSummaryEts),
+    {ok, GCPid} = rabbit_msg_store_gc:start_link(
+                    #gc_state { dir              = Dir,
+                                index_module     = IndexModule,
+                                index_state      = IndexState,
+                                file_summary_ets = FileSummaryEts,
+                                msg_store        = self()
+                              }),
 
     {ok, maybe_compact(
            State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid }),
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({read, Guid}, From, State) ->
-    State1 = read_message(Guid, From, State),
-    noreply(State1);
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        successfully_recovered_state -> 7;
+        {new_client_state, _Ref}     -> 7;
+        {read, _Guid}                -> 2;
+        _                            -> 0
+    end.
 
-handle_call({contains, Guid}, From, State) ->
-    State1 = contains_message(Guid, From, State),
-    noreply(State1);
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        sync                                               -> 8;
+        {combine_files, _Source, _Destination, _Reclaimed} -> 8;
+        {delete_file, _File, _Reclaimed}                   -> 8;
+        {set_maximum_since_use, _Age}                      -> 8;
+        _                                                  -> 0
+    end.
+
+handle_call(successfully_recovered_state, _From, State) ->
+    reply(State #msstate.successfully_recovered, State);
 
 handle_call({new_client_state, CRef}, _From,
             State = #msstate { dir                = Dir,
@@ -595,59 +647,48 @@ handle_call({new_client_state, CRef}, _From,
            FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts},
           State #msstate { client_refs = sets:add_element(CRef, ClientRefs) });
 
-handle_call(successfully_recovered_state, _From, State) ->
-    reply(State #msstate.successfully_recovered, State);
+handle_call(client_terminate, _From, State) ->
+    reply(ok, State);
 
-handle_call({delete_client, CRef}, _From,
+handle_call({read, Guid}, From, State) ->
+    State1 = read_message(Guid, From, State),
+    noreply(State1);
+
+handle_call({contains, Guid}, From, State) ->
+    State1 = contains_message(Guid, From, State),
+    noreply(State1).
+
+handle_cast({client_delete, CRef},
             State = #msstate { client_refs = ClientRefs }) ->
-    reply(ok,
-          State #msstate { client_refs = sets:del_element(CRef, ClientRefs) }).
+    noreply(
+      State #msstate { client_refs = sets:del_element(CRef, ClientRefs) });
 
-handle_cast({write, Guid, Msg},
-            State = #msstate { current_file_handle = CurHdl,
-                               current_file        = CurFile,
-                               sum_valid_data      = SumValid,
-                               sum_file_size       = SumFileSize,
-                               file_summary_ets    = FileSummaryEts,
-                               cur_file_cache_ets  = CurFileCacheEts }) ->
+handle_cast({write, Guid},
+            State = #msstate { sum_valid_data     = SumValid,
+                               file_summary_ets   = FileSummaryEts,
+                               cur_file_cache_ets = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
+    [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case index_lookup(Guid, State) of
         not_found ->
-            %% New message, lots to do
-            {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
-            {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
-            ok = index_insert(#msg_location {
-                                guid = Guid, ref_count = 1, file = CurFile,
-                                offset = CurOffset, total_size = TotalSize },
-                              State),
-            [#file_summary { valid_total_size = ValidTotalSize,
-                             contiguous_top   = ContiguousTop,
-                             right            = undefined,
-                             locked           = false,
-                             file_size        = FileSize }] =
-                ets:lookup(FileSummaryEts, CurFile),
-            ValidTotalSize1 = ValidTotalSize + TotalSize,
-            ContiguousTop1 = case CurOffset =:= ContiguousTop of
-                                 true  -> ValidTotalSize1;
-                                 false -> ContiguousTop
-                             end,
-            true = ets:update_element(
-                     FileSummaryEts, CurFile,
-                     [{#file_summary.valid_total_size, ValidTotalSize1},
-                      {#file_summary.contiguous_top,   ContiguousTop1},
-                      {#file_summary.file_size,        FileSize + TotalSize}]),
-            NextOffset = CurOffset + TotalSize,
-            noreply(
-              maybe_roll_to_new_file(
-                NextOffset, State #msstate {
-                              sum_valid_data = SumValid + TotalSize,
-                              sum_file_size  = SumFileSize + TotalSize }));
+            write_message(Guid, Msg, State);
+        #msg_location { ref_count = 0, file = File, total_size = TotalSize } ->
+            case ets:lookup(FileSummaryEts, File) of
+                [#file_summary { locked = true }] ->
+                    ok = index_delete(Guid, State),
+                    write_message(Guid, Msg, State);
+                [#file_summary {}] ->
+                    ok = index_update_ref_count(Guid, 1, State),
+                    [_] = ets:update_counter(
+                            FileSummaryEts, File,
+                            [{#file_summary.valid_total_size, TotalSize}]),
+                    noreply(State #msstate {
+                              sum_valid_data = SumValid + TotalSize })
+            end;
         #msg_location { ref_count = RefCount } ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
-            ok = index_update_fields(Guid,
-                                     {#msg_location.ref_count, RefCount + 1},
-                                     State),
+            ok = index_update_ref_count(Guid, RefCount + 1, State),
             noreply(State)
     end;
 
@@ -681,37 +722,23 @@ handle_cast({sync, Guids, K},
 handle_cast(sync, State) ->
     noreply(internal_sync(State));
 
-handle_cast({gc_done, Reclaimed, Src, Dst},
+handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
-                               gc_active        = {Src, Dst},
                                file_handles_ets = FileHandlesEts,
                                file_summary_ets = FileSummaryEts }) ->
-    %% GC done, so now ensure that any clients that have open fhs to
-    %% those files close them before using them again. This has to be
-    %% done here (given it's done in the msg_store, and not the gc),
-    %% and not when starting up the GC, because if done when starting
-    %% up the GC, the client could find the close, and close and
-    %% reopen the fh, whilst the GC is waiting for readers to
-    %% disappear, before it's actually done the GC.
-    true = mark_handle_to_close(FileHandlesEts, Src),
-    true = mark_handle_to_close(FileHandlesEts, Dst),
-    %% we always move data left, so Src has gone and was on the
-    %% right, so need to make dest = source.right.left, and also
-    %% dest.right = source.right
-    [#file_summary { left    = Dst,
-                     right   = SrcRight,
-                     locked  = true,
-                     readers = 0 }] = ets:lookup(FileSummaryEts, Src),
-    %% this could fail if SrcRight =:= undefined
-    ets:update_element(FileSummaryEts, SrcRight, {#file_summary.left, Dst}),
-    true = ets:update_element(FileSummaryEts, Dst,
-                              [{#file_summary.locked, false},
-                               {#file_summary.right,  SrcRight}]),
-    true = ets:delete(FileSummaryEts, Src),
-    noreply(
-      maybe_compact(run_pending(
-                      State #msstate { sum_file_size = SumFileSize - Reclaimed,
-                                       gc_active     = false })));
+    ok = cleanup_after_file_deletion(Source, State),
+    %% see comment in cleanup_after_file_deletion
+    true = mark_handle_to_close(FileHandlesEts, Destination),
+    true = ets:update_element(FileSummaryEts, Destination,
+                              {#file_summary.locked, false}),
+    State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
+    noreply(maybe_compact(run_pending([Source, Destination], State1)));
+
+handle_cast({delete_file, File, Reclaimed},
+            State = #msstate { sum_file_size = SumFileSize }) ->
+    ok = cleanup_after_file_deletion(File, State),
+    State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
+    noreply(maybe_compact(run_pending([File], State1)));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -796,9 +823,31 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
               State1 #msstate { on_sync = [] }
     end.
 
+write_message(Guid, Msg,
+              State = #msstate { current_file_handle = CurHdl,
+                                 current_file        = CurFile,
+                                 sum_valid_data      = SumValid,
+                                 sum_file_size       = SumFileSize,
+                                 file_summary_ets    = FileSummaryEts }) ->
+    {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
+    {ok, TotalSize} = rabbit_msg_file:append(CurHdl, Guid, Msg),
+    ok = index_insert(
+           #msg_location { guid = Guid, ref_count = 1, file = CurFile,
+                           offset = CurOffset, total_size = TotalSize }, State),
+    [#file_summary { right = undefined, locked = false }] =
+        ets:lookup(FileSummaryEts, CurFile),
+    [_,_] = ets:update_counter(FileSummaryEts, CurFile,
+                               [{#file_summary.valid_total_size, TotalSize},
+                                {#file_summary.file_size,        TotalSize}]),
+    NextOffset = CurOffset + TotalSize,
+    noreply(maybe_roll_to_new_file(
+              NextOffset, State #msstate {
+                            sum_valid_data = SumValid    + TotalSize,
+                            sum_file_size  = SumFileSize + TotalSize })).
+
 read_message(Guid, From,
              State = #msstate { dedup_cache_ets = DedupCacheEts }) ->
-    case index_lookup(Guid, State) of
+    case index_lookup_positive_ref_count(Guid, State) of
         not_found ->
             gen_server2:reply(From, not_found),
             State;
@@ -840,7 +889,7 @@ read_message1(From, #msg_location { guid = Guid, ref_count = RefCount,
                      ets:lookup(FileSummaryEts, File),
                  case Locked of
                      true  -> add_to_pending_gc_completion({read, Guid, From},
-                                                           State);
+                                                           File, State);
                      false -> {Msg, State1} =
                                   read_from_disk(MsgLoc, State, DedupCacheEts),
                               gen_server2:reply(From, {ok, Msg}),
@@ -870,19 +919,18 @@ read_from_disk(#msg_location { guid = Guid, ref_count = RefCount,
     ok = maybe_insert_into_cache(DedupCacheEts, RefCount, Guid, Msg),
     {Msg, State1}.
 
-contains_message(Guid, From, State = #msstate { gc_active = GCActive }) ->
-    case index_lookup(Guid, State) of
+contains_message(Guid, From,
+                 State = #msstate { pending_gc_completion = Pending }) ->
+    case index_lookup_positive_ref_count(Guid, State) of
         not_found ->
             gen_server2:reply(From, false),
             State;
         #msg_location { file = File } ->
-            case GCActive of
-                {A, B} when File =:= A orelse File =:= B ->
-                    add_to_pending_gc_completion(
-                      {contains, Guid, From}, State);
-                _ ->
-                    gen_server2:reply(From, true),
-                    State
+            case orddict:is_key(File, Pending) of
+                true  -> add_to_pending_gc_completion(
+                           {contains, Guid, From}, File, State);
+                false -> gen_server2:reply(From, true),
+                         State
             end
     end.
 
@@ -890,56 +938,52 @@ remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
                                         file_summary_ets = FileSummaryEts,
                                         dedup_cache_ets  = DedupCacheEts }) ->
     #msg_location { ref_count = RefCount, file = File,
-                    offset = Offset, total_size = TotalSize } =
-        index_lookup(Guid, State),
+                    total_size = TotalSize } =
+        index_lookup_positive_ref_count(Guid, State),
+    %% only update field, otherwise bad interaction with concurrent GC
+    Dec = fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
     case RefCount of
-        1 ->
-            %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
-            %% there may be further writes in the mailbox for the same
-            %% msg.
-            ok = remove_cache_entry(DedupCacheEts, Guid),
-            [#file_summary { valid_total_size = ValidTotalSize,
-                             contiguous_top   = ContiguousTop,
-                             locked           = Locked }] =
-                ets:lookup(FileSummaryEts, File),
-            case Locked of
-                true ->
-                    add_to_pending_gc_completion({remove, Guid}, State);
-                false ->
-                    ok = index_delete(Guid, State),
-                    ContiguousTop1 = lists:min([ContiguousTop, Offset]),
-                    ValidTotalSize1 = ValidTotalSize - TotalSize,
-                    true = ets:update_element(
+        %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
+        %% there may be further writes in the mailbox for the same
+        %% msg.
+        1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
+             case ets:lookup(FileSummaryEts, File) of
+                 [#file_summary { locked = true } ] ->
+                     add_to_pending_gc_completion({remove, Guid}, File, State);
+                 [#file_summary {}] ->
+                     ok = Dec(),
+                     [_] = ets:update_counter(
                              FileSummaryEts, File,
-                             [{#file_summary.valid_total_size, ValidTotalSize1},
-                              {#file_summary.contiguous_top, ContiguousTop1}]),
-                    State1 = delete_file_if_empty(File, State),
-                    State1 #msstate { sum_valid_data = SumValid - TotalSize }
-            end;
-        _ when 1 < RefCount ->
-            ok = decrement_cache(DedupCacheEts, Guid),
-            %% only update field, otherwise bad interaction with concurrent GC
-            ok = index_update_fields(Guid,
-                                     {#msg_location.ref_count, RefCount - 1},
-                                     State),
-            State
+                             [{#file_summary.valid_total_size, -TotalSize}]),
+                     delete_file_if_empty(
+                       File, State #msstate {
+                               sum_valid_data = SumValid - TotalSize })
+             end;
+        _ -> ok = decrement_cache(DedupCacheEts, Guid),
+             ok = Dec(),
+             State
     end.
 
 add_to_pending_gc_completion(
-  Op, State = #msstate { pending_gc_completion = Pending }) ->
-    State #msstate { pending_gc_completion = [Op | Pending] }.
+  Op, File, State = #msstate { pending_gc_completion = Pending }) ->
+    State #msstate { pending_gc_completion =
+                         rabbit_misc:orddict_cons(File, Op, Pending) }.
 
-run_pending(State = #msstate { pending_gc_completion = [] }) ->
-    State;
-run_pending(State = #msstate { pending_gc_completion = Pending }) ->
-    State1 = State #msstate { pending_gc_completion = [] },
-    lists:foldl(fun run_pending/2, State1, lists:reverse(Pending)).
+run_pending(Files, State) ->
+    lists:foldl(
+      fun (File, State1 = #msstate { pending_gc_completion = Pending }) ->
+              Pending1 = orddict:erase(File, Pending),
+              lists:foldl(
+                fun run_pending_action/2,
+                State1 #msstate { pending_gc_completion = Pending1 },
+                lists:reverse(orddict:fetch(File, Pending)))
+      end, State, Files).
 
-run_pending({read, Guid, From}, State) ->
+run_pending_action({read, Guid, From}, State) ->
     read_message(Guid, From, State);
-run_pending({contains, Guid, From}, State) ->
+run_pending_action({contains, Guid, From}, State) ->
     contains_message(Guid, From, State);
-run_pending({remove, Guid}, State) ->
+run_pending_action({remove, Guid}, State) ->
     remove_message(Guid, State).
 
 safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
@@ -950,6 +994,10 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+orddict_store(Key, Val, Dict) ->
+    false = orddict:is_key(Key, Dict),
+    orddict:store(Key, Val, Dict).
 
 %%----------------------------------------------------------------------------
 %% file helper functions
@@ -1039,9 +1087,9 @@ filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
-sort_file_names(FileNames) ->
+list_sorted_file_names(Dir, Ext) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
-               FileNames).
+               filelib:wildcard("*" ++ Ext, Dir)).
 
 %%----------------------------------------------------------------------------
 %% message cache helper functions
@@ -1093,6 +1141,16 @@ decrement_cache(DedupCacheEts, Guid) ->
 %% index
 %%----------------------------------------------------------------------------
 
+index_lookup_positive_ref_count(Key, State) ->
+    case index_lookup(Key, State) of
+        not_found                       -> not_found;
+        #msg_location { ref_count = 0 } -> not_found;
+        #msg_location {} = MsgLocation  -> MsgLocation
+    end.
+
+index_update_ref_count(Key, RefCount, State) ->
+    index_update_fields(Key, {#msg_location.ref_count, RefCount}, State).
+
 index_lookup(Key, #client_msstate { index_module = Index,
                                     index_state  = State }) ->
     Index:lookup(Key, State);
@@ -1121,15 +1179,15 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %% shutdown and recovery
 %%----------------------------------------------------------------------------
 
-recover_index_and_client_refs(IndexModule, undefined, Dir, _Server) ->
-    ok = rabbit_misc:recursive_delete([Dir]),
-    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Server) ->
     {false, IndexModule:new(Dir), sets:new()};
-recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server) ->
-    ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
+recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
+    rabbit_log:warning("~w: rebuilding indices from scratch~n", [Server]),
+    {false, IndexModule:new(Dir), sets:new()};
+recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
-                    rabbit_log:warning("~w: " ++ ErrorMsg ++
-                                       "~nrebuilding indices from scratch~n",
+                    rabbit_log:warning("~w: " ++ ErrorMsg ++ "~n"
+                                       "rebuilding indices from scratch~n",
                                        [Server | ErrorArgs]),
                     {false, IndexModule:new(Dir), sets:new()}
             end,
@@ -1143,12 +1201,12 @@ recover_index_and_client_refs(IndexModule, ClientRefs, Dir, Server) ->
                   andalso IndexModule =:= RecIndexModule) of
                 true  -> case IndexModule:recover(Dir) of
                              {ok, IndexState1} ->
-                                 ClientRefs1 = sets:from_list(ClientRefs),
-                                 {true, IndexState1, ClientRefs1};
+                                 {true, IndexState1,
+                                  sets:from_list(ClientRefs)};
                              {error, Error} ->
                                  Fresh("failed to recover index: ~p", [Error])
                          end;
-                false  -> Fresh("recovery terms differ from present", [])
+                false -> Fresh("recovery terms differ from present", [])
             end
     end.
 
@@ -1169,7 +1227,7 @@ store_file_summary(Tid, Dir) ->
     ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
                       [{extended_info, [object_count]}]).
 
-recover_file_summary(false, _Dir, _Server) ->
+recover_file_summary(false, _Dir) ->
     %% TODO: the only reason for this to be an *ordered*_set is so
     %% that a) maybe_compact can start a traversal from the eldest
     %% file, and b) build_index in fast recovery mode can easily
@@ -1179,15 +1237,12 @@ recover_file_summary(false, _Dir, _Server) ->
     %% ditching the latter would be neater.
     {false, ets:new(rabbit_msg_store_file_summary,
                     [ordered_set, public, {keypos, #file_summary.file}])};
-recover_file_summary(true, Dir, Server) ->
+recover_file_summary(true, Dir) ->
     Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
     case ets:file2tab(Path) of
-        {ok, Tid}      -> file:delete(Path),
+        {ok, Tid}       -> file:delete(Path),
                           {true, Tid};
-        {error, Error} -> rabbit_log:warning(
-                            "~w: failed to recover file summary: ~p~n"
-                            "rebuilding~n", [Server, Error]),
-                          recover_file_summary(false, Dir, Server)
+        {error, _Error} -> recover_file_summary(false, Dir)
     end.
 
 count_msg_refs(Gen, Seed, State) ->
@@ -1200,6 +1255,7 @@ count_msg_refs(Gen, Seed, State) ->
             ok = case index_lookup(Guid, State) of
                      not_found ->
                          index_insert(#msg_location { guid = Guid,
+                                                      file = undefined,
                                                       ref_count = Delta },
                                       State);
                      #msg_location { ref_count = RefCount } = StoreEntry ->
@@ -1214,7 +1270,9 @@ count_msg_refs(Gen, Seed, State) ->
             count_msg_refs(Gen, Next, State)
     end.
 
-recover_crashed_compactions(Dir, FileNames, TmpFileNames) ->
+recover_crashed_compactions(Dir) ->
+    FileNames =    list_sorted_file_names(Dir, ?FILE_EXTENSION),
+    TmpFileNames = list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP),
     lists:foreach(
       fun (TmpFileName) ->
               NonTmpRelatedFileName =
@@ -1223,102 +1281,25 @@ recover_crashed_compactions(Dir, FileNames, TmpFileNames) ->
               ok = recover_crashed_compaction(
                      Dir, TmpFileName, NonTmpRelatedFileName)
       end, TmpFileNames),
-    ok.
+    TmpFileNames == [].
 
 recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
-    {ok, UncorruptedMessagesTmp, GuidsTmp} =
-        scan_file_for_valid_messages_and_guids(Dir, TmpFileName),
-    {ok, UncorruptedMessages, Guids} =
-        scan_file_for_valid_messages_and_guids(Dir, NonTmpRelatedFileName),
-    %% 1) It's possible that everything in the tmp file is also in the
-    %%    main file such that the main file is (prefix ++
-    %%    tmpfile). This means that compaction failed immediately
-    %%    prior to the final step of deleting the tmp file. Plan: just
-    %%    delete the tmp file
-    %% 2) It's possible that everything in the tmp file is also in the
-    %%    main file but with holes throughout (or just somthing like
-    %%    main = (prefix ++ hole ++ tmpfile)). This means that
-    %%    compaction wrote out the tmp file successfully and then
-    %%    failed. Plan: just delete the tmp file and allow the
-    %%    compaction to eventually be triggered later
-    %% 3) It's possible that everything in the tmp file is also in the
-    %%    main file but such that the main file does not end with tmp
-    %%    file (and there are valid messages in the suffix; main =
-    %%    (prefix ++ tmpfile[with extra holes?] ++ suffix)). This
-    %%    means that compaction failed as we were writing out the tmp
-    %%    file. Plan: just delete the tmp file and allow the
-    %%    compaction to eventually be triggered later
-    %% 4) It's possible that there are messages in the tmp file which
-    %%    are not in the main file. This means that writing out the
-    %%    tmp file succeeded, but then we failed as we were copying
-    %%    them back over to the main file, after truncating the main
-    %%    file. As the main file has already been truncated, it should
-    %%    consist only of valid messages. Plan: Truncate the main file
-    %%    back to before any of the files in the tmp file and copy
-    %%    them over again
-    TmpPath = form_filename(Dir, TmpFileName),
-    case is_sublist(GuidsTmp, Guids) of
-        true -> %% we're in case 1, 2 or 3 above. Just delete the tmp file
-                %% note this also catches the case when the tmp file
-                %% is empty
-            ok = file:delete(TmpPath);
-        false ->
-            %% We're in case 4 above. We only care about the inital
-            %% msgs in main file that are not in the tmp file. If
-            %% there are no msgs in the tmp file then we would be in
-            %% the 'true' branch of this case, so we know the
-            %% lists:last call is safe.
-            EldestTmpGuid = lists:last(GuidsTmp),
-            {Guids1, UncorruptedMessages1}
-                = case lists:splitwith(
-                         fun (Guid) -> Guid =/= EldestTmpGuid end, Guids) of
-                      {_Guids, []} -> %% no msgs from tmp in main
-                          {Guids, UncorruptedMessages};
-                      {Dropped, [EldestTmpGuid | Rest]} ->
-                          %% Msgs in Dropped are in tmp, so forget them.
-                          %% *cry*. Lists indexed from 1.
-                          {Rest, lists:sublist(UncorruptedMessages,
-                                               2 + length(Dropped),
-                                               length(Rest))}
-                  end,
-            %% The main file prefix should be contiguous
-            {Top, Guids1} = find_contiguous_block_prefix(
-                               lists:reverse(UncorruptedMessages1)),
-            %% we should have that none of the messages in the prefix
-            %% are in the tmp file
-            true = is_disjoint(Guids1, GuidsTmp),
-            %% must open with read flag, otherwise will stomp over contents
-            {ok, MainHdl} = open_file(Dir, NonTmpRelatedFileName,
-                                      [read | ?WRITE_MODE]),
-            %% Wipe out any rubbish at the end of the file. Remember
-            %% the head of the list will be the highest entry in the
-            %% file.
-            [{_, TmpTopTotalSize, TmpTopOffset}|_] = UncorruptedMessagesTmp,
-            TmpSize = TmpTopOffset + TmpTopTotalSize,
-            %% Extend the main file as big as necessary in a single
-            %% move. If we run out of disk space, this truncate could
-            %% fail, but we still aren't risking losing data
-            ok = truncate_and_extend_file(MainHdl, Top, Top + TmpSize),
-            {ok, TmpHdl} = open_file(Dir, TmpFileName, ?READ_AHEAD_MODE),
-            {ok, TmpSize} = file_handle_cache:copy(TmpHdl, MainHdl, TmpSize),
-            ok = file_handle_cache:close(MainHdl),
-            ok = file_handle_cache:delete(TmpHdl),
-
-            {ok, _MainMessages, GuidsMain} =
-                scan_file_for_valid_messages_and_guids(
-                  Dir, NonTmpRelatedFileName),
-            %% check that everything in Guids1 is in GuidsMain
-            true = is_sublist(Guids1, GuidsMain),
-            %% check that everything in GuidsTmp is in GuidsMain
-            true = is_sublist(GuidsTmp, GuidsMain)
-    end,
+    %% Because a msg can legitimately appear multiple times in the
+    %% same file, identifying the contents of the tmp file and where
+    %% they came from is non-trivial. If we are recovering a crashed
+    %% compaction then we will be rebuilding the index, which can cope
+    %% with duplicates appearing. Thus the simplest and safest thing
+    %% to do is to append the contents of the tmp file to its main
+    %% file.
+    {ok, TmpHdl}  = open_file(Dir, TmpFileName, ?READ_MODE),
+    {ok, MainHdl} = open_file(Dir, NonTmpRelatedFileName,
+                              ?READ_MODE ++ ?WRITE_MODE),
+    {ok, _End} = file_handle_cache:position(MainHdl, eof),
+    Size = filelib:file_size(form_filename(Dir, TmpFileName)),
+    {ok, Size} = file_handle_cache:copy(TmpHdl, MainHdl, Size),
+    ok = file_handle_cache:close(MainHdl),
+    ok = file_handle_cache:delete(TmpHdl),
     ok.
-
-is_sublist(SmallerL, BiggerL) ->
-    lists:all(fun (Item) -> lists:member(Item, BiggerL) end, SmallerL).
-
-is_disjoint(SmallerL, BiggerL) ->
-    lists:all(fun (Item) -> not lists:member(Item, BiggerL) end, SmallerL).
 
 scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
@@ -1333,26 +1314,23 @@ scan_file_for_valid_messages(Dir, FileName) ->
         {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
 
-scan_file_for_valid_messages_and_guids(Dir, FileName) ->
-    {ok, Messages, _FileSize} = scan_file_for_valid_messages(Dir, FileName),
-    {ok, Messages, [Guid || {Guid, _TotalSize, _FileOffset} <- Messages]}.
-
 %% Takes the list in *ascending* order (i.e. eldest message
 %% first). This is the opposite of what scan_file_for_valid_messages
 %% produces. The list of msgs that is produced is youngest first.
-find_contiguous_block_prefix(L) -> find_contiguous_block_prefix(L, 0, []).
+drop_contiguous_block_prefix(L) -> drop_contiguous_block_prefix(L, 0).
 
-find_contiguous_block_prefix([], ExpectedOffset, Guids) ->
-    {ExpectedOffset, Guids};
-find_contiguous_block_prefix([{Guid, TotalSize, ExpectedOffset} | Tail],
-                             ExpectedOffset, Guids) ->
+drop_contiguous_block_prefix([], ExpectedOffset) ->
+    {ExpectedOffset, []};
+drop_contiguous_block_prefix([#msg_location { offset = ExpectedOffset,
+                                              total_size = TotalSize } | Tail],
+                             ExpectedOffset) ->
     ExpectedOffset1 = ExpectedOffset + TotalSize,
-    find_contiguous_block_prefix(Tail, ExpectedOffset1, [Guid | Guids]);
-find_contiguous_block_prefix([_MsgAfterGap | _Tail], ExpectedOffset, Guids) ->
-    {ExpectedOffset, Guids}.
+    drop_contiguous_block_prefix(Tail, ExpectedOffset1);
+drop_contiguous_block_prefix(MsgsAfterGap, ExpectedOffset) ->
+    {ExpectedOffset, MsgsAfterGap}.
 
-build_index(true, _Files, State = #msstate {
-                            file_summary_ets = FileSummaryEts }) ->
+build_index(true, _StartupFunState,
+            State = #msstate { file_summary_ets = FileSummaryEts }) ->
     ets:foldl(
       fun (#file_summary { valid_total_size = ValidTotalSize,
                            file_size        = FileSize,
@@ -1364,12 +1342,17 @@ build_index(true, _Files, State = #msstate {
                            sum_file_size  = SumFileSize + FileSize,
                            current_file   = File }}
       end, {0, State}, FileSummaryEts);
-build_index(false, Files, State) ->
+build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
+            State = #msstate { dir = Dir }) ->
+    ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     {ok, Pid} = gatherer:start_link(),
-    case Files of
-        [] -> build_index(Pid, undefined, [State #msstate.current_file], State);
-        _  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
-              {Offset, lists:foldl(fun delete_file_if_empty/2, State1, Files)}
+    case [filename_to_num(FileName) ||
+             FileName <- list_sorted_file_names(Dir, ?FILE_EXTENSION)] of
+        []     -> build_index(Pid, undefined, [State #msstate.current_file],
+                              State);
+        Files  -> {Offset, State1} = build_index(Pid, undefined, Files, State),
+                  {Offset, lists:foldl(fun delete_file_if_empty/2,
+                                       State1, Files)}
     end.
 
 build_index(Gatherer, Left, [],
@@ -1410,19 +1393,16 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
         lists:foldl(
           fun (Obj = {Guid, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
                   case index_lookup(Guid, State) of
-                      not_found ->
-                          {VMAcc, VTSAcc};
-                      StoreEntry ->
+                      #msg_location { file = undefined } = StoreEntry ->
                           ok = index_update(StoreEntry #msg_location {
                                               file = File, offset = Offset,
                                               total_size = TotalSize },
                                             State),
-                          {[Obj | VMAcc], VTSAcc + TotalSize}
+                          {[Obj | VMAcc], VTSAcc + TotalSize};
+                      _ ->
+                          {VMAcc, VTSAcc}
                   end
           end, {[], 0}, Messages),
-    %% foldl reverses lists, find_contiguous_block_prefix needs
-    %% msgs eldest first, so, ValidMessages is the right way round
-    {ContiguousTop, _} = find_contiguous_block_prefix(ValidMessages),
     {Right, FileSize1} =
         case Files of
             %% if it's the last file, we'll truncate to remove any
@@ -1439,7 +1419,6 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
     ok = gatherer:in(Gatherer, #file_summary {
                        file             = File,
                        valid_total_size = ValidTotalSize,
-                       contiguous_top   = ContiguousTop,
                        left             = Left,
                        right            = Right,
                        file_size        = FileSize1,
@@ -1467,7 +1446,6 @@ maybe_roll_to_new_file(
     true = ets:insert_new(FileSummaryEts, #file_summary {
                             file             = NextFile,
                             valid_total_size = 0,
-                            contiguous_top   = 0,
                             left             = CurFile,
                             right            = undefined,
                             file_size        = 0,
@@ -1481,12 +1459,12 @@ maybe_roll_to_new_file(
 maybe_roll_to_new_file(_, State) ->
     State.
 
-maybe_compact(State = #msstate { sum_valid_data   = SumValid,
-                                 sum_file_size    = SumFileSize,
-                                 gc_active        = false,
-                                 gc_pid           = GCPid,
-                                 file_summary_ets = FileSummaryEts,
-                                 file_size_limit  = FileSizeLimit })
+maybe_compact(State = #msstate { sum_valid_data        = SumValid,
+                                 sum_file_size         = SumFileSize,
+                                 gc_pid                = GCPid,
+                                 pending_gc_completion = Pending,
+                                 file_summary_ets      = FileSummaryEts,
+                                 file_size_limit       = FileSizeLimit })
   when (SumFileSize > 2 * FileSizeLimit andalso
         (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION) ->
     %% TODO: the algorithm here is sub-optimal - it may result in a
@@ -1495,27 +1473,30 @@ maybe_compact(State = #msstate { sum_valid_data   = SumValid,
         '$end_of_table' ->
             State;
         First ->
-            case find_files_to_gc(FileSummaryEts, FileSizeLimit,
-                                  ets:lookup(FileSummaryEts, First)) of
+            case find_files_to_combine(FileSummaryEts, FileSizeLimit,
+                                       ets:lookup(FileSummaryEts, First)) of
                 not_found ->
                     State;
                 {Src, Dst} ->
+                    Pending1 = orddict_store(Dst, [],
+                                             orddict_store(Src, [], Pending)),
                     State1 = close_handle(Src, close_handle(Dst, State)),
                     true = ets:update_element(FileSummaryEts, Src,
                                               {#file_summary.locked, true}),
                     true = ets:update_element(FileSummaryEts, Dst,
                                               {#file_summary.locked, true}),
-                    ok = rabbit_msg_store_gc:gc(GCPid, Src, Dst),
-                    State1 #msstate { gc_active = {Src, Dst} }
+                    ok = rabbit_msg_store_gc:combine(GCPid, Src, Dst),
+                    State1 #msstate { pending_gc_completion = Pending1 }
             end
     end;
 maybe_compact(State) ->
     State.
 
-find_files_to_gc(FileSummaryEts, FileSizeLimit,
-                 [#file_summary { file             = Dst,
-                                  valid_total_size = DstValid,
-                                  right            = Src }]) ->
+find_files_to_combine(FileSummaryEts, FileSizeLimit,
+                      [#file_summary { file             = Dst,
+                                       valid_total_size = DstValid,
+                                       right            = Src,
+                                       locked           = DstLocked }]) ->
     case Src of
         undefined ->
             not_found;
@@ -1523,13 +1504,16 @@ find_files_to_gc(FileSummaryEts, FileSizeLimit,
             [#file_summary { file             = Src,
                              valid_total_size = SrcValid,
                              left             = Dst,
-                             right            = SrcRight }] = Next =
+                             right            = SrcRight,
+                             locked           = SrcLocked }] = Next =
                 ets:lookup(FileSummaryEts, Src),
             case SrcRight of
                 undefined -> not_found;
-                _         -> case DstValid + SrcValid =< FileSizeLimit of
+                _         -> case (DstValid + SrcValid =< FileSizeLimit) andalso
+                                 (DstValid > 0) andalso (SrcValid > 0) andalso
+                                 not (DstLocked orelse SrcLocked) of
                                  true  -> {Src, Dst};
-                                 false -> find_files_to_gc(
+                                 false -> find_files_to_combine(
                                             FileSummaryEts, FileSizeLimit, Next)
                              end
             end
@@ -1538,151 +1522,172 @@ find_files_to_gc(FileSummaryEts, FileSizeLimit,
 delete_file_if_empty(File, State = #msstate { current_file = File }) ->
     State;
 delete_file_if_empty(File, State = #msstate {
-                             dir              = Dir,
-                             sum_file_size    = SumFileSize,
-                             file_handles_ets = FileHandlesEts,
-                             file_summary_ets = FileSummaryEts }) ->
+                             gc_pid                = GCPid,
+                             file_summary_ets      = FileSummaryEts,
+                             pending_gc_completion = Pending }) ->
     [#file_summary { valid_total_size = ValidData,
-                     left             = Left,
-                     right            = Right,
-                     file_size        = FileSize,
                      locked           = false }] =
         ets:lookup(FileSummaryEts, File),
     case ValidData of
-        %% we should NEVER find the current file in here hence right
-        %% should always be a file, not undefined
-        0 -> case {Left, Right} of
-                 {undefined, _} when Right =/= undefined ->
-                     %% the eldest file is empty.
-                     true = ets:update_element(
-                              FileSummaryEts, Right,
-                              {#file_summary.left, undefined});
-                 {_, _} when Right =/= undefined ->
-                     true = ets:update_element(FileSummaryEts, Right,
-                                               {#file_summary.left, Left}),
-                     true = ets:update_element(FileSummaryEts, Left,
-                                               {#file_summary.right, Right})
-             end,
-             true = mark_handle_to_close(FileHandlesEts, File),
-             true = ets:delete(FileSummaryEts, File),
-             State1 = close_handle(File, State),
-             ok = file:delete(form_filename(Dir, filenum_to_name(File))),
-             State1 #msstate { sum_file_size = SumFileSize - FileSize };
+        0 -> %% don't delete the file_summary_ets entry for File here
+             %% because we could have readers which need to be able to
+             %% decrement the readers count.
+             true = ets:update_element(FileSummaryEts, File,
+                                       {#file_summary.locked, true}),
+             ok = rabbit_msg_store_gc:delete(GCPid, File),
+             Pending1 = orddict_store(File, [], Pending),
+             close_handle(File,
+                          State #msstate { pending_gc_completion = Pending1 });
         _ -> State
     end.
+
+cleanup_after_file_deletion(File,
+                            #msstate { file_handles_ets = FileHandlesEts,
+                                       file_summary_ets = FileSummaryEts }) ->
+    %% Ensure that any clients that have open fhs to the file close
+    %% them before using them again. This has to be done here (given
+    %% it's done in the msg_store, and not the gc), and not when
+    %% starting up the GC, because if done when starting up the GC,
+    %% the client could find the close, and close and reopen the fh,
+    %% whilst the GC is waiting for readers to disappear, before it's
+    %% actually done the GC.
+    true = mark_handle_to_close(FileHandlesEts, File),
+    [#file_summary { left    = Left,
+                     right   = Right,
+                     locked  = true,
+                     readers = 0 }] = ets:lookup(FileSummaryEts, File),
+    %% We'll never delete the current file, so right is never undefined
+    true = Right =/= undefined, %% ASSERTION
+    true = ets:update_element(FileSummaryEts, Right,
+                              {#file_summary.left, Left}),
+    %% ensure the double linked list is maintained
+    true = case Left of
+               undefined -> true; %% File is the eldest file (left-most)
+               _         -> ets:update_element(FileSummaryEts, Left,
+                                               {#file_summary.right, Right})
+           end,
+    true = ets:delete(FileSummaryEts, File),
+    ok.
 
 %%----------------------------------------------------------------------------
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
 
-gc(SrcFile, DstFile, State = {FileSummaryEts, _Dir, _Index, _IndexState}) ->
-    [SrcObj = #file_summary {
-       readers          = SrcReaders,
-       left             = DstFile,
-       file_size        = SrcFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, SrcFile),
-    [DstObj = #file_summary {
-       readers          = DstReaders,
-       right            = SrcFile,
-       file_size        = DstFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, DstFile),
+has_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
+    [#file_summary { locked = true, readers = Count }] =
+        ets:lookup(FileSummaryEts, File),
+    Count /= 0.
 
-    case SrcReaders =:= 0 andalso DstReaders =:= 0 of
-        true  -> TotalValidData = combine_files(SrcObj, DstObj, State),
-                 %% don't update dest.right, because it could be
-                 %% changing at the same time
-                 true = ets:update_element(
-                          FileSummaryEts, DstFile,
-                          [{#file_summary.valid_total_size, TotalValidData},
-                           {#file_summary.contiguous_top,   TotalValidData},
-                           {#file_summary.file_size,        TotalValidData}]),
-                 SrcFileSize + DstFileSize - TotalValidData;
-        false -> concurrent_readers
-    end.
+combine_files(Source, Destination,
+              State = #gc_state { file_summary_ets = FileSummaryEts,
+                                  dir              = Dir,
+                                  msg_store        = Server }) ->
+    [#file_summary {
+       readers          = 0,
+       left             = Destination,
+       valid_total_size = SourceValid,
+       file_size        = SourceFileSize,
+       locked           = true }] = ets:lookup(FileSummaryEts, Source),
+    [#file_summary {
+       readers          = 0,
+       right            = Source,
+       valid_total_size = DestinationValid,
+       file_size        = DestinationFileSize,
+       locked           = true }] = ets:lookup(FileSummaryEts, Destination),
 
-combine_files(#file_summary { file             = Source,
-                              valid_total_size = SourceValid,
-                              left             = Destination },
-              #file_summary { file             = Destination,
-                              valid_total_size = DestinationValid,
-                              contiguous_top   = DestinationContiguousTop,
-                              right            = Source },
-              State = {_FileSummaryEts, Dir, _Index, _IndexState}) ->
-    SourceName      = filenum_to_name(Source),
-    DestinationName = filenum_to_name(Destination),
+    SourceName           = filenum_to_name(Source),
+    DestinationName      = filenum_to_name(Destination),
     {ok, SourceHdl}      = open_file(Dir, SourceName,
                                      ?READ_AHEAD_MODE),
     {ok, DestinationHdl} = open_file(Dir, DestinationName,
                                      ?READ_AHEAD_MODE ++ ?WRITE_MODE),
-    ExpectedSize = SourceValid + DestinationValid,
+    TotalValidData = SourceValid + DestinationValid,
     %% if DestinationValid =:= DestinationContiguousTop then we don't
     %% need a tmp file
     %% if they're not equal, then we need to write out everything past
     %%   the DestinationContiguousTop to a tmp file then truncate,
     %%   copy back in, and then copy over from Source
     %% otherwise we just truncate straight away and copy over from Source
-    case DestinationContiguousTop =:= DestinationValid of
-        true ->
-            ok = truncate_and_extend_file(
-                   DestinationHdl, DestinationContiguousTop, ExpectedSize);
-        false ->
-            {DestinationWorkList, DestinationValid} =
-                find_unremoved_messages_in_file(Destination, State),
-            Worklist =
-                lists:dropwhile(
-                  fun (#msg_location { offset = Offset })
-                      when Offset =/= DestinationContiguousTop ->
-                          %% it cannot be that Offset =:=
-                          %% DestinationContiguousTop because if it
-                          %% was then DestinationContiguousTop would
-                          %% have been extended by TotalSize
-                          Offset < DestinationContiguousTop
-                  end, DestinationWorkList),
-            Tmp = filename:rootname(DestinationName) ++ ?FILE_EXTENSION_TMP,
-            {ok, TmpHdl} = open_file(Dir, Tmp, ?READ_AHEAD_MODE ++ ?WRITE_MODE),
-            ok = copy_messages(
-                   Worklist, DestinationContiguousTop, DestinationValid,
-                   DestinationHdl, TmpHdl, Destination, State),
-            TmpSize = DestinationValid - DestinationContiguousTop,
-            %% so now Tmp contains everything we need to salvage from
-            %% Destination, and index_state has been updated to
-            %% reflect the compaction of Destination so truncate
-            %% Destination and copy from Tmp back to the end
-            {ok, 0} = file_handle_cache:position(TmpHdl, 0),
-            ok = truncate_and_extend_file(
-                   DestinationHdl, DestinationContiguousTop, ExpectedSize),
-            {ok, TmpSize} =
-                file_handle_cache:copy(TmpHdl, DestinationHdl, TmpSize),
-            %% position in DestinationHdl should now be DestinationValid
-            ok = file_handle_cache:sync(DestinationHdl),
-            ok = file_handle_cache:delete(TmpHdl)
+    {DestinationWorkList, DestinationValid} =
+        load_and_vacuum_message_file(Destination, State),
+    {DestinationContiguousTop, DestinationWorkListTail} =
+        drop_contiguous_block_prefix(DestinationWorkList),
+    case DestinationWorkListTail of
+        [] -> ok = truncate_and_extend_file(
+                     DestinationHdl, DestinationContiguousTop, TotalValidData);
+        _  -> Tmp = filename:rootname(DestinationName) ++ ?FILE_EXTENSION_TMP,
+              {ok, TmpHdl} = open_file(Dir, Tmp, ?READ_AHEAD_MODE++?WRITE_MODE),
+              ok = copy_messages(
+                     DestinationWorkListTail, DestinationContiguousTop,
+                     DestinationValid, DestinationHdl, TmpHdl, Destination,
+                     State),
+              TmpSize = DestinationValid - DestinationContiguousTop,
+              %% so now Tmp contains everything we need to salvage
+              %% from Destination, and index_state has been updated to
+              %% reflect the compaction of Destination so truncate
+              %% Destination and copy from Tmp back to the end
+              {ok, 0} = file_handle_cache:position(TmpHdl, 0),
+              ok = truncate_and_extend_file(
+                     DestinationHdl, DestinationContiguousTop, TotalValidData),
+              {ok, TmpSize} =
+                  file_handle_cache:copy(TmpHdl, DestinationHdl, TmpSize),
+              %% position in DestinationHdl should now be DestinationValid
+              ok = file_handle_cache:sync(DestinationHdl),
+              ok = file_handle_cache:delete(TmpHdl)
     end,
-    {SourceWorkList, SourceValid} =
-        find_unremoved_messages_in_file(Source, State),
-    ok = copy_messages(SourceWorkList, DestinationValid, ExpectedSize,
+    {SourceWorkList, SourceValid} = load_and_vacuum_message_file(Source, State),
+    ok = copy_messages(SourceWorkList, DestinationValid, TotalValidData,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
     ok = file_handle_cache:close(DestinationHdl),
     ok = file_handle_cache:delete(SourceHdl),
-    ExpectedSize.
 
-find_unremoved_messages_in_file(File,
-                                {_FileSummaryEts, Dir, Index, IndexState}) ->
+    %% don't update dest.right, because it could be changing at the
+    %% same time
+    true = ets:update_element(
+             FileSummaryEts, Destination,
+             [{#file_summary.valid_total_size, TotalValidData},
+              {#file_summary.file_size,        TotalValidData}]),
+
+    Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
+    gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}).
+
+delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
+                                      dir              = Dir,
+                                      msg_store        = Server }) ->
+    [#file_summary { valid_total_size = 0,
+                     locked           = true,
+                     file_size        = FileSize,
+                     readers          = 0 }] = ets:lookup(FileSummaryEts, File),
+    {[], 0} = load_and_vacuum_message_file(File, State),
+    ok = file:delete(form_filename(Dir, filenum_to_name(File))),
+    gen_server2:cast(Server, {delete_file, File, FileSize}).
+
+load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
+                                               index_module = Index,
+                                               index_state  = IndexState }) ->
     %% Messages here will be end-of-file at start-of-list
     {ok, Messages, _FileSize} =
         scan_file_for_valid_messages(Dir, filenum_to_name(File)),
     %% foldl will reverse so will end up with msgs in ascending offset order
-    lists:foldl(fun ({Guid, TotalSize, _Offset}, Acc = {List, Size}) ->
-                        case Index:lookup(Guid, IndexState) of
-                            #msg_location { file = File } = Entry ->
-                                {[ Entry | List ], TotalSize + Size};
-                            _ ->
-                                Acc
-                        end
-                end, {[], 0}, Messages).
+    lists:foldl(
+      fun ({Guid, TotalSize, Offset}, Acc = {List, Size}) ->
+              case Index:lookup(Guid, IndexState) of
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset, ref_count = 0 } = Entry ->
+                      ok = Index:delete_object(Entry, IndexState),
+                      Acc;
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset } = Entry ->
+                      {[ Entry | List ], TotalSize + Size};
+                  _ ->
+                      Acc
+              end
+      end, {[], 0}, Messages).
 
 copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
-              Destination, {_FileSummaryEts, _Dir, Index, IndexState}) ->
+              Destination, #gc_state { index_module = Index,
+                                       index_state  = IndexState }) ->
     Copy = fun ({BlockStart, BlockEnd}) ->
                    BSize = BlockEnd - BlockStart,
                    {ok, BlockStart} =

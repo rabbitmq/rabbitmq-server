@@ -64,20 +64,19 @@ start() ->
                     io:format("done.~n"),
                     halt();
                 {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-                    error("invalid command '~s'",
-                          [lists:flatten(
-                             rabbit_misc:intersperse(" ", FullCommand))]),
+                    print_error("invalid command '~s'",
+                                [string:join(FullCommand, " ")]),
                     usage();
                 timeout ->
-                    error("timeout starting some nodes.", []),
+                    print_error("timeout starting some nodes.", []),
                     halt(1);
                 Other ->
-                    error("~p", [Other]),
+                    print_error("~p", [Other]),
                     halt(2)
             end
     end.
 
-error(Format, Args) ->
+print_error(Format, Args) ->
     rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 parse_args([Command | Args]) ->
@@ -93,7 +92,14 @@ usage() ->
 action(start_all, [NodeCount], RpcTimeout) ->
     io:format("Starting all nodes...~n", []),
     application:load(rabbit),
-    NodeName = rabbit_misc:nodeparts(getenv("RABBITMQ_NODENAME")),
+    {_NodeNamePrefix, NodeHost} = NodeName = rabbit_misc:nodeparts(
+                                               getenv("RABBITMQ_NODENAME")),
+    case net_adm:names(NodeHost) of
+        {error, EpmdReason} ->
+            throw({cannot_connect_to_epmd, NodeHost, EpmdReason});
+        {ok, _} ->
+            ok
+    end,
     {NodePids, Running} =
         case list_to_integer(NodeCount) of
             1 -> {NodePid, Started} = start_node(rabbit_misc:makenode(NodeName),
@@ -220,11 +226,11 @@ run_rabbitmq_server_unix() ->
 
 run_rabbitmq_server_win32() ->
     Cmd = filename:nativename(os:find_executable("cmd")),
-    CmdLine = "\"" ++ getenv("RABBITMQ_SCRIPT_HOME")
-                                         ++ "\\rabbitmq-server.bat\" -noinput",
+    CmdLine = "\"" ++ getenv("RABBITMQ_SCRIPT_HOME") ++
+              "\\rabbitmq-server.bat\" -noinput -detached",
     erlang:open_port({spawn_executable, Cmd},
                      [{arg0, Cmd}, {args, ["/q", "/s", "/c", CmdLine]},
-                      nouse_stdio, hide]).
+                      nouse_stdio]).
 
 is_rabbit_running(Node, RpcTimeout) ->
     case rpc:call(Node, rabbit, status, [], RpcTimeout) of
@@ -303,17 +309,27 @@ kill_wait(Pid, TimeLeft, Forceful) ->
 is_dead(Pid) ->
     PidS = integer_to_list(Pid),
     with_os([{unix, fun () ->
-                            Res = os:cmd("ps --no-headers --pid " ++ PidS),
-                            Res == ""
+                            system("kill -0 " ++ PidS
+                                   ++ " >/dev/null 2>&1") /= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
-                                          PidS ++ "\""),
+                                          PidS ++ "\" 2>&1"),
                              case re:run(Res, "erl\\.exe", [{capture, none}]) of
                                  match -> false;
                                  _     -> true
                              end
                      end}]).
+
+% Like system(3)
+system(Cmd) ->
+    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
+    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
+    receive {Port, {exit_status, Status}} -> Status end.
+
+% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
+escape_quotes(Cmd) ->
+    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
 
 call_all_nodes(Func) ->
     case read_pids_file() of

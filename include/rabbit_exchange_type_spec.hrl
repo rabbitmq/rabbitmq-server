@@ -31,8 +31,8 @@
 -ifdef(use_specs).
 
 -spec(description/0 :: () -> [{atom(), any()}]).
--spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                   -> {rabbit_router:routing_result(), [pid()]}).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
 -spec(create/1 :: (rabbit_types:exchange()) -> 'ok').
 -spec(recover/2 :: (rabbit_types:exchange(),
@@ -43,7 +43,8 @@
                         rabbit_types:binding()) -> 'ok').
 -spec(remove_bindings/2 :: (rabbit_types:exchange(),
                             [rabbit_types:binding()]) -> 'ok').
--spec(assert_args_equivalence/2 :: (rabbit_types:exchange(),
-                                    rabbit_framing:amqp_table()) -> 'ok').
+-spec(assert_args_equivalence/2 ::
+        (rabbit_types:exchange(), rabbit_framing:amqp_table())
+        -> 'ok' | rabbit_types:connection_exit()).
 
 -endif.

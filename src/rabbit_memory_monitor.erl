@@ -63,8 +63,9 @@
 %% have some space for when the queues don't quite respond as fast as
 %% we would like, or when there is buffering going on in other parts
 %% of the system. In short, we aim to stay some distance away from
-%% when the memory alarms will go off, which cause channel.flow.
-%% Note that all other Thresholds are relative to this scaling.
+%% when the memory alarms will go off, which cause backpressure (of
+%% some sort) on producers. Note that all other Thresholds are
+%% relative to this scaling.
 -define(MEMORY_LIMIT_SCALING, 0.4).
 
 -define(LIMIT_THRESHOLD, 0.5). %% don't limit queues when mem use is < this
@@ -86,7 +87,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> 'ignore' | rabbit_types:ok_or_error2(pid(), any())).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(update/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
 -spec(deregister/1 :: (pid()) -> 'ok').

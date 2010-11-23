@@ -33,20 +33,16 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, gc/3, no_readers/2, stop/1]).
+-export([start_link/1, combine/3, delete/2, no_readers/2, stop/1]).
 
 -export([set_maximum_since_use/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, prioritise_cast/2]).
 
--record(gcstate,
-        {dir,
-         index_state,
-         index_module,
-         parent,
-         file_summary_ets,
-         scheduled
+-record(state,
+        { pending_no_readers,
+          msg_store_state
         }).
 
 -include("rabbit.hrl").
@@ -55,10 +51,12 @@
 
 -ifdef(use_specs).
 
--spec(start_link/4 :: (file:filename(), any(), atom(), ets:tid()) ->
-                           'ignore' | rabbit_types:ok_or_error2(pid(), any())).
--spec(gc/3 :: (pid(), non_neg_integer(), non_neg_integer()) -> 'ok').
--spec(no_readers/2 :: (pid(), non_neg_integer()) -> 'ok').
+-spec(start_link/1 :: (rabbit_msg_store:gc_state()) ->
+                           rabbit_types:ok_pid_or_error()).
+-spec(combine/3 :: (pid(), rabbit_msg_store:file_num(),
+                    rabbit_msg_store:file_num()) -> 'ok').
+-spec(delete/2 :: (pid(), rabbit_msg_store:file_num()) -> 'ok').
+-spec(no_readers/2 :: (pid(), rabbit_msg_store:file_num()) -> 'ok').
 -spec(stop/1 :: (pid()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 
@@ -66,13 +64,15 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Dir, IndexState, IndexModule, FileSummaryEts) ->
-    gen_server2:start_link(
-      ?MODULE, [self(), Dir, IndexState, IndexModule, FileSummaryEts],
-      [{timeout, infinity}]).
+start_link(MsgStoreState) ->
+    gen_server2:start_link(?MODULE, [MsgStoreState],
+                           [{timeout, infinity}]).
 
-gc(Server, Source, Destination) ->
-    gen_server2:cast(Server, {gc, Source, Destination}).
+combine(Server, Source, Destination) ->
+    gen_server2:cast(Server, {combine, Source, Destination}).
+
+delete(Server, File) ->
+    gen_server2:cast(Server, {delete, File}).
 
 no_readers(Server, File) ->
     gen_server2:cast(Server, {no_readers, File}).
@@ -81,37 +81,40 @@ stop(Server) ->
     gen_server2:call(Server, stop, infinity).
 
 set_maximum_since_use(Pid, Age) ->
-    gen_server2:pcast(Pid, 8, {set_maximum_since_use, Age}).
+    gen_server2:cast(Pid, {set_maximum_since_use, Age}).
 
 %%----------------------------------------------------------------------------
 
-init([Parent, Dir, IndexState, IndexModule, FileSummaryEts]) ->
+init([MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
-    {ok, #gcstate { dir              = Dir,
-                    index_state      = IndexState,
-                    index_module     = IndexModule,
-                    parent           = Parent,
-                    file_summary_ets = FileSummaryEts,
-                    scheduled        = undefined },
-     hibernate,
+    {ok, #state { pending_no_readers = dict:new(),
+                  msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+prioritise_cast({set_maximum_since_use, _Age}, _State) -> 8;
+prioritise_cast(_Msg,                          _State) -> 0.
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
-handle_cast({gc, Source, Destination},
-            State = #gcstate { scheduled = undefined }) ->
-    {noreply, attempt_gc(State #gcstate { scheduled = {Source, Destination} }),
-     hibernate};
+handle_cast({combine, Source, Destination}, State) ->
+    {noreply, attempt_action(combine, [Source, Destination], State), hibernate};
+
+handle_cast({delete, File}, State) ->
+    {noreply, attempt_action(delete, [File], State), hibernate};
 
 handle_cast({no_readers, File},
-            State = #gcstate { scheduled = {Source, Destination} })
-  when File =:= Source orelse File =:= Destination ->
-    {noreply, attempt_gc(State), hibernate};
-
-handle_cast({no_readers, _File}, State) ->
-    {noreply, State, hibernate};
+            State = #state { pending_no_readers = Pending }) ->
+    {noreply, case dict:find(File, Pending) of
+                  error ->
+                      State;
+                  {ok, {Action, Files}} ->
+                      Pending1 = dict:erase(File, Pending),
+                      attempt_action(
+                        Action, Files,
+                        State #state { pending_no_readers = Pending1 })
+              end, hibernate};
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -126,16 +129,18 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-attempt_gc(State = #gcstate { dir              = Dir,
-                              index_state      = IndexState,
-                              index_module     = Index,
-                              parent           = Parent,
-                              file_summary_ets = FileSummaryEts,
-                              scheduled        = {Source, Destination} }) ->
-    case rabbit_msg_store:gc(Source, Destination,
-                             {FileSummaryEts, Dir, Index, IndexState}) of
-        concurrent_readers -> State;
-        Reclaimed          -> ok = rabbit_msg_store:gc_done(
-                                     Parent, Reclaimed, Source, Destination),
-                              State #gcstate { scheduled = undefined }
+attempt_action(Action, Files,
+               State = #state { pending_no_readers = Pending,
+                                msg_store_state    = MsgStoreState }) ->
+    case [File || File <- Files,
+                  rabbit_msg_store:has_readers(File, MsgStoreState)] of
+        []         -> do_action(Action, Files, MsgStoreState),
+                      State;
+        [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
+                      State #state { pending_no_readers = Pending1 }
     end.
+
+do_action(combine, [Source, Destination], MsgStoreState) ->
+    rabbit_msg_store:combine_files(Source, Destination, MsgStoreState);
+do_action(delete, [File], MsgStoreState) ->
+    rabbit_msg_store:delete_file(File, MsgStoreState).

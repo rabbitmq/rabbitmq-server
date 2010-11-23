@@ -39,7 +39,6 @@
 -export([die/1, frame_error/2, amqp_error/4,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
--export([get_config/1, get_config/2, set_config/2]).
 -export([dirty_read/1]).
 -export([table_lookup/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
@@ -51,7 +50,7 @@
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
--export([intersperse/2, upmap/2, map_in_order/2]).
+-export([upmap/2, map_in_order/2]).
 -export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
@@ -64,6 +63,9 @@
 -export([version_compare/2, version_compare/3]).
 -export([recursive_delete/1, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
+-export([get_options/2]).
+-export([all_module_attributes/1, build_acyclic_graph/3]).
+-export([now_ms/0]).
 
 -import(mnesia).
 -import(lists).
@@ -79,34 +81,39 @@
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
+-type(optdef() :: {flag, string()} | {option, string(), any()}).
+-type(channel_or_connection_exit()
+      :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
+-type(digraph_label() :: term()).
+-type(graph_vertex_fun() ::
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
+-type(graph_edge_fun() ::
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
 -spec(polite_pause/0 :: () -> 'done').
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
--spec(die/1 :: (rabbit_framing:amqp_exception()) -> no_return()).
+-spec(die/1 ::
+        (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
-                       -> no_return()).
+                       -> rabbit_types:connection_exit()).
 -spec(amqp_error/4 ::
         (rabbit_framing:amqp_exception(), string(), [any()],
          rabbit_framing:amqp_method_name())
         -> rabbit_types:amqp_error()).
 -spec(protocol_error/3 :: (rabbit_framing:amqp_exception(), string(), [any()])
-                          -> no_return()).
+                          -> channel_or_connection_exit()).
 -spec(protocol_error/4 ::
         (rabbit_framing:amqp_exception(), string(), [any()],
-         rabbit_framing:amqp_method_name())
-        -> no_return()).
--spec(protocol_error/1 :: (rabbit_types:amqp_error()) -> no_return()).
--spec(not_found/1 :: (rabbit_types:r(atom())) -> no_return()).
+         rabbit_framing:amqp_method_name()) -> channel_or_connection_exit()).
+-spec(protocol_error/1 ::
+        (rabbit_types:amqp_error()) -> channel_or_connection_exit()).
+-spec(not_found/1 :: (rabbit_types:r(atom())) -> rabbit_types:channel_exit()).
 -spec(assert_args_equivalence/4 :: (rabbit_framing:amqp_table(),
                                     rabbit_framing:amqp_table(),
                                     rabbit_types:r(any()), [binary()]) ->
-                                        'ok' | no_return()).
--spec(get_config/1 ::
-        (atom()) -> rabbit_types:ok_or_error2(any(), 'not_found')).
--spec(get_config/2 :: (atom(), A) -> A).
--spec(set_config/2 :: (atom(), any()) -> 'ok').
+                                        'ok' | rabbit_types:connection_exit()).
 -spec(dirty_read/1 ::
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
@@ -128,8 +135,8 @@
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
--spec(report_cover/1 :: (file:filename()) -> 'ok').
+-spec(enable_cover/1 :: ([file:filename() | atom()]) -> ok_or_error()).
+-spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -147,7 +154,6 @@
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
--spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
@@ -177,11 +183,20 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(dict_cons/3 :: (any(), any(), dict:dictionary()) ->
-                          dict:dictionary()).
--spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
-                             orddict:dictionary()).
+-spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
+-spec(get_options/2 :: ([optdef()], [string()])
+                       -> {[string()], [{string(), any()}]}).
+-spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-spec(build_acyclic_graph/3 ::
+        (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
+        -> rabbit_types:ok_or_error2(digraph(),
+                                     {'vertex', 'duplicate', digraph:vertex()} |
+                                     {'edge', ({bad_vertex, digraph:vertex()} |
+                                               {bad_edge, [digraph:vertex()]}),
+                                      digraph:vertex(), digraph:vertex()})).
+-spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
 
@@ -228,25 +243,10 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
                            not_allowed,
-                           "cannot redeclare ~s with inequivalent args for ~s: "
+                           "inequivalent arg '~s' for ~s:  "
                            "required ~w, received ~w",
-                           [rabbit_misc:rs(Name), Key, New1, Orig1])
+                           [Key, rabbit_misc:rs(Name), New1, Orig1])
     end.
-
-get_config(Key) ->
-    case dirty_read({rabbit_config, Key}) of
-        {ok, {rabbit_config, Key, V}} -> {ok, V};
-        Other -> Other
-    end.
-
-get_config(Key, DefaultValue) ->
-    case get_config(Key) of
-        {ok, V} -> V;
-        {error, not_found} -> DefaultValue
-    end.
-
-set_config(Key, Value) ->
-    ok = mnesia:dirty_write({rabbit_config, Key, Value}).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
@@ -281,29 +281,30 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
-enable_cover() ->
-    enable_cover(".").
+enable_cover() -> enable_cover(["."]).
 
-enable_cover([Root]) when is_atom(Root) ->
-    enable_cover(atom_to_list(Root));
-enable_cover(Root) ->
-    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
-        {error,Reason} -> {error,Reason};
-        _ -> ok
-    end.
+enable_cover(Dirs) ->
+    lists:foldl(fun (Dir, ok) ->
+                        case cover:compile_beam_directory(
+                               filename:join(lists:concat([Dir]),"ebin")) of
+                            {error, _} = Err -> Err;
+                            _                -> ok
+                        end;
+                    (_Dir, Err) ->
+                        Err
+                end, ok, Dirs).
 
 start_cover(NodesS) ->
     {ok, _} = cover:start([makenode(N) || N <- NodesS]),
     ok.
 
-report_cover() ->
-    report_cover(".").
+report_cover() -> report_cover(["."]).
 
-report_cover([Root]) when is_atom(Root) ->
-    report_cover(atom_to_list(Root));
-report_cover(Root) ->
+report_cover(Dirs) -> [report_cover1(lists:concat([Dir])) || Dir <- Dirs], ok.
+
+report_cover1(Root) ->
     Dir = filename:join(Root, "cover"),
-    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
+    ok = filelib:ensure_dir(filename:join(Dir, "junk")),
     lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
     {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
@@ -414,10 +415,6 @@ tcp_name(Prefix, IPAddress, Port)
       lists:flatten(
         io_lib:format("~w_~s:~w",
                       [Prefix, inet_parse:ntoa(IPAddress), Port]))).
-
-intersperse(_, []) -> [];
-intersperse(_, [E]) -> [E];
-intersperse(Sep, [E|T]) -> [E, Sep | intersperse(Sep, T)].
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
@@ -700,4 +697,87 @@ unlink_and_capture_exit(Pid) ->
     unlink(Pid),
     receive {'EXIT', Pid, _} -> ok
     after 0 -> ok
+    end.
+
+% Separate flags and options from arguments.
+% get_options([{flag, "-q"}, {option, "-p", "/"}],
+%             ["set_permissions","-p","/","guest",
+%              "-q",".*",".*",".*"])
+% == {["set_permissions","guest",".*",".*",".*"],
+%     [{"-q",true},{"-p","/"}]}
+get_options(Defs, As) ->
+    lists:foldl(fun(Def, {AsIn, RsIn}) ->
+                        {AsOut, Value} = case Def of
+                                             {flag, Key} ->
+                                                 get_flag(Key, AsIn);
+                                             {option, Key, Default} ->
+                                                 get_option(Key, Default, AsIn)
+                                         end,
+                        {AsOut, [{Key, Value} | RsIn]}
+                end, {As, []}, Defs).
+
+get_option(K, _Default, [K, V | As]) ->
+    {As, V};
+get_option(K, Default, [Nk | As]) ->
+    {As1, V} = get_option(K, Default, As),
+    {[Nk | As1], V};
+get_option(_, Default, As) ->
+    {As, Default}.
+
+get_flag(K, [K | As]) ->
+    {As, true};
+get_flag(K, [Nk | As]) ->
+    {As1, V} = get_flag(K, As),
+    {[Nk | As1], V};
+get_flag(_, []) ->
+    {[], false}.
+
+now_ms() ->
+    timer:now_diff(now(), {0,0,0}) div 1000.
+
+module_attributes(Module) ->
+    case catch Module:module_info(attributes) of
+        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+                      [Module]),
+            [];
+        {'EXIT', Reason} ->
+            exit(Reason);
+        V ->
+            V
+    end.
+
+all_module_attributes(Name) ->
+    Modules =
+        lists:usort(
+          lists:append(
+            [Modules || {App, _, _}   <- application:loaded_applications(),
+                        {ok, Modules} <- [application:get_key(App, modules)]])),
+    lists:foldl(
+      fun (Module, Acc) ->
+              case lists:append([Atts || {N, Atts} <- module_attributes(Module),
+                                         N =:= Name]) of
+                  []   -> Acc;
+                  Atts -> [{Module, Atts} | Acc]
+              end
+      end, [], Modules).
+
+
+build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
+    G = digraph:new([acyclic]),
+    try
+        [case digraph:vertex(G, Vertex) of
+             false -> digraph:add_vertex(G, Vertex, Label);
+             _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
+         end || {Module, Atts}  <- Graph,
+                {Vertex, Label} <- VertexFun(Module, Atts)],
+        [case digraph:add_edge(G, From, To) of
+             {error, E} -> throw({graph_error, {edge, E, From, To}});
+             _          -> ok
+         end || {Module, Atts} <- Graph,
+                {From, To}     <- EdgeFun(Module, Atts)],
+        {ok, G}
+    catch {graph_error, Reason} ->
+            true = digraph:delete(G),
+            {error, Reason}
     end.

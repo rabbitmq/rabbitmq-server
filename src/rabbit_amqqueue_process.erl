@@ -39,10 +39,13 @@
 -define(SYNC_INTERVAL,                 5). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
+-define(BASE_MESSAGE_PROPERTIES, #message_properties{expiry = undefined}).
+
 -export([start_link/1, info_keys/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1]).
+         handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
+         prioritise_cast/2, prioritise_info/2]).
 
 -import(queue).
 -import(erlang).
@@ -59,7 +62,10 @@
             expires,
             sync_timer_ref,
             rate_timer_ref,
-            expiry_timer_ref
+            expiry_timer_ref,
+            stats_timer,
+            ttl,
+            ttl_timer_ref
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -74,13 +80,8 @@
              txn,
              unsent_message_count}).
 
--define(INFO_KEYS,
-        [name,
-         durable,
-         auto_delete,
-         arguments,
-         pid,
-         owner_pid,
+-define(STATISTICS_KEYS,
+        [pid,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -90,6 +91,17 @@
          memory,
          backing_queue_status
         ]).
+
+-define(CREATION_EVENT_KEYS,
+        [pid,
+         name,
+         durable,
+         auto_delete,
+         arguments,
+         owner_pid
+        ]).
+
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
@@ -114,7 +126,9 @@ init(Q) ->
             expires             = undefined,
             sync_timer_ref      = undefined,
             rate_timer_ref      = undefined,
-            expiry_timer_ref    = undefined}, hibernate,
+            expiry_timer_ref    = undefined,
+            ttl                 = undefined,
+            stats_timer         = rabbit_event:init_stats_timer()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -136,15 +150,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-init_expires(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-expires">>) of
-        {long, Expires} -> ensure_expiry_timer(State#q{expires = Expires});
-        undefined       -> State
-    end.
-
 declare(Recover, From,
         State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
-                   backing_queue = BQ, backing_queue_state = undefined}) ->
+                   backing_queue = BQ, backing_queue_state = undefined,
+                   stats_timer = StatsTimer}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
         not_found -> {stop, normal, not_found, State};
         Q         -> gen_server2:reply(From, {new, Q}),
@@ -155,9 +164,27 @@ declare(Recover, From,
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
                      BQS = BQ:init(QName, IsDurable, Recover),
-                     noreply(init_expires(State#q{backing_queue_state = BQS}));
+                     State1 = process_args(State#q{backing_queue_state = BQS}),
+                     rabbit_event:notify(queue_created,
+                                         infos(?CREATION_EVENT_KEYS, State1)),
+                     rabbit_event:if_enabled(StatsTimer,
+                                             fun() -> emit_stats(State1) end),
+                     noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
+
+process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
+    lists:foldl(fun({Arg, Fun}, State1) ->
+                        case rabbit_misc:table_lookup(Arguments, Arg) of
+                            {_Type, Val} -> Fun(Val, State1);
+                            undefined    -> State1
+                        end
+                end, State, [{<<"x-expires">>,     fun init_expires/2},
+                             {<<"x-message-ttl">>, fun init_ttl/2}]).
+
+init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
+
+init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -173,6 +200,7 @@ terminate_shutdown(Fun, State) ->
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
+                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
@@ -189,9 +217,10 @@ noreply(NewState) ->
 next_state(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         ensure_rate_timer(State),
-    case BQ:needs_idle_timeout(BQS)of
-        true  -> {ensure_sync_timer(State1), 0};
-        false -> {stop_sync_timer(State1), hibernate}
+    State2 = ensure_stats_timer(State1),
+    case BQ:needs_idle_timeout(BQS) of
+        true  -> {ensure_sync_timer(State2), 0};
+        false -> {stop_sync_timer(State2), hibernate}
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
@@ -234,8 +263,9 @@ stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
     {ok, cancel} = timer:cancel(TRef),
     State#q{expiry_timer_ref = undefined}.
 
-%% We only wish to expire where there are no consumers *and* when
-%% basic.get hasn't been called for the configured period.
+%% We wish to expire only when there are no consumers *and* the expiry
+%% hasn't been refreshed (by queue.declare or basic.get) for the
+%% configured period.
 ensure_expiry_timer(State = #q{expires = undefined}) ->
     State;
 ensure_expiry_timer(State = #q{expires = Expires}) ->
@@ -248,6 +278,12 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
         false ->
             State
     end.
+
+ensure_stats_timer(State = #q{stats_timer = StatsTimer,
+                              q = Q}) ->
+    State#q{stats_timer = rabbit_event:ensure_stats_timer(
+                            StatsTimer,
+                            fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -278,6 +314,25 @@ ch_record(ChPid) ->
 
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C).
+
+maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
+                              acktags              = ChAckTags,
+                              txn                  = Txn,
+                              unsent_message_count = UnsentMessageCount}) ->
+    case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount, Txn} of
+        {0, 0, 0, none} -> ok = erase_ch_record(C),
+                           false;
+        _               -> store_ch_record(C),
+                           true
+    end.
+
+erase_ch_record(#cr{ch_pid      = ChPid,
+                    limiter_pid = LimiterPid,
+                    monitor_ref = MonitorRef}) ->
+    ok = rabbit_limiter:unregister(LimiterPid, self()),
+    erlang:demonitor(MonitorRef),
+    erase({ch, ChPid}),
+    ok.
 
 all_ch_record() ->
     [C || {{ch, _}, C} <- get()].
@@ -325,7 +380,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                                  end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
-                    store_ch_record(NewC),
+                    true = maybe_store_ch_record(NewC),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         case ch_record_state_transition(C, NewC) of
                             ok    -> {queue:in(QEntry, ActiveConsumersTail),
@@ -344,7 +399,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     deliver_msgs_to_consumers(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
-                    store_ch_record(C#cr{is_limit_active = true}),
+                    true = maybe_store_ch_record(C#cr{is_limit_active = true}),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         move_consumers(ChPid,
                                        ActiveConsumers,
@@ -364,35 +419,40 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
 deliver_from_queue_pred(IsEmpty, _State) ->
     not IsEmpty.
 
-deliver_from_queue_deliver(AckRequired, false,
-                           State = #q{backing_queue = BQ,
-                                      backing_queue_state = BQS}) ->
-    {{Message, IsDelivered, AckTag, Remaining}, BQS1} =
-        BQ:fetch(AckRequired, BQS),
-    {{Message, IsDelivered, AckTag}, 0 == Remaining,
-     State #q { backing_queue_state = BQS1 }}.
+deliver_from_queue_deliver(AckRequired, false, State) ->
+    {{Message, IsDelivered, AckTag, Remaining}, State1} =
+        fetch(AckRequired, State),
+    {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
-run_message_queue(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
             fun deliver_from_queue_deliver/3},
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        drop_expired_messages(State),
     IsEmpty = BQ:is_empty(BQS),
-    {_IsEmpty1, State1} = deliver_msgs_to_consumers(Funs, IsEmpty, State),
-    State1.
+    {_IsEmpty1, State2} = deliver_msgs_to_consumers(Funs, IsEmpty, State1),
+    State2.
 
 attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
+                %% we don't need an expiry here because messages are
+                %% not being enqueued, so we use an empty
+                %% message_properties.
                 {AckTag, BQS1} =
-                    BQ:publish_delivered(AckRequired, Message, BQS),
+                    BQ:publish_delivered(AckRequired, Message,
+                                         ?BASE_MESSAGE_PROPERTIES, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
     deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State);
-attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue = BQ,
+attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue       = BQ,
                                                  backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
-    {true, State#q{backing_queue_state = BQ:tx_publish(Txn, Message, BQS)}}.
+    {true,
+     State#q{backing_queue_state =
+                 BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
@@ -400,13 +460,22 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
             {true, NewState};
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
-            BQS = BQ:publish(Message, State #q.backing_queue_state),
-            {false, NewState#q{backing_queue_state = BQS}}
+            BQS = BQ:publish(Message,
+                             message_properties(State),
+                             State #q.backing_queue_state),
+            {false, ensure_ttl_timer(NewState#q{backing_queue_state = BQS})}
     end.
 
-requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
+requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
     maybe_run_queue_via_backing_queue(
-      fun (BQS) -> BQ:requeue(AckTags, BQS) end, State).
+      fun (BQS) ->
+              BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS)
+      end, State).
+
+fetch(AckRequired, State = #q{backing_queue_state = BQS,
+                              backing_queue       = BQ}) ->
+    {Result, BQS1} = BQ:fetch(AckRequired, BQS),
+    {Result, State#q{backing_queue_state = BQS1}}.
 
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
@@ -429,7 +498,7 @@ possibly_unblock(State, ChPid, Update) ->
             State;
         C ->
             NewC = Update(C),
-            store_ch_record(NewC),
+            maybe_store_ch_record(NewC),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
                 unblock -> {NewBlockedConsumers, NewActiveConsumers} =
@@ -450,10 +519,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
-        #cr{monitor_ref = MonitorRef, ch_pid = ChPid, txn = Txn,
-            acktags = ChAckTags} ->
-            erlang:demonitor(MonitorRef),
-            erase({ch, ChPid}),
+        C = #cr{ch_pid = ChPid, txn = Txn, acktags = ChAckTags} ->
+            ok = erase_ch_record(C),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
@@ -501,15 +568,18 @@ qname(#q{q = #amqqueue{name = QName}}) -> QName.
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
     run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
 
-commit_transaction(Txn, From, ChPid, State = #q{backing_queue = BQ,
-                                                backing_queue_state = BQS}) ->
-    {AckTags, BQS1} =
-        BQ:tx_commit(Txn, fun () -> gen_server2:reply(From, ok) end, BQS),
+commit_transaction(Txn, From, ChPid, State = #q{backing_queue       = BQ,
+                                                backing_queue_state = BQS,
+                                                ttl                 = TTL}) ->
+    {AckTags, BQS1} = BQ:tx_commit(Txn,
+                                   fun () -> gen_server2:reply(From, ok) end,
+                                   reset_msg_expiry_fun(TTL),
+                                   BQS),
     %% ChPid must be known here because of the participant management
     %% by the channel.
     C = #cr{acktags = ChAckTags} = lookup_ch(ChPid),
     ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-    store_ch_record(C#cr{acktags = ChAckTags1, txn = none}),
+    maybe_store_ch_record(C#cr{acktags = ChAckTags1, txn = none}),
     State#q{backing_queue_state = BQS1}.
 
 rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
@@ -522,6 +592,44 @@ rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
 
 subtract_acks(A, B) when is_list(B) ->
     lists:foldl(fun sets:del_element/2, A, B).
+
+reset_msg_expiry_fun(TTL) ->
+    fun(MsgProps) ->
+            MsgProps#message_properties{expiry = calculate_msg_expiry(TTL)}
+    end.
+
+message_properties(#q{ttl=TTL}) ->
+    #message_properties{expiry = calculate_msg_expiry(TTL)}.
+
+calculate_msg_expiry(undefined) -> undefined;
+calculate_msg_expiry(TTL)       -> now_millis() + (TTL * 1000).
+
+drop_expired_messages(State = #q{ttl = undefined}) ->
+    State;
+drop_expired_messages(State = #q{backing_queue_state = BQS,
+                                 backing_queue = BQ}) ->
+    Now = now_millis(),
+    BQS1 = BQ:dropwhile(
+             fun (#message_properties{expiry = Expiry}) ->
+                     Now > Expiry
+             end, BQS),
+    ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
+
+ensure_ttl_timer(State = #q{backing_queue       = BQ,
+                            backing_queue_state = BQS,
+                            ttl                 = TTL,
+                            ttl_timer_ref       = undefined})
+  when TTL =/= undefined ->
+    case BQ:is_empty(BQS) of
+        true  -> State;
+        false -> TRef = timer:apply_after(TTL, rabbit_amqqueue, drop_expired,
+                                          [self()]),
+                 State#q{ttl_timer_ref = TRef}
+    end;
+ensure_ttl_timer(State) ->
+    State.
+
+now_millis() -> timer:now_diff(now(), {0,0,0}).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -560,7 +668,42 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
+emit_stats(State) ->
+    emit_stats(State, []).
+
+emit_stats(State, Extra) ->
+    rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
+
 %---------------------------------------------------------------------------
+
+prioritise_call(Msg, _From, _State) ->
+    case Msg of
+        info                                      -> 9;
+        {info, _Items}                            -> 9;
+        consumers                                 -> 9;
+        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
+        _                                         -> 0
+    end.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        update_ram_duration                  -> 8;
+        delete_immediately                   -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        maybe_expire                         -> 8;
+        drop_expired                         -> 8;
+        emit_stats                           -> 7;
+        {ack, _Txn, _MsgIds, _ChPid}         -> 7;
+        {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
+        {notify_sent, _ChPid}                -> 7;
+        {unblock, _ChPid}                    -> 7;
+        _                                    -> 0
+    end.
+
+prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+                #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
+prioritise_info(_Msg, _State)                                 -> 0.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -573,6 +716,7 @@ handle_call({init, Recover}, From,
                 declare(Recover, From, State);
         _    -> #q{q = #amqqueue{name = QName, durable = IsDurable},
                    backing_queue = BQ, backing_queue_state = undefined} = State,
+                gen_server2:reply(From, not_found),
                 case Recover of
                     true -> ok;
                     _    -> rabbit_log:warning(
@@ -580,7 +724,7 @@ handle_call({init, Recover}, From,
                 end,
                 BQS = BQ:init(QName, IsDurable, Recover),
                 %% Rely on terminate to delete the queue.
-                {stop, normal, not_found, State#q{backing_queue_state = BQS}}
+                {stop, normal, State#q{backing_queue_state = BQS}}
     end;
 
 handle_call(info, _From, State) ->
@@ -639,21 +783,22 @@ handle_call({notify_down, ChPid}, _From, State) ->
     end;
 
 handle_call({basic_get, ChPid, NoAck}, _From,
-            State = #q{q = #amqqueue{name = QName},
-                       backing_queue_state = BQS, backing_queue = BQ}) ->
+            State = #q{q = #amqqueue{name = QName}}) ->
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
-    case BQ:fetch(AckRequired, BQS) of
-        {empty, BQS1} -> reply(empty, State1#q{backing_queue_state = BQS1});
-        {{Message, IsDelivered, AckTag, Remaining}, BQS1} ->
+    case fetch(AckRequired, drop_expired_messages(State1)) of
+        {empty, State2} ->
+            reply(empty, State2);
+        {{Message, IsDelivered, AckTag, Remaining}, State2} ->
             case AckRequired of
-                true ->  C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                         store_ch_record(
-                           C#cr{acktags = sets:add_element(AckTag, ChAckTags)});
+                true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
+                         true = maybe_store_ch_record(
+                                  C#cr{acktags = sets:add_element(AckTag,
+                                                                  ChAckTags)});
                 false -> ok
             end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
-            reply({ok, Remaining, Msg}, State1#q{backing_queue_state = BQS1})
+            reply({ok, Remaining, Msg}, State2)
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid,
@@ -667,8 +812,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
             C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
-            store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                 limiter_pid = LimiterPid}),
+            true = maybe_store_ch_record(C#cr{consumer_count = ConsumerCount +1,
+                                              limiter_pid    = LimiterPid}),
             ok = case ConsumerCount of
                      0 -> rabbit_limiter:register(LimiterPid, self());
                      _ -> ok
@@ -702,12 +847,15 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumer_count = ConsumerCount, limiter_pid = LimiterPid} ->
-            store_ch_record(C#cr{consumer_count = ConsumerCount - 1}),
-            case ConsumerCount of
-                1 -> ok = rabbit_limiter:unregister(LimiterPid, self());
-                _ -> ok
-            end,
+        C = #cr{consumer_count = ConsumerCount,
+                limiter_pid    = LimiterPid} ->
+            C1 = C#cr{consumer_count = ConsumerCount -1},
+            maybe_store_ch_record(
+              case ConsumerCount of
+                  1 -> ok = rabbit_limiter:unregister(LimiterPid, self()),
+                       C1#cr{limiter_pid = undefined};
+                  _ -> C1
+              end),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
@@ -725,10 +873,11 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             end
     end;
 
-handle_call(stat, _From, State = #q{backing_queue = BQ,
-                                    backing_queue_state = BQS,
-                                    active_consumers = ActiveConsumers}) ->
-    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State);
+handle_call(stat, _From, State) ->
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS,
+                active_consumers = ActiveConsumers} =
+        drop_expired_messages(ensure_expiry_timer(State)),
+    reply({ok, BQ:len(BQS), queue:len(ActiveConsumers)}, State1);
 
 handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
@@ -755,7 +904,7 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
             noreply(State);
         C = #cr{acktags = ChAckTags} ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            store_ch_record(C#cr{acktags = ChAckTags1}),
+            maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(requeue_and_run(AckTags, State))
     end;
 
@@ -779,12 +928,30 @@ handle_cast({ack, Txn, AckTags, ChPid},
                             {C#cr{acktags = ChAckTags1}, BQ:ack(AckTags, BQS)};
                     _    -> {C#cr{txn = Txn}, BQ:tx_ack(Txn, AckTags, BQS)}
                 end,
-            store_ch_record(C1),
+            maybe_store_ch_record(C1),
             noreply(State#q{backing_queue_state = BQS1})
+    end;
+
+handle_cast({reject, AckTags, Requeue, ChPid},
+            State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            noreply(State);
+        C = #cr{acktags = ChAckTags} ->
+            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
+            maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
+            noreply(case Requeue of
+                        true  -> requeue_and_run(AckTags, State);
+                        false -> BQS1 = BQ:ack(AckTags, BQS),
+                                 State #q { backing_queue_state = BQS1 }
+                    end)
     end;
 
 handle_cast({rollback, Txn, ChPid}, State) ->
     noreply(rollback_transaction(Txn, ChPid, State));
+
+handle_cast(delete_immediately, State) ->
+    {stop, normal, State};
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
@@ -841,7 +1008,17 @@ handle_cast(maybe_expire, State) ->
         true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
                  {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
-    end.
+    end;
+
+handle_cast(drop_expired, State) ->
+    noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
+
+handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
+    %% Do not invoke noreply as it would see no timer and create a new one.
+    emit_stats(State),
+    State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
+    assert_invariant(State1),
+    {noreply, State1, hibernate}.
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -872,10 +1049,17 @@ handle_info(Info, State) ->
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
     {hibernate, State};
 handle_pre_hibernate(State = #q{backing_queue = BQ,
-                                backing_queue_state = BQS}) ->
+                                backing_queue_state = BQS,
+                                stats_timer = StatsTimer}) ->
     BQS1 = BQ:handle_pre_hibernate(BQS),
     %% no activity for a while == 0 egress and ingress rates
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    {hibernate, stop_rate_timer(State#q{backing_queue_state = BQS2})}.
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    emit_stats(State, [{idle_since, now()}])
+                            end),
+    State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
+                     backing_queue_state = BQS2},
+    {hibernate, stop_rate_timer(State1)}.

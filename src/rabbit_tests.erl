@@ -35,17 +35,14 @@
 
 -export([all_tests/0, test_parsing/0]).
 
-%% Exported so the hook mechanism can call back
--export([handle_hook/3, bad_handle_hook/3, extra_arg_hook/5]).
-
 -import(lists).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
 
--define(PERSISTENT_MSG_STORE,     msg_store_persistent).
--define(TRANSIENT_MSG_STORE,      msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
@@ -55,6 +52,8 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    ok = file_handle_cache:set_limit(10),
+    passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
     passed = test_bpqueue(),
@@ -63,17 +62,19 @@ all_tests() ->
     passed = test_supervisor_delayed_restart(),
     passed = test_parsing(),
     passed = test_content_framing(),
+    passed = test_content_transcoding(),
     passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
-    passed = test_memory_pressure(),
+    passed = test_statistics(),
+    passed = test_option_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
     passed = maybe_run_cluster_dependent_tests(),
+    passed = test_configurable_server_properties(),
     passed.
-
 
 maybe_run_cluster_dependent_tests() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
@@ -535,6 +536,51 @@ test_content_framing() ->
     passed = test_content_framing(11, <<"More than one frame">>),
     passed.
 
+test_content_transcoding() ->
+    %% there are no guarantees provided by 'clear' - it's just a hint
+    ClearDecoded = fun rabbit_binary_parser:clear_decoded_content/1,
+    ClearEncoded = fun rabbit_binary_generator:clear_encoded_content/1,
+    EnsureDecoded =
+        fun (C0) ->
+                C1 = rabbit_binary_parser:ensure_content_decoded(C0),
+                true = C1#content.properties =/= none,
+                C1
+        end,
+    EnsureEncoded =
+        fun (Protocol) ->
+                fun (C0) ->
+                        C1 = rabbit_binary_generator:ensure_content_encoded(
+                               C0, Protocol),
+                        true = C1#content.properties_bin =/= none,
+                        C1
+                end
+        end,
+    %% Beyond the assertions in Ensure*, the only testable guarantee
+    %% is that the operations should never fail.
+    %%
+    %% If we were using quickcheck we'd simply stuff all the above
+    %% into a generator for sequences of operations. In the absence of
+    %% quickcheck we pick particularly interesting sequences that:
+    %%
+    %% - execute every op twice since they are idempotent
+    %% - invoke clear_decoded, clear_encoded, decode and transcode
+    %%   with one or both of decoded and encoded content present
+    [begin
+         sequence_with_content([Op]),
+         sequence_with_content([ClearEncoded, Op]),
+         sequence_with_content([ClearDecoded, Op])
+     end || Op <- [ClearDecoded, ClearEncoded, EnsureDecoded,
+                   EnsureEncoded(rabbit_framing_amqp_0_9_1),
+                   EnsureEncoded(rabbit_framing_amqp_0_8)]],
+    passed.
+
+sequence_with_content(Sequence) ->
+    lists:foldl(fun (F, V) -> F(F(V)) end,
+                rabbit_binary_generator:ensure_content_encoded(
+                  rabbit_basic:build_content(#'P_basic'{}, <<>>),
+                  rabbit_framing_amqp_0_9_1),
+                Sequence).
+
 test_topic_match(P, R) ->
     test_topic_match(P, R, true).
 
@@ -725,6 +771,30 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
+test_option_parser() ->
+    % command and arguments should just pass through
+    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
+                           [], ["mock_command", "arg1", "arg2"]),
+
+    % get flags
+    ok = check_get_options(
+           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
+           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+
+    % get options
+    ok = check_get_options(
+           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
+           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
+           ["mock_command", "-foo", "bar"]),
+
+    % shuffled and interleaved arguments and options
+    ok = check_get_options(
+           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
+           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
+           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+
+    passed.
+
 test_cluster_management() ->
 
     %% 'cluster' and 'reset' should only work if the app is stopped
@@ -860,7 +930,7 @@ test_cluster_management2(SecondaryNode) ->
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
-    ok = control_action(stop_app, SecondaryNode, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
@@ -868,9 +938,9 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, []),
-    ok = control_action(cluster, SecondaryNode, [NodeS]),
-    ok = control_action(start_app, SecondaryNode, []),
+    ok = control_action(force_reset, SecondaryNode, [], []),
+    ok = control_action(cluster, SecondaryNode, [NodeS], []),
+    ok = control_action(start_app, SecondaryNode, [], []),
 
     passed.
 
@@ -890,7 +960,7 @@ test_user_management() ->
     {error, {no_such_user, _}} =
         control_action(list_user_permissions, ["foo"]),
     {error, {no_such_vhost, _}} =
-        control_action(list_permissions, ["-p", "/testhost"]),
+        control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
 
@@ -899,6 +969,8 @@ test_user_management() ->
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
+    ok = control_action(set_admin, ["foo"]),
+    ok = control_action(clear_admin, ["foo"]),
     ok = control_action(list_users, []),
 
     %% vhost creation
@@ -908,16 +980,19 @@ test_user_management() ->
     ok = control_action(list_vhosts, []),
 
     %% user/vhost mapping
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
-    ok = control_action(list_permissions, ["-p", "/testhost"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
+    ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_user_permissions, ["foo"]),
 
     %% user/vhost unmapping
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
-    ok = control_action(clear_permissions, ["-p", "/testhost", "foo"]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
+    ok = control_action(clear_permissions, ["foo"], [{"-p", "/testhost"}]),
 
     %% vhost deletion
     ok = control_action(delete_vhost, ["/testhost"]),
@@ -926,8 +1001,8 @@ test_user_management() ->
 
     %% deleting a populated vhost
     ok = control_action(add_vhost, ["/testhost"]),
-    ok = control_action(set_permissions, ["-p", "/testhost",
-                                          "foo", ".*", ".*", ".*"]),
+    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
+                        [{"-p", "/testhost"}]),
     ok = control_action(delete_vhost, ["/testhost"]),
 
     %% user deletion
@@ -941,7 +1016,8 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         <<"user">>, <<"/">>, self()),
+                                         <<"user">>, <<"/">>, self(),
+                                         fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -958,7 +1034,15 @@ test_server_status() ->
     ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
 
     %% list bindings
-    ok = control_action(list_bindings, []),
+    ok = info_action(list_bindings, rabbit_binding:info_keys(), true),
+    %% misc binding listing APIs
+    [_|_] = rabbit_binding:list_for_source(
+              rabbit_misc:r(<<"/">>, exchange, <<"">>)),
+    [_] = rabbit_binding:list_for_destination(
+              rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
+    [_] = rabbit_binding:list_for_source_and_destination(
+            rabbit_misc:r(<<"/">>, exchange, <<"">>),
+            rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
     %% list connections
     [#listener{host = H, port = P} | _] =
@@ -982,186 +1066,112 @@ test_server_status() ->
 
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
+
+    unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
 
-test_hooks() ->
-    %% Firing of hooks calls all hooks in an isolated manner
-    rabbit_hooks:subscribe(test_hook, test, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:subscribe(test_hook, test2, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:subscribe(test_hook2, test2, {rabbit_tests, handle_hook, []}),
-    rabbit_hooks:trigger(test_hook, [arg1, arg2]),
-    [arg1, arg2] = get(test_hook_test_fired),
-    [arg1, arg2] = get(test_hook_test2_fired),
-    undefined = get(test_hook2_test2_fired),
-
-    %% Hook Deletion works
-    put(test_hook_test_fired, undefined),
-    put(test_hook_test2_fired, undefined),
-    rabbit_hooks:unsubscribe(test_hook, test),
-    rabbit_hooks:trigger(test_hook, [arg3, arg4]),
-    undefined = get(test_hook_test_fired),
-    [arg3, arg4] = get(test_hook_test2_fired),
-    undefined = get(test_hook2_test2_fired),
-
-    %% Catches exceptions from bad hooks
-    rabbit_hooks:subscribe(test_hook3, test, {rabbit_tests, bad_handle_hook, []}),
-    ok = rabbit_hooks:trigger(test_hook3, []),
-
-    %% Passing extra arguments to hooks
-    rabbit_hooks:subscribe(arg_hook, test, {rabbit_tests, extra_arg_hook, [1, 3]}),
-    rabbit_hooks:trigger(arg_hook, [arg1, arg2]),
-    {[arg1, arg2], 1, 3} = get(arg_hook_test_fired),
-
-    %% Invoking Pids
-    Remote = fun () ->
-        receive
-            {rabbitmq_hook,[remote_test,test,[],Target]} ->
-                Target ! invoked
-        end
+test_spawn(Receiver) ->
+    Me = self(),
+    Writer = spawn(fun () -> Receiver(Me) end),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
+                                         <<"guest">>, <<"/">>, self(),
+                                         fun (_) -> {ok, self()} end),
+    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    receive #'channel.open_ok'{} -> ok
+    after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
-    P = spawn(Remote),
-    rabbit_hooks:subscribe(remote_test, test, {rabbit_hooks, notify_remote, [P, [self()]]}),
-    rabbit_hooks:trigger(remote_test, []),
-    receive
-       invoked -> ok
-    after 100 ->
-       io:format("Remote hook not invoked"),
-       throw(timeout)
-    end,
-    passed.
+    {Writer, Ch}.
 
-test_memory_pressure_receiver(Pid) ->
+test_statistics_receiver(Pid) ->
     receive
         shutdown ->
             ok;
         {send_command, Method} ->
-            ok = case Method of
-                     #'channel.flow'{}    -> ok;
-                     #'basic.qos_ok'{}    -> ok;
-                     #'channel.open_ok'{} -> ok
-                 end,
             Pid ! Method,
-            test_memory_pressure_receiver(Pid);
-        sync ->
-            Pid ! sync,
-            test_memory_pressure_receiver(Pid)
+            test_statistics_receiver(Pid)
     end.
 
-test_memory_pressure_receive_flow(Active) ->
-    receive #'channel.flow'{active = Active} -> ok
-    after 1000 -> throw(failed_to_receive_channel_flow)
-    end,
-    receive #'channel.flow'{} ->
-            throw(pipelining_sync_commands_detected)
-    after 0 ->
-            ok
+test_statistics_event_receiver(Pid) ->
+    receive
+        Foo ->
+            Pid ! Foo,
+            test_statistics_event_receiver(Pid)
     end.
 
-test_memory_pressure_sync(Ch, Writer) ->
-    ok = rabbit_channel:do(Ch, #'basic.qos'{}),
-    Writer ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'basic.qos_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_basic_qos_ok)
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
+    rabbit_channel:emit_stats(Ch),
+    test_statistics_receive_event1(Ch, Matcher).
+
+test_statistics_receive_event1(Ch, Matcher) ->
+    receive #event{type = channel_stats, props = Props} ->
+            case Matcher(Props) of
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
+            end
+    after 1000 -> throw(failed_to_receive_event)
     end.
 
-test_memory_pressure_spawn() ->
-    Me = self(),
-    Writer = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         <<"user">>, <<"/">>, self()),
-    ok = rabbit_channel:do(Ch, #'channel.open'{}),
-    MRef = erlang:monitor(process, Ch),
-    receive #'channel.open_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_channel_open_ok)
-    end,
-    {Writer, Ch, MRef}.
+test_statistics() ->
+    application:set_env(rabbit, collect_statistics, fine),
 
-expect_normal_channel_termination(MRef, Ch) ->
-    receive {'DOWN', MRef, process, Ch, normal} -> ok
-    after 1000 -> throw(channel_failed_to_exit)
-    end.
+    %% ATM this just tests the queue / exchange stats in channels. That's
+    %% by far the most complex code though.
 
-gobble_channel_exit() ->
-    receive {channel_exit, _, _} -> ok
-    after 1000 -> throw(channel_exit_not_received)
-    end.
+    %% Set up a channel and queue
+    {_Writer, Ch} = test_spawn(fun test_statistics_receiver/1),
+    rabbit_channel:do(Ch, #'queue.declare'{}),
+    QName = receive #'queue.declare_ok'{queue = Q0} ->
+                    Q0
+            after 1000 -> throw(failed_to_receive_queue_declare_ok)
+            end,
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    QPid = Q#amqqueue.pid,
+    X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
-test_memory_pressure() ->
-    {Writer0, Ch0, MRef0} = test_memory_pressure_spawn(),
-    [ok = rabbit_channel:conserve_memory(Ch0, Conserve) ||
-        Conserve <- [false, false, true, false, true, true, false]],
-    ok = test_memory_pressure_sync(Ch0, Writer0),
-    receive {'DOWN', MRef0, process, Ch0, Info0} ->
-            throw({channel_died_early, Info0})
-    after 0 -> ok
-    end,
+    rabbit_tests_event_receiver:start(self()),
 
-    %% we should have just 1 active=false waiting for us
-    ok = test_memory_pressure_receive_flow(false),
+    %% Check stats empty
+    Event = test_statistics_receive_event(Ch, fun (_) -> true end),
+    [] = proplists:get_value(channel_queue_stats, Event),
+    [] = proplists:get_value(channel_exchange_stats, Event),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event),
 
-    %% if we reply with flow_ok, we should immediately get an
-    %% active=true back
-    ok = rabbit_channel:do(Ch0, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_receive_flow(true),
+    %% Publish and get a message
+    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
+                                           routing_key = QName},
+                      rabbit_basic:build_content(#'P_basic'{}, <<"">>)),
+    rabbit_channel:do(Ch, #'basic.get'{queue = QName}),
 
-    %% if we publish at this point, the channel should die
-    Content = rabbit_basic:build_content(#'P_basic'{}, <<>>),
-    ok = rabbit_channel:do(Ch0, #'basic.publish'{}, Content),
-    expect_normal_channel_termination(MRef0, Ch0),
-    gobble_channel_exit(),
+    %% Check the stats reflect that
+    Event2 = test_statistics_receive_event(
+               Ch,
+               fun (E) ->
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) > 0
+               end),
+    [{QPid,[{get,1}]}] = proplists:get_value(channel_queue_stats, Event2),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
+    [{{QPid,X},[{publish,1}]}] =
+        proplists:get_value(channel_queue_exchange_stats, Event2),
 
-    {Writer1, Ch1, MRef1} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch1, true),
-    ok = test_memory_pressure_receive_flow(false),
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    ok = test_memory_pressure_sync(Ch1, Writer1),
-    ok = rabbit_channel:conserve_memory(Ch1, false),
-    ok = test_memory_pressure_receive_flow(true),
-    %% send back the wrong flow_ok. Channel should die.
-    ok = rabbit_channel:do(Ch1, #'channel.flow_ok'{active = false}),
-    expect_normal_channel_termination(MRef1, Ch1),
-    gobble_channel_exit(),
+    %% Check the stats remove stuff on queue deletion
+    rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
+    Event3 = test_statistics_receive_event(
+               Ch,
+               fun (E) ->
+                       length(proplists:get_value(
+                                channel_queue_exchange_stats, E)) == 0
+               end),
 
-    {_Writer2, Ch2, MRef2} = test_memory_pressure_spawn(),
-    %% just out of the blue, send a flow_ok. Life should end.
-    ok = rabbit_channel:do(Ch2, #'channel.flow_ok'{active = true}),
-    expect_normal_channel_termination(MRef2, Ch2),
-    gobble_channel_exit(),
+    [] = proplists:get_value(channel_queue_stats, Event3),
+    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event3),
+    [] = proplists:get_value(channel_queue_exchange_stats, Event3),
 
-    {_Writer3, Ch3, MRef3} = test_memory_pressure_spawn(),
-    ok = rabbit_channel:conserve_memory(Ch3, true),
-    ok = test_memory_pressure_receive_flow(false),
-    receive {'DOWN', MRef3, process, Ch3, _} ->
-            ok
-    after 12000 ->
-            throw(channel_failed_to_exit)
-    end,
-    gobble_channel_exit(),
-
-    alarm_handler:set_alarm({vm_memory_high_watermark, []}),
-    Me = self(),
-    Writer4 = spawn(fun () -> test_memory_pressure_receiver(Me) end),
-    {ok, Ch4} = rabbit_channel:start_link(1, self(), Writer4,
-                                          <<"user">>, <<"/">>, self()),
-    ok = rabbit_channel:do(Ch4, #'channel.open'{}),
-    MRef4 = erlang:monitor(process, Ch4),
-    Writer4 ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'channel.open_ok'{} -> throw(unexpected_channel_open_ok)
-    after 0 -> ok
-    end,
-    alarm_handler:clear_alarm(vm_memory_high_watermark),
-    Writer4 ! sync,
-    receive sync -> ok after 1000 -> throw(failed_to_receive_writer_sync) end,
-    receive #'channel.open_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_channel_open_ok)
-    end,
-    rabbit_channel:shutdown(Ch4),
-    expect_normal_channel_termination(MRef4, Ch4),
-
+    rabbit_channel:shutdown(Ch),
+    rabbit_tests_event_receiver:stop(),
     passed.
 
 test_delegates_async(SecondaryNode) ->
@@ -1253,11 +1263,16 @@ test_delegates_sync(SecondaryNode) ->
 
 %---------------------------------------------------------------------
 
-control_action(Command, Args) -> control_action(Command, node(), Args).
+control_action(Command, Args) ->
+    control_action(Command, node(), Args, default_options()).
 
-control_action(Command, Node, Args) ->
+control_action(Command, Args, NewOpts) ->
+    control_action(Command, node(), Args,
+                   expand_options(default_options(), NewOpts)).
+
+control_action(Command, Node, Args, Opts) ->
     case catch rabbit_control:action(
-                 Command, Node, Args,
+                 Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
                  end) of
@@ -1271,11 +1286,26 @@ control_action(Command, Node, Args) ->
 
 info_action(Command, Args, CheckVHost) ->
     ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, ["-p", "/"]);
+    if CheckVHost -> ok = control_action(Command, []);
        true       -> ok
     end,
     ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
     {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
+
+default_options() -> [{"-p", "/"}, {"-q", "false"}].
+
+expand_options(As, Bs) ->
+    lists:foldl(fun({K, _}=A, R) ->
+                        case proplists:is_defined(K, R) of
+                            true -> R;
+                            false -> [A | R]
+                        end
+                end, Bs, As).
+
+check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
+    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
+    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
     ok.
 
 empty_files(Files) ->
@@ -1335,16 +1365,34 @@ delete_log_handlers(Handlers) ->
         Handler <- Handlers],
     ok.
 
-handle_hook(HookName, Handler, Args) ->
-    A = atom_to_list(HookName) ++ "_" ++ atom_to_list(Handler) ++ "_fired",
-    put(list_to_atom(A), Args).
-bad_handle_hook(_, _, _) ->
-    exit(bad_handle_hook_called).
-extra_arg_hook(Hookname, Handler, Args, Extra1, Extra2) ->
-    handle_hook(Hookname, Handler, {Args, Extra1, Extra2}).
-
 test_supervisor_delayed_restart() ->
     test_sup:test_supervisor_delayed_restart().
+
+test_file_handle_cache() ->
+    %% test copying when there is just one spare handle
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
+    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
+    Pid = spawn(fun () -> {ok, Hdl} = file_handle_cache:open(
+                                        filename:join(TmpDir, "file3"),
+                                        [write], []),
+                          receive close -> ok end,
+                          file_handle_cache:delete(Hdl)
+                end),
+    Src = filename:join(TmpDir, "file1"),
+    Dst = filename:join(TmpDir, "file2"),
+    Content = <<"foo">>,
+    ok = file:write_file(Src, Content),
+    {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
+    {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
+    Size = size(Content),
+    {ok, Size} = file_handle_cache:copy(SrcHdl, DstHdl, Size),
+    ok = file_handle_cache:delete(SrcHdl),
+    file_handle_cache:delete(DstHdl),
+    Pid ! close,
+    ok = file_handle_cache:set_limit(Limit),
+    passed.
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
@@ -1361,6 +1409,7 @@ test_backing_queue() ->
             application:set_env(rabbit, msg_store_file_size_limit,
                                 FileSizeLimit, infinity),
             passed = test_queue_index(),
+            passed = test_queue_index_props(),
             passed = test_variable_queue(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
@@ -1378,17 +1427,17 @@ restart_msg_store_empty() ->
 guid_bin(X) ->
     erlang:md5(term_to_binary(X)).
 
-msg_store_contains(Atom, Guids) ->
+msg_store_contains(Atom, Guids, MSCState) ->
     Atom = lists:foldl(
              fun (Guid, Atom1) when Atom1 =:= Atom ->
-                     rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid) end,
+                     rabbit_msg_store:contains(Guid, MSCState) end,
              Atom, Guids).
 
-msg_store_sync(Guids) ->
+msg_store_sync(Guids, MSCState) ->
     Ref = make_ref(),
     Self = self(),
-    ok = rabbit_msg_store:sync(?PERSISTENT_MSG_STORE, Guids,
-                               fun () -> Self ! {sync, Ref} end),
+    ok = rabbit_msg_store:sync(Guids, fun () -> Self ! {sync, Ref} end,
+                               MSCState),
     receive
         {sync, Ref} -> ok
     after
@@ -1400,23 +1449,32 @@ msg_store_sync(Guids) ->
 msg_store_read(Guids, MSCState) ->
     lists:foldl(fun (Guid, MSCStateM) ->
                         {{ok, Guid}, MSCStateN} = rabbit_msg_store:read(
-                                                    ?PERSISTENT_MSG_STORE,
                                                     Guid, MSCStateM),
                         MSCStateN
                 end, MSCState, Guids).
 
 msg_store_write(Guids, MSCState) ->
-    lists:foldl(fun (Guid, {ok, MSCStateN}) ->
-                        rabbit_msg_store:write(?PERSISTENT_MSG_STORE,
-                                               Guid, Guid, MSCStateN)
-                end, {ok, MSCState}, Guids).
+    ok = lists:foldl(
+           fun (Guid, ok) -> rabbit_msg_store:write(Guid, Guid, MSCState) end,
+           ok, Guids).
 
-msg_store_remove(Guids) ->
-    rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids).
+msg_store_remove(Guids, MSCState) ->
+    rabbit_msg_store:remove(Guids, MSCState).
+
+msg_store_remove(MsgStore, Ref, Guids) ->
+    with_msg_store_client(MsgStore, Ref,
+                          fun (MSCStateM) ->
+                                  ok = msg_store_remove(Guids, MSCStateM),
+                                  MSCStateM
+                          end).
+
+with_msg_store_client(MsgStore, Ref, Fun) ->
+    rabbit_msg_store:client_terminate(
+      Fun(rabbit_msg_store:client_init(MsgStore, Ref))).
 
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
-      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
+      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MSCState) end,
                   rabbit_msg_store:client_init(MsgStore, Ref), L)).
 
 test_msg_store() ->
@@ -1424,31 +1482,31 @@ test_msg_store() ->
     Self = self(),
     Guids = [guid_bin(M) || M <- lists:seq(1,100)],
     {Guids1stHalf, Guids2ndHalf} = lists:split(50, Guids),
-    %% check we don't contain any of the msgs we're about to publish
-    false = msg_store_contains(false, Guids),
     Ref = rabbit_guid:guid(),
     MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    %% check we don't contain any of the msgs we're about to publish
+    false = msg_store_contains(false, Guids, MSCState),
     %% publish the first half
-    {ok, MSCState1} = msg_store_write(Guids1stHalf, MSCState),
+    ok = msg_store_write(Guids1stHalf, MSCState),
     %% sync on the first half
-    ok = msg_store_sync(Guids1stHalf),
+    ok = msg_store_sync(Guids1stHalf, MSCState),
     %% publish the second half
-    {ok, MSCState2} = msg_store_write(Guids2ndHalf, MSCState1),
+    ok = msg_store_write(Guids2ndHalf, MSCState),
     %% sync on the first half again - the msg_store will be dirty, but
     %% we won't need the fsync
-    ok = msg_store_sync(Guids1stHalf),
+    ok = msg_store_sync(Guids1stHalf, MSCState),
     %% check they're all in there
-    true = msg_store_contains(true, Guids),
+    true = msg_store_contains(true, Guids, MSCState),
     %% publish the latter half twice so we hit the caching and ref count code
-    {ok, MSCState3} = msg_store_write(Guids2ndHalf, MSCState2),
+    ok = msg_store_write(Guids2ndHalf, MSCState),
     %% check they're still all in there
-    true = msg_store_contains(true, Guids),
+    true = msg_store_contains(true, Guids, MSCState),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
     ok = lists:foldl(
            fun (Guid, ok) -> rabbit_msg_store:sync(
-                                ?PERSISTENT_MSG_STORE,
-                                [Guid], fun () -> Self ! {sync, Guid} end)
+                               [Guid], fun () -> Self ! {sync, Guid} end,
+                               MSCState)
            end, ok, Guids2ndHalf),
     lists:foldl(
       fun(Guid, ok) ->
@@ -1463,24 +1521,24 @@ test_msg_store() ->
       end, ok, Guids2ndHalf),
     %% it's very likely we're not dirty here, so the 1st half sync
     %% should hit a different code path
-    ok = msg_store_sync(Guids1stHalf),
+    ok = msg_store_sync(Guids1stHalf, MSCState),
     %% read them all
-    MSCState4 = msg_store_read(Guids, MSCState3),
+    MSCState1 = msg_store_read(Guids, MSCState),
     %% read them all again - this will hit the cache, not disk
-    MSCState5 = msg_store_read(Guids, MSCState4),
+    MSCState2 = msg_store_read(Guids, MSCState1),
     %% remove them all
-    ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids),
+    ok = rabbit_msg_store:remove(Guids, MSCState2),
     %% check first half doesn't exist
-    false = msg_store_contains(false, Guids1stHalf),
+    false = msg_store_contains(false, Guids1stHalf, MSCState2),
     %% check second half does exist
-    true = msg_store_contains(true, Guids2ndHalf),
+    true = msg_store_contains(true, Guids2ndHalf, MSCState2),
     %% read the second half again
-    MSCState6 = msg_store_read(Guids2ndHalf, MSCState5),
+    MSCState3 = msg_store_read(Guids2ndHalf, MSCState2),
     %% release the second half, just for fun (aka code coverage)
-    ok = rabbit_msg_store:release(?PERSISTENT_MSG_STORE, Guids2ndHalf),
+    ok = rabbit_msg_store:release(Guids2ndHalf, MSCState3),
     %% read the second half again, just for fun (aka code coverage)
-    MSCState7 = msg_store_read(Guids2ndHalf, MSCState6),
-    ok = rabbit_msg_store:client_terminate(MSCState7),
+    MSCState4 = msg_store_read(Guids2ndHalf, MSCState3),
+    ok = rabbit_msg_store:client_terminate(MSCState4),
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
@@ -1491,22 +1549,26 @@ test_msg_store() ->
                     ([Guid|GuidsTail]) ->
                         {Guid, 0, GuidsTail}
                 end, Guids2ndHalf}),
+    MSCState5 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we have the right msgs left
     lists:foldl(
       fun (Guid, Bool) ->
-              not(Bool = rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid))
+              not(Bool = rabbit_msg_store:contains(Guid, MSCState5))
       end, false, Guids2ndHalf),
+    ok = rabbit_msg_store:client_terminate(MSCState5),
     %% restart empty
     restart_msg_store_empty(),
+    MSCState6 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs
-    false = msg_store_contains(false, Guids),
+    false = msg_store_contains(false, Guids, MSCState6),
     %% publish the first half again
-    MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
-    {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
+    ok = msg_store_write(Guids1stHalf, MSCState6),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
-           msg_store_read(Guids1stHalf, MSCState9)),
-    ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids1stHalf),
+           msg_store_read(Guids1stHalf, MSCState6)),
+    MSCState7 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    ok = rabbit_msg_store:remove(Guids1stHalf, MSCState7),
+    ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse guids
     %% push a lot of msgs in... at least 100 files worth
@@ -1515,31 +1577,39 @@ test_msg_store() ->
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
     GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
-    ok = foreach_with_msg_store_client(
+    ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MsgStore, MSCStateM) ->
-                   {ok, MSCStateN} = rabbit_msg_store:write(
-                                       MsgStore, Guid, Payload, MSCStateM),
-                   MSCStateN
-           end, GuidsBig),
+           fun (MSCStateM) ->
+                   [ok = rabbit_msg_store:write(Guid, Payload, MSCStateM) ||
+                       Guid <- GuidsBig],
+                   MSCStateM
+           end),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MsgStore, MSCStateM) ->
+           fun (Guid, MSCStateM) ->
                    {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
-                                                  MsgStore, Guid, MSCStateM),
+                                                  Guid, MSCStateM),
                    MSCStateN
            end, GuidsBig),
     %% .., then 3s by 1...
-    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
+                          [guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
     %% .., then remove 3s by 2, from the young end first. This hits
     %% GC (under 50% good data left, but no empty files. Must GC).
-    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
+                          [guid_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
     %% .., then remove 3s by 3, from the young end first. This hits
     %% GC...
-    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
+                          [guid_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
     %% ensure empty
-    false = msg_store_contains(false, GuidsBig),
+    ok = with_msg_store_client(
+           ?PERSISTENT_MSG_STORE, Ref,
+           fun (MSCStateM) ->
+                   false = msg_store_contains(false, GuidsBig, MSCStateM),
+                   MSCStateM
+           end),
     %% restart empty
     restart_msg_store_empty(),
     passed.
@@ -1551,11 +1621,18 @@ test_queue() ->
     queue_name(<<"test">>).
 
 init_test_queue() ->
-    rabbit_queue_index:init(
-      test_queue(), true, false,
-      fun (Guid) ->
-              rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
-      end).
+    TestQueue = test_queue(),
+    Terms = rabbit_queue_index:shutdown_terms(TestQueue),
+    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:guid()),
+    PersistentClient = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE,
+                                                    PRef),
+    Res = rabbit_queue_index:recover(
+            TestQueue, Terms, false,
+            fun (Guid) ->
+                    rabbit_msg_store:contains(Guid, PersistentClient)
+            end),
+    ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
+    Res.
 
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
@@ -1566,13 +1643,13 @@ restart_test_queue(Qi) ->
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
     ok = rabbit_variable_queue:start([]),
-    {0, _Terms, Qi} = init_test_queue(),
+    {0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
 
 with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
-    {0, _Terms, Qi} = init_test_queue(),
+    {0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
@@ -1581,28 +1658,43 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
                end,
-    {A, B, MSCStateEnd} =
+    MSCState = rabbit_msg_store:client_init(MsgStore, Ref),
+    {A, B} =
         lists:foldl(
-          fun (SeqId, {QiN, SeqIdsGuidsAcc, MSCStateN}) ->
+          fun (SeqId, {QiN, SeqIdsGuidsAcc}) ->
                   Guid = rabbit_guid:guid(),
                   QiM = rabbit_queue_index:publish(
-                          Guid, SeqId, Persistent, QiN),
-                  {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
-                                                           Guid, MSCStateN),
-                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
-          end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
-    ok = rabbit_msg_store:client_delete_and_terminate(
-           MSCStateEnd, MsgStore, Ref),
+                          Guid, SeqId, #message_properties{}, Persistent, QiN),
+                  ok = rabbit_msg_store:write(Guid, Guid, MSCState),
+                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc]}
+          end, {Qi, []}, SeqIds),
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{Guid, SeqId, Persistent, Delivered}|Read],
+                           [{Guid, SeqId, _Props, Persistent, Delivered}|Read],
                            [{SeqId, Guid}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
+
+test_queue_index_props() ->
+    with_empty_test_queue(
+      fun(Qi0) ->
+              Guid = rabbit_guid:guid(),
+              Props = #message_properties{expiry=12345},
+              Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
+              {[{Guid, 1, Props, _, _}], Qi2} =
+                  rabbit_queue_index:read(1, 2, Qi1),
+              Qi2
+      end),
+
+    ok = rabbit_variable_queue:stop(),
+    ok = rabbit_variable_queue:start([]),
+
+    passed.
 
 test_queue_index() ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -1622,7 +1714,7 @@ test_queue_index() ->
               ok = verify_read_with_published(false, false, ReadA,
                                               lists:reverse(SeqIdsGuidsA)),
               %% should get length back as 0, as all the msgs were transient
-              {0, _Terms1, Qi6} = restart_test_queue(Qi4),
+              {0, Qi6} = restart_test_queue(Qi4),
               {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
               {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
@@ -1631,7 +1723,7 @@ test_queue_index() ->
                                               lists:reverse(SeqIdsGuidsB)),
               %% should get length back as MostOfASegment
               LenB = length(SeqIdsB),
-              {LenB, _Terms2, Qi12} = restart_test_queue(Qi10),
+              {LenB, Qi12} = restart_test_queue(Qi10),
               {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
               Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
               {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
@@ -1643,7 +1735,7 @@ test_queue_index() ->
               {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
               %% should get length back as 0 because all persistent
               %% msgs have been acked
-              {0, _Terms3, Qi19} = restart_test_queue(Qi18),
+              {0, Qi19} = restart_test_queue(Qi18),
               Qi19
       end),
 
@@ -1715,11 +1807,11 @@ test_queue_index() ->
                                                          true, Qi0),
               Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
               Qi3 = rabbit_queue_index:ack([0], Qi2),
-              {5, _Terms9, Qi4} = restart_test_queue(Qi3),
+              {5, Qi4} = restart_test_queue(Qi3),
               {Qi5, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi4),
               Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
               Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
-              {5, _Terms10, Qi8} = restart_test_queue(Qi7),
+              {5, Qi8} = restart_test_queue(Qi7),
               Qi8
       end),
 
@@ -1737,7 +1829,8 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>), VQN)
+                                                   end}, <<>>),
+                #message_properties{}, VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -1765,14 +1858,46 @@ with_fresh_variable_queue(Fun) ->
                       {len, 0}]),
     _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
     passed.
-    
+
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
-              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1]],
+              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_dropwhile/1]],
     passed.
+
+test_dropwhile(VQ0) ->
+    Count = 10,
+
+    %% add messages with sequential expiry
+    VQ1 = lists:foldl(
+            fun (N, VQN) ->
+                    rabbit_variable_queue:publish(
+                      rabbit_basic:message(
+                        rabbit_misc:r(<<>>, exchange, <<>>),
+                        <<>>, #'P_basic'{}, <<>>),
+                      #message_properties{expiry = N}, VQN)
+            end, VQ0, lists:seq(1, Count)),
+
+    %% drop the first 5 messages
+    VQ2 = rabbit_variable_queue:dropwhile(
+            fun(#message_properties { expiry = Expiry }) ->
+                    Expiry =< 5
+            end, VQ1),
+
+    %% fetch five now
+    VQ3 = lists:foldl(fun (_N, VQN) ->
+                              {{#basic_message{}, _, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch(false, VQN),
+                              VQM
+                      end, VQ2, lists:seq(6, Count)),
+
+    %% should be empty now
+    {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
+
+    VQ4.
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -1784,6 +1909,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
     %% squeeze and relax queue
     Churn = Len div 32,
     VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
+
     {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
     VQ7 = lists:foldl(
             fun (Duration1, VQ4) ->
@@ -1882,7 +2008,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(false, 4, VQ1),
     {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
-    VQ4 = rabbit_variable_queue:requeue(AckTags, VQ3),
+    VQ4 = rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
     VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
     VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
@@ -1921,4 +2047,57 @@ test_queue_recover() ->
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
+    passed.
+
+test_configurable_server_properties() ->
+    %% List of the names of the built-in properties do we expect to find
+    BuiltInPropNames = [<<"product">>, <<"version">>, <<"platform">>,
+                        <<"copyright">>, <<"information">>],
+
+    %% Verify that the built-in properties are initially present
+    ActualPropNames = [Key ||
+                         {Key, longstr, _} <- rabbit_reader:server_properties()],
+    true = lists:all(fun (X) -> lists:member(X, ActualPropNames) end,
+                     BuiltInPropNames),
+
+    %% Get the initial server properties configured in the environment
+    {ok, ServerProperties} = application:get_env(rabbit, server_properties),
+
+    %% Helper functions
+    ConsProp = fun (X) -> application:set_env(rabbit,
+                                              server_properties,
+                                              [X | ServerProperties]) end,
+    IsPropPresent = fun (X) -> lists:member(X,
+                                            rabbit_reader:server_properties())
+                    end,
+
+    %% Add a wholly new property of the simplified {KeyAtom, StringValue} form
+    NewSimplifiedProperty = {NewHareKey, NewHareVal} = {hare, "soup"},
+    ConsProp(NewSimplifiedProperty),
+    %% Do we find hare soup, appropriately formatted in the generated properties?
+    ExpectedHareImage = {list_to_binary(atom_to_list(NewHareKey)),
+                         longstr,
+                         list_to_binary(NewHareVal)},
+    true = IsPropPresent(ExpectedHareImage),
+
+    %% Add a wholly new property of the {BinaryKey, Type, Value} form
+    %% and check for it
+    NewProperty = {<<"new-bin-key">>, signedint, -1},
+    ConsProp(NewProperty),
+    %% Do we find the new property?
+    true = IsPropPresent(NewProperty),
+
+    %% Add a property that clobbers a built-in, and verify correct clobbering
+    {NewVerKey, NewVerVal} = NewVersion = {version, "X.Y.Z."},
+    {BinNewVerKey, BinNewVerVal} = {list_to_binary(atom_to_list(NewVerKey)),
+                                    list_to_binary(NewVerVal)},
+    ConsProp(NewVersion),
+    ClobberedServerProps = rabbit_reader:server_properties(),
+    %% Is the clobbering insert present?
+    true = IsPropPresent({BinNewVerKey, longstr, BinNewVerVal}),
+    %% Is the clobbering insert the only thing with the clobbering key?
+    [{BinNewVerKey, longstr, BinNewVerVal}] =
+        [E || {K, longstr, _V} = E <- ClobberedServerProps, K =:= BinNewVerKey],
+
+    application:set_env(rabbit, server_properties, ServerProperties),
     passed.

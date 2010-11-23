@@ -29,50 +29,38 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_load).
+-module(rabbit_tests_event_receiver).
 
--export([local_load/0, remote_loads/0, pick/0]).
+-export([start/1, stop/0]).
 
--define(FUDGE_FACTOR, 0.98).
--define(TIMEOUT, 100).
+-export([init/1, handle_call/2, handle_event/2, handle_info/2,
+         terminate/2, code_change/3]).
 
-%%----------------------------------------------------------------------------
+start(Pid) ->
+    gen_event:add_handler(rabbit_event, ?MODULE, [Pid]).
 
--ifdef(use_specs).
-
--type(load() :: {{non_neg_integer(), integer() | 'unknown'}, node()}).
--spec(local_load/0 :: () -> load()).
--spec(remote_loads/0 :: () -> [load()]).
--spec(pick/0 :: () -> node()).
-
--endif.
+stop() ->
+    gen_event:delete_handler(rabbit_event, ?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
-local_load() ->
-    LoadAvg = case whereis(cpu_sup) of
-                  undefined -> unknown;
-                  _         -> case cpu_sup:avg1() of
-                                   L when is_integer(L) -> L;
-                                   {error, timeout}     -> unknown
-                               end
-              end,
-    {{statistics(run_queue), LoadAvg}, node()}.
+init([Pid]) ->
+    {ok, Pid}.
 
-remote_loads() ->
-    {ResL, _BadNodes} =
-        rpc:multicall(nodes(), ?MODULE, local_load, [], ?TIMEOUT),
-    ResL.
+handle_call(_Request, Pid) ->
+    {ok, not_understood, Pid}.
 
-pick() ->
-    RemoteLoads = remote_loads(),
-    {{RunQ, LoadAvg}, Node} = local_load(),
-    %% add bias towards current node; we rely on Erlang's term order
-    %% of SomeFloat < local_unknown < unknown.
-    AdjustedLoadAvg = case LoadAvg of
-                          unknown -> local_unknown;
-                          _       -> LoadAvg * ?FUDGE_FACTOR
-                      end,
-    Loads = [{{RunQ, AdjustedLoadAvg}, Node} | RemoteLoads],
-    {_, SelectedNode} = lists:min(Loads),
-    SelectedNode.
+handle_event(Event, Pid) ->
+    Pid ! Event,
+    {ok, Pid}.
+
+handle_info(_Info, Pid) ->
+    {ok, Pid}.
+
+terminate(_Arg, _Pid) ->
+    ok.
+
+code_change(_OldVsn, Pid, _Extra) ->
+    {ok, Pid}.
+
+%%----------------------------------------------------------------------------

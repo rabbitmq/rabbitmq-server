@@ -34,7 +34,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, publish/2]).
+-export([description/0, route/2]).
 -export([validate/1, create/1, recover/2, delete/2, add_binding/2,
          remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -58,16 +58,15 @@ description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-publish(#exchange{name = Name}, Delivery =
+route(#exchange{name = Name},
         #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:deliver(rabbit_router:match_bindings(
-                            Name, fun (#binding{key = BindingKey}) ->
-                                          topic_matches(BindingKey, RoutingKey)
-                                  end),
-                          Delivery).
+    rabbit_router:match_bindings(Name,
+                                 fun (#binding{key = BindingKey}) ->
+                                         topic_matches(BindingKey, RoutingKey)
+                                 end).
 
 split_topic_key(Key) ->
-    re:split(Key, "\\.", [{return, list}]).
+    string:tokens(binary_to_list(Key), ".").
 
 topic_matches(PatternKey, RoutingKey) ->
     P = split_topic_key(PatternKey),

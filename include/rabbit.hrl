@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--record(user, {username, password}).
+-record(user, {username, password_hash, is_admin}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
@@ -60,17 +60,21 @@
 -record(route, {binding, value = const}).
 -record(reverse_route, {reverse_binding, value = const}).
 
--record(binding, {exchange_name, key, queue_name, args = []}).
--record(reverse_binding, {queue_name, key, exchange_name, args = []}).
+-record(binding, {source, key, destination, args = []}).
+-record(reverse_binding, {destination, key, source, args = []}).
 
--record(listener, {node, protocol, host, port}).
+-record(listener, {node, protocol, host, ip_address, port}).
 
 -record(basic_message, {exchange_name, routing_key, content, guid,
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
--record(amqp_error, {name, explanation, method = none}).
+-record(amqp_error, {name, explanation = "", method = none}).
+
+-record(event, {type, props, timestamp}).
+
+-record(message_properties, {expiry}).
 
 %%----------------------------------------------------------------------------
 
@@ -83,6 +87,7 @@
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
+-define(STATS_INTERVAL,             5000).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
