@@ -100,7 +100,7 @@ abstract_method_serialization_test(Connection, BeforeFun, MultiOpFun,
                                    AfterFun) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     X = uuid(),
-    Payload = list_to_binary([["x" || _ <- lists:seq(1, 1000)]]),
+    Payload = list_to_binary(["x" || _ <- lists:seq(1, 1000)]),
     OpsPerProcess = 20,
     #'exchange.declare_ok'{} =
         amqp_channel:call(Channel, #'exchange.declare'{exchange = X,
