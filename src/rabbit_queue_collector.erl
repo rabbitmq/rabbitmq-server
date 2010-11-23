@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {queues}).
+-record(state, {queues, delete_from}).
 
 -include("rabbit.hrl").
 
@@ -66,32 +66,39 @@ delete_all(CollectorPid) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{queues = dict:new()}}.
+    {ok, #state{queues = dict:new(), delete_from = undefined}}.
 
 %%--------------------------------------------------------------------------
 
 handle_call({register, Q}, _From,
-            State = #state{queues = Queues}) ->
+            State = #state{queues = Queues, delete_from = Deleting}) ->
     MonitorRef = erlang:monitor(process, Q#amqqueue.pid),
-    {reply, ok,
-     State#state{queues = dict:store(MonitorRef, Q, Queues)}};
+    case Deleting of
+        undefined -> ok;
+        _         -> rabbit_amqqueue:delete_immediately(Q)
+    end,
+    {reply, ok, State#state{queues = dict:store(MonitorRef, Q, Queues)}};
 
-handle_call(delete_all, _From, State = #state{queues = Queues}) ->
-    [rabbit_misc:with_exit_handler(
-       fun () -> ok end,
-       fun () ->
-               erlang:demonitor(MonitorRef),
-               rabbit_amqqueue:delete(Q, false, false)
-       end)
-     || {MonitorRef, Q} <- dict:to_list(Queues)],
-    {reply, ok, State}.
+handle_call(delete_all, From, State = #state{queues      = Queues,
+                                             delete_from = undefined}) ->
+    case dict:size(Queues) of
+        0 -> {reply, ok, State#state{delete_from = From}};
+        _ -> [rabbit_amqqueue:delete_immediately(Q)
+              || {_MRef, Q} <- dict:to_list(Queues)],
+             {noreply, State#state{delete_from = From}}
+    end.
 
 handle_cast(Msg, State) ->
     {stop, {unhandled_cast, Msg}, State}.
 
 handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
-            State = #state{queues = Queues}) ->
-    {noreply, State#state{queues = dict:erase(MonitorRef, Queues)}}.
+            State = #state{queues = Queues, delete_from = Deleting}) ->
+    Queues1 = dict:erase(MonitorRef, Queues),
+    case Deleting =/= undefined andalso dict:size(Queues1) =:= 0 of
+        true  -> gen_server:reply(Deleting, ok);
+        false -> ok
+    end,
+    {noreply, State#state{queues = Queues1}}.
 
 terminate(_Reason, _State) ->
     ok.

@@ -212,13 +212,15 @@ table_definitions() ->
        {match, #amqqueue{name = queue_name_match(), _='_'}}]}].
 
 binding_match() ->
-    #binding{queue_name = queue_name_match(),
-             exchange_name = exchange_name_match(),
+    #binding{source = exchange_name_match(),
+             destination = binding_destination_match(),
              _='_'}.
 reverse_binding_match() ->
-    #reverse_binding{queue_name = queue_name_match(),
-                     exchange_name = exchange_name_match(),
+    #reverse_binding{destination = binding_destination_match(),
+                     source = exchange_name_match(),
                      _='_'}.
+binding_destination_match() ->
+    resource_match('_').
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
@@ -241,18 +243,19 @@ ensure_mnesia_dir() ->
     case filelib:ensure_dir(MnesiaDir) of
         {error, Reason} ->
             throw({error, {cannot_create_mnesia_dir, MnesiaDir, Reason}});
-        ok -> ok
+        ok ->
+            ok
     end.
 
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
         yes -> ok;
-        no -> throw({error, mnesia_not_running})
+        no  -> throw({error, mnesia_not_running})
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
-        no -> ok;
+        no  -> ok;
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
@@ -331,10 +334,8 @@ read_cluster_nodes_config() ->
     case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
-            case application:get_env(cluster_nodes) of
-                undefined -> [];
-                {ok, ClusterNodes} -> ClusterNodes
-            end;
+            {ok, ClusterNodes} = application:get_env(rabbit, cluster_nodes),
+            ClusterNodes;
         {error, Reason} ->
             throw({error, {cannot_read_cluster_nodes_config,
                            FileName, Reason}})
@@ -360,39 +361,41 @@ init_db(ClusterNodes, Force) ->
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
-                false ->
-                    FailedClusterNodes = ProperClusterNodes -- Nodes,
-                    case FailedClusterNodes of
-                        [] -> ok;
-                        _ ->
-                            throw({error, {failed_to_cluster_with,
-                                           FailedClusterNodes,
-                                           "Mnesia could not connect to some nodes."}})
-                    end;
-                _ -> ok
+                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
+                         case FailedClusterNodes of
+                             [] -> ok;
+                             _  -> throw({error, {failed_to_cluster_with,
+                                                  FailedClusterNodes,
+                                                  "Mnesia could not connect "
+                                                  "to some nodes."}})
+                         end;
+                true  -> ok
             end,
-            case Nodes of
-                [] ->
-                    case mnesia:system_info(use_dir) of
-                        true ->
-                            case check_schema_integrity() of
-                                ok ->
-                                    ok;
-                                {error, Reason} ->
-                                    %% NB: we cannot use rabbit_log here since
-                                    %% it may not have been started yet
-                                    error_logger:warning_msg(
-                                      "schema integrity check failed: ~p~n"
-                                      "moving database to backup location "
-                                      "and recreating schema from scratch~n",
-                                      [Reason]),
-                                    ok = move_db(),
-                                    ok = create_schema()
-                            end;
-                        false ->
-                            ok = create_schema()
+            case {Nodes, mnesia:system_info(use_dir),
+                  mnesia:system_info(db_nodes)} of
+                {[], true, [_]} ->
+                    %% True single disc node, attempt upgrade
+                    wait_for_tables(),
+                    case rabbit_upgrade:maybe_upgrade() of
+                        ok ->
+                            ensure_schema_ok();
+                        version_not_available ->
+                            schema_ok_or_move()
                     end;
-                [_|_] ->
+                {[], true, _} ->
+                    %% "Master" (i.e. without config) disc node in cluster,
+                    %% verify schema
+                    wait_for_tables(),
+                    ensure_version_ok(rabbit_upgrade:read_version()),
+                    ensure_schema_ok();
+                {[], false, _} ->
+                    %% First RAM node in cluster, start from scratch
+                    ok = create_schema();
+                {[AnotherNode|_], _, _} ->
+                    %% Subsequent node in cluster, catch up
+                    ensure_version_ok(rabbit_upgrade:read_version()),
+                    ensure_version_ok(
+                      rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
@@ -401,14 +404,43 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ok = ensure_schema_integrity()
+                    ensure_schema_ok()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
-            throw({error, {unable_to_join_cluster,
-                           ClusterNodes, Reason}})
+            throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
+    end.
+
+schema_ok_or_move() ->
+    case check_schema_integrity() of
+        ok ->
+            ok;
+        {error, Reason} ->
+            %% NB: we cannot use rabbit_log here since it may not have been
+            %% started yet
+            error_logger:warning_msg("schema integrity check failed: ~p~n"
+                                     "moving database to backup location "
+                                     "and recreating schema from scratch~n",
+                                     [Reason]),
+            ok = move_db(),
+            ok = create_schema()
+    end.
+
+ensure_version_ok({ok, DiscVersion}) ->
+    case rabbit_upgrade:desired_version() of
+        DiscVersion    ->  ok;
+        DesiredVersion ->  throw({error, {schema_mismatch,
+                                          DesiredVersion, DiscVersion}})
+    end;
+ensure_version_ok({error, _}) ->
+    ok = rabbit_upgrade:write_version().
+
+ensure_schema_ok() ->
+    case check_schema_integrity() of
+        ok              -> ok;
+        {error, Reason} -> throw({error, {schema_invalid, Reason}})
     end.
 
 create_schema() ->
@@ -419,7 +451,8 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables().
+    ok = wait_for_tables(),
+    ok = rabbit_upgrade:write_version().
 
 move_db() ->
     mnesia:stop(),

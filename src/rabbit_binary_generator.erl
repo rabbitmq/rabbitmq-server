@@ -47,6 +47,7 @@
 -export([generate_table/1, encode_properties/2]).
 -export([check_empty_content_body_frame_size/0]).
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
+-export([map_exception/3]).
 
 -import(lists).
 
@@ -74,6 +75,12 @@
                                        rabbit_types:encoded_content()).
 -spec(clear_encoded_content/1 ::
         (rabbit_types:content()) -> rabbit_types:unencoded_content()).
+-spec(map_exception/3 :: (rabbit_channel:channel_number(),
+                          rabbit_types:amqp_error() | any(),
+                          rabbit_types:protocol()) ->
+                              {boolean(),
+                               rabbit_channel:channel_number(),
+                               rabbit_framing:amqp_method_record()}).
 
 -endif.
 
@@ -306,3 +313,46 @@ clear_encoded_content(Content = #content{properties = none}) ->
     Content;
 clear_encoded_content(Content = #content{}) ->
     Content#content{properties_bin = none, protocol = none}.
+
+%% NB: this function is also used by the Erlang client
+map_exception(Channel, Reason, Protocol) ->
+    {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
+        lookup_amqp_exception(Reason, Protocol),
+    ShouldClose = SuggestedClose orelse (Channel == 0),
+    {ClassId, MethodId} = case FailedMethod of
+                              {_, _} -> FailedMethod;
+                              none   -> {0, 0};
+                              _      -> Protocol:method_id(FailedMethod)
+                          end,
+    {CloseChannel, CloseMethod} =
+        case ShouldClose of
+            true  -> {0, #'connection.close'{reply_code = ReplyCode,
+                                             reply_text = ReplyText,
+                                             class_id = ClassId,
+                                             method_id = MethodId}};
+            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
+                                                reply_text = ReplyText,
+                                                class_id = ClassId,
+                                                method_id = MethodId}}
+        end,
+    {ShouldClose, CloseChannel, CloseMethod}.
+
+lookup_amqp_exception(#amqp_error{name        = Name,
+                                  explanation = Expl,
+                                  method      = Method},
+                      Protocol) ->
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
+    ExplBin = amqp_exception_explanation(Text, Expl),
+    {ShouldClose, Code, ExplBin, Method};
+lookup_amqp_exception(Other, Protocol) ->
+    rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
+    {ShouldClose, Code, Text} =
+        Protocol:lookup_amqp_exception(internal_error, Protocol),
+    {ShouldClose, Code, Text, none}.
+
+amqp_exception_explanation(Text, Expl) ->
+    ExplBin = list_to_binary(Expl),
+    CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
+    if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
+       true                        -> CompleteTextBin
+    end.

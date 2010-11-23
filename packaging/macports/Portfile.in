@@ -17,13 +17,19 @@ long_description	\
 homepage        @BASE_URL@
 master_sites    @BASE_URL@releases/rabbitmq-server/v${version}/
 
+distfiles      ${name}-${version}${extract.suffix} \
+               ${name}-generic-unix-${version}${extract.suffix}
+
 checksums \
-    md5 @md5@ \
-    sha1 @sha1@ \
-    rmd160 @rmd160@
+    ${name}-${version}${extract.suffix} md5 @md5-src@ \
+    ${name}-${version}${extract.suffix} sha1 @sha1-src@ \
+    ${name}-${version}${extract.suffix} rmd160 @rmd160-src@ \
+    ${name}-generic-unix-${version}${extract.suffix} md5 @md5-bin@ \
+    ${name}-generic-unix-${version}${extract.suffix} sha1 @sha1-bin@ \
+    ${name}-generic-unix-${version}${extract.suffix} rmd160 @rmd160-bin@
 
 depends_lib	port:erlang
-depends_build	port:xmlto port:libxslt
+depends_build	port:libxslt
 
 platform darwin 7 {
     depends_build-append port:py25-simplejson
@@ -49,10 +55,14 @@ set plistloc ${prefix}/etc/LaunchDaemons/org.macports.rabbitmq-server
 set sbindir ${destroot}${prefix}/lib/rabbitmq/bin
 set wrappersbin ${destroot}${prefix}/sbin
 set realsbin ${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version}/sbin
+set mansrc ${workpath}/rabbitmq_server-${version}/share/man
+set mandest ${destroot}${prefix}/share/man
 
 use_configure   no
 
 use_parallel_build yes
+
+destroot.target install_bin
 
 destroot.destdir \
     TARGET_DIR=${destroot}${prefix}/lib/rabbitmq/lib/rabbitmq_server-${version} \
@@ -75,7 +85,7 @@ post-destroot {
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
-    foreach var {CONFIG_FILE CLUSTER_CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
+    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
         reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
             ${realsbin}/rabbitmq-multi \
             ${realsbin}/rabbitmq-server \
@@ -93,6 +103,11 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-multi
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
+
+    file copy ${mansrc}/man1/rabbitmq-multi.1.gz  ${mandest}/man1/
+    file copy ${mansrc}/man1/rabbitmq-server.1.gz ${mandest}/man1/
+    file copy ${mansrc}/man1/rabbitmqctl.1.gz     ${mandest}/man1/
+    file copy ${mansrc}/man5/rabbitmq.conf.5.gz   ${mandest}/man5/
 }
 
 pre-install {

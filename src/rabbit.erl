@@ -291,96 +291,66 @@ run_boot_step({StepName, Attributes}) ->
             io:format("-- ~s~n", [Description]);
         MFAs ->
             io:format("starting ~-60s ...", [Description]),
-            [case catch apply(M,F,A) of
-                 {'EXIT', Reason} ->
-                     boot_error("FAILED~nReason: ~p~n", [Reason]);
-                 ok ->
-                     ok
+            [try
+                 apply(M,F,A)
+             catch
+                 _:Reason -> boot_error("FAILED~nReason: ~p~n", [Reason])
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
     end.
 
-module_attributes(Module) ->
-    case catch Module:module_info(attributes) of
-        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
-            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
-                      [Module]),
-            [];
-        {'EXIT', Reason} ->
-            exit(Reason);
-        V ->
-            V
-    end.
-
 boot_steps() ->
-    AllApps = [App || {App, _, _} <- application:loaded_applications()],
-    Modules = lists:usort(
-                lists:append([Modules
-                              || {ok, Modules} <-
-                                     [application:get_key(App, modules)
-                                      || App <- AllApps]])),
-    UnsortedSteps =
-        lists:flatmap(fun (Module) ->
-                              [{StepName, Attributes}
-                               || {rabbit_boot_step, [{StepName, Attributes}]}
-                                      <- module_attributes(Module)]
-                      end, Modules),
-    sort_boot_steps(UnsortedSteps).
+    sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)).
+
+vertices(_Module, Steps) ->
+    [{StepName, {StepName, Atts}} || {StepName, Atts} <- Steps].
+
+edges(_Module, Steps) ->
+    [case Key of
+         requires -> {StepName, OtherStep};
+         enables  -> {OtherStep, StepName}
+     end || {StepName, Atts} <- Steps,
+            {Key, OtherStep} <- Atts,
+            Key =:= requires orelse Key =:= enables].
 
 sort_boot_steps(UnsortedSteps) ->
-    G = digraph:new([acyclic]),
-
-    %% Add vertices, with duplicate checking.
-    [case digraph:vertex(G, StepName) of
-         false -> digraph:add_vertex(G, StepName, Step);
-         _     -> boot_error("Duplicate boot step name: ~w~n", [StepName])
-     end || Step = {StepName, _Attrs} <- UnsortedSteps],
-
-    %% Add edges, detecting cycles and missing vertices.
-    lists:foreach(fun ({StepName, Attributes}) ->
-                          [add_boot_step_dep(G, StepName, PrecedingStepName)
-                           || {requires, PrecedingStepName} <- Attributes],
-                          [add_boot_step_dep(G, SucceedingStepName, StepName)
-                           || {enables, SucceedingStepName} <- Attributes]
-                  end, UnsortedSteps),
-
-    %% Use topological sort to find a consistent ordering (if there is
-    %% one, otherwise fail).
-    SortedStepsRev = [begin
-                          {StepName, Step} = digraph:vertex(G, StepName),
-                          Step
-                      end || StepName <- digraph_utils:topsort(G)],
-    SortedSteps = lists:reverse(SortedStepsRev),
-
-    digraph:delete(G),
-
-    %% Check that all mentioned {M,F,A} triples are exported.
-    case [{StepName, {M,F,A}}
-          || {StepName, Attributes} <- SortedSteps,
-             {mfa, {M,F,A}} <- Attributes,
-             not erlang:function_exported(M, F, length(A))] of
-        []               -> SortedSteps;
-        MissingFunctions -> boot_error("Boot step functions not exported: ~p~n",
-                                       [MissingFunctions])
-    end.
-
-add_boot_step_dep(G, RunsSecond, RunsFirst) ->
-    case digraph:add_edge(G, RunsSecond, RunsFirst) of
-        {error, Reason} ->
-            boot_error("Could not add boot step dependency of ~w on ~w:~n~s",
-              [RunsSecond, RunsFirst,
+    case rabbit_misc:build_acyclic_graph(fun vertices/2, fun edges/2,
+                                         UnsortedSteps) of
+        {ok, G} ->
+            %% Use topological sort to find a consistent ordering (if
+            %% there is one, otherwise fail).
+            SortedSteps = lists:reverse(
+                            [begin
+                                 {StepName, Step} = digraph:vertex(G, StepName),
+                                 Step
+                             end || StepName <- digraph_utils:topsort(G)]),
+            digraph:delete(G),
+            %% Check that all mentioned {M,F,A} triples are exported.
+            case [{StepName, {M,F,A}} ||
+                     {StepName, Attributes} <- SortedSteps,
+                     {mfa, {M,F,A}}         <- Attributes,
+                     not erlang:function_exported(M, F, length(A))] of
+                []               -> SortedSteps;
+                MissingFunctions -> boot_error(
+                                      "Boot step functions not exported: ~p~n",
+                                      [MissingFunctions])
+            end;
+        {error, {vertex, duplicate, StepName}} ->
+            boot_error("Duplicate boot step name: ~w~n", [StepName]);
+        {error, {edge, Reason, From, To}} ->
+            boot_error(
+              "Could not add boot step dependency of ~w on ~w:~n~s",
+              [To, From,
                case Reason of
                    {bad_vertex, V} ->
                        io_lib:format("Boot step not registered: ~w~n", [V]);
                    {bad_edge, [First | Rest]} ->
                        [io_lib:format("Cyclic dependency: ~w", [First]),
-                        [io_lib:format(" depends on ~w", [Next])
-                         || Next <- Rest],
+                        [io_lib:format(" depends on ~w", [Next]) ||
+                            Next <- Rest],
                         io_lib:format(" depends on ~w~n", [First])]
-               end]);
-        _ ->
-            ok
+               end])
     end.
 
 %%---------------------------------------------------------------------------

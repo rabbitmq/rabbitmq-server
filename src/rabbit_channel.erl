@@ -58,7 +58,8 @@
          consumer_count,
          messages_unacknowledged,
          acks_uncommitted,
-         prefetch_count]).
+         prefetch_count,
+         client_flow_blocked]).
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -86,17 +87,17 @@
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
--spec(send_command/2 :: (pid(), rabbit_framing:amqp_method()) -> 'ok').
+-spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (pid()) -> [rabbit_types:info()]).
--spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
--spec(info_all/0 :: () -> [[rabbit_types:info()]]).
--spec(info_all/1 :: ([rabbit_types:info_key()]) -> [[rabbit_types:info()]]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (pid()) -> rabbit_types:infos()).
+-spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
+-spec(info_all/0 :: () -> [rabbit_types:infos()]).
+-spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -232,7 +233,7 @@ handle_cast({method, Method, Content}, State) ->
     end;
 
 handle_cast({flushed, QPid}, State) ->
-    {noreply, queue_blocked(QPid, State)};
+    {noreply, queue_blocked(QPid, State), hibernate};
 
 handle_cast(terminate, State) ->
     {stop, normal, State};
@@ -257,17 +258,20 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
     {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}}.
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
+     hibernate}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     erase_queue_stats(QPid),
-    {noreply, queue_blocked(QPid, State)}.
+    {noreply, queue_blocked(QPid, State), hibernate}.
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    rabbit_event:if_enabled(StatsTimer, fun () ->
-                                                internal_emit_stats(State)
-                                        end),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    internal_emit_stats(
+                                      State, [{idle_since, now()}])
+                            end),
     {hibernate,
      State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
@@ -314,14 +318,10 @@ terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
-    NewState = State#ch{most_recently_declared_queue = ActualName},
-    case NoWait of
-        true  -> {noreply, NewState};
-        false -> Reply = #'queue.declare_ok'{queue = ActualName,
-                                             message_count = MessageCount,
-                                             consumer_count = ConsumerCount},
-                 {reply, Reply, NewState}
-    end.
+    return_ok(State#ch{most_recently_declared_queue = ActualName}, NoWait,
+              #'queue.declare_ok'{queue          = ActualName,
+                                  message_count  = MessageCount,
+                                  consumer_count = ConsumerCount}).
 
 check_resource_access(Username, Resource, Perm) ->
     V = {Resource, Perm},
@@ -343,33 +343,46 @@ clear_permission_cache() ->
     erase(permission_cache),
     ok.
 
-check_configure_permitted(Resource, #ch{ username = Username}) ->
+check_configure_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, configure).
 
-check_write_permitted(Resource, #ch{ username = Username}) ->
+check_write_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, write).
 
-check_read_permitted(Resource, #ch{ username = Username}) ->
+check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-expand_queue_name_shortcut(<<>>, #ch{ most_recently_declared_queue = <<>> }) ->
+expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
-expand_queue_name_shortcut(<<>>, #ch{ virtual_host = VHostPath,
-                                      most_recently_declared_queue = MRDQ }) ->
+expand_queue_name_shortcut(<<>>, #ch{virtual_host = VHostPath,
+                                     most_recently_declared_queue = MRDQ}) ->
     rabbit_misc:r(VHostPath, queue, MRDQ);
-expand_queue_name_shortcut(QueueNameBin, #ch{ virtual_host = VHostPath }) ->
+expand_queue_name_shortcut(QueueNameBin, #ch{virtual_host = VHostPath}) ->
     rabbit_misc:r(VHostPath, queue, QueueNameBin).
 
 expand_routing_key_shortcut(<<>>, <<>>,
-                            #ch{ most_recently_declared_queue = <<>> }) ->
+                            #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
 expand_routing_key_shortcut(<<>>, <<>>,
-                            #ch{ most_recently_declared_queue = MRDQ }) ->
+                            #ch{most_recently_declared_queue = MRDQ}) ->
     MRDQ;
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _State) ->
     RoutingKey.
+
+expand_binding(queue, DestinationNameBin, RoutingKey, State) ->
+    {expand_queue_name_shortcut(DestinationNameBin, State),
+     expand_routing_key_shortcut(DestinationNameBin, RoutingKey, State)};
+expand_binding(exchange, DestinationNameBin, RoutingKey, State) ->
+    {rabbit_misc:r(State#ch.virtual_host, exchange, DestinationNameBin),
+     RoutingKey}.
+
+check_not_default_exchange(#resource{kind = exchange, name = <<"">>}) ->
+    rabbit_misc:protocol_error(
+      access_refused, "operation not permitted on the default exchange", []);
+check_not_default_exchange(_) ->
+    ok.
 
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
@@ -437,11 +450,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
-    Message = #basic_message{exchange_name  = ExchangeName,
-                             routing_key    = RoutingKey,
-                             content        = DecodedContent,
-                             guid           = rabbit_guid:guid(),
-                             is_persistent  = IsPersistent},
+    Message = #basic_message{exchange_name = ExchangeName,
+                             routing_key   = RoutingKey,
+                             content       = DecodedContent,
+                             guid          = rabbit_guid:guid(),
+                             is_persistent = IsPersistent},
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
@@ -480,9 +493,9 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{ writer_pid = WriterPid,
-                              reader_pid = ReaderPid,
-                              next_tag = DeliveryTag }) ->
+              _, State = #ch{writer_pid = WriterPid,
+                             reader_pid = ReaderPid,
+                             next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
@@ -512,15 +525,15 @@ handle_method(#'basic.get'{queue = QueueNameBin,
             {reply, #'basic.get_empty'{}, State}
     end;
 
-handle_method(#'basic.consume'{queue = QueueNameBin,
+handle_method(#'basic.consume'{queue        = QueueNameBin,
                                consumer_tag = ConsumerTag,
-                               no_local = _, % FIXME: implement
-                               no_ack = NoAck,
-                               exclusive = ExclusiveConsume,
-                               nowait = NoWait},
-              _, State = #ch{ reader_pid = ReaderPid,
-                              limiter_pid = LimiterPid,
-                              consumer_mapping = ConsumerMapping }) ->
+                               no_local     = _, % FIXME: implement
+                               no_ack       = NoAck,
+                               exclusive    = ExclusiveConsume,
+                               nowait       = NoWait},
+              _, State = #ch{reader_pid       = ReaderPid,
+                             limiter_pid      = LimiterPid,
+                             consumer_mapping = ConsumerMapping }) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = expand_queue_name_shortcut(QueueNameBin, State),
@@ -615,7 +628,7 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
 handle_method(#'basic.recover_async'{requeue = true},
-              _, State = #ch{ unacked_message_q = UAMQ }) ->
+              _, State = #ch{unacked_message_q = UAMQ}) ->
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    %% The Qpid python test suite incorrectly assumes
@@ -630,8 +643,8 @@ handle_method(#'basic.recover_async'{requeue = true},
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
 handle_method(#'basic.recover_async'{requeue = false},
-              _, State = #ch{ writer_pid = WriterPid,
-                              unacked_message_q = UAMQ }) ->
+              _, State = #ch{writer_pid = WriterPid,
+                             unacked_message_q = UAMQ}) ->
     ok = rabbit_misc:queue_fold(
            fun ({_DeliveryTag, none, _Msg}, ok) ->
                    %% Was sent as a basic.get_ok. Don't redeliver
@@ -664,7 +677,7 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
-              _, State = #ch{ unacked_message_q = UAMQ}) ->
+              _, State = #ch{unacked_message_q = UAMQ}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
@@ -681,9 +694,10 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   internal = false,
                                   nowait = NoWait,
                                   arguments = Args},
-              _, State = #ch{ virtual_host = VHostPath }) ->
+              _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    check_not_default_exchange(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
@@ -709,17 +723,19 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   passive = true,
                                   nowait = NoWait},
-              _, State = #ch{ virtual_host = VHostPath }) ->
+              _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_configure_permitted(ExchangeName, State),
+    check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
                                  if_unused = IfUnused,
                                  nowait = NoWait},
-              _, State = #ch { virtual_host = VHostPath }) ->
+              _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    check_not_default_exchange(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     case rabbit_exchange:delete(ExchangeName, IfUnused) of
         {error, not_found} ->
@@ -730,6 +746,24 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
         ok ->
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
+
+handle_method(#'exchange.bind'{destination = DestinationNameBin,
+                               source = SourceNameBin,
+                               routing_key = RoutingKey,
+                               nowait = NoWait,
+                               arguments = Arguments}, _, State) ->
+    binding_action(fun rabbit_binding:add/2,
+                   SourceNameBin, exchange, DestinationNameBin, RoutingKey,
+                   Arguments, #'exchange.bind_ok'{}, NoWait, State);
+
+handle_method(#'exchange.unbind'{destination = DestinationNameBin,
+                                 source = SourceNameBin,
+                                 routing_key = RoutingKey,
+                                 nowait = NoWait,
+                                 arguments = Arguments}, _, State) ->
+    binding_action(fun rabbit_binding:remove/2,
+                   SourceNameBin, exchange, DestinationNameBin, RoutingKey,
+                   Arguments, #'exchange.unbind_ok'{}, NoWait, State);
 
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
@@ -822,7 +856,7 @@ handle_method(#'queue.bind'{queue = QueueNameBin,
                             nowait = NoWait,
                             arguments = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:add/2,
-                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   ExchangeNameBin, queue, QueueNameBin, RoutingKey, Arguments,
                    #'queue.bind_ok'{}, NoWait, State);
 
 handle_method(#'queue.unbind'{queue = QueueNameBin,
@@ -830,7 +864,7 @@ handle_method(#'queue.unbind'{queue = QueueNameBin,
                               routing_key = RoutingKey,
                               arguments = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:remove/2,
-                   ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
+                   ExchangeNameBin, queue, QueueNameBin, RoutingKey, Arguments,
                    #'queue.unbind_ok'{}, false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin,
@@ -872,6 +906,7 @@ handle_method(#'channel.flow'{active = true}, _,
                   end,
     {reply, #'channel.flow_ok'{active = true},
      State#ch{limiter_pid = LimiterPid1}};
+
 handle_method(#'channel.flow'{active = false}, _,
               State = #ch{limiter_pid = LimiterPid,
                           consumer_mapping = Consumers}) ->
@@ -879,14 +914,14 @@ handle_method(#'channel.flow'{active = false}, _,
                       undefined -> start_limiter(State);
                       Other     -> Other
                   end,
+    State1 = State#ch{limiter_pid = LimiterPid1},
     ok = rabbit_limiter:block(LimiterPid1),
-    QPids = consumer_queues(Consumers),
-    Queues = [{QPid, erlang:monitor(process, QPid)} || QPid <- QPids],
-    ok = rabbit_amqqueue:flush_all(QPids, self()),
-    case Queues of
-        [] -> {reply, #'channel.flow_ok'{active = false}, State};
-        _  -> {noreply, State#ch{limiter_pid = LimiterPid1,
-                                 blocking = dict:from_list(Queues)}}
+    case consumer_queues(Consumers) of
+        []    -> {reply, #'channel.flow_ok'{active = false}, State1};
+        QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
+                              QPid <- QPids],
+                 ok = rabbit_amqqueue:flush_all(QPids, self()),
+                 {noreply, State1#ch{blocking = dict:from_list(Queues)}}
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->
@@ -895,42 +930,44 @@ handle_method(_MethodRecord, _Content, _State) ->
 
 %%----------------------------------------------------------------------------
 
-binding_action(Fun, ExchangeNameBin, QueueNameBin, RoutingKey, Arguments,
-               ReturnMethod, NoWait,
+binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
+               RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
                            reader_pid   = ReaderPid}) ->
     %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
     %% including the one named "" !
-    QueueName = expand_queue_name_shortcut(QueueNameBin, State),
-    check_write_permitted(QueueName, State),
-    ActualRoutingKey = expand_routing_key_shortcut(QueueNameBin, RoutingKey,
-                                                   State),
+    {DestinationName, ActualRoutingKey} =
+        expand_binding(DestinationType, DestinationNameBin, RoutingKey, State),
+    check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
     check_read_permitted(ExchangeName, State),
-    case Fun(#binding{exchange_name = ExchangeName,
-                      queue_name    = QueueName,
-                      key           = ActualRoutingKey,
-                      args          = Arguments},
-             fun (_X, Q) ->
+    case Fun(#binding{source      = ExchangeName,
+                      destination = DestinationName,
+                      key         = ActualRoutingKey,
+                      args        = Arguments},
+             fun (_X, Q = #amqqueue{}) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                      catch exit:Reason -> {error, Reason}
-                     end
+                     end;
+                 (_X, #exchange{}) ->
+                     ok
              end) of
-        {error, exchange_not_found} ->
+        {error, source_not_found} ->
             rabbit_misc:not_found(ExchangeName);
-        {error, queue_not_found} ->
-            rabbit_misc:not_found(QueueName);
-        {error, exchange_and_queue_not_found} ->
+        {error, destination_not_found} ->
+            rabbit_misc:not_found(DestinationName);
+        {error, source_and_destination_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no ~s and no ~s", [rabbit_misc:rs(ExchangeName),
-                                             rabbit_misc:rs(QueueName)]);
+                                             rabbit_misc:rs(DestinationName)]);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",
               [RoutingKey, rabbit_misc:rs(ExchangeName),
-               rabbit_misc:rs(QueueName)]);
+               rabbit_misc:rs(DestinationName)]);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
         ok -> return_ok(State, NoWait, ReturnMethod)
@@ -1127,6 +1164,8 @@ i(acks_uncommitted, #ch{uncommitted_ack_q = UAQ}) ->
     queue:len(UAQ);
 i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
+i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->
+    rabbit_limiter:is_blocked(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
 
@@ -1164,11 +1203,14 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
+internal_emit_stats(State) ->
+    internal_emit_stats(State, []).
+
+internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->
-            rabbit_event:notify(channel_stats, CoarseStats);
+            rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
         fine ->
             FineStats =
                 [{channel_queue_stats,
@@ -1178,7 +1220,8 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
-            rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
+            rabbit_event:notify(channel_stats,
+                                Extra ++ CoarseStats ++ FineStats)
     end.
 
 erase_queue_stats(QPid) ->

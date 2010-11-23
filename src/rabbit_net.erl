@@ -33,8 +33,8 @@
 -include("rabbit.hrl").
 
 -export([async_recv/3, close/1, controlling_process/2,
-        getstat/2, peername/1, port_command/2,
-        send/2, sockname/1]).
+        getstat/2, peername/1, peercert/1, port_command/2,
+        send/2, sockname/1, is_ssl/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -45,28 +45,30 @@
 -type(stat_option() ::
 	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
 	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
--type(error() :: rabbit_types:error(any())).
+-type(ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any())).
+-type(ok_or_any_error() :: rabbit_types:ok_or_error(any())).
 -type(socket() :: port() | #ssl_socket{}).
 
 -spec(async_recv/3 ::
         (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
--spec(close/1 :: (socket()) -> rabbit_types:ok_or_error(any())).
--spec(controlling_process/2 ::
-        (socket(), pid()) -> rabbit_types:ok_or_error(any())).
+-spec(close/1 :: (socket()) -> ok_or_any_error()).
+-spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
 -spec(send/2 ::
-        (socket(), binary() | iolist()) -> rabbit_types:ok_or_error(any())).
+        (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(peername/1 ::
         (socket())
-        -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
-           error()).
+        -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
+-spec(peercert/1 ::
+        (socket())
+        -> 'nossl' | ok_val_or_error(rabbit_ssl:certificate())).
 -spec(sockname/1 ::
         (socket())
-        -> rabbit_types:ok({inet:ip_address(), rabbit_networking:ip_port()}) |
-           error()).
+        -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
+-spec(is_ssl/1 :: (socket()) -> boolean()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
-        -> rabbit_types:ok([{stat_option(), integer()}]) | error()).
+        -> ok_val_or_error([{stat_option(), integer()}])).
 
 -endif.
 
@@ -108,6 +110,11 @@ peername(Sock) when ?IS_SSL(Sock) ->
 peername(Sock) when is_port(Sock) ->
     inet:peername(Sock).
 
+peercert(Sock) when ?IS_SSL(Sock) ->
+    ssl:peercert(Sock#ssl_socket.ssl);
+peercert(Sock) when is_port(Sock) ->
+    nossl.
+
 port_command(Sock, Data) when ?IS_SSL(Sock) ->
     case ssl:send(Sock#ssl_socket.ssl, Data) of
         ok              -> self() ! {inet_reply, Sock, ok},
@@ -127,3 +134,6 @@ sockname(Sock) when ?IS_SSL(Sock) ->
     ssl:sockname(Sock#ssl_socket.ssl);
 sockname(Sock) when is_port(Sock) ->
     inet:sockname(Sock).
+
+is_ssl(Sock) ->
+    ?IS_SSL(Sock).

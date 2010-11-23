@@ -107,6 +107,10 @@ if "!RABBITMQ_MNESIA_DIR!"=="" (
     set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
 )
 
+if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
+    set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-plugins-expand
+)
+
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
@@ -114,12 +118,10 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_plugin_activator ^
--rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
--rabbit plugins_expand_dir \""!RABBITMQ_MNESIA_DIR:\=/!/plugins-scratch"\" ^
--rabbit rabbit_ebin  \""!RABBITMQ_EBIN_ROOT:\=/!"\" ^
--extra !STAR!
+-extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+       "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"
 
-set RABBITMQ_BOOT_FILE=!RABBITMQ_MNESIA_DIR!\plugins-scratch\rabbit
+set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
 if not exist "!RABBITMQ_BOOT_FILE!.boot" (
     echo Custom Boot File "!RABBITMQ_BOOT_FILE!.boot" is missing.
     exit /B 1
@@ -165,7 +167,6 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR!"\" ^
-!CLUSTER_CONFIG! ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !STAR!
 
