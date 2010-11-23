@@ -314,23 +314,28 @@ add_vhost(VHostPath) ->
                           ok = mnesia:write(rabbit_vhost,
                                             #vhost{virtual_host = VHostPath},
                                             write),
-                          [rabbit_exchange:declare(
-                             rabbit_misc:r(VHostPath, exchange, Name),
-                             Type, true, false, []) ||
-                              {Name,Type} <-
-                                  [{<<"">>,           direct},
-                                   {<<"amq.direct">>, direct},
-                                   {<<"amq.topic">>,  topic},
-                                   {<<"amq.match">>,  headers}, %% per 0-9-1 pdf
-                                   {<<"amq.headers">>,  headers}, %% per 0-9-1 xml
-                                   {<<"amq.fanout">>, fanout}]],
-                          ok;
+                          {ok, [rabbit_exchange:declare(
+                                rabbit_misc:r(VHostPath, exchange, Name),
+                                Type, true, false, []) ||
+                                 {Name,Type} <-
+                                     [{<<"">>,             direct},
+                                      {<<"amq.direct">>,   direct},
+                                      {<<"amq.topic">>,    topic},
+                                      {<<"amq.match">>,    headers}, % 0-9-1 pdf
+                                      {<<"amq.headers">>,  headers}, % 0-9-1 xml
+                                      {<<"amq.fanout">>,   fanout}]]};
                       [_] ->
                           mnesia:abort({vhost_already_exists, VHostPath})
                   end
           end),
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),
-    R.
+    case R of
+        {ok, Xs} -> [{rabbit_exchange:maybe_callback(Type, create, [X]),
+                      rabbit_event:notify(exchange_created,
+                                          rabbit_exchange:info(X))} ||
+                     X = #exchange{type = Type} <- Xs], ok;
+        _        -> R
+    end.
 
 delete_vhost(VHostPath) ->
     %%FIXME: We are forced to delete the queues outside the TX below

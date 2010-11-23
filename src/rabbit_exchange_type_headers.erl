@@ -43,7 +43,7 @@
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type headers"},
                     {mfa,         {rabbit_exchange_type_registry, register,
-                                   [<<"headers">>, ?MODULE]}},
+                                   [<<"headers">>, ?MODULE, false]}},
                     {requires,    rabbit_exchange_type_registry},
                     {enables,     kernel_ready}]}).
 

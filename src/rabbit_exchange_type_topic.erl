@@ -42,7 +42,7 @@
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type topic"},
                     {mfa,         {rabbit_exchange_type_registry, register,
-                                   [<<"topic">>, ?MODULE]}},
+                                   [<<"topic">>, ?MODULE, false]}},
                     {requires,    rabbit_exchange_type_registry},
                     {enables,     kernel_ready}]}).
 

@@ -36,7 +36,7 @@
 -export([recover/0, declare/5, lookup/1, lookup_or_die/1, list/1, info_keys/0,
          info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
 %% this must be run inside a mnesia tx
--export([maybe_auto_delete/1]).
+-export([maybe_auto_delete/1, maybe_callback/3]).
 -export([assert_equivalence/5, assert_args_equivalence/2, check_type/1]).
 
 %%----------------------------------------------------------------------------
@@ -85,6 +85,7 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
+-spec(maybe_callback/3:: (atom(), atom(), [any()]) -> 'ok').
 
 -endif.
 
@@ -124,7 +125,7 @@ declare(XName, Type, Durable, AutoDelete, Args) ->
     %% value.
     TypeModule = type_to_module(Type),
     ok = TypeModule:validate(X),
-    case rabbit_misc:execute_mnesia_transaction(
+    case {rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_exchange, XName}) of
                        [] ->
@@ -136,21 +137,23 @@ declare(XName, Type, Durable, AutoDelete, Args) ->
                                     false ->
                                         ok
                            end,
+                           maybe_callback(Type, create, [X]),
                            {new, X};
                        [ExistingX] ->
                            {existing, ExistingX}
                    end
-           end) of
-        {new, X}      -> TypeModule:create(X),
-                         rabbit_event:notify(exchange_created, info(X)),
-                         X;
-        {existing, X} -> X;
-        Err           -> Err
+           end), mnesia:is_transaction()} of
+        {{new, X}, false}     -> maybe_callback(Type, create, [X]),
+                                 rabbit_event:notify(exchange_created, info(X)),
+                                 X;
+        {{new, X}, true}      -> X;
+        {{existing, X}, _}    -> X;
+        Err                   -> Err
     end.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
+    {ok, [Module, _Tx]} = rabbit_exchange_type_registry:lookup_module(T),
     Module.
 
 %% Used with binaries sent over the wire; the type may not exist.
@@ -303,14 +306,24 @@ maybe_auto_delete(#exchange{auto_delete = true} = X) ->
         {deleted, X, [], Deletions} -> {deleted, Deletions}
     end.
 
+%% Possible callback, depending on whether mnesia is in a transaction
+%% and whether transactional callbacks were requested by the exchange
+maybe_callback(XType, Fun, Args) ->
+    {ok, [Module, ModTx]} = rabbit_exchange_type_registry:lookup_module(XType),
+    Tx = mnesia:is_transaction(),
+    if (ModTx =:= Tx) -> ok = apply(Module, Fun, Args);
+       true           -> ok
+    end.
+
 conditional_delete(X = #exchange{name = XName}) ->
     case rabbit_binding:has_for_source(XName) of
         false  -> unconditional_delete(X);
         true   -> {error, in_use}
     end.
 
-unconditional_delete(X = #exchange{name = XName}) ->
+unconditional_delete(X = #exchange{name = XName, type = Type}) ->
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
+    maybe_callback(Type, delete, [X, lists:flatten(Bindings)]),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.

@@ -128,7 +128,7 @@ remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 add(Binding, InnerFun) ->
     case binding_action(
            Binding,
-           fun (Src, Dst, B) ->
+           fun (Src = #exchange{ type = Type }, Dst, B) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
                    %% anything else
@@ -138,6 +138,8 @@ add(Binding, InnerFun) ->
                                []  -> ok = sync_binding(
                                              B, all_durable([Src, Dst]),
                                              fun mnesia:write/3),
+                                      rabbit_exchange:maybe_callback(
+                                             Type, add_binding, [Src, B]),
                                       {new, Src, B};
                                [_] -> {existing, Src, B}
                            end;
@@ -146,7 +148,7 @@ add(Binding, InnerFun) ->
                    end
            end) of
         {new, Src = #exchange{ type = Type }, B} ->
-            ok = (type_to_module(Type)):add_binding(Src, B),
+            rabbit_exchange:maybe_callback(Type, add_binding, [Src, B]),
             rabbit_event:notify(binding_created, info(B));
         {existing, _, _} ->
             ok;
@@ -168,9 +170,11 @@ remove(Binding, InnerFun) ->
                                    ok = sync_binding(
                                           B, all_durable([Src, Dst]),
                                           fun mnesia:delete_object/3),
-                                   {ok,
-                                    maybe_auto_delete(B#binding.source,
-                                                      [B], new_deletions())};
+                                   Deletions = maybe_auto_delete(
+                                                   B#binding.source,
+                                                   [B], new_deletions()),
+                                   ok = process_deletions(Deletions),
+                                   {ok, Deletions};
                                {error, _} = E ->
                                    E
                            end
@@ -303,11 +307,6 @@ call_with_source_and_destination(SrcName, DstName, Fun) ->
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
 table_for_resource(#resource{kind = queue})    -> rabbit_queue.
 
-%% Used with atoms from records; e.g., the type is expected to exist.
-type_to_module(T) ->
-    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
-    Module.
-
 contains(Table, MatchHead) ->
     continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read)).
 
@@ -424,16 +423,33 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      [Bindings1 | Bindings2]}.
 
 process_deletions(Deletions) ->
-    dict:fold(
-      fun (_XName, {X = #exchange{ type = Type }, Deleted, Bindings}, ok) ->
-              FlatBindings = lists:flatten(Bindings),
-              [rabbit_event:notify(binding_deleted, info(B)) ||
-                  B <- FlatBindings],
-              TypeModule = type_to_module(Type),
+    Tx = mnesia:is_transaction(),
+    NonTxFun =
+        if Tx     -> fun(_X, _D, _B) -> ok end;
+           not Tx ->
+            fun (#exchange{name = XName}, Deleted, FlatBindings) ->
+                [rabbit_event:notify(binding_deleted, info(B))
+                 || B <- FlatBindings],
+                case Deleted of
+                    not_deleted -> ok;
+                    deleted     -> rabbit_event:notify(exchange_deleted,
+                                                       [{name, XName}])
+                end
+            end
+        end,
+    Fun =
+      fun (X = #exchange{type = Type}, Deleted, FlatBindings) ->
               case Deleted of
-                  not_deleted -> TypeModule:remove_bindings(X, FlatBindings);
-                  deleted     -> rabbit_event:notify(exchange_deleted,
-                                                     [{name, X#exchange.name}]),
-                                 TypeModule:delete(X, FlatBindings)
+                  not_deleted -> rabbit_exchange:maybe_callback(
+                                     Type, remove_bindings, [X, FlatBindings]);
+                  deleted     -> rabbit_exchange:maybe_callback(
+                                     Type, delete, [X, FlatBindings])
               end
+      end,
+    dict:fold(
+      fun (_XName, {X, Deleted, Bindings}, ok) ->
+              FlatBindings = lists:flatten(Bindings),
+              ok = Fun(X, Deleted, FlatBindings),
+              NonTxFun(X, Deleted, FlatBindings)
       end, ok, Deletions).
+

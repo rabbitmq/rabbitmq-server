@@ -42,18 +42,22 @@ behaviour_info(callbacks) ->
      {validate, 1},
 
      %% called after declaration when previously absent
+     %% registration determines whether this is called in a mnesia transaction
      {create, 1},
 
      %% called when recovering
      {recover, 2},
 
      %% called after exchange deletion.
+     %% registration determines whether this is called in a mnesia transaction
      {delete, 2},
 
      %% called after a binding has been added
+     %% registration determines whether this is called in a mnesia transaction
      {add_binding, 2},
 
      %% called after bindings have been deleted.
+     %% registration determines whether this is called in a mnesia transaction
      {remove_bindings, 2},
 
      %% called when comparing exchanges for equivalence - should return ok or
