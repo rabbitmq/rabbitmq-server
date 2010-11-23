@@ -39,7 +39,8 @@
 
 -export([boot/0]).
 
--export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2, handle_info/2]).
+-export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
+         handle_info/2]).
 
 boot() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
@@ -48,7 +49,7 @@ boot() ->
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(
                     rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
-                    topic, true, []),
+                    topic, true, false, []),
     {ok, #resource{virtual_host = DefaultVHost,
                    kind = exchange,
                    name = ?LOG_EXCH_NAME}}.

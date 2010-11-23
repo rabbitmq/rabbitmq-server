@@ -36,7 +36,8 @@
 
 -record(vhost, {virtual_host, dummy}).
 
--record(connection, {user, timeout_sec, frame_max, vhost, client_properties}).
+-record(connection, {protocol, user, timeout_sec, frame_max, vhost,
+                     client_properties}).
 
 -record(content,
         {class_id,
@@ -44,12 +45,13 @@
          properties_bin, %% either 'none', or an encoded properties binary
          %% Note: at most one of properties and properties_bin can be
          %% 'none' at once.
+         protocol, %% The protocol under which properties_bin was encoded
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, arguments}).
+-record(exchange, {name, type, durable, auto_delete, arguments}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
                    arguments, pid}).
@@ -68,115 +70,13 @@
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message}).
-
 -record(amqp_error, {name, explanation, method = none}).
-
-%%----------------------------------------------------------------------------
-
--ifdef(use_specs).
-
--include("rabbit_framing_spec.hrl").
-
--type(maybe(T) :: T | 'none').
--type(erlang_node() :: atom()).
--type(ssl_socket() :: #ssl_socket{}).
--type(socket() :: port() | ssl_socket()).
--type(thunk(T) :: fun(() -> T)).
--type(info_key() :: atom()).
--type(info() :: {info_key(), any()}).
--type(regexp() :: binary()).
--type(file_path() :: string()).
-
-%% this is really an abstract type, but dialyzer does not support them
--type(guid() :: binary()).
--type(txn() :: guid()).
--type(pkey() :: guid()).
--type(r(Kind) ::
-      #resource{virtual_host :: vhost(),
-                kind         :: Kind,
-                name         :: resource_name()}).
--type(queue_name() :: r('queue')).
--type(exchange_name() :: r('exchange')).
--type(user() ::
-      #user{username :: username(),
-            password :: password()}).
--type(permission() ::
-      #permission{configure :: regexp(),
-                  write     :: regexp(),
-                  read      :: regexp()}).
--type(amqqueue() ::
-      #amqqueue{name            :: queue_name(),
-                durable         :: boolean(),
-                auto_delete     :: boolean(),
-                exclusive_owner :: maybe(pid()),
-                arguments       :: amqp_table(),
-                pid             :: maybe(pid())}).
--type(exchange() ::
-      #exchange{name        :: exchange_name(),
-                type        :: exchange_type(),
-                durable     :: boolean(),
-                arguments   :: amqp_table()}).
--type(binding() ::
-      #binding{exchange_name    :: exchange_name(),
-               queue_name       :: queue_name(),
-               key              :: binding_key()}).
-%% TODO: make this more precise by tying specific class_ids to
-%% specific properties
--type(undecoded_content() ::
-      #content{class_id              :: amqp_class_id(),
-               properties            :: 'none',
-               properties_bin        :: binary(),
-               payload_fragments_rev :: [binary()]} |
-      #content{class_id              :: amqp_class_id(),
-               properties            :: amqp_properties(),
-               properties_bin        :: 'none',
-               payload_fragments_rev :: [binary()]}).
--type(unencoded_content() :: undecoded_content()).
--type(decoded_content() ::
-      #content{class_id              :: amqp_class_id(),
-               properties            :: amqp_properties(),
-               properties_bin        :: maybe(binary()),
-               payload_fragments_rev :: [binary()]}).
--type(encoded_content() ::
-      #content{class_id              :: amqp_class_id(),
-               properties            :: maybe(amqp_properties()),
-               properties_bin        :: binary(),
-               payload_fragments_rev :: [binary()]}).
--type(content() :: undecoded_content() | decoded_content()).
--type(basic_message() ::
-      #basic_message{exchange_name  :: exchange_name(),
-                     routing_key    :: routing_key(),
-                     content        :: content(),
-                     guid           :: guid(),
-                     is_persistent  :: boolean()}).
--type(message() :: basic_message()).
--type(delivery() ::
-      #delivery{mandatory :: boolean(),
-                immediate :: boolean(),
-                txn       :: maybe(txn()),
-                sender    :: pid(),
-                message   :: message()}).
-%% this really should be an abstract type
--type(msg_id() :: non_neg_integer()).
--type(qmsg() :: {queue_name(), pid(), msg_id(), boolean(), message()}).
--type(listener() ::
-      #listener{node     :: erlang_node(),
-                protocol :: atom(),
-                host     :: string() | atom(),
-                port     :: non_neg_integer()}).
--type(not_found() :: {'error', 'not_found'}).
--type(routing_result() :: 'routed' | 'unroutable' | 'not_delivered').
--type(amqp_error() ::
-      #amqp_error{name        :: atom(),
-                  explanation :: string(),
-                  method      :: atom()}).
-
--endif.
 
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
+-define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
 
 -define(MAX_WAIT, 16#ffffffff).

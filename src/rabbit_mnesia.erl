@@ -29,11 +29,12 @@
 %%   Contributor(s): ______________________________________.
 %%
 
+
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/1, reset/0, force_reset/0, is_clustered/0,
-         empty_ram_only_tables/0]).
+         cluster/1, force_cluster/1, reset/0, force_reset/0,
+         is_clustered/0, empty_ram_only_tables/0]).
 
 -export([table_names/0]).
 
@@ -47,12 +48,18 @@
 
 -ifdef(use_specs).
 
--spec(status/0 :: () -> [{'nodes' | 'running_nodes', [erlang_node()]}]).
--spec(dir/0 :: () -> file_path()).
+-export_type([node_type/0]).
+
+-type(node_type() :: disc_only | disc | ram | unknown).
+-spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
+                         {'running_nodes', [node()]}]).
+-spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
--spec(cluster/1 :: ([erlang_node()]) -> 'ok').
+-spec(cluster/1 :: ([node()]) -> 'ok').
+-spec(force_cluster/1 :: ([node()]) -> 'ok').
+-spec(cluster/2 :: ([node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
@@ -64,13 +71,26 @@
 %%----------------------------------------------------------------------------
 
 status() ->
-    [{nodes, mnesia:system_info(db_nodes)},
+    [{nodes, case mnesia:system_info(is_running) of
+                 yes -> [{Key, Nodes} ||
+                            {Key, CopyType} <- [{disc_only, disc_only_copies},
+                                                {disc,      disc_copies},
+                                                {ram,       ram_copies}],
+                            begin
+                                Nodes = nodes_of_type(CopyType),
+                                Nodes =/= []
+                            end];
+                 no -> case mnesia:system_info(db_nodes) of
+                           [] -> [];
+                           Nodes -> [{unknown, Nodes}]
+                       end
+             end},
      {running_nodes, mnesia:system_info(running_db_nodes)}].
 
 init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config()),
+    ok = init_db(read_cluster_nodes_config(), true),
     ok = wait_for_tables(),
     ok.
 
@@ -78,16 +98,22 @@ is_db_empty() ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               table_names()).
 
+cluster(ClusterNodes) ->
+    cluster(ClusterNodes, false).
+force_cluster(ClusterNodes) ->
+    cluster(ClusterNodes, true).
+
 %% Alter which disk nodes this node is clustered with. This can be a
 %% subset of all the disk nodes in the cluster but can (and should)
 %% include the node itself if it is to be a disk rather than a ram
-%% node.
-cluster(ClusterNodes) ->
+%% node.  If Force is false, only connections to online nodes are
+%% allowed.
+cluster(ClusterNodes, Force) ->
     ok = ensure_mnesia_not_running(),
     ok = ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
-        ok = init_db(ClusterNodes),
+        ok = init_db(ClusterNodes, Force),
         ok = wait_for_tables(),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
@@ -117,6 +143,15 @@ empty_ram_only_tables() ->
     ok.
 
 %%--------------------------------------------------------------------
+
+nodes_of_type(Type) ->
+    %% This function should return the nodes of a certain type (ram,
+    %% disc or disc_only) in the current cluster.  The type of nodes
+    %% is determined when the cluster is initially configured.
+    %% Specifically, we check whether a certain table, which we know
+    %% will be written to disk on a disc node, is stored on disk or in
+    %% RAM.
+    mnesia:table_info(rabbit_durable_exchange, Type).
 
 table_definitions() ->
     [{rabbit_user,
@@ -149,6 +184,8 @@ table_definitions() ->
       [{record_name, reverse_route},
        {attributes, record_info(fields, reverse_route)},
        {type, ordered_set}]},
+     %% Consider the implications to nodes_of_type/1 before altering
+     %% the next entry.
      {rabbit_durable_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
@@ -227,20 +264,9 @@ read_cluster_nodes_config() ->
     case rabbit_misc:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
-            case application:get_env(cluster_config) of
+            case application:get_env(cluster_nodes) of
                 undefined -> [];
-                {ok, DefaultFileName} ->
-                    case file:consult(DefaultFileName) of
-                        {ok, [ClusterNodes]} -> ClusterNodes;
-                        {error, enoent} ->
-                            error_logger:warning_msg(
-                              "default cluster config file ~p does not exist~n",
-                              [DefaultFileName]),
-                            [];
-                        {error, Reason} ->
-                            throw({error, {cannot_read_cluster_nodes_config,
-                                           DefaultFileName, Reason}})
-                    end
+                {ok, ClusterNodes} -> ClusterNodes
             end;
         {error, Reason} ->
             throw({error, {cannot_read_cluster_nodes_config,
@@ -259,38 +285,56 @@ delete_cluster_nodes_config() ->
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
-%% specified cluster nodes.
-init_db(ClusterNodes) ->
-    case mnesia:change_config(extra_db_nodes, ClusterNodes -- [node()]) of
-        {ok, []} ->
-            case mnesia:system_info(use_dir) of
-                true ->
-                    case check_schema_integrity() of
-                        ok ->
-                            ok;
-                        {error, Reason} ->
-                            %% NB: we cannot use rabbit_log here since
-                            %% it may not have been started yet
-                            error_logger:warning_msg(
-                              "schema integrity check failed: ~p~n"
-                              "moving database to backup location "
-                              "and recreating schema from scratch~n",
-                              [Reason]),
-                            ok = move_db(),
+%% specified cluster nodes.  If Force is false, don't allow
+%% connections to offline nodes.
+init_db(ClusterNodes, Force) ->
+    UClusterNodes = lists:usort(ClusterNodes),
+    ProperClusterNodes = UClusterNodes -- [node()],
+    case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
+        {ok, Nodes} ->
+            case Force of
+                false ->
+                    FailedClusterNodes = ProperClusterNodes -- Nodes,
+                    case FailedClusterNodes of
+                        [] -> ok;
+                        _ ->
+                            throw({error, {failed_to_cluster_with,
+                                           FailedClusterNodes,
+                                           "Mnesia could not connect to some nodes."}})
+                    end;
+                _ -> ok
+            end,
+            case Nodes of
+                [] ->
+                    case mnesia:system_info(use_dir) of
+                        true ->
+                            case check_schema_integrity() of
+                                ok ->
+                                    ok;
+                                {error, Reason} ->
+                                    %% NB: we cannot use rabbit_log here since
+                                    %% it may not have been started yet
+                                    error_logger:warning_msg(
+                                      "schema integrity check failed: ~p~n"
+                                      "moving database to backup location "
+                                      "and recreating schema from scratch~n",
+                                      [Reason]),
+                                    ok = move_db(),
+                                    ok = create_schema()
+                            end;
+                        false ->
                             ok = create_schema()
                     end;
-                false ->
-                    ok = create_schema()
-            end;
-        {ok, [_|_]} ->
-            IsDiskNode = ClusterNodes == [] orelse
-                lists:member(node(), ClusterNodes),
-            ok = wait_for_replicated_tables(),
-            ok = create_local_table_copy(schema, disc_copies),
-            ok = create_local_table_copies(case IsDiskNode of
-                                               true  -> disc;
-                                               false -> ram
-                                           end);
+                [_|_] ->
+                    IsDiskNode = ClusterNodes == [] orelse
+                        lists:member(node(), ClusterNodes),
+                    ok = wait_for_replicated_tables(),
+                    ok = create_local_table_copy(schema, disc_copies),
+                    ok = create_local_table_copies(case IsDiskNode of
+                                                       true  -> disc;
+                                                       false -> ram
+                                                   end)
+                end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or

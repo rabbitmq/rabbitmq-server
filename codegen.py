@@ -315,11 +315,16 @@ def genErl(spec):
     methods = spec.allMethods()
 
     printFileHeader()
-    print """-module(rabbit_framing).
--include("rabbit_framing.hrl").
+    module = "rabbit_framing_amqp_%d_%d" % (spec.major, spec.minor)
+    if spec.revision != 0:
+        module = "%s_%d" % (module, spec.revision)
+    if module == "rabbit_framing_amqp_8_0":
+        module = "rabbit_framing_amqp_0_8"
+    print "-module(%s)." % module
+    print """-include("rabbit_framing.hrl").
 
+-export([version/0]).
 -export([lookup_method_name/1]).
-
 -export([method_id/1]).
 -export([method_has_content/1]).
 -export([is_method_synchronous/1]).
@@ -332,12 +337,70 @@ def genErl(spec):
 -export([lookup_amqp_exception/1]).
 -export([amqp_exception/1]).
 
-bitvalue(true) -> 1;
-bitvalue(false) -> 0;
-bitvalue(undefined) -> 0.
+"""
+    print "%% Various types"
+    print "-ifdef(use_specs)."
 
+    print """-export_type([amqp_table/0, amqp_property_type/0, amqp_method_record/0,
+              amqp_method_name/0, amqp_method/0, amqp_class_id/0,
+              amqp_value/0, amqp_array/0, amqp_exception/0, amqp_property_record/0]).
+
+-type(amqp_field_type() ::
+      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
+      'table' | 'byte' | 'double' | 'float' | 'long' |
+      'short' | 'bool' | 'binary' | 'void').
+-type(amqp_property_type() ::
+      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
+      'longlongint' | 'timestamp' | 'bit' | 'table').
+
+-type(amqp_table() :: [{binary(), amqp_field_type(), amqp_value()}]).
+-type(amqp_array() :: [{amqp_field_type(), amqp_value()}]).
+-type(amqp_value() :: binary() |    % longstr
+                      integer() |   % signedint
+                      {non_neg_integer(), non_neg_integer()} | % decimal
+                      amqp_table() |
+                      amqp_array() |
+                      byte() |      % byte
+                      float() |     % double
+                      integer() |   % long
+                      integer() |   % short
+                      boolean() |   % bool
+                      binary() |    % binary
+                      'undefined' | % void
+                      non_neg_integer() % timestamp
+     ).
+"""
+
+    print prettyType("amqp_method_name()",
+                     [m.erlangName() for m in methods])
+    print prettyType("amqp_method()",
+                     ["{%s, %s}" % (m.klass.index, m.index) for m in methods],
+                     6)
+    print prettyType("amqp_method_record()",
+                     ["#%s{}" % (m.erlangName()) for m in methods])
+    fieldNames = set()
+    for m in methods:
+        fieldNames.update(m.arguments)
+    fieldNames = [erlangize(f.name) for f in fieldNames]
+    print prettyType("amqp_method_field_name()",
+                     fieldNames)
+    print prettyType("amqp_property_record()",
+                     ["#'P_%s'{}" % erlangize(c.name) for c in spec.allClasses()])
+    print prettyType("amqp_exception()",
+                     ["'%s'" % erlangConstantName(c).lower() for (c, v, cls) in spec.constants])
+    print prettyType("amqp_exception_code()",
+                     ["%i" % v for (c, v, cls) in spec.constants])
+    classIds = set()
+    for m in spec.allMethods():
+        classIds.add(m.klass.index)
+    print prettyType("amqp_class_id()",
+                     ["%i" % ci for ci in classIds])
+    print "-endif. % use_specs"
+
+    print """
 %% Method signatures
 -ifdef(use_specs).
+-spec(version/0 :: () -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
 -spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
 -spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
@@ -351,7 +414,15 @@ bitvalue(undefined) -> 0.
 -spec(lookup_amqp_exception/1 :: (amqp_exception()) -> {boolean(), amqp_exception_code(), binary()}).
 -spec(amqp_exception/1 :: (amqp_exception_code()) -> amqp_exception()).
 -endif. % use_specs
+
+bitvalue(true) -> 1;
+bitvalue(false) -> 0;
+bitvalue(undefined) -> 0.
 """
+    version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
+    if version == '{8, 0, 0}': version = '{0, 8, 0}'
+    print "version() -> %s." % (version)
+
     for m in methods: genLookupMethodName(m)
     print "lookup_method_name({_ClassId, _MethodId} = Id) -> exit({unknown_method_id, Id})."
 
@@ -410,9 +481,6 @@ def genHrl(spec):
     methods = spec.allMethods()
 
     printFileHeader()
-    print "-define(PROTOCOL_VERSION_MAJOR, %d)." % (spec.major)
-    print "-define(PROTOCOL_VERSION_MINOR, %d)." % (spec.minor)
-    print "-define(PROTOCOL_VERSION_REVISION, %d)." % (spec.revision)
     print "-define(PROTOCOL_PORT, %d)." % (spec.port)
 
     for (c,v,cls) in spec.constants:
@@ -426,63 +494,6 @@ def genHrl(spec):
     for c in spec.allClasses():
         print "-record('P_%s', {%s})." % (erlangize(c.name), fieldNameList(c.fields))
 
-    print "-ifdef(use_specs)."
-    print "%% Various types"
-    print prettyType("amqp_method_name()",
-                     [m.erlangName() for m in methods])
-    print prettyType("amqp_method()",
-                     ["{%s, %s}" % (m.klass.index, m.index) for m in methods],
-                     6)
-    print prettyType("amqp_method_record()",
-                     ["#%s{}" % (m.erlangName()) for m in methods])
-    fieldNames = set()
-    for m in methods:
-        fieldNames.update(m.arguments)
-    fieldNames = [erlangize(f.name) for f in fieldNames]
-    print prettyType("amqp_method_field_name()",
-                     fieldNames)
-    print prettyType("amqp_property_record()",
-                     ["#'P_%s'{}" % erlangize(c.name) for c in spec.allClasses()])
-    print prettyType("amqp_exception()",
-                     ["'%s'" % erlangConstantName(c).lower() for (c, v, cls) in spec.constants])
-    print prettyType("amqp_exception_code()",
-                     ["%i" % v for (c, v, cls) in spec.constants])
-    print "-endif. % use_specs"
-
-def genSpec(spec):
-    methods = spec.allMethods()
-
-    printFileHeader()
-    print """% Hard-coded types
--type(amqp_field_type() ::
-      'longstr' | 'signedint' | 'decimal' | 'timestamp' |
-      'table' | 'byte' | 'double' | 'float' | 'long' |
-      'short' | 'bool' | 'binary' | 'void').
--type(amqp_property_type() ::
-      'shortstr' | 'longstr' | 'octet' | 'shortint' | 'longint' |
-      'longlongint' | 'timestamp' | 'bit' | 'table').
-%% we could make this more precise but ultimately are limited by
-%% dialyzer's lack of support for recursive types
--type(amqp_table() :: [{binary(), amqp_field_type(), any()}]).
-%% TODO: make this more precise
--type(amqp_properties() :: tuple()).
-
--type(channel_number() :: non_neg_integer()).
--type(resource_name() :: binary()).
--type(routing_key() :: binary()).
--type(username() :: binary()).
--type(password() :: binary()).
--type(vhost() :: binary()).
--type(ctag() :: binary()).
--type(exchange_type() :: atom()).
--type(binding_key() :: binary()).
-"""
-    print "% Auto-generated types"
-    classIds = set()
-    for m in spec.allMethods():
-        classIds.add(m.klass.index)
-    print prettyType("amqp_class_id()",
-                     ["%i" % ci for ci in classIds])
 
 def generateErl(specPath):
     genErl(AmqpSpec(specPath))
@@ -490,11 +501,7 @@ def generateErl(specPath):
 def generateHrl(specPath):
     genHrl(AmqpSpec(specPath))
 
-def generateSpec(specPath):
-    genSpec(AmqpSpec(specPath))
-
 if __name__ == "__main__":
     do_main_dict({"header": generateHrl,
-                  "spec": generateSpec,
                   "body": generateErl})
 

@@ -35,8 +35,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, publish/2]).
--export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
+-export([validate/1, create/1, recover/2, delete/2, add_binding/2,
+         remove_bindings/2, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
@@ -49,7 +49,9 @@
 -export([topic_matches/2]).
 
 -ifdef(use_specs).
+
 -spec(topic_matches/2 :: (binary(), binary()) -> boolean()).
+
 -endif.
 
 description() ->
@@ -65,8 +67,7 @@ publish(#exchange{name = Name}, Delivery =
                           Delivery).
 
 split_topic_key(Key) ->
-    {ok, KeySplit} = regexp:split(binary_to_list(Key), "\\."),
-    KeySplit.
+    re:split(Key, "\\.", [{return, list}]).
 
 topic_matches(PatternKey, RoutingKey) ->
     P = split_topic_key(PatternKey),

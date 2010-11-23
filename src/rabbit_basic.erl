@@ -42,24 +42,41 @@
 
 -ifdef(use_specs).
 
--type(properties_input() :: (amqp_properties() | [{atom(), any()}])).
--type(publish_result() :: ({ok, routing_result(), [pid()]} | not_found())).
+-type(properties_input() ::
+        (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
+-type(publish_result() ::
+        ({ok, rabbit_router:routing_result(), [pid()]}
+         | rabbit_types:error('not_found'))).
 
--spec(publish/1 :: (delivery()) -> publish_result()).
--spec(delivery/4 :: (boolean(), boolean(), maybe(txn()), message()) ->
-             delivery()).
--spec(message/4 :: (exchange_name(), routing_key(), properties_input(),
-                    binary()) -> (message() | {'error', any()})).
--spec(properties/1 :: (properties_input()) -> amqp_properties()).
--spec(publish/4 :: (exchange_name(), routing_key(), properties_input(),
-                    binary()) -> publish_result()).
--spec(publish/7 :: (exchange_name(), routing_key(), boolean(), boolean(),
-                    maybe(txn()), properties_input(), binary()) ->
-             publish_result()).
--spec(build_content/2 :: (amqp_properties(), binary()) -> content()).
--spec(from_content/1 :: (content()) -> {amqp_properties(), binary()}).
+-spec(publish/1 :: (rabbit_types:delivery()) -> publish_result()).
+-spec(delivery/4 ::
+        (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
+         rabbit_types:message())
+        -> rabbit_types:delivery()).
+-spec(message/4 ::
+        (rabbit_exchange:name(), rabbit_router:routing_key(),
+         properties_input(), binary())
+        -> (rabbit_types:message() | rabbit_types:error(any()))).
+-spec(properties/1 ::
+        (properties_input()) -> rabbit_framing:amqp_property_record()).
+-spec(publish/4 ::
+        (rabbit_exchange:name(), rabbit_router:routing_key(),
+         properties_input(), binary())
+        -> publish_result()).
+-spec(publish/7 ::
+        (rabbit_exchange:name(), rabbit_router:routing_key(),
+         boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
+         properties_input(), binary())
+        -> publish_result()).
+-spec(build_content/2 ::
+        (rabbit_framing:amqp_property_record(), binary())
+        -> rabbit_types:content()).
+-spec(from_content/1 ::
+        (rabbit_types:content())
+        -> {rabbit_framing:amqp_property_record(), binary()}).
 -spec(is_message_persistent/1 ::
-        (decoded_content()) -> (boolean() | {'invalid', non_neg_integer()})).
+        (rabbit_types:decoded_content())
+        -> (boolean() | {'invalid', non_neg_integer()})).
 
 -endif.
 
@@ -80,18 +97,24 @@ delivery(Mandatory, Immediate, Txn, Message) ->
               sender = self(), message = Message}.
 
 build_content(Properties, BodyBin) ->
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+    %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
+    {ClassId, _MethodId} =
+        rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     #content{class_id = ClassId,
              properties = Properties,
              properties_bin = none,
+             protocol = none,
              payload_fragments_rev = [BodyBin]}.
 
 from_content(Content) ->
     #content{class_id = ClassId,
              properties = Props,
              payload_fragments_rev = FragmentsRev} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+        %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
+        rabbit_binary_parser:ensure_content_decoded(Content,
+                                                    rabbit_framing_amqp_0_9_1),
+    {ClassId, _MethodId} =
+        rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->

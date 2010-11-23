@@ -32,21 +32,22 @@
 -module(rabbit_framing_channel).
 -include("rabbit.hrl").
 
--export([start_link/2, process/2, shutdown/1]).
+-export([start_link/3, process/2, shutdown/1]).
 
 %% internal
--export([mainloop/1]).
+-export([mainloop/2]).
 
 %%--------------------------------------------------------------------
 
-start_link(StartFun, StartArgs) ->
-    spawn_link(
-      fun () ->
-              %% we trap exits so that a normal termination of the
-              %% channel or reader process terminates us too.
-              process_flag(trap_exit, true),
-              mainloop(apply(StartFun, StartArgs))
-      end).
+start_link(StartFun, StartArgs, Protocol) ->
+    {ok, spawn_link(
+           fun () ->
+                   %% we trap exits so that a normal termination of
+                   %% the channel or reader process terminates us too.
+                   process_flag(trap_exit, true),
+                   {ok, ChannelPid} = apply(StartFun, StartArgs),
+                   mainloop(ChannelPid, Protocol)
+           end)}.
 
 process(Pid, Frame) ->
     Pid ! {frame, Frame},
@@ -72,18 +73,20 @@ read_frame(ChannelPid) ->
         Msg                    -> exit({unexpected_message, Msg})
     end.
 
-mainloop(ChannelPid) ->
+mainloop(ChannelPid, Protocol) ->
     Decoded = read_frame(ChannelPid),
     case Decoded of
         {method, MethodName, FieldsBin} ->
-            Method = rabbit_framing:decode_method_fields(MethodName, FieldsBin),
-            case rabbit_framing:method_has_content(MethodName) of
-                true  -> rabbit_channel:do(ChannelPid, Method,
+            Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+            case Protocol:method_has_content(MethodName) of
+                true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
+                         rabbit_channel:do(ChannelPid, Method,
                                            collect_content(ChannelPid,
-                                                           MethodName));
+                                                           ClassId,
+                                                           Protocol));
                 false -> rabbit_channel:do(ChannelPid, Method)
             end,
-            ?MODULE:mainloop(ChannelPid);
+            ?MODULE:mainloop(ChannelPid, Protocol);
         _ ->
             rabbit_misc:protocol_error(
               unexpected_frame,
@@ -91,23 +94,21 @@ mainloop(ChannelPid) ->
               [Decoded])
     end.
 
-collect_content(ChannelPid, MethodName) ->
-    {ClassId, _MethodId} = rabbit_framing:method_id(MethodName),
+collect_content(ChannelPid, ClassId, Protocol) ->
     case read_frame(ChannelPid) of
-        {content_header, HeaderClassId, 0, BodySize, PropertiesBin} ->
-            if HeaderClassId == ClassId ->
-                    Payload = collect_content_payload(ChannelPid, BodySize, []),
-                    #content{class_id = ClassId,
-                             properties = none,
-                             properties_bin = PropertiesBin,
-                             payload_fragments_rev = Payload};
-               true ->
-                    rabbit_misc:protocol_error(
-                      unexpected_frame,
-                      "expected content header for class ~w, "
-                      "got one for class ~w instead",
-                      [ClassId, HeaderClassId])
-            end;
+        {content_header, ClassId, 0, BodySize, PropertiesBin} ->
+            Payload = collect_content_payload(ChannelPid, BodySize, []),
+            #content{class_id = ClassId,
+                     properties = none,
+                     properties_bin = PropertiesBin,
+                     protocol = Protocol,
+                     payload_fragments_rev = Payload};
+        {content_header, HeaderClassId, 0, _BodySize, _PropertiesBin} ->
+            rabbit_misc:protocol_error(
+              unexpected_frame,
+              "expected content header for class ~w, "
+              "got one for class ~w instead",
+              [ClassId, HeaderClassId]);
         _ ->
             rabbit_misc:protocol_error(
               unexpected_frame,

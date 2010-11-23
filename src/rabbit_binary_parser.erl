@@ -34,7 +34,7 @@
 -include("rabbit.hrl").
 
 -export([parse_table/1, parse_properties/2]).
--export([ensure_content_decoded/1, clear_decoded_content/1]).
+-export([ensure_content_decoded/2, clear_decoded_content/1]).
 
 -import(lists).
 
@@ -42,10 +42,14 @@
 
 -ifdef(use_specs).
 
--spec(parse_table/1 :: (binary()) -> amqp_table()).
--spec(parse_properties/2 :: ([amqp_property_type()], binary()) -> [any()]).
--spec(ensure_content_decoded/1 :: (content()) -> decoded_content()).
--spec(clear_decoded_content/1 :: (content()) -> undecoded_content()).
+-spec(parse_table/1 :: (binary()) -> rabbit_framing:amqp_table()).
+-spec(parse_properties/2 ::
+        ([rabbit_framing:amqp_property_type()], binary()) -> [any()]).
+-spec(ensure_content_decoded/2 ::
+        (rabbit_types:content(), rabbit_types:protocol())
+        -> rabbit_types:decoded_content()).
+-spec(clear_decoded_content/1 ::
+        (rabbit_types:content()) -> rabbit_types:undecoded_content()).
 
 -endif.
 
@@ -159,12 +163,12 @@ parse_property(bit, Rest) ->
 parse_property(table, <<Len:32/unsigned, Table:Len/binary, Rest/binary>>) ->
     {parse_table(Table), Rest}.
 
-ensure_content_decoded(Content = #content{properties = Props})
+ensure_content_decoded(Content = #content{properties = Props}, _Protocol)
   when Props =/= 'none' ->
     Content;
-ensure_content_decoded(Content = #content{properties_bin = PropBin})
+ensure_content_decoded(Content = #content{properties_bin = PropBin}, Protocol)
   when is_binary(PropBin) ->
-    Content#content{properties = rabbit_framing:decode_properties(
+    Content#content{properties = Protocol:decode_properties(
                                    Content#content.class_id, PropBin)}.
 
 clear_decoded_content(Content = #content{properties = none}) ->

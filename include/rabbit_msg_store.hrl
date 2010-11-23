@@ -29,35 +29,13 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(delegate_sup).
-
--behaviour(supervisor).
-
--export([start_link/0]).
-
--export([init/1]).
-
--define(SERVER, ?MODULE).
-
-%%----------------------------------------------------------------------------
+-include("rabbit.hrl").
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> rabbit_types:ok_or_error2(pid(), any()) | 'ignore').
+-type(msg() :: any()).
 
 -endif.
 
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    {ok, {{one_for_one, 10, 10},
-          [{Hash, {delegate, start_link, [Hash]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Hash <- lists:seq(0, delegate:process_count() - 1)]}}.
-
-%%----------------------------------------------------------------------------
+-record(msg_location,
+        {guid, ref_count, file, offset, total_size}).

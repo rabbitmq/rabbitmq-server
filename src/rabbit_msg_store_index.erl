@@ -29,35 +29,19 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(delegate_sup).
+-module(rabbit_msg_store_index).
 
--behaviour(supervisor).
+-export([behaviour_info/1]).
 
--export([start_link/0]).
-
--export([init/1]).
-
--define(SERVER, ?MODULE).
-
-%%----------------------------------------------------------------------------
-
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_or_error2(pid(), any()) | 'ignore').
-
--endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    {ok, {{one_for_one, 10, 10},
-          [{Hash, {delegate, start_link, [Hash]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Hash <- lists:seq(0, delegate:process_count() - 1)]}}.
-
-%%----------------------------------------------------------------------------
+behaviour_info(callbacks) ->
+    [{new,            1},
+     {recover,        1},
+     {lookup,         2},
+     {insert,         2},
+     {update,         2},
+     {update_fields,  3},
+     {delete,         2},
+     {delete_by_file, 2},
+     {terminate,      1}];
+behaviour_info(_Other) ->
+    undefined.
