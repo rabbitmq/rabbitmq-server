@@ -15,3 +15,9 @@ objectClass: person
 cn: Simon MacMullen
 sn: MacMullen
 userPassword: password
+
+dn: cn=Mike Bridgen,ou=people,dc=example,dc=com
+objectClass: person
+cn: Mike Bridgen
+sn: Bridgen
+userPassword: password

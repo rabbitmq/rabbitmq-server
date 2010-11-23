@@ -12,12 +12,8 @@ objectClass: top
 objectClass: organizationalUnit
 ou: exchanges
 
-dn: cn=myexchange,ou=exchanges,ou=test,ou=vhosts,dc=example,dc=com
+# This should only be visible to Simon, not MikeB.
+dn: cn=simonexchange,ou=exchanges,ou=test,ou=vhosts,dc=example,dc=com
 Objectclass: top
 objectClass: device
-ou: myexchange
-
-#dn: olcDatabase=bdb,cn=config
-#olcAccess: to dn="cn=myexchange,ou=exchanges,ou=test,ou=vhosts,dc=example,dc=com"
-#  by dn="cn=Simon MacMullen,ou=people,dc=example,dc=com" write
-#  by * none
+ou: simonexchange
