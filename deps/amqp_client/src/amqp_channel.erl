@@ -25,7 +25,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/3, connection_closing/2]).
+-export([start_link/3, connection_closing/2, open/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -142,13 +142,7 @@ close(Channel) ->
 %% @doc Closes the channel, allowing the caller to supply a reply code and
 %% text.
 close(Channel, Code, Text) ->
-    Close = #'channel.close'{reply_text = Text,
-                             reply_code = Code,
-                             class_id   = 0,
-                             method_id  = 0},
-    case call(Channel, Close) of #'channel.close_ok'{} -> ok;
-                                 Error                 -> Error
-    end.
+    gen_server:call(Channel, {close, Code, Text}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
@@ -225,6 +219,10 @@ start_link(Driver, ChannelNumber, SWF) ->
 connection_closing(Pid, ChannelCloseType) ->
     gen_server:cast(Pid, {connection_closing, ChannelCloseType}).
 
+%% @private
+open(Pid) ->
+    gen_server:call(Pid, open, infinity).
+
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -236,6 +234,12 @@ init([Sup, Driver, ChannelNumber, SWF]) ->
                 number           = ChannelNumber,
                 start_writer_fun = SWF}}.
 
+%% @private
+handle_call(open, From, State) ->
+    {noreply, rpc_top_half(#'channel.open'{}, none, From, State)};
+%% @private
+handle_call({close, Code, Text}, From, State) ->
+    handle_close(Code, Text, From, State);
 %% @private
 handle_call({call, Method, AmqpMsg}, From, State) ->
     handle_method_call(Method, AmqpMsg, From, State);
@@ -343,22 +347,33 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 handle_method_call(Method, AmqpMsg, From, State) ->
-    case {Method, From, check_block(Method, AmqpMsg, State)} of
-        {#'basic.consume'{}, none, _} ->
-            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. "
-                      "Use subscribe/3 instead!~n", [self(), Method]),
-            {noreply, State};
-        {#'basic.consume'{}, _, _} ->
-            {reply, {error, use_subscribe}, State};
-        {_, _, ok} ->
+    case {check_invalid_method(Method), From,
+          check_block(Method, AmqpMsg, State)} of
+        {ok, _, ok} ->
             {noreply,
              rpc_top_half(Method, build_content(AmqpMsg), From, State)};
-        {_, none, BlockReply} ->
+        {ok, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
                       "Reason: ~p~n", [self(), Method, BlockReply]),
             {noreply, State};
-        {_, _, BlockReply} ->
-            {reply, BlockReply, State}
+        {ok, _, BlockReply} ->
+            {reply, BlockReply, State};
+        {{_, InvalidMethodMessage}, none, _} ->
+            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. " ++
+                      InvalidMethodMessage ++ "~n", [self(), Method]),
+            {noreply, State};
+        {{InvalidMethodReply, _}, _, _} ->
+            {reply, {error, InvalidMethodReply}, State}
+    end.
+
+handle_close(Code, Text, From, State) ->
+    Close = #'channel.close'{reply_code = Code,
+                             reply_text = Text,
+                             class_id   = 0,
+                             method_id  = 0},
+    case check_block(Close, none, State) of
+        ok         -> {noreply, rpc_top_half(Close, none, From, State)};
+        BlockReply -> {reply, BlockReply, State}
     end.
 
 handle_subscribe(#'basic.consume'{consumer_tag = Tag} = Method, Consumer,
@@ -459,12 +474,14 @@ handle_method(Method, Content, State = #state{closing = Closing}) ->
                  end
     end.
 
+handle_method1(#'channel.open_ok'{}, none, State) ->
+    {noreply, rpc_bottom_half(ok, State)};
 handle_method1(#'channel.close'{reply_code = Code, reply_text = Text}, none,
                State) ->
     do(#'channel.close_ok'{}, none, State),
     {stop, {server_initiated_close, Code, Text}, State};
-handle_method1(#'channel.close_ok'{} = CloseOk, none, State) ->
-    {stop, normal, rpc_bottom_half(CloseOk, State)};
+handle_method1(#'channel.close_ok'{}, none, State) ->
+    {stop, normal, rpc_bottom_half(ok, State)};
 handle_method1(#'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
                none, State = #state{tagged_sub_requests = Tagged,
                                     anon_sub_requests = Anon}) ->
@@ -630,6 +647,16 @@ check_block(_Method, none, #state{}) ->
 check_block(_Method, #amqp_msg{}, #state{flow_active = false}) ->
     blocked;
 check_block(_Method, _AmqpMsg, #state{}) ->
+    ok.
+
+check_invalid_method(#'channel.open'{}) ->
+    {use_amqp_connection_module,
+     "Use amqp_connection:open_channel/{1,2} instead"};
+check_invalid_method(#'channel.close'{}) ->
+    {use_close_function, "Use close/{1,3} instead"};
+check_invalid_method(#'basic.consume'{}) ->
+    {use_subscribe_function, "Use subscribe/3 instead"};
+check_invalid_method(_) ->
     ok.
 
 is_connection_method(Method) ->
