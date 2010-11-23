@@ -47,7 +47,7 @@
                 closing             = false,
                 writer,
                 return_handler_pid  = none,
-                flow_control        = false,
+                flow_active         = true,
                 flow_handler_pid    = none,
                 consumers           = dict:new(),
                 default_consumer    = none,
@@ -344,7 +344,7 @@ check_block(_Method, _AmqpMsg, #state{closing = connection}) ->
     closing;
 check_block(_Method, none, #state{}) ->
     ok;
-check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
+check_block(_Method, #amqp_msg{}, #state{flow_active = false}) ->
     blocked;
 check_block(_Method, _AmqpMsg, #state{}) ->
     ok.
@@ -423,9 +423,12 @@ handle_method1(#'channel.flow'{active = Active} = Flow, none,
     case FlowHandler of none -> ok;
                         _    -> FlowHandler ! Flow
     end,
-    do(#'channel.flow_ok'{active = Active}, none, State),
-    %% TODO: change flow_control so that we don't have to invert meaning
-    {noreply, State#state{flow_control = not(Active)}};
+    %% Putting the flow_ok in the queue so that the RPC queue can be flushed
+    %% beforehand. Methods that made it to the queue are not blocked in any
+    %% circumstance. Thus, we must not have any content-bearing methods in the
+    %% queue when sending flow_ok{active = false} - so we flush it entirely.
+    {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
+                           State#state{flow_active = Active})};
 handle_method1(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
                State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
