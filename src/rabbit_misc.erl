@@ -242,7 +242,7 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
     case {table_lookup(Orig, Key), table_lookup(New, Key)} of
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
-                           not_allowed,
+                           precondition_failed,
                            "inequivalent arg '~s' for ~s:  "
                            "required ~w, received ~w",
                            [Key, rabbit_misc:rs(Name), New1, Orig1])
