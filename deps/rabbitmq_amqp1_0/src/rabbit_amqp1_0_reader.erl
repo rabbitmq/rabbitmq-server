@@ -642,7 +642,10 @@ is_connection_frame(_)               -> false.
 
 %% FIXME Handle depending on connection state
 %% TODO It'd be nice to only decode up to the descriptor
-handle_1_0_frame(Channel, Payload,
+
+%% Nothing specifies that connection methods have to be on a
+%% particular channel.
+handle_1_0_frame(_Channel, Payload,
                  State = #v1{ connection_state = CS}) when
       CS =:= closing; CS =:= closed ->
     Frame = rabbit_framing_v1_0:decode(
@@ -744,7 +747,7 @@ handle_input(frame_header_1_0, <<Size:4/unsigned,
     case Size of
         0 ->
             {State, frame_header_1_0, 8}; %% heartbeat
-        Size1 ->
+        _ ->
             {State, {frame_payload_1_0, DOff, Channel}, Size - 8} % size is inclusive
     end;
 handle_input(frame_header_1_0, Malformed, State) ->

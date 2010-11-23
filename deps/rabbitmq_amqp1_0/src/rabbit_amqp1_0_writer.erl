@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_writer).
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([start/3, start_link/3, shutdown/1, mainloop/1]).
 -export([send_command/2, send_command/3, send_command_and_signal_back/3,

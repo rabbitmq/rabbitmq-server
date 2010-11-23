@@ -15,9 +15,9 @@
 
 -record(incoming_link, {name, target}).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("rabbit_amqp1_0.hrl").
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
 
 %% We have to keep track of a few things for sessions,
 %% across outgoing links:

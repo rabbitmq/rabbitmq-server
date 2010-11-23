@@ -1,7 +1,7 @@
 
 %% General consts
 
--define(FRAME_MIN_SIZE, 4096).
+-define(FRAME_1_0_MIN_SIZE, 4096).
 
 %% Encoding categories
 
