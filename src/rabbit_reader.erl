@@ -591,8 +591,8 @@ handle_frame(Type, Channel, Payload,
                             %% there's no cleanup to do (notify
                             %% queues, etc.)
                             ok = rabbit_writer:internal_send_command(
-                                   State#v1.sock, Channel, #'channel.close_ok'{},
-                                   Protocol);
+                                   State#v1.sock, Channel,
+                                   #'channel.close_ok'{}, Protocol);
                         _ -> ok
                     end,
                     State;
