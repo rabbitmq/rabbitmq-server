@@ -521,10 +521,11 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
-    {SeqId, a(State2 #vqstate { next_seq_id      = SeqId    + 1,
-                                out_counter      = OutCount + 1,
-                                in_counter       = InCount  + 1,
-                                persistent_count = PCount1 })}.
+    {SeqId, a(reduce_memory_use(
+                State2 #vqstate { next_seq_id      = SeqId    + 1,
+                                  out_counter      = OutCount + 1,
+                                  in_counter       = InCount  + 1,
+                                  persistent_count = PCount1 }))}.
 
 dropwhile(Pred, State) ->
     {_OkOrEmpty, State1} = dropwhile1(Pred, State),
@@ -825,17 +826,17 @@ status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
       {q4                    , queue:len(Q4)},
       {len                   , Len},
       {pending_acks          , dict:size(PA)},
-      {ram_ack_count         , gb_trees:size(RAI)},
       {outstanding_txns      , length(From)},
       {target_ram_item_count , TargetRamItemCount},
       {ram_msg_count         , RamMsgCount},
+      {ram_ack_count         , gb_trees:size(RAI)},
       {ram_index_count       , RamIndexCount},
       {next_seq_id           , NextSeqId},
       {persistent_count      , PersistentCount},
-      {avg_egress_rate       , AvgEgressRate},
       {avg_ingress_rate      , AvgIngressRate},
-      {avg_ack_egress_rate   , AvgAckEgressRate},
-      {avg_ack_ingress_rate  , AvgAckIngressRate}].
+      {avg_egress_rate       , AvgEgressRate},
+      {avg_ack_ingress_rate  , AvgAckIngressRate},
+      {avg_ack_egress_rate   , AvgAckEgressRate} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
