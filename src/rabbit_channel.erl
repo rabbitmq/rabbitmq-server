@@ -267,9 +267,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    rabbit_event:if_enabled(StatsTimer, fun () ->
-                                                internal_emit_stats(State)
-                                        end),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    internal_emit_stats(
+                                      State, [{idle_since, now()}])
+                            end),
     {hibernate,
      State#ch{stats_timer = rabbit_event:stop_stats_timer(StatsTimer)}}.
 
@@ -1201,11 +1203,14 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
+internal_emit_stats(State) ->
+    internal_emit_stats(State, []).
+
+internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->
-            rabbit_event:notify(channel_stats, CoarseStats);
+            rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
         fine ->
             FineStats =
                 [{channel_queue_stats,
@@ -1215,7 +1220,8 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
-            rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
+            rabbit_event:notify(channel_stats,
+                                Extra ++ CoarseStats ++ FineStats)
     end.
 
 erase_queue_stats(QPid) ->
