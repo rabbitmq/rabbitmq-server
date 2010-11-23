@@ -146,9 +146,8 @@ close(Channel, Code, Text) ->
                              reply_code = Code,
                              class_id   = 0,
                              method_id  = 0},
-    case call(Channel, Close) of
-        #'channel.close_ok'{} -> ok;
-        Error                 -> Error
+    case call(Channel, Close) of #'channel.close_ok'{} -> ok;
+                                 Error                 -> Error
     end.
 
 %%---------------------------------------------------------------------------
@@ -585,13 +584,12 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
 
 %% This comes from framing channel, the writer or rabbit_channel
 %% @private
-handle_info({channel_exit, _FrPidOrChNumber, Reason},
-            State = #state{number = Number}) ->
+handle_info({channel_exit, _FrPidOrChNumber, Reason}, State) ->
     case Reason of
         %% Sent by rabbit_channel in the direct case
         #amqp_error{name = ErrorName, explanation = Expl} ->
-            ?LOG_WARN("Channel ~p closing: server sent error ~p~n",
-                      [Number, Reason]),
+            ?LOG_WARN("Channel (~p) closing: server sent error ~p~n",
+                      [self(), Reason]),
             {IsHard, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
             {stop, {if IsHard -> server_initiated_hard_close;
                        true   -> server_initiated_close
@@ -609,15 +607,14 @@ handle_info({shutdown, Reason}, State) ->
     {stop, Reason, State};
 
 %% @private
-handle_info({shutdown, FailShutdownReason, connection_closing},
-            #state{number = Number} = State) ->
+handle_info({shutdown, FailShutdownReason, connection_closing}, State) ->
     case FailShutdownReason of
         timed_out_flushing_channel ->
-            ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
-                      "closing~n", [Number]);
+            ?LOG_WARN("Channel (~p) closing: timed out flushing while "
+                      "connection closing~n", [self()]);
         timed_out_waiting_close_ok ->
-            ?LOG_WARN("Channel ~p closing: timed out waiting for "
-                      "channel.close_ok while connection closing~n", [Number])
+            ?LOG_WARN("Channel (~p) closing: timed out waiting for "
+                      "channel.close_ok while connection closing~n", [self()])
     end,
     {stop, FailShutdownReason, State};
 
