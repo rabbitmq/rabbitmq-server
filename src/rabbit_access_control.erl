@@ -33,9 +33,9 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([user_pass_login/2, check_user_pass_login/2, check_user_login/2, 
-	 make_salt/0, check_password/2, check_vhost_access/2,
-	 check_resource_access/3, list_vhosts/1]).
+-export([user_pass_login/2, check_user_pass_login/2, check_user_login/2,
+         make_salt/0, check_password/2, check_vhost_access/2,
+         check_resource_access/3, list_vhosts/1]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1]).
 -export([change_password_hash/2]).
@@ -158,6 +158,7 @@ list_vhosts(User = #user{auth_backend = Module}) ->
                          Module:check_vhost_access(User, VHost, read)
                  end, list_vhosts()).
 
+%% TODO move almost everything below this line to rabbit_auth_backend_internal
 %%----------------------------------------------------------------------------
 
 add_user(Username, Password) ->

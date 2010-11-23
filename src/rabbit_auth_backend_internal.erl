@@ -51,7 +51,7 @@ check_user_login(Username, [{password, Password}]) ->
     internal_check_user_login(
       Username,
       fun(#internal_user{password_hash = Hash}) ->
-	      rabbit_access_control:check_password(Password, Hash)
+              rabbit_access_control:check_password(Password, Hash)
       end);
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
