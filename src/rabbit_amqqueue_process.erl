@@ -445,14 +445,16 @@ confirm_message(#basic_message{guid = Guid}, State) ->
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     State;
-record_confirm_message(#delivery{message = #basic_message{
-                                   is_persistent = false}}, State) ->
-    State;
-record_confirm_message(#delivery{msg_seq_no = MsgSeqNo,
+record_confirm_message(#delivery{message = #basic_message {
+                                  is_persistent = true,
+                                  guid          = Guid},
                                  sender     = ChPid,
-                                 message    = #basic_message{guid = Guid}},
-                       State = #q{guid_to_channel = GTC}) ->
-    State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)}.
+                                 msg_seq_no = MsgSeqNo},
+                       State = #q{q = #amqqueue{durable = true},
+                                  guid_to_channel = GTC}) ->
+    State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)};
+record_confirm_message(_Delivery, State) ->
+    State.
 
 ack_by_acktags(AckTags, State = #q{backing_queue       = BQ,
                                    backing_queue_state = BQS}) ->
@@ -486,11 +488,12 @@ attempt_delivery(#delivery{txn        = none,
                 %% not being enqueued, so we use an empty
                 %% message_properties.
                 {AckTag, BQS1} =
-                    BQ:publish_delivered(AckRequired, Message,
-                                         ?BASE_MESSAGE_PROPERTIES
-                                         #message_properties {
-                                            needs_confirming = NeedsConfirming },
-                                         BQS),
+                    BQ:publish_delivered(
+                      AckRequired, Message,
+                      ?BASE_MESSAGE_PROPERTIES
+                      #message_properties{
+                         needs_confirming = NeedsConfirming},
+                      BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
@@ -512,8 +515,8 @@ deliver_or_enqueue(Delivery, State) ->
         {false, State1 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             #delivery{message = Message, msg_seq_no = MsgSeqNo} = Delivery,
             BQS1 = BQ:publish(Message,
-                              (message_properties(State)) #message_properties {
-                                needs_confirming = (MsgSeqNo =/= undefined) },
+                              (message_properties(State)) #message_properties{
+                                needs_confirming = (MsgSeqNo =/= undefined)},
                               BQS),
             {false, ensure_ttl_timer(State1#q{backing_queue_state = BQS1})}
     end.
