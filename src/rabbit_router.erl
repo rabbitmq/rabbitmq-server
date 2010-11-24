@@ -75,10 +75,11 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
 deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
-    {Success, _} = delegate:invoke(
-                     QPids, fun (Pid) ->
-                                    rabbit_amqqueue:deliver(Pid, Delivery)
-                            end),
+    {Success, _} =
+        delegate:invoke(QPids,
+                        fun (Pid) ->
+                                rabbit_amqqueue:deliver(Pid, Delivery)
+                        end),
     {Routed, Handled} =
          lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     case check_delivery(Mandatory, Immediate, {Routed, Handled}) of

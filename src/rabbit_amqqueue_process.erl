@@ -445,13 +445,13 @@ confirm_message(#basic_message{guid = Guid}, State) ->
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     State;
-record_confirm_message(#delivery{message = #basic_message {
-                                  is_persistent = true,
-                                  guid          = Guid},
-                                 sender     = ChPid,
-                                 msg_seq_no = MsgSeqNo},
-                       State = #q{q = #amqqueue{durable = true},
-                                  guid_to_channel = GTC}) ->
+record_confirm_message(#delivery{sender     = ChPid,
+                                 msg_seq_no = MsgSeqNo,
+                                 message    = #basic_message {
+                                   is_persistent = true,
+                                   guid          = Guid}},
+                       State = #q{guid_to_channel = GTC,
+                                  q               = #amqqueue{durable = true}}) ->
     State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)};
 record_confirm_message(_Delivery, State) ->
     State.
