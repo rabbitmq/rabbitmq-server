@@ -132,7 +132,10 @@ check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     check_access(
-      fun() -> Module:check_vhost_access(User, VHostPath, write)  end,
+      fun() ->
+              vhost_exists(VHostPath) andalso
+                  Module:check_vhost_access(User, VHostPath, write)
+      end,
       "~s failed checking vhost access to ~s for ~s: ~p~n",
       [Module, VHostPath, Username],
       "access to vhost '~s' refused for user '~s'",
