@@ -61,7 +61,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+-export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
@@ -183,6 +183,9 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
+-spec(recursive_copy/2 ::
+        (file:filename(), file:filename())
+        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
@@ -684,6 +687,33 @@ recursive_delete1(Path) ->
                          end;
                      {error, Err} ->
                          {error, {Path, Err}}
+                 end
+    end.
+
+recursive_copy(Src, Dest) ->
+    case filelib:is_dir(Src) of
+        false -> case file:copy(Src, Dest) of
+                     {ok, _Bytes}    -> ok;
+                     {error, enoent} -> ok; %% Path doesn't exist anyway
+                     {error, Err}    -> {error, {Src, Dest, Err}}
+                 end;
+        true  -> case file:list_dir(Src) of
+                     {ok, FileNames} ->
+                         case file:make_dir(Dest) of
+                             ok ->
+                                 lists:foldl(
+                                   fun (FileName, ok) ->
+                                           recursive_copy(
+                                             filename:join(Src, FileName),
+                                             filename:join(Dest, FileName));
+                                       (_FileName, Error) ->
+                                           Error
+                                   end, ok, FileNames);
+                             {error, Err} ->
+                                 {error, {Src, Dest, Err}}
+                         end;
+                     {error, Err} ->
+                         {error, {Src, Dest, Err}}
                  end
     end.
 
