@@ -1,0 +1,16 @@
+{application, rabbit_amqp1_0,
+ [{description, "AMQP 1.0 support for RabbitMQ"},
+  {vsn, "%%VSN%%"},
+  {modules, [
+            rabbit_amqp1_0,
+            rabbit_amqp1_0_sup,
+            rabbit_amqp1_0_reader,
+            rabbit_amqp1_0_writer,
+            rabbit_amqp1_0_session,
+            rabbit_amqp1_0_binary_generator,
+            rabbit_amqp1_0_binary_parser
+  ]},
+  {registered, []},
+  {mod, {rabbit_amqp1_0, []}},
+  {env, [{listeners, [{"0.0.0.0", 5673}]}]},
+  {applications, [kernel, stdlib, rabbit]}]}.
