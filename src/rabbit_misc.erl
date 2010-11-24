@@ -64,7 +64,7 @@
 -export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
--export([all_module_attributes/1, build_acyclic_graph/4]).
+-export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 
 -import(mnesia).
@@ -86,10 +86,9 @@
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
 -type(graph_vertex_fun() ::
-        fun ((atom(), [term()]) -> {digraph:vertex(), digraph_label()})).
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
-        fun ((atom(), [term()]) -> {digraph:vertex(), digraph:vertex()})).
--type(graph_error_fun() :: fun ((any()) -> any() | no_return())).
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -193,9 +192,13 @@
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
--spec(build_acyclic_graph/4 :: (graph_vertex_fun(), graph_edge_fun(),
-                                graph_error_fun(), [{atom(), [term()]}]) ->
-                                    digraph()).
+-spec(build_acyclic_graph/3 ::
+        (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
+        -> rabbit_types:ok_or_error2(digraph(),
+                                     {'vertex', 'duplicate', digraph:vertex()} |
+                                     {'edge', ({bad_vertex, digraph:vertex()} |
+                                               {bad_edge, [digraph:vertex()]}),
+                                      digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
@@ -790,16 +793,21 @@ all_module_attributes(Name) ->
       end, [], Modules).
 
 
-build_acyclic_graph(VertexFun, EdgeFun, ErrorFun, Graph) ->
+build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     G = digraph:new([acyclic]),
-    [ case digraph:vertex(G, Vertex) of
-          false -> digraph:add_vertex(G, Vertex, Label);
-          _     -> ErrorFun({vertex, duplicate, Vertex})
-      end || {Module, Atts} <- Graph,
-             {Vertex, Label} <- VertexFun(Module, Atts) ],
-    [ case digraph:add_edge(G, From, To) of
-          {error, E} -> ErrorFun({edge, E, From, To});
-          _          -> ok
-      end || {Module, Atts} <- Graph,
-             {From, To} <- EdgeFun(Module, Atts) ],
-    G.
+    try
+        [case digraph:vertex(G, Vertex) of
+             false -> digraph:add_vertex(G, Vertex, Label);
+             _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
+         end || {Module, Atts}  <- Graph,
+                {Vertex, Label} <- VertexFun(Module, Atts)],
+        [case digraph:add_edge(G, From, To) of
+             {error, E} -> throw({graph_error, {edge, E, From, To}});
+             _          -> ok
+         end || {Module, Atts} <- Graph,
+                {From, To}     <- EdgeFun(Module, Atts)],
+        {ok, G}
+    catch {graph_error, Reason} ->
+            true = digraph:delete(G),
+            {error, Reason}
+    end.
