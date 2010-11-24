@@ -84,8 +84,8 @@ check_resource_access(User = #user{username = Username},
                       Permission) ->
     gen_server:call(?SERVER, {check_resource, User, [{username,   Username},
                                                      {vhost,      VHost},
-                                                     {res_type,   Type},
-                                                     {res_name,   Name},
+                                                     {resource,   Type},
+                                                     {name,       Name},
                                                      {permission, Permission}]},
                     infinity).
 
@@ -93,6 +93,16 @@ check_resource_access(User = #user{username = Username},
 
 evaluate({constant, Bool}, _Args, _LDAP) ->
     Bool;
+
+evaluate({for, [{Type, Value, SubQuery}|Rest]}, Args, LDAP) ->
+    case proplists:get_value(Type, Args) of
+        undefined -> {error, {args_dont_contain, Type, Args}};
+        Value     -> evaluate(SubQuery, Args, LDAP);
+        _         -> evaluate({for, Rest}, Args, LDAP)
+    end;
+
+evaluate({for, []}, _Args, _LDAP) ->
+    {error, {for_query_incomplete}};
 
 evaluate({exists, DnPattern}, Args, LDAP) ->
     Dn = rabbit_auth_backend_ldap_util:fill(DnPattern, Args),

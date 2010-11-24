@@ -110,11 +110,14 @@ A query can be in one of two forms:
 
     resource_access_query:   ${username}
                              ${vhost}
-                             ${res_type} (i.e. exchange, queue, binding)
-                             ${res_name}
+                             ${resource} (i.e. exchange, queue, binding)
+                             ${name}
                              ${permission} (i.e. configure, write, read)
 
     is_admin_query:          ${username}
+
+  {for, Options}
+    TODO document lots with examples
 
 use_ssl
 -------
