@@ -39,7 +39,7 @@ with all options specified might look like:
   {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
   {rabbit_auth_backend_ldap,
    [ {servers,               ["my-ldap-server"]},
-     {user_dn_pattern,       "cn=~s,ou=People,dc=example,dc=com"},
+     {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
      {vhost_access_query,    {exists,
                               "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
      {resource_access_query, {constant, true}},
@@ -62,11 +62,11 @@ want to change this.
 user_dn_pattern
 ---------------
 
-Default: "cn=~s,ou=People,dc=example,dc=com"
+Default: "cn=${username},ou=People,dc=example,dc=com"
 
-Pattern for a user's DN. Must contain exactly one instance of "~s". This will
-be where the username supplied by the client is substituted. You almost
-certainly want to change this.
+Pattern for a user's DN. Must contain exactly one instance of
+"${username}". This will be where the username supplied by the client
+is substituted. You almost certainly want to change this.
 
 vhost_access_query
 ------------------
