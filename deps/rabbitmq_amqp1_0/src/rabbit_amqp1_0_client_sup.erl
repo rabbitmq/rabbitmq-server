@@ -14,8 +14,8 @@ start_link() ->
     {ok, ChannelSupSupPid} =
         supervisor2:start_child(
           SupPid,
-          {channel_sup_sup, {rabbit_channel_sup_sup, start_link, []},
-           intrinsic, infinity, supervisor, [rabbit_channel_sup_sup]}),
+          {channel_sup_sup, {rabbit_amqp1_0_session_sup_sup, start_link, []},
+           intrinsic, infinity, supervisor, [rabbit_amqp1_0_session_sup_sup]}),
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
@@ -24,9 +24,6 @@ start_link() ->
                      rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_reader]}),
     {ok, SupPid, ReaderPid}.
-
-reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader)).
 
 %%--------------------------------------------------------------------------
 

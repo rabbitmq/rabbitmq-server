@@ -5,7 +5,7 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
--export([start_link/3, process_frame/2]).
+-export([start_link/7, process_frame/2]).
 
 -record(session, {channel, reader_pid, writer_pid, transfer_number = 0,
                   outgoing_lwm = 0, outgoing_session_credit = 10 }).
@@ -35,10 +35,11 @@
 %% TODO figure out how much of this actually needs to be serialised.
 %% TODO links can be migrated between sessions -- seriously.
 
-start_link(IncomingChannel, ReaderPid, WriterPid) ->
-    {ok, Pid} = gen_server2:start_link(
-                  ?MODULE, [IncomingChannel, ReaderPid, WriterPid], []),
-    Pid.
+%% TODO account for all these things
+start_link(Channel, ReaderPid, WriterPid, Username, VHost,
+           Collector, StartLimiterFun) ->
+    gen_server2:start_link(
+      ?MODULE, [Channel, ReaderPid, WriterPid], []).
 
 process_frame(Pid, Frame) ->
     gen_server2:cast(Pid, {frame, Frame}).
@@ -47,7 +48,6 @@ process_frame(Pid, Frame) ->
 
 init([Channel, ReaderPid, WriterPid]) ->
     process_flag(trap_exit, true),
-    link(WriterPid),
     {ok, #session{ channel = Channel,
                    reader_pid = ReaderPid,
                    writer_pid = WriterPid }}.
@@ -92,7 +92,7 @@ handle_cast({frame, Frame},
                               channel = Channel}) ->
     case handle_control(Frame, State) of
         {reply, Reply, NewState} ->
-            ok = rabbit_writer:send_control_v1_0(Sock, Reply),
+            ok = rabbit_amqp1_0_writer:send_command(Sock, Reply),
             noreply(NewState);
         {noreply, NewState} ->
             noreply(NewState);
@@ -189,7 +189,7 @@ handle_control(#'v1_0.transfer'{handle = Handle,
             %% Check permitted
             Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
             %% Scangiest way to the content
-            Msg = assemble_v1_0_message(ExchangeName, Fragments),
+            Msg = assemble_message(ExchangeName, Fragments),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
                   Exchange,
@@ -207,7 +207,7 @@ handle_control(#'v1_0.detach'{ handle = Handle },
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
 handle_control(#'v1_0.end'{}, #session{ writer_pid = Sock }) ->
-    ok = rabbit_writer:send_control_v1_0(Sock, #'v1_0.end'{}),
+    ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
 handle_control(Frame, State) ->
@@ -217,7 +217,7 @@ handle_control(Frame, State) ->
 %% ------
 
 %% Kludged because so is the python client
-assemble_v1_0_message(ExchangeName, Fragments) ->
+assemble_message(ExchangeName, Fragments) ->
     %% get the class_id we need
     {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
     [Fragment | _] = Fragments,
@@ -255,7 +255,7 @@ transfer(WriterPid, LinkHandle,
                          aborted = false,
                          batchable = false,
                          fragments = fragments(Content)},
-    rabbit_writer:send_control_and_notify_v1_0(
+    rabbit_amqp1_0_writer:send_command_and_notify(
       WriterPid, QPid, self(), T),
     NewLink.
 
@@ -281,6 +281,3 @@ fragments(Content) ->
 %% FIXME
 transfer_size(Content, Unit) ->
     1.
-
-send_on_channel_v1_0(Sock, Channel, Control) ->
-    ok = rabbit_writer:internal_send_control_v1_0(Sock, Channel, Control).

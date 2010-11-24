@@ -1,4 +1,12 @@
 
+-ifdef(debug).
+-define(DEBUG0(F), io:format(F, [])).
+-define(DEBUG(F, A), io:format(F, A)).
+-else.
+-define(DEBUG0(F), ok).
+-define(DEBUG(F, A), ok).
+-endif.
+
 %% General consts
 
 -define(FRAME_1_0_MIN_SIZE, 4096).

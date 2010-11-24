@@ -325,6 +325,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
+            ?DEBUG("(bytes ~p)~n", [Data]),
             mainloop(Deb, handle_input(State#v1.callback, Data,
                                        State#v1{recv_ref = none}));
         {inet_async, Sock, Ref, {error, closed}} ->
@@ -529,7 +530,7 @@ maybe_close(State = #v1{connection_state = closing,
             NewState = close_connection(State),
             ok = case Protocol of
                      rabbit_amqp1_0_framing ->
-                         send_on_1_0_connection(Sock, #'v1_0.close'{});
+                         send_on_channel0(Sock, #'v1_0.close'{}, rabbit_amqp1_0_framing);
                      Protocol1 ->
                          send_on_channel0(Sock, #'connection.close_ok'{}, Protocol1)
                  end,
@@ -648,16 +649,18 @@ is_connection_frame(_)               -> false.
 handle_1_0_frame(_Channel, Payload,
                  State = #v1{ connection_state = CS}) when
       CS =:= closing; CS =:= closed ->
-    Frame = rabbit_framing_v1_0:decode(
-              rabbit_binary_parser_v1_0:parse(Payload)),
+    Frame = rabbit_amqp1_0_framing:decode(
+              rabbit_amqp1_0_binary_parser:parse(Payload)),
+    ?DEBUG("1.0 frame decoded: ~p~n", [Frame]),
     case is_connection_frame(Frame) of
         true  -> handle_1_0_connection_frame(Frame, State);
         false -> State
     end;
 handle_1_0_frame(Channel, Payload,
                  State = #v1{ connection_state = CS}) ->
-    Frame = rabbit_framing_v1_0:decode(
-              rabbit_binary_parser_v1_0:parse(Payload)),
+    Frame = rabbit_amqp1_0_framing:decode(
+              rabbit_amqp1_0_binary_parser:parse(Payload)),
+    ?DEBUG("1.0 frame decoded: ~p~n", [Frame]),
     case is_connection_frame(Frame) of
         true  -> handle_1_0_connection_frame(Frame, State);
         false -> handle_1_0_session_frame(Channel, Frame, State)
@@ -668,12 +671,12 @@ handle_1_0_connection_frame(#'v1_0.open'{},
                               connection_state = starting,
                               connection = Connection,
                               sock = Sock}) ->
-    ok = send_on_1_0_connection(
+    ok = send_on_channel0(
            Sock,
            #'v1_0.open'{channel_max = {ushort, 0},
                         max_frame_size = {uint, ?FRAME_MAX},
                         container_id = {utf8, list_to_binary(atom_to_list(node()))},
-                        heartbeat_interval = {uint, 0}}),
+                        heartbeat_interval = {uint, 0}}, rabbit_amqp1_0_framing),
     %% FIXME heartbeat and negotiate maxes
     State#v1{connection_state = running,
              connection = Connection#connection{
@@ -692,7 +695,7 @@ handle_1_0_session_frame(Channel, Frame,
                                         frame_max = FrameMax }}) ->
     case get({channel, Channel}) of
         {ch_fr_pid, SessionPid} ->
-            ok = rabbit_amqp1_0_session:process(SessionPid, Frame),
+            ok = rabbit_amqp1_0_session:process_frame(SessionPid, Frame),
             case Frame of
                 #'v1_0.end'{} ->
                     erase({channel, Channel}),
@@ -740,24 +743,25 @@ handle_input({frame_payload, Type, Channel, PayloadSize},
             throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
 
-handle_input(frame_header_1_0, <<Size:4/unsigned,
-                                 DOff:8, Type:8,
-                                 Channel:2/unsigned>>,
-             State) when DOff >= 2 andalso Type =:= 0 ->
+handle_input(frame_header_1_0, <<Size:32, DOff:8, Type:8, Channel:16>>,
+             State) when DOff >= 2 andalso Type == 0 ->
+    ?DEBUG("1.0 frame header: doff: ~p size: ~p~n", [DOff, Size]),
     case Size of
         0 ->
             {State, frame_header_1_0, 8}; %% heartbeat
         _ ->
-            {State, {frame_payload_1_0, DOff, Channel}, Size - 8} % size is inclusive
+            ensure_stats_timer(
+              switch_callback(State, {frame_payload_1_0, DOff, Channel}, Size - 8))
     end;
 handle_input(frame_header_1_0, Malformed, State) ->
     throw({bad_1_0_header, Malformed});
 handle_input({frame_payload_1_0, DOff, Channel},
             FrameBin, State) ->
-    Bits = (DOff * 4 - 8),
-    <<_:Bits/binary, FramePayload/binary>> = FrameBin,
-    NewState = handle_1_0_frame(Channel, FramePayload, State),
-    {NewState, frame_header_1_0, 8};
+    SkipBits = (DOff * 4 - 8),
+    <<Skip:SkipBits, FramePayload/binary>> = FrameBin,
+    ?DEBUG("1.0 frame: ~p (skipped ~p)~n", [FramePayload, Skip]),
+    handle_1_0_frame(Channel, FramePayload,
+                     switch_callback(State, frame_header_1_0, 8));
 
 %% The two rules pertaining to version negotiation:
 %%
@@ -791,7 +795,7 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
 %% general where the 0-x code would use it as a module.
 %% FIXME TLS and SASL use a different protocol number, and would go
 %% here.
-handle_input(handshake, <<"AMQP", 0, 0, 1, 0>>, State) ->
+handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
     start_1_0_connection({1, 0, 0}, rabbit_amqp1_0_framing, State);
 
 handle_input(handshake, <<"AMQP", A, B, C, D>>, #v1{sock = Sock}) ->
@@ -833,7 +837,7 @@ start_1_0_connection({1, 0, 0},
                     frame_header_1_0, 8).
 
 refuse_connection(Sock, Exception) ->
-    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
+    ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,1,0,0>>) end),
     throw(Exception).
 
 ensure_stats_timer(State = #v1{stats_timer = StatsTimer,
@@ -963,10 +967,7 @@ handle_method0(_Method, #v1{connection_state = S}) ->
       channel_error, "unexpected method in connection state ~w", [S]).
 
 send_on_channel0(Sock, Method, Protocol) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
-
-send_on_1_0_connection(Sock, Control) ->
-    ok = rabbit_amqp1_0_writer:internal_send_control(Sock, 0, Control).
+    ok = rabbit_amqp1_0_writer:internal_send_command(Sock, 0, Method, Protocol).
 
 %%--------------------------------------------------------------------------
 
@@ -1065,14 +1066,15 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                                  user      = _User,
                                  vhost     = VHost}} = State,
     {ok, ChSupPid, ChFrPid} =
-        rabbit_amqp1_0_session_sup:start_session(
+        %% Note: the equivalent, start_channel is in channel_sup_sup
+        rabbit_amqp1_0_session_sup_sup:start_session(
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
                        self(), <<"guest">>, VHost, Collector}),
     erlang:monitor(process, ChSupPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
     put({ch_fr_pid, ChFrPid}, {channel, Channel}),
-    ok = rabbit_amqp1_0_session:process(ChFrPid, Frame).
+    ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame).
 
 log_channel_error(ConnectionState, Channel, Reason) ->
     rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",

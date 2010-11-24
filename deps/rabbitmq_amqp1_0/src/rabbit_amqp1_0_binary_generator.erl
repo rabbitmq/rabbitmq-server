@@ -9,9 +9,11 @@
 -spec(build_frame/2 :: (int(), iolist()) -> iolist()).
 -endif.
 
+-define(AMQP_FRAME_TYPE, 0).
+
 build_frame(Channel, Payload) ->
     Size = iolist_size(Payload) + 8, % frame header and no extension
-    [ <<Size:32/unsigned, 2:8, 0:8, Channel:16/unsigned>>, Payload ].
+    [ <<Size:32/unsigned, 2:8, ?AMQP_FRAME_TYPE:8, Channel:16/unsigned>>, Payload ].
 
 generate({described, Descriptor, Value}) ->
     DescBin = generate(Descriptor),
@@ -56,8 +58,8 @@ generate({list, List}) ->
 generate({map, ListOfPairs}) ->
     Count = length(ListOfPairs) * 2,
     Compound = lists:map(fun ({Key, Val}) ->
-                                 [(generate(Key))/binary,
-                                  (generate(Val))/binary]
+                                 [(generate(Key)),
+                                  (generate(Val))]
                          end, ListOfPairs),
     Size = iolist_size(Compound),
     [ <<?COMPOUND_1:4,1:4,(Size + 1):8,Count:8>>,
