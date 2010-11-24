@@ -34,7 +34,7 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0, wait_for_tables/0]).
+         is_clustered/0, empty_ram_only_tables/0, copy_db/1]).
 
 -export([table_names/0]).
 
@@ -65,7 +65,7 @@
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
--spec(wait_for_tables/0 :: () -> 'ok').
+-spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 
 -endif.
 
@@ -376,7 +376,7 @@ init_db(ClusterNodes, Force) ->
                   mnesia:system_info(db_nodes)} of
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
-                    wait_for_tables(),
+                    ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
                         ok                    -> ensure_schema_ok();
                         version_not_available -> schema_ok_or_move()
@@ -384,7 +384,7 @@ init_db(ClusterNodes, Force) ->
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
-                    wait_for_tables(),
+                    ok = wait_for_tables(),
                     ensure_version_ok(rabbit_upgrade:read_version()),
                     ensure_schema_ok();
                 {[], false, _} ->
@@ -474,6 +474,16 @@ move_db() ->
     ok = ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok.
+
+copy_db(Destination) ->
+    mnesia:stop(),
+    case rabbit_misc:recursive_copy(dir(), Destination) of
+        ok ->
+            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+            ok = wait_for_tables();
+        {error, E} ->
+            {error, E}
+    end.
 
 create_tables() ->
     lists:foreach(fun ({Tab, TabDef}) ->
