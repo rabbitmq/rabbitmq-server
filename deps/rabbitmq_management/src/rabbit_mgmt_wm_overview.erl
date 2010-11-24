@@ -41,9 +41,7 @@ to_json(ReqData, Context = #context{username = Username, is_admin = IsAdmin}) ->
                              || L <- rabbit_networking:active_listeners()],
                 Overview0 ++
                     rabbit_mgmt_db:get_overview() ++
-                    [{management_version, version()},
-                     {statistics_level,   StatsLevel},
-                     {node,               node()},
+                    [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          Listeners}];
             _ ->
