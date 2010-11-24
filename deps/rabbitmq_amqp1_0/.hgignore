@@ -1,0 +1,8 @@
+syntax: regexp
+\.beam$
+\.pyc$
+\~$
+^dist/
+^build/
+^tmp/
+^cover/
