@@ -396,6 +396,7 @@ prettify_typed_amqp_value(Type, Value) ->
         _       -> Value
     end.
 
+% the slower shutdown on windows required to flush stdout
 quit(Status) ->
     case os:type() of
         {unix, _} ->
