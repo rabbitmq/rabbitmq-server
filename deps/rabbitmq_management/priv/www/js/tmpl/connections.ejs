@@ -37,9 +37,9 @@
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
     <td><%= connection.channels %></td>
 <% if (vhosts_interesting) { %>
-    <td><%= link_vhost(connection.vhost) %></td>
+    <td><%= connection.vhost %></td>
 <% } %>
-    <td><%= link_user(connection.user) %></td>
+    <td><%= connection.user %></td>
     <td><%= connection.state %></td>
   </tr>
   <% } %>

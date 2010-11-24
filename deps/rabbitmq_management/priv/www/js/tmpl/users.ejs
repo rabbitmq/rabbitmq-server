@@ -12,7 +12,7 @@
   <tbody>
     <% for (var i = 0; i < users.length; i++) { %>
        <tr<%= alt_rows(i)%>>
-         <td><%= link_to(users[i].name, '#/users/' + esc(users[i].name)) %></td>
+         <td><%= link_user(users[i].name) %></td>
          <td class="c"><%= fmt_boolean(users[i].administrator) %></td>
        </tr>
     <% } %>

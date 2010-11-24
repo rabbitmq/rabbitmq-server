@@ -1,44 +1,71 @@
 <h1>Queue <b><%= queue.name %></b></h1>
 
 <div class="section">
-  <h2>Details</h2>
+  <h2>Overview</h2>
   <div class="hider updatable">
+    <h3>Messages</h3>
+    <div class="highlight">
+      Ready
+      <strong><%= fmt_string(queue.messages_ready) %></strong>
+    </div>
+    <div class="highlight">
+      Unacknowledged
+      <strong><%= fmt_string(queue.messages_unacknowledged) %></strong>
+    </div>
+    <div class="highlight">
+      Total
+      <strong><%= fmt_string(queue.messages) %></strong>
+    </div>
+    <span class="br"></span>
+
+    <h3>Details</h3>
     <table class="facts">
       <tr>
-        <th>Virtual host</th>
-<% if (nodes_interesting) { %>
-        <th>Node</th>
-<% } %>
-        <th>Durable</th>
-        <th>Auto delete</th>
-        <th>Exclusive owner</th>
-        <th>Arguments</th>
-        <th>Consumers</th>
-        <th>Memory</th>
-        <th>Messages</th>
+        <th>Parameters</th>
+        <td><%= fmt_parameters(queue) %></td>
       </tr>
       <tr>
-        <td><%= queue.vhost %></td>
-<% if (nodes_interesting) { %>
-        <td><%= queue.node %></td>
-<% } %>
-        <td><%= fmt_boolean(queue.durable) %></td>
-        <td><%= fmt_boolean(queue.auto_delete) %></td>
+        <th>Exclusive owner</th>
         <td>
-          <% if (queue.owner_pid_details != undefined) { %>
-          <%= link_conn(queue.owner_pid_details.name) %>
+          <% if (queue.owner_pid_details == undefined) { %>
+            None
+          <% } else { %>
+            <%= link_conn(queue.owner_pid_details.name) %>
           <% } %>
         </td>
-        <td><%= fmt_table_short(queue.arguments) %></td>
-        <td><%= fmt_string(queue.consumers) %></td>
-        <td><%= fmt_bytes(queue.memory) %></td>
-        <td class="l">
-          <%= fmt_string(queue.messages_ready) %> ready<br/>
-          <%= fmt_string(queue.messages_unacknowledged) %> unacknowledged<br/>
-          <%= fmt_string(queue.messages) %> total
-        </td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><%= fmt_idle_long(queue) %></td>
       </tr>
     </table>
+
+    <table class="facts">
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <tr>
+        <th>Memory</th>
+        <td><%= fmt_bytes(queue.memory) %></td>
+      </tr>
+    </table>
+
+    <table class="facts">
+<% if (vhosts_interesting) { %>
+      <tr>
+        <th>Virtual host</th>
+        <td><%= queue.vhost %></td>
+      </tr>
+<% } %>
+<% if (nodes_interesting) { %>
+      <tr>
+        <th>Node</th>
+        <td><%= queue.node %></td>
+      </tr>
+<% } %>
+    </table>
+    <span class="br"></span>
   </div>
 </div>
 
@@ -69,7 +96,7 @@
 </div>
 <% } %>
 
-<div class="section">
+<div class="section-hidden">
   <h2>Bindings</h2>
   <div class="hider updatable">
     <h3>Incoming to <b><%= queue.name %></b></h3>
@@ -90,26 +117,23 @@
 <%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
 
 <div class="section-hidden">
-  <h2>Purge This Queue</h2>
+  <h2>Delete / Purge</h2>
   <div class="hider">
-    <form action="#/queues" method="delete">
-      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
-      <input type="hidden" name="name" value="<%= queue.name %>"/>
-      <input type="hidden" name="mode" value="purge"/>
-      <input type="submit" value="Purge" />
-    </form>
-  </div>
-</div>
-
-<div class="section-hidden">
-  <h2>Delete This Queue</h2>
-  <div class="hider">
-    <form action="#/queues" method="delete" class="confirm">
+    <form action="#/queues" method="delete" class="confirm inline-form">
       <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
       <input type="hidden" name="name" value="<%= queue.name %>"/>
       <input type="hidden" name="mode" value="delete"/>
       <input type="submit" value="Delete" />
     </form>
+
+    <form action="#/queues" method="delete" class="inline-form">
+      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="mode" value="purge"/>
+      <input type="submit" value="Purge" />
+    </form>
+
+    <span class="br"></span>
   </div>
 </div>
 
