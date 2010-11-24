@@ -854,8 +854,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
 auth_mechanisms(Sock) ->
     {ok, Configured} = application:get_env(auth_mechanisms),
     [Name || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
-             Module:should_offer(Sock),
-             lists:any(fun (N) -> N == Name end, Configured)].
+             Module:should_offer(Sock), lists:member(Name, Configured)].
 
 auth_mechanisms_binary(Sock) ->
     list_to_binary(
