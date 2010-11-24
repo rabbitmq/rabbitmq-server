@@ -729,7 +729,10 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 emit_stats(State) ->
-    rabbit_event:notify(queue_stats, infos(?STATISTICS_KEYS, State)).
+    emit_stats(State, []).
+
+emit_stats(State, Extra) ->
+    rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
 
@@ -1126,7 +1129,10 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    rabbit_event:if_enabled(StatsTimer, fun () -> emit_stats(State) end),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    emit_stats(State, [{idle_since, now()}])
+                            end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS2},
     {hibernate, stop_rate_timer(State1)}.

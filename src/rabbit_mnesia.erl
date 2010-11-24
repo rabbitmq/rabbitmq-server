@@ -34,7 +34,7 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0]).
+         is_clustered/0, empty_ram_only_tables/0, copy_db/1]).
 
 -export([table_names/0]).
 
@@ -65,6 +65,7 @@
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
+-spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 
 -endif.
 
@@ -361,41 +362,38 @@ init_db(ClusterNodes, Force) ->
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
-                false ->
-                    FailedClusterNodes = ProperClusterNodes -- Nodes,
-                    case FailedClusterNodes of
-                        [] -> ok;
-                        _ ->
-                            throw({error, {failed_to_cluster_with,
-                                           FailedClusterNodes,
-                                           "Mnesia could not connect to some nodes."}})
-                    end;
-                _ -> ok
+                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
+                         case FailedClusterNodes of
+                             [] -> ok;
+                             _  -> throw({error, {failed_to_cluster_with,
+                                                  FailedClusterNodes,
+                                                  "Mnesia could not connect "
+                                                  "to some nodes."}})
+                         end;
+                true  -> ok
             end,
             case {Nodes, mnesia:system_info(use_dir),
                   mnesia:system_info(db_nodes)} of
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
-                    wait_for_tables(),
+                    ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok ->
-                            schema_ok_or_exit();
-                        version_not_available ->
-                            schema_ok_or_move()
+                        ok                    -> ensure_schema_ok();
+                        version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
-                    wait_for_tables(),
-                    version_ok_or_exit(rabbit_upgrade:read_version()),
-                    schema_ok_or_exit();
+                    ok = wait_for_tables(),
+                    ensure_version_ok(rabbit_upgrade:read_version()),
+                    ensure_schema_ok();
                 {[], false, _} ->
                     %% First RAM node in cluster, start from scratch
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
-                    version_ok_or_exit(rabbit_upgrade:read_version()),
-                    version_ok_or_exit(
+                    ensure_version_ok(rabbit_upgrade:read_version()),
+                    ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
@@ -405,14 +403,13 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    schema_ok_or_exit()
+                    ensure_schema_ok()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
-            throw({error, {unable_to_join_cluster,
-                           ClusterNodes, Reason}})
+            throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
     end.
 
 schema_ok_or_move() ->
@@ -430,22 +427,19 @@ schema_ok_or_move() ->
             ok = create_schema()
     end.
 
-version_ok_or_exit({ok, DiscVersion}) ->
+ensure_version_ok({ok, DiscVersion}) ->
     case rabbit_upgrade:desired_version() of
-        DiscVersion ->
-            ok;
-        DesiredVersion ->
-            exit({schema_mismatch, DesiredVersion, DiscVersion})
+        DiscVersion    ->  ok;
+        DesiredVersion ->  throw({error, {schema_mismatch,
+                                          DesiredVersion, DiscVersion}})
     end;
-version_ok_or_exit({error, _}) ->
+ensure_version_ok({error, _}) ->
     ok = rabbit_upgrade:write_version().
 
-schema_ok_or_exit() ->
+ensure_schema_ok() ->
     case check_schema_integrity() of
-        ok ->
-            ok;
-        {error, Reason} ->
-            exit({schema_invalid, Reason})
+        ok              -> ok;
+        {error, Reason} -> throw({error, {schema_invalid, Reason}})
     end.
 
 create_schema() ->
@@ -480,6 +474,16 @@ move_db() ->
     ok = ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok.
+
+copy_db(Destination) ->
+    mnesia:stop(),
+    case rabbit_misc:recursive_copy(dir(), Destination) of
+        ok ->
+            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+            ok = wait_for_tables();
+        {error, E} ->
+            {error, E}
+    end.
 
 create_tables() ->
     lists:foreach(fun ({Tab, TabDef}) ->

@@ -263,7 +263,9 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({deliver, ConsumerTag, AckRequired, Msg},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
-    State1 = lock_message(AckRequired, {DeliveryTag, ConsumerTag, Msg}, State),
+    State1 = lock_message(AckRequired,
+                          ack_record(DeliveryTag, ConsumerTag, Msg),
+                          State),
     ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
     {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
     maybe_incr_stats([{QPid, 1}],
@@ -302,11 +304,13 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
 handle_pre_hibernate(State = #ch{stats_timer   = StatsTimer}) ->
     ok = clear_permission_cache(),
     State1 = flush_multiple(State),
-    rabbit_event:if_enabled(StatsTimer, fun() ->
-                                                internal_emit_stats(State1)
-                                        end),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun () ->
+                                    internal_emit_stats(
+                                      State, [{idle_since, now()}])
+                            end),
     StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
-    {hibernate, State1#ch{stats_timer   = StatsTimer1}}.
+    {hibernate, State1#ch{stats_timer = StatsTimer1}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -592,7 +596,9 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                 #basic_message{exchange_name = ExchangeName,
                                routing_key = RoutingKey,
                                content = Content}}} ->
-            State1 = lock_message(not(NoAck), {DeliveryTag, none, Msg}, State),
+            State1 = lock_message(not(NoAck),
+                                  ack_record(DeliveryTag, none, Msg),
+                                  State),
             maybe_incr_stats([{QPid, 1}],
                              case NoAck of
                                  true  -> get_no_ack;
@@ -728,30 +734,8 @@ handle_method(#'basic.recover_async'{requeue = true},
     %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
 
-handle_method(#'basic.recover_async'{requeue = false},
-              _, State = #ch{writer_pid = WriterPid,
-                             unacked_message_q = UAMQ}) ->
-    ok = rabbit_misc:queue_fold(
-           fun ({_DeliveryTag, none, _Msg}, ok) ->
-                   %% Was sent as a basic.get_ok. Don't redeliver
-                   %% it. FIXME: appropriate?
-                   ok;
-               ({DeliveryTag, ConsumerTag,
-                 {QName, QPid, MsgId, _Redelivered, Message}}, ok) ->
-                   %% Was sent as a proper consumer delivery.  Resend
-                   %% it as before.
-                   %%
-                   %% FIXME: What should happen if the consumer's been
-                   %% cancelled since?
-                   %%
-                   %% FIXME: should we allocate a fresh DeliveryTag?
-                   internal_deliver(
-                     WriterPid, false, ConsumerTag, DeliveryTag,
-                     {QName, QPid, MsgId, true, Message})
-           end, ok, UAMQ),
-    %% No answer required - basic.recover is the newer, synchronous
-    %% variant of this method
-    {noreply, State};
+handle_method(#'basic.recover_async'{requeue = false}, _, _State) ->
+    rabbit_misc:protocol_error(not_implemented, "requeue=false", []);
 
 handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
     {noreply, State2 = #ch{writer_pid = WriterPid}} =
@@ -1097,6 +1081,10 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                            routing_key = RoutingKey},
            Content).
 
+ack_record(DeliveryTag, ConsumerTag,
+           _MsgStruct = {_QName, QPid, MsgId, _Redelivered, _Msg}) ->
+    {DeliveryTag, ConsumerTag, {QPid, MsgId}}.
+
 collect_acks(Q, 0, true) ->
     {Q, queue:new()};
 collect_acks(Q, DeliveryTag, Multiple) ->
@@ -1169,8 +1157,7 @@ rollback_and_notify(State) ->
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = rabbit_misc:queue_fold(
-          fun ({_DTag, _CTag,
-                {_QName, QPid, MsgId, _Redelivered, _Message}}, D) ->
+          fun ({_DTag, _CTag, {QPid, MsgId}}, D) ->
                   %% dict:append would avoid the lists:reverse in
                   %% handle_message({recover, true}, ...). However, it
                   %% is significantly slower when going beyond a few
@@ -1330,11 +1317,14 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
+internal_emit_stats(State) ->
+    internal_emit_stats(State, []).
+
+internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->
-            rabbit_event:notify(channel_stats, CoarseStats);
+            rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
         fine ->
             FineStats =
                 [{channel_queue_stats,
@@ -1344,7 +1334,8 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}) ->
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
-            rabbit_event:notify(channel_stats, CoarseStats ++ FineStats)
+            rabbit_event:notify(channel_stats,
+                                Extra ++ CoarseStats ++ FineStats)
     end.
 
 erase_queue_stats(QPid) ->

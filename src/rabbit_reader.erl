@@ -45,10 +45,6 @@
 
 -export([emit_stats/1]).
 
--import(gen_tcp).
--import(inet).
--import(prim_inet).
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
@@ -322,13 +318,10 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     done.
 
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
-    %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
-            {State1, Callback1, Length1} =
-                handle_input(State#v1.callback, Data,
-                             State#v1{recv_ref = none}),
-            mainloop(Deb, switch_callback(State1, Callback1, Length1));
+            mainloop(Deb, handle_input(State#v1.callback, Data,
+                                       State#v1{recv_ref = none}));
         {inet_async, Sock, Ref, {error, closed}} ->
             if State#v1.connection_state =:= closed ->
                     State;
@@ -568,7 +561,6 @@ handle_frame(Type, Channel, Payload,
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
-            %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {ch_fr_pid, ChFrPid} ->
                     ok = rabbit_framing_channel:process(ChFrPid, AnalyzedFrame),
@@ -632,18 +624,18 @@ analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
-    %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
-    {ensure_stats_timer(State), {frame_payload, Type, Channel, PayloadSize},
-     PayloadSize + 1};
+    ensure_stats_timer(
+      switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
+                      PayloadSize + 1));
 
-handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, State) ->
+handle_input({frame_payload, Type, Channel, PayloadSize},
+             PayloadAndMarker, State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            %%?LOGDEBUG("Frame completed: ~p/~p/~p~n", [Type, Channel, Payload]),
-            NewState = handle_frame(Type, Channel, Payload, State),
-            {NewState, frame_header, 7};
+            handle_frame(Type, Channel, Payload,
+                         switch_callback(State, frame_header, 7));
         _ ->
-            throw({bad_payload, PayloadAndMarker})
+            throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
 
 %% The two rules pertaining to version negotiation:
@@ -694,11 +686,11 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                                  mechanisms = <<"PLAIN AMQPLAIN">>,
                                  locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
-    {State#v1{connection = Connection#connection{
-                             timeout_sec = ?NORMAL_TIMEOUT,
-                             protocol = Protocol},
-              connection_state = starting},
-     frame_header, 7}.
+    switch_callback(State#v1{connection = Connection#connection{
+                                            timeout_sec = ?NORMAL_TIMEOUT,
+                                            protocol = Protocol},
+                             connection_state = starting},
+                    frame_header, 7).
 
 refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),

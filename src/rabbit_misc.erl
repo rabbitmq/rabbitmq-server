@@ -61,10 +61,10 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+-export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
--export([all_module_attributes/1, build_acyclic_graph/4]).
+-export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 
 -import(mnesia).
@@ -86,10 +86,9 @@
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
 -type(graph_vertex_fun() ::
-        fun ((atom(), [term()]) -> {digraph:vertex(), digraph_label()})).
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
-        fun ((atom(), [term()]) -> {digraph:vertex(), digraph:vertex()})).
--type(graph_error_fun() :: fun ((any()) -> any() | no_return())).
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -184,15 +183,22 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
+-spec(recursive_copy/2 ::
+        (file:filename(), file:filename())
+        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
--spec(build_acyclic_graph/4 :: (graph_vertex_fun(), graph_edge_fun(),
-                                graph_error_fun(), [{atom(), [term()]}]) ->
-                                    digraph()).
+-spec(build_acyclic_graph/3 ::
+        (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
+        -> rabbit_types:ok_or_error2(digraph(),
+                                     {'vertex', 'duplicate', digraph:vertex()} |
+                                     {'edge', ({bad_vertex, digraph:vertex()} |
+                                               {bad_edge, [digraph:vertex()]}),
+                                      digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 
 -endif.
@@ -684,6 +690,33 @@ recursive_delete1(Path) ->
                  end
     end.
 
+recursive_copy(Src, Dest) ->
+    case filelib:is_dir(Src) of
+        false -> case file:copy(Src, Dest) of
+                     {ok, _Bytes}    -> ok;
+                     {error, enoent} -> ok; %% Path doesn't exist anyway
+                     {error, Err}    -> {error, {Src, Dest, Err}}
+                 end;
+        true  -> case file:list_dir(Src) of
+                     {ok, FileNames} ->
+                         case file:make_dir(Dest) of
+                             ok ->
+                                 lists:foldl(
+                                   fun (FileName, ok) ->
+                                           recursive_copy(
+                                             filename:join(Src, FileName),
+                                             filename:join(Dest, FileName));
+                                       (_FileName, Error) ->
+                                           Error
+                                   end, ok, FileNames);
+                             {error, Err} ->
+                                 {error, {Src, Dest, Err}}
+                         end;
+                     {error, Err} ->
+                         {error, {Src, Dest, Err}}
+                 end
+    end.
+
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
@@ -760,16 +793,21 @@ all_module_attributes(Name) ->
       end, [], Modules).
 
 
-build_acyclic_graph(VertexFun, EdgeFun, ErrorFun, Graph) ->
+build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     G = digraph:new([acyclic]),
-    [ case digraph:vertex(G, Vertex) of
-          false -> digraph:add_vertex(G, Vertex, Label);
-          _     -> ErrorFun({vertex, duplicate, Vertex})
-      end || {Module, Atts} <- Graph,
-             {Vertex, Label} <- VertexFun(Module, Atts) ],
-    [ case digraph:add_edge(G, From, To) of
-          {error, E} -> ErrorFun({edge, E, From, To});
-          _          -> ok
-      end || {Module, Atts} <- Graph,
-             {From, To} <- EdgeFun(Module, Atts) ],
-    G.
+    try
+        [case digraph:vertex(G, Vertex) of
+             false -> digraph:add_vertex(G, Vertex, Label);
+             _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
+         end || {Module, Atts}  <- Graph,
+                {Vertex, Label} <- VertexFun(Module, Atts)],
+        [case digraph:add_edge(G, From, To) of
+             {error, E} -> throw({graph_error, {edge, E, From, To}});
+             _          -> ok
+         end || {Module, Atts} <- Graph,
+                {From, To}     <- EdgeFun(Module, Atts)],
+        {ok, G}
+    catch {graph_error, Reason} ->
+            true = digraph:delete(G),
+            {error, Reason}
+    end.
