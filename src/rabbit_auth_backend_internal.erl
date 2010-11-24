@@ -37,7 +37,7 @@
 -export([description/0]).
 -export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
 
-%%-include("rabbit_auth_backend_spec.hrl").
+-include("rabbit_auth_backend_spec.hrl").
 
 %% Our internal user database
 

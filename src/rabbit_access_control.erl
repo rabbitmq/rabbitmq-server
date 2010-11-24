@@ -48,7 +48,7 @@
 
 -ifdef(use_specs).
 
--export_type([username/0, password/0, password_hash/0]).
+-export_type([username/0, password/0, password_hash/0, permission_atom/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).
@@ -67,7 +67,7 @@
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
-        (username(), rabbit_types:r(atom()), permission_atom())
+        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
@@ -77,7 +77,7 @@
 -spec(clear_admin/1 :: (username()) -> 'ok').
 -spec(list_users/0 :: () -> [{username(), boolean()}]).
 -spec(lookup_user/1 ::
-        (username()) -> rabbit_types:ok(rabbit_types:user())
+        (username()) -> rabbit_types:ok(rabbit_types:internal_user())
                             | rabbit_types:error('not_found')).
 -spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').

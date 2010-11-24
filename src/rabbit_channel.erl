@@ -79,7 +79,7 @@
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/7 ::
-      (channel_number(), pid(), pid(), rabbit_access_control:user(),
+      (channel_number(), pid(), pid(), rabbit_types:user(),
        rabbit_types:vhost(), pid(),
        fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
