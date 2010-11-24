@@ -152,7 +152,7 @@ apply_upgrades(Upgrades) ->
                     %% hence we don't need the lockfile since the real
                     %% mnesia dir is the good one.
                     ok = file:delete(LockFile),
-                    exit({could_not_back_up_mnesia_dir, E})
+                    throw({could_not_back_up_mnesia_dir, E})
             end;
         {error, eexist} ->
             throw({error, previous_upgrade_failed});
