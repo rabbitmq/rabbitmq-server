@@ -128,10 +128,11 @@ apply_upgrades(Upgrades) ->
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
             case rabbit_mnesia:copy_db(BackupDir) of
                 ok ->
-                    %% We need to make the backup after creating the lock file
-                    %% so that it protects us from trying to overwrite the
-                    %% backup. Unfortunately this means the lock file exists in
-                    %% the backup too, which is not intuitive. Remove it.
+                    %% We need to make the backup after creating the
+                    %% lock file so that it protects us from trying to
+                    %% overwrite the backup. Unfortunately this means
+                    %% the lock file exists in the backup too, which
+                    %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
                     info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
                     [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
@@ -141,9 +142,9 @@ apply_upgrades(Upgrades) ->
                     info("Upgrades: Mnesia backup removed~n", []),
                     ok = file:delete(LockFile);
                 {error, E} ->
-                    %% If we can't backup, the upgrade hasn't started hence we
-                    %% don't need the lockfile since the real mnesia dir is the
-                    %% good one.
+                    %% If we can't backup, the upgrade hasn't started
+                    %% hence we don't need the lockfile since the real
+                    %% mnesia dir is the good one.
                     ok = file:delete(LockFile),
                     exit({could_not_back_up_mnesia_dir, E})
             end;
