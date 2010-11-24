@@ -29,36 +29,45 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_direct).
+-module(rabbit_auth_mechanism_amqplain).
 -include("rabbit.hrl").
 
--behaviour(rabbit_exchange_type).
+-behaviour(rabbit_auth_mechanism).
 
--export([description/0, route/2]).
--export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+-export([description/0, should_offer/1, init/1, handle_response/2]).
+
+-include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "exchange type direct"},
+                   [{description, "auth mechanism amqplain"},
                     {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"direct">>, ?MODULE]}},
+                                   [auth_mechanism, <<"AMQPLAIN">>, ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
+%% AMQPLAIN, as used by Qpid Python test suite. The 0-8 spec actually
+%% defines this as PLAIN, but in 0-9 that definition is gone, instead
+%% referring generically to "SASL security mechanism", i.e. the above.
+
 description() ->
-    [{name, <<"direct">>},
-     {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
+    [{name, <<"AMQPLAIN">>},
+     {description, <<"QPid AMQPLAIN mechanism">>}].
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_routing_key(Name, RoutingKey).
+should_offer(_Sock) ->
+    true.
 
-validate(_X) -> ok.
-create(_X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_X, _Bs) -> ok.
-add_binding(_X, _B) -> ok.
-remove_bindings(_X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+init(_Sock) ->
+    [].
+
+handle_response(Response, _State) ->
+    LoginTable = rabbit_binary_parser:parse_table(Response),
+    case {lists:keysearch(<<"LOGIN">>, 1, LoginTable),
+          lists:keysearch(<<"PASSWORD">>, 1, LoginTable)} of
+        {{value, {_, longstr, User}},
+         {value, {_, longstr, Pass}}} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        _ ->
+            {protocol_error,
+             "AMQPLAIN auth info ~w is missing LOGIN or PASSWORD field",
+              [LoginTable]}
+    end.

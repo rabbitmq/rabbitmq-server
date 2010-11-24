@@ -29,36 +29,44 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_direct).
+-module(rabbit_auth_mechanism_cr_demo).
 -include("rabbit.hrl").
 
--behaviour(rabbit_exchange_type).
+-behaviour(rabbit_auth_mechanism).
 
--export([description/0, route/2]).
--export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+-export([description/0, should_offer/1, init/1, handle_response/2]).
+
+-include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "exchange type direct"},
+                   [{description, "auth mechanism cr-demo"},
                     {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"direct">>, ?MODULE]}},
+                                   [auth_mechanism, <<"RABBIT-CR-DEMO">>,
+                                    ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
+-record(state, {username = undefined}).
+
+%% Provides equivalent security to PLAIN but demos use of Connection.Secure(Ok)
+%% START-OK: Username
+%% SECURE: "Please tell me your password"
+%% SECURE-OK: Password
+
 description() ->
-    [{name, <<"direct">>},
-     {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
+    [{name, <<"RABBIT-CR-DEMO">>},
+     {description, <<"RabbitMQ Demo challenge-response authentication "
+                     "mechanism">>}].
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_routing_key(Name, RoutingKey).
+should_offer(_Sock) ->
+    true.
 
-validate(_X) -> ok.
-create(_X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_X, _Bs) -> ok.
-add_binding(_X, _B) -> ok.
-remove_bindings(_X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+init(_Sock) ->
+    #state{}.
+
+handle_response(Response, State = #state{username = undefined}) ->
+    {challenge, <<"Please tell me your password">>,
+     State#state{username = Response}};
+
+handle_response(Response, #state{username = Username}) ->
+    rabbit_access_control:check_user_pass_login(Username, Response).

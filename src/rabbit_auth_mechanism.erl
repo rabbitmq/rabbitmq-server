@@ -29,36 +29,33 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_direct).
--include("rabbit.hrl").
+-module(rabbit_auth_mechanism).
 
--behaviour(rabbit_exchange_type).
+-export([behaviour_info/1]).
 
--export([description/0, route/2]).
--export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+behaviour_info(callbacks) ->
+    [
+     %% A description.
+     {description, 0},
 
--rabbit_boot_step({?MODULE,
-                   [{description, "exchange type direct"},
-                    {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"direct">>, ?MODULE]}},
-                    {requires,    rabbit_registry},
-                    {enables,     kernel_ready}]}).
+     %% If this mechanism is enabled, should it be offered for a given socket?
+     %% (primarily so EXTERNAL can be SSL-only)
+     {should_offer, 1},
 
-description() ->
-    [{name, <<"direct">>},
-     {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
+     %% Called before authentication starts. Should create a state
+     %% object to be passed through all the stages of authentication.
+     {init, 1},
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_routing_key(Name, RoutingKey).
-
-validate(_X) -> ok.
-create(_X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_X, _Bs) -> ok.
-add_binding(_X, _B) -> ok.
-remove_bindings(_X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+     %% Handle a stage of authentication. Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {challenge, Challenge, NextState}
+     %%     Another round is needed. Here's the state I want next time.
+     %% {protocol_error, Msg, Args}
+     %%     Client got the protocol wrong. Log and die.
+     %% {refused, Username}
+     %%     Client failed authentication. Log and die.
+     {handle_response, 2}
+    ];
+behaviour_info(_Other) ->
+    undefined.
