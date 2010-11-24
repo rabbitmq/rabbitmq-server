@@ -1308,7 +1308,7 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                      unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
 
 msgs_confirmed(GuidSet, State) ->
-    {remove_confirms(GuidSet, State), {confirm, gb_sets:to_list(GuidSet)}}.
+    {{confirm, gb_sets:to_list(GuidSet)}, remove_confirms(GuidSet, State)}.
 
 msgs_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(

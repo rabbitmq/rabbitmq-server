@@ -623,7 +623,7 @@ qname(#q{q = #amqqueue{name = QName}}) -> QName.
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
     {BQS2, State1} =
         case Fun(BQS) of
-            {BQS1, {confirm, Guids}} -> {BQS1, confirm_messages(Guids, State)};
+            {{confirm, Guids}, BQS1} -> {BQS1, confirm_messages(Guids, State)};
             BQS1                     -> {BQS1, State}
         end,
     run_message_queue(State1#q{backing_queue_state = BQS2}).
