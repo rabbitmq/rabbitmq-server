@@ -51,7 +51,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, { servers, user_dn_pattern, vhost_access_query,
-                 resource_access_query, is_admin_query, ssl, log, port }).
+                 resource_access_query, is_admin_query, use_ssl, log, port }).
 
 %%--------------------------------------------------------------------
 
@@ -121,7 +121,7 @@ evaluate_ldap(#user{username = U, impl = P}, Q, Args, State) ->
 with_ldap(Username, Password, Fun,
           State = #state{ servers         = Servers,
                           user_dn_pattern = UserDnPattern,
-                          ssl             = SSL,
+                          use_ssl         = SSL,
                           log             = Log,
                           port            = Port }) ->
     Opts0 = [{ssl, SSL}, {port, Port}],
@@ -156,23 +156,13 @@ with_ldap(Username, Password, Fun,
 
 %%--------------------------------------------------------------------
 
+get_env(F) ->
+    {ok, V} = application:get_env(F),
+    V.
+
 init([]) ->
-    {ok, Servers}        = application:get_env(servers),
-    {ok, UserDnPattern}  = application:get_env(user_dn_pattern),
-    {ok, VHostAccess}    = application:get_env(vhost_access_query),
-    {ok, ResourceAccess} = application:get_env(resource_access_query),
-    {ok, IsAdmin}        = application:get_env(is_admin_query),
-    {ok, SSL}            = application:get_env(use_ssl),
-    {ok, Log}            = application:get_env(log),
-    {ok, Port}           = application:get_env(server_port),
-    {ok, #state{ servers               = Servers,
-                 user_dn_pattern       = UserDnPattern,
-                 vhost_access_query    = VHostAccess,
-                 resource_access_query = ResourceAccess,
-                 is_admin_query        = IsAdmin,
-                 ssl                   = SSL,
-                 log                   = Log,
-                 port                  = Port }}.
+    {ok, list_to_tuple(
+           [state | [get_env(F) || F <- record_info(fields, state)]])}.
 
 handle_call({login, Username, Password}, _From,
             State = #state{ is_admin_query = IsAdminQuery }) ->
