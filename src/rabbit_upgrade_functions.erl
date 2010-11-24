@@ -24,28 +24,55 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({remove_user_scope, []}).
+-rabbit_upgrade({remove_user_scope,  []}).
+-rabbit_upgrade({hash_passwords,     []}).
+-rabbit_upgrade({add_ip_to_listener, []}).
 
 %% -------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(remove_user_scope/0 :: () -> 'ok').
+-spec(remove_user_scope/0  :: () -> 'ok').
+-spec(hash_passwords/0     :: () -> 'ok').
+-spec(add_ip_to_listener/0 :: () -> 'ok').
 
 -endif.
 
 %%--------------------------------------------------------------------
 
+%% It's a bad idea to use records or record_info here, even for the
+%% destination form. Because in the future, the destination form of
+%% your current transform may not match the record any more, and it
+%% would be messy to have to go back and fix old transforms at that
+%% point.
+
 remove_user_scope() ->
-    {atomic, ok} = mnesia:transform_table(
-                     rabbit_user_permission,
-                     fun (Perm = #user_permission{
-                            permission = {permission,
-                                          _Scope, Conf, Write, Read}}) ->
-                             Perm#user_permission{
-                               permission = #permission{configure = Conf,
-                                                        write     = Write,
-                                                        read      = Read}}
-                     end,
-                     record_info(fields, user_permission)),
+    mnesia(
+      rabbit_user_permission,
+      fun ({user_permission, UV, {permission, _Scope, Conf, Write, Read}}) ->
+              {user_permission, UV, {permission, Conf, Write, Read}}
+      end,
+      [user_vhost, permission]).
+
+hash_passwords() ->
+    mnesia(
+      rabbit_user,
+      fun ({user, Username, Password, IsAdmin}) ->
+              Hash = rabbit_access_control:hash_password(Password),
+              {user, Username, Hash, IsAdmin}
+      end,
+      [username, password_hash, is_admin]).
+
+add_ip_to_listener() ->
+    mnesia(
+      rabbit_listener,
+      fun ({listener, Node, Protocol, Host, Port}) ->
+              {listener, Node, Protocol, Host, {0,0,0,0}, Port}
+      end,
+      [node, protocol, host, ip_address, port]).
+
+%%--------------------------------------------------------------------
+
+mnesia(TableName, Fun, FieldList) ->
+    {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList),
     ok.

@@ -114,14 +114,11 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
 
 %% Format and rdnSequence as a RFC4514 subject string.
 format_rdn_sequence({rdnSequence, Seq}) ->
-    lists:flatten(
-      rabbit_misc:intersperse(
-        ",", lists:reverse([format_complex_rdn(RDN) || RDN <- Seq]))).
+    string:join(lists:reverse([format_complex_rdn(RDN) || RDN <- Seq]), ",").
 
 %% Format an RDN set.
 format_complex_rdn(RDNs) ->
-    lists:flatten(
-      rabbit_misc:intersperse("+", [format_rdn(RDN) || RDN <- RDNs])).
+    string:join([format_rdn(RDN) || RDN <- RDNs], "+").
 
 %% Format an RDN.  If the type name is unknown, use the dotted decimal
 %% representation.  See RFC4514, section 2.3.
@@ -148,7 +145,7 @@ format_rdn(#'AttributeTypeAndValue'{type = T, value = V}) ->
             io_lib:format(Fmt ++ "=~s", [FV]);
         none when is_tuple(T) ->
             TypeL = [io_lib:format("~w", [X]) || X <- tuple_to_list(T)],
-            io_lib:format("~s:~s", [rabbit_misc:intersperse(".", TypeL), FV]);
+            io_lib:format("~s:~s", [string:join(TypeL, "."), FV]);
         none ->
             io_lib:format("~p:~s", [T, FV])
     end.
