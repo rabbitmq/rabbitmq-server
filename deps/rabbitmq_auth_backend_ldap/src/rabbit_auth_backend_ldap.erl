@@ -37,7 +37,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_auth_backend).
-%%-include("rabbit_auth_backend_spec.hrl").
+-include_lib("rabbit_common/include/rabbit_auth_backend_spec.hrl").
 
 -export([description/0]).
 -export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
@@ -115,6 +115,9 @@ evaluate_ldap(#user{username = U, impl = P}, Q, Args, State) ->
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
+%% Also this requires that we store the password in #user.impl, which
+%% is quite dodgy - all sorts of crash scenarios lead to the contents of
+%% #user getting logged.
 with_ldap(Username, Password, Fun,
           State = #state{ servers         = Servers,
                           user_dn_pattern = UserDnPattern,
