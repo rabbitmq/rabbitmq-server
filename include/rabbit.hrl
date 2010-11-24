@@ -35,7 +35,6 @@
                impl          %% Scratch space for that module
               }).
 
-%% TODO mnesia-upgrade this
 -record(internal_user, {username, password_hash, is_admin}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
