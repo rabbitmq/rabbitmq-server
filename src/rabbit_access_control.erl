@@ -150,7 +150,7 @@ check_resource_access(User = #user{username = Username, auth_backend = Module},
                       Resource, Permission) ->
     check_access(
       fun() -> Module:check_resource_access(User, Resource, Permission) end,
-      "~s failed checking resource access to ~s for ~s: ~p~n",
+      "~s failed checking resource access to ~p for ~s: ~p~n",
       [Module, Resource, Username],
       "access to ~s refused for user '~s'",
       [rabbit_misc:rs(Resource), Username]).
