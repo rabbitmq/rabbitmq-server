@@ -45,7 +45,6 @@ to_json(ReqData, Context = #context{username = Username, is_admin = IsAdmin}) ->
                      {statistics_db_node, stats_db_node()},
                      {listeners,          Listeners}];
             _ ->
-
                 Overview0 ++
                     rabbit_mgmt_db:get_overview(Username)
         end,
