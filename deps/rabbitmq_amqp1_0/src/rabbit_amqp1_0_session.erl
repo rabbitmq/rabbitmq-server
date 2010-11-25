@@ -113,8 +113,11 @@ handle_cast({frame, Frame},
     %% TODO rabbit_channel has some extra error handling here
     end.
 
+%% TODO rabbit_channel returns {noreply, State, hibernate}, but that
+%% appears to break things here (it stops the session responding to
+%% frames).
 noreply(State) ->
-    {noreply, State, hibernate}.
+    {noreply, State}.
 
 %% ------
 
