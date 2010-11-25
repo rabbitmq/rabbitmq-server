@@ -1039,21 +1039,24 @@ transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
 
 transform_file(Path, Fun) ->
     PathTmp = Path ++ ".upgrade",
-    Size = filelib:file_size(Path),
+    case filelib:file_size(Path) of
+        0 ->
+            ok;
+        Size ->
+            {ok, PathTmpHdl} =
+                file_handle_cache:open(PathTmp, ?WRITE_MODE,
+                                       [{write_buffer, infinity}]),
 
-    {ok, PathTmpHdl} =
-        file_handle_cache:open(PathTmp, ?WRITE_MODE,
-                               [{write_buffer, infinity}]),
+            {ok, PathHdl} = file_handle_cache:open(
+                              Path, [{read_ahead, Size} | ?READ_MODE], []),
+            {ok, Content} = file_handle_cache:read(PathHdl, Size),
+            ok = file_handle_cache:close(PathHdl),
 
-    {ok, PathHdl} =
-        file_handle_cache:open(Path, [{read_ahead, Size} | ?READ_MODE], []),
-    {ok, Content} = file_handle_cache:read(PathHdl, Size),
-    ok = file_handle_cache:close(PathHdl),
+            ok = drive_transform_fun(Fun, PathTmpHdl, Content),
 
-    ok = drive_transform_fun(Fun, PathTmpHdl, Content),
-
-    ok = file_handle_cache:close(PathTmpHdl),
-    ok = file:rename(PathTmp, Path).
+            ok = file_handle_cache:close(PathTmpHdl),
+            ok = file:rename(PathTmp, Path)
+    end.
 
 drive_transform_fun(Fun, Hdl, Contents) ->
     case Fun(Contents) of
