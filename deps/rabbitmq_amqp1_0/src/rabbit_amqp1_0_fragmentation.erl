@@ -16,26 +16,26 @@
 %% TODO: we don't care about fragment_offset while reading. Should we?
 assemble(Fragments) ->
     %%io:format("Fragments: ~p~n", [Fragments]),
-    {Props, Content} = assemble(?SECTION_HEADER, {undefined, undefined},
+    {Props, Content} = assemble(?SECTION_HEADER, {#'P_basic'{}, undefined},
                                 Fragments),
-    %%io:format("Payload= ~p~n", [Content]),
-    %%io:format("Props= ~p~n", [Props]),
+    %%io:format("Props: ~p~n", [Props]),
+    %%io:format("Content: ~p~n", [Content]),
     #amqp_msg{props = Props, payload = Content}.
 
 assemble(?SECTION_HEADER, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
                            format_code = ?SECTION_HEADER} | Fragments]) ->
-    %% TODO parse HEADER
-    assemble(?SECTION_PROPERTIES, {PropsIn, ContentIn}, Fragments);
+    assemble(?SECTION_PROPERTIES, {parse_header(Payload, PropsIn), ContentIn},
+             Fragments);
 
 assemble(?SECTION_PROPERTIES, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
                            format_code = ?SECTION_PROPERTIES} | Fragments]) ->
-    %% TODO parse PROPERTIES
     %% TODO allow for AMQP_DATA, _MAP, _LIST
-    assemble(?SECTION_DATA, {#'P_basic'{}, ContentIn}, Fragments);
+    assemble(?SECTION_DATA, {parse_properties(Payload, PropsIn), ContentIn},
+             Fragments);
 
 assemble(?SECTION_DATA, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
@@ -53,6 +53,33 @@ assemble(?SECTION_FOOTER, {PropsIn, ContentIn},
 
 assemble(Expected, {_, _}, Actual) ->
     exit({expected_fragment, Expected, Actual}).
+
+parse_header(HeaderBin, Props) ->
+    Parsed = rabbit_amqp1_0_framing:decode(
+              rabbit_amqp1_0_binary_parser:parse(HeaderBin)),
+    Props#'P_basic'{headers          = todo, %% TODO
+                    delivery_mode    = case Parsed#'v1_0.header'.durable of
+                                           true -> 2;
+                                           _    -> 1
+                                       end,
+                    priority         = Parsed#'v1_0.header'.priority,
+                    expiration       = Parsed#'v1_0.header'.ttl,
+                    timestamp        = Parsed#'v1_0.header'.transmit_time,
+                    type             = todo, %% TODO
+                    app_id           = todo, %% TODO
+                    cluster_id       = todo}. %% TODO
+
+parse_properties(PropsBin, Props) ->
+    Parsed = rabbit_amqp1_0_framing:decode(
+              rabbit_amqp1_0_binary_parser:parse(PropsBin)),
+    Props#'P_basic'{content_type     = Parsed#'v1_0.properties'.content_type,
+                    content_encoding = todo, %% TODO parse from 1.0 version
+                    correlation_id   = Parsed#'v1_0.properties'.correlation_id,
+                    reply_to         = Parsed#'v1_0.properties'.reply_to,
+                    message_id       = Parsed#'v1_0.properties'.message_id,
+                    user_id          = Parsed#'v1_0.properties'.user_id}.
+
+%%--------------------------------------------------------------------
 
 
 fragments(#amqp_msg{props = Properties, payload = Content}) ->

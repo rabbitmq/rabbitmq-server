@@ -55,7 +55,14 @@ record_for({symbol, "amqp:linkage:list"}) ->
 record_for({symbol, "amqp:flow-state:list"}) ->
     #'v1_0.flow_state'{};
 record_for({symbol, "amqp:fragment:list"}) ->
-    #'v1_0.fragment'{}.
+    #'v1_0.fragment'{};
+record_for({symbol, "amqp:header:list"}) ->
+    #'v1_0.header'{};
+record_for({symbol, "amqp:properties:list"}) ->
+    #'v1_0.properties'{};
+record_for({symbol, "amqp:footer:list"}) ->
+    #'v1_0.footer'{}.
+
 
 
 encode_described(Symbol, Frame) ->

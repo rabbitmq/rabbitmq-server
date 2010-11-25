@@ -126,3 +126,28 @@
          format_code = null,
          fragment_offset = null,
          payload = null}).
+
+-record('v1_0.header',
+        {durable = null,
+         priority = null,
+         transmit_time = null,
+         ttl = null,
+         former_acquirers = null,
+         delivery_failures = null,
+         format_code = null,
+         message_attrs = null,
+         delivery_attrs = null}).
+
+-record('v1_0.properties',
+        {message_id = null,
+         user_id = null,
+         to = null,
+         subject = null,
+         reply_to = null,
+         correlation_id = null,
+         content_length = null,
+         content_type = null}).
+
+-record('v1_0.footer',
+        {message_attrs = null,
+         delivery_attrs = null}).
