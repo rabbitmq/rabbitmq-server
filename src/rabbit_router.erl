@@ -82,10 +82,8 @@ deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                         end),
     {Routed, Handled} =
          lists:foldl(fun fold_deliveries/2, {false, []}, Success),
-    case check_delivery(Mandatory, Immediate, {Routed, Handled}) of
-        {routed, Qs} -> {routed, Qs};
-        O            -> O
-    end.
+    check_delivery(Mandatory, Immediate, {Routed, Handled}).
+
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source
