@@ -1239,7 +1239,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
                            persistent_count = PCount,
                            durable          = IsDurable,
                            ram_msg_count    = RamMsgCount,
-                           unconfirmed      = Unconfirmed}) ->
+                           unconfirmed      = Unconfirmed }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
