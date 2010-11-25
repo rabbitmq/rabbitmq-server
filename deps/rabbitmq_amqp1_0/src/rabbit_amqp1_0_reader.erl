@@ -668,7 +668,8 @@ handle_1_0_frame(Channel, Payload,
 
 handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
                                           max_frame_size = ClientFrameMax,
-                                          hostname = _Hostname },
+                                          hostname = _Hostname,
+                                          properties = Props },
                             State = #v1{
                               start_heartbeat_fun = SHF,
                               stats_timer = StatsTimer,
@@ -676,6 +677,10 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
                               connection = Connection,
                               sock = Sock}) ->
     %% TODO channel_max?
+    ClientProps = case Props of
+                      null -> [];
+                      {map, Ps} -> Ps
+                  end,
     ClientHeartbeat = case Interval of
                           null -> 0;
                           {_, HB} -> HB
@@ -710,6 +715,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
                                   ClientHeartbeat, ReceiveFun),
                 State#v1{connection_state = running,
                          connection = Connection#connection{
+                                        client_properties = ClientProps,
                                         vhost = <<"/">>, %% FIXME relate to hostname
                                         timeout_sec = ClientHeartbeat,
                                         frame_max = FrameMax},
