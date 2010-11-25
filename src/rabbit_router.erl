@@ -72,7 +72,8 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
-deliver(QNames, Delivery) ->
+deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
+                                    immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
     {Success, _} =
         delegate:invoke(QPids,
@@ -80,9 +81,11 @@ deliver(QNames, Delivery) ->
                                 rabbit_amqqueue:deliver(Pid, Delivery)
                         end),
     {Routed, Handled} =
-        lists:foldl(fun fold_deliveries/2, {false, []}, Success),
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   {Routed, Handled}).
+         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
+    case check_delivery(Mandatory, Immediate, {Routed, Handled}) of
+        {routed, Qs} -> {routed, Qs};
+        O            -> O
+    end.
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source
