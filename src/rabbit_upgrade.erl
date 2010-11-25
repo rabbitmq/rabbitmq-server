@@ -127,9 +127,8 @@ heads(G) ->
 
 apply_upgrades(Upgrades) ->
     LockFile = lock_filename(dir()),
-    case file:open(LockFile, [write, exclusive]) of
-        {ok, Lock} ->
-            ok = file:close(Lock),
+    case rabbit_misc:lock_file(LockFile) of
+        ok ->
             BackupDir = dir() ++ "-upgrade-backup",
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
             case rabbit_mnesia:copy_db(BackupDir) of
@@ -155,9 +154,7 @@ apply_upgrades(Upgrades) ->
                     throw({could_not_back_up_mnesia_dir, E})
             end;
         {error, eexist} ->
-            throw({error, previous_upgrade_failed});
-        {error, _} = Error ->
-            throw(Error)
+            throw({error, previous_upgrade_failed})
     end.
 
 apply_upgrade({M, F}) ->

@@ -66,6 +66,7 @@
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
+-export([lock_file/1]).
 
 -import(mnesia).
 -import(lists).
@@ -200,6 +201,7 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
+-spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 
 -endif.
 
@@ -810,4 +812,15 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     catch {graph_error, Reason} ->
             true = digraph:delete(G),
             {error, Reason}
+    end.
+
+%% TODO: When we stop supporting Erlang prior to R14, this should be
+%% replaced with file:open [write, exclusive]
+lock_file(Path) ->
+    case filelib:is_file(Path) of
+        true ->
+            {error, eexist};
+        false ->
+            {ok, Lock} = file:open(Path, [write]),
+            ok = file:close(Lock)
     end.
