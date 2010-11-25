@@ -128,7 +128,7 @@ remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 add(Binding, InnerFun) ->
     case binding_action(
            Binding,
-           fun (Src = #exchange{ type = Type }, Dst, B) ->
+           fun (Src = #exchange{type = Type}, Dst, B) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
                    %% anything else
@@ -138,7 +138,7 @@ add(Binding, InnerFun) ->
                                []  -> ok = sync_binding(
                                              B, all_durable([Src, Dst]),
                                              fun mnesia:write/3),
-                                      rabbit_exchange:maybe_callback(
+                                      ok = rabbit_exchange:maybe_callback(
                                              Type, add_binding, [Src, B]),
                                       {new, Src, B};
                                [_] -> {existing, Src, B}
@@ -147,8 +147,8 @@ add(Binding, InnerFun) ->
                            E
                    end
            end) of
-        {new, Src = #exchange{ type = Type }, B} ->
-            rabbit_exchange:maybe_callback(Type, add_binding, [Src, B]),
+        {new, Src = #exchange{type = Type}, B} ->
+            ok = rabbit_exchange:maybe_callback(Type, add_binding, [Src, B]),
             rabbit_event:notify(binding_created, info(B));
         {existing, _, _} ->
             ok;
@@ -427,29 +427,29 @@ process_deletions(Deletions) ->
     NonTxFun =
         if Tx     -> fun(_X, _D, _B) -> ok end;
            not Tx ->
-            fun (#exchange{name = XName}, Deleted, FlatBindings) ->
-                [rabbit_event:notify(binding_deleted, info(B))
-                 || B <- FlatBindings],
-                case Deleted of
-                    not_deleted -> ok;
-                    deleted     -> rabbit_event:notify(exchange_deleted,
-                                                       [{name, XName}])
-                end
-            end
+               fun (#exchange{name = XName}, Deleted, FlatBindings) ->
+                   [rabbit_event:notify(binding_deleted, info(B)) ||
+                    B <- FlatBindings],
+                   case Deleted of
+                       not_deleted -> ok;
+                       deleted     -> rabbit_event:notify(exchange_deleted,
+                                                          [{name, XName}])
+                   end
+               end
         end,
     Fun =
-      fun (X = #exchange{type = Type}, Deleted, FlatBindings) ->
-              case Deleted of
-                  not_deleted -> rabbit_exchange:maybe_callback(
-                                     Type, remove_bindings, [X, FlatBindings]);
-                  deleted     -> rabbit_exchange:maybe_callback(
-                                     Type, delete, [X, FlatBindings])
-              end
-      end,
+        fun (X = #exchange{type = Type}, Deleted, FlatBindings) ->
+            case Deleted of
+                not_deleted -> rabbit_exchange:maybe_callback(
+                                   Type, remove_bindings, [X, FlatBindings]);
+                deleted     -> rabbit_exchange:maybe_callback(
+                                   Type, delete, [X, FlatBindings])
+            end
+        end,
     dict:fold(
-      fun (_XName, {X, Deleted, Bindings}, ok) ->
-              FlatBindings = lists:flatten(Bindings),
-              ok = Fun(X, Deleted, FlatBindings),
-              NonTxFun(X, Deleted, FlatBindings)
-      end, ok, Deletions).
+        fun (_XName, {X, Deleted, Bindings}, ok) ->
+            FlatBindings = lists:flatten(Bindings),
+            NonTxFun(X, Deleted, FlatBindings)
+            Fun(X, Deleted, FlatBindings),
+        end, ok, Deletions).
 

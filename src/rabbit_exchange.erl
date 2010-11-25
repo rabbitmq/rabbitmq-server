@@ -120,12 +120,10 @@ declare(XName, Type, Durable, AutoDelete, Args) ->
                   durable     = Durable,
                   auto_delete = AutoDelete,
                   arguments   = Args},
-    %% We want to upset things if it isn't ok; this is different from
-    %% the other hooks invocations, where we tend to ignore the return
-    %% value.
+    %% We want to upset things if it isn't ok
     TypeModule = type_to_module(Type),
     ok = TypeModule:validate(X),
-    case {rabbit_misc:execute_mnesia_transaction(
+    case rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_exchange, XName}) of
                        [] ->
@@ -137,18 +135,18 @@ declare(XName, Type, Durable, AutoDelete, Args) ->
                                     false ->
                                         ok
                            end,
-                           maybe_callback(Type, create, [X]),
-                           {new, X};
+                           ok = maybe_callback(Type, create, [X]),
+                           {new, X, mnesia:is_transaction()};
                        [ExistingX] ->
                            {existing, ExistingX}
                    end
-           end), mnesia:is_transaction()} of
-        {{new, X}, false}     -> maybe_callback(Type, create, [X]),
-                                 rabbit_event:notify(exchange_created, info(X)),
-                                 X;
-        {{new, X}, true}      -> X;
-        {{existing, X}, _}    -> X;
-        Err                   -> Err
+           end) of
+        {new, X, false} -> ok = maybe_callback(Type, create, [X]),
+                           rabbit_event:notify(exchange_created, info(X)),
+                           X;
+        {new, X, true}  -> X;
+        {existing, X}   -> X;
+        Err             -> Err
     end.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
@@ -308,6 +306,7 @@ maybe_auto_delete(#exchange{auto_delete = true} = X) ->
 
 %% Possible callback, depending on whether mnesia is in a transaction
 %% and whether transactional callbacks were requested by the exchange
+%% The type is expected to exist.
 maybe_callback(XType, Fun, Args) ->
     {ok, [Module, ModTx]} = rabbit_exchange_type_registry:lookup_module(XType),
     Tx = mnesia:is_transaction(),
@@ -325,5 +324,5 @@ unconditional_delete(X = #exchange{name = XName, type = Type}) ->
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
-    maybe_callback(Type, delete, [X, lists:flatten(Bindings)]),
+    ok = maybe_callback(Type, delete, [X, lists:flatten(Bindings)]),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.

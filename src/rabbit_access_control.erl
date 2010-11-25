@@ -330,10 +330,13 @@ add_vhost(VHostPath) ->
           end),
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),
     case R of
-        {ok, Xs} -> [{rabbit_exchange:maybe_callback(Type, create, [X]),
-                      rabbit_event:notify(exchange_created,
-                                          rabbit_exchange:info(X))} ||
-                     X = #exchange{type = Type} <- Xs], ok;
+        {ok, Xs} -> lists:map(
+                        fun(X = #exchange{type = Type}) ->
+                            rabbit_event:notify(exchange_created,
+                                                rabbit_exchange:info(X))
+                            rabbit_exchange:maybe_callback(Type, create, [X]),
+                        end, Xs),
+                    ok;
         _        -> R
     end.
 
