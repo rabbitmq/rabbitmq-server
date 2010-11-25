@@ -14,7 +14,7 @@
                         transfer_count = 0,
                         transfer_unit = 0}).
 
--record(incoming_link, {name, target}).
+-record(incoming_link, {name, exchange, routing_key}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -132,26 +132,33 @@ handle_control(#'v1_0.attach'{name = Name,
                               role = false}, %% client is sender
                State = #session{ outgoing_lwm = LWM }) ->
     %% TODO associate link name with target
-    #'v1_0.linkage'{ target = Target } = Linkage,
+    #'v1_0.linkage'{ source = Source, target = Target } = Linkage,
     #'v1_0.flow_state'{ transfer_count = TransferCount } = Flow,
-    {utf8, Exchange} = linkage_address(Target),
-    %% FIXME check for the exchange ..
-    Link = #incoming_link{ name = Name, target = Exchange },
-    put({incoming, Handle}, Link),
-    {reply, 
-     #'v1_0.attach'{
-       name = Name,
-       handle = Handle,
-       remote = Linkage,
-       local = #'v1_0.linkage'{
-         target = {utf8, Exchange}
-        }, %% TODO include whatever the source was
-       flow_state = Flow#'v1_0.flow_state'{
-                      link_credit = {uint, 50},
-                      unsettled_lwm = {uint, LWM}
-                     },
-       role = true %% reciever
-      }, State};
+    {utf8, Destination} = Target#'v1_0.target'.address,
+    case ensure_destination(Destination, #incoming_link{ name = Name }, State) of
+        {ok, IncomingLink, State1} ->
+            put({incoming, Handle}, IncomingLink),
+            {reply,
+             #'v1_0.attach'{
+               name = Name,
+               handle = Handle,
+               remote = Linkage,
+               local = #'v1_0.linkage'{
+                 %% TODO include whatever the source was
+                 source = Source,
+                 target = #'v1_0.target'{ address = {utf8, Destination} }},
+               flow_state = Flow#'v1_0.flow_state'{
+                              link_credit = {uint, 50},
+                              unsettled_lwm = {uint, LWM}},
+               role = true}, State};
+        {error, State1} ->
+            {reply,
+             #'v1_0.attach'{
+               name = Name,
+               handle = Handle,
+               remote = Linkage,
+               local = null}, State1}
+    end;
 
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
@@ -160,7 +167,7 @@ handle_control(#'v1_0.attach'{name = Name,
                               role = true}, %% client is receiver
                State = #session{backing_channel = Ch}) ->
     #'v1_0.linkage'{ source = Source } = Linkage,
-    {utf8, Q} = linkage_address(Source),
+    {utf8, Q} = Source#'v1_0.source'.address,
     case amqp_channel:subscribe(
            Ch, #'basic.consume' { queue = Q,
                                   consumer_tag = handle_to_ctag(Handle),
@@ -196,12 +203,11 @@ handle_control(#'v1_0.transfer'{handle = Handle,
                                },
                           State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
-        #incoming_link{ target = X } ->
+        #incoming_link{ exchange = X, routing_key = RK } ->
             %% TODO what's the equivalent of the routing key?
-            K = <<"">>,
             Msg = rabbit_amqp1_0_fragmentation:assemble(Fragments),
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
-                                                     routing_key = K }, Msg);
+                                                     routing_key = RK }, Msg);
         undefined ->
             %% FIXME What am I supposed to do here
             no_such_handle
@@ -260,8 +266,13 @@ flow_state(#outgoing_link{credit = Credit,
             link_credit = {uint, Credit}
            }.
 
-linkage_address({described, _SourceOrTarget, {map, KeyValuePairs}}) ->
-    proplists:get_value({symbol, "address"}, KeyValuePairs).
+ensure_destination(Destination, Link = #incoming_link{}, State) ->
+    %% TODO Break the destination down into elements,
+    %% check that exchanges exist,
+    %% possibly create a subscription queue, etc.
+    {ok,
+     Link#incoming_link{exchange = Destination, routing_key = <<"">>},
+     State}.
 
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number

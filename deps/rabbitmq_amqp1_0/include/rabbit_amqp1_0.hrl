@@ -120,6 +120,20 @@
          available = null,
          drain = null}).
 
+-record('v1_0.source',
+        {address = null,
+         dynamic = null,
+         distribution_mode = null,
+         filter = null,
+         default_outcome = null,
+         outcomes = null,
+         capabilities = null}).
+
+-record('v1_0.target',
+        {address = null,
+         dynamic = null,
+         capabilities = null}).
+
 -record('v1_0.fragment',
         {first = null,
          last = null,
