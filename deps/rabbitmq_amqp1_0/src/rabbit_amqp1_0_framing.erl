@@ -17,6 +17,11 @@ fill_fields(Record, Fields) ->
                  {Record, 2}, Fields),
     Res.
 
+%% Some fields are allowed to be 'multiple', in which case they are
+%% either null, a single value, or given the descriptor true and a
+%% list value. (Yes that is gross)
+decode({described, true, {list, Fields}}) ->
+    {list, Fields};
 decode({described, Descriptor, {list, Fields}}) ->
     fill_fields(record_for(Descriptor), Fields);
 decode(Other) ->

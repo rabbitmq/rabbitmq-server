@@ -117,8 +117,9 @@ handle_control(#'v1_0.attach'{name = Name,
                               role = false}, %% client is sender
                State = #session{ outgoing_lwm = LWM }) ->
     %% TODO associate link name with target
-    #'v1_0.linkage'{ target = Exchange } = Linkage,
+    #'v1_0.linkage'{ target = Target } = Linkage,
     #'v1_0.flow_state'{ transfer_count = TransferCount } = Flow,
+    {utf8, Exchange} = linkage_address(Target),
     %% FIXME check for the exchange ..
     Link = #incoming_link{ name = Name, target = Exchange },
     put({incoming, Handle}, Link),
@@ -128,7 +129,7 @@ handle_control(#'v1_0.attach'{name = Name,
        handle = Handle,
        remote = Linkage,
        local = #'v1_0.linkage'{
-         target = Exchange 
+         target = {utf8, Exchange}
         }, %% TODO include whatever the source was
        flow_state = Flow#'v1_0.flow_state'{
                       link_credit = {uint, 50},
@@ -143,7 +144,8 @@ handle_control(#'v1_0.attach'{name = Name,
                               flow_state = Flow,
                               role = true}, %% client is receiver
                State) ->
-    #'v1_0.linkage'{ source = {utf8, Q} } = Linkage,
+    #'v1_0.linkage'{ source = Source } = Linkage,
+    {utf8, Q} = linkage_address(Source),
     case rabbit_amqqueue:with(
            rabbit_misc:r(<<"/">>, queue, Q),
            fun (Queue) ->
@@ -164,7 +166,8 @@ handle_control(#'v1_0.attach'{name = Name,
                name = Name,
                handle = Handle,
                remote = Linkage,
-               local = #'v1_0.linkage'{ source = {utf8, Q} },
+               local = #'v1_0.linkage'{
+                 source = {utf8, Q} },
                flow_state = Flow, %% TODO
                role = false
               }, State};
@@ -183,9 +186,9 @@ handle_control(#'v1_0.transfer'{handle = Handle,
                                },
                           State) ->
     case get({incoming, Handle}) of
-        #incoming_link{ target = {utf8, Target} } ->
+        #incoming_link{ target = X } ->
             %% Send to the exchange!
-            ExchangeName = rabbit_misc:r(<<"/">>, exchange, Target),
+            ExchangeName = rabbit_misc:r(<<"/">>, exchange, X),
             %% Check permitted
             Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
             %% Scangiest way to the content
@@ -269,6 +272,9 @@ flow_state(#outgoing_link{credit = Credit,
             transfer_count = {uint, Count},
             link_credit = {uint, Credit}
            }.
+
+linkage_address({described, _SourceOrTarget, {map, KeyValuePairs}}) ->
+    proplists:get_value({symbol, "address"}, KeyValuePairs).
 
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
