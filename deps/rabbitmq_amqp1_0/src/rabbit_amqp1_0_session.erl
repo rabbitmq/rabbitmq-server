@@ -167,7 +167,7 @@ handle_control(#'v1_0.attach'{name = Name,
                               role = true}, %% client is receiver
                State = #session{backing_channel = Ch}) ->
     #'v1_0.linkage'{ source = Source } = Linkage,
-    {utf8, Q} = Source#'v1_0.source'.address,
+    {utf8, Q} = Source#'v1_0.source'.address, %% TODO ensure_destination
     case amqp_channel:subscribe(
            Ch, #'basic.consume' { queue = Q,
                                   consumer_tag = handle_to_ctag(Handle),
@@ -184,7 +184,7 @@ handle_control(#'v1_0.attach'{name = Name,
                handle = Handle,
                remote = Linkage,
                local = #'v1_0.linkage'{
-                 source = {utf8, Q} },
+                 source = #'v1_0.source'{address = {utf8, Q}}},
                flow_state = Flow, %% TODO
                role = false
               }, State};
@@ -199,8 +199,7 @@ handle_control(#'v1_0.attach'{name = Name,
 handle_control(#'v1_0.transfer'{handle = Handle,
                                 delivery_tag = Tag,
                                 transfer_id = TransferId,
-                                fragments = {list, Fragments}
-                               },
+                                fragments = Fragments},
                           State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK } ->
@@ -225,7 +224,6 @@ handle_control(#'v1_0.end'{}, #session{ writer_pid = Sock }) ->
     stop;
 
 handle_control(Frame, State) ->
-    io:format("Session frame: ~p~n", [Frame]),
     {noreply, State}.
 
 %% ------
