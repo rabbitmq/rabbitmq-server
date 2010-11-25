@@ -69,6 +69,26 @@ code_change(_OldVsn, State, _Extra) ->
 handle_call(Msg, From, State) ->
     {reply, {error, not_understood, Msg}, State}.
 
+handle_info(#'basic.consume_ok'{}, State) ->
+    %% Handled above
+    {noreply, State};
+
+handle_info({#'basic.deliver'{consumer_tag = ConsumerTag}, Msg},
+            State = #session{ writer_pid = WriterPid,
+                              transfer_number = TransferNum }) ->
+    %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
+    Handle = ctag_to_handle(ConsumerTag),
+    case get({out, Handle}) of
+        Link = #outgoing_link{} ->
+            NewLink = transfer(WriterPid, Handle, Link, State, Msg),
+            put({out, Handle}, NewLink),
+            {noreply, State#session{ transfer_number = next_transfer_number(TransferNum)}};
+        undefined ->
+            %% FIXME handle missing link -- why does the queue think it's there?
+            io:format("Delivery to non-existent consumer ~p", [ConsumerTag]),
+            {noreply, State}
+    end;
+
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #session{writer_pid = WriterPid}) ->
@@ -78,22 +98,6 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     {noreply, State}. % FIXME rabbit_channel uses queue_blocked?
-
-handle_cast({deliver, ConsumerTag, AckRequired, MsgStruct},
-            State = #session{ writer_pid = WriterPid,
-                              transfer_number = TransferNum }) ->
-    %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
-    %% Consumer tag is the link handle
-    case get({out, ConsumerTag}) of
-        Link = #outgoing_link{} ->
-            NewLink = transfer(WriterPid, ConsumerTag, Link, State, MsgStruct),
-            put({out, ConsumerTag}, NewLink),
-            {noreply, State#session{ transfer_number = next_transfer_number(TransferNum)}};
-        _ ->
-            %% FIXME handle missing link -- why does the queue think it's there?
-            io:format("Delivery to non-existent consumer ~p", [ConsumerTag]),
-            {noreply, State}
-    end;
 
 handle_cast({frame, Frame},
             State = #session{ writer_pid = Sock,
@@ -151,25 +155,20 @@ handle_control(#'v1_0.attach'{name = Name,
                               local = Linkage,
                               flow_state = Flow,
                               role = true}, %% client is receiver
-               State) ->
+               State = #session{backing_channel = Ch}) ->
     #'v1_0.linkage'{ source = Source } = Linkage,
     {utf8, Q} = linkage_address(Source),
-    case rabbit_amqqueue:with(
-           rabbit_misc:r(<<"/">>, queue, Q),
-           fun (Queue) ->
-                   rabbit_amqqueue:basic_consume(Queue,
-                                                 true, %% FIXME noack
-                                                 self(),
-                                                 undefined, %% FIXME limiter
-                                                 Handle,
-                                                 false, %% exclusive
-                                                 undefined),
-                   %% FIXME we should avoid the race by getting the queue to send
-                   %% attach back, but a.t.m. it would use the wrong codec.
-                   put({out, Handle}, #outgoing_link{}),
-                   ok
-           end) of
-        ok ->
+    case amqp_channel:subscribe(
+           Ch, #'basic.consume' { queue = Q,
+                                  consumer_tag = handle_to_ctag(Handle),
+                                  %% TODO noack
+                                  no_ack = true,
+                                  %% TODO exclusive?
+                                  exclusive = false}, self()) of
+        #'basic.consume_ok'{} ->
+            %% FIXME we should avoid the race by getting the queue to send
+            %% attach back, but a.t.m. it would use the wrong codec.
+            put({out, Handle}, #outgoing_link{}),
             {reply, #'v1_0.attach'{
                name = Name,
                handle = Handle,
@@ -179,7 +178,7 @@ handle_control(#'v1_0.attach'{name = Name,
                flow_state = Flow, %% TODO
                role = false
               }, State};
-        {error, _} ->
+        _ ->
             {reply, #'v1_0.attach'{
                name = Name,
                local = null,
@@ -234,8 +233,7 @@ transfer(WriterPid, LinkHandle,
                                 transfer_unit = Unit,
                                 transfer_count = Count },
          Session = #session{ transfer_number = TransferNumber },
-         {_QName, QPid, _MsgId, Redelivered,
-          #basic_message{content = Content}}) ->
+         #amqp_msg{props = Properties, payload = Content}) ->
     TransferSize = transfer_size(Content, Unit),
     NewLink = Link#outgoing_link{ credit = Credit - TransferSize,
                                   transfer_count = Count + TransferSize },
@@ -251,8 +249,7 @@ transfer(WriterPid, LinkHandle,
                          aborted = false,
                          batchable = false,
                          fragments = fragments(Content)},
-    rabbit_amqp1_0_writer:send_command_and_notify(
-      WriterPid, QPid, self(), T),
+    rabbit_amqp1_0_writer:send_command(WriterPid, T),
     NewLink.
 
 flow_state(#outgoing_link{credit = Credit,
@@ -280,3 +277,9 @@ fragments(Content) ->
 %% FIXME
 transfer_size(Content, Unit) ->
     1.
+
+handle_to_ctag({uint, H}) ->
+    <<H:32/integer>>.
+
+ctag_to_handle(<<H:32/integer>>) ->
+    {uint, H}.
