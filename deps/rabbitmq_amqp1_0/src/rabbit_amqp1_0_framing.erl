@@ -1,11 +1,14 @@
 -module(rabbit_amqp1_0_framing).
 
--export([encode/1, decode/1]).
+-export([encode/1, decode/1, version/0]).
 
 %% debug
 -export([fill_fields/2]).
 
 -include("rabbit_amqp1_0.hrl").
+
+version() ->
+    {1, 0, 0}.
 
 fill_fields(Record, Fields) ->
     {Res, _} = lists:foldl(

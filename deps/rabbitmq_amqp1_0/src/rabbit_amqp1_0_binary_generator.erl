@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_binary_generator).
 
--export([generate/1, build_frame/2]).
+-export([generate/1, build_frame/2, build_heartbeat_frame/0]).
 
 -include("rabbit_amqp1_0.hrl").
 
@@ -10,10 +10,14 @@
 -endif.
 
 -define(AMQP_FRAME_TYPE, 0).
+-define(DOFF, 2).
 
 build_frame(Channel, Payload) ->
     Size = iolist_size(Payload) + 8, % frame header and no extension
     [ <<Size:32/unsigned, 2:8, ?AMQP_FRAME_TYPE:8, Channel:16/unsigned>>, Payload ].
+
+build_heartbeat_frame() ->
+    <<0:32, ?DOFF:8, ?AMQP_FRAME_TYPE:8, 0:16>>.
 
 generate({described, Descriptor, Value}) ->
     DescBin = generate(Descriptor),

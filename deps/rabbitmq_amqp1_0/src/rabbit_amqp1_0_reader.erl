@@ -666,23 +666,70 @@ handle_1_0_frame(Channel, Payload,
         false -> handle_1_0_session_frame(Channel, Frame, State)
     end.
 
-handle_1_0_connection_frame(#'v1_0.open'{},
+handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
+                                          max_frame_size = ClientFrameMax,
+                                          hostname = _Hostname },
                             State = #v1{
+                              start_heartbeat_fun = SHF,
+                              stats_timer = StatsTimer,
                               connection_state = starting,
                               connection = Connection,
                               sock = Sock}) ->
+    %% TODO channel_max?
+    ClientHeartbeat = case Interval of
+                          null -> 0;
+                          {_, HB} -> HB
+                      end,
+    FrameMax = case ClientFrameMax of
+                   null -> 0;
+                   {_, FM} -> FM
+               end,
+    State1 =
+        if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+                rabbit_misc:protocol_error(
+                  not_allowed, "frame_max=~w < ~w min size",
+                  [FrameMax, ?FRAME_MIN_SIZE]);
+           (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+                rabbit_misc:protocol_error(
+                  not_allowed, "frame_max=~w > ~w max size",
+                  [FrameMax, ?FRAME_MAX]);
+           true ->
+            SendFun =
+                    fun() ->
+                            Frame =
+                                rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
+                            catch rabbit_net:send(Sock, Frame)
+                    end,
+
+                Parent = self(),
+                ReceiveFun =
+                    fun() ->
+                            Parent ! timeout
+                    end,
+                Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
+                                  ClientHeartbeat, ReceiveFun),
+                State#v1{connection_state = running,
+                         connection = Connection#connection{
+                                        vhost = <<"/">>, %% FIXME relate to hostname
+                                        timeout_sec = ClientHeartbeat,
+                                        frame_max = FrameMax},
+                         heartbeater = Heartbeater}
+        end,
     ok = send_on_channel0(
            Sock,
            #'v1_0.open'{channel_max = {ushort, 0},
-                        max_frame_size = {uint, ?FRAME_MAX},
+                        max_frame_size = {uint, FrameMax},
                         container_id = {utf8, list_to_binary(atom_to_list(node()))},
-                        heartbeat_interval = {uint, 0}}, rabbit_amqp1_0_framing),
-    %% FIXME heartbeat and negotiate maxes
-    State#v1{connection_state = running,
-             connection = Connection#connection{
-                            timeout_sec = 0,
-                            frame_max = ?FRAME_MAX
-                           }};
+                        heartbeat_interval = {uint, ClientHeartbeat}},
+           rabbit_amqp1_0_framing),
+    State2 = internal_conserve_memory(
+               rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+               State1),
+    rabbit_event:notify(connection_created,
+                        infos(?CREATION_EVENT_KEYS, State2)),
+    rabbit_event:if_enabled(StatsTimer,
+                            fun() -> internal_emit_stats(State2) end),
+    State2;
 
 handle_1_0_connection_frame(Frame = #'v1_0.close'{},
                              State = #v1{ sock = Sock }) ->
@@ -1063,13 +1110,13 @@ send_to_new_1_0_session(Channel, Frame, State) ->
         connection = #connection{protocol  = Protocol,
                                  frame_max = FrameMax,
                                  %% FIXME SASL, TLS, etc.
-                                 user      = _User,
+                                 user      = User,
                                  vhost     = VHost}} = State,
     {ok, ChSupPid, ChFrPid} =
         %% Note: the equivalent, start_channel is in channel_sup_sup
         rabbit_amqp1_0_session_sup_sup:start_session(
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
-                       self(), <<"guest">>, VHost, Collector}),
+                       self(), User, VHost, Collector}),
     erlang:monitor(process, ChSupPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
