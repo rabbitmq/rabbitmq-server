@@ -818,9 +818,7 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
 %% replaced with file:open [write, exclusive]
 lock_file(Path) ->
     case filelib:is_file(Path) of
-        true ->
-            {error, eexist};
-        false ->
-            {ok, Lock} = file:open(Path, [write]),
-            ok = file:close(Lock)
+        true  -> {error, eexist};
+        false -> {ok, Lock} = file:open(Path, [write]),
+                 ok = file:close(Lock)
     end.
