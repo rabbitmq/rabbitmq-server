@@ -144,6 +144,12 @@ encode(Frame = #'v1_0.source'{}) ->
     encode_described(map, "amqp:source:map", Frame);
 encode(Frame = #'v1_0.fragment'{}) ->
     encode_described(list, "amqp:fragment:list", Frame);
+encode(Frame = #'v1_0.header'{}) ->
+    encode_described(list, "amqp:header:list", Frame);
+encode(Frame = #'v1_0.properties'{}) ->
+    encode_described(list, "amqp:properties:list", Frame);
+encode(Frame = #'v1_0.footer'{}) ->
+    encode_described(list, "amqp:footer:list", Frame);
 encode({list, L}) ->
     {list, [encode(I) || I <- L]};
 encode(Other) -> Other.

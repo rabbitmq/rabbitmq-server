@@ -55,9 +55,8 @@ assemble(Expected, {_, _}, Actual) ->
     exit({expected_fragment, Expected, Actual}).
 
 parse_header(HeaderBin, Props) ->
-    Parsed = rabbit_amqp1_0_framing:decode(
-              rabbit_amqp1_0_binary_parser:parse(HeaderBin)),
-    Props#'P_basic'{headers          = todo, %% TODO
+    Parsed = parse(HeaderBin),
+    Props#'P_basic'{headers          = null, %% TODO
                     delivery_mode    = case Parsed#'v1_0.header'.durable of
                                            true -> 2;
                                            _    -> 1
@@ -65,28 +64,31 @@ parse_header(HeaderBin, Props) ->
                     priority         = Parsed#'v1_0.header'.priority,
                     expiration       = Parsed#'v1_0.header'.ttl,
                     timestamp        = Parsed#'v1_0.header'.transmit_time,
-                    type             = todo, %% TODO
-                    app_id           = todo, %% TODO
-                    cluster_id       = todo}. %% TODO
+                    type             = null, %% TODO
+                    app_id           = null, %% TODO
+                    cluster_id       = null}. %% TODO
 
 parse_properties(PropsBin, Props) ->
-    Parsed = rabbit_amqp1_0_framing:decode(
-              rabbit_amqp1_0_binary_parser:parse(PropsBin)),
+    Parsed = parse(PropsBin),
     Props#'P_basic'{content_type     = Parsed#'v1_0.properties'.content_type,
-                    content_encoding = todo, %% TODO parse from 1.0 version
+                    content_encoding = null, %% TODO parse from 1.0 version
                     correlation_id   = Parsed#'v1_0.properties'.correlation_id,
                     reply_to         = Parsed#'v1_0.properties'.reply_to,
                     message_id       = Parsed#'v1_0.properties'.message_id,
                     user_id          = Parsed#'v1_0.properties'.user_id}.
 
+parse(Bin) ->
+    rabbit_amqp1_0_framing:decode(rabbit_amqp1_0_binary_parser:parse(Bin)).
+
 %%--------------------------------------------------------------------
 
-
 fragments(#amqp_msg{props = Properties, payload = Content}) ->
-    {list, [fragment(?SECTION_HEADER, <<"">>),
-            fragment(?SECTION_PROPERTIES, <<"">>),
-            fragment(?SECTION_DATA, Content),
-            fragment(?SECTION_FOOTER, <<"">>)]}.
+    {HeaderBin, PropertiesBin} = enc_properties(Properties),
+    FooterBin = enc(#'v1_0.footer'{}), %% TODO
+    {list, [fragment(?SECTION_HEADER,     HeaderBin),
+            fragment(?SECTION_PROPERTIES, PropertiesBin),
+            fragment(?SECTION_DATA,       Content),
+            fragment(?SECTION_FOOTER,     FooterBin)]}.
 
 fragment(Code, Content) ->
     #'v1_0.fragment'{first = true,
@@ -94,3 +96,32 @@ fragment(Code, Content) ->
                      format_code = Code,
                      fragment_offset = {ulong, 0}, %% TODO definitely wrong
                      payload = {binary, Content}}.
+
+enc_properties(Props) ->
+    Header = #'v1_0.header'
+      {durable           = case Props#'P_basic'.delivery_mode of
+                               1 -> false;
+                               2 -> true
+                           end,
+       priority          = Props#'P_basic'.priority,
+       transmit_time     = Props#'P_basic'.timestamp,
+       ttl               = Props#'P_basic'.expiration,
+       former_acquirers  = null, %% TODO
+       delivery_failures = null, %% TODO
+       format_code       = null, %% TODO
+       message_attrs     = null, %% TODO
+       delivery_attrs    = null}, %% TODO
+    Properties = #'v1_0.properties'{
+      message_id     = Props#'P_basic'.message_id,
+      user_id        = Props#'P_basic'.user_id,
+      to             = null, %% TODO
+      subject        = null, %% TODO
+      reply_to       = Props#'P_basic'.reply_to,
+      correlation_id = Props#'P_basic'.correlation_id,
+      content_length = null,
+      content_type   = Props#'P_basic'.content_type}, %% TODO encode to 1.0 ver
+    {enc(Header), enc(Properties)}.
+
+enc(Rec) ->
+    iolist_to_binary(rabbit_amqp1_0_binary_generator:generate(
+                       rabbit_amqp1_0_framing:encode(Rec))).
