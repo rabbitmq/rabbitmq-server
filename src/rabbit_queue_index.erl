@@ -1066,4 +1066,3 @@ drive_transform_fun(Fun, Hdl, Contents) ->
             ok = file_handle_cache:append(Hdl, Output),
             drive_transform_fun(Fun, Hdl, Contents1)
     end.
-rr
