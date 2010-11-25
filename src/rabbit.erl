@@ -294,7 +294,8 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_error("FAILED~nReason: ~p~n", [Reason])
+                 _:Reason -> boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n",
+                                        [Reason, erlang:get_stacktrace()])
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
