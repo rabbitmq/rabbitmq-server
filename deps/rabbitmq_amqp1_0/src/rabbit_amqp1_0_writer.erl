@@ -35,7 +35,8 @@
 
 -export([start/5, start_link/5, mainloop/2, mainloop1/2]).
 -export([send_command/2, send_command/3, send_command_sync/2,
-         send_command_sync/3, send_command_and_notify/5]).
+         send_command_sync/3, send_command_and_notify/4,
+         send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
 
 -import(gen_tcp).
@@ -130,6 +131,11 @@ handle_message({'$gen_call', From, {send_command_sync, MethodRecord, Content}},
     ok = internal_send_command_async(MethodRecord, Content, State),
     gen_server:reply(From, ok),
     State;
+handle_message({send_command_and_notify, QPid, ChPid, MethodRecord},
+               State) ->
+    ok = internal_send_command_async(MethodRecord, State),
+    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    State;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
                State) ->
     ok = internal_send_command_async(MethodRecord, Content, State),
@@ -157,6 +163,10 @@ send_command_sync(W, MethodRecord) ->
 
 send_command_sync(W, MethodRecord, Content) ->
     call(W, {send_command_sync, MethodRecord, Content}).
+
+send_command_and_notify(W, Q, ChPid, MethodRecord) ->
+    W ! {send_command_and_notify, Q, ChPid, MethodRecord},
+    ok.
 
 send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
