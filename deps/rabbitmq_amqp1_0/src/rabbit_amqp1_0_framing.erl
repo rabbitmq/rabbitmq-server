@@ -24,7 +24,7 @@ fill_fields(Record, Fields) ->
 %% either null, a single value, or given the descriptor true and a
 %% list value. (Yes that is gross)
 decode({described, true, {list, Fields}}) ->
-    {list, Fields};
+    {list, [decode(F) || F <- Fields]};
 decode({described, Descriptor, {list, Fields}}) ->
     fill_fields(record_for(Descriptor), Fields);
 decode(Other) ->
@@ -53,7 +53,10 @@ record_for({symbol, "amqp:close:list"}) ->
 record_for({symbol, "amqp:linkage:list"}) ->
     #'v1_0.linkage'{};
 record_for({symbol, "amqp:flow-state:list"}) ->
-    #'v1_0.flow_state'{}.
+    #'v1_0.flow_state'{};
+record_for({symbol, "amqp:fragment:list"}) ->
+    #'v1_0.fragment'{}.
+
 
 encode_described(Symbol, Frame) ->
     {described, {symbol, Symbol},
@@ -79,4 +82,8 @@ encode(Frame = #'v1_0.linkage'{}) ->
     encode_described("amqp:linkage:list", Frame);
 encode(Frame = #'v1_0.flow_state'{}) ->
     encode_described("amqp:flow-state:list", Frame);
+encode(Frame = #'v1_0.fragment'{}) ->
+    encode_described("amqp:fragment:list", Frame);
+encode({list, L}) ->
+    {list, [encode(I) || I <- L]};
 encode(Other) -> Other.

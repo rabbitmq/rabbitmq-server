@@ -119,3 +119,10 @@
          link_credit = null,
          available = null,
          drain = null}).
+
+-record('v1_0.fragment',
+        {first = null,
+         last = null,
+         format_code = null,
+         fragment_offset = null,
+         payload = null}).

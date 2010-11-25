@@ -199,7 +199,7 @@ handle_control(#'v1_0.transfer'{handle = Handle,
         #incoming_link{ target = X } ->
             %% TODO what's the equivalent of the routing key?
             K = <<"">>,
-            Msg = assemble_message(Fragments),
+            Msg = rabbit_amqp1_0_fragmentation:assemble(Fragments),
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = K }, Msg);
         undefined ->
@@ -224,19 +224,12 @@ handle_control(Frame, State) ->
 
 %% ------
 
-%% Kludged because so is the python client
-assemble_message(Fragments) ->
-    [Fragment | _] = Fragments,
-    {described, {symbol, "amqp:fragment:list"},
-     {list, [_, _, _, _, {binary, Payload}]}} = Fragment,
-    #amqp_msg{props = #'P_basic'{}, payload = Payload}.
-
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ credit = Credit,
                                 transfer_unit = Unit,
                                 transfer_count = Count },
          Session = #session{ transfer_number = TransferNumber },
-         #amqp_msg{props = Properties, payload = Content}) ->
+         Msg = #amqp_msg{payload = Content}) ->
     TransferSize = transfer_size(Content, Unit),
     NewLink = Link#outgoing_link{ credit = Credit - TransferSize,
                                   transfer_count = Count + TransferSize },
@@ -251,7 +244,8 @@ transfer(WriterPid, LinkHandle,
                          more = false,
                          aborted = false,
                          batchable = false,
-                         fragments = fragments(Content)},
+                         fragments =
+                             rabbit_amqp1_0_fragmentation:fragments(Msg)},
     rabbit_amqp1_0_writer:send_command(WriterPid, T),
     NewLink.
 
@@ -272,10 +266,6 @@ linkage_address({described, _SourceOrTarget, {map, KeyValuePairs}}) ->
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
     TransferNumber + 1.
-
-%% FIXME
-fragments(Content) ->
-    {list, []}.
 
 %% FIXME
 transfer_size(Content, Unit) ->
