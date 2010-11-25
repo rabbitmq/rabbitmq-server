@@ -5,7 +5,7 @@ DEPS=rabbitmq-server rabbitmq-erlang-client
 # EXTRA_PACKAGE_DIRS=priv
 
 START_RABBIT_IN_TESTS=true
-TEST_APPS=rabbit_amqp1_0
+TEST_APPS=rabbit_amqp1_0 amqp_client
 UNIT_TEST_COMMANDS=eunit:test(rabbit_amqp1_0_test,[verbose])
 
 include ../include.mk

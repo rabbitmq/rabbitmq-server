@@ -7,7 +7,8 @@
 
 -export([start_link/7, process_frame/2]).
 
--record(session, {channel, reader_pid, writer_pid, transfer_number = 0,
+-record(session, {channel_num, backing_connection, backing_channel,
+                  reader_pid, writer_pid, transfer_number = 0,
                   outgoing_lwm = 0, outgoing_session_credit = 10 }).
 -record(outgoing_link, {credit = 0,
                         transfer_count = 0,
@@ -15,8 +16,7 @@
 
 -record(incoming_link, {name, target}).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
 %% We have to keep track of a few things for sessions,
@@ -48,11 +48,19 @@ process_frame(Pid, Frame) ->
 
 init([Channel, ReaderPid, WriterPid]) ->
     process_flag(trap_exit, true),
-    {ok, #session{ channel = Channel,
-                   reader_pid = ReaderPid,
-                   writer_pid = WriterPid }}.
+    %% TODO pass through authentication information
+    {ok, Conn} = amqp_connection:start(direct),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, #session{ channel_num        = Channel,
+                   backing_connection = Conn,
+                   backing_channel    = Ch,
+                   reader_pid         = ReaderPid,
+                   writer_pid         = WriterPid }}.
 
-terminate(Reason, State) ->
+terminate(Reason, State = #session{ backing_connection = Conn,
+                                    backing_channel    = Ch}) ->
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -64,7 +72,7 @@ handle_call(Msg, From, State) ->
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #session{writer_pid = WriterPid}) ->
-    State#session.reader_pid ! {channel_exit, State#session.channel, Reason},
+    State#session.reader_pid ! {channel_exit, State#session.channel_num, Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -89,7 +97,7 @@ handle_cast({deliver, ConsumerTag, AckRequired, MsgStruct},
 
 handle_cast({frame, Frame},
             State = #session{ writer_pid = Sock,
-                              channel = Channel}) ->
+                              channel_num = Channel}) ->
     case handle_control(Frame, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_amqp1_0_writer:send_command(Sock, Reply),
@@ -106,7 +114,7 @@ noreply(State) ->
 
 %% ------
 
-handle_control(#'v1_0.begin'{}, State = #session{ channel = Channel }) ->
+handle_control(#'v1_0.begin'{}, State = #session{ channel_num = Channel }) ->
     {reply, #'v1_0.begin'{
        remote_channel = {ushort, Channel}}, State};
 
@@ -184,19 +192,14 @@ handle_control(#'v1_0.transfer'{handle = Handle,
                                 transfer_id = TransferId,
                                 fragments = {list, Fragments}
                                },
-                          State) ->
+                          State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
         #incoming_link{ target = X } ->
-            %% Send to the exchange!
-            ExchangeName = rabbit_misc:r(<<"/">>, exchange, X),
-            %% Check permitted
-            Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
-            %% Scangiest way to the content
-            Msg = assemble_message(ExchangeName, Fragments),
-            {RoutingRes, DeliveredQPids} =
-                rabbit_exchange:publish(
-                  Exchange,
-                  rabbit_basic:delivery(false, false, none, Msg));
+            %% TODO what's the equivalent of the routing key?
+            K = <<"">>,
+            Msg = assemble_message(Fragments),
+            amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
+                                                     routing_key = K }, Msg);
         undefined ->
             %% FIXME What am I supposed to do here
             no_such_handle
@@ -205,7 +208,7 @@ handle_control(#'v1_0.transfer'{handle = Handle,
 
 handle_control(#'v1_0.detach'{ handle = Handle },
                State = #session{ writer_pid = Sock,
-                                 channel = Channel }) ->
+                                 channel_num = Channel }) ->
     erase({incoming, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
@@ -220,21 +223,11 @@ handle_control(Frame, State) ->
 %% ------
 
 %% Kludged because so is the python client
-assemble_message(ExchangeName, Fragments) ->
-    %% get the class_id we need
-    {ClassId, _MethodId} = rabbit_framing:method_id('basic.publish'),
+assemble_message(Fragments) ->
     [Fragment | _] = Fragments,
     {described, {symbol, "amqp:fragment:list"},
      {list, [_, _, _, _, {binary, Payload}]}} = Fragment,
-    Content = #content{class_id = ClassId,
-                       payload_fragments_rev = [Payload],
-                       properties = #'P_basic'{},
-                       properties_bin = none},
-    #basic_message{exchange_name = ExchangeName,
-                   routing_key = <<"">>,
-                   content = Content,
-                   guid = rabbit_guid:guid(),
-                   is_persistent = false}.
+    #amqp_msg{props = #'P_basic'{}, payload = Payload}.
 
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ credit = Credit,
