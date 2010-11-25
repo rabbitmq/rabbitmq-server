@@ -471,7 +471,8 @@ send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_multiple = true}) ->
     do_if_unconfirmed(
       MsgSeqNo, QPid,
       fun(MSN, State1 = #ch{held_confirms = As}) ->
-              start_confirm_timer(State1#ch{held_confirms = gb_sets:add(MSN, As)})
+              start_confirm_timer(
+                State1#ch{held_confirms = gb_sets:add(MSN, As)})
       end, State).
 
 do_if_unconfirmed(MsgSeqNo, QPid, ConfirmFun,

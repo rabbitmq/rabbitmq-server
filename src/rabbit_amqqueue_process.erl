@@ -450,8 +450,9 @@ record_confirm_message(#delivery{sender     = ChPid,
                                  message    = #basic_message {
                                    is_persistent = true,
                                    guid          = Guid}},
-                       State = #q{guid_to_channel = GTC,
-                                  q               = #amqqueue{durable = true}}) ->
+                       State =
+                           #q{guid_to_channel = GTC,
+                              q               = #amqqueue{durable = true}}) ->
     State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)};
 record_confirm_message(_Delivery, State) ->
     State.
@@ -859,8 +860,9 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                 case AckRequired of
                     true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
                              true = maybe_store_ch_record(
-                                      C#cr{acktags = sets:add_element(AckTag,
-                                                                      ChAckTags)}),
+                                      C#cr{acktags =
+                                               sets:add_element(AckTag,
+                                                                ChAckTags)}),
                              State2;
                     false -> confirm_message(Message, State2)
                 end,

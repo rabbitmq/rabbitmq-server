@@ -523,7 +523,8 @@ publish_delivered(false, _Msg, _MsgProps, State = #vqstate { len = 0 }) ->
     {blank_ack, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
-                  MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+                  MsgProps = #message_properties {
+                    needs_confirming = NeedsConfirming },
                   State = #vqstate { len              = 0,
                                      next_seq_id      = SeqId,
                                      out_counter      = OutCount,
@@ -1366,10 +1367,11 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
     AckdGuids = lists:concat(
-                  orddict:fold(fun (IsPersistent, Guids, Gs) ->
-                                       MsgStoreFun(MSCState, IsPersistent, Guids),
-                                       [Guids | Gs]
-                               end, [], GuidsByStore)),
+                  orddict:fold(
+                    fun (IsPersistent, Guids, Gs) ->
+                            MsgStoreFun(MSCState, IsPersistent, Guids),
+                            [Guids | Gs]
+                    end, [], GuidsByStore)),
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
     {AckdGuids, State1 #vqstate { index_state      = IndexState1,

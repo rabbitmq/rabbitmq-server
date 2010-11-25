@@ -727,7 +727,8 @@ handle_cast({write, CRef, Guid},
             ok = index_update_ref_count(Guid, RefCount + 1, State1),
             CTG2 = case {dict:find(CRef, CODC), File} of
                        {{ok, _},   CurFile} -> CTG1;
-                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid)), CTG;
+                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid)),
+                                               CTG;
                        _                    -> CTG1
                    end,
             noreply(State #msstate { cref_to_guids = CTG2 })
