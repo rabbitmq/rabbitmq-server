@@ -1042,7 +1042,7 @@ transform_file(Path, Fun) ->
     Size = filelib:file_size(Path),
 
     {ok, PathTmpHdl} =
-        file_handle_cache:open(PathTmp, [exclusive | ?WRITE_MODE],
+        file_handle_cache:open(PathTmp, ?WRITE_MODE,
                                [{write_buffer, infinity}]),
 
     {ok, PathHdl} =
@@ -1063,3 +1063,4 @@ drive_transform_fun(Fun, Hdl, Contents) ->
             ok = file_handle_cache:append(Hdl, Output),
             drive_transform_fun(Fun, Hdl, Contents1)
     end.
+rr
