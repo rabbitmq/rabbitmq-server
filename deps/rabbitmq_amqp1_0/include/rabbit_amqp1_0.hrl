@@ -29,150 +29,150 @@
 -define(ARRAY_4, 15).
 
 -record('v1_0.open',
-        {options = null,
-         container_id = null,
-         hostname = null,
-         max_frame_size = null,
-         channel_max = null,
-         heartbeat_interval = null,
-         outgoing_locales = null,
-         incoming_locales = null,
-         offered_capabilities = null,
-         desired_capabilities = null,
-         properties = null}).
+        {options,
+         container_id,
+         hostname,
+         max_frame_size,
+         channel_max,
+         heartbeat_interval,
+         outgoing_locales,
+         incoming_locales,
+         offered_capabilities,
+         desired_capabilities,
+         properties}).
 
 -record('v1_0.begin',
-        {options = null,
-         remote_channel = null,
-         offered_capabilities = null,
-         desired_capabilities = null,
-         properties = null}).
+        {options,
+         remote_channel,
+         offered_capabilities,
+         desired_capabilities,
+         properties}).
 
 -record('v1_0.attach',
-        {options = null,
-         name = null,
-         handle = null,
-         flow_state = null,
-         role = null,
-         local = null,
-         remote = null,
-         durable = null,
-         expiry_policy = null,
-         timeout = null,
-         unsettled = null,
-         transfer_unit = null,
-         max_message_size = null,
-         error_mode = null,
-         properties = null}).
+        {options,
+         name,
+         handle,
+         flow_state,
+         role,
+         local,
+         remote,
+         durable,
+         expiry_policy,
+         timeout,
+         unsettled,
+         transfer_unit,
+         max_message_size,
+         error_mode,
+         properties}).
 
 -record('v1_0.flow',
-        {options = null,
-         handle = null,
-         flow_state = null,
-         echo = null}).
+        {options,
+         handle,
+         flow_state,
+         echo}).
 
 -record('v1_0.transfer',
-        {options = null,
-         handle = null,
-         flow_state = null,
-         delivery_tag = null,
-         transfer_id = null,
-         settled = null,
-         state = null,
-         resume = null,
-         more = null,
-         aborted = null,
-         batchable = null,
-         fragments = null}).
+        {options,
+         handle,
+         flow_state,
+         delivery_tag,
+         transfer_id,
+         settled,
+         state,
+         resume,
+         more,
+         aborted,
+         batchable,
+         fragments}).
 
 -record('v1_0.disposition',
-        {options = null,
-         role = null,
-         batchable = null,
-         extents = null}).
+        {options,
+         role,
+         batchable,
+         extents}).
 
 -record('v1_0.detach',
-         {options = null,
-          handle = null,
-          local = null,
-          remote = null,
-          error = null}).
+         {options,
+          handle,
+          local,
+          remote,
+          error}).
 
 -record('v1_0.end',
-         {options = null,
-          error = null}).
+         {options,
+          error}).
 
 -record('v1_0.close',
-        {options = null,
-         error = null}).
+        {options,
+         error}).
 
 %% Other types
 
 -record('v1_0.linkage',
-        {source = null,
-         target = null}).
+        {source,
+         target}).
 
 -record('v1_0.flow_state',
-        {unsettled_lwm = null,
-         session_credit = null,
-         transfer_count = null,
-         link_credit = null,
-         available = null,
-         drain = null}).
+        {unsettled_lwm,
+         session_credit,
+         transfer_count,
+         link_credit,
+         available,
+         drain}).
 
 -record('v1_0.source',
-        {address = null,
-         dynamic = null,
-         distribution_mode = null,
-         filter = null,
-         default_outcome = null,
-         outcomes = null,
-         capabilities = null}).
+        {address,
+         dynamic,
+         distribution_mode,
+         filter,
+         default_outcome,
+         outcomes,
+         capabilities}).
 
 -record('v1_0.target',
-        {address = null,
-         dynamic = null,
-         capabilities = null}).
+        {address,
+         dynamic,
+         capabilities}).
 
 -record('v1_0.fragment',
-        {first = null,
-         last = null,
-         format_code = null,
-         fragment_offset = null,
-         payload = null}).
+        {first,
+         last,
+         format_code,
+         fragment_offset,
+         payload}).
 
 -record('v1_0.header',
-        {durable = null,
-         priority = null,
-         transmit_time = null,
-         ttl = null,
-         former_acquirers = null,
-         delivery_failures = null,
-         format_code = null,
-         message_attrs = null,
-         delivery_attrs = null}).
+        {durable,
+         priority,
+         transmit_time,
+         ttl,
+         former_acquirers,
+         delivery_failures,
+         format_code,
+         message_attrs,
+         delivery_attrs}).
 
 -record('v1_0.properties',
-        {message_id = null,
-         user_id = null,
-         to = null,
-         subject = null,
-         reply_to = null,
-         correlation_id = null,
-         content_length = null,
-         content_type = null}).
+        {message_id,
+         user_id,
+         to,
+         subject,
+         reply_to,
+         correlation_id,
+         content_length,
+         content_type}).
 
 -record('v1_0.footer',
-        {message_attrs = null,
-         delivery_attrs = null}).
+        {message_attrs,
+         delivery_attrs}).
 
 -record('v1_0.transfer_state',
-        {bytes_transferred = null,
-         outcome = null,
-         txn_id = null}).
+        {bytes_transferred,
+         outcome,
+         txn_id}).
 
 -record('v1_0.accepted',
         {}).
 
 -record('v1_0.rejected',
-        {error = null}).
+        {error}).

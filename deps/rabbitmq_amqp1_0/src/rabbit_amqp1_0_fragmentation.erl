@@ -56,7 +56,7 @@ assemble(Expected, {_, _}, Actual) ->
 
 parse_header(HeaderBin, Props) ->
     Parsed = parse(HeaderBin),
-    Props#'P_basic'{headers          = null, %% TODO
+    Props#'P_basic'{headers          = undefined, %% TODO
                     delivery_mode    = case Parsed#'v1_0.header'.durable of
                                            true -> 2;
                                            _    -> 1
@@ -64,14 +64,14 @@ parse_header(HeaderBin, Props) ->
                     priority         = Parsed#'v1_0.header'.priority,
                     expiration       = Parsed#'v1_0.header'.ttl,
                     timestamp        = Parsed#'v1_0.header'.transmit_time,
-                    type             = null, %% TODO
-                    app_id           = null, %% TODO
-                    cluster_id       = null}. %% TODO
+                    type             = undefined, %% TODO
+                    app_id           = undefined, %% TODO
+                    cluster_id       = undefined}. %% TODO
 
 parse_properties(PropsBin, Props) ->
     Parsed = parse(PropsBin),
     Props#'P_basic'{content_type     = Parsed#'v1_0.properties'.content_type,
-                    content_encoding = null, %% TODO parse from 1.0 version
+                    content_encoding = undefined, %% TODO parse from 1.0 version
                     correlation_id   = Parsed#'v1_0.properties'.correlation_id,
                     reply_to         = Parsed#'v1_0.properties'.reply_to,
                     message_id       = Parsed#'v1_0.properties'.message_id,
@@ -108,19 +108,19 @@ enc_properties(Props) ->
        priority          = Props#'P_basic'.priority,
        transmit_time     = Props#'P_basic'.timestamp,
        ttl               = Props#'P_basic'.expiration,
-       former_acquirers  = null, %% TODO
-       delivery_failures = null, %% TODO
-       format_code       = null, %% TODO
-       message_attrs     = null, %% TODO
-       delivery_attrs    = null}, %% TODO
+       former_acquirers  = undefined, %% TODO
+       delivery_failures = undefined, %% TODO
+       format_code       = undefined, %% TODO
+       message_attrs     = undefined, %% TODO
+       delivery_attrs    = undefined}, %% TODO
     Properties = #'v1_0.properties'{
       message_id     = Props#'P_basic'.message_id,
       user_id        = Props#'P_basic'.user_id,
-      to             = null, %% TODO
-      subject        = null, %% TODO
+      to             = undefined, %% TODO
+      subject        = undefined, %% TODO
       reply_to       = Props#'P_basic'.reply_to,
       correlation_id = Props#'P_basic'.correlation_id,
-      content_length = null,
+      content_length = undefined,
       content_type   = Props#'P_basic'.content_type}, %% TODO encode to 1.0 ver
     {enc(Header), enc(Properties)}.
 

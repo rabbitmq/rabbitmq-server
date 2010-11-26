@@ -43,7 +43,7 @@ symbolify(FieldName) when is_atom(FieldName) ->
     Symbol.
 
 %% Some fields are allowed to be 'multiple', in which case they are
-%% either null, a single value, or given the descriptor true and a
+%% either undefined, a single value, or given the descriptor true and a
 %% list value. (Yes that is gross)
 decode({described, true, {list, Fields}}) ->
     [decode(F) || F <- Fields];
@@ -51,6 +51,7 @@ decode({described, Descriptor, {list, Fields}}) ->
     fill_from_list(record_for(Descriptor), Fields);
 decode({described, Descriptor, {map, Fields}}) ->
     fill_from_map(record_for(Descriptor), Fields);
+decode(null) -> undefined;
 decode(Other) ->
      Other.
 
@@ -167,4 +168,5 @@ encode(Frame = #'v1_0.rejected'{}) ->
     encode_described(map, "amqp:rejected:map", Frame);
 encode(L) when is_list(L) ->
     {described, true, {list, [encode(I) || I <- L]}};
+encode(undefined) -> null;
 encode(Other) -> Other.

@@ -157,7 +157,7 @@ handle_control(#'v1_0.attach'{name = Name,
                name = Name,
                handle = Handle,
                remote = Linkage,
-               local = null}, State1}
+               local = undefined}, State1}
     end;
 
 handle_control(#'v1_0.attach'{name = Name,
@@ -191,8 +191,8 @@ handle_control(#'v1_0.attach'{name = Name,
         _ ->
             {reply, #'v1_0.attach'{
                name = Name,
-               local = null,
-               remote = null},
+               local = undefined,
+               remote = undefined},
              State}
     end;
 

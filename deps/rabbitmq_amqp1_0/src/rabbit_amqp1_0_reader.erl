@@ -678,15 +678,15 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
                               sock = Sock}) ->
     %% TODO channel_max?
     ClientProps = case Props of
-                      null -> [];
+                      undefined -> [];
                       {map, Ps} -> Ps
                   end,
     ClientHeartbeat = case Interval of
-                          null -> 0;
+                          undefined -> 0;
                           {_, HB} -> HB
                       end,
     FrameMax = case ClientFrameMax of
-                   null -> 0;
+                   undefined -> 0;
                    {_, FM} -> FM
                end,
     State1 =
