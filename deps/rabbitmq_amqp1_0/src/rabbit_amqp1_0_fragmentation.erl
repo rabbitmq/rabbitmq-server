@@ -102,8 +102,8 @@ fragment(Code, Content) ->
 enc_properties(Props) ->
     Header = #'v1_0.header'
       {durable           = case Props#'P_basic'.delivery_mode of
-                               1 -> false;
-                               2 -> true
+                               2 -> true;
+                               _ -> false
                            end,
        priority          = Props#'P_basic'.priority,
        transmit_time     = Props#'P_basic'.timestamp,
