@@ -89,26 +89,35 @@ record_for({symbol, "amqp:header:list"}) ->
 record_for({symbol, "amqp:properties:list"}) ->
     #'v1_0.properties'{};
 record_for({symbol, "amqp:footer:list"}) ->
-    #'v1_0.footer'{}.
+    #'v1_0.footer'{};
+record_for({symbol, "amqp:transfer-state:map"}) ->
+    #'v1_0.transfer_state'{};
+record_for({symbol, "amqp:accepted:map"}) ->
+    #'v1_0.accepted'{};
+record_for({symbol, "amqp:rejected:map"}) ->
+    #'v1_0.rejected'{}.
 
 
-fields(#'v1_0.open'{})        -> record_info(fields, 'v1_0.open');
-fields(#'v1_0.close'{})       -> record_info(fields, 'v1_0.close');
-fields(#'v1_0.begin'{})       -> record_info(fields, 'v1_0.begin');
-fields(#'v1_0.end'{})         -> record_info(fields, 'v1_0.end');
-fields(#'v1_0.attach'{})      -> record_info(fields, 'v1_0.attach');
-fields(#'v1_0.detach'{})      -> record_info(fields, 'v1_0.detach');
-fields(#'v1_0.flow'{})        -> record_info(fields, 'v1_0.flow');
-fields(#'v1_0.transfer'{})    -> record_info(fields, 'v1_0.transfer');
-fields(#'v1_0.disposition'{}) -> record_info(fields, 'v1_0.disposition');
-fields(#'v1_0.linkage'{})     -> record_info(fields, 'v1_0.linkage');
-fields(#'v1_0.flow_state'{})  -> record_info(fields, 'v1_0.flow_state');
-fields(#'v1_0.target'{})      -> record_info(fields, 'v1_0.target');
-fields(#'v1_0.source'{})      -> record_info(fields, 'v1_0.source');
-fields(#'v1_0.fragment'{})    -> record_info(fields, 'v1_0.fragment');
-fields(#'v1_0.header'{})      -> record_info(fields, 'v1_0.header');
-fields(#'v1_0.properties'{})  -> record_info(fields, 'v1_0.properties');
-fields(#'v1_0.footer'{})      -> record_info(fields, 'v1_0.footer').
+fields(#'v1_0.open'{})           -> record_info(fields, 'v1_0.open');
+fields(#'v1_0.close'{})          -> record_info(fields, 'v1_0.close');
+fields(#'v1_0.begin'{})          -> record_info(fields, 'v1_0.begin');
+fields(#'v1_0.end'{})            -> record_info(fields, 'v1_0.end');
+fields(#'v1_0.attach'{})         -> record_info(fields, 'v1_0.attach');
+fields(#'v1_0.detach'{})         -> record_info(fields, 'v1_0.detach');
+fields(#'v1_0.flow'{})           -> record_info(fields, 'v1_0.flow');
+fields(#'v1_0.transfer'{})       -> record_info(fields, 'v1_0.transfer');
+fields(#'v1_0.disposition'{})    -> record_info(fields, 'v1_0.disposition');
+fields(#'v1_0.linkage'{})        -> record_info(fields, 'v1_0.linkage');
+fields(#'v1_0.flow_state'{})     -> record_info(fields, 'v1_0.flow_state');
+fields(#'v1_0.target'{})         -> record_info(fields, 'v1_0.target');
+fields(#'v1_0.source'{})         -> record_info(fields, 'v1_0.source');
+fields(#'v1_0.fragment'{})       -> record_info(fields, 'v1_0.fragment');
+fields(#'v1_0.header'{})         -> record_info(fields, 'v1_0.header');
+fields(#'v1_0.properties'{})     -> record_info(fields, 'v1_0.properties');
+fields(#'v1_0.footer'{})         -> record_info(fields, 'v1_0.footer');
+fields(#'v1_0.transfer_state'{}) -> record_info(fields, 'v1_0.transfer_state');
+fields(#'v1_0.accepted'{})       -> record_info(fields, 'v1_0.accepted');
+fields(#'v1_0.rejected'{})       -> record_info(fields, 'v1_0.rejected').
 
 encode_described(list, Symbol, Frame) ->
     {described, {symbol, Symbol},
@@ -150,6 +159,12 @@ encode(Frame = #'v1_0.properties'{}) ->
     encode_described(list, "amqp:properties:list", Frame);
 encode(Frame = #'v1_0.footer'{}) ->
     encode_described(list, "amqp:footer:list", Frame);
+encode(Frame = #'v1_0.transfer_state'{}) ->
+    encode_described(map, "amqp:transfer-state:map", Frame);
+encode(Frame = #'v1_0.accepted'{}) ->
+    encode_described(map, "amqp:accepted:map", Frame);
+encode(Frame = #'v1_0.rejected'{}) ->
+    encode_described(map, "amqp:rejected:map", Frame);
 encode({list, L}) ->
     {list, [encode(I) || I <- L]};
 encode(Other) -> Other.

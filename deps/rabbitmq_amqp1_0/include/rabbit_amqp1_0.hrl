@@ -165,3 +165,14 @@
 -record('v1_0.footer',
         {message_attrs = null,
          delivery_attrs = null}).
+
+-record('v1_0.transfer_state',
+        {bytes_transferred = null,
+         outcome = null,
+         txn_id = null}).
+
+-record('v1_0.accepted',
+        {}).
+
+-record('v1_0.rejected',
+        {error = null}).

@@ -243,7 +243,10 @@ transfer(WriterPid, LinkHandle,
                                          <<TransferNumber/integer>>},
                          transfer_id = {uint, TransferNumber},
                          settled = true,
-                         state = {symbol, "ACCEPTED"}, % FIXME
+                         state = #'v1_0.transfer_state'{
+                           %% TODO body? message? frame? what?
+                           bytes_transferred = {ulong, 0}
+                          },
                          resume = false,
                          more = false,
                          aborted = false,
