@@ -161,7 +161,8 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([obtain/0, transfer/1, set_limit/1, get_limit/0]).
+-export([obtain/0, transfer/1, set_limit/1, get_limit/0, get_obtain_count/0,
+	 get_obtain_limit/0]).
 -export([ulimit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -274,6 +275,8 @@
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
+-spec(get_obtain_count/0 :: () -> non_neg_integer()).
+-spec(get_obtain_limit/0 :: () -> 'infinity' | non_neg_integer()).
 -spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
 
 -endif.
@@ -508,6 +511,12 @@ set_limit(Limit) ->
 
 get_limit() ->
     gen_server:call(?SERVER, get_limit, infinity).
+
+get_obtain_count() ->
+    gen_server:call(?SERVER, get_obtain_count, infinity).
+
+get_obtain_limit() ->
+    gen_server:call(?SERVER, get_obtain_limit, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -892,6 +901,12 @@ handle_call({set_limit, Limit}, _From, State) ->
                                     limit        = Limit,
                                     obtain_limit = obtain_limit(Limit) }))};
 handle_call(get_limit, _From, State = #fhc_state { limit = Limit }) ->
+    {reply, Limit, State};
+handle_call(get_obtain_count, _From,
+	    State = #fhc_state { obtain_count = Count }) ->
+    {reply, Count, State};
+handle_call(get_obtain_limit, _From,
+	    State = #fhc_state { obtain_limit = Limit }) ->
     {reply, Limit, State}.
 
 handle_cast({register_callback, Pid, MFA},
