@@ -94,7 +94,9 @@ fragment(Code, Content) ->
     #'v1_0.fragment'{first = true,
                      last = true,
                      format_code = Code,
-                     fragment_offset = {ulong, 0}, %% TODO definitely wrong
+                     %% TODO DUBIOUS this is definitely wrong but I don't see
+                     %% the point
+                     fragment_offset = {ulong, 0},
                      payload = {binary, Content}}.
 
 enc_properties(Props) ->

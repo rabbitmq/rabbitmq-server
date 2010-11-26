@@ -244,7 +244,8 @@ transfer(WriterPid, LinkHandle,
                          transfer_id = {uint, TransferNumber},
                          settled = true,
                          state = #'v1_0.transfer_state'{
-                           %% TODO body? message? frame? what?
+                           %% TODO DUBIOUS this replicates information we
+                           %% and the client already have
                            bytes_transferred = {ulong, 0}
                           },
                          resume = false,
