@@ -332,16 +332,20 @@ handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
     Totals0 = sum(Qs1, [messages_ready, messages_unacknowledged]),
     Totals = [{messages, add(pget(messages_ready, Totals0),
                              pget(messages_unacknowledged, Totals0))}|Totals0],
-    F = fun(Type) ->
+    Filter = fun(Id, Name) ->
+                     lists:member(pget(vhost, pget(Name, Id)), VHosts)
+             end,
+    F = fun(Type, Name) ->
                 get_fine_stats(
-                  [],
-                  [R || R = {{_, #resource{virtual_host = V}}, _, _}
-                            <- ets:tab2list(orddict:fetch(Type, Tables)),
-                        lists:member(V, VHosts)])
+                  [], [R || R = {Id, _, _}
+                                <- ets:tab2list(orddict:fetch(Type, Tables)),
+                            Filter(augment_msg_stats_items(
+                                     format_id(Id), Tables), Name)])
         end,
-    {reply, [{message_stats,
-              F(channel_exchange_stats) ++ F(channel_queue_stats)},
-             {queue_totals, Totals}], State};
+    Publish = F(channel_exchange_stats, exchange),
+    Consume = F(channel_queue_stats, queue_details),
+    {reply, [{message_stats, Publish ++ Consume}, {queue_totals, Totals}],
+     State};
 
 handle_call(_Request, _From, State) ->
     {reply, not_understood, State}.
