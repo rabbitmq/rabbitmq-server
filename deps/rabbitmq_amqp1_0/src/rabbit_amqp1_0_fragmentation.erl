@@ -85,10 +85,10 @@ parse(Bin) ->
 fragments(#amqp_msg{props = Properties, payload = Content}) ->
     {HeaderBin, PropertiesBin} = enc_properties(Properties),
     FooterBin = enc(#'v1_0.footer'{}), %% TODO
-    {list, [fragment(?SECTION_HEADER,     HeaderBin),
-            fragment(?SECTION_PROPERTIES, PropertiesBin),
-            fragment(?SECTION_DATA,       Content),
-            fragment(?SECTION_FOOTER,     FooterBin)]}.
+    [fragment(?SECTION_HEADER,     HeaderBin),
+     fragment(?SECTION_PROPERTIES, PropertiesBin),
+     fragment(?SECTION_DATA,       Content),
+     fragment(?SECTION_FOOTER,     FooterBin)].
 
 fragment(Code, Content) ->
     #'v1_0.fragment'{first = true,

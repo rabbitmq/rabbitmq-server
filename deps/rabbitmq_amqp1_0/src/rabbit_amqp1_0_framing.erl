@@ -165,6 +165,6 @@ encode(Frame = #'v1_0.accepted'{}) ->
     encode_described(map, "amqp:accepted:map", Frame);
 encode(Frame = #'v1_0.rejected'{}) ->
     encode_described(map, "amqp:rejected:map", Frame);
-encode({list, L}) ->
-    {list, [encode(I) || I <- L]};
+encode(L) when is_list(L) ->
+    {described, true, {list, [encode(I) || I <- L]}};
 encode(Other) -> Other.
