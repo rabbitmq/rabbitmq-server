@@ -111,7 +111,7 @@ function fmt_table_long(table) {
     for (k in table) {
         res += '<tr><th>' + k + '</th><td>' + table[k] + '</td>';
     }
-    return res + '</table>';
+    return res + '</table><span class="br"></span>';
 }
 
 function fmt_uptime(u) {
