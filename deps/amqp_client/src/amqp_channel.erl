@@ -573,7 +573,12 @@ handle_info({send_command, Method}, State) ->
 handle_info({send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
 
-%% This handles the delivery of a message from a direct channel
+%% These callbacks handles the delivery of a message from a direct channel
+%% @private
+handle_info({send_command_and_notify, Q, ChPid, Method}, State) ->
+    handle_method(Method, none, State),
+    rabbit_amqqueue:notify_sent(Q, ChPid),
+    {noreply, State};
 %% @private
 handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
