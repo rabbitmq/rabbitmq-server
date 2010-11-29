@@ -1,0 +1,150 @@
+<?xml version="1.0"?>
+
+<!--
+
+Copyright (c) 2010 Bank of America, N.A., Barclays Bank PLC, Cisco Systems,
+Credit Suisse, Deutsche Boerse Systems, Envoy Technologies Inc.,Goldman Sachs,
+IONA Technologies PLC, iMatix Corporation sprl.,JPMorgan Chase Bank Inc. N.A,
+Microsoft Corporation, Novell, Rabbit Technologies Ltd., Red Hat Inc., Solace
+Systems Inc., Tervela Inc., TWIST Process Innovations Ltd, WS02 Inc. and
+29West Inc
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<amqp name="messaging" xmlns="http://www.amqp.org/schema/amqp.xsd">
+  <section name="message-format">
+    <type name="section-codes" class="restricted" source="uint">
+      <choice name="header" value="0"/>
+      <choice name="properties" value="1"/>
+      <choice name="footer" value="2"/>
+      <choice name="data" value="3"/>
+      <choice name="amqp-data" value="4"/>
+      <choice name="amqp-map" value="5"/>
+      <choice name="amqp-list" value="6"/>
+    </type>
+    <type name="header" class="composite" source="list">
+      <descriptor name="amqp:header:list" code="0x00000001:0x00000200"/>
+      <field name="durable" type="boolean"/>
+      <field name="priority" type="ubyte"/>
+      <field name="transmit-time" type="timestamp"/>
+      <field name="ttl" type="ulong"/>
+      <field name="former-acquirers" type="uint"/>
+      <field name="delivery-failures" type="uint"/>
+      <field name="format-code" type="uint"/>
+      <field name="message-attrs" type="message-attributes"/>
+      <field name="delivery-attrs" type="message-attributes"/>
+    </type>
+    <type name="properties" class="composite" source="list">
+      <descriptor name="amqp:properties:list" code="0x00000001:0x00000201"/>
+      <field name="message-id" type="binary"/>
+      <field name="user-id" type="binary"/>
+      <field name="to" type="*" requires="address"/>
+      <field name="subject" type="string"/>
+      <field name="reply-to" type="*" requires="address"/>
+      <field name="correlation-id" type="binary"/>
+      <field name="content-length" type="ulong"/>
+      <field name="content-type" type="symbol"/>
+    </type>
+    <type name="footer" class="composite" source="list">
+      <descriptor name="amqp:footer:list" code="0x00000001:0x00000202"/>
+      <field name="message-attrs" type="message-attributes"/>
+      <field name="delivery-attrs" type="message-attributes"/>
+    </type>
+    <type name="message-attributes" class="restricted" source="map"/>
+  </section>
+  <section name="transfer-state">
+    <type name="transfer-state" class="composite" source="map" provides="transfer-state">
+      <descriptor name="amqp:transfer-state:map" code="0x00000001:0x00000203"/>
+      <field name="bytes-transferred" type="ulong"/>
+      <field name="outcome" type="*" requires="outcome"/>
+      <field name="txn-id" type="*"/>
+    </type>
+    <type name="accepted" class="composite" source="map" provides="outcome">
+      <descriptor name="amqp:accepted:map" code="0x00000001:0x00000204"/>
+    </type>
+    <type name="rejected" class="composite" source="map" provides="outcome">
+      <descriptor name="amqp:rejected:map" code="0x00000001:0x00000205"/>
+      <field name="error" type="error"/>
+    </type>
+    <type name="released" class="composite" source="map" provides="outcome">
+      <descriptor name="amqp:released:map" code="0x00000001:0x00000206"/>
+    </type>
+    <type name="modified" class="composite" source="map" provides="outcome">
+      <descriptor name="amqp:modified:map" code="0x00000001:0x00000207"/>
+      <field name="delivery-failed" type="boolean"/>
+      <field name="deliver-elsewhere" type="boolean"/>
+      <field name="message-attrs" type="message-attributes"/>
+      <field name="delivery-attrs" type="message-attributes"/>
+    </type>
+  </section>
+  <section name="addressing">
+    <type name="source" class="composite" source="map" provides="source">
+      <descriptor name="amqp:source:map" code="0x00000001:0x00000208"/>
+      <field name="address" type="*" requires="address">
+        <error name="address-not-found" type="amqp-error" value="not-found"/>
+      </field>
+      <field name="dynamic" type="*" requires="lifetime-policy"/>
+      <field name="distribution-mode" type="symbol" requires="distribution-mode"/>
+      <field name="filter" type="filter-set"/>
+      <field name="default-outcome" type="*"/>
+      <field name="outcomes" type="symbol" multiple="true"/>
+      <field name="capabilities" type="symbol" multiple="true"/>
+    </type>
+    <type name="target" class="composite" source="map" provides="target">
+      <descriptor name="amqp:target:map" code="0x00000001:0x00000209"/>
+      <field name="address" type="*" requires="address">
+        <error name="address-not-found" type="amqp-error" value="not-found"/>
+      </field>
+      <field name="dynamic" type="*" requires="lifetime-policy"/>
+      <field name="capabilities" type="symbol" multiple="true"/>
+    </type>
+    <type name="std-dist-mode" class="restricted" source="symbol" provides="distribution-mode">
+      <choice name="move" value="move"/>
+      <choice name="copy" value="copy"/>
+    </type>
+    <type name="filter" class="composite" source="list">
+      <descriptor name="amqp:filter:list" code="0x00000001:0x0000020a"/>
+      <field name="filter-type" type="symbol" mandatory="true"/>
+      <field name="filter" type="*" mandatory="true"/>
+    </type>
+    <type name="filter-set" class="restricted" source="map"/>
+    <type name="delete-on-close" class="composite" source="map" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-close:map" code="0x00000001:0x0000020b"/>
+      <field name="options" type="options"/>
+    </type>
+    <type name="delete-on-no-links" class="composite" source="map" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-no-links:map" code="0x00000001:0x0000020c"/>
+      <field name="options" type="options"/>
+    </type>
+    <type name="delete-on-no-messages" class="composite" source="map" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-no-messages:map" code="0x00000001:0x0000020d"/>
+      <field name="options" type="options"/>
+    </type>
+    <type name="delete-on-no-links-or-messages" class="composite" source="map" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-no-links-or-messages:map" code="0x00000001:0x0000020e"/>
+      <field name="options" type="options"/>
+    </type>
+  </section>
+</amqp>
