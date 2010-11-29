@@ -64,7 +64,7 @@ start(DurableQueues) ->
 stop() ->
     ok = rabbit_sup:stop_child(rabbit_persister).
 
-init(QName, IsDurable, Recover) ->
+init(#amqqueue { name = QName }, IsDurable, Recover) ->
     Q = queue:from_list(case IsDurable andalso Recover of
                             true  -> rabbit_persister:queue_content(QName);
                             false -> []
