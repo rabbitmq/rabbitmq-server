@@ -171,6 +171,8 @@ encode(Frame = #'v1_0.rejected'{}) ->
     encode_described(map, "amqp:rejected:map", Frame);
 encode(Frame = #'v1_0.extent'{}) ->
     encode_described(list, "amqp:extent:list", Frame);
+encode(Frame = #'v1_0.disposition'{}) ->
+    encode_described(list, "amqp:disposition:list", Frame);
 encode(L) when is_list(L) ->
     {described, true, {list, [encode(I) || I <- L]}};
 encode(undefined) -> null;

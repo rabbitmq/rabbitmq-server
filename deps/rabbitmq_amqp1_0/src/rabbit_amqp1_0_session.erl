@@ -9,19 +9,17 @@
 
 -record(session, {channel_num, backing_connection, backing_channel,
                   reader_pid, writer_pid, transfer_number = 0,
-                  outgoing_lwm = 0, outgoing_session_credit = 10 }).
+                  outgoing_lwm = 0, outgoing_session_credit = 10,
+                  xfer_num_to_tag }).
 -record(outgoing_link, {credit,
                         transfer_count = 0,
                         transfer_unit = 0,
-                        default_outcome,
-                        transfer_number_to_delivery_tag}).
+                        default_outcome}).
 
 -record(incoming_link, {name, exchange, routing_key}).
 
-%% Python client currently does not set handle in extent (should this
-%% be mandatory?) which means we can't look up the delivery tag.
-%%-define(DEFAULT_DEFAULT_OUTCOME, released).
--define(DEFAULT_DEFAULT_OUTCOME, accepted).
+-define(DEFAULT_DEFAULT_OUTCOME, released).
+%%-define(DEFAULT_DEFAULT_OUTCOME, accepted).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -62,7 +60,8 @@ init([Channel, ReaderPid, WriterPid]) ->
                    backing_connection = Conn,
                    backing_channel    = Ch,
                    reader_pid         = ReaderPid,
-                   writer_pid         = WriterPid }}.
+                   writer_pid         = WriterPid,
+                   xfer_num_to_tag    = dict:new()}}.
 
 terminate(Reason, State = #session{ backing_connection = Conn,
                                     backing_channel    = Ch}) ->
@@ -88,9 +87,11 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
     Handle = ctag_to_handle(ConsumerTag),
     case get({out, Handle}) of
         Link = #outgoing_link{} ->
-            NewLink = transfer(WriterPid, Handle, Link, State, Msg, DeliveryTag),
+            {NewLink, NewState} =
+                transfer(WriterPid, Handle, Link, State, Msg, DeliveryTag),
             put({out, Handle}, NewLink),
-            {noreply, State#session{ transfer_number = next_transfer_number(TransferNum)}};
+            {noreply, NewState#session{
+                        transfer_number = next_transfer_number(TransferNum)}};
         undefined ->
             %% FIXME handle missing link -- why does the queue think it's there?
             io:format("Delivery to non-existent consumer ~p", [ConsumerTag]),
@@ -206,8 +207,7 @@ handle_control(#'v1_0.attach'{name = Name,
                 #outgoing_link{
                   credit = Credit,
                   transfer_unit = Unit,
-                  default_outcome = DefaultOutcome,
-                  transfer_number_to_delivery_tag = dict:new()
+                  default_outcome = DefaultOutcome
                  }),
             {reply, #'v1_0.attach'{
                name = Name,
@@ -249,8 +249,13 @@ handle_control(#'v1_0.disposition'{ batchable = Batchable,
                                     extents = Extents,
                                     role = true} = Disp, %% Client is receiver
                State) ->
-    SettledExtents = [settle(E, Batchable, State) || E <- Extents],
-    {reply, Disp#'v1_0.disposition'{ extents = SettledExtents }, State};
+    {SettledExtents, NewState} =
+        lists:foldl(fun(Extent, {SettledExtents1, State1}) ->
+                            {SettledExtent, State2} =
+                                settle(Extent, Batchable, State1),
+                            {[SettledExtent | SettledExtents1], State2}
+                    end, {[], State}, Extents),
+    {reply, Disp#'v1_0.disposition'{ extents = SettledExtents }, NewState};
 
 handle_control(#'v1_0.detach'{ handle = Handle },
                State = #session{ writer_pid = Sock,
@@ -272,18 +277,15 @@ transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ credit = Credit,
                                 transfer_unit = Unit,
                                 transfer_count = Count,
-                                default_outcome = DefaultOutcome,
-                                transfer_number_to_delivery_tag = Dict},
-         Session = #session{ transfer_number = TransferNumber },
+                                default_outcome = DefaultOutcome},
+         Session = #session{ transfer_number = TransferNumber,
+                             xfer_num_to_tag = Dict },
          Msg = #amqp_msg{payload = Content},
          DeliveryTag) ->
     TransferSize = transfer_size(Content, Unit),
     NewLink = Link#outgoing_link{
                 credit = Credit - TransferSize,
-                transfer_count = Count + TransferSize,
-                transfer_number_to_delivery_tag = dict:store(TransferNumber,
-                                                             DeliveryTag,
-                                                             Dict) },
+                transfer_count = Count + TransferSize },
     Settled = case DefaultOutcome of
                   accepted -> true;
                   _        -> false
@@ -305,19 +307,20 @@ transfer(WriterPid, LinkHandle,
                          fragments =
                              rabbit_amqp1_0_fragmentation:fragments(Msg)},
     rabbit_amqp1_0_writer:send_command(WriterPid, T),
-    NewLink.
+    {NewLink, Session#session { xfer_num_to_tag = dict:store(TransferNumber,
+                                                             DeliveryTag,
+                                                             Dict) }}.
 
 settle(#'v1_0.extent'{
-          first = First,
-          last = Last, %% TODO handle this
-          handle = Handle,
+          first = {uint, First},
+          last = {uint, Last}, %% TODO handle this
+          handle = Handle, %% TODO DUBIOUS what on earth is this for?
           settled = Settled,
           state = #'v1_0.transfer_state'{ outcome = Outcome }
          } = Extent,
        Batchable, %% TODO is this documented anywhere? Handle it.
-       #session{backing_channel = Ch}) ->
-    Link = #outgoing_link {transfer_number_to_delivery_tag = Dict} =
-        get({outgoing, Handle}),
+       State = #session{backing_channel = Ch,
+                        xfer_num_to_tag = Dict}) ->
     case Settled of
         true ->
             %% Do nothing, the receiver is settled.
@@ -325,19 +328,19 @@ settle(#'v1_0.extent'{
 
         false ->
             DeliveryTag = dict:fetch(First, Dict),
-            put({outgoing, Handle}, dict:erase(First, Dict)),
             case Outcome of
-                accepted ->
+                #'v1_0.accepted'{} ->
                     amqp_channel:call(Ch, #'basic.ack' {
                                         delivery_tag = DeliveryTag,
                                         multiple     = false });
-                reject ->
+                #'v1_0.rejected'{} ->
                     amqp_channel:call(Ch, #'basic.reject' {
                                         delivery_tag = DeliveryTag,
                                         requeue      = true })
             end
     end,
-    Extent#'v1_0.extent'{ settled = true }.
+    {Extent#'v1_0.extent'{ settled = true },
+     State#session{xfer_num_to_tag = dict:erase(First, Dict)}}.
 
 flow_state(#outgoing_link{credit = Credit,
                           transfer_count = Count},
