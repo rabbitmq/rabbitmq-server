@@ -12,6 +12,8 @@ UNIT_TEST_COMMANDS=eunit:test(rabbit_amqp1_0_test,[verbose])
 
 FRAMING_ERL=src/rabbit_amqp1_0_framing0.erl
 FRAMING_HRL=include/rabbit_amqp1_0_framing.hrl
+CODEGEN=./codegen.py
+CODEGEN_SPECS=spec/messaging.xml spec/transport.xml
 
 EXTRA_BUILD_DEPS=$(FRAMING_HRL)
 
@@ -25,11 +27,11 @@ unittest: $(TARGETS) $(TEST_TARGETS)
 		-eval 'init:stop()' | tee $(TMPDIR)/rabbit-amqp1.0-unittest-output |\
 			egrep "passed" >/dev/null
 
-$(FRAMING_ERL):
-	./codegen.py erl spec/messaging.xml spec/transport.xml > $@
+$(FRAMING_ERL): $(CODEGEN) $(CODEGEN_SPECS)
+	$(CODEGEN) erl $(CODEGEN_SPECS) > $@
 
-$(FRAMING_HRL):
-	./codegen.py hrl spec/messaging.xml spec/transport.xml > $@
+$(FRAMING_HRL): $(CODEGEN) $(CODEGEN_SPECS)
+	$(CODEGEN) hrl $(CODEGEN_SPECS) > $@
 
 clean::
 	rm -f $(FRAMING_HRL) $(FRAMING_ERL)
