@@ -10,7 +10,7 @@
 -record(session, {channel_num, backing_connection, backing_channel,
                   reader_pid, writer_pid, transfer_number = 0,
                   outgoing_lwm = 0, outgoing_session_credit = 10 }).
--record(outgoing_link, {credit = 0,
+-record(outgoing_link, {credit,
                         transfer_count = 0,
                         transfer_unit = 0}).
 
@@ -163,11 +163,17 @@ handle_control(#'v1_0.attach'{name = Name,
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = Linkage,
-                              flow_state = Flow,
+                              flow_state = Flow = #'v1_0.flow_state'{
+                                             link_credit = {uint, Credit},
+                                             drain = Drain
+                                            },
+                              transfer_unit = Unit,
                               role = true}, %% client is receiver
                State = #session{backing_channel = Ch}) ->
     #'v1_0.linkage'{ source = Source } = Linkage,
     {utf8, Q} = Source#'v1_0.source'.address, %% TODO ensure_destination
+    #'queue.declare_ok'{message_count = Available} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
     case amqp_channel:subscribe(
            Ch, #'basic.consume' { queue = Q,
                                   consumer_tag = handle_to_ctag(Handle),
@@ -178,14 +184,20 @@ handle_control(#'v1_0.attach'{name = Name,
         #'basic.consume_ok'{} ->
             %% FIXME we should avoid the race by getting the queue to send
             %% attach back, but a.t.m. it would use the wrong codec.
-            put({out, Handle}, #outgoing_link{}),
+            put({out, Handle},
+                #outgoing_link{
+                  credit = Credit,
+                  transfer_unit = Unit
+                 }),
             {reply, #'v1_0.attach'{
                name = Name,
                handle = Handle,
                remote = Linkage,
                local = #'v1_0.linkage'{
                  source = #'v1_0.source'{address = {utf8, Q}}},
-               flow_state = Flow, %% TODO
+               flow_state = Flow#'v1_0.flow_state'{
+                              available = {uint, Available}
+                             },
                role = false
               }, State};
         _ ->
@@ -224,6 +236,7 @@ handle_control(#'v1_0.end'{}, #session{ writer_pid = Sock }) ->
     stop;
 
 handle_control(Frame, State) ->
+    io:format("Ignoring frame: ~p~n", [Frame]),
     {noreply, State}.
 
 %% ------
@@ -235,6 +248,8 @@ transfer(WriterPid, LinkHandle,
          Session = #session{ transfer_number = TransferNumber },
          Msg = #amqp_msg{payload = Content}) ->
     TransferSize = transfer_size(Content, Unit),
+    %% TODO this is actually problematic since the current Python client
+    %% doesn't seem to send flow to allow us to start sending messages again!
     NewLink = Link#outgoing_link{ credit = Credit - TransferSize,
                                   transfer_count = Count + TransferSize },
     T = #'v1_0.transfer'{handle = LinkHandle,
