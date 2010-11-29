@@ -162,7 +162,6 @@ handle_control(#'v1_0.attach'{name = Name,
 
 %% TODO we don't really implement flow control. Reject connections
 %% that try to use it - except ATM the Python test case asks to use it
-%% (but appears not to send flow frames ever...)
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = Linkage,
