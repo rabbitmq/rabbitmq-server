@@ -160,6 +160,8 @@ handle_control(#'v1_0.attach'{name = Name,
                local = undefined}, State1}
     end;
 
+%% TODO we don't really implement flow control. Rejcet connections that try
+%% to use it (except ATM our test case does...)
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = Linkage,
