@@ -114,12 +114,11 @@ info_keys() -> ?INFO_KEYS.
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
-    {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q                   = Q#amqqueue{pid = self()},
             exclusive_consumer  = none,
             has_had_consumers   = false,
-            backing_queue       = BQ,
+            backing_queue       = backing_queue_module(Q),
             backing_queue_state = undefined,
             active_consumers    = queue:new(),
             blocked_consumers   = queue:new(),
@@ -221,6 +220,13 @@ next_state(State) ->
     case BQ:needs_idle_timeout(BQS) of
         true  -> {ensure_sync_timer(State2), 0};
         false -> {stop_sync_timer(State2), hibernate}
+    end.
+
+backing_queue_module(#amqqueue{arguments = Args}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-mirror">>) of
+        undefined -> {ok, BQM} = application:get_env(backing_queue_module),
+                     BQM;
+        _Nodes    -> rabbit_mirror_queue_master
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
