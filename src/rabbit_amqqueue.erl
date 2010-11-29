@@ -209,7 +209,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       arguments       = Args,
                                       exclusive_owner = Owner,
                                       pid             = none,
-                                      mirror_pids     = []}),
+                                      extra_pids      = []}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}) of
         not_found -> rabbit_misc:not_found(QueueName);
         Q1        -> Q1
