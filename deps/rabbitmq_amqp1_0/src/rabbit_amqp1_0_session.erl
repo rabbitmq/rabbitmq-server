@@ -160,8 +160,9 @@ handle_control(#'v1_0.attach'{name = Name,
                local = undefined}, State1}
     end;
 
-%% TODO we don't really implement flow control. Rejcet connections that try
-%% to use it (except ATM our test case does...)
+%% TODO we don't really implement flow control. Reject connections
+%% that try to use it - except ATM the Python test case asks to use it
+%% (but appears not to send flow frames ever...)
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = Linkage,
@@ -250,8 +251,6 @@ transfer(WriterPid, LinkHandle,
          Session = #session{ transfer_number = TransferNumber },
          Msg = #amqp_msg{payload = Content}) ->
     TransferSize = transfer_size(Content, Unit),
-    %% TODO this is actually problematic since the current Python client
-    %% doesn't seem to send flow to allow us to start sending messages again!
     NewLink = Link#outgoing_link{ credit = Credit - TransferSize,
                                   transfer_count = Count + TransferSize },
     T = #'v1_0.transfer'{handle = LinkHandle,
