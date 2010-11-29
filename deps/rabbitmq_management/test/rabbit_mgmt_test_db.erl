@@ -117,8 +117,14 @@ test_overview(_Conn, Chan) ->
     [fun() ->
              %% Very noddy, but at least we test we can get it
              Overview = rabbit_mgmt_db:get_overview(),
-             true = 0 < pget(recv_oct, Overview),
-             true = 0 < pget(send_oct, Overview)
+             Queues = pget(queue_totals, Overview),
+             assert_positive(pget(messages_unacknowledged, Queues)),
+             assert_positive(pget(messages_ready, Queues)),
+             assert_positive(pget(messages, Queues)),
+             Stats = pget(message_stats, Overview),
+             assert_positive(pget(publish, Stats)),
+             assert_positive(pget(deliver, Stats)),
+             assert_positive(pget(ack, Stats))
      end].
 
 test_channels(Conn, Chan) ->
@@ -344,3 +350,6 @@ assert_close(Exp, Act) ->
         true -> ok;
         _    -> throw({expected, Exp, got, Act})
     end.
+
+assert_positive(Val) ->
+    true = is_number(Val) andalso 0 < Val.
