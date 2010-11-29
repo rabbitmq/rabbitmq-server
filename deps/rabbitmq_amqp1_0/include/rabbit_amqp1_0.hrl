@@ -176,3 +176,10 @@
 
 -record('v1_0.rejected',
         {error}).
+
+-record('v1_0.extent',
+        {first,
+         last,
+         handle,
+         settled,
+         state}).

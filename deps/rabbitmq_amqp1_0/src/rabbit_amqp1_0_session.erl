@@ -12,9 +12,16 @@
                   outgoing_lwm = 0, outgoing_session_credit = 10 }).
 -record(outgoing_link, {credit,
                         transfer_count = 0,
-                        transfer_unit = 0}).
+                        transfer_unit = 0,
+                        default_outcome,
+                        transfer_number_to_delivery_tag}).
 
 -record(incoming_link, {name, exchange, routing_key}).
+
+%% Python client currently does not set handle in extent (should this
+%% be mandatory?) which means we can't look up the delivery tag.
+%%-define(DEFAULT_DEFAULT_OUTCOME, released).
+-define(DEFAULT_DEFAULT_OUTCOME, accepted).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -73,14 +80,15 @@ handle_info(#'basic.consume_ok'{}, State) ->
     %% Handled above
     {noreply, State};
 
-handle_info({#'basic.deliver'{consumer_tag = ConsumerTag}, Msg},
+handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
+                              delivery_tag = DeliveryTag}, Msg},
             State = #session{ writer_pid = WriterPid,
                               transfer_number = TransferNum }) ->
     %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
     Handle = ctag_to_handle(ConsumerTag),
     case get({out, Handle}) of
         Link = #outgoing_link{} ->
-            NewLink = transfer(WriterPid, Handle, Link, State, Msg),
+            NewLink = transfer(WriterPid, Handle, Link, State, Msg, DeliveryTag),
             put({out, Handle}, NewLink),
             {noreply, State#session{ transfer_number = next_transfer_number(TransferNum)}};
         undefined ->
@@ -172,15 +180,23 @@ handle_control(#'v1_0.attach'{name = Name,
                               transfer_unit = Unit,
                               role = true}, %% client is receiver
                State = #session{backing_channel = Ch}) ->
-    #'v1_0.linkage'{ source = Source } = Linkage,
-    {utf8, Q} = Source#'v1_0.source'.address, %% TODO ensure_destination
+    %% TODO ensure_destination
+    #'v1_0.linkage'{ source = Source = #'v1_0.source' {
+                                address = {utf8, Q},
+                                default_outcome = DO
+                               }
+                   } = Linkage,
+    %% TODO handle the outcomes field
+    DefaultOutcome = case DO of
+                         undefined -> ?DEFAULT_DEFAULT_OUTCOME;
+                         _         -> DO
+                     end,
     #'queue.declare_ok'{message_count = Available} =
         amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
     case amqp_channel:subscribe(
            Ch, #'basic.consume' { queue = Q,
                                   consumer_tag = handle_to_ctag(Handle),
-                                  %% TODO noack
-                                  no_ack = true,
+                                  no_ack = DefaultOutcome == accepted,
                                   %% TODO exclusive?
                                   exclusive = false}, self()) of
         #'basic.consume_ok'{} ->
@@ -189,7 +205,9 @@ handle_control(#'v1_0.attach'{name = Name,
             put({out, Handle},
                 #outgoing_link{
                   credit = Credit,
-                  transfer_unit = Unit
+                  transfer_unit = Unit,
+                  default_outcome = DefaultOutcome,
+                  transfer_number_to_delivery_tag = dict:new()
                  }),
             {reply, #'v1_0.attach'{
                name = Name,
@@ -227,6 +245,13 @@ handle_control(#'v1_0.transfer'{handle = Handle,
     end,
     {noreply, State};
 
+handle_control(#'v1_0.disposition'{ batchable = Batchable,
+                                    extents = Extents,
+                                    role = true} = Disp, %% Client is receiver
+               State) ->
+    SettledExtents = [settle(E, Batchable, State) || E <- Extents],
+    {reply, Disp#'v1_0.disposition'{ extents = SettledExtents }, State};
+
 handle_control(#'v1_0.detach'{ handle = Handle },
                State = #session{ writer_pid = Sock,
                                  channel_num = Channel }) ->
@@ -246,18 +271,28 @@ handle_control(Frame, State) ->
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ credit = Credit,
                                 transfer_unit = Unit,
-                                transfer_count = Count },
+                                transfer_count = Count,
+                                default_outcome = DefaultOutcome,
+                                transfer_number_to_delivery_tag = Dict},
          Session = #session{ transfer_number = TransferNumber },
-         Msg = #amqp_msg{payload = Content}) ->
+         Msg = #amqp_msg{payload = Content},
+         DeliveryTag) ->
     TransferSize = transfer_size(Content, Unit),
-    NewLink = Link#outgoing_link{ credit = Credit - TransferSize,
-                                  transfer_count = Count + TransferSize },
+    NewLink = Link#outgoing_link{
+                credit = Credit - TransferSize,
+                transfer_count = Count + TransferSize,
+                transfer_number_to_delivery_tag = dict:store(TransferNumber,
+                                                             DeliveryTag,
+                                                             Dict) },
+    Settled = case DefaultOutcome of
+                  accepted -> true;
+                  _        -> false
+              end,
     T = #'v1_0.transfer'{handle = LinkHandle,
                          flow_state = flow_state(Link, Session),
-                         delivery_tag = {binary,
-                                         <<TransferNumber/integer>>},
+                         delivery_tag = {binary, <<DeliveryTag/integer>>},
                          transfer_id = {uint, TransferNumber},
-                         settled = true,
+                         settled = Settled,
                          state = #'v1_0.transfer_state'{
                            %% TODO DUBIOUS this replicates information we
                            %% and the client already have
@@ -271,6 +306,38 @@ transfer(WriterPid, LinkHandle,
                              rabbit_amqp1_0_fragmentation:fragments(Msg)},
     rabbit_amqp1_0_writer:send_command(WriterPid, T),
     NewLink.
+
+settle(#'v1_0.extent'{
+          first = First,
+          last = Last, %% TODO handle this
+          handle = Handle,
+          settled = Settled,
+          state = #'v1_0.transfer_state'{ outcome = Outcome }
+         } = Extent,
+       Batchable, %% TODO is this documented anywhere? Handle it.
+       #session{backing_channel = Ch}) ->
+    Link = #outgoing_link {transfer_number_to_delivery_tag = Dict} =
+        get({outgoing, Handle}),
+    case Settled of
+        true ->
+            %% Do nothing, the receiver is settled.
+            ok;
+
+        false ->
+            DeliveryTag = dict:fetch(First, Dict),
+            put({outgoing, Handle}, dict:erase(First, Dict)),
+            case Outcome of
+                accepted ->
+                    amqp_channel:call(Ch, #'basic.ack' {
+                                        delivery_tag = DeliveryTag,
+                                        multiple     = false });
+                reject ->
+                    amqp_channel:call(Ch, #'basic.reject' {
+                                        delivery_tag = DeliveryTag,
+                                        requeue      = true })
+            end
+    end,
+    Extent#'v1_0.extent'{ settled = true }.
 
 flow_state(#outgoing_link{credit = Credit,
                           transfer_count = Count},

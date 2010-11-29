@@ -96,7 +96,9 @@ record_for({symbol, "amqp:transfer-state:map"}) ->
 record_for({symbol, "amqp:accepted:map"}) ->
     #'v1_0.accepted'{};
 record_for({symbol, "amqp:rejected:map"}) ->
-    #'v1_0.rejected'{}.
+    #'v1_0.rejected'{};
+record_for({symbol, "amqp:extent:list"}) ->
+    #'v1_0.extent'{}.
 
 
 fields(#'v1_0.open'{})           -> record_info(fields, 'v1_0.open');
@@ -118,7 +120,8 @@ fields(#'v1_0.properties'{})     -> record_info(fields, 'v1_0.properties');
 fields(#'v1_0.footer'{})         -> record_info(fields, 'v1_0.footer');
 fields(#'v1_0.transfer_state'{}) -> record_info(fields, 'v1_0.transfer_state');
 fields(#'v1_0.accepted'{})       -> record_info(fields, 'v1_0.accepted');
-fields(#'v1_0.rejected'{})       -> record_info(fields, 'v1_0.rejected').
+fields(#'v1_0.rejected'{})       -> record_info(fields, 'v1_0.rejected');
+fields(#'v1_0.extent'{})       -> record_info(fields, 'v1_0.extent').
 
 encode_described(list, Symbol, Frame) ->
     {described, {symbol, Symbol},
@@ -166,6 +169,8 @@ encode(Frame = #'v1_0.accepted'{}) ->
     encode_described(map, "amqp:accepted:map", Frame);
 encode(Frame = #'v1_0.rejected'{}) ->
     encode_described(map, "amqp:rejected:map", Frame);
+encode(Frame = #'v1_0.extent'{}) ->
+    encode_described(list, "amqp:extent:list", Frame);
 encode(L) when is_list(L) ->
     {described, true, {list, [encode(I) || I <- L]}};
 encode(undefined) -> null;
