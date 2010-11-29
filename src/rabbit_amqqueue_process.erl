@@ -150,8 +150,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 declare(Recover, From,
-        State = #q{q = Q = #amqqueue{durable = IsDurable},
-                   backing_queue = BQ, backing_queue_state = undefined,
+        State = #q{q = Q, backing_queue = BQ, backing_queue_state = undefined,
                    stats_timer = StatsTimer}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
         not_found -> {stop, normal, not_found, State};
@@ -162,7 +161,7 @@ declare(Recover, From,
                      ok = rabbit_memory_monitor:register(
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
-                     BQS = BQ:init(Q, IsDurable, Recover),
+                     BQS = BQ:init(Q, Recover),
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),

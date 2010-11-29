@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/1, delete_and_terminate/1,
+-export([init/2, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
@@ -403,7 +403,7 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(#amqqueue { name = QueueName }, IsDurable, false) ->
+init(#amqqueue { name = QueueName, durable = IsDurable }, false) ->
     IndexState = rabbit_queue_index:init(QueueName),
     init(IsDurable, IndexState, 0, [],
          case IsDurable of
@@ -412,7 +412,7 @@ init(#amqqueue { name = QueueName }, IsDurable, false) ->
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE));
 
-init(#amqqueue { name = QueueName }, true, true) ->
+init(#amqqueue { name = QueueName, durable = true }, true) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of

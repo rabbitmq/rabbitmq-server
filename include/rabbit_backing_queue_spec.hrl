@@ -43,8 +43,7 @@
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(init/3 :: (rabbit_amqqueue:name(), is_durable(), attempt_recovery()) ->
-                     state()).
+-spec(init/2 :: (rabbit_types:amqqueue(), attempt_recovery()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
