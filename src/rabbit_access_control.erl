@@ -310,35 +310,29 @@ add_vhost(VHostPath) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, VHostPath}) of
-                      [] ->
-                          ok = mnesia:write(rabbit_vhost,
-                                            #vhost{virtual_host = VHostPath},
-                                            write),
-                          {ok, [rabbit_exchange:declare(
-                                rabbit_misc:r(VHostPath, exchange, Name),
-                                Type, true, false, []) ||
-                                 {Name,Type} <-
-                                     [{<<"">>,             direct},
-                                      {<<"amq.direct">>,   direct},
-                                      {<<"amq.topic">>,    topic},
-                                      {<<"amq.match">>,    headers}, % 0-9-1 pdf
-                                      {<<"amq.headers">>,  headers}, % 0-9-1 xml
-                                      {<<"amq.fanout">>,   fanout}]]};
-                      [_] ->
-                          mnesia:abort({vhost_already_exists, VHostPath})
+                      []  -> ok = mnesia:write(rabbit_vhost,
+                                               #vhost{virtual_host = VHostPath},
+                                               write);
+                      [_] -> mnesia:abort({vhost_already_exists, VHostPath})
                   end
-          end),
+          end,
+          fun (Arg, true)   -> Arg;
+              (_Arg, false) ->
+                  [rabbit_exchange:declare(
+                      rabbit_misc:r(VHostPath, exchange, Name),
+                      Type, true, false, []) ||
+                         {Name,Type} <-
+                             [{<<"">>,            direct},
+                              {<<"amq.direct">>,  direct},
+                              {<<"amq.topic">>,   topic},
+                              {<<"amq.match">>,   headers}, %% per 0-9-1 pdf
+                              {<<"amq.headers">>, headers}, %% per 0-9-1 xml
+                              {<<"amq.fanout">>,  fanout}]],
+                  ok
+          end
+          ),
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),
-    case R of
-        {ok, Xs} -> lists:map(
-                        fun(X = #exchange{type = Type}) ->
-                            rabbit_event:notify(exchange_created,
-                                                rabbit_exchange:info(X))
-                            rabbit_exchange:maybe_callback(Type, create, [X]),
-                        end, Xs),
-                    ok;
-        _        -> R
-    end.
+    R.
 
 delete_vhost(VHostPath) ->
     %%FIXME: We are forced to delete the queues outside the TX below
@@ -349,6 +343,11 @@ delete_vhost(VHostPath) ->
                           {ok,_} = rabbit_amqqueue:delete(Q, false, false)
                   end,
                   rabbit_amqqueue:list(VHostPath)),
+    %%Exchange deletion causes notifications which must be sent outside the TX
+    lists:foreach(fun (#exchange{name = Name}) ->
+                          ok = rabbit_exchange:delete(Name, false)
+                  end,
+                  rabbit_exchange:list(VHostPath)),
     R = rabbit_misc:execute_mnesia_transaction(
           rabbit_misc:with_vhost(
             VHostPath,
@@ -359,10 +358,6 @@ delete_vhost(VHostPath) ->
     R.
 
 internal_delete_vhost(VHostPath) ->
-    lists:foreach(fun (#exchange{name = Name}) ->
-                          ok = rabbit_exchange:delete(Name, false)
-                  end,
-                  rabbit_exchange:list(VHostPath)),
     lists:foreach(fun ({Username, _, _, _}) ->
                           ok = clear_permissions(Username, VHostPath)
                   end,

@@ -220,21 +220,24 @@ internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
               case Recover of
                   true ->
                       ok = store_queue(Q),
-                      Q;
+                      {false, Q};
                   false ->
                       case mnesia:wread({rabbit_queue, QueueName}) of
                           [] ->
                               case mnesia:read({rabbit_durable_queue,
                                                 QueueName}) of
                                   []  -> ok = store_queue(Q),
-                                         ok = add_default_binding(Q),
-                                         Q;
-                                  [_] -> not_found %% Q exists on stopped node
+                                         {true, Q};
+                                         %% Q exists on stopped node
+                                  [_] -> {false, not_found}
                               end;
                           [ExistingQ] ->
-                              ExistingQ
+                              {false, ExistingQ}
                       end
               end
+      end,
+      fun ({true, Q}, false)        -> ok = add_default_binding(Q), Q;
+          ({_AddBinding, Arg}, _Tx) -> Arg
       end).
 
 store_queue(Q = #amqqueue{durable = true}) ->
@@ -452,16 +455,17 @@ internal_delete1(QueueName) ->
     rabbit_binding:remove_for_destination(QueueName).
 
 internal_delete(QueueName) ->
-    case rabbit_misc:execute_mnesia_transaction(
+    rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    case mnesia:wread({rabbit_queue, QueueName}) of
                        []  -> {error, not_found};
                        [_] -> internal_delete1(QueueName)
                    end
-           end) of
-        {error, _} = Err -> Err;
-        Deletions        -> ok = rabbit_binding:process_deletions(Deletions)
-    end.
+           end,
+           fun ({error, _} = Err, _Tx) -> Err;
+               (Deletions, Tx)        ->
+                   ok = rabbit_binding:process_deletions(Deletions, Tx)
+           end).
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
     gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
@@ -482,16 +486,20 @@ drop_expired(QPid) ->
     gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
-    rabbit_binding:process_deletions(
-      lists:foldl(
-        fun rabbit_binding:combine_deletions/2,
-        rabbit_binding:new_deletions(),
-        rabbit_misc:execute_mnesia_transaction(
-          fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
-                                    #amqqueue{name = QueueName, pid = Pid}
-                                        <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node]))
-          end))).
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
+                                #amqqueue{name = QueueName, pid = Pid}
+                                    <- mnesia:table(rabbit_queue),
+                                node(Pid) == Node]))
+      end,
+      fun (Deletions, Tx) ->
+          rabbit_binding:process_deletions(
+            lists:foldl(
+              fun rabbit_binding:combine_deletions/2,
+              rabbit_binding:new_deletions(),
+              Deletions),
+            Tx)
+      end).
 
 delete_queue(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),

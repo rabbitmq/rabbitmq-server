@@ -37,7 +37,7 @@
 -export([init_stats_timer/0, ensure_stats_timer/2, stop_stats_timer/1]).
 -export([reset_stats_timer/1]).
 -export([stats_level/1, if_enabled/2]).
--export([notify/2]).
+-export([notify/2, notify/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -77,6 +77,7 @@
 -spec(stats_level/1 :: (state()) -> level()).
 -spec(if_enabled/2 :: (state(), timer_fun()) -> 'ok').
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
+-spec(notify/3 :: (event_type(), event_props(), boolean()) -> 'ok').
 
 -endif.
 
@@ -139,6 +140,12 @@ if_enabled(#state{level = none}, _Fun) ->
 if_enabled(_State, Fun) ->
     Fun(),
     ok.
+
+notify(Type, Props, Tx) ->
+    case Tx of
+        false -> notify(Type, Props);
+        true  -> ok
+    end.
 
 notify(Type, Props) ->
     try

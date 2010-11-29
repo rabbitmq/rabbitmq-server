@@ -36,7 +36,7 @@
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
-         process_deletions/1]).
+         process_deletions/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
@@ -91,7 +91,7 @@
         (rabbit_types:binding_destination()) -> deletions()).
 -spec(remove_transient_for_destination/1 ::
         (rabbit_types:binding_destination()) -> deletions()).
--spec(process_deletions/1 :: (deletions()) -> 'ok').
+-spec(process_deletions/2 :: (deletions(), boolean()) -> 'ok').
 -spec(combine_deletions/2 :: (deletions(), deletions()) -> deletions()).
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
                          {'undefined' | rabbit_types:exchange(),
@@ -119,16 +119,17 @@ recover() ->
 exists(Binding) ->
     binding_action(
       Binding,
-      fun (_Src, _Dst, B) -> mnesia:read({rabbit_route, B}) /= [] end).
+      fun (_Src, _Dst, B) -> mnesia:read({rabbit_route, B}) /= [] end,
+      fun (_, _) -> ok end).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
 remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 
 add(Binding, InnerFun) ->
-    case binding_action(
+    binding_action(
            Binding,
-           fun (Src = #exchange{type = Type}, Dst, B) ->
+           fun (Src, Dst, B) ->
                    %% this argument is used to check queue exclusivity;
                    %% in general, we want to fail on that in preference to
                    %% anything else
@@ -138,26 +139,24 @@ add(Binding, InnerFun) ->
                                []  -> ok = sync_binding(
                                              B, all_durable([Src, Dst]),
                                              fun mnesia:write/3),
-                                      ok = rabbit_exchange:maybe_callback(
-                                             Type, add_binding, [Src, B]),
                                       {new, Src, B};
                                [_] -> {existing, Src, B}
                            end;
                        {error, _} = E ->
                            E
                    end
-           end) of
-        {new, Src = #exchange{type = Type}, B} ->
-            ok = rabbit_exchange:maybe_callback(Type, add_binding, [Src, B]),
-            rabbit_event:notify(binding_created, info(B));
-        {existing, _, _} ->
-            ok;
-        {error, _} = Err ->
-            Err
-    end.
+           end,
+           fun({new, Src, B}, Tx) ->
+                  ok = rabbit_exchange:callback(Src, add_binding, [Src, B], Tx),
+                  rabbit_event:notify(binding_created, info(B), Tx);
+              ({existing, _, _}, _Tx) ->
+                  ok;
+              ({error, _} = Err, _Tx) ->
+                  Err
+           end).
 
 remove(Binding, InnerFun) ->
-    case binding_action(
+    binding_action(
            Binding,
            fun (Src, Dst, B) ->
                    case mnesia:match_object(rabbit_route, #route{binding = B},
@@ -170,21 +169,19 @@ remove(Binding, InnerFun) ->
                                    ok = sync_binding(
                                           B, all_durable([Src, Dst]),
                                           fun mnesia:delete_object/3),
-                                   Deletions = maybe_auto_delete(
-                                                   B#binding.source,
-                                                   [B], new_deletions()),
-                                   ok = process_deletions(Deletions),
-                                   {ok, Deletions};
+                                   {ok,
+                                    maybe_auto_delete(B#binding.source,
+                                                      [B], new_deletions())};
                                {error, _} = E ->
                                    E
                            end
                    end
-           end) of
-        {error, _} = Err ->
-            Err;
-        {ok, Deletions} ->
-            ok = process_deletions(Deletions)
-    end.
+           end,
+           fun ({error, _} = Err, _Tx) ->
+                   Err;
+               ({ok, Deletions}, Tx) ->
+                   ok = process_deletions(Deletions, Tx)
+           end).
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
@@ -272,13 +269,14 @@ all_durable(Resources) ->
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,
-                                  args        = Arguments}, Fun) ->
+                                  args        = Arguments}, Fun, TriggerFun) ->
     call_with_source_and_destination(
       SrcName, DstName,
       fun (Src, Dst) ->
               SortedArgs = rabbit_misc:sort_field_table(Arguments),
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
-      end).
+      end,
+      TriggerFun).
 
 sync_binding(Binding, Durable, Fun) ->
     ok = case Durable of
@@ -291,7 +289,7 @@ sync_binding(Binding, Durable, Fun) ->
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
 
-call_with_source_and_destination(SrcName, DstName, Fun) ->
+call_with_source_and_destination(SrcName, DstName, Fun, TriggerFun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
     rabbit_misc:execute_mnesia_transaction(
@@ -302,7 +300,8 @@ call_with_source_and_destination(SrcName, DstName, Fun) ->
                     {[_],   []   } -> {error, destination_not_found};
                     {[],    []   } -> {error, source_and_destination_not_found}
                 end
-      end).
+      end,
+      TriggerFun).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
 table_for_resource(#resource{kind = queue})    -> rabbit_queue.
@@ -422,34 +421,20 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      anything_but(not_deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
 
-process_deletions(Deletions) ->
-    Tx = mnesia:is_transaction(),
-    NonTxFun =
-        if Tx     -> fun(_X, _D, _B) -> ok end;
-           not Tx ->
-               fun (#exchange{name = XName}, Deleted, FlatBindings) ->
-                   [rabbit_event:notify(binding_deleted, info(B)) ||
-                    B <- FlatBindings],
-                   case Deleted of
-                       not_deleted -> ok;
-                       deleted     -> rabbit_event:notify(exchange_deleted,
-                                                          [{name, XName}])
-                   end
-               end
-        end,
-    Fun =
-        fun (X = #exchange{type = Type}, Deleted, FlatBindings) ->
-            case Deleted of
-                not_deleted -> rabbit_exchange:maybe_callback(
-                                   Type, remove_bindings, [X, FlatBindings]);
-                deleted     -> rabbit_exchange:maybe_callback(
-                                   Type, delete, [X, FlatBindings])
-            end
-        end,
+process_deletions(Deletions, Tx) ->
     dict:fold(
-        fun (_XName, {X, Deleted, Bindings}, ok) ->
-            FlatBindings = lists:flatten(Bindings),
-            NonTxFun(X, Deleted, FlatBindings)
-            Fun(X, Deleted, FlatBindings),
-        end, ok, Deletions).
-
+      fun (_XName, {X, Deleted, Bindings}, ok) ->
+              FlatBindings = lists:flatten(Bindings),
+              [rabbit_event:notify(binding_deleted, info(B), Tx) ||
+                  B <- FlatBindings],
+              case Deleted of
+                  not_deleted -> rabbit_exchange:callback(X, remove_bindings,
+                                                         [X, FlatBindings], Tx);
+                  deleted     -> rabbit_event:notify(
+                                     exchange_deleted,
+                                     [{name, X#exchange.name}],
+                                     Tx),
+                                 rabbit_exchange:callback(X, delete,
+                                                          [X, FlatBindings], Tx)
+              end
+      end, ok, Deletions).
