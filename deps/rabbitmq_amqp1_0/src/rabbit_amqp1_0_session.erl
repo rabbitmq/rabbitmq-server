@@ -221,8 +221,7 @@ handle_control(#'v1_0.transfer'{handle = Handle,
                           State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK } ->
-            %% TODO what's the equivalent of the routing key?
-            Msg = rabbit_amqp1_0_fragmentation:assemble(Fragments),
+            Msg = rabbit_amqp1_0_message:assemble(Fragments),
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = RK }, Msg);
         undefined ->
@@ -338,7 +337,7 @@ transfer(WriterPid, LinkHandle,
                          aborted = false,
                          batchable = false,
                          fragments =
-                             rabbit_amqp1_0_fragmentation:fragments(Msg)},
+                             rabbit_amqp1_0_message:fragments(Msg)},
     rabbit_amqp1_0_writer:send_command(WriterPid, T),
     {NewLink, Session#session { xfer_num_to_tag = dict:store(TransferNumber,
                                                              DeliveryTag,

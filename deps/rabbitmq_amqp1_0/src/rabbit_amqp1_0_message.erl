@@ -1,4 +1,4 @@
--module(rabbit_amqp1_0_fragmentation).
+-module(rabbit_amqp1_0_message).
 
 -export([assemble/1, fragments/1]).
 
