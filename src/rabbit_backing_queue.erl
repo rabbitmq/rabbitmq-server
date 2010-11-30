@@ -62,12 +62,12 @@ behaviour_info(callbacks) ->
      {purge, 1},
 
      %% Publish a message.
-     {publish, 3},
+     {publish, 4},
 
      %% Called for messages which have already been passed straight
      %% out to a client. The queue will be empty for these calls
      %% (i.e. saves the round trip through the backing queue).
-     {publish_delivered, 4},
+     {publish_delivered, 5},
 
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
@@ -81,7 +81,7 @@ behaviour_info(callbacks) ->
      {ack, 2},
 
      %% A publish, but in the context of a transaction.
-     {tx_publish, 4},
+     {tx_publish, 5},
 
      %% Acks, but in the context of a transaction.
      {tx_ack, 3},

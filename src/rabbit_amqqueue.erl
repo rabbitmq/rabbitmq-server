@@ -499,11 +499,12 @@ delete_queue(QueueName) ->
     rabbit_binding:remove_transient_for_destination(QueueName).
 
 pseudo_queue(QueueName, Pid) ->
-    #amqqueue{name = QueueName,
-              durable = false,
+    #amqqueue{name        = QueueName,
+              durable     = false,
               auto_delete = false,
-              arguments = [],
-              pid = Pid}.
+              arguments   = [],
+              pid         = Pid,
+              extra_pids  = []}.
 
 safe_delegate_call_ok(F, Pids) ->
     {_, Bad} = delegate:invoke(Pids,

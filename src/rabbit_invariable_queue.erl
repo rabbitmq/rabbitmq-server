@@ -31,8 +31,8 @@
 
 -module(rabbit_invariable_queue).
 
--export([init/2, terminate/1, delete_and_terminate/1, purge/1, publish/3,
-         publish_delivered/4, fetch/2, ack/2, tx_publish/4, tx_ack/3,
+-export([init/2, terminate/1, delete_and_terminate/1, purge/1, publish/4,
+         publish_delivered/5, fetch/2, ack/2, tx_publish/5, tx_ack/3,
          dropwhile/2, tx_rollback/2, tx_commit/4, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
          idle_timeout/1, handle_pre_hibernate/1, status/1]).
@@ -100,17 +100,17 @@ purge(State = #iv_state { queue = Q, qname = QName, durable = IsDurable,
     ok = persist_acks(QName, IsDurable, none, AckTags, PA),
     {Len, State #iv_state { len = 0, queue = queue:new() }}.
 
-publish(Msg, MsgProps, State = #iv_state { queue   = Q,
-                                           qname   = QName,
-                                           durable = IsDurable,
-                                           len     = Len }) ->
+publish(Msg, MsgProps, _ChPid, State = #iv_state { queue   = Q,
+                                                   qname   = QName,
+                                                   durable = IsDurable,
+                                                   len     = Len }) ->
     ok = persist_message(QName, IsDurable, none, Msg, MsgProps),
     State #iv_state { queue = enqueue(Msg, MsgProps, false, Q), len = Len + 1 }.
 
-publish_delivered(false, _Msg, _MsgProps, State) ->
+publish_delivered(false, _Msg, _MsgProps, _ChPid, State) ->
     {blank_ack, State};
 publish_delivered(true, Msg = #basic_message { guid = Guid },
-                  MsgProps,
+                  MsgProps, _ChPid,
                   State = #iv_state { qname = QName, durable = IsDurable,
                                       len = 0, pending_ack = PA }) ->
     ok = persist_message(QName, IsDurable, none, Msg, MsgProps),
@@ -159,8 +159,9 @@ ack(AckTags, State = #iv_state { qname = QName, durable = IsDurable,
     PA1 = remove_acks(AckTags, PA),
     State #iv_state { pending_ack = PA1 }.
 
-tx_publish(Txn, Msg, MsgProps, State = #iv_state { qname   = QName,
-                                                   durable = IsDurable }) ->
+tx_publish(Txn, Msg, MsgProps, _ChPid,
+           State = #iv_state { qname   = QName,
+                               durable = IsDurable }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
     ok = persist_message(QName, IsDurable, Txn, Msg, MsgProps),

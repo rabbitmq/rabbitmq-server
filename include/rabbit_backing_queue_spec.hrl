@@ -47,18 +47,20 @@
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
--spec(publish/3 :: (rabbit_types:basic_message(),
-                    rabbit_types:message_properties(), state()) -> state()).
--spec(publish_delivered/4 :: (ack_required(), rabbit_types:basic_message(),
-                              rabbit_types:message_properties(), state())
+-spec(publish/4 :: (rabbit_types:basic_message(),
+                    rabbit_types:message_properties(), pid(), state())
+                   -> state()).
+-spec(publish_delivered/5 :: (ack_required(), rabbit_types:basic_message(),
+                              rabbit_types:message_properties(), pid(), state())
                              -> {ack(), state()}).
 -spec(dropwhile/2 ::
         (fun ((rabbit_types:message_properties()) -> boolean()), state())
         -> state()).
 -spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
 -spec(ack/2 :: ([ack()], state()) -> state()).
--spec(tx_publish/4 :: (rabbit_types:txn(), rabbit_types:basic_message(),
-                       rabbit_types:message_properties(), state()) -> state()).
+-spec(tx_publish/5 :: (rabbit_types:txn(), rabbit_types:basic_message(),
+                       rabbit_types:message_properties(), pid(), state()) ->
+                           state()).
 -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 -spec(tx_commit/4 ::

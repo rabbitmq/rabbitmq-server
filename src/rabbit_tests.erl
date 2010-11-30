@@ -1830,7 +1830,7 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                                                        true  -> 2;
                                                        false -> 1
                                                    end}, <<>>),
-                #message_properties{}, VQN)
+                #message_properties{}, self(), VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -1849,8 +1849,8 @@ assert_props(List, PropVals) ->
     [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
 
 test_amqqueue(Durable) ->
-    #amqqueue{name    = test_queue(),
-              durable = Durable}.
+    (rabbit_amqqueue:pseudo_queue(test_queue(), self()))
+        #amqqueue { durable = Durable }.
 
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
@@ -1912,7 +1912,7 @@ test_dropwhile(VQ0) ->
                       rabbit_basic:message(
                         rabbit_misc:r(<<>>, exchange, <<>>),
                         <<>>, #'P_basic'{}, <<>>),
-                      #message_properties{expiry = N}, VQN)
+                      #message_properties{expiry = N}, self(), VQN)
             end, VQ0, lists:seq(1, Count)),
 
     %% drop the first 5 messages

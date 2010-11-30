@@ -438,7 +438,7 @@ run_message_queue(State) ->
     {_IsEmpty1, State2} = deliver_msgs_to_consumers(Funs, IsEmpty, State1),
     State2.
 
-attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
+attempt_delivery(none, ChPid, Message, State = #q{backing_queue = BQ}) ->
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
         fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
@@ -447,7 +447,7 @@ attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
                 %% message_properties.
                 {AckTag, BQS1} =
                     BQ:publish_delivered(AckRequired, Message,
-                                         ?BASE_MESSAGE_PROPERTIES, BQS),
+                                         ?BASE_MESSAGE_PROPERTIES, ChPid, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
@@ -455,9 +455,9 @@ attempt_delivery(none, _ChPid, Message, State = #q{backing_queue = BQ}) ->
 attempt_delivery(Txn, ChPid, Message, State = #q{backing_queue       = BQ,
                                                  backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
-    {true,
-     State#q{backing_queue_state =
-                 BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, BQS)}}.
+    {true, State#q{backing_queue_state =
+                       BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES,
+                                     ChPid, BQS)}}.
 
 deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
     case attempt_delivery(Txn, ChPid, Message, State) of
@@ -466,7 +466,7 @@ deliver_or_enqueue(Txn, ChPid, Message, State = #q{backing_queue = BQ}) ->
         {false, NewState} ->
             %% Txn is none and no unblocked channels with consumers
             BQS = BQ:publish(Message,
-                             message_properties(State),
+                             message_properties(State), ChPid,
                              State #q.backing_queue_state),
             {false, ensure_ttl_timer(NewState#q{backing_queue_state = BQS})}
     end.
