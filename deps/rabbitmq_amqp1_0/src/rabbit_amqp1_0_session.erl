@@ -7,6 +7,10 @@
 
 -export([start_link/7, process_frame/2]).
 
+-ifdef(debug).
+-export([parse_destination/1]).
+-endif.
+
 -record(session, {channel_num, backing_connection, backing_channel,
                   declaring_channel,
                   reader_pid, writer_pid, transfer_number = 0,
@@ -169,6 +173,7 @@ handle_control(#'v1_0.attach'{name = Name,
                role = true},
              State1};
         {error, Reason, State1} ->
+            rabbit_log:warning("AMQP 1.0 attach rejected ~p", [Reason]),
             {reply,
              #'v1_0.attach'{
                name = Name,
@@ -486,7 +491,7 @@ ensure_target(Target = #'v1_0.target'{address=Address,
 parse_destination(Destination) when is_binary(Destination) ->
     parse_destination(binary_to_list(Destination));
 parse_destination(Destination) when is_list(Destination) ->
-    case regexp:split("/", Destination) of
+    case regexp:split(Destination, "/") of
         {ok, ["", Type | Tail]} when
               Type =:= "queue" orelse Type =:= "exchange" ->
             [Type | Tail];
