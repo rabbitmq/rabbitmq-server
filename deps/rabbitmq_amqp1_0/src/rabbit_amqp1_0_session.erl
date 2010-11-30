@@ -27,6 +27,9 @@
 -define(REJECTED, #'v1_0.rejected'{}).
 -define(RELEASED, #'v1_0.released'{}).
 
+-define(SEND_ROLE, false).
+-define(RECV_ROLE, true).
+
 -define(DEFAULT_OUTCOME, ?RELEASED).
 %%-define(DEFAULT_OUTCOME, ?ACCEPTED).
 -define(OUTCOMES, [?ACCEPTED, ?REJECTED, ?RELEASED]).
@@ -157,7 +160,7 @@ handle_control(#'v1_0.attach'{name = Name,
                               local = ClientLinkage,
                               flow_state = Flow,
                               transfer_unit = Unit,
-                              role = false}, %% client is sender
+                              role = ?SEND_ROLE}, %% client is sender
                State = #session{ outgoing_lwm = LWM }) ->
     %% TODO associate link name with target
     #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
@@ -178,7 +181,7 @@ handle_control(#'v1_0.attach'{name = Name,
                  unsettled_lwm = {uint, LWM},
                  transfer_count = {uint, 0}},
                transfer_unit = Unit,
-               role = true},
+               role = ?RECV_ROLE}, %% server is receiver
              State1};
         {error, Reason, State1} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p", [Reason]),
@@ -200,7 +203,7 @@ handle_control(#'v1_0.attach'{name = Name,
                                              drain = Drain
                                             },
                               transfer_unit = Unit,
-                              role = true} = Attach, %% client is receiver
+                              role = ?RECV_ROLE} = Attach, %% client is receiver
                State = #session{backing_channel = Ch}) ->
     %% TODO ensure_destination
     #'v1_0.linkage'{ source = Source = #'v1_0.source' {
@@ -241,15 +244,22 @@ handle_control(#'v1_0.transfer'{handle = Handle,
 
 handle_control(#'v1_0.disposition'{ batchable = Batchable,
                                     extents = Extents,
-                                    role = true} = Disp, %% Client is receiver
+                                    role = ?RECV_ROLE} = Disp, %% Client is receiver
                State) ->
     {SettledExtents, NewState} =
         lists:foldl(fun(Extent, {SettledExtents1, State1}) ->
-                            {SettledExtent, State2} =
-                                settle(Extent, Batchable, State1),
-                            {[SettledExtent | SettledExtents1], State2}
+                            {Settled, State2} = settle(Extent, Batchable, State1),
+                            {[Settled | SettledExtents1], State2}
                     end, {[], State}, Extents),
-    {reply, Disp#'v1_0.disposition'{ extents = SettledExtents }, NewState};
+    case lists:filter(fun (none) -> false;
+                          (Ext)  -> true
+                      end, SettledExtents) of
+        []   -> {noreply, NewState}; %% everything in its place
+        Exts -> {reply,
+                 Disp#'v1_0.disposition'{ extents = Exts,
+                                          role = ?SEND_ROLE }, %% server is sender
+                 NewState}
+    end;
 
 handle_control(#'v1_0.detach'{ handle = Handle },
                State = #session{ writer_pid = Sock,
@@ -315,7 +325,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
                flow_state = Flow#'v1_0.flow_state'{
                               available = {uint, Available}
                              },
-               role = false
+               role = ?SEND_ROLE % server is sender
               }, State};
         Fail ->
             protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
@@ -365,30 +375,31 @@ settle(#'v1_0.extent'{
        Batchable, %% TODO is this documented anywhere? Handle it.
        State = #session{backing_channel = Ch,
                         xfer_num_to_tag = Dict}) ->
-    case Settled of
-        true ->
-            %% Do nothing, the receiver is settled.
-            ok;
-
-        false ->
-            DeliveryTag = dict:fetch(First, Dict),
-            case Outcome of
-                ?ACCEPTED ->
-                    amqp_channel:call(Ch, #'basic.ack' {
-                                        delivery_tag = DeliveryTag,
-                                        multiple     = false });
-                ?REJECTED ->
-                    amqp_channel:call(Ch, #'basic.reject' {
-                                        delivery_tag = DeliveryTag,
-                                        requeue      = true });
-                ?RELEASED ->
-                    amqp_channel:call(Ch, #'basic.reject' {
-                                        delivery_tag = DeliveryTag,
-                                        requeue      = false })
-            end
-    end,
-    {Extent#'v1_0.extent'{ settled = true },
-     State#session{xfer_num_to_tag = dict:erase(First, Dict)}}.
+    Dict1 =
+        lists:foldl(
+          fun (Transfer, TransferMap) ->
+                  DeliveryTag = dict:fetch(Transfer, TransferMap),
+                  Ack =
+                      case Outcome of
+                          ?ACCEPTED ->
+                              #'basic.ack' {delivery_tag = DeliveryTag,
+                                            multiple     = false };
+                          ?REJECTED ->
+                              #'basic.reject' {delivery_tag = DeliveryTag,
+                                               requeue      = false };
+                          ?RELEASED ->
+                              #'basic.reject' {delivery_tag = DeliveryTag,
+                                               requeue      = true }
+                      end,
+                  ok = amqp_channel:call(Ch, Ack),
+                  dict:erase(Transfer, TransferMap)
+          end,
+          Dict, lists:seq(First, Last)),
+    {case Settled of
+         true  -> none;
+         false -> Extent#'v1_0.extent'{ settled = true }
+     end,
+     State#session{xfer_num_to_tag = Dict1}}.
 
 flow_state(#outgoing_link{credit = Credit,
                           transfer_count = Count},
