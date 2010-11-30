@@ -34,7 +34,7 @@
 
 -export([async_recv/3, close/1, controlling_process/2,
         getstat/2, peername/1, peercert/1, port_command/2,
-        send/2, sockname/1, is_ssl/1]).
+        send/2, sockname/1, is_ssl/1, setopts/2]).
 
 %%---------------------------------------------------------------------------
 
@@ -69,6 +69,9 @@
 -spec(getstat/2 ::
         (socket(), [stat_option()])
         -> ok_val_or_error([{stat_option(), integer()}])).
+-spec(setopts/2 :: (socket(), [{atom(), any()} |
+                               {raw, non_neg_integer(), non_neg_integer(),
+                                binary()}]) -> ok_or_any_error()).
 
 -endif.
 
@@ -137,3 +140,8 @@ sockname(Sock) when is_port(Sock) ->
 
 is_ssl(Sock) ->
     ?IS_SSL(Sock).
+
+setopts(Sock, Options) when ?IS_SSL(Sock) ->
+    ssl:setopts(Sock#ssl_socket.ssl, Options);
+setopts(Sock, Options) when is_port(Sock) ->
+    inet:setopts(Sock, Options).

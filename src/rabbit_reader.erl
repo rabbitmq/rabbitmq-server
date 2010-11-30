@@ -54,9 +54,9 @@
 
 %---------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_length, recv_ref,
+-record(v1, {parent, sock, connection, callback, recv_length, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun}).
+             channel_sup_sup_pid, start_heartbeat_fun, buf}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -275,7 +275,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     try
-        mainloop(Deb, switch_callback(
+        recvloop(Deb, switch_callback(
                         #v1{parent              = Parent,
                             sock                = ClientSock,
                             connection          = #connection{
@@ -287,14 +287,15 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                               client_properties  = none},
                             callback            = uninitialized_callback,
                             recv_length         = 0,
-                            recv_ref            = none,
+                            pending_recv        = false,
                             connection_state    = pre_init,
                             queue_collector     = Collector,
                             heartbeater         = none,
                             stats_timer         =
                                 rabbit_event:init_stats_timer(),
                             channel_sup_sup_pid = ChannelSupSupPid,
-                            start_heartbeat_fun = StartHeartbeatFun
+                            start_heartbeat_fun = StartHeartbeatFun,
+                            buf                 = [<<>>]
                            },
                         handshake, 8))
     catch
@@ -317,21 +318,33 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     end,
     done.
 
-mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
+recvloop(Deb, State = #v1{pending_recv = true}) ->
+    mainloop(Deb, State);
+recvloop(Deb, State = #v1{connection_state = blocked}) ->
+    mainloop(Deb, State);
+recvloop(Deb, State = #v1{sock = Sock, recv_length = Length, buf = Buf}) ->
+    case iolist_size(Buf) < Length of
+        true  -> ok = rabbit_net:setopts(Sock, [{active, once}]),
+                 mainloop(Deb, State#v1{pending_recv = true});
+        false -> {Data, Rest} = split_binary(
+                                  list_to_binary(lists:reverse(Buf)), Length),
+                 recvloop(Deb, handle_input(State#v1.callback, Data,
+                                            State#v1{buf = [Rest]}))
+    end.
+
+mainloop(Deb, State = #v1{parent = Parent, sock = Sock}) ->
     receive
-        {inet_async, Sock, Ref, {ok, Data}} ->
-            mainloop(Deb, handle_input(State#v1.callback, Data,
-                                       State#v1{recv_ref = none}));
-        {inet_async, Sock, Ref, {error, closed}} ->
+        {tcp, Sock, Data} ->
+            recvloop(Deb, State#v1{buf = [Data | State#v1.buf],
+                                   pending_recv = false});
+        {tcp_closed, Sock} ->
             if State#v1.connection_state =:= closed ->
                     State;
                true ->
                     throw(connection_closed_abruptly)
             end;
-        {inet_async, Sock, Ref, {error, Reason}} ->
-            throw({inet_error, Reason});
         {conserve_memory, Conserve} ->
-            mainloop(Deb, internal_conserve_memory(Conserve, State));
+            recvloop(Deb, internal_conserve_memory(Conserve, State));
         {'EXIT', Parent, Reason} ->
             terminate(io_lib:format("broker forced connection closure "
                                     "with reason '~w'", [Reason]), State),
@@ -391,11 +404,9 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
 switch_callback(State = #v1{connection_state = blocked,
                             heartbeater = Heartbeater}, Callback, Length) ->
     ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-    State#v1{callback = Callback, recv_length = Length, recv_ref = none};
+    State#v1{callback = Callback, recv_length = Length};
 switch_callback(State, Callback, Length) ->
-    Ref = inet_op(fun () -> rabbit_net:async_recv(
-                              State#v1.sock, Length, infinity) end),
-    State#v1{callback = Callback, recv_length = Length, recv_ref = Ref}.
+    State#v1{callback = Callback, recv_length = Length}.
 
 terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, send_exception(State, 0,
@@ -409,12 +420,9 @@ internal_conserve_memory(true,  State = #v1{connection_state = running}) ->
 internal_conserve_memory(false, State = #v1{connection_state = blocking}) ->
     State#v1{connection_state = running};
 internal_conserve_memory(false, State = #v1{connection_state = blocked,
-                                            heartbeater      = Heartbeater,
-                                            callback         = Callback,
-                                            recv_length      = Length,
-                                            recv_ref         = none}) ->
+                                            heartbeater      = Heartbeater}) ->
     ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-    switch_callback(State#v1{connection_state = running}, Callback, Length);
+    State#v1{connection_state = running};
 internal_conserve_memory(_Conserve, State) ->
     State.
 
