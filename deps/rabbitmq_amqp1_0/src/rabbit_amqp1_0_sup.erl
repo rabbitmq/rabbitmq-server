@@ -62,5 +62,5 @@ start_client(Sock) ->
     {ok, SupPid, ReaderPid} =
         supervisor:start_child(rabbit_amqp1_0_client_sup_sup, []),
     ok = gen_tcp:controlling_process(Sock, ReaderPid),
-    ReaderPid ! {go, Sock, fun (Sock) -> {ok, Sock} end},
+    ReaderPid ! {go, Sock, fun (S) -> {ok, S} end},
     SupPid.
