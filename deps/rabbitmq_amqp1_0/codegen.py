@@ -14,6 +14,9 @@ class AMQPType:
         self.fields = [safe(el.getAttribute('name')) for el in
                        dom.getElementsByTagName('field')]
 
+    def define(self):
+        return ('SYMBOL_%s' % self.name.upper(), self.desc)
+
 class AMQPDefines:
     def __init__(self, dom):
         self.name = safe(dom.getAttribute('name'))
@@ -44,15 +47,20 @@ encode(Other) -> Other."""
 def print_hrl(types, defines):
     for t in types:
         print """-record('v1_0.%s', {%s}).""" % (t.name, ", ".join(t.fields))
+        print_define(t.define(), 'symbol')
     for d in defines:
         if len(d.options) > 0:
             print """ %% %s""" % (d.name)
-            for (name, value) in d.options:
-                if d.source == 'symbol':
-                    quoted = '"%s"' % value
-                else:
-                    quoted = value
-                print """-define(V_1_0_%s, {%s, %s}).""" % (name, d.source, quoted)
+            for opt in d.options:
+                print_define(opt, d.source)
+
+def print_define(opt, source):
+    (name, value) = opt
+    if source == 'symbol':
+        quoted = '"%s"' % value
+    else:
+        quoted = value
+    print """-define(V_1_0_%s, {%s, %s}).""" % (name, source, quoted)
 
 def want_type(el):
     klass = el.getAttribute('class')

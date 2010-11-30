@@ -23,16 +23,14 @@
 
 -record(incoming_link, {name, exchange, routing_key}).
 
--define(ACCEPTED, #'v1_0.accepted'{}).
--define(REJECTED, #'v1_0.rejected'{}).
--define(RELEASED, #'v1_0.released'{}).
-
 -define(SEND_ROLE, false).
 -define(RECV_ROLE, true).
 
--define(DEFAULT_OUTCOME, ?RELEASED).
-%%-define(DEFAULT_OUTCOME, ?ACCEPTED).
--define(OUTCOMES, [?ACCEPTED, ?REJECTED, ?RELEASED]).
+-define(DEFAULT_OUTCOME, #'v1_0.released'{}).
+
+-define(OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
+                   ?V_1_0_SYMBOL_REJECTED,
+                   ?V_1_0_SYMBOL_RELEASED]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -279,7 +277,8 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                              },
                                transfer_unit = Unit},
                State = #session{backing_channel = Ch}) ->
-    NoAck = DefaultOutcome == ?ACCEPTED andalso Outcomes == [?ACCEPTED],
+    NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
+        Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
     #'v1_0.linkage'{ source = #'v1_0.source' {address = {utf8, Q}} } = Linkage,
     #'queue.declare_ok'{message_count = Available} =
         amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
@@ -367,13 +366,13 @@ settle(#'v1_0.extent'{
                   DeliveryTag = dict:fetch(Transfer, TransferMap),
                   Ack =
                       case Outcome of
-                          ?ACCEPTED ->
+                          #'v1_0.accepted'{} ->
                               #'basic.ack' {delivery_tag = DeliveryTag,
                                             multiple     = false };
-                          ?REJECTED ->
+                          #'v1_0.rejected'{} ->
                               #'basic.reject' {delivery_tag = DeliveryTag,
                                                requeue      = false };
-                          ?RELEASED ->
+                          #'v1_0.released'{} ->
                               #'basic.reject' {delivery_tag = DeliveryTag,
                                                requeue      = true }
                       end,
