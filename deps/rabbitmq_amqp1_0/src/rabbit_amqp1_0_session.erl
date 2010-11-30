@@ -14,12 +14,17 @@
 -record(outgoing_link, {credit,
                         transfer_count = 0,
                         transfer_unit = 0,
-                        default_outcome}).
+                        no_ack}).
 
 -record(incoming_link, {name, exchange, routing_key}).
 
--define(DEFAULT_DEFAULT_OUTCOME, released).
-%%-define(DEFAULT_DEFAULT_OUTCOME, accepted).
+-define(ACCEPTED, #'v1_0.accepted'{}).
+-define(REJECTED, #'v1_0.rejected'{}).
+-define(RELEASED, #'v1_0.released'{}).
+
+-define(DEFAULT_OUTCOME, ?RELEASED).
+%%-define(DEFAULT_OUTCOME, ?ACCEPTED).
+-define(OUTCOMES, [?ACCEPTED, ?REJECTED, ?RELEASED]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -179,53 +184,26 @@ handle_control(#'v1_0.attach'{name = Name,
                                              drain = Drain
                                             },
                               transfer_unit = Unit,
-                              role = true}, %% client is receiver
+                              role = true} = Attach, %% client is receiver
                State = #session{backing_channel = Ch}) ->
     %% TODO ensure_destination
     #'v1_0.linkage'{ source = Source = #'v1_0.source' {
                                 address = {utf8, Q},
-                                default_outcome = DO
+                                default_outcome = DO,
+                                outcomes = Os
                                }
                    } = Linkage,
-    %% TODO handle the outcomes field
     DefaultOutcome = case DO of
-                         undefined -> ?DEFAULT_DEFAULT_OUTCOME;
+                         undefined -> ?DEFAULT_OUTCOME;
                          _         -> DO
                      end,
-    #'queue.declare_ok'{message_count = Available} =
-        amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
-    case amqp_channel:subscribe(
-           Ch, #'basic.consume' { queue = Q,
-                                  consumer_tag = handle_to_ctag(Handle),
-                                  no_ack = DefaultOutcome == accepted,
-                                  %% TODO exclusive?
-                                  exclusive = false}, self()) of
-        #'basic.consume_ok'{} ->
-            %% FIXME we should avoid the race by getting the queue to send
-            %% attach back, but a.t.m. it would use the wrong codec.
-            put({out, Handle},
-                #outgoing_link{
-                  credit = Credit,
-                  transfer_unit = Unit,
-                  default_outcome = DefaultOutcome
-                 }),
-            {reply, #'v1_0.attach'{
-               name = Name,
-               handle = Handle,
-               remote = Linkage,
-               local = #'v1_0.linkage'{
-                 source = #'v1_0.source'{address = {utf8, Q}}},
-               flow_state = Flow#'v1_0.flow_state'{
-                              available = {uint, Available}
-                             },
-               role = false
-              }, State};
-        _ ->
-            {reply, #'v1_0.attach'{
-               name = Name,
-               local = undefined,
-               remote = undefined},
-             State}
+    Outcomes = case Os of
+                   undefined -> ?OUTCOMES;
+                   _         -> Os
+               end,
+    case lists:any(fun(O) -> not lists:member(O, ?OUTCOMES) end, Outcomes) of
+        true  -> close_error();
+        false -> attach_outgoing(DefaultOutcome, Outcomes, Attach, State)
     end;
 
 handle_control(#'v1_0.transfer'{handle = Handle,
@@ -273,11 +251,62 @@ handle_control(Frame, State) ->
 
 %% ------
 
+close_error() ->
+    %% TODO handle errors
+    stop.
+
+attach_outgoing(DefaultOutcome, Outcomes,
+                #'v1_0.attach'{name = Name,
+                               handle = Handle,
+                               local = Linkage,
+                               flow_state = Flow = #'v1_0.flow_state'{
+                                              link_credit = {uint, Credit}
+                                             },
+                               transfer_unit = Unit},
+               State = #session{backing_channel = Ch}) ->
+    NoAck = DefaultOutcome == ?ACCEPTED andalso Outcomes == [?ACCEPTED],
+    #'v1_0.linkage'{ source = #'v1_0.source' {address = {utf8, Q}} } = Linkage,
+    #'queue.declare_ok'{message_count = Available} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
+    case amqp_channel:subscribe(
+           Ch, #'basic.consume' { queue = Q,
+                                  consumer_tag = handle_to_ctag(Handle),
+                                  no_ack = NoAck,
+                                  %% TODO exclusive?
+                                  exclusive = false}, self()) of
+        #'basic.consume_ok'{} ->
+            %% FIXME we should avoid the race by getting the queue to send
+            %% attach back, but a.t.m. it would use the wrong codec.
+            put({out, Handle},
+                #outgoing_link{
+                  credit = Credit,
+                  transfer_unit = Unit,
+                  no_ack = NoAck
+                 }),
+            {reply, #'v1_0.attach'{
+               name = Name,
+               handle = Handle,
+               remote = Linkage,
+               local = #'v1_0.linkage'{
+                 source = #'v1_0.source'{address = {utf8, Q},
+                                         default_outcome = DefaultOutcome,
+                                         outcomes = Outcomes
+                                        }
+                },
+               flow_state = Flow#'v1_0.flow_state'{
+                              available = {uint, Available}
+                             },
+               role = false
+              }, State};
+        _ ->
+            close_error()
+    end.
+
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ credit = Credit,
                                 transfer_unit = Unit,
                                 transfer_count = Count,
-                                default_outcome = DefaultOutcome},
+                                no_ack = NoAck},
          Session = #session{ transfer_number = TransferNumber,
                              xfer_num_to_tag = Dict },
          Msg = #amqp_msg{payload = Content},
@@ -286,15 +315,11 @@ transfer(WriterPid, LinkHandle,
     NewLink = Link#outgoing_link{
                 credit = Credit - TransferSize,
                 transfer_count = Count + TransferSize },
-    Settled = case DefaultOutcome of
-                  accepted -> true;
-                  _        -> false
-              end,
     T = #'v1_0.transfer'{handle = LinkHandle,
                          flow_state = flow_state(Link, Session),
                          delivery_tag = {binary, <<DeliveryTag/integer>>},
                          transfer_id = {uint, TransferNumber},
-                         settled = Settled,
+                         settled = NoAck,
                          state = #'v1_0.transfer_state'{
                            %% TODO DUBIOUS this replicates information we
                            %% and the client already have
@@ -329,14 +354,18 @@ settle(#'v1_0.extent'{
         false ->
             DeliveryTag = dict:fetch(First, Dict),
             case Outcome of
-                #'v1_0.accepted'{} ->
+                ?ACCEPTED ->
                     amqp_channel:call(Ch, #'basic.ack' {
                                         delivery_tag = DeliveryTag,
                                         multiple     = false });
-                #'v1_0.rejected'{} ->
+                ?REJECTED ->
                     amqp_channel:call(Ch, #'basic.reject' {
                                         delivery_tag = DeliveryTag,
-                                        requeue      = true })
+                                        requeue      = true });
+                ?RELEASED ->
+                    amqp_channel:call(Ch, #'basic.reject' {
+                                        delivery_tag = DeliveryTag,
+                                        requeue      = false })
             end
     end,
     {Extent#'v1_0.extent'{ settled = true },
