@@ -121,7 +121,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 handle_cast({frame, Frame},
             State = #session{ writer_pid = Sock,
                               channel_num = Channel}) ->
-    case handle_control(Frame, State) of
+    try handle_control(Frame, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_amqp1_0_writer:send_command(Sock, Reply),
             noreply(NewState);
@@ -129,7 +129,15 @@ handle_cast({frame, Frame},
             noreply(NewState);
         stop ->
             {stop, normal, State}
-    %% TODO rabbit_channel has some extra error handling here
+    catch exit:Reason = #'v1_0.error'{} ->
+            %% TODO shut down nicely like rabbit_channel
+            Close = #'v1_0.end'{ error = Reason },
+            ok = rabbit_amqp1_0_writer:send_command(Sock, Close),
+            {stop, normal, State};
+          exit:normal ->
+            {stop, normal, State};
+          _:Reason ->
+            {stop, {Reason, erlang:get_stacktrace()}, State}
     end.
 
 %% TODO rabbit_channel returns {noreply, State, hibernate}, but that
@@ -209,9 +217,10 @@ handle_control(#'v1_0.attach'{name = Name,
                    undefined -> ?OUTCOMES;
                    _         -> Os
                end,
-    case lists:any(fun(O) -> not lists:member(O, ?OUTCOMES) end, Outcomes) of
-        true  -> close_error();
-        false -> attach_outgoing(DefaultOutcome, Outcomes, Attach, State)
+    case lists:filter(fun(O) -> not lists:member(O, ?OUTCOMES) end, Outcomes) of
+        []   -> attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
+        Bad  -> protocol_error(?V_1_0_NOT_IMPLEMENTED,
+                               "Outcomes not supported: ~p", [Bad])
     end;
 
 handle_control(#'v1_0.transfer'{handle = Handle,
@@ -258,9 +267,12 @@ handle_control(Frame, State) ->
 
 %% ------
 
-close_error() ->
-    %% TODO handle errors
-    stop.
+protocol_error(Condition, Msg, Args) ->
+    exit(#'v1_0.error'{
+        condition = Condition,
+        description = {utf8, list_to_binary(
+                               lists:flatten(io_lib:format(Msg, Args)))}
+       }).
 
 attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
@@ -305,8 +317,8 @@ attach_outgoing(DefaultOutcome, Outcomes,
                              },
                role = false
               }, State};
-        _ ->
-            close_error()
+        Fail ->
+            protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
     end.
 
 transfer(WriterPid, LinkHandle,

@@ -48,10 +48,10 @@ def print_hrl(types, defines):
         if len(d.options) > 0:
             print """ %% %s""" % (d.name)
             for (name, value) in d.options:
-                if d.source == 'uint':
-                    quoted = value
+                if d.source == 'symbol':
+                    quoted = '"%s"' % value
                 else:
-                    quoted = "'%s'" % value
+                    quoted = value
                 print """-define(V_1_0_%s, {%s, %s}).""" % (name, d.source, quoted)
 
 def want_type(el):
