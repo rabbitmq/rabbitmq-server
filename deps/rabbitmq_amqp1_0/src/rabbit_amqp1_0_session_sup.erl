@@ -55,9 +55,20 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
 start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
             Collector}) ->
+    case Protocol of
+        rabbit_amqp1_0_framing ->
+            start_link_1_0({Protocol, Sock, Channel, FrameMax, ReaderPid,
+                            Username, VHost, Collector});
+        _ ->
+            rabbit_channel_sup:start_link({Protocol, Sock, Channel, FrameMax,
+                                           ReaderPid, Username, VHost,
+                                           Collector})
+    end.
+
+start_link_1_0({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
+                Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
