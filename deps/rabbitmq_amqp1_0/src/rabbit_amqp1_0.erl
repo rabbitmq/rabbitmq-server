@@ -12,7 +12,7 @@ start() ->
 %% Callbacks
 
 start(normal, []) ->
-    {ok, Listeners} = application:get_env(listeners),
+    {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SupPid} = rabbit_amqp1_0_sup:start_link(Listeners),
     %% TODO report starting up ...
     {ok, SupPid}.
