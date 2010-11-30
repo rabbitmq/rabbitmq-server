@@ -34,7 +34,7 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, should_offer/1, init/1, handle_response/2]).
+-export([description/0, init/1, handle_response/2]).
 
 -include("rabbit_auth_mechanism_spec.hrl").
 
@@ -57,35 +57,28 @@ description() ->
     [{name, <<"EXTERNAL">>},
      {description, <<"SASL EXTERNAL authentication mechanism">>}].
 
-should_offer(Sock) ->
-    case peer_subject(Sock) of
-        none ->
-            false;
-        _ ->
-            {ok, Opts} = application:get_env(ssl_options),
-            case {proplists:get_value(fail_if_no_peer_cert, Opts),
-                  proplists:get_value(verify, Opts)} of
-                {true, verify_peer} ->
-                    true;
-                {F, V} ->
-                    rabbit_log:warning("EXTERNAL mechanism disabled, "
-                                       "fail_if_no_peer_cert=~p; "
-                                       "verify=~p~n", [F, V]),
-                    false
-            end
-    end.
-
 init(Sock) ->
-    {ok, C} = rabbit_net:peercert(Sock),
-    CN = case rabbit_ssl:peer_cert_subject_item(C, ?'id-at-commonName') of
-             not_found -> not_found;
-             CN0       -> list_to_binary(CN0)
-         end,
-    #state{username = CN}.
+    Username = case rabbit_net:peercert(Sock) of
+                   {ok, C} ->
+                       CN = case rabbit_ssl:peer_cert_subject_item(
+                                   C, ?'id-at-commonName') of
+                                not_found -> not_found;
+                                CN0       -> list_to_binary(CN0)
+                            end,
+                       case config_sane() of
+                           true  -> CN;
+                           false -> not_found
+                       end;
+                   {error, no_peercert} ->
+                       not_found;
+                   nossl ->
+                       not_found
+               end,
+    #state{username = Username}.
 
 handle_response(_Response, #state{username = Username}) ->
     case Username of
-        not_found -> {refused, Username};
+        not_found -> {refused, "CN not found"};
         _         -> case rabbit_access_control:lookup_user(Username) of
                          {ok, User}         -> {ok, User};
                          {error, not_found} -> {refused, Username}
@@ -94,9 +87,15 @@ handle_response(_Response, #state{username = Username}) ->
 
 %%--------------------------------------------------------------------------
 
-peer_subject(Sock) ->
-    case rabbit_net:peercert(Sock) of
-        nossl                -> none;
-        {error, no_peercert} -> none;
-        {ok, C}              -> rabbit_ssl:peer_cert_subject(C)
+config_sane() ->
+    {ok, Opts} = application:get_env(ssl_options),
+    case {proplists:get_value(fail_if_no_peer_cert, Opts),
+          proplists:get_value(verify, Opts)} of
+        {true, verify_peer} ->
+            true;
+        {F, V} ->
+            rabbit_log:warning("EXTERNAL mechanism disabled, "
+                               "fail_if_no_peer_cert=~p; "
+                               "verify=~p~n", [F, V]),
+            false
     end.
