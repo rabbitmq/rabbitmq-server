@@ -3,7 +3,7 @@
   {vsn, "%%VSN%%"},
   {modules, [
              amqp_channel,
-             amqp_channel_util,
+             amqp_channels_manager,
              amqp_connection,
              amqp_direct_connection,
              amqp_main_reader,
@@ -13,4 +13,5 @@
   ]},
   {registered, []},
   {env, []},
+  {mod, {amqp_client, []}},
   {applications, [kernel, stdlib]}]}.

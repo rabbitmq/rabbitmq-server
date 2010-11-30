@@ -1,26 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 %%
 
 -module(ssl_client_SUITE).
@@ -70,7 +61,7 @@ rpc_test() ->
 %% Negative Tests
 
 non_existent_exchange_test() -> 
-  negative_test_util:non_existent_exchange_test(new_connection()).
+    negative_test_util:non_existent_exchange_test(new_connection()).
 
 hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
@@ -87,7 +78,10 @@ new_connection() ->
                       {keyfile, CertsDir ++ "/client/key.pem"},
                       {verify, verify_peer},
                       {fail_if_no_peer_cert, true}]},
-    amqp_connection:start_network(Params).
+    case amqp_connection:start(network, Params) of
+        {ok, Conn}         -> Conn;
+        {error, _} = Error -> Error
+    end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
