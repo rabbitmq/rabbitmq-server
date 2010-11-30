@@ -91,8 +91,8 @@ if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
 	-pa "$RABBITMQ_EBIN_ROOT" \
 	-noinput \
 	-hidden \
-	-s rabbit_plugin_activator \
-	-extra "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}"
+	-s rabbit_prelaunch \
+	-extra "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}" "${RABBITMQ_NODENAME}"
     then
 	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
 	RABBITMQ_EBIN_PATH=""

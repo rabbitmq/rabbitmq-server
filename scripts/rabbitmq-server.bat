@@ -117,9 +117,10 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
--s rabbit_plugin_activator ^
+-s rabbit_prelaunch ^
 -extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
-       "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"
+       "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
+       "!RABBITMQ_NODENAME!"
 
 set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
 if not exist "!RABBITMQ_BOOT_FILE!.boot" (

@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_plugin_activator).
+-module(rabbit_prelaunch).
 
 -export([start/0, stop/0]).
 
@@ -52,7 +52,7 @@ start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
 
     %% Determine our various directories
-    [PluginDir, UnpackedPluginDir] = init:get_plain_arguments(),
+    [PluginDir, UnpackedPluginDir, NodeName] = init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
@@ -130,6 +130,13 @@ start() ->
     [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
      || App <- PluginApps],
     io:nl(),
+    case net_kernel:start([list_to_atom(NodeName), shortnames]) of
+        {ok, _Pid}      -> ok = net_kernel:stop();
+        {error, Result} ->
+            terminate("starting node with name ~p failed - "
+                      "an instance with the same name may already be running~n~p~n",
+                      [NodeName, Result])
+    end,
     halt(),
     ok.
 
