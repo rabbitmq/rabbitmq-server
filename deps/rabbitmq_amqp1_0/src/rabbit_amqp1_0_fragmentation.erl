@@ -5,49 +5,41 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--define(SECTION_HEADER,     {uint, 0}).
--define(SECTION_PROPERTIES, {uint, 1}).
--define(SECTION_FOOTER,     {uint, 2}).
--define(SECTION_DATA,       {uint, 3}).
--define(SECTION_AMQP_DATA,  {uint, 4}).
--define(SECTION_AMQP_MAP,   {uint, 5}).
--define(SECTION_AMQP_LIST,  {uint, 6}).
-
 %% TODO: we don't care about fragment_offset while reading. Should we?
 assemble(Fragments) ->
     %%io:format("Fragments: ~p~n", [Fragments]),
-    {Props, Content} = assemble(?SECTION_HEADER, {#'P_basic'{}, undefined},
+    {Props, Content} = assemble(?V_1_0_HEADER, {#'P_basic'{}, undefined},
                                 Fragments),
     %%io:format("Props: ~p~n", [Props]),
     %%io:format("Content: ~p~n", [Content]),
     #amqp_msg{props = Props, payload = Content}.
 
-assemble(?SECTION_HEADER, {PropsIn, ContentIn},
+assemble(?V_1_0_HEADER, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
-                           format_code = ?SECTION_HEADER} | Fragments]) ->
-    assemble(?SECTION_PROPERTIES, {parse_header(Payload, PropsIn), ContentIn},
+                           format_code = ?V_1_0_HEADER} | Fragments]) ->
+    assemble(?V_1_0_PROPERTIES, {parse_header(Payload, PropsIn), ContentIn},
              Fragments);
 
-assemble(?SECTION_PROPERTIES, {PropsIn, ContentIn},
+assemble(?V_1_0_PROPERTIES, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
-                           format_code = ?SECTION_PROPERTIES} | Fragments]) ->
+                           format_code = ?V_1_0_PROPERTIES} | Fragments]) ->
     %% TODO allow for AMQP_DATA, _MAP, _LIST
-    assemble(?SECTION_DATA, {parse_properties(Payload, PropsIn), ContentIn},
+    assemble(?V_1_0_DATA, {parse_properties(Payload, PropsIn), ContentIn},
              Fragments);
 
-assemble(?SECTION_DATA, {PropsIn, ContentIn},
+assemble(?V_1_0_DATA, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
-                           format_code = ?SECTION_DATA} | Fragments]) ->
+                           format_code = ?V_1_0_DATA} | Fragments]) ->
     %% TODO allow for multiple fragments
-    assemble(?SECTION_FOOTER, {PropsIn, Payload}, Fragments);
+    assemble(?V_1_0_FOOTER, {PropsIn, Payload}, Fragments);
 
-assemble(?SECTION_FOOTER, {PropsIn, ContentIn},
+assemble(?V_1_0_FOOTER, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
-                           format_code = ?SECTION_FOOTER}]) ->
+                           format_code = ?V_1_0_FOOTER}]) ->
     %% TODO parse FOOTER
     {PropsIn, ContentIn};
 
@@ -85,10 +77,10 @@ parse(Bin) ->
 fragments(#amqp_msg{props = Properties, payload = Content}) ->
     {HeaderBin, PropertiesBin} = enc_properties(Properties),
     FooterBin = enc(#'v1_0.footer'{}), %% TODO
-    [fragment(?SECTION_HEADER,     HeaderBin),
-     fragment(?SECTION_PROPERTIES, PropertiesBin),
-     fragment(?SECTION_DATA,       Content),
-     fragment(?SECTION_FOOTER,     FooterBin)].
+    [fragment(?V_1_0_HEADER,     HeaderBin),
+     fragment(?V_1_0_PROPERTIES, PropertiesBin),
+     fragment(?V_1_0_DATA,       Content),
+     fragment(?V_1_0_FOOTER,     FooterBin)].
 
 fragment(Code, Content) ->
     #'v1_0.fragment'{first = true,
