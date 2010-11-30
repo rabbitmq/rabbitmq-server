@@ -656,8 +656,7 @@ handle_1_0_frame(_Channel, Payload,
         true  -> handle_1_0_connection_frame(Frame, State);
         false -> State
     end;
-handle_1_0_frame(Channel, Payload,
-                 State = #v1{ connection_state = CS}) ->
+handle_1_0_frame(Channel, Payload, State) ->
     Frame = rabbit_amqp1_0_framing:decode(
               rabbit_amqp1_0_binary_parser:parse(Payload)),
     ?DEBUG("1.0 frame decoded: ~p~n", [Frame]),
@@ -737,15 +736,11 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
                             fun() -> internal_emit_stats(State2) end),
     State2;
 
-handle_1_0_connection_frame(Frame = #'v1_0.close'{},
-                             State = #v1{ sock = Sock }) ->
+handle_1_0_connection_frame(_Frame, State) ->
     lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing}).
 
-handle_1_0_session_frame(Channel, Frame,
-                         State = #v1{ sock = Sock,
-                                      connection = #connection{
-                                        frame_max = FrameMax }}) ->
+handle_1_0_session_frame(Channel, Frame, State) ->
     case get({channel, Channel}) of
         {ch_fr_pid, SessionPid} ->
             ok = rabbit_amqp1_0_session:process_frame(SessionPid, Frame),
@@ -806,12 +801,13 @@ handle_input(frame_header_1_0, <<Size:32, DOff:8, Type:8, Channel:16>>,
             ensure_stats_timer(
               switch_callback(State, {frame_payload_1_0, DOff, Channel}, Size - 8))
     end;
-handle_input(frame_header_1_0, Malformed, State) ->
+handle_input(frame_header_1_0, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
 handle_input({frame_payload_1_0, DOff, Channel},
             FrameBin, State) ->
     SkipBits = (DOff * 4 - 8),
     <<Skip:SkipBits, FramePayload/binary>> = FrameBin,
+    Skip = Skip, %% hide warning when debug is off
     ?DEBUG("1.0 frame: ~p (skipped ~p)~n", [FramePayload, Skip]),
     handle_1_0_frame(Channel, FramePayload,
                      switch_callback(State, frame_header_1_0, 8));

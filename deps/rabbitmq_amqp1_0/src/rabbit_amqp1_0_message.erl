@@ -29,7 +29,7 @@ assemble(?V_1_0_PROPERTIES, {PropsIn, ContentIn},
     assemble(?V_1_0_DATA, {parse_properties(Payload, PropsIn), ContentIn},
              Fragments);
 
-assemble(?V_1_0_DATA, {PropsIn, ContentIn},
+assemble(?V_1_0_DATA, {PropsIn, _ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
                            payload = {binary, Payload},
                            format_code = ?V_1_0_DATA} | Fragments]) ->
@@ -38,7 +38,7 @@ assemble(?V_1_0_DATA, {PropsIn, ContentIn},
 
 assemble(?V_1_0_FOOTER, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
-                           payload = {binary, Payload},
+                           payload = {binary, _Payload},
                            format_code = ?V_1_0_FOOTER}]) ->
     %% TODO parse FOOTER
     {PropsIn, ContentIn};

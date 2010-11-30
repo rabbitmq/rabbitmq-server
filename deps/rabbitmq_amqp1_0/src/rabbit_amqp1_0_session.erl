@@ -54,8 +54,8 @@
 %% TODO links can be migrated between sessions -- seriously.
 
 %% TODO account for all these things
-start_link(Channel, ReaderPid, WriterPid, Username, VHost,
-           Collector, StartLimiterFun) ->
+start_link(Channel, ReaderPid, WriterPid, _Username, _VHost,
+           _Collector, _StartLimiterFun) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid], []).
 
@@ -76,8 +76,8 @@ init([Channel, ReaderPid, WriterPid]) ->
                    writer_pid         = WriterPid,
                    xfer_num_to_tag    = dict:new()}}.
 
-terminate(Reason, State = #session{ backing_connection = Conn,
-                                    backing_channel    = Ch}) ->
+terminate(_Reason, #session{ backing_connection = Conn,
+                             backing_channel    = Ch}) ->
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
@@ -85,7 +85,7 @@ terminate(Reason, State = #session{ backing_connection = Conn,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_call(Msg, From, State) ->
+handle_call(Msg, _From, State) ->
     {reply, {error, not_understood, Msg}, State}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -118,12 +118,12 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
-handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
+    %% TODO do we care any more since we're using direct client?
     {noreply, State}. % FIXME rabbit_channel uses queue_blocked?
 
 handle_cast({frame, Frame},
-            State = #session{ writer_pid = Sock,
-                              channel_num = Channel}) ->
+            State = #session{ writer_pid = Sock }) ->
     try handle_control(Frame, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_amqp1_0_writer:send_command(Sock, Reply),
@@ -158,13 +158,11 @@ handle_control(#'v1_0.begin'{}, State = #session{ channel_num = Channel }) ->
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = ClientLinkage,
-                              flow_state = Flow,
                               transfer_unit = Unit,
                               role = ?SEND_ROLE}, %% client is sender
                State = #session{ outgoing_lwm = LWM }) ->
     %% TODO associate link name with target
     #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
-    #'v1_0.flow_state'{ transfer_count = TransferCount } = Flow,
     case ensure_target(Target, #incoming_link{ name = Name }, State) of
         {ok, ServerTarget, IncomingLink, State1} ->
             put({incoming, Handle}, IncomingLink),
@@ -195,22 +193,14 @@ handle_control(#'v1_0.attach'{name = Name,
 
 %% TODO we don't really implement flow control. Reject connections
 %% that try to use it - except ATM the Python test case asks to use it
-handle_control(#'v1_0.attach'{name = Name,
-                              handle = Handle,
-                              local = Linkage,
-                              flow_state = Flow = #'v1_0.flow_state'{
-                                             link_credit = {uint, Credit},
-                                             drain = Drain
-                                            },
-                              transfer_unit = Unit,
+handle_control(#'v1_0.attach'{local = Linkage,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
-               State = #session{backing_channel = Ch}) ->
+               State) ->
     %% TODO ensure_destination
-    #'v1_0.linkage'{ source = Source = #'v1_0.source' {
-                                address = {utf8, Q},
-                                default_outcome = DO,
-                                outcomes = Os
-                               }
+    #'v1_0.linkage'{ source  = #'v1_0.source' {
+                       default_outcome = DO,
+                       outcomes = Os
+                      }
                    } = Linkage,
     DefaultOutcome = case DO of
                          undefined -> ?DEFAULT_OUTCOME;
@@ -227,8 +217,6 @@ handle_control(#'v1_0.attach'{name = Name,
     end;
 
 handle_control(#'v1_0.transfer'{handle = Handle,
-                                delivery_tag = Tag,
-                                transfer_id = TransferId,
                                 fragments = Fragments},
                           State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
@@ -252,7 +240,7 @@ handle_control(#'v1_0.disposition'{ batchable = Batchable,
                             {[Settled | SettledExtents1], State2}
                     end, {[], State}, Extents),
     case lists:filter(fun (none) -> false;
-                          (Ext)  -> true
+                          (_Ext)  -> true
                       end, SettledExtents) of
         []   -> {noreply, NewState}; %% everything in its place
         Exts -> {reply,
@@ -261,9 +249,7 @@ handle_control(#'v1_0.disposition'{ batchable = Batchable,
                  NewState}
     end;
 
-handle_control(#'v1_0.detach'{ handle = Handle },
-               State = #session{ writer_pid = Sock,
-                                 channel_num = Channel }) ->
+handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
     erase({incoming, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
@@ -368,11 +354,11 @@ transfer(WriterPid, LinkHandle,
 settle(#'v1_0.extent'{
           first = {uint, First},
           last = {uint, Last}, %% TODO handle this
-          handle = Handle, %% TODO DUBIOUS what on earth is this for?
+          handle = _Handle, %% TODO DUBIOUS what on earth is this for?
           settled = Settled,
           state = #'v1_0.transfer_state'{ outcome = Outcome }
          } = Extent,
-       Batchable, %% TODO is this documented anywhere? Handle it.
+       _Batchable, %% TODO is this documented anywhere? Handle it.
        State = #session{backing_channel = Ch,
                         xfer_num_to_tag = Dict}) ->
     Dict1 =
@@ -462,7 +448,7 @@ ensure_declaring_channel(State) ->
 
 ensure_target(Target = #'v1_0.target'{address=Address,
                                       dynamic=Dynamic},
-              Link = #incoming_link{},
+              #incoming_link{},
               State) ->
     case Dynamic of
         undefined ->
@@ -550,7 +536,7 @@ check_exchange(ExchangeName, State) when is_binary(ExchangeName) ->
 
 %% TODO Lifetimes: we approximate these with exclusive + auto_delete
 %% for the minute.
-create_queue(Lifetime, State) ->
+create_queue(_Lifetime, State) ->
     State1 = #session{ declaring_channel = Ch } = ensure_declaring_channel(State),
     #'queue.declare_ok'{queue = QueueName} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true, auto_delete = true}),
@@ -564,7 +550,7 @@ next_transfer_number(TransferNumber) ->
     TransferNumber + 1.
 
 %% FIXME
-transfer_size(Content, Unit) ->
+transfer_size(_Content, _Unit) ->
     1.
 
 handle_to_ctag({uint, H}) ->
