@@ -8,6 +8,7 @@
 -export([start_link/7, process_frame/2]).
 
 -record(session, {channel_num, backing_connection, backing_channel,
+                  declaring_channel,
                   reader_pid, writer_pid, transfer_number = 0,
                   outgoing_lwm = 0, outgoing_session_credit = 10,
                   xfer_num_to_tag }).
@@ -141,36 +142,38 @@ handle_control(#'v1_0.begin'{}, State = #session{ channel_num = Channel }) ->
 
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
-                              local = Linkage,
+                              local = ClientLinkage,
                               flow_state = Flow,
+                              transfer_unit = Unit,
                               role = false}, %% client is sender
                State = #session{ outgoing_lwm = LWM }) ->
     %% TODO associate link name with target
-    #'v1_0.linkage'{ source = Source, target = Target } = Linkage,
+    #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
     #'v1_0.flow_state'{ transfer_count = TransferCount } = Flow,
-    {utf8, Destination} = Target#'v1_0.target'.address,
-    case ensure_destination(Destination, #incoming_link{ name = Name }, State) of
-        {ok, IncomingLink, State1} ->
+    case ensure_target(Target, #incoming_link{ name = Name }, State) of
+        {ok, ServerTarget, IncomingLink, State1} ->
             put({incoming, Handle}, IncomingLink),
             {reply,
              #'v1_0.attach'{
                name = Name,
                handle = Handle,
-               remote = Linkage,
+               remote = ClientLinkage,
                local = #'v1_0.linkage'{
-                 %% TODO include whatever the source was
                  source = Source,
-                 target = #'v1_0.target'{ address = {utf8, Destination} }},
-               flow_state = Flow#'v1_0.flow_state'{
-                              link_credit = {uint, 50},
-                              unsettled_lwm = {uint, LWM}},
-               role = true}, State};
-        {error, State1} ->
+                 target = ServerTarget },
+               flow_state = #'v1_0.flow_state'{
+                 link_credit = {uint, 50},
+                 unsettled_lwm = {uint, LWM},
+                 transfer_count = {uint, 0}},
+               transfer_unit = Unit,
+               role = true},
+             State1};
+        {error, Reason, State1} ->
             {reply,
              #'v1_0.attach'{
                name = Name,
                handle = Handle,
-               remote = Linkage,
+               remote = ClientLinkage,
                local = undefined}, State1}
     end;
 
@@ -382,13 +385,152 @@ flow_state(#outgoing_link{credit = Credit,
             link_credit = {uint, Credit}
            }.
 
-ensure_destination(Destination, Link = #incoming_link{}, State) ->
-    %% TODO Break the destination down into elements,
-    %% check that exchanges exist,
-    %% possibly create a subscription queue, etc.
-    {ok,
-     Link#incoming_link{exchange = Destination, routing_key = <<"">>},
-     State}.
+ensure_declaring_channel(State = #session{
+                           backing_connection = Conn,
+                           declaring_channel = undefined}) ->
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    State#session{declaring_channel = Ch};
+ensure_declaring_channel(State) ->
+    State.
+
+%% There are a few things that influence what source and target
+%% definitions mean for our purposes.
+%%
+%% Addresses: we artificially segregate exchanges and queues, since
+%% they have different namespaces. However, we allow both incoming and
+%% outgoing links to exchanges: outgoing links from an exchange
+%% involve an anonymous queue.
+%%
+%% For targets, addresses are
+%% Address = "/exchange/" Name
+%%         | "/queue"
+%%         | "/queue/" Name
+%%
+%% For sources, addresses are
+%% Address = "/exchange/" Name "/" RoutingKey
+%%         | "/queue/" Name
+%%
+%% We use the message property "Subject" as the equivalent of the
+%% routing key.  In AMQP 0-9-1 terms, a target of /queue is equivalent
+%% to the default exchange; that is, the message is routed to the
+%% queue named by the subject.  A target of "/queue/Name" ignores the
+%% subject.  The reason for both varieties is that a
+%% dynamically-created queue must be fully addressable as a target,
+%% while a service may wish to use /queue and route each message to
+%% its reply-to queue name (as it is done in 0-9-1).
+%%
+%% A dynamic source or target only ever creates a queue, and the
+%% address is returned in full; e.g., "/queue/amq.gen.123456".
+%% However, that cannot be used as a reply-to, since a 0-9-1 client
+%% will use it unaltered as the routing key naming the queue.
+%% Therefore, we rewrite reply-to from 1.0 clients to be just the
+%% queue name, and expect replying clients to use /queue and the
+%% subject field.
+%%
+%% For a source queue, the distribution-mode is always move.  For a
+%% source exchange, it is always copy. Anything else should be
+%% refused.
+%%
+%% TODO default-outcome and outcomes, dynamic lifetimes
+
+ensure_target(Target = #'v1_0.target'{address=Address,
+                                      dynamic=Dynamic},
+              Link = #incoming_link{},
+              State) ->
+    case Dynamic of
+        undefined ->
+            case Address of
+                {utf8, Destination} ->
+                    case parse_destination(Destination) of
+                        ["queue", Name] ->
+                            case check_queue(Name, State) of
+                                {ok, QueueName, State1} ->
+                                    {ok, Target,
+                                     #incoming_link{exchange = <<"">>,
+                                                    routing_key = QueueName},
+                                     State1};
+                                {error, Reason, State1} ->
+                                    {error, Reason, State1}
+                            end;
+                        ["queue"] ->
+                            %% Rely on the Subject being set
+                            {ok, Target, #incoming_link{exchange = <<"">>}, State};
+                        ["exchange", Name] ->
+                            case check_exchange(Name, State) of
+                                {ok, ExchangeName, State1} ->
+                                    {ok, Target,
+                                     #incoming_link{exchange = ExchangeName},
+                                     State1};
+                                {error, Reason, State2} ->
+                                    {error, Reason, State2}
+                            end;
+                        {error, Reason} ->
+                            {error, Reason, State}
+                    end;
+                _Else ->
+                    {error, {unknown_address, Address}, State}
+            end;
+        {symbol, Lifetime} ->
+            case Address of
+                undefined ->
+                    {ok, QueueName, State1} = create_queue(Lifetime, State),
+                    {ok,
+                     Target#'v1_0.target'{address = {utf8, queue_address(QueueName)}},
+                     #incoming_link{exchange = <<"">>, routing_key = QueueName},
+                     State1};
+                _Else ->
+                    {error, both_dynamic_and_address_supplied, State}
+            end
+    end.
+
+parse_destination(Destination) when is_binary(Destination) ->
+    parse_destination(binary_to_list(Destination));
+parse_destination(Destination) when is_list(Destination) ->
+    case regexp:split("/", Destination) of
+        {ok, ["", Type | Tail]} when
+              Type =:= "queue" orelse Type =:= "exchange" ->
+            [Type | Tail];
+        _Else ->
+            {error, {malformed_address, Destination}}
+    end.
+
+%% Check that a queue exists
+check_queue(QueueName, State) when is_list(QueueName) ->
+    check_queue(list_to_binary(QueueName), State);
+check_queue(QueueName, State) ->
+    QDecl = #'queue.declare'{queue = QueueName, passive = true},
+    State1 = #session{
+      declaring_channel = Channel} = ensure_declaring_channel(State),
+    case catch amqp_channel:call(Channel, QDecl) of
+        {'EXIT', _Reason} ->
+            {error, not_found, State1#session{ declaring_channel = undefined }};
+        #'queue.declare_ok'{} ->
+            {ok, QueueName, State1}
+    end.
+
+check_exchange(ExchangeName, State) when is_list(ExchangeName) ->
+    check_exchange(list_to_binary(ExchangeName), State);
+check_exchange(ExchangeName, State) when is_binary(ExchangeName) ->
+    XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
+    State1 = #session{
+      declaring_channel = Channel } = ensure_declaring_channel(State),
+    case catch amqp_channel:call(Channel, XDecl) of
+        {'EXIT', _Reason} ->
+            {error, not_found, State1#session{declaring_channel = undefined}};
+        #'exchange.declare_ok'{} ->
+            {ok, ExchangeName, State1}
+    end.
+
+%% TODO Lifetimes: we approximate these with exclusive + auto_delete
+%% for the minute.
+create_queue(Lifetime, State) ->
+    State1 = #session{ declaring_channel = Ch } = ensure_declaring_channel(State),
+    #'queue.declare_ok'{queue = QueueName} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true, auto_delete = true}),
+    {ok, QueueName, State1}.
+
+queue_address(QueueName) when is_binary(QueueName) ->
+    <<"/queue/", QueueName/binary>>.
 
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
