@@ -130,12 +130,17 @@ start() ->
     [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
      || App <- PluginApps],
     io:nl(),
+
+    % check whether it is possible to start a node with the requested nodename
     case net_kernel:start([list_to_atom(NodeName), shortnames]) of
         {ok, _Pid}      -> ok = net_kernel:stop();
         {error, Result} ->
-            terminate("starting node with name ~p failed - "
-                      "an instance with the same name may already be running~n~p~n",
-                      [NodeName, Result])
+             io:format("starting node with name ~p failed. "
+                       "(is RabbitMQ already running?)~n~p~n",
+                       [NodeName, Result]),
+            [io:format(Fmt ++ "~n", Args) ||
+             {Fmt, Args} <- rabbit_control:diagnostics(NodeName)],
+            halt(1)
     end,
     halt(),
     ok.
