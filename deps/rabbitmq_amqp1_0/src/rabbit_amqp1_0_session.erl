@@ -14,7 +14,7 @@
 -record(session, {channel_num, backing_connection, backing_channel,
                   declaring_channel,
                   reader_pid, writer_pid, transfer_number = 0,
-                  outgoing_lwm = 0, outgoing_session_credit = 10,
+                  outgoing_lwm = 0, outgoing_session_credit,
                   xfer_num_to_tag }).
 -record(outgoing_link, {credit,
                         transfer_count = 0,
@@ -180,16 +180,18 @@ handle_control(#'v1_0.attach'{name = Name,
                role = ?RECV_ROLE}, %% server is receiver
              State1};
         {error, Reason, State1} ->
-            rabbit_log:warning("AMQP 1.0 attach rejected ~p", [Reason]),
+            rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             {reply,
              #'v1_0.attach'{
                name = Name,
                handle = Handle,
                remote = ClientLinkage,
-               local = undefined}, State1}
+               local = undefined}, State1},
+            protocol_error(?V_1_0_INVALID_FIELD,
+                               "Attach rejected: ~p", [Reason])
     end;
 
-%% TODO we don't really implement flow control. Reject connections
+%% TODO we don't really implement link-based flow control. Reject connections
 %% that try to use it - except ATM the Python test case asks to use it
 handle_control(#'v1_0.attach'{local = Linkage,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
@@ -273,12 +275,22 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                handle = Handle,
                                local = Linkage,
                                flow_state = Flow = #'v1_0.flow_state'{
+                                              session_credit = {uint, ClientSC},
                                               link_credit = {uint, Credit}
                                              },
                                transfer_unit = Unit},
-               State = #session{backing_channel = Ch}) ->
+               State = #session{backing_channel = Ch,
+                                outgoing_session_credit = ServerSC}) ->
     NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
+    SessionCredit =
+        case ServerSC of
+            undefined -> #'basic.qos_ok'{} =
+                             amqp_channel:call(Ch, #'basic.qos'{
+                                                 prefetch_count = ClientSC}),
+                         ClientSC;
+            _         -> ServerSC
+        end,
     #'v1_0.linkage'{ source = #'v1_0.source' {address = {utf8, Q}} } = Linkage,
     #'queue.declare_ok'{message_count = Available} =
         amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
@@ -302,16 +314,21 @@ attach_outgoing(DefaultOutcome, Outcomes,
                handle = Handle,
                remote = Linkage,
                local = #'v1_0.linkage'{
-                 source = #'v1_0.source'{address = {utf8, Q},
-                                         default_outcome = DefaultOutcome,
-                                         outcomes = Outcomes
-                                        }
+                 source = #'v1_0.source'{
+                   address = {utf8, Q},
+                   default_outcome = DefaultOutcome
+                   %% TODO this breaks the Python client, when it
+                   %% tries to send us back a matching detach message
+                   %% it gets confused between described(true, [...])
+                   %% and [...]. We think we're correct here
+                   %% outcomes = Outcomes
+                  }
                 },
                flow_state = Flow#'v1_0.flow_state'{
                               available = {uint, Available}
                              },
                role = ?SEND_ROLE % server is sender
-              }, State};
+              }, State#session{outgoing_session_credit = SessionCredit}};
         Fail ->
             protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
     end.
@@ -322,15 +339,18 @@ transfer(WriterPid, LinkHandle,
                                 transfer_count = Count,
                                 no_ack = NoAck},
          Session = #session{ transfer_number = TransferNumber,
+                             outgoing_session_credit = SessionCredit,
                              xfer_num_to_tag = Dict },
          Msg = #amqp_msg{payload = Content},
          DeliveryTag) ->
     TransferSize = transfer_size(Content, Unit),
     NewLink = Link#outgoing_link{
                 credit = Credit - TransferSize,
-                transfer_count = Count + TransferSize },
+                transfer_count = Count + TransferSize
+               },
+    NewSession = Session#session {outgoing_session_credit = SessionCredit - 1},
     T = #'v1_0.transfer'{handle = LinkHandle,
-                         flow_state = flow_state(Link, Session),
+                         flow_state = flow_state(NewLink, NewSession),
                          delivery_tag = {binary, <<DeliveryTag/integer>>},
                          transfer_id = {uint, TransferNumber},
                          settled = NoAck,
@@ -346,9 +366,9 @@ transfer(WriterPid, LinkHandle,
                          fragments =
                              rabbit_amqp1_0_message:fragments(Msg)},
     rabbit_amqp1_0_writer:send_command(WriterPid, T),
-    {NewLink, Session#session { xfer_num_to_tag = dict:store(TransferNumber,
-                                                             DeliveryTag,
-                                                             Dict) }}.
+    {NewLink, NewSession#session { xfer_num_to_tag = dict:store(TransferNumber,
+                                                                DeliveryTag,
+                                                                Dict) }}.
 
 settle(#'v1_0.extent'{
           first = {uint, First},
@@ -359,10 +379,11 @@ settle(#'v1_0.extent'{
          } = Extent,
        _Batchable, %% TODO is this documented anywhere? Handle it.
        State = #session{backing_channel = Ch,
+                        outgoing_session_credit = SessionCredit,
                         xfer_num_to_tag = Dict}) ->
-    Dict1 =
+    {Dict1, SessionCredit1} =
         lists:foldl(
-          fun (Transfer, TransferMap) ->
+          fun (Transfer, {TransferMap, SC}) ->
                   DeliveryTag = dict:fetch(Transfer, TransferMap),
                   Ack =
                       case Outcome of
@@ -377,14 +398,15 @@ settle(#'v1_0.extent'{
                                                requeue      = true }
                       end,
                   ok = amqp_channel:call(Ch, Ack),
-                  dict:erase(Transfer, TransferMap)
+                  {dict:erase(Transfer, TransferMap), SC + 1}
           end,
-          Dict, lists:seq(First, Last)),
+          {Dict, SessionCredit}, lists:seq(First, Last)),
     {case Settled of
          true  -> none;
          false -> Extent#'v1_0.extent'{ settled = true }
      end,
-     State#session{xfer_num_to_tag = Dict1}}.
+     State#session{outgoing_session_credit = SessionCredit1,
+                   xfer_num_to_tag = Dict1}}.
 
 flow_state(#outgoing_link{credit = Credit,
                           transfer_count = Count},
