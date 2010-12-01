@@ -15,9 +15,9 @@ FRAMING_HRL=include/rabbit_amqp1_0_framing.hrl
 CODEGEN=./codegen.py
 CODEGEN_SPECS=spec/messaging.xml spec/transport.xml
 
-EXTRA_BUILD_DEPS=$(FRAMING_HRL)
-
 include ../include.mk
+
+$(TARGETS): $(FRAMING_HRL)
 
 test: unittest
 
