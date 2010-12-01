@@ -33,6 +33,8 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
+-export([register_ack_handler/2]).
+-export([get_published_message_count/1]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -47,6 +49,8 @@
                 closing             = false,
                 writer,
                 return_handler_pid  = none,
+                ack_handler_pid     = none,
+                pub_msg_count       = undefined,
                 flow_active         = true,
                 flow_handler_pid    = none,
                 consumers           = dict:new(),
@@ -151,6 +155,14 @@ close(Channel, Code, Text) ->
         Error                 -> Error
     end.
 
+%% @spec (Channel) -> integer()
+%% where
+%%      Channel = pid()
+%% @doc Returns the number of published messages since the channel was put
+%% in confirm mode
+get_published_message_count(Channel) ->
+    gen_server:call(Channel, get_published_message_count).
+
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
 %%---------------------------------------------------------------------------
@@ -161,7 +173,7 @@ close(Channel, Code, Text) ->
 %% where
 %%      Channel = pid()
 %%      Consumer = pid()
-%% @doc Creates a subscription to a queue. This subscribes a consumer pid to 
+%% @doc Creates a subscription to a queue. This subscribes a consumer pid to
 %% the queue defined in the #'basic.consume'{} method record. Note that
 %% both the process invoking this method and the supplied consumer process
 %% receive an acknowledgement of the subscription. The calling process will
@@ -178,6 +190,15 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
 %% registered process will receive #basic.return{} records.
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+
+%% @spec (Channel, AckHandler) -> ok
+%% where
+%%      Channel = pid()
+%%      AckHandler = pid()
+%% @doc This registers a handler to deal with ack'd messages. The
+%% registered process will receive #basic.ack{} commands.
+register_ack_handler(Channel, AckHandler) ->
+    gen_server:cast(Channel, {register_ack_handler, AckHandler} ).
 
 %% @spec (Channel, FlowHandler) -> ok
 %% where
@@ -227,8 +248,19 @@ handle_method_call(Method, AmqpMsg, From, State) ->
         {#'basic.consume'{}, _, _} ->
             {reply, {error, use_subscribe}, State};
         {_, _, ok} ->
+            State1 = case {Method, State} of
+                         {#'confirm.select'{}, _} ->
+                             State #state { pub_msg_count = 0 };
+                         {#'basic.publish'{},
+                          #state { pub_msg_count = undefined }} ->
+                             State;
+                         {#'basic.publish'{},
+                          #state { pub_msg_count = PMC }} ->
+                             State #state { pub_msg_count = PMC + 1 };
+                         _ -> State
+                     end,
             {noreply,
-             rpc_top_half(Method, build_content(AmqpMsg), From, State)};
+             rpc_top_half(Method, build_content(AmqpMsg), From, State1)};
         {_, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
                       "Reason: ~p~n", [self(), Method, BlockReply]),
@@ -423,10 +455,9 @@ handle_method1(#'channel.flow'{active = Active} = Flow, none,
     case FlowHandler of none -> ok;
                         _    -> FlowHandler ! Flow
     end,
-    %% Putting the flow_ok in the queue so that the RPC queue can be flushed
-    %% beforehand. Methods that made it to the queue are not blocked in any
-    %% circumstance. Thus, we must not have any content-bearing methods in the
-    %% queue when sending flow_ok{active = false} - so we flush it entirely.
+    %% Putting the flow_ok in the queue so that the RPC queue can be
+    %% flushed beforehand. Methods that made it to the queue are not
+    %% blocked in any circumstance.
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
                            State#state{flow_active = Active})};
 handle_method1(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
@@ -441,6 +472,15 @@ handle_method1(#'basic.return'{} = BasicReturn, AmqpMsg,
                           "return handler registered~n",
                           [self(), BasicReturn, AmqpMsg]);
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
+    end,
+    {noreply, State};
+handle_method1(#'basic.ack'{} = BasicAck, AmqpMsg,
+               #state{ack_handler_pid = AckHandler} = State) ->
+    case AckHandler of
+        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
+                          "ack handler registered~n",
+                          [self(), BasicAck, AmqpMsg]);
+        _    -> AckHandler ! {BasicAck, AmqpMsg}
     end,
     {noreply, State};
 handle_method1(Method, none, State) ->
@@ -510,7 +550,14 @@ handle_call({send_command_sync, Method, Content}, From, State) ->
 handle_call({send_command_sync, Method}, From, State) ->
     Ret = handle_method(Method, none, State),
     gen_server:reply(From, ok),
-    Ret.
+    Ret;
+
+%% Get the number of published messages since the channel was put in
+%% confirm mode.
+%% @private
+handle_call(get_published_message_count, _From,
+            State = #state { pub_msg_count = PMC }) ->
+    {reply, PMC, State}.
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
@@ -522,6 +569,12 @@ handle_cast({cast, Method, AmqpMsg}, State) ->
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
+
+%% Registers a handler to process ack messages
+%% @private
+handle_cast({register_ack_handler, AckHandler}, State) ->
+    link(AckHandler),
+    {noreply, State#state{ack_handler_pid = AckHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private
@@ -576,7 +629,12 @@ handle_info({send_command, Method}, State) ->
 handle_info({send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
 
-%% This handles the delivery of a message from a direct channel
+%% These callbacks handles the delivery of a message from a direct channel
+%% @private
+handle_info({send_command_and_notify, Q, ChPid, Method}, State) ->
+    handle_method(Method, none, State),
+    rabbit_amqqueue:notify_sent(Q, ChPid),
+    {noreply, State};
 %% @private
 handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method(Method, Content, State),
