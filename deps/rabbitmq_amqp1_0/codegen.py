@@ -27,7 +27,7 @@ class AMQPDefines:
 
 def print_erl(types):
     print """-module(rabbit_amqp1_0_framing0).
--export([record_for/1, fields/1, encode/1]).
+-export([record_for/1, fields/1, encode/1, symbol_for/1]).
 -include("rabbit_amqp1_0.hrl")."""
     for t in types:
         print """record_for({symbol, "%s"}) ->
@@ -43,6 +43,10 @@ def print_erl(types):
     {described, true, {list, [encode(I) || I <- L]}};
 encode(undefined) -> null;
 encode(Other) -> Other."""
+    for t in types:
+        print """symbol_for(#'v1_0.%s'{}) ->
+    {symbol, "%s"};""" % (t.name, t.desc)
+    print """symbol_for(Other) -> exit({unknown, Other})."""
 
 def print_hrl(types, defines):
     for t in types:

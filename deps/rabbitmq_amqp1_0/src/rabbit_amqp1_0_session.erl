@@ -21,9 +21,11 @@
                         credit,
                         transfer_count = 0,
                         transfer_unit = 0,
-                        no_ack}).
+                        no_ack,
+                        default_outcome}).
 
 -record(incoming_link, {name, exchange, routing_key}).
+-record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
 -define(SEND_ROLE, false).
 -define(RECV_ROLE, true).
@@ -76,7 +78,7 @@ init([Channel, ReaderPid, WriterPid]) ->
                    backing_channel    = Ch,
                    reader_pid         = ReaderPid,
                    writer_pid         = WriterPid,
-                   xfer_num_to_tag    = dict:new()}}.
+                   xfer_num_to_tag    = gb_trees:empty()}}.
 
 terminate(_Reason, #session{ backing_connection = Conn,
                              backing_channel    = Ch}) ->
@@ -261,6 +263,20 @@ handle_control(#'v1_0.end'{}, #session{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
+handle_control(#'v1_0.flow'{ flow_state = #'v1_0.flow_state' {
+                               unsettled_lwm = NewLWM
+                              }},
+               State = #session{ outgoing_lwm = CurrentLWM }) ->
+    State1 = case NewLWM < CurrentLWM of
+                 true ->
+                     protocol_error(?V_1_0_ILLEGAL_STATE,
+                                    "Attempt to roll back lwm from ~p to ~p",
+                                    [CurrentLWM, NewLWM]);
+                 _ ->
+                     implicit_settle(NewLWM, State)
+             end,
+    {noreply, State1#session{ outgoing_lwm = NewLWM }};
+
 handle_control(Frame, State) ->
     io:format("Ignoring frame: ~p~n", [Frame]),
     {noreply, State}.
@@ -287,9 +303,12 @@ attach_outgoing(DefaultOutcome, Outcomes,
     #'v1_0.linkage'{ source = Source } = ClientLinkage,
     NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
-    case ensure_source(Source, #outgoing_link{ credit = Credit,
-                                               transfer_unit = Unit,
-                                               no_ack = NoAck}, State) of
+    DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
+    case ensure_source(Source,
+                       #outgoing_link{ credit = Credit,
+                                       transfer_unit = Unit,
+                                       no_ack = NoAck,
+                                       default_outcome = DOSym}, State) of
         {ok, Source1,
          OutgoingLink = #outgoing_link{ queue = QueueName }, State1} ->
             SessionCredit =
@@ -338,7 +357,8 @@ transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ credit = Credit,
                                 transfer_unit = Unit,
                                 transfer_count = Count,
-                                no_ack = NoAck},
+                                no_ack = NoAck,
+                                default_outcome = DefaultOutcome },
          Session = #session{ transfer_number = TransferNumber,
                              outgoing_session_credit = SessionCredit,
                              xfer_num_to_tag = Dict },
@@ -367,9 +387,11 @@ transfer(WriterPid, LinkHandle,
                          fragments =
                              rabbit_amqp1_0_message:fragments(Msg)},
     rabbit_amqp1_0_writer:send_command(WriterPid, T),
-    {NewLink, NewSession#session { xfer_num_to_tag = dict:store(TransferNumber,
-                                                                DeliveryTag,
-                                                                Dict) }}.
+    Dict1 = gb_trees:insert(TransferNumber,
+                            #outgoing_transfer{
+                              delivery_tag = DeliveryTag,
+                              expected_outcome = DefaultOutcome }, Dict),
+    {NewLink, NewSession#session { xfer_num_to_tag = Dict1 }}.
 
 settle(#'v1_0.extent'{
           first = {uint, First},
@@ -385,7 +407,8 @@ settle(#'v1_0.extent'{
     {Dict1, SessionCredit1} =
         lists:foldl(
           fun (Transfer, {TransferMap, SC}) ->
-                  DeliveryTag = dict:fetch(Transfer, TransferMap),
+                  #outgoing_transfer{ delivery_tag = DeliveryTag }
+                      = gb_trees:get(Transfer, TransferMap),
                   Ack =
                       case Outcome of
                           #'v1_0.accepted'{} ->
@@ -399,7 +422,7 @@ settle(#'v1_0.extent'{
                                                requeue      = true }
                       end,
                   ok = amqp_channel:call(Ch, Ack),
-                  {dict:erase(Transfer, TransferMap), SC + 1}
+                  {gb_trees:delete(Transfer, TransferMap), SC + 1}
           end,
           {Dict, SessionCredit}, lists:seq(First, Last)),
     {case Settled of
@@ -408,6 +431,38 @@ settle(#'v1_0.extent'{
      end,
      State#session{outgoing_session_credit = SessionCredit1,
                    xfer_num_to_tag = Dict1}}.
+
+implicit_settle(NewLWM, State = #session{
+                          backing_channel = Ch,
+                          outgoing_session_credit = SessionCredit,
+                          xfer_num_to_tag = TransferMap }) ->
+    TransferId = gb_trees:smallest(TransferMap),
+    case TransferId of
+        NewLWM ->
+            ok; %% Nothing more to settle; the LWM is the smallest unsettled
+                %% transfer
+        _ ->
+            #outgoing_transfer { delivery_tag = DeliveryTag,
+                                 expected_outcome = Outcome } =
+                gb_trees:get(TransferId, TransferMap),
+            Ack =
+                case Outcome of
+                    ?V_1_0_SYMBOL_ACCEPTED ->
+                        #'basic.ack' {delivery_tag = DeliveryTag,
+                                      multiple     = false };
+                    ?V_1_0_SYMBOL_REJECTED ->
+                        #'basic.reject' {delivery_tag = DeliveryTag,
+                                         requeue      = false };
+                    ?V_1_0_SYMBOL_RELEASED ->
+                        #'basic.reject' {delivery_tag = DeliveryTag,
+                                         requeue      = true }
+                end,
+            ok = amqp_channel:call(Ch, Ack),
+            TransferMap1 = gb_trees:delete(TransferId, TransferMap),
+            State1 = State#session{ outgoing_session_credit = SessionCredit + 1,
+                                    xfer_num_to_tag = TransferMap1 },
+            implicit_settle(NewLWM, State1)
+    end.
 
 flow_state(#outgoing_link{credit = Credit,
                           transfer_count = Count},
