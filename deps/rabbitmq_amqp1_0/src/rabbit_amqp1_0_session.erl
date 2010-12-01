@@ -16,7 +16,9 @@
                   reader_pid, writer_pid, transfer_number = 0,
                   outgoing_lwm = 0, outgoing_session_credit,
                   xfer_num_to_tag }).
--record(outgoing_link, {credit,
+-record(outgoing_link, {queue,
+                        available = 0,
+                        credit,
                         transfer_count = 0,
                         transfer_unit = 0,
                         no_ack}).
@@ -25,6 +27,8 @@
 
 -define(SEND_ROLE, false).
 -define(RECV_ROLE, true).
+
+-define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).
 
@@ -273,64 +277,61 @@ protocol_error(Condition, Msg, Args) ->
 attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
                                handle = Handle,
-                               local = Linkage,
+                               local = ClientLinkage,
                                flow_state = Flow = #'v1_0.flow_state'{
                                               session_credit = {uint, ClientSC},
-                                              link_credit = {uint, Credit}
-                                             },
+                                              link_credit = {uint, Credit}},
                                transfer_unit = Unit},
                State = #session{backing_channel = Ch,
                                 outgoing_session_credit = ServerSC}) ->
+    #'v1_0.linkage'{ source = Source } = ClientLinkage,
     NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
-    SessionCredit =
-        case ServerSC of
-            undefined -> #'basic.qos_ok'{} =
-                             amqp_channel:call(Ch, #'basic.qos'{
-                                                 prefetch_count = ClientSC}),
-                         ClientSC;
-            _         -> ServerSC
-        end,
-    #'v1_0.linkage'{ source = #'v1_0.source' {address = {utf8, Q}} } = Linkage,
-    #'queue.declare_ok'{message_count = Available} =
-        amqp_channel:call(Ch, #'queue.declare'{queue = Q, passive = true}),
-    case amqp_channel:subscribe(
-           Ch, #'basic.consume' { queue = Q,
-                                  consumer_tag = handle_to_ctag(Handle),
-                                  no_ack = NoAck,
-                                  %% TODO exclusive?
-                                  exclusive = false}, self()) of
-        #'basic.consume_ok'{} ->
-            %% FIXME we should avoid the race by getting the queue to send
-            %% attach back, but a.t.m. it would use the wrong codec.
-            put({out, Handle},
-                #outgoing_link{
-                  credit = Credit,
-                  transfer_unit = Unit,
-                  no_ack = NoAck
-                 }),
-            {reply, #'v1_0.attach'{
-               name = Name,
-               handle = Handle,
-               remote = Linkage,
-               local = #'v1_0.linkage'{
-                 source = #'v1_0.source'{
-                   address = {utf8, Q},
-                   default_outcome = DefaultOutcome
-                   %% TODO this breaks the Python client, when it
-                   %% tries to send us back a matching detach message
-                   %% it gets confused between described(true, [...])
-                   %% and [...]. We think we're correct here
-                   %% outcomes = Outcomes
-                  }
-                },
-               flow_state = Flow#'v1_0.flow_state'{
-                              available = {uint, Available}
-                             },
-               role = ?SEND_ROLE % server is sender
-              }, State#session{outgoing_session_credit = SessionCredit}};
-        Fail ->
-            protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
+    case ensure_source(Source, #outgoing_link{ credit = Credit,
+                                               transfer_unit = Unit,
+                                               no_ack = NoAck}, State) of
+        {ok, Source1,
+         OutgoingLink = #outgoing_link{ queue = QueueName }, State1} ->
+            SessionCredit =
+                case ServerSC of
+                    undefined -> #'basic.qos_ok'{} =
+                                     amqp_channel:call(Ch, #'basic.qos'{
+                                                         prefetch_count = ClientSC}),
+                                 ClientSC;
+                    _         -> ServerSC
+                end,
+            case amqp_channel:subscribe(
+                   Ch, #'basic.consume' { queue = QueueName,
+                                          consumer_tag = handle_to_ctag(Handle),
+                                          no_ack = NoAck,
+                                          %% TODO exclusive?
+                                          exclusive = false}, self()) of
+                #'basic.consume_ok'{} ->
+                    %% FIXME we should avoid the race by getting the queue to send
+                    %% attach back, but a.t.m. it would use the wrong codec.
+                    put({out, Handle}, OutgoingLink),
+                    {reply, #'v1_0.attach'{
+                       name = Name,
+                       handle = Handle,
+                       remote = ClientLinkage,
+                       local =
+                       ClientLinkage#'v1_0.linkage'{
+                         source = Source1#'v1_0.source'{
+                                    default_outcome = DefaultOutcome
+                                    %% TODO this breaks the Python client, when it
+                                    %% tries to send us back a matching detach message
+                                    %% it gets confused between described(true, [...])
+                                    %% and [...]. We think we're correct here
+                                    %% outcomes = Outcomes
+                                   }},
+                       flow_state = Flow#'v1_0.flow_state'{},
+                       role = ?SEND_ROLE},
+                     State1#session{outgoing_session_credit = SessionCredit}};
+                Fail ->
+                    protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
+            end;
+        {error, Reason, State1} ->
+            {reply, #'v1_0.attach'{local = undefined}, State1}
     end.
 
 transfer(WriterPid, LinkHandle,
@@ -469,7 +470,7 @@ ensure_declaring_channel(State) ->
 
 ensure_target(Target = #'v1_0.target'{address=Address,
                                       dynamic=Dynamic},
-              #incoming_link{},
+              Link = #incoming_link{},
               State) ->
     case Dynamic of
         undefined ->
@@ -478,22 +479,22 @@ ensure_target(Target = #'v1_0.target'{address=Address,
                     case parse_destination(Destination) of
                         ["queue", Name] ->
                             case check_queue(Name, State) of
-                                {ok, QueueName, State1} ->
+                                {ok, QueueName, _Available, State1} ->
                                     {ok, Target,
-                                     #incoming_link{exchange = <<"">>,
-                                                    routing_key = QueueName},
+                                     Link#incoming_link{exchange = <<"">>,
+                                                        routing_key = QueueName},
                                      State1};
                                 {error, Reason, State1} ->
                                     {error, Reason, State1}
                             end;
                         ["queue"] ->
                             %% Rely on the Subject being set
-                            {ok, Target, #incoming_link{exchange = <<"">>}, State};
+                            {ok, Target, Link#incoming_link{exchange = <<"">>}, State};
                         ["exchange", Name] ->
                             case check_exchange(Name, State) of
                                 {ok, ExchangeName, State1} ->
                                     {ok, Target,
-                                     #incoming_link{exchange = ExchangeName},
+                                     Link#incoming_link{exchange = ExchangeName},
                                      State1};
                                 {error, Reason, State2} ->
                                     {error, Reason, State2}
@@ -510,10 +511,65 @@ ensure_target(Target = #'v1_0.target'{address=Address,
                     {ok, QueueName, State1} = create_queue(Lifetime, State),
                     {ok,
                      Target#'v1_0.target'{address = {utf8, queue_address(QueueName)}},
-                     #incoming_link{exchange = <<"">>, routing_key = QueueName},
+                     Link#incoming_link{exchange = <<"">>,
+                                        routing_key = QueueName},
                      State1};
                 _Else ->
-                    {error, both_dynamic_and_address_supplied, State}
+                    {error, {both_dynamic_and_address_supplied,
+                             Dynamic, Address},
+                     State}
+            end
+    end.
+
+ensure_source(Source = #'v1_0.source'{ address = Address,
+                                       dynamic = Dynamic },
+              Link = #outgoing_link{}, State) ->
+    case Dynamic of
+        undefined ->
+            case Address of
+                {utf8, Destination} ->
+                    case parse_destination(Destination) of
+                        ["queue", Name] ->
+                            case check_queue(Name, State) of
+                                {ok, QueueName, Available, State1} ->
+                                    {ok, Source,
+                                     Link#outgoing_link{
+                                       available = Available,
+                                       queue = QueueName},
+                                     State1};
+                                {error, Reason, State1} ->
+                                    {error, Reason, State1}
+                            end;
+                        ["exchange", Name, RK] ->
+                            case check_exchange(Name, State) of
+                                {ok, ExchangeName, State1} ->
+                                    RoutingKey = list_to_binary(RK),
+                                    {ok, QueueName, State2} =
+                                        create_bound_queue(ExchangeName, RoutingKey,
+                                                           State1),
+                                    {ok, Source, Link#outgoing_link{queue = QueueName},
+                                     State2};
+                                {error, Reason, State1} ->
+                                    {error, Reason, State1}
+                            end;
+                        _Otherwise ->
+                            {error, {unknown_address, Address}, State}
+                    end;
+                _Else ->
+                    {error, {malformed_address, Address}, State}
+            end;
+        {symbol, Lifetime} ->
+            case Address of
+                undefined ->
+                    {ok, QueueName, State1} = create_queue(Lifetime, State),
+                    {ok,
+                     Source#'v1_0.source'{address = {utf8, queue_address(QueueName)}},
+                     #outgoing_link{queue = QueueName},
+                     State1};
+                _Else ->
+                    {error, {both_dynamic_and_address_supplied,
+                             Dynamic, Address},
+                     State}
             end
     end.
 
@@ -538,8 +594,8 @@ check_queue(QueueName, State) ->
     case catch amqp_channel:call(Channel, QDecl) of
         {'EXIT', _Reason} ->
             {error, not_found, State1#session{ declaring_channel = undefined }};
-        #'queue.declare_ok'{} ->
-            {ok, QueueName, State1}
+        #'queue.declare_ok'{ message_count = Available } ->
+            {ok, QueueName, Available, State1}
     end.
 
 check_exchange(ExchangeName, State) when is_list(ExchangeName) ->
@@ -555,12 +611,23 @@ check_exchange(ExchangeName, State) when is_binary(ExchangeName) ->
             {ok, ExchangeName, State1}
     end.
 
-%% TODO Lifetimes: we approximate these with exclusive + auto_delete
-%% for the minute.
+%% TODO Lifetimes: we approximate these with auto_delete, but not
+%% exclusive, since exclusive queues and the direct client are broken
+%% at the minute.
 create_queue(_Lifetime, State) ->
     State1 = #session{ declaring_channel = Ch } = ensure_declaring_channel(State),
     #'queue.declare_ok'{queue = QueueName} =
-        amqp_channel:call(Ch, #'queue.declare'{exclusive = true, auto_delete = true}),
+        amqp_channel:call(Ch, #'queue.declare'{auto_delete = true}),
+    {ok, QueueName, State1}.
+
+create_bound_queue(ExchangeName, RoutingKey, State) ->
+    {ok, QueueName, State1 = #session{ declaring_channel = Ch}} =
+        create_queue(?EXCHANGE_SUB_LIFETIME, State),
+    %% Don't both ensuring the channel, the previous should have done it
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Ch, #'queue.bind'{ exchange = ExchangeName,
+                                             queue = QueueName,
+                                             routing_key = RoutingKey }),
     {ok, QueueName, State1}.
 
 queue_address(QueueName) when is_binary(QueueName) ->
