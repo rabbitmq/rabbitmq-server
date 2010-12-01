@@ -83,9 +83,6 @@ sync_async_method_serialization_test() ->
                 test_util:sync_async_method_serialization_test(new_connection())
         end}.
 
-recover_after_cancel_test() ->
-    test_util:recover_after_cancel_test(new_connection()).
-
 teardown_test() ->
     repeat(fun test_util:teardown_test/1, ?ITERATIONS).
 
