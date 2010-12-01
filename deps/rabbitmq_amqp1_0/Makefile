@@ -17,7 +17,7 @@ CODEGEN_SPECS=spec/messaging.xml spec/transport.xml
 
 include ../include.mk
 
-$(TARGETS): $(FRAMING_HRL)
+$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES)): $(FRAMING_HRL)
 
 test: unittest
 
