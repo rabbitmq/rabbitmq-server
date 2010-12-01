@@ -150,9 +150,8 @@ close(Channel, Code, Text) ->
                              reply_code = Code,
                              class_id   = 0,
                              method_id  = 0},
-    case call(Channel, Close) of
-        #'channel.close_ok'{} -> ok;
-        Error                 -> Error
+    case call(Channel, Close) of #'channel.close_ok'{} -> ok;
+                                 Error                 -> Error
     end.
 
 %% @spec (Channel) -> integer()
@@ -236,6 +235,136 @@ register_default_consumer(Channel, Consumer) ->
     gen_server:cast(Channel, {register_default_consumer, Consumer}).
 
 %%---------------------------------------------------------------------------
+%% Internal interface
+%%---------------------------------------------------------------------------
+
+%% @private
+start_link(Driver, ChannelNumber, SWF) ->
+    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
+
+%% @private
+connection_closing(Pid, ChannelCloseType) ->
+    gen_server:cast(Pid, {connection_closing, ChannelCloseType}).
+
+%%---------------------------------------------------------------------------
+%% gen_server callbacks
+%%---------------------------------------------------------------------------
+
+%% @private
+init([Sup, Driver, ChannelNumber, SWF]) ->
+    {ok, #state{sup              = Sup,
+                driver           = Driver,
+                number           = ChannelNumber,
+                start_writer_fun = SWF}}.
+
+%% @private
+handle_call({call, Method, AmqpMsg}, From, State) ->
+    handle_method_call(Method, AmqpMsg, From, State);
+%% @private
+handle_call({subscribe, Method, Consumer}, From, State) ->
+    handle_subscribe(Method, Consumer, From, State);
+%% Handles the delivery of messages from a direct channel
+%% @private
+handle_call({send_command_sync, Method, Content}, From, State) ->
+    Ret = handle_method(Method, Content, State),
+    gen_server:reply(From, ok),
+    Ret;
+%% Handles the delivery of messages from a direct channel
+%% @private
+handle_call({send_command_sync, Method}, From, State) ->
+    Ret = handle_method(Method, none, State),
+    gen_server:reply(From, ok),
+    Ret;
+%% Get the number of published messages since the channel was put in
+%% confirm mode.
+%% @private
+handle_call(get_published_message_count, _From,
+            State = #state {pub_msg_count = PMC}) ->
+    {reply, PMC, State}.
+
+%% @private
+handle_cast({cast, Method, AmqpMsg}, State) ->
+    handle_method_call(Method, AmqpMsg, none, State);
+%% Registers a handler to process return messages
+%% @private
+handle_cast({register_return_handler, ReturnHandler}, State) ->
+    erlang:monitor(process, ReturnHandler),
+    {noreply, State#state{return_handler_pid = ReturnHandler}};
+%% Registers a handler to process ack messages
+%% @private
+handle_cast({register_ack_handler, AckHandler}, State) ->
+    erlang:monitor(process, AckHandler),
+    {noreply, State#state{ack_handler_pid = AckHandler}};
+%% Registers a handler to process flow control messages
+%% @private
+handle_cast({register_flow_handler, FlowHandler}, State) ->
+    erlang:monitor(process, FlowHandler),
+    {noreply, State#state{flow_handler_pid = FlowHandler}};
+%% Registers a handler to process unexpected deliveries
+%% @private
+handle_cast({register_default_consumer, Consumer}, State) ->
+    erlang:monitor(process, Consumer),
+    {noreply, State#state{default_consumer = Consumer}};
+%% Received from framing channel
+%% @private
+handle_cast({method, Method, Content}, State) ->
+    handle_method(Method, Content, State);
+%% Handles the situation when the connection closes without closing the channel
+%% beforehand. The channel must block all further RPCs,
+%% flush the RPC queue (optional), and terminate
+%% @private
+handle_cast({connection_closing, CloseType}, State) ->
+    handle_connection_closing(CloseType, State);
+%% @private
+handle_cast({shutdown, {_, 200, _}}, State) ->
+    {stop, normal, State};
+%% @private
+handle_cast({shutdown, Reason}, State) ->
+    {stop, Reason, State}.
+
+%% Received from rabbit_channel in the direct case
+%% @private
+handle_info({send_command, Method}, State) ->
+    handle_method(Method, none, State);
+%% Received from rabbit_channel in the direct case
+%% @private
+handle_info({send_command, Method, Content}, State) ->
+    handle_method(Method, Content, State);
+%% This comes from framing channel, the writer or rabbit_channel
+%% @private
+handle_info({channel_exit, _FrPidOrChNumber, Reason}, State) ->
+    handle_channel_exit(Reason, State);
+%% @private
+handle_info(timed_out_flushing_channel, State) ->
+    ?LOG_WARN("Channel (~p) closing: timed out flushing while "
+              "connection closing~n", [self()]),
+    {stop, timed_out_flushing_channel, State};
+%% @private
+handle_info(timed_out_waiting_close_ok, State) ->
+    ?LOG_WARN("Channel (~p) closing: timed out waiting for "
+              "channel.close_ok while connection closing~n", [self()]),
+    {stop, timed_out_waiting_close_ok, State};
+%% @private
+handle_info({'DOWN', _, process, Pid, Reason}, State) ->
+    handle_down(Pid, Reason, State).
+
+%% @private
+terminate(Reason, #state{rpc_requests = RpcQueue}) ->
+    case queue:is_empty(RpcQueue) of
+        false -> ?LOG_WARN("Channel (~p): RPC queue was not empty on "
+                           "terminate~n", [self()]),
+                 case Reason of
+                     normal -> exit(rpc_queue_not_empty_on_terminate);
+                     _      -> ok
+                 end;
+        true  -> ok
+    end.
+
+%% @private
+code_change(_OldVsn, State, _Extra) ->
+    State.
+
+%%---------------------------------------------------------------------------
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
@@ -250,14 +379,15 @@ handle_method_call(Method, AmqpMsg, From, State) ->
         {_, _, ok} ->
             State1 = case {Method, State} of
                          {#'confirm.select'{}, _} ->
-                             State #state { pub_msg_count = 0 };
+                             State #state{pub_msg_count = 0};
                          {#'basic.publish'{},
-                          #state { pub_msg_count = undefined }} ->
+                          #state{pub_msg_count = undefined}} ->
                              State;
                          {#'basic.publish'{},
-                          #state { pub_msg_count = PMC }} ->
-                             State #state { pub_msg_count = PMC + 1 };
-                         _ -> State
+                          #state{pub_msg_count = PMC}} ->
+                             State #state{pub_msg_count = PMC + 1};
+                         _ ->
+                             State
                      end,
             {noreply,
              rpc_top_half(Method, build_content(AmqpMsg), From, State1)};
@@ -266,6 +396,29 @@ handle_method_call(Method, AmqpMsg, From, State) ->
                       "Reason: ~p~n", [self(), Method, BlockReply]),
             {noreply, State};
         {_, _, BlockReply} ->
+            {reply, BlockReply, State}
+    end.
+
+handle_subscribe(#'basic.consume'{consumer_tag = Tag} = Method, Consumer,
+                 From, State = #state{tagged_sub_requests = Tagged,
+                                      anon_sub_requests   = Anon,
+                                      consumers           = Consumers}) ->
+    case check_block(Method, none, State) of
+        ok when Tag =:= undefined orelse size(Tag) == 0 ->
+            NewMethod = Method#'basic.consume'{consumer_tag = <<"">>},
+            NewState = State#state{anon_sub_requests =
+                                    queue:in(Consumer, Anon)},
+            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
+        ok when is_binary(Tag) ->
+            case dict:is_key(Tag, Tagged) orelse dict:is_key(Tag, Consumers) of
+                true ->
+                    {reply, {error, consumer_tag_already_in_use}, State};
+                false ->
+                    NewState = State#state{tagged_sub_requests =
+                                             dict:store(Tag, Consumer, Tagged)},
+                    {noreply, rpc_top_half(Method, none, From, NewState)}
+            end;
+        BlockReply ->
             {reply, BlockReply, State}
     end.
 
@@ -304,7 +457,8 @@ do_rpc(State = #state{rpc_requests = Q,
             end;
         {empty, NewQ} ->
             case Closing of
-                connection -> self() ! {shutdown, connection_closing};
+                connection -> gen_server:cast(self(),
+                                              {shutdown, connection_closing});
                 _          -> ok
             end,
             State#state{rpc_requests = NewQ}
@@ -316,86 +470,6 @@ pre_do(#'channel.close'{}, _Content, State) ->
     State#state{closing = just_channel};
 pre_do(_, _, State) ->
     State.
-
-%%---------------------------------------------------------------------------
-%% Internal plumbing
-%%---------------------------------------------------------------------------
-
-do(Method, Content, #state{driver = Driver, writer = W}) ->
-    %% Catching because it expects the {channel_exit, _, _} message on error
-    catch case {Driver, Content} of
-              {network, none} -> rabbit_writer:send_command_sync(W, Method);
-              {network, _}    -> rabbit_writer:send_command_sync(W, Method,
-                                                                 Content);
-              {direct, none}  -> rabbit_channel:do(W, Method);
-              {direct, _}     -> rabbit_channel:do(W, Method, Content)
-          end.
-
-start_writer(State = #state{start_writer_fun = SWF}) ->
-    {ok, Writer} = SWF(),
-    State#state{writer = Writer}.
-
-resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
-    exit(no_consumers_registered);
-resolve_consumer(ConsumerTag, #state{consumers = Consumers,
-                                     default_consumer = DefaultConsumer}) ->
-    case dict:find(ConsumerTag, Consumers) of
-        {ok, Value} ->
-            Value;
-        error ->
-            case is_pid(DefaultConsumer) of
-                true  -> DefaultConsumer;
-                false -> exit(unexpected_delivery_and_no_default_consumer)
-            end
-    end.
-
-register_consumer(ConsumerTag, Consumer,
-                  State = #state{consumers = Consumers0}) ->
-    Consumers1 = dict:store(ConsumerTag, Consumer, Consumers0),
-    State#state{consumers = Consumers1}.
-
-unregister_consumer(ConsumerTag,
-                    State = #state{consumers = Consumers0}) ->
-    Consumers1 = dict:erase(ConsumerTag, Consumers0),
-    State#state{consumers = Consumers1}.
-
-amqp_msg(none) ->
-    none;
-amqp_msg(Content) ->
-    {Props, Payload} = rabbit_basic:from_content(Content),
-    #amqp_msg{props = Props, payload = Payload}.
-
-build_content(none) ->
-    none;
-build_content(#amqp_msg{props = Props, payload = Payload}) ->
-    rabbit_basic:build_content(Props, Payload).
-
-check_block(_Method, _AmqpMsg, #state{closing = just_channel}) ->
-    closing;
-check_block(_Method, _AmqpMsg, #state{closing = connection}) ->
-    closing;
-check_block(_Method, none, #state{}) ->
-    ok;
-check_block(_Method, #amqp_msg{}, #state{flow_active = false}) ->
-    blocked;
-check_block(_Method, _AmqpMsg, #state{}) ->
-    ok.
-
-is_connection_method(Method) ->
-    {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
-    ?PROTOCOL:lookup_class_name(ClassId) == connection.
-
-server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
-    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
-        {true, _, _} ->
-            {stop, {server_misbehaved, AmqpError}, State};
-        {false, _, Close} ->
-            ?LOG_WARN("Channel (~p) flushing and closing due to soft "
-                      "error caused by the server ~p~n", [self(), AmqpError]),
-            Self = self(),
-            spawn(fun() -> call(Self, Close) end),
-            {noreply, State}
-    end.
 
 %%---------------------------------------------------------------------------
 %% Handling of methods from the server
@@ -489,167 +563,30 @@ handle_method1(Method, Content, State) ->
     {noreply, rpc_bottom_half({Method, Content}, State)}.
 
 %%---------------------------------------------------------------------------
-%% Internal interface
+%% Other handle_* functions
 %%---------------------------------------------------------------------------
 
-%% @private
-start_link(Driver, ChannelNumber, SWF) ->
-    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
-
-%% @private
-connection_closing(Pid, ChannelCloseType) ->
-    gen_server:cast(Pid, {connection_closing, ChannelCloseType}).
-
-%%---------------------------------------------------------------------------
-%% gen_server callbacks
-%%---------------------------------------------------------------------------
-
-%% @private
-init([Sup, Driver, ChannelNumber, SWF]) ->
-    {ok, #state{sup              = Sup,
-                driver           = Driver,
-                number           = ChannelNumber,
-                start_writer_fun = SWF}}.
-
-%% Standard implementation of the call/{2,3} command
-%% @private
-handle_call({call, Method, AmqpMsg}, From, State) ->
-    handle_method_call(Method, AmqpMsg, From, State);
-
-%% Standard implementation of the subscribe/3 command
-%% @private
-handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
-            From, State = #state{tagged_sub_requests = Tagged,
-                                 anon_sub_requests   = Anon}) ->
-    case check_block(Method, none, State) of
-        ok ->
-            {NewMethod, NewState} =
-                if Tag =:= undefined orelse size(Tag) == 0 ->
-                       NewAnon = queue:in(Consumer, Anon),
-                       {Method#'basic.consume'{consumer_tag = <<"">>},
-                        State#state{anon_sub_requests = NewAnon}};
-                   is_binary(Tag) ->
-                       %% TODO test whether this tag already exists, either in
-                       %% the pending tagged request map or in general as
-                       %% already subscribed consumer
-                       NewTagged = dict:store(Tag, Consumer, Tagged),
-                       {Method, State#state{tagged_sub_requests = NewTagged}}
-                end,
-            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
-        BlockReply ->
-            {reply, BlockReply, State}
-    end;
-
-%% These handle the delivery of messages from a direct channel
-%% @private
-handle_call({send_command_sync, Method, Content}, From, State) ->
-    Ret = handle_method(Method, Content, State),
-    gen_server:reply(From, ok),
-    Ret;
-%% @private
-handle_call({send_command_sync, Method}, From, State) ->
-    Ret = handle_method(Method, none, State),
-    gen_server:reply(From, ok),
-    Ret;
-
-%% Get the number of published messages since the channel was put in
-%% confirm mode.
-%% @private
-handle_call(get_published_message_count, _From,
-            State = #state { pub_msg_count = PMC }) ->
-    {reply, PMC, State}.
-
-%% Standard implementation of the cast/{2,3} command
-%% @private
-handle_cast({cast, Method, AmqpMsg}, State) ->
-    handle_method_call(Method, AmqpMsg, none, State);
-
-%% Registers a handler to process return messages
-%% @private
-handle_cast({register_return_handler, ReturnHandler}, State) ->
-    erlang:monitor(process, ReturnHandler),
-    {noreply, State#state{return_handler_pid = ReturnHandler}};
-
-%% Registers a handler to process ack messages
-%% @private
-handle_cast({register_ack_handler, AckHandler}, State) ->
-    link(AckHandler),
-    {noreply, State#state{ack_handler_pid = AckHandler}};
-
-%% Registers a handler to process flow control messages
-%% @private
-handle_cast({register_flow_handler, FlowHandler}, State) ->
-    erlang:monitor(process, FlowHandler),
-    {noreply, State#state{flow_handler_pid = FlowHandler}};
-
-%% Registers a handler to process unexpected deliveries
-%% @private
-handle_cast({register_default_consumer, Consumer}, State) ->
-    erlang:monitor(process, Consumer),
-    {noreply, State#state{default_consumer = Consumer}};
-
-%% @private
-handle_cast({notify_sent, _Peer}, State) ->
-    {noreply, State};
-
-%% This callback is invoked when a network channel sends messages
-%% to this gen_server instance
-%% @private
-handle_cast({method, Method, Content}, State) ->
-    handle_method(Method, Content, State);
-
-%% Handles the situation when the connection closes without closing the channel
-%% beforehand. The channel must block all further RPCs,
-%% flush the RPC queue (optional), and terminate
-%% @private
-handle_cast({connection_closing, CloseType},
-            #state{rpc_requests = RpcQueue,
-                   closing      = Closing} = State) ->
+handle_connection_closing(CloseType, State = #state{rpc_requests = RpcQueue,
+                                                    closing      = Closing}) ->
     case {CloseType, Closing, queue:is_empty(RpcQueue)} of
         {flush, false, false} ->
             erlang:send_after(?TIMEOUT_FLUSH, self(),
-                              {shutdown, timed_out_flushing_channel,
-                               connection_closing}),
+                              timed_out_flushing_channel),
             {noreply, State#state{closing = connection}};
         {flush, just_channel, false} ->
             erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
-                              {shutdown, timed_out_waiting_close_ok,
-                               connection_closing}),
+                              timed_out_waiting_close_ok),
             {noreply, State#state{closing = connection}};
         _ ->
             {stop, connection_closing, State}
     end.
 
-%% These callbacks are invoked when a direct channel sends messages
-%% to this gen_server instance
-%% @private
-handle_info({send_command, Method}, State) ->
-    handle_method(Method, none, State);
-%% @private
-handle_info({send_command, Method, Content}, State) ->
-    handle_method(Method, Content, State);
-
-%% These callbacks handles the delivery of a message from a direct channel
-%% @private
-handle_info({send_command_and_notify, Q, ChPid, Method}, State) ->
-    handle_method(Method, none, State),
-    rabbit_amqqueue:notify_sent(Q, ChPid),
-    {noreply, State};
-%% @private
-handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
-    handle_method(Method, Content, State),
-    rabbit_amqqueue:notify_sent(Q, ChPid),
-    {noreply, State};
-
-%% This comes from framing channel, the writer or rabbit_channel
-%% @private
-handle_info({channel_exit, _FrPidOrChNumber, Reason},
-            State = #state{number = Number}) ->
+handle_channel_exit(Reason, State) ->
     case Reason of
         %% Sent by rabbit_channel in the direct case
         #amqp_error{name = ErrorName, explanation = Expl} ->
-            ?LOG_WARN("Channel ~p closing: server sent error ~p~n",
-                      [Number, Reason]),
+            ?LOG_WARN("Channel (~p) closing: server sent error ~p~n",
+                      [self(), Reason]),
             {IsHard, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
             {stop, {if IsHard -> server_initiated_hard_close;
                        true   -> server_initiated_close
@@ -657,37 +594,18 @@ handle_info({channel_exit, _FrPidOrChNumber, Reason},
         %% Unexpected death of a channel infrastructure process
         _ ->
             {stop, {infrastructure_died, Reason}, State}
-    end;
-
-%% @private
-handle_info({shutdown, {_, 200, _}}, State) ->
-    {stop, normal, State};
-%% @private
-handle_info({shutdown, Reason}, State) ->
-    {stop, Reason, State};
-
-%% @private
-handle_info({shutdown, FailShutdownReason, connection_closing},
-            #state{number = Number} = State) ->
-    case FailShutdownReason of
-        timed_out_flushing_channel ->
-            ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
-                      "closing~n", [Number]);
-        timed_out_waiting_close_ok ->
-            ?LOG_WARN("Channel ~p closing: timed out waiting for "
-                      "channel.close_ok while connection closing~n", [Number])
-    end,
-    {stop, FailShutdownReason, State};
-
-%% @private
-handle_info({'DOWN', _, process, Pid, Reason}, State) ->
-    handle_down(Pid, Reason, State).
+    end.
 
 handle_down(ReturnHandler, Reason,
             State = #state{return_handler_pid = ReturnHandler}) ->
     ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
               "Reason: ~p~n", [self(), ReturnHandler, Reason]),
     {noreply, State#state{return_handler_pid = none}};
+handle_down(AckHandler, Reason,
+            State = #state{ack_handler_pid = AckHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering ack handler ~p because it died. "
+              "Reason: ~p~n", [self(), AckHandler, Reason]),
+    {noreply, State#state{ack_handler_pid = none}};
 handle_down(FlowHandler, Reason,
             State = #state{flow_handler_pid = FlowHandler}) ->
     ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
@@ -701,18 +619,82 @@ handle_down(DefaultConsumer, Reason,
 handle_down(Other, Reason, State) ->
     {stop, {unexpected_down, Other, Reason}, State}.
 
-%% @private
-terminate(Reason, #state{rpc_requests = RpcQueue}) ->
-    case queue:is_empty(RpcQueue) of
-        false -> ?LOG_WARN("Channel (~p): RPC queue was not empty on "
-                           "terminate~n", [self()]),
-                 case Reason of
-                     normal -> exit(rpc_queue_not_empty_on_terminate);
-                     _      -> ok
-                 end;
-        true  -> ok
+%%---------------------------------------------------------------------------
+%% Internal plumbing
+%%---------------------------------------------------------------------------
+
+do(Method, Content, #state{driver = Driver, writer = W}) ->
+    %% Catching because it expects the {channel_exit, _, _} message on error
+    catch case {Driver, Content} of
+              {network, none} -> rabbit_writer:send_command_sync(W, Method);
+              {network, _}    -> rabbit_writer:send_command_sync(W, Method,
+                                                                 Content);
+              {direct, none}  -> rabbit_channel:do(W, Method);
+              {direct, _}     -> rabbit_channel:do(W, Method, Content)
+          end.
+
+start_writer(State = #state{start_writer_fun = SWF}) ->
+    {ok, Writer} = SWF(),
+    State#state{writer = Writer}.
+
+resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
+    exit(no_consumers_registered);
+resolve_consumer(ConsumerTag, #state{consumers = Consumers,
+                                     default_consumer = DefaultConsumer}) ->
+    case dict:find(ConsumerTag, Consumers) of
+        {ok, Value} ->
+            Value;
+        error ->
+            case is_pid(DefaultConsumer) of
+                true  -> DefaultConsumer;
+                false -> exit(unexpected_delivery_and_no_default_consumer)
+            end
     end.
 
-%% @private
-code_change(_OldVsn, State, _Extra) ->
-    State.
+register_consumer(ConsumerTag, Consumer,
+                  State = #state{consumers = Consumers0}) ->
+    Consumers1 = dict:store(ConsumerTag, Consumer, Consumers0),
+    State#state{consumers = Consumers1}.
+
+unregister_consumer(ConsumerTag,
+                    State = #state{consumers = Consumers0}) ->
+    Consumers1 = dict:erase(ConsumerTag, Consumers0),
+    State#state{consumers = Consumers1}.
+
+amqp_msg(none) ->
+    none;
+amqp_msg(Content) ->
+    {Props, Payload} = rabbit_basic:from_content(Content),
+    #amqp_msg{props = Props, payload = Payload}.
+
+build_content(none) ->
+    none;
+build_content(#amqp_msg{props = Props, payload = Payload}) ->
+    rabbit_basic:build_content(Props, Payload).
+
+check_block(_Method, _AmqpMsg, #state{closing = just_channel}) ->
+    closing;
+check_block(_Method, _AmqpMsg, #state{closing = connection}) ->
+    closing;
+check_block(_Method, none, #state{}) ->
+    ok;
+check_block(_Method, #amqp_msg{}, #state{flow_active = false}) ->
+    blocked;
+check_block(_Method, _AmqpMsg, #state{}) ->
+    ok.
+
+is_connection_method(Method) ->
+    {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
+    ?PROTOCOL:lookup_class_name(ClassId) == connection.
+
+server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
+    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
+        {true, _, _} ->
+            {stop, {server_misbehaved, AmqpError}, State};
+        {false, _, Close} ->
+            ?LOG_WARN("Channel (~p) flushing and closing due to soft "
+                      "error caused by the server ~p~n", [self(), AmqpError]),
+            Self = self(),
+            spawn(fun() -> call(Self, Close) end),
+            {noreply, State}
+    end.
