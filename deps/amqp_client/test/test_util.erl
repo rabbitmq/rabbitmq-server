@@ -203,7 +203,7 @@ recover_after_cancel_test(Connection) ->
           after 2000 ->
                   exit(did_not_receive_subscription_message)
           end,
-    Expect = fun() ->
+    Expect = fun () ->
                      receive
                          {#'basic.deliver'{}, _} ->
                              %% don't send ack

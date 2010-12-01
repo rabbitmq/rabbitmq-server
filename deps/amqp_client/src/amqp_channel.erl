@@ -330,6 +330,12 @@ handle_info({send_command, Method}, State) ->
 %% @private
 handle_info({send_command, Method, Content}, State) ->
     handle_method(Method, Content, State);
+%% Received from rabbit_channel in the direct case
+%% @private
+handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
+    handle_method(Method, Content, State),
+    rabbit_amqqueue:notify_sent(Q, ChPid),
+    {noreply, State};
 %% This comes from framing channel, the writer or rabbit_channel
 %% @private
 handle_info({channel_exit, _FrPidOrChNumber, Reason}, State) ->
