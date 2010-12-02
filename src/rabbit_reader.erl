@@ -724,18 +724,10 @@ handle_method0(MethodName, FieldsBin,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
-    catch exit:Reason ->
-            CompleteReason = case Reason of
-                                 #amqp_error{method = none} ->
-                                     Reason#amqp_error{method = MethodName};
-                                 OtherReason -> {exit, OtherReason,
-                                                 erlang:get_stacktrace()}
-                             end,
-            HandleException(CompleteReason);
-          error:Reason ->
-            HandleException({error, Reason, erlang:get_stacktrace()});
-          throw:Reason ->
-            HandleException({throw, Reason, erlang:get_stacktrace()})
+    catch exit:#amqp_error{method = none} = Reason ->
+            HandleException(Reason#amqp_error{method = MethodName});
+          Type:Reason ->
+            HandleException({Type, Reason, erlang:get_stacktrace()})
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
