@@ -49,7 +49,7 @@
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, published_count, confirm_multiple, confirm_tref,
+             confirm_enabled, publish_seqno, confirm_multiple, confirm_tref,
              held_confirms, unconfirmed, queues_for_msg}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
@@ -191,7 +191,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = StatsTimer,
                 confirm_enabled         = false,
-                published_count         = 0,
+                publish_seqno           = 0,
                 confirm_multiple        = false,
                 held_confirms           = gb_sets:new(),
                 unconfirmed             = gb_sets:new(),
@@ -536,11 +536,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     {MsgSeqNo, State1}
         = case ConfirmEnabled of
               false -> {undefined, State};
-              true  -> Count = State#ch.published_count,
-                       {Count,
-                        State#ch{published_count = Count + 1,
+              true  -> SeqNo = State#ch.publish_seqno,
+                       {SeqNo,
+                        State#ch{publish_seqno = SeqNo + 1,
                                  unconfirmed =
-                                     gb_sets:add(Count, State#ch.unconfirmed)}}
+                                     gb_sets:add(SeqNo, State#ch.unconfirmed)}}
           end,
     Message = #basic_message{exchange_name = ExchangeName,
                              routing_key   = RoutingKey,
