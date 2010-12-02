@@ -1,26 +1,18 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @private
 -module(amqp_channels_manager).
@@ -30,7 +22,7 @@
 -behaviour(gen_server).
 
 -export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
-         num_channels/1, pass_frame/3, signal_connection_closing/3]).
+         num_channels/1, pass_frame/3, signal_connection_closing/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -63,8 +55,8 @@ num_channels(ChMgr) ->
 pass_frame(ChMgr, ChNumber, Frame) ->
     gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).
 
-signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
-    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
+signal_connection_closing(ChMgr, ChannelCloseType) ->
+    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType}).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -92,8 +84,8 @@ handle_cast({set_channel_max, ChannelMax}, State) ->
 handle_cast({pass_frame, ChNumber, Frame}, State) ->
     internal_pass_frame(ChNumber, Frame, State),
     {noreply, State};
-handle_cast({connection_closing, ChannelCloseType, Reason}, State) ->
-    handle_connection_closing(ChannelCloseType, Reason, State).
+handle_cast({connection_closing, ChannelCloseType}, State) ->
+    handle_connection_closing(ChannelCloseType, State).
 
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
     handle_down(Pid, Reason, State).
@@ -164,33 +156,35 @@ handle_channel_down(Pid, Number, Reason, State) ->
 
 maybe_report_down(_Pid, normal, _State) ->
     ok;
-maybe_report_down(Pid, {server_initiated_close, Code, _Text} = Reason, State) ->
-    {IsHardError, _, _} = ?PROTOCOL:lookup_amqp_exception(
-                            ?PROTOCOL:amqp_exception(Code)),
-    case IsHardError of
-        true  -> signal_connection({hard_error_in_channel, Pid, Reason}, State);
-        false -> ok
-    end;
 maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
-maybe_report_down(_Pid, {connection_closing, _}, _State) ->
+maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
-maybe_report_down(Pid, Other, State) ->
-    signal_connection({channel_internal_error, Pid, Other}, State).
+maybe_report_down(_Pid, connection_closing, _State) ->
+    ok;
+maybe_report_down(Pid, {server_initiated_hard_close, _, _} = Reason,
+                  #state{connection = Connection}) ->
+    amqp_gen_connection:hard_error_in_channel(Connection, Pid, Reason);
+maybe_report_down(_Pid, {server_misbehaved, AmqpError},
+                  #state{connection = Connection}) ->
+    amqp_gen_connection:server_misbehaved(Connection, AmqpError);
+maybe_report_down(Pid, Other, #state{connection = Connection}) ->
+    amqp_gen_connection:channel_internal_error(Connection, Pid, Other).
 
 check_all_channels_terminated(#state{closing = false}) ->
     ok;
-check_all_channels_terminated(State = #state{closing = true}) ->
+check_all_channels_terminated(State = #state{closing = true,
+                                             connection = Connection}) ->
     case internal_is_empty(State) of
-        true  -> signal_connection(all_channels_terminated, State);
+        true  -> amqp_gen_connection:channels_terminated(Connection);
         false -> ok
     end.
 
-handle_connection_closing(ChannelCloseType, Reason, State) ->
+handle_connection_closing(ChannelCloseType,
+                          State = #state{connection = Connection}) ->
     case internal_is_empty(State) of
-        true  -> signal_connection(all_channels_terminated, State);
-        false -> signal_channels({connection_closing, ChannelCloseType, Reason},
-                                 State)
+        true  -> amqp_gen_connection:channels_terminated(Connection);
+        false -> signal_channels_connection_closing(ChannelCloseType, State)
     end,
     {noreply, State#state{closing = true}}.
 
@@ -233,8 +227,7 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
                                   error        -> undefined
     end.
 
-signal_channels(Msg, #state{map_pid_num = MapPN}) ->
-    dict:fold(fun(Pid, _, _) -> Pid ! Msg end, none, MapPN).
-
-signal_connection(Msg, #state{connection = Connection}) ->
-    Connection ! Msg.
+signal_channels_connection_closing(ChannelCloseType,
+                                   #state{map_pid_num = MapPN}) ->
+    [amqp_channel:connection_closing(Pid, ChannelCloseType)
+        || Pid <- dict:fetch_keys(MapPN)].

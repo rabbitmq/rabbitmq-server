@@ -1,26 +1,18 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @private
 -module(amqp_connection_type_sup).
@@ -67,25 +59,8 @@ start_link_network(Sock, Connection, ChMgr) ->
            transient, ?MAX_WAIT, worker, [amqp_main_reader]}),
     {ok, Sup, {MainReader, Framing, Writer}}.
 
-start_heartbeat_fun(Sup) ->
-    fun (_Sock, 0) ->
-            none;
-        (Sock, Timeout) ->
-            Connection = self(),
-            {ok, _} = supervisor2:start_child(
-                        Sup,
-                        {heartbeat_sender, {rabbit_heartbeat,
-                                            start_heartbeat_sender,
-                                            [Connection, Sock, Timeout]},
-                         transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-            {ok, _} = supervisor2:start_child(
-                        Sup,
-                        {heartbeat_receiver, {rabbit_heartbeat,
-                                              start_heartbeat_receiver,
-                                              [Connection, Sock, Timeout]},
-                         transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}),
-            ok
-    end.
+start_heartbeat_fun(SupPid) ->
+    rabbit_heartbeat:start_heartbeat_fun(SupPid).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

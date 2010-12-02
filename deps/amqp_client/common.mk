@@ -1,26 +1,17 @@
-#   The contents of this file are subject to the Mozilla Public License
-#   Version 1.1 (the "License"); you may not use this file except in
-#   compliance with the License. You may obtain a copy of the License at
-#   http://www.mozilla.org/MPL/
+# The contents of this file are subject to the Mozilla Public License
+# Version 1.1 (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
 #
-#   Software distributed under the License is distributed on an "AS IS"
-#   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-#   License for the specific language governing rights and limitations
-#   under the License.
+# Software distributed under the License is distributed on an "AS IS"
+# basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+# License for the specific language governing rights and limitations
+# under the License.
 #
-#   The Original Code is the RabbitMQ Erlang Client.
+# The Original Code is RabbitMQ.
 #
-#   The Initial Developers of the Original Code are LShift Ltd.,
-#   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-#
-#   Portions created by LShift Ltd., Cohesive Financial
-#   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-#   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-#   Technologies Ltd.; 
-#
-#   All Rights Reserved.
-#
-#   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+# The Initial Developer of the Original Code is VMware, Inc.
+# Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 #
 
 # The client library can either be built from source control or by downloading
@@ -54,6 +45,7 @@ SOURCE_DIR=src
 DIST_DIR=dist
 DEPS_DIR=deps
 DOC_DIR=doc
+DEPS_FILE=deps.mk
 
 ifeq ("$(ERL_LIBS)", "")
 	ERL_LIBS :=
@@ -108,7 +100,7 @@ ifndef USE_SPECS
 USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
 endif
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+ERLC_OPTS=-I $(INCLUDE_DIR) -pa $(EBIN_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
@@ -128,6 +120,18 @@ ALL_SSL_COVERAGE := true
 SSL_BROKER_ARGS :=
 endif
 
+# Versions prior to this are not supported
+NEED_MAKE := 3.80
+ifneq "$(NEED_MAKE)" "$(firstword $(sort $(NEED_MAKE) $(MAKE_VERSION)))"
+$(error Versions of make prior to $(NEED_MAKE) are not supported)
+endif
+
+# .DEFAULT_GOAL introduced in 3.81
+DEFAULT_GOAL_MAKE := 3.81
+ifneq "$(DEFAULT_GOAL_MAKE)" "$(firstword $(sort $(DEFAULT_GOAL_MAKE) $(MAKE_VERSION)))"
+.DEFAULT_GOAL=all
+endif
+
 all: package
 
 common_clean:
@@ -135,6 +139,7 @@ common_clean:
 	rm -f erl_crash.dump
 	rm -rf $(DEPS_DIR)
 	rm -rf $(DOC_DIR)
+	rm -f $(DEPS_FILE)
 	$(MAKE) -C $(TEST_DIR) clean
 
 compile: $(TARGETS)
@@ -169,8 +174,30 @@ $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR
 	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	unzip -o $< -d $(DEPS_DIR)
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
+$(DEPS_FILE): $(SOURCES) $(INCLUDES)
+	rm -f $@
+	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript $(BROKER_DIR)/generate_deps $@ $(EBIN_DIR)
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) | $(DEPS_FILE)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 $(DEPS_DIR):
 	mkdir -p $@
+
+# Note that all targets which depend on clean must have clean in their
+# name.  Also any target that doesn't depend on clean should not have
+# clean in its name, unless you know that you don't need any of the
+# automatic dependency generation for that target.
+
+# We want to load the dep file if *any* target *doesn't* contain
+# "clean" - i.e. if removing all clean-like targets leaves something
+
+ifeq "$(MAKECMDGOALS)" ""
+TESTABLEGOALS:=$(.DEFAULT_GOAL)
+else
+TESTABLEGOALS:=$(MAKECMDGOALS)
+endif
+
+ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
+-include $(DEPS_FILE)
+endif

@@ -1,26 +1,18 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ____________________.
 
 %% @private
 -module(amqp_connection_sup).
@@ -29,14 +21,14 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, AmqpParams) ->
+start_link(Type, Module, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     {ok, ChSupSup} = supervisor2:start_child(
                        Sup,
@@ -44,32 +36,23 @@ start_link(Type, AmqpParams) ->
                                           [Type]},
                         intrinsic, infinity, supervisor,
                         [amqp_channel_sup_sup]}),
-    {ok, Connection} =
-        start_connection(Sup, Type, AmqpParams,
-                         start_infrastructure_fun(Sup, Type, ChSupSup)),
+    SChMF = start_channels_manager_fun(Sup, ChSupSup),
+    SIF = start_infrastructure_fun(Sup, Type),
+    {ok, Connection} = supervisor2:start_child(
+                         Sup,
+                         {connection, {amqp_gen_connection, start_link,
+                                       [Module, AmqpParams, SIF, SChMF, []]},
+                          intrinsic, brutal_kill, worker,
+                          [amqp_gen_connection]}),
     {ok, Sup, Connection}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_connection(Sup, network, AmqpParams, SIF) ->
-    {ok, _} = supervisor2:start_child(
-                Sup,
-                {connection, {amqp_network_connection, start_link,
-                              [AmqpParams, SIF]},
-                 intrinsic, brutal_kill, worker, [amqp_network_connection]});
-start_connection(Sup, direct, AmqpParams, SIF) ->
-    {ok, _} = supervisor2:start_child(
-                Sup,
-                {connection, {amqp_direct_connection, start_link,
-                              [AmqpParams, SIF]},
-                 intrinsic, brutal_kill, worker, [amqp_direct_connection]}).
-
-start_infrastructure_fun(Sup, network, ChSupSup) ->
-    fun (Sock) ->
+start_infrastructure_fun(Sup, network) ->
+    fun (Sock, ChMgr) ->
             Connection = self(),
-            {ok, ChMgr} = start_channels_manager(Sup, Connection, ChSupSup),
             {ok, CTSup, {MainReader, Framing, Writer}} =
                 supervisor2:start_child(
                   Sup,
@@ -78,13 +61,11 @@ start_infrastructure_fun(Sup, network, ChSupSup) ->
                                          [Sock, Connection, ChMgr]},
                    transient, infinity, supervisor,
                    [amqp_connection_type_sup]}),
-            {ok, {ChMgr, MainReader, Framing, Writer,
+            {ok, {MainReader, Framing, Writer,
                   amqp_connection_type_sup:start_heartbeat_fun(CTSup)}}
     end;
-start_infrastructure_fun(Sup, direct, ChSupSup) ->
+start_infrastructure_fun(Sup, direct) ->
     fun () ->
-            Connection = self(),
-            {ok, ChMgr} = start_channels_manager(Sup, Connection, ChSupSup),
             {ok, _CTSup, Collector} =
                 supervisor2:start_child(
                   Sup,
@@ -92,15 +73,18 @@ start_infrastructure_fun(Sup, direct, ChSupSup) ->
                                          start_link_direct, []},
                    transient, infinity, supervisor,
                    [amqp_connection_type_sup]}),
-            {ok, {ChMgr, Collector}}
+            {ok, Collector}
     end.
 
-start_channels_manager(Sup, Connection, ChSupSup) ->
-    {ok, _} = supervisor2:start_child(
-                Sup,
-                {channels_manager, {amqp_channels_manager, start_link,
-                                    [Connection, ChSupSup]},
-                 transient, ?MAX_WAIT, worker, [amqp_channels_manager]}).
+start_channels_manager_fun(Sup, ChSupSup) ->
+    fun () ->
+            Connection = self(),
+            {ok, _} = supervisor2:start_child(
+                        Sup,
+                        {channels_manager, {amqp_channels_manager, start_link,
+                                            [Connection, ChSupSup]},
+                         transient, ?MAX_WAIT, worker, [amqp_channels_manager]})
+    end.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
