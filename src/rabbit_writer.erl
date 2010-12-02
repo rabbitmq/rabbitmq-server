@@ -188,8 +188,8 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
 %% We optimise delivery of small messages. Content-bearing methods
 %% require at least three frames. Small messages always fit into
 %% that. We hand their frames to the Erlang network functions in one
-%% go, which leads to more efficient processing in the runtime and a
-%% greater chance of coalescing into fewer TCP packets.
+%% go, which may lead to somewhat more efficient processing in the
+%% runtime and a greater chance of coalescing into fewer TCP packets.
 %%
 %% By contrast, for larger messages, split across many frames, we want
 %% to allow interleaving of frames on different channels. Hence we
