@@ -491,9 +491,8 @@ attempt_delivery(#delivery{txn        = none,
                 {AckTag, BQS1} =
                     BQ:publish_delivered(
                       AckRequired, Message,
-                      ?BASE_MESSAGE_PROPERTIES
-                      #message_properties{
-                         needs_confirming = NeedsConfirming},
+                      (?BASE_MESSAGE_PROPERTIES)#message_properties{
+                        needs_confirming = NeedsConfirming},
                       BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
