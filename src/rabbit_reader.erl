@@ -710,25 +710,32 @@ ensure_stats_timer(State) ->
 
 handle_method0(MethodName, FieldsBin,
                State = #v1{connection = #connection{protocol = Protocol}}) ->
-    try
-        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
-                       State)
-    catch Type:Reason ->
-            CompleteReason = case Reason of
-                                 #amqp_error{method = none} ->
-                                     Reason#amqp_error{method = MethodName};
-                                 OtherReason -> {Type, OtherReason,
-                                                 erlang:get_stacktrace()}
-                             end,
+    HandleException =
+        fun(R) ->
             case ?IS_RUNNING(State) of
-                true  -> send_exception(State, 0, CompleteReason);
+                true  -> send_exception(State, 0, R);
                 %% We don't trust the client at this point - force
                 %% them to wait for a bit so they can't DOS us with
                 %% repeated failed logins etc.
                 false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-                         throw({channel0_error, State#v1.connection_state,
-                                CompleteReason})
+                         throw({channel0_error, State#v1.connection_state, R})
             end
+        end,
+    try
+        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
+                       State)
+    catch exit:Reason ->
+            CompleteReason = case Reason of
+                                 #amqp_error{method = none} ->
+                                     Reason#amqp_error{method = MethodName};
+                                 OtherReason -> {exit, OtherReason,
+                                                 erlang:get_stacktrace()}
+                             end,
+            HandleException(CompleteReason);
+          error:Reason ->
+            HandleException({error, Reason, erlang:get_stacktrace()});
+          throw:Reason ->
+            HandleException({throw, Reason, erlang:get_stacktrace()})
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
