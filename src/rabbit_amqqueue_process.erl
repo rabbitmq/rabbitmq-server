@@ -488,11 +488,10 @@ attempt_delivery(#delivery{txn        = none,
                 %% we don't need an expiry here because messages are
                 %% not being enqueued, so we use an empty
                 %% message_properties.
-                BP = ?BASE_MESSAGE_PROPERTIES,
                 {AckTag, BQS1} =
                     BQ:publish_delivered(
                       AckRequired, Message,
-                      BP#message_properties{
+                      (?BASE_MESSAGE_PROPERTIES)#message_properties{
                         needs_confirming = NeedsConfirming},
                       BQS),
                 {{Message, false, AckTag}, true,
