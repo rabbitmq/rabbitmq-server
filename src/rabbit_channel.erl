@@ -460,20 +460,19 @@ send_or_enqueue_ack(undefined, _QPid, State) ->
 send_or_enqueue_ack(_MsgSeqNo, _QPid, State = #ch{confirm_enabled = false}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_multiple = false}) ->
-    do_if_unconfirmed(
-      MsgSeqNo, QPid,
-      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
-              ok = rabbit_writer:send_command(
-                     WriterPid, #'basic.ack'{delivery_tag = MSN}),
-              State1
-      end, State);
+    do_if_unconfirmed(MsgSeqNo, QPid,
+                      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
+                              ok = rabbit_writer:send_command(
+                                     WriterPid, #'basic.ack'{
+                                       delivery_tag = MSN}),
+                              State1
+                      end, State);
 send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_multiple = true}) ->
-    do_if_unconfirmed(
-      MsgSeqNo, QPid,
-      fun(MSN, State1 = #ch{held_confirms = As}) ->
-              start_confirm_timer(
-                State1#ch{held_confirms = gb_sets:add(MSN, As)})
-      end, State).
+    do_if_unconfirmed(MsgSeqNo, QPid,
+                      fun(MSN, State1 = #ch{held_confirms = As}) ->
+                              start_confirm_timer(
+                                State1#ch{held_confirms = gb_sets:add(MSN, As)})
+                      end, State).
 
 do_if_unconfirmed(MsgSeqNo, QPid, ConfirmFun,
                   State = #ch{unconfirmed    = UC,
@@ -484,9 +483,8 @@ do_if_unconfirmed(MsgSeqNo, QPid, ConfirmFun,
             Unconfirmed1 = gb_sets:delete(MsgSeqNo, UC),
             case QPid of
                 undefined ->
-                    ConfirmFun(MsgSeqNo,
-                               State#ch{unconfirmed = Unconfirmed1});
-                _        ->
+                    ConfirmFun(MsgSeqNo, State#ch{unconfirmed = Unconfirmed1});
+                _  ->
                     {ok, Qs} = dict:find(MsgSeqNo, QFM),
                     Qs1 = sets:del_element(QPid, Qs),
                     case sets:size(Qs1) of
@@ -499,7 +497,8 @@ do_if_unconfirmed(MsgSeqNo, QPid, ConfirmFun,
                                           dict:store(MsgSeqNo, Qs1, QFM)}
                     end
             end;
-        false -> State
+        false ->
+            State
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
