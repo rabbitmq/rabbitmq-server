@@ -177,7 +177,7 @@
          format_status/2]).
 
 %% Internal exports
--export([init_it/6, print_event/3]).
+-export([init_it/6]).
 
 -import(error_logger, [format/2]).
 
@@ -192,10 +192,13 @@
 
 -ifdef(use_specs).
 
--spec(handle_common_termination/3 ::
-      (any(), atom(), #gs2_state{}) -> no_return()).
+-type(gs2_state() :: #gs2_state{}).
 
--spec(hibernate/1 :: (#gs2_state{}) -> no_return()).
+-spec(handle_common_termination/3 ::
+        (any(), atom(), gs2_state()) -> no_return()).
+-spec(hibernate/1 :: (gs2_state()) -> no_return()).
+-spec(pre_hibernate/1 :: (gs2_state()) -> no_return()).
+-spec(system_terminate/4 :: (_, _, _, gs2_state()) -> no_return()).
 
 -endif.
 
@@ -612,7 +615,7 @@ process_msg(Msg,
         _Msg when Debug =:= [] ->
             handle_msg(Msg, GS2State);
         _Msg ->
-            Debug1 = sys:handle_debug(Debug, {?MODULE, print_event},
+            Debug1 = sys:handle_debug(Debug, fun print_event/3,
                                       Name, {in, Msg}),
             handle_msg(Msg, GS2State #gs2_state { debug = Debug1 })
     end.
@@ -838,13 +841,13 @@ handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                        time  = Time1,
                                        debug = Debug1});
         {noreply, NState} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state {state = NState,
                                       time  = infinity,
                                       debug = Debug1});
         {noreply, NState, Time1} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state {state = NState,
                                       time  = Time1,
@@ -866,13 +869,13 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
                                                         debug = Debug}) ->
     case Reply of
         {noreply, NState} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state { state = NState,
                                        time  = infinity,
                                        debug = Debug1 });
         {noreply, NState, Time1} ->
-            Debug1 = common_debug(Debug, {?MODULE, print_event}, Name,
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
                                   {noreply, NState}),
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
@@ -894,7 +897,7 @@ handle_common_termination(Reply, Msg, GS2State) ->
 reply(Name, {To, Tag}, Reply, State, Debug) ->
     reply({To, Tag}, Reply),
     sys:handle_debug(
-      Debug, {?MODULE, print_event}, Name, {out, Reply, To, State}).
+      Debug, fun print_event/3, Name, {out, Reply, To, State}).
 
 
 %%-----------------------------------------------------------------
@@ -902,10 +905,6 @@ reply(Name, {To, Tag}, Reply, State, Debug) ->
 %%-----------------------------------------------------------------
 system_continue(Parent, Debug, GS2State) ->
     loop(GS2State #gs2_state { parent = Parent, debug = Debug }).
-
--ifdef(use_specs).
--spec system_terminate(_, _, _, [_]) -> no_return().
--endif.
 
 system_terminate(Reason, _Parent, Debug, GS2State) ->
     terminate(Reason, [], GS2State #gs2_state { debug = Debug }).
@@ -1128,7 +1127,8 @@ function_exported_or_default(Mod, Fun, Arity, Default) ->
 %%-----------------------------------------------------------------
 format_status(Opt, StatusData) ->
     [PDict, SysState, Parent, Debug,
-     [Name, State, Mod, _Time, _TimeoutState, Queue]] = StatusData,
+     #gs2_state{name = Name, state = State, mod = Mod, queue = Queue}] =
+        StatusData,
     NameTag = if is_pid(Name) ->
                       pid_to_list(Name);
                  is_atom(Name) ->

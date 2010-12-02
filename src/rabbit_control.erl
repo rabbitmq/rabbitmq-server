@@ -39,7 +39,6 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
--define(SCOPE_OPT, "-s").
 
 %%----------------------------------------------------------------------------
 
@@ -67,7 +66,7 @@ start() ->
     {[Command0 | Args], Opts} =
         rabbit_misc:get_options(
           [{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
-           {option, ?VHOST_OPT, "/"}, {option, ?SCOPE_OPT, "client"}],
+           {option, ?VHOST_OPT, "/"}],
           FullCommand),
     Opts1 = lists:map(fun({K, V}) ->
                               case K of
@@ -94,29 +93,27 @@ start() ->
             end,
             halt();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            error("invalid command '~s'",
-                  [lists:flatten(
-                     rabbit_misc:intersperse(
-                       " ", [atom_to_list(Command) | Args]))]),
+            print_error("invalid command '~s'",
+                        [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
-            error("~p", [Reason]),
+            print_error("~p", [Reason]),
             halt(2);
         {badrpc, {'EXIT', Reason}} ->
-            error("~p", [Reason]),
+            print_error("~p", [Reason]),
             halt(2);
         {badrpc, Reason} ->
-            error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
             halt(2);
         Other ->
-            error("~p", [Other]),
+            print_error("~p", [Other]),
             halt(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
-error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
     fmt_stderr("diagnostics:", []),
@@ -257,7 +254,8 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
 action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [exchange_name, queue_name,
+    ArgAtoms = default_if_empty(Args, [source_name, source_kind,
+                                       destination_name, destination_kind,
                                        routing_key, arguments]),
     display_info_list(rpc_call(Node, rabbit_binding, info_all,
                                [VHostArg, ArgAtoms]),
@@ -288,10 +286,9 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Scope = proplists:get_value(?SCOPE_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
     call(Node, {rabbit_access_control, set_permissions,
-                [Scope, Username, VHost, CPerm, WPerm, RPerm]});
+                [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -322,7 +319,7 @@ display_info_list(Other, _) ->
     Other.
 
 display_row(Row) ->
-    io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
+    io:fwrite(string:join(Row, "\t")),
     io:nl().
 
 -define(IS_U8(X),  (X >= 0 andalso X =< 255)).

@@ -35,7 +35,7 @@
 
 -export([new/1, recover/1,
          lookup/2, insert/2, update/2, update_fields/3, delete/2,
-         delete_by_file/2, terminate/1]).
+         delete_object/2, delete_by_file/2, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
 -define(FILENAME, "msg_store_index.ets").
@@ -77,6 +77,10 @@ update_fields(Key, Updates, State) ->
 
 delete(Key, State) ->
     true = ets:delete(State #state.table, Key),
+    ok.
+
+delete_object(Obj, State) ->
+    true = ets:delete_object(State #state.table, Obj),
     ok.
 
 delete_by_file(File, State) ->

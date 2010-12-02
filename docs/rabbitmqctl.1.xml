@@ -589,22 +589,12 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">-s <replaceable>scope</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>vhostpath</term>
                 <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>scope</term>
-                <listitem><para>Scope of the permissions: either
-                <command>client</command> (the default) or
-                <command>all</command>.  This determines whether
-                permissions are checked for server-generated resource
-                names (<command>all</command>) or only for
-                client-specified resource names
-                (<command>client</command>).</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>user</term>
@@ -894,16 +884,31 @@
             </para>
             <variablelist>
               <varlistentry>
-                <term>exchange_name</term>
-                <listitem><para>The name of the exchange to which the
-                binding is attached. with non-ASCII characters
-                escaped as in C.</para></listitem>
+                <term>source_name</term>
+                <listitem><para>The name of the source of messages to
+                which the binding is attached. With non-ASCII
+                characters escaped as in C.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>queue_name</term>
-                <listitem><para>The name of the queue to which the
-                binding is attached. with non-ASCII characters
-                escaped as in C.</para></listitem>
+                <term>source_kind</term>
+                <listitem><para>The kind of the source of messages to
+                which the binding is attached. Currently always
+                queue. With non-ASCII characters escaped as in
+                C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>destination_name</term>
+                <listitem><para>The name of the destination of
+                messages to which the binding is attached. With
+                non-ASCII characters escaped as in
+                C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>destination_kind</term>
+                <listitem><para>The kind of the destination of
+                messages to which the binding is attached. With
+                non-ASCII characters escaped as in
+                C.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>routing_key</term>
@@ -965,6 +970,26 @@
               <varlistentry>
                 <term>peer_port</term>
                 <listitem><para>Peer port.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl</term>
+                <listitem><para>Boolean indicating whether the
+                connection is secured with SSL.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_cert_subject</term>
+                <listitem><para>The subject of the peer's SSL
+                certificate, in RFC4514 form.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_cert_issuer</term>
+                <listitem><para>The issuer of the peer's SSL
+                certificate, in RFC4514 form.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_cert_validity</term>
+                <listitem><para>The period for which the peer's SSL
+                certificate is valid.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>state</term>
@@ -1100,6 +1125,14 @@
               <varlistentry>
                 <term>prefetch_count</term>
                 <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>client_flow_blocked</term>
+                <listitem><para>True if the client issued a
+                    <command>channel.flow{active=false}</command>
+                    command, blocking the server from delivering
+                    messages to the channel's consumers.
+                    </para></listitem>
               </varlistentry>
             </variablelist>
             <para>

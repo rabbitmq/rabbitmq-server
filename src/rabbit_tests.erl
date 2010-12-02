@@ -41,8 +41,8 @@
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
 
--define(PERSISTENT_MSG_STORE,     msg_store_persistent).
--define(TRANSIENT_MSG_STORE,      msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
@@ -73,8 +73,8 @@ all_tests() ->
     passed = test_user_management(),
     passed = test_server_status(),
     passed = maybe_run_cluster_dependent_tests(),
+    passed = test_configurable_server_properties(),
     passed.
-
 
 maybe_run_cluster_dependent_tests() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
@@ -963,9 +963,6 @@ test_user_management() ->
         control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
-    {error, {invalid_scope, _}} =
-        control_action(set_permissions, ["guest", "foo", ".*", ".*"],
-                       [{"-s", "cilent"}]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
@@ -988,9 +985,7 @@ test_user_management() ->
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
                         [{"-p", "/testhost"}]),
     ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
-                        [{"-p", "/testhost"}, {"-s", "client"}]),
-    ok = control_action(set_permissions, ["foo", ".*", ".*", ".*"],
-                        [{"-p", "/testhost"}, {"-s", "all"}]),
+                        [{"-p", "/testhost"}]),
     ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_permissions, [], [{"-p", "/testhost"}]),
     ok = control_action(list_user_permissions, ["foo"]),
@@ -1041,11 +1036,11 @@ test_server_status() ->
     %% list bindings
     ok = info_action(list_bindings, rabbit_binding:info_keys(), true),
     %% misc binding listing APIs
-    [_|_] = rabbit_binding:list_for_exchange(
+    [_|_] = rabbit_binding:list_for_source(
               rabbit_misc:r(<<"/">>, exchange, <<"">>)),
-    [_] = rabbit_binding:list_for_queue(
+    [_] = rabbit_binding:list_for_destination(
               rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
-    [_] = rabbit_binding:list_for_exchange_and_queue(
+    [_] = rabbit_binding:list_for_source_and_destination(
             rabbit_misc:r(<<"/">>, exchange, <<"">>),
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
 
@@ -1298,7 +1293,7 @@ info_action(Command, Args, CheckVHost) ->
     {bad_argument, dummy} = control_action(Command, ["dummy"]),
     ok.
 
-default_options() -> [{"-s", "client"}, {"-p", "/"}, {"-q", "false"}].
+default_options() -> [{"-p", "/"}, {"-q", "false"}].
 
 expand_options(As, Bs) ->
     lists:foldl(fun({K, _}=A, R) ->
@@ -1414,6 +1409,7 @@ test_backing_queue() ->
             application:set_env(rabbit, msg_store_file_size_limit,
                                 FileSizeLimit, infinity),
             passed = test_queue_index(),
+            passed = test_queue_index_props(),
             passed = test_variable_queue(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
@@ -1431,17 +1427,17 @@ restart_msg_store_empty() ->
 guid_bin(X) ->
     erlang:md5(term_to_binary(X)).
 
-msg_store_contains(Atom, Guids) ->
+msg_store_contains(Atom, Guids, MSCState) ->
     Atom = lists:foldl(
              fun (Guid, Atom1) when Atom1 =:= Atom ->
-                     rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid) end,
+                     rabbit_msg_store:contains(Guid, MSCState) end,
              Atom, Guids).
 
-msg_store_sync(Guids) ->
+msg_store_sync(Guids, MSCState) ->
     Ref = make_ref(),
     Self = self(),
-    ok = rabbit_msg_store:sync(?PERSISTENT_MSG_STORE, Guids,
-                               fun () -> Self ! {sync, Ref} end),
+    ok = rabbit_msg_store:sync(Guids, fun () -> Self ! {sync, Ref} end,
+                               MSCState),
     receive
         {sync, Ref} -> ok
     after
@@ -1453,55 +1449,65 @@ msg_store_sync(Guids) ->
 msg_store_read(Guids, MSCState) ->
     lists:foldl(fun (Guid, MSCStateM) ->
                         {{ok, Guid}, MSCStateN} = rabbit_msg_store:read(
-                                                    ?PERSISTENT_MSG_STORE,
                                                     Guid, MSCStateM),
                         MSCStateN
                 end, MSCState, Guids).
 
 msg_store_write(Guids, MSCState) ->
-    lists:foldl(fun (Guid, {ok, MSCStateN}) ->
-                        rabbit_msg_store:write(?PERSISTENT_MSG_STORE,
-                                               Guid, Guid, MSCStateN)
-                end, {ok, MSCState}, Guids).
+    ok = lists:foldl(
+           fun (Guid, ok) -> rabbit_msg_store:write(Guid, Guid, MSCState) end,
+           ok, Guids).
 
-msg_store_remove(Guids) ->
-    rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids).
+msg_store_remove(Guids, MSCState) ->
+    rabbit_msg_store:remove(Guids, MSCState).
+
+msg_store_remove(MsgStore, Ref, Guids) ->
+    with_msg_store_client(MsgStore, Ref,
+                          fun (MSCStateM) ->
+                                  ok = msg_store_remove(Guids, MSCStateM),
+                                  MSCStateM
+                          end).
+
+with_msg_store_client(MsgStore, Ref, Fun) ->
+    rabbit_msg_store:client_terminate(
+      Fun(rabbit_msg_store:client_init(MsgStore, Ref, undefined))).
 
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
-      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MsgStore, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref), L), MsgStore).
+      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MSCState) end,
+                  rabbit_msg_store:client_init(MsgStore, Ref, undefined), L)).
 
 test_msg_store() ->
     restart_msg_store_empty(),
     Self = self(),
     Guids = [guid_bin(M) || M <- lists:seq(1,100)],
     {Guids1stHalf, Guids2ndHalf} = lists:split(50, Guids),
-    %% check we don't contain any of the msgs we're about to publish
-    false = msg_store_contains(false, Guids),
     Ref = rabbit_guid:guid(),
-    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
+    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
+                                            undefined),
+    %% check we don't contain any of the msgs we're about to publish
+    false = msg_store_contains(false, Guids, MSCState),
     %% publish the first half
-    {ok, MSCState1} = msg_store_write(Guids1stHalf, MSCState),
+    ok = msg_store_write(Guids1stHalf, MSCState),
     %% sync on the first half
-    ok = msg_store_sync(Guids1stHalf),
+    ok = msg_store_sync(Guids1stHalf, MSCState),
     %% publish the second half
-    {ok, MSCState2} = msg_store_write(Guids2ndHalf, MSCState1),
+    ok = msg_store_write(Guids2ndHalf, MSCState),
     %% sync on the first half again - the msg_store will be dirty, but
     %% we won't need the fsync
-    ok = msg_store_sync(Guids1stHalf),
+    ok = msg_store_sync(Guids1stHalf, MSCState),
     %% check they're all in there
-    true = msg_store_contains(true, Guids),
+    true = msg_store_contains(true, Guids, MSCState),
     %% publish the latter half twice so we hit the caching and ref count code
-    {ok, MSCState3} = msg_store_write(Guids2ndHalf, MSCState2),
+    ok = msg_store_write(Guids2ndHalf, MSCState),
     %% check they're still all in there
-    true = msg_store_contains(true, Guids),
+    true = msg_store_contains(true, Guids, MSCState),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
     ok = lists:foldl(
            fun (Guid, ok) -> rabbit_msg_store:sync(
-                                ?PERSISTENT_MSG_STORE,
-                                [Guid], fun () -> Self ! {sync, Guid} end)
+                               [Guid], fun () -> Self ! {sync, Guid} end,
+                               MSCState)
            end, ok, Guids2ndHalf),
     lists:foldl(
       fun(Guid, ok) ->
@@ -1516,24 +1522,24 @@ test_msg_store() ->
       end, ok, Guids2ndHalf),
     %% it's very likely we're not dirty here, so the 1st half sync
     %% should hit a different code path
-    ok = msg_store_sync(Guids1stHalf),
+    ok = msg_store_sync(Guids1stHalf, MSCState),
     %% read them all
-    MSCState4 = msg_store_read(Guids, MSCState3),
+    MSCState1 = msg_store_read(Guids, MSCState),
     %% read them all again - this will hit the cache, not disk
-    MSCState5 = msg_store_read(Guids, MSCState4),
+    MSCState2 = msg_store_read(Guids, MSCState1),
     %% remove them all
-    ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids),
+    ok = rabbit_msg_store:remove(Guids, MSCState2),
     %% check first half doesn't exist
-    false = msg_store_contains(false, Guids1stHalf),
+    false = msg_store_contains(false, Guids1stHalf, MSCState2),
     %% check second half does exist
-    true = msg_store_contains(true, Guids2ndHalf),
+    true = msg_store_contains(true, Guids2ndHalf, MSCState2),
     %% read the second half again
-    MSCState6 = msg_store_read(Guids2ndHalf, MSCState5),
+    MSCState3 = msg_store_read(Guids2ndHalf, MSCState2),
     %% release the second half, just for fun (aka code coverage)
-    ok = rabbit_msg_store:release(?PERSISTENT_MSG_STORE, Guids2ndHalf),
+    ok = rabbit_msg_store:release(Guids2ndHalf, MSCState3),
     %% read the second half again, just for fun (aka code coverage)
-    MSCState7 = msg_store_read(Guids2ndHalf, MSCState6),
-    ok = rabbit_msg_store:client_terminate(MSCState7, ?PERSISTENT_MSG_STORE),
+    MSCState4 = msg_store_read(Guids2ndHalf, MSCState3),
+    ok = rabbit_msg_store:client_terminate(MSCState4),
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
@@ -1544,22 +1550,29 @@ test_msg_store() ->
                     ([Guid|GuidsTail]) ->
                         {Guid, 0, GuidsTail}
                 end, Guids2ndHalf}),
+    MSCState5 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
+                                             undefined),
     %% check we have the right msgs left
     lists:foldl(
       fun (Guid, Bool) ->
-              not(Bool = rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid))
+              not(Bool = rabbit_msg_store:contains(Guid, MSCState5))
       end, false, Guids2ndHalf),
+    ok = rabbit_msg_store:client_terminate(MSCState5),
     %% restart empty
     restart_msg_store_empty(),
+    MSCState6 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
+                                             undefined),
     %% check we don't contain any of the msgs
-    false = msg_store_contains(false, Guids),
+    false = msg_store_contains(false, Guids, MSCState6),
     %% publish the first half again
-    MSCState8 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref),
-    {ok, MSCState9} = msg_store_write(Guids1stHalf, MSCState8),
+    ok = msg_store_write(Guids1stHalf, MSCState6),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
-           msg_store_read(Guids1stHalf, MSCState9), ?PERSISTENT_MSG_STORE),
-    ok = rabbit_msg_store:remove(?PERSISTENT_MSG_STORE, Guids1stHalf),
+           msg_store_read(Guids1stHalf, MSCState6)),
+    MSCState7 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
+                                             undefined),
+    ok = rabbit_msg_store:remove(Guids1stHalf, MSCState7),
+    ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse guids
     %% push a lot of msgs in... at least 100 files worth
@@ -1568,31 +1581,39 @@ test_msg_store() ->
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
     GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
-    ok = foreach_with_msg_store_client(
+    ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MsgStore, MSCStateM) ->
-                   {ok, MSCStateN} = rabbit_msg_store:write(
-                                       MsgStore, Guid, Payload, MSCStateM),
-                   MSCStateN
-           end, GuidsBig),
+           fun (MSCStateM) ->
+                   [ok = rabbit_msg_store:write(Guid, Payload, MSCStateM) ||
+                       Guid <- GuidsBig],
+                   MSCStateM
+           end),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MsgStore, MSCStateM) ->
+           fun (Guid, MSCStateM) ->
                    {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
-                                                  MsgStore, Guid, MSCStateM),
+                                                  Guid, MSCStateM),
                    MSCStateN
            end, GuidsBig),
     %% .., then 3s by 1...
-    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
+                          [guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
     %% .., then remove 3s by 2, from the young end first. This hits
     %% GC (under 50% good data left, but no empty files. Must GC).
-    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
+                          [guid_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
     %% .., then remove 3s by 3, from the young end first. This hits
     %% GC...
-    ok = msg_store_remove([guid_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
+                          [guid_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
     %% ensure empty
-    false = msg_store_contains(false, GuidsBig),
+    ok = with_msg_store_client(
+           ?PERSISTENT_MSG_STORE, Ref,
+           fun (MSCStateM) ->
+                   false = msg_store_contains(false, GuidsBig, MSCStateM),
+                   MSCStateM
+           end),
     %% restart empty
     restart_msg_store_empty(),
     passed.
@@ -1604,11 +1625,19 @@ test_queue() ->
     queue_name(<<"test">>).
 
 init_test_queue() ->
-    rabbit_queue_index:init(
-      test_queue(), true, false,
-      fun (Guid) ->
-              rabbit_msg_store:contains(?PERSISTENT_MSG_STORE, Guid)
-      end).
+    TestQueue = test_queue(),
+    Terms = rabbit_queue_index:shutdown_terms(TestQueue),
+    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:guid()),
+    PersistentClient = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE,
+                                                    PRef, undefined),
+    Res = rabbit_queue_index:recover(
+            TestQueue, Terms, false,
+            fun (Guid) ->
+                    rabbit_msg_store:contains(Guid, PersistentClient)
+            end,
+            fun nop/1),
+    ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
+    Res.
 
 restart_test_queue(Qi) ->
     _ = rabbit_queue_index:terminate([], Qi),
@@ -1619,13 +1648,13 @@ restart_test_queue(Qi) ->
 empty_test_queue() ->
     ok = rabbit_variable_queue:stop(),
     ok = rabbit_variable_queue:start([]),
-    {0, _Terms, Qi} = init_test_queue(),
+    {0, Qi} = init_test_queue(),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
 
 with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
-    {0, _Terms, Qi} = init_test_queue(),
+    {0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
@@ -1634,28 +1663,43 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
                end,
-    {A, B, MSCStateEnd} =
+    MSCState = rabbit_msg_store:client_init(MsgStore, Ref, undefined),
+    {A, B} =
         lists:foldl(
-          fun (SeqId, {QiN, SeqIdsGuidsAcc, MSCStateN}) ->
+          fun (SeqId, {QiN, SeqIdsGuidsAcc}) ->
                   Guid = rabbit_guid:guid(),
                   QiM = rabbit_queue_index:publish(
-                          Guid, SeqId, Persistent, QiN),
-                  {ok, MSCStateM} = rabbit_msg_store:write(MsgStore, Guid,
-                                                           Guid, MSCStateN),
-                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc], MSCStateM}
-          end, {Qi, [], rabbit_msg_store:client_init(MsgStore, Ref)}, SeqIds),
-    ok = rabbit_msg_store:client_delete_and_terminate(
-           MSCStateEnd, MsgStore, Ref),
+                          Guid, SeqId, #message_properties{}, Persistent, QiN),
+                  ok = rabbit_msg_store:write(Guid, Guid, MSCState),
+                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc]}
+          end, {Qi, []}, SeqIds),
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{Guid, SeqId, Persistent, Delivered}|Read],
+                           [{Guid, SeqId, _Props, Persistent, Delivered}|Read],
                            [{SeqId, Guid}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
+
+test_queue_index_props() ->
+    with_empty_test_queue(
+      fun(Qi0) ->
+              Guid = rabbit_guid:guid(),
+              Props = #message_properties{expiry=12345},
+              Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
+              {[{Guid, 1, Props, _, _}], Qi2} =
+                  rabbit_queue_index:read(1, 2, Qi1),
+              Qi2
+      end),
+
+    ok = rabbit_variable_queue:stop(),
+    ok = rabbit_variable_queue:start([]),
+
+    passed.
 
 test_queue_index() ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -1675,7 +1719,7 @@ test_queue_index() ->
               ok = verify_read_with_published(false, false, ReadA,
                                               lists:reverse(SeqIdsGuidsA)),
               %% should get length back as 0, as all the msgs were transient
-              {0, _Terms1, Qi6} = restart_test_queue(Qi4),
+              {0, Qi6} = restart_test_queue(Qi4),
               {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
               {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
@@ -1684,7 +1728,7 @@ test_queue_index() ->
                                               lists:reverse(SeqIdsGuidsB)),
               %% should get length back as MostOfASegment
               LenB = length(SeqIdsB),
-              {LenB, _Terms2, Qi12} = restart_test_queue(Qi10),
+              {LenB, Qi12} = restart_test_queue(Qi10),
               {0, TwoSegs, Qi13} = rabbit_queue_index:bounds(Qi12),
               Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
               {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
@@ -1696,7 +1740,7 @@ test_queue_index() ->
               {0, 0, Qi18} = rabbit_queue_index:bounds(Qi17),
               %% should get length back as 0 because all persistent
               %% msgs have been acked
-              {0, _Terms3, Qi19} = restart_test_queue(Qi18),
+              {0, Qi19} = restart_test_queue(Qi18),
               Qi19
       end),
 
@@ -1768,11 +1812,11 @@ test_queue_index() ->
                                                          true, Qi0),
               Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
               Qi3 = rabbit_queue_index:ack([0], Qi2),
-              {5, _Terms9, Qi4} = restart_test_queue(Qi3),
+              {5, Qi4} = restart_test_queue(Qi3),
               {Qi5, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi4),
               Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
               Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
-              {5, _Terms10, Qi8} = restart_test_queue(Qi7),
+              {5, Qi8} = restart_test_queue(Qi7),
               Qi8
       end),
 
@@ -1790,7 +1834,8 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
                                                        true  -> 2;
                                                        false -> 1
-                                                   end}, <<>>), VQN)
+                                                   end}, <<>>),
+                #message_properties{}, VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -1810,7 +1855,8 @@ assert_props(List, PropVals) ->
 
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
-    VQ = rabbit_variable_queue:init(test_queue(), true, false),
+    VQ = rabbit_variable_queue:init(test_queue(), true, false,
+                                    fun nop/1, fun nop/1),
     S0 = rabbit_variable_queue:status(VQ),
     assert_props(S0, [{q1, 0}, {q2, 0},
                       {delta, {delta, undefined, 0, undefined}},
@@ -1824,8 +1870,70 @@ test_variable_queue() ->
         F <- [fun test_variable_queue_dynamic_duration_change/1,
               fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
-              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1]],
+              fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
+              fun test_dropwhile/1,
+              fun test_variable_queue_ack_limiting/1]],
     passed.
+
+test_variable_queue_ack_limiting(VQ0) ->
+    %% start by sending in a bunch of messages
+    Len = 1024,
+    VQ1 = variable_queue_publish(false, Len, VQ0),
+
+    %% squeeze and relax queue
+    Churn = Len div 32,
+    VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
+
+    %% update stats for duration
+    {_Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
+
+    %% fetch half the messages
+    {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
+
+    VQ5 = check_variable_queue_status(VQ4, [{len          , Len div 2},
+                                            {ram_ack_count, Len div 2},
+                                            {ram_msg_count, Len div 2}]),
+
+    %% ensure all acks go to disk on 0 duration target
+    VQ6 = check_variable_queue_status(
+            rabbit_variable_queue:set_ram_duration_target(0, VQ5),
+            [{len, Len div 2},
+             {target_ram_item_count, 0},
+             {ram_msg_count, 0},
+             {ram_ack_count, 0}]),
+
+    VQ6.
+
+test_dropwhile(VQ0) ->
+    Count = 10,
+
+    %% add messages with sequential expiry
+    VQ1 = lists:foldl(
+            fun (N, VQN) ->
+                    rabbit_variable_queue:publish(
+                      rabbit_basic:message(
+                        rabbit_misc:r(<<>>, exchange, <<>>),
+                        <<>>, #'P_basic'{}, <<>>),
+                      #message_properties{expiry = N}, VQN)
+            end, VQ0, lists:seq(1, Count)),
+
+    %% drop the first 5 messages
+    VQ2 = rabbit_variable_queue:dropwhile(
+            fun(#message_properties { expiry = Expiry }) ->
+                    Expiry =< 5
+            end, VQ1),
+
+    %% fetch five now
+    VQ3 = lists:foldl(fun (_N, VQN) ->
+                              {{#basic_message{}, _, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch(false, VQN),
+                              VQM
+                      end, VQ2, lists:seq(6, Count)),
+
+    %% should be empty now
+    {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
+
+    VQ4.
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -1833,10 +1941,10 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
     %% start by sending in a couple of segments worth
     Len = 2*SegmentSize,
     VQ1 = variable_queue_publish(false, Len, VQ0),
-
     %% squeeze and relax queue
     Churn = Len div 32,
     VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
+
     {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
     VQ7 = lists:foldl(
             fun (Duration1, VQ4) ->
@@ -1850,7 +1958,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
 
     %% drain
     {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags, VQ8),
+    {_, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
     VQ10.
@@ -1860,7 +1968,8 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
-    publish_fetch_and_ack(N-1, Len, rabbit_variable_queue:ack([AckTag], VQ2)).
+    {_, VQ3} = rabbit_variable_queue:ack([AckTag], VQ2),
+    publish_fetch_and_ack(N-1, Len, VQ3).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -1893,7 +2002,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
+    {_, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
     %% should be empty now
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
     VQ10.
@@ -1922,7 +2031,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
+    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
+                                     fun nop/1, fun nop/1),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
     VQ9 = variable_queue_publish(false, 1, VQ8),
@@ -1935,10 +2045,11 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(false, 4, VQ1),
     {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
-    VQ4 = rabbit_variable_queue:requeue(AckTags, VQ3),
+    VQ4 = rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
     VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true),
+    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
+                                     fun nop/1, fun nop/1),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
@@ -1968,10 +2079,66 @@ test_queue_recover() ->
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
-              VQ1 = rabbit_variable_queue:init(QName, true, true),
+              VQ1 = rabbit_variable_queue:init(QName, true, true,
+                                               fun nop/1, fun nop/1),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.
+
+test_configurable_server_properties() ->
+    %% List of the names of the built-in properties do we expect to find
+    BuiltInPropNames = [<<"product">>, <<"version">>, <<"platform">>,
+                        <<"copyright">>, <<"information">>],
+
+    %% Verify that the built-in properties are initially present
+    ActualPropNames = [Key ||
+                         {Key, longstr, _} <- rabbit_reader:server_properties()],
+    true = lists:all(fun (X) -> lists:member(X, ActualPropNames) end,
+                     BuiltInPropNames),
+
+    %% Get the initial server properties configured in the environment
+    {ok, ServerProperties} = application:get_env(rabbit, server_properties),
+
+    %% Helper functions
+    ConsProp = fun (X) -> application:set_env(rabbit,
+                                              server_properties,
+                                              [X | ServerProperties]) end,
+    IsPropPresent = fun (X) -> lists:member(X,
+                                            rabbit_reader:server_properties())
+                    end,
+
+    %% Add a wholly new property of the simplified {KeyAtom, StringValue} form
+    NewSimplifiedProperty = {NewHareKey, NewHareVal} = {hare, "soup"},
+    ConsProp(NewSimplifiedProperty),
+    %% Do we find hare soup, appropriately formatted in the generated properties?
+    ExpectedHareImage = {list_to_binary(atom_to_list(NewHareKey)),
+                         longstr,
+                         list_to_binary(NewHareVal)},
+    true = IsPropPresent(ExpectedHareImage),
+
+    %% Add a wholly new property of the {BinaryKey, Type, Value} form
+    %% and check for it
+    NewProperty = {<<"new-bin-key">>, signedint, -1},
+    ConsProp(NewProperty),
+    %% Do we find the new property?
+    true = IsPropPresent(NewProperty),
+
+    %% Add a property that clobbers a built-in, and verify correct clobbering
+    {NewVerKey, NewVerVal} = NewVersion = {version, "X.Y.Z."},
+    {BinNewVerKey, BinNewVerVal} = {list_to_binary(atom_to_list(NewVerKey)),
+                                    list_to_binary(NewVerVal)},
+    ConsProp(NewVersion),
+    ClobberedServerProps = rabbit_reader:server_properties(),
+    %% Is the clobbering insert present?
+    true = IsPropPresent({BinNewVerKey, longstr, BinNewVerVal}),
+    %% Is the clobbering insert the only thing with the clobbering key?
+    [{BinNewVerKey, longstr, BinNewVerVal}] =
+        [E || {K, longstr, _V} = E <- ClobberedServerProps, K =:= BinNewVerKey],
+
+    application:set_env(rabbit, server_properties, ServerProperties),
+    passed.
+
+nop(_) -> ok.

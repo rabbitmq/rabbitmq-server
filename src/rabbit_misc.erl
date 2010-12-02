@@ -50,7 +50,7 @@
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
--export([intersperse/2, upmap/2, map_in_order/2]).
+-export([upmap/2, map_in_order/2]).
 -export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
@@ -61,9 +61,12 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+-export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
+-export([all_module_attributes/1, build_acyclic_graph/3]).
+-export([now_ms/0]).
+-export([lock_file/1]).
 
 -import(mnesia).
 -import(lists).
@@ -82,6 +85,11 @@
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
+-type(digraph_label() :: term()).
+-type(graph_vertex_fun() ::
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
+-type(graph_edge_fun() ::
+        fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -128,8 +136,8 @@
 -spec(enable_cover/0 :: () -> ok_or_error()).
 -spec(start_cover/1 :: ([{string(), string()} | string()]) -> 'ok').
 -spec(report_cover/0 :: () -> 'ok').
--spec(enable_cover/1 :: (file:filename()) -> ok_or_error()).
--spec(report_cover/1 :: (file:filename()) -> 'ok').
+-spec(enable_cover/1 :: ([file:filename() | atom()]) -> ok_or_error()).
+-spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
@@ -147,7 +155,6 @@
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
--spec(intersperse/2 :: (A, [A]) -> [A]).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
@@ -177,13 +184,24 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(dict_cons/3 :: (any(), any(), dict:dictionary()) ->
-                          dict:dictionary()).
--spec(orddict_cons/3 :: (any(), any(), orddict:dictionary()) ->
-                             orddict:dictionary()).
+-spec(recursive_copy/2 ::
+        (file:filename(), file:filename())
+        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
+-spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
+-spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
+-spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
+-spec(build_acyclic_graph/3 ::
+        (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
+        -> rabbit_types:ok_or_error2(digraph(),
+                                     {'vertex', 'duplicate', digraph:vertex()} |
+                                     {'edge', ({bad_vertex, digraph:vertex()} |
+                                               {bad_edge, [digraph:vertex()]}),
+                                      digraph:vertex(), digraph:vertex()})).
+-spec(now_ms/0 :: () -> non_neg_integer()).
+-spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 
 -endif.
 
@@ -229,7 +247,7 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
     case {table_lookup(Orig, Key), table_lookup(New, Key)} of
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
-                           not_allowed,
+                           precondition_failed,
                            "inequivalent arg '~s' for ~s:  "
                            "required ~w, received ~w",
                            [Key, rabbit_misc:rs(Name), New1, Orig1])
@@ -268,29 +286,30 @@ rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
                                 [Kind, Name, VHostPath])).
 
-enable_cover() ->
-    enable_cover(".").
+enable_cover() -> enable_cover(["."]).
 
-enable_cover([Root]) when is_atom(Root) ->
-    enable_cover(atom_to_list(Root));
-enable_cover(Root) ->
-    case cover:compile_beam_directory(filename:join(Root, "ebin")) of
-        {error,Reason} -> {error,Reason};
-        _ -> ok
-    end.
+enable_cover(Dirs) ->
+    lists:foldl(fun (Dir, ok) ->
+                        case cover:compile_beam_directory(
+                               filename:join(lists:concat([Dir]),"ebin")) of
+                            {error, _} = Err -> Err;
+                            _                -> ok
+                        end;
+                    (_Dir, Err) ->
+                        Err
+                end, ok, Dirs).
 
 start_cover(NodesS) ->
     {ok, _} = cover:start([makenode(N) || N <- NodesS]),
     ok.
 
-report_cover() ->
-    report_cover(".").
+report_cover() -> report_cover(["."]).
 
-report_cover([Root]) when is_atom(Root) ->
-    report_cover(atom_to_list(Root));
-report_cover(Root) ->
+report_cover(Dirs) -> [report_cover1(lists:concat([Dir])) || Dir <- Dirs], ok.
+
+report_cover1(Root) ->
     Dir = filename:join(Root, "cover"),
-    ok = filelib:ensure_dir(filename:join(Dir,"junk")),
+    ok = filelib:ensure_dir(filename:join(Dir, "junk")),
     lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
     {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
@@ -401,10 +420,6 @@ tcp_name(Prefix, IPAddress, Port)
       lists:flatten(
         io_lib:format("~w_~s:~w",
                       [Prefix, inet_parse:ntoa(IPAddress), Port]))).
-
-intersperse(_, []) -> [];
-intersperse(_, [E]) -> [E];
-intersperse(Sep, [E|T]) -> [E, Sep | intersperse(Sep, T)].
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
@@ -677,6 +692,33 @@ recursive_delete1(Path) ->
                  end
     end.
 
+recursive_copy(Src, Dest) ->
+    case filelib:is_dir(Src) of
+        false -> case file:copy(Src, Dest) of
+                     {ok, _Bytes}    -> ok;
+                     {error, enoent} -> ok; %% Path doesn't exist anyway
+                     {error, Err}    -> {error, {Src, Dest, Err}}
+                 end;
+        true  -> case file:list_dir(Src) of
+                     {ok, FileNames} ->
+                         case file:make_dir(Dest) of
+                             ok ->
+                                 lists:foldl(
+                                   fun (FileName, ok) ->
+                                           recursive_copy(
+                                             filename:join(Src, FileName),
+                                             filename:join(Dest, FileName));
+                                       (_FileName, Error) ->
+                                           Error
+                                   end, ok, FileNames);
+                             {error, Err} ->
+                                 {error, {Src, Dest, Err}}
+                         end;
+                     {error, Err} ->
+                         {error, {Src, Dest, Err}}
+                 end
+    end.
+
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
@@ -721,3 +763,62 @@ get_flag(K, [Nk | As]) ->
     {[Nk | As1], V};
 get_flag(_, []) ->
     {[], false}.
+
+now_ms() ->
+    timer:now_diff(now(), {0,0,0}) div 1000.
+
+module_attributes(Module) ->
+    case catch Module:module_info(attributes) of
+        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+            io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
+                      [Module]),
+            [];
+        {'EXIT', Reason} ->
+            exit(Reason);
+        V ->
+            V
+    end.
+
+all_module_attributes(Name) ->
+    Modules =
+        lists:usort(
+          lists:append(
+            [Modules || {App, _, _}   <- application:loaded_applications(),
+                        {ok, Modules} <- [application:get_key(App, modules)]])),
+    lists:foldl(
+      fun (Module, Acc) ->
+              case lists:append([Atts || {N, Atts} <- module_attributes(Module),
+                                         N =:= Name]) of
+                  []   -> Acc;
+                  Atts -> [{Module, Atts} | Acc]
+              end
+      end, [], Modules).
+
+
+build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
+    G = digraph:new([acyclic]),
+    try
+        [case digraph:vertex(G, Vertex) of
+             false -> digraph:add_vertex(G, Vertex, Label);
+             _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
+         end || {Module, Atts}  <- Graph,
+                {Vertex, Label} <- VertexFun(Module, Atts)],
+        [case digraph:add_edge(G, From, To) of
+             {error, E} -> throw({graph_error, {edge, E, From, To}});
+             _          -> ok
+         end || {Module, Atts} <- Graph,
+                {From, To}     <- EdgeFun(Module, Atts)],
+        {ok, G}
+    catch {graph_error, Reason} ->
+            true = digraph:delete(G),
+            {error, Reason}
+    end.
+
+%% TODO: When we stop supporting Erlang prior to R14, this should be
+%% replaced with file:open [write, exclusive]
+lock_file(Path) ->
+    case filelib:is_file(Path) of
+        true  -> {error, eexist};
+        false -> {ok, Lock} = file:open(Path, [write]),
+                 ok = file:close(Lock)
+    end.

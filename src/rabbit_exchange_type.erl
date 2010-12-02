@@ -36,7 +36,7 @@
 behaviour_info(callbacks) ->
     [
      {description, 0},
-     {publish, 2},
+     {route, 2},
 
      %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
      {validate, 1},

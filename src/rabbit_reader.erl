@@ -45,10 +45,6 @@
 
 -export([emit_stats/1]).
 
--import(gen_tcp).
--import(inet).
--import(prim_inet).
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
@@ -65,7 +61,9 @@
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
 
--define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port,
+-define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
+                              peer_cert_subject, peer_cert_issuer,
+                              peer_cert_validity,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
@@ -160,28 +158,25 @@
 
 -ifdef(use_specs).
 
--type(start_heartbeat_fun() ::
-        fun ((rabbit_networking:socket(), non_neg_integer()) ->
-                    rabbit_heartbeat:heartbeaters())).
-
--spec(start_link/3 :: (pid(), pid(), start_heartbeat_fun()) ->
+-spec(start_link/3 :: (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun()) ->
                            rabbit_types:ok(pid())).
--spec(info_keys/0 :: () -> [rabbit_types:info_key()]).
--spec(info/1 :: (pid()) -> [rabbit_types:info()]).
--spec(info/2 :: (pid(), [rabbit_types:info_key()]) -> [rabbit_types:info()]).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/1 :: (pid()) -> rabbit_types:infos()).
+-spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/4 :: (pid(), pid(), pid(), start_heartbeat_fun()) -> no_return()).
+-spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
+                -> no_return()).
 -spec(start_connection/7 ::
-        (pid(), pid(), pid(), start_heartbeat_fun(), any(),
-         rabbit_networking:socket(),
-         fun ((rabbit_networking:socket()) ->
+        (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun(), any(),
+         rabbit_net:socket(),
+         fun ((rabbit_net:socket()) ->
                      rabbit_types:ok_or_error2(
-                       rabbit_networking:socket(), any()))) -> no_return()).
+                       rabbit_net:socket(), any()))) -> no_return()).
 
 -endif.
 
@@ -233,12 +228,29 @@ conserve_memory(Pid, Conserve) ->
 server_properties() ->
     {ok, Product} = application:get_key(rabbit, id),
     {ok, Version} = application:get_key(rabbit, vsn),
-    [{list_to_binary(K), longstr, list_to_binary(V)} ||
-        {K, V} <- [{"product",     Product},
-                   {"version",     Version},
-                   {"platform",    "Erlang/OTP"},
-                   {"copyright",   ?COPYRIGHT_MESSAGE},
-                   {"information", ?INFORMATION_MESSAGE}]].
+
+    %% Get any configuration-specified server properties
+    {ok, RawConfigServerProps} = application:get_env(rabbit,
+                                                     server_properties),
+
+    %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
+    %% from the config and merge them with the generated built-in properties
+    NormalizedConfigServerProps =
+        [case X of
+             {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
+                                  longstr,
+                                  list_to_binary(Value)};
+             {BinKey, Type, Value} -> {BinKey, Type, Value}
+         end || X <- RawConfigServerProps ++
+                    [{product,     Product},
+                     {version,     Version},
+                     {platform,    "Erlang/OTP"},
+                     {copyright,   ?COPYRIGHT_MESSAGE},
+                     {information, ?INFORMATION_MESSAGE}]],
+
+    %% Filter duplicated properties in favor of config file provided values
+    lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
+                NormalizedConfigServerProps).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -306,13 +318,10 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     done.
 
 mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
-    %%?LOGDEBUG("Reader mainloop: ~p bytes available, need ~p~n", [HaveBytes, WaitUntilNBytes]),
     receive
         {inet_async, Sock, Ref, {ok, Data}} ->
-            {State1, Callback1, Length1} =
-                handle_input(State#v1.callback, Data,
-                             State#v1{recv_ref = none}),
-            mainloop(Deb, switch_callback(State1, Callback1, Length1));
+            mainloop(Deb, handle_input(State#v1.callback, Data,
+                                       State#v1{recv_ref = none}));
         {inet_async, Sock, Ref, {error, closed}} ->
             if State#v1.connection_state =:= closed ->
                     State;
@@ -552,7 +561,6 @@ handle_frame(Type, Channel, Payload,
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
-            %%?LOGDEBUG("Ch ~p Frame ~p~n", [Channel, AnalyzedFrame]),
             case get({channel, Channel}) of
                 {ch_fr_pid, ChFrPid} ->
                     ok = rabbit_framing_channel:process(ChFrPid, AnalyzedFrame),
@@ -582,8 +590,9 @@ handle_frame(Type, Channel, Payload,
                             %% We're already closing this channel, so
                             %% there's no cleanup to do (notify
                             %% queues, etc.)
-                            ok = rabbit_writer:send_command(State#v1.sock,
-                                                            #'channel.close_ok'{});
+                            ok = rabbit_writer:internal_send_command(
+                                   State#v1.sock, Channel,
+                                   #'channel.close_ok'{}, Protocol);
                         _ -> ok
                     end,
                     State;
@@ -616,18 +625,18 @@ analyze_frame(_Type, _Body, _Protocol) ->
     error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
-    %%?LOGDEBUG("Got frame header: ~p/~p/~p~n", [Type, Channel, PayloadSize]),
-    {ensure_stats_timer(State), {frame_payload, Type, Channel, PayloadSize},
-     PayloadSize + 1};
+    ensure_stats_timer(
+      switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
+                      PayloadSize + 1));
 
-handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker, State) ->
+handle_input({frame_payload, Type, Channel, PayloadSize},
+             PayloadAndMarker, State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            %%?LOGDEBUG("Frame completed: ~p/~p/~p~n", [Type, Channel, Payload]),
-            NewState = handle_frame(Type, Channel, Payload, State),
-            {NewState, frame_header, 7};
+            handle_frame(Type, Channel, Payload,
+                         switch_callback(State, frame_header, 7));
         _ ->
-            throw({bad_payload, PayloadAndMarker})
+            throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
 
 %% The two rules pertaining to version negotiation:
@@ -678,11 +687,11 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                                  mechanisms = <<"PLAIN AMQPLAIN">>,
                                  locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
-    {State#v1{connection = Connection#connection{
-                             timeout_sec = ?NORMAL_TIMEOUT,
-                             protocol = Protocol},
-              connection_state = starting},
-     frame_header, 7}.
+    switch_callback(State#v1{connection = Connection#connection{
+                                            timeout_sec = ?NORMAL_TIMEOUT,
+                                            protocol = Protocol},
+                             connection_state = starting},
+                    frame_header, 7).
 
 refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
@@ -752,7 +761,19 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            Heartbeater = SHF(Sock, ClientHeartbeat),
+            SendFun =
+                fun() ->
+                        Frame = rabbit_binary_generator:build_heartbeat_frame(),
+                        catch rabbit_net:send(Sock, Frame)
+                end,
+
+            Parent = self(),
+            ReceiveFun =
+                fun() ->
+                        Parent ! timeout
+                end,
+            Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
+                              ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
                      connection = Connection#connection{
                                     timeout_sec = ClientHeartbeat,
@@ -813,27 +834,28 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid, #v1{}) ->
     self();
 i(address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:sockname(Sock),
-    A;
+    socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:sockname(Sock),
-    P;
+    socket_info(fun rabbit_net:sockname/1, fun ({_, P}) -> P end, Sock);
 i(peer_address, #v1{sock = Sock}) ->
-    {ok, {A, _}} = rabbit_net:peername(Sock),
-    A;
+    socket_info(fun rabbit_net:peername/1, fun ({A, _}) -> A end, Sock);
 i(peer_port, #v1{sock = Sock}) ->
-    {ok, {_, P}} = rabbit_net:peername(Sock),
-    P;
+    socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
+i(ssl, #v1{sock = Sock}) ->
+    rabbit_net:is_ssl(Sock);
+i(peer_cert_issuer, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
+i(peer_cert_subject, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_subject/1, Sock);
+i(peer_cert_validity, #v1{sock = Sock}) ->
+    cert_info(fun rabbit_ssl:peer_cert_validity/1, Sock);
 i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= recv_cnt;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{SockStat, StatVal}]} -> StatVal;
-        {error, einval}             -> undefined;
-        {error, Error}              -> throw({cannot_get_socket_stats, Error})
-    end;
+    socket_info(fun () -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end);
 i(state, #v1{connection_state = S}) ->
     S;
 i(channels, #v1{}) ->
@@ -857,6 +879,22 @@ i(client_properties, #v1{connection = #connection{
     ClientProperties;
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
+
+socket_info(Get, Select, Sock) ->
+    socket_info(fun() -> Get(Sock) end, Select).
+
+socket_info(Get, Select) ->
+    case Get() of
+        {ok,    T} -> Select(T);
+        {error, _} -> ''
+    end.
+
+cert_info(F, Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl                -> '';
+        {error, no_peercert} -> '';
+        {ok, Cert}           -> list_to_binary(F(Cert))
+    end.
 
 %%--------------------------------------------------------------------------
 
@@ -891,7 +929,7 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
 send_exception(State = #v1{connection = #connection{protocol = Protocol}},
                Channel, Reason) ->
     {ShouldClose, CloseChannel, CloseMethod} =
-        map_exception(Channel, Reason, Protocol),
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     NewState = case ShouldClose of
                    true  -> terminate_channels(),
                             close_connection(State);
@@ -900,47 +938,6 @@ send_exception(State = #v1{connection = #connection{protocol = Protocol}},
     ok = rabbit_writer:internal_send_command(
            NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
     NewState.
-
-map_exception(Channel, Reason, Protocol) ->
-    {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason, Protocol),
-    ShouldClose = SuggestedClose or (Channel == 0),
-    {ClassId, MethodId} = case FailedMethod of
-                              {_, _} -> FailedMethod;
-                              none   -> {0, 0};
-                              _      -> Protocol:method_id(FailedMethod)
-                          end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true -> {0, #'connection.close'{reply_code = ReplyCode,
-                                            reply_text = ReplyText,
-                                            class_id = ClassId,
-                                            method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
-
-lookup_amqp_exception(#amqp_error{name        = Name,
-                                  explanation = Expl,
-                                  method      = Method},
-                      Protocol) ->
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
-    ExplBin = amqp_exception_explanation(Text, Expl),
-    {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other, Protocol) ->
-    rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
-    {ShouldClose, Code, Text, none}.
-
-amqp_exception_explanation(Text, Expl) ->
-    ExplBin = list_to_binary(Expl),
-    CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
-       true                        -> CompleteTextBin
-    end.
 
 internal_emit_stats(State = #v1{stats_timer = StatsTimer}) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),

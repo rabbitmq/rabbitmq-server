@@ -29,37 +29,36 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(delegate_sup).
+%% TODO auto-generate
 
--behaviour(supervisor).
-
--export([start_link/0]).
-
--export([init/1]).
-
--define(SERVER, ?MODULE).
-
-%%----------------------------------------------------------------------------
+-module(rabbit_framing).
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-export_type([protocol/0,
+              amqp_field_type/0, amqp_property_type/0,
+              amqp_table/0, amqp_array/0, amqp_value/0,
+              amqp_method_name/0, amqp_method/0, amqp_method_record/0,
+              amqp_method_field_name/0, amqp_property_record/0,
+              amqp_exception/0, amqp_exception_code/0, amqp_class_id/0]).
+
+-type(protocol() :: 'rabbit_framing_amqp_0_8' | 'rabbit_framing_amqp_0_9_1').
+
+-define(protocol_type(T), type(T :: rabbit_framing_amqp_0_8:T |
+                                    rabbit_framing_amqp_0_9_1:T)).
+
+-?protocol_type(amqp_field_type()).
+-?protocol_type(amqp_property_type()).
+-?protocol_type(amqp_table()).
+-?protocol_type(amqp_array()).
+-?protocol_type(amqp_value()).
+-?protocol_type(amqp_method_name()).
+-?protocol_type(amqp_method()).
+-?protocol_type(amqp_method_record()).
+-?protocol_type(amqp_method_field_name()).
+-?protocol_type(amqp_property_record()).
+-?protocol_type(amqp_exception()).
+-?protocol_type(amqp_exception_code()).
+-?protocol_type(amqp_class_id()).
 
 -endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    {ok, {{one_for_one, 10, 10}, specs(incoming) ++ specs(outgoing)}}.
-
-specs(Prefix) ->
-    [{{Prefix, Hash}, {delegate, start_link, [Prefix, Hash]},
-      transient, 16#ffffffff, worker, [delegate]} ||
-        Hash <- lists:seq(0, delegate:process_count() - 1)].
-
-%%----------------------------------------------------------------------------
