@@ -103,9 +103,16 @@
 %% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
 %% apparently, by OpenAMQ.
 check_login(<<"PLAIN">>, Response) ->
-    [User, Pass] = [list_to_binary(T) ||
-                       T <- string:tokens(binary_to_list(Response), [0])],
-    user_pass_login(User, Pass);
+    case re:run(Response, "\\0([^\\0]*)", [{capture, all_but_first, binary},
+                                           global]) of
+        {match, [[User],[Pass]]} ->
+            user_pass_login(User, Pass);
+        _ ->
+            rabbit_misc:protocol_error(
+              access_refused, "login refused, response '~p' invalid",
+              [Response])
+    end;
+
 %% AMQPLAIN, as used by Qpid Python test suite. The 0-8 spec actually
 %% defines this as PLAIN, but in 0-9 that definition is gone, instead
 %% referring generically to "SASL security mechanism", i.e. the above.
