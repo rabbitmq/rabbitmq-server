@@ -109,7 +109,7 @@ check_login(<<"PLAIN">>, Response) ->
             user_pass_login(User, Pass);
         _ ->
             rabbit_misc:protocol_error(
-              access_refused, "login refused, response '~p' invalid",
+              access_refused, "login refused, response ~p invalid",
               [Response])
     end;
 
