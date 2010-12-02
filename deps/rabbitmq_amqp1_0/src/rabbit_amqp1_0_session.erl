@@ -82,6 +82,7 @@ init([Channel, ReaderPid, WriterPid]) ->
 terminate(_Reason, #session{ backing_connection = Conn,
                              backing_channel    = Ch}) ->
     amqp_channel:close(Ch),
+    %% TODO: closing the connection here leads to errors in the logs
     amqp_connection:close(Conn),
     ok.
 
