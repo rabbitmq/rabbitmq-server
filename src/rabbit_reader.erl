@@ -713,11 +713,12 @@ handle_method0(MethodName, FieldsBin,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
                        State)
-    catch exit:Reason ->
+    catch Type:Reason ->
             CompleteReason = case Reason of
                                  #amqp_error{method = none} ->
                                      Reason#amqp_error{method = MethodName};
-                                 OtherReason -> OtherReason
+                                 OtherReason -> {Type, OtherReason,
+                                                 erlang:get_stacktrace()}
                              end,
             case ?IS_RUNNING(State) of
                 true  -> send_exception(State, 0, CompleteReason);
