@@ -69,7 +69,6 @@ process_frame(Pid, Frame) ->
 %% ---------
 
 init([Channel, ReaderPid, WriterPid]) ->
-    process_flag(trap_exit, true),
     %% TODO pass through authentication information
     {ok, Conn} = amqp_connection:start(direct),
     {ok, Ch} = amqp_connection:open_channel(Conn),
