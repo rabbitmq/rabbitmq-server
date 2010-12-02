@@ -727,7 +727,7 @@ handle_method0(MethodName, FieldsBin,
     catch exit:#amqp_error{method = none} = Reason ->
             HandleException(Reason#amqp_error{method = MethodName});
           Type:Reason ->
-            HandleException({Type, Reason, erlang:get_stacktrace()})
+            HandleException({Type, Reason, MethodName, erlang:get_stacktrace()})
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
