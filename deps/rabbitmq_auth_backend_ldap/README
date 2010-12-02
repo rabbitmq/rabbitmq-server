@@ -32,24 +32,17 @@ Configuring the plugin
 ======================
 
 You must then configure the plugin. This plugin has quite a few configuration
-options. Most have sensible-ish defaults. An example configuration file
-with all options specified might look like:
+options, but most have sensible defaults.
 
-[
-  {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
-  {rabbit_auth_backend_ldap,
-   [ {servers,               ["my-ldap-server"]},
-     {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
-     {vhost_access_query,    {exists,
-                              "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
-     {resource_access_query, {constant, true}},
-     {is_admin_query,        {constant, false}},
-     {use_ssl,               false},
-     {port,                  389},
-     {log,                   false} ] }
-].
+The most complex part of configuring the plugin pertains to
+authorisation (i.e. granting permissions to your users via LDAP). This
+is documented separately in README-authorisation.
 
-The options are:
+The default configuration allows all users to access all objects in
+all vhosts, but does not make them administrators. If you're happy
+with that, there is no need to read README-authorisation.
+
+The options not related to authorisation are:
 
 servers
 -------
@@ -67,57 +60,6 @@ Default: "cn=${username},ou=People,dc=example,dc=com"
 Pattern for a user's DN. Must contain exactly one instance of
 "${username}". This will be where the username supplied by the client
 is substituted. You almost certainly want to change this.
-
-vhost_access_query
-------------------
-
-Default: {constant, true}
-
-resource_access_query
----------------------
-
-Default: {constant, true}
-
-is_admin_query
---------------
-
-Default: {constant, false}
-
-These three options define how authorisation works. Each defines a query that
-will determine whether a user has access to a vhost, a resource
-(e.g. exchange, queue, binding) or is considered an administrator.
-
-A query can be in one of two forms:
-
-  {constant, Bool}
-    This will always return either true or false. The default configuration
-    therefore allows all users to access all objects in all vhosts, but does
-    not make them administrators.
-
-  {exists, Pattern}
-    This will substitute variables into the pattern, and return true if there
-    exists an object with the resulting DN *which the user has permission to
-    read*. Substitution occurs with ${} syntax. The vhost_access_query in the
-    example configuration above therefore allows you to control access to
-    vhosts by controlling the read ACLs of OUs in a vhosts OU.
-
-    The different queries allow different substitutions:
-
-    vhost_access_query:      ${username}
-                             ${vhost}
-                             ${permission} (read, i.e. see it in the management
-                                            plugin, or write, i.e. log in)
-
-    resource_access_query:   ${username}
-                             ${vhost}
-                             ${resource} (i.e. exchange, queue, binding)
-                             ${name}
-                             ${permission} (i.e. configure, write, read)
-
-    is_admin_query:          ${username}
-
-  {for, Options}
-    TODO document lots with examples
 
 use_ssl
 -------
@@ -142,6 +84,22 @@ Default: false
 Set to true to cause LDAP traffic to be written to the RabbitMQ log. You
 probably only want to use this for debugging, especially since it will usually
 cause passwords to be written to the logs.
+
+Example configuration file
+==========================
+
+An example configuration file with some options specified might look
+like:
+
+[
+  {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
+  {rabbit_auth_backend_ldap,
+   [ {servers,               ["my-ldap-server"]},
+     {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
+     {use_ssl,               false},
+     {port,                  389},
+     {log,                   false} ] }
+].
 
 
 Limitations

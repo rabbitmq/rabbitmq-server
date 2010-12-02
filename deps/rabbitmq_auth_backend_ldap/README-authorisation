@@ -1,0 +1,110 @@
+Overview
+========
+
+Authorisation is effected by three configuration options:
+
+* vhost_access_query
+* resource_access_query
+* is_admin_query
+
+These three options define how authorisation works. Each defines a query that
+will determine whether a user has access to a vhost, a resource
+(e.g. exchange, queue, binding) or is considered an administrator.
+
+The default values are {constant, true}, {constant, true} and
+{constant, false}, granting all users access to all objects in all
+vhosts, but not making them administrators.
+
+A query can be of one of several types:
+
+Constant Query
+--------------
+
+{constant, Bool}
+
+This will always return either true or false, unconditionally granting
+or denying access.
+
+Exists Query
+------------
+
+{exists, Pattern}
+
+This will substitute variables into the pattern, and return true if
+there exists an object with the resulting DN *which the user has
+permission to read*. Substitution occurs with ${} syntax. The
+vhost_access_query in the example configuration below therefore allows
+you to control access to vhosts by controlling the read ACLs of OUs in
+a vhosts OU.
+
+Each of the three queries allow different substitutions:
+
+vhost_access_query:
+  ${username}
+  ${vhost}
+  ${permission} (read, meaning see it in the management plugin,
+                 or write, meaning log in)
+
+resource_access_query:
+  ${username}
+  ${vhost}
+  ${resource} (one of exchange, queue or binding)
+  ${name}
+  ${permission} (one of configure, write or read)
+
+The terms configure, write and read for resource access have the same
+meanings that they do for the built in RabbitMQ permissions system,
+see http://www.rabbitmq.com/admin-guide.html#access-control
+
+is_admin_query:
+  ${username}
+
+For Query
+---------
+
+{for, [{Name, Value, SubQuery}, ...]}
+
+This allows you to split up a query and handle different cases with
+different subqueries.
+
+Options should be a list of three-tuples, with each tuple containing a
+name, value and subquery. The name is the name of a variable
+(i.e. something that would go into a ${} substitution). The value is a
+possible value for that variable.
+
+So the rather artificail example:
+
+ {resource_access_query, {for,
+                          [{resource, exchange, {constant, true}},
+                           {resource, queue,    {constant, true}},
+                           {resource, binding,  {constant, false}}
+                          ]}}
+
+would allow all users full access to exchanges and queues, but not bindings.
+
+TODO better example
+
+Example Configuration
+=====================
+
+TODO improve and explain this
+
+[
+  {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
+  {rabbit_auth_backend_ldap,
+   [ {servers,               ["my-ldap-server"]},
+     {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
+     {vhost_access_query,    {exists,
+                              "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
+     {resource_access_query, {for,
+                              [{resource, exchange, {constant, true}},
+                               {resource, queue,    {constant, true}},
+                               {resource, binding,  {constant, true}}
+                              ]}},
+     {is_admin_query,        {constant, false}},
+     {use_ssl,               false},
+     {port,                  389},
+     {log,                   false} ] }
+].
+
+
