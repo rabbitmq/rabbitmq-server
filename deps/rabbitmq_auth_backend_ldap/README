@@ -13,7 +13,7 @@ Enabling the plugin
 
 To enable the plugin, set the value of the "auth_backends" configuration item
 for the "rabbit" application to include "rabbit_auth_backend_ldap".
-"auth_backends" is a list of authorisation providers to try in order.
+"auth_backends" is a list of authentication providers to try in order.
 
 Therefore a complete RabbitMQ configuration that enables this plugin would
 look like:
@@ -81,9 +81,9 @@ log
 
 Default: false
 
-Set to true to cause LDAP traffic to be written to the RabbitMQ log. You
-probably only want to use this for debugging, especially since it will usually
-cause passwords to be written to the logs.
+Set to true to cause LDAP traffic to be written to the RabbitMQ
+log. You probably only want to use this for debugging, since it will
+usually cause passwords to be written to the logs.
 
 Example configuration file
 ==========================

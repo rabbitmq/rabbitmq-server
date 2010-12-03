@@ -7,9 +7,9 @@ Authorisation is effected by three configuration options:
 * resource_access_query
 * is_admin_query
 
-These three options define how authorisation works. Each defines a query that
-will determine whether a user has access to a vhost, a resource
-(e.g. exchange, queue, binding) or is considered an administrator.
+Each defines a query that will determine whether a user has access to
+a vhost, a resource (e.g. exchange, queue, binding) or is considered
+an administrator.
 
 The default values are {constant, true}, {constant, true} and
 {constant, false}, granting all users access to all objects in all
@@ -53,7 +53,7 @@ resource_access_query:
   ${permission} (one of configure, write or read)
 
 The terms configure, write and read for resource access have the same
-meanings that they do for the built in RabbitMQ permissions system,
+meanings that they do for the built-in RabbitMQ permissions system,
 see http://www.rabbitmq.com/admin-guide.html#access-control
 
 is_admin_query:
@@ -72,7 +72,7 @@ name, value and subquery. The name is the name of a variable
 (i.e. something that would go into a ${} substitution). The value is a
 possible value for that variable.
 
-So the rather artificail example:
+So the rather artificial example:
 
  {resource_access_query, {for,
                           [{resource, exchange, {constant, true}},
@@ -106,5 +106,3 @@ TODO improve and explain this
      {port,                  389},
      {log,                   false} ] }
 ].
-
-
