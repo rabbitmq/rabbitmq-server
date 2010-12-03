@@ -203,7 +203,7 @@ terminate_shutdown(Fun, State) ->
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
-                     [emit_consumer_deleted(CTag, Ch)
+                     [emit_consumer_deleted(Ch, CTag)
                       || {CTag, Ch, _} <- consumers(State1)],
                      rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
@@ -543,7 +543,7 @@ remove_consumer(ChPid, ConsumerTag, Queue) ->
 
 remove_consumers(ChPid, Queue) ->
     {Kept, Removed} = split_by_channel(ChPid, Queue),
-    [emit_consumer_deleted(CTag, Ch) ||
+    [emit_consumer_deleted(Ch, CTag) ||
         {Ch, #consumer{tag = CTag}} <- queue:to_list(Removed)],
     Kept.
 
@@ -951,7 +951,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                        C1#cr{limiter_pid = undefined};
                   _ -> C1
               end),
-            emit_consumer_deleted(ConsumerTag, ChPid),
+            emit_consumer_deleted(ChPid, ConsumerTag),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
