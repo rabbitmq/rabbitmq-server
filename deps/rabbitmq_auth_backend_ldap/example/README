@@ -1,5 +1,11 @@
 This is a very simple example, designed to be set up with the modern
 Debian / Ubuntu packaging of OpenLDAP. Running setup.sh after "apt-get
-install slapd" should get you a domain dc=example,dc=com, an admin
-user cn=admin,dc=example,dc=com (password "admin"), and a normal user
-cn=Simon MacMullen,ou=people,dc=example,dc=com (password "password").
+install slapd" will wipe out any existing LDAP database and get you:
+
+* A domain
+* An admin user
+* A couple of normal users
+* A group containing the users
+* An OU representing a vhost
+
+These correspond to the examples mentioned in the documentation.
