@@ -52,8 +52,7 @@
 
 -record(state, { servers,
                  user_dn_pattern,
-                 admin_dn,
-                 admin_password,
+                 other_bind,
                  vhost_access_query,
                  resource_access_query,
                  is_admin_query,
@@ -145,13 +144,12 @@ evaluate_ldap(Q, Args, User, State) ->
 
 %%--------------------------------------------------------------------
 
-with_ldap(Fun, State = #state{admin_dn       = AdminDN,
-                              admin_password = AdminPassword}) ->
-    with_ldap(AdminDN, AdminPassword, Fun, State).
+with_ldap(Fun, State = #state{ other_bind = BindOpts }) ->
+    with_ldap(BindOpts, Fun, State).
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-with_ldap(UserDN, Password, Fun,
+with_ldap(BindOpts, Fun,
           State = #state{ servers = Servers,
                           use_ssl = SSL,
                           log     = Log,
@@ -168,13 +166,19 @@ with_ldap(UserDN, Password, Fun,
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
             Reply = try
-                        case eldap:simple_bind(LDAP, UserDN, Password) of
-                            ok ->
+                        case BindOpts of
+                            anon ->
                                 Fun(LDAP);
-                            {error, invalidCredentials} ->
-                                {refused, UserDN};
-                            {error, _} = E ->
-                                E
+                            {UserDN, Password} ->
+                                case eldap:simple_bind(LDAP,
+                                                       UserDN, Password) of
+                                    ok ->
+                                        Fun(LDAP);
+                                    {error, invalidCredentials} ->
+                                        {refused, UserDN};
+                                    {error, _} = E ->
+                                        E
+                                end
                         end
                     after
                         eldap:close(LDAP)
@@ -215,7 +219,7 @@ handle_call({login, Username}, _From, State) ->
     with_ldap(fun(LDAP) -> do_login(Username, LDAP, State) end, State);
 
 handle_call({login, Username, Password}, _From, State) ->
-    with_ldap(username_to_dn(Username, State), Password,
+    with_ldap({username_to_dn(Username, State), Password},
               fun(LDAP) -> do_login(Username, LDAP, State) end, State);
 
 handle_call({check_vhost, Args, User},

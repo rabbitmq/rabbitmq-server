@@ -61,23 +61,17 @@ Pattern for a user's DN. Must contain exactly one instance of
 "${username}". This will be where the username supplied by the client
 is substituted. You almost certainly want to change this.
 
-admin_dn
---------
+other_bind
+----------
 
-Default: "cn=admin,dc=example,dc=com"
+Default: anon
 
-User DN to use for any authorisation queries, and for checking login
-details when the user is not presenting a password (e.g. SASL
-EXTERNAL).
+Normally for authentication this plugin binds to the LDAP server as
+the user it is trying to authenticate. This option controls how to
+bind for authorisation queries, and to retrieve the details of a user
+who is logging in without presenting a password (e.g. SASL EXTERNAL).
 
-TODO: anon auth
-
-admin_password
---------------
-
-Default: "admin"
-
-Password to use with admin_dn.
+This option must either be the atom anon, or a tuple {UserDN, Password}.
 
 use_ssl
 -------
@@ -106,23 +100,22 @@ usually cause passwords to be written to the logs.
 Example configuration file
 ==========================
 
-An example configuration file with some options specified might look
+A minimal configuration file with some options specified might look
 like:
 
 [
   {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
   {rabbit_auth_backend_ldap,
    [ {servers,               ["my-ldap-server"]},
-     {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
-     {use_ssl,               false},
-     {port,                  389},
-     {log,                   false} ] }
+     {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"} ] }
 ].
-
 
 Limitations
 ===========
 
-Currently this plugin is very chatty with LDAP connections.
+Currently this plugin is rather chatty with LDAP connections when
+doing authorisation over LDAP.
 
 There might need to be more types of queries.
+
+It hasn't received much testing.
