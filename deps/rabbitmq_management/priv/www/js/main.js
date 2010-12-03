@@ -522,7 +522,7 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (req.status == 400 || req.status == 404) {
+    if (req.status >= 400 && req.status <= 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
         error_popup('warn', reason);
