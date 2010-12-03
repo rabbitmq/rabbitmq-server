@@ -753,17 +753,17 @@ emit_stats(State, Extra) ->
 
 emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
     rabbit_event:notify(consumer_created,
-                        [{consumer_tag,     ConsumerTag},
-                         {exclusive,        Exclusive},
-                         {ack_required,     AckRequired},
-                         {channel_pid,      ChPid},
-                         {queue_pid,        self()}]).
+                        [{consumer_tag, ConsumerTag},
+                         {exclusive,    Exclusive},
+                         {ack_required, AckRequired},
+                         {channel,      ChPid},
+                         {queue,        self()}]).
 
 emit_consumer_deleted(ChPid, ConsumerTag) ->
     rabbit_event:notify(consumer_deleted,
-                        [{consumer_tag,     ConsumerTag},
-                         {channel_pid,      ChPid},
-                         {queue_pid,        self()}]).
+                        [{consumer_tag, ConsumerTag},
+                         {channel,      ChPid},
+                         {queue,        self()}]).
 
 %---------------------------------------------------------------------------
 
