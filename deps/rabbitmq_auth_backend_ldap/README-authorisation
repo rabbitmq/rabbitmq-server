@@ -48,7 +48,7 @@ vhost_access_query:
 resource_access_query:
   ${username}
   ${vhost}
-  ${resource} (one of exchange, queue or binding)
+  ${resource} (one of exchange or queue)
   ${name}
   ${permission} (one of configure, write or read)
 
@@ -72,17 +72,17 @@ name, value and subquery. The name is the name of a variable
 (i.e. something that would go into a ${} substitution). The value is a
 possible value for that variable.
 
-So the rather artificial example:
+So the example:
 
- {resource_access_query, {for,
-                          [{resource, exchange, {constant, true}},
-                           {resource, queue,    {constant, true}},
-                           {resource, binding,  {constant, false}}
-                          ]}}
+     {resource_access_query,
+      {for, [{resource, exchange,
+              {for, [{permission, configure, {constant, false}},
+                     {permission, write,     {constant, true}},
+                     {permission, read,      {constant, true}}
+                    ]}},
+             {resource, queue, {constant, true}} ]}}
 
-would allow all users full access to exchanges and queues, but not bindings.
-
-TODO better example
+would allow all users to do anything but declare and delete exchanges.
 
 Example Configuration
 =====================
@@ -96,11 +96,13 @@ TODO improve and explain this
      {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
      {vhost_access_query,    {exists,
                               "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
-     {resource_access_query, {for,
-                              [{resource, exchange, {constant, true}},
-                               {resource, queue,    {constant, true}},
-                               {resource, binding,  {constant, true}}
-                              ]}},
+     {resource_access_query,
+      {for, [{resource, exchange,
+              {for, [{permission, configure, {constant, false}},
+                     {permission, write,     {constant, true}},
+                     {permission, read,      {constant, true}}
+                    ]}},
+             {resource, queue, {constant, true}} ]}},
      {is_admin_query,        {constant, false}},
      {use_ssl,               false},
      {port,                  389},
