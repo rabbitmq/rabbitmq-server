@@ -543,8 +543,8 @@ remove_consumer(ChPid, ConsumerTag, Queue) ->
 
 remove_consumers(ChPid, Queue) ->
     {Kept, Removed} = split_by_channel(ChPid, Queue),
-    [emit_consumer_deleted(CTag, Ch)
-     || {Ch, #consumer{tag = CTag}} <- queue:to_list(Removed)],
+    [emit_consumer_deleted(CTag, Ch) ||
+        {Ch, #consumer{tag = CTag}} <- queue:to_list(Removed)],
     Kept.
 
 move_consumers(ChPid, From, To) ->
