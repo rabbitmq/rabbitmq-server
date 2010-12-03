@@ -11,4 +11,5 @@ sleep 1
 
 sudo ldapadd -Y EXTERNAL -H ldapi:/// -f global.ldif
 ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f people.ldif
+ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f groups.ldif
 ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f rabbit.ldif

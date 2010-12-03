@@ -81,15 +81,15 @@ check_user_login(Username, [{password, Password}]) ->
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
-check_vhost_access(#user{username = Username,
-                         impl = UserDN}, VHost, Permission) ->
+check_vhost_access(User = #user{username = Username,
+                                impl = UserDN}, VHost, Permission) ->
     gen_server:call(?SERVER, {check_vhost, [{username,   Username},
                                             {user_dn,    UserDN},
                                             {vhost,      VHost},
-                                            {permission, Permission}]},
+                                            {permission, Permission}], User},
                     infinity).
 
-check_resource_access(#user{username = Username, impl = UserDN},
+check_resource_access(User = #user{username = Username, impl = UserDN},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
     gen_server:call(?SERVER, {check_resource, [{username,   Username},
@@ -97,45 +97,54 @@ check_resource_access(#user{username = Username, impl = UserDN},
                                                {vhost,      VHost},
                                                {resource,   Type},
                                                {name,       Name},
-                                               {permission, Permission}]},
+                                               {permission, Permission}], User},
                     infinity).
 
 %%--------------------------------------------------------------------
 
-evaluate({constant, Bool}, _Args, _LDAP) ->
+evaluate({constant, Bool}, _Args, _User, _LDAP) ->
     Bool;
 
-evaluate({for, [{Type, Value, SubQuery}|Rest]}, Args, LDAP) ->
+evaluate({for, [{Type, Value, SubQuery}|Rest]}, Args, User, LDAP) ->
     case proplists:get_value(Type, Args) of
-        undefined -> {error, {args_dont_contain, Type, Args}};
-        Value     -> evaluate(SubQuery, Args, LDAP);
-        _         -> evaluate({for, Rest}, Args, LDAP)
+        undefined -> {error, {args_do_not_contain, Type, Args}};
+        Value     -> evaluate(SubQuery, Args, User, LDAP);
+        _         -> evaluate({for, Rest}, Args, User, LDAP)
     end;
 
-evaluate({for, []}, _Args, _LDAP) ->
+evaluate({for, []}, _Args, _User, _LDAP) ->
     {error, {for_query_incomplete}};
 
-evaluate({exists, DNPattern}, Args, LDAP) ->
-    DN = rabbit_auth_backend_ldap_util:fill(DNPattern, Args),
-    Base = {base, DN},
-    Scope = {scope, eldap:baseObject()},
+evaluate({exists, DNPattern}, Args, _User, LDAP) ->
     %% eldap forces us to have a filter. objectClass should always be there.
-    Filter = {filter, eldap:present("objectClass")},
-    case eldap:search(LDAP, [Base, Filter, Scope]) of
+    Filter = eldap:present("objectClass"),
+    object_exists(DNPattern, Filter, Args, LDAP);
+
+evaluate({in_group, DNPattern}, Args, #user{impl = UserDN}, LDAP) ->
+    Filter = eldap:'and'([eldap:equalityMatch("objectClass", "groupOfNames"),
+                          eldap:equalityMatch("member",      UserDN)]),
+    object_exists(DNPattern, Filter, Args, LDAP);
+
+evaluate(Q, Args, _User, _LDAP) ->
+    {error, {unrecognised_query, Q, Args}}.
+
+object_exists(DNPattern, Filter, Args, LDAP) ->
+    DN = rabbit_auth_backend_ldap_util:fill(DNPattern, Args),
+    case eldap:search(LDAP,
+                      [{base, DN},
+                       {filter, Filter},
+                       {scope, eldap:baseObject()}]) of
         {ok, #eldap_search_result{entries = Entries}} ->
             length(Entries) > 0;
         {error, _} ->
             false
-    end;
+    end.
 
-evaluate(Q, Args, _LDAP) ->
-    {error, {unrecognised_query, Q, Args}}.
-
-evaluate_ldap(Q, Args,
+evaluate_ldap(Q, Args, User,
               State = #state {admin_dn       = AdminDN,
                               admin_password = AdminPassword}) ->
     with_ldap(AdminDN, AdminPassword,
-              fun(LDAP) -> evaluate(Q, Args, LDAP) end, State).
+              fun(LDAP) -> evaluate(Q, Args, User, LDAP) end, State).
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
@@ -190,24 +199,25 @@ handle_call({login, Username, Password}, _From,
     with_ldap(
       UserDN, Password,
       fun(LDAP) ->
+              User = #user{username     = Username,
+                           auth_backend = ?MODULE,
+                           impl         = UserDN},
               case evaluate(IsAdminQuery, [{username, Username},
-                                           {user_dn,  UserDN}], LDAP) of
+                                           {user_dn,  UserDN}], User, LDAP) of
                   {error, _} = E ->
                       E;
                   IsAdmin ->
-                      {ok, #user{username     = Username,
-                                 is_admin     = IsAdmin,
-                                 auth_backend = ?MODULE}}
+                      {ok, User#user{is_admin = IsAdmin}}
               end
       end, State);
 
-handle_call({check_vhost, Args},
+handle_call({check_vhost, Args, User},
             _From, State = #state{vhost_access_query = Q}) ->
-    evaluate_ldap(Q, Args, State);
+    evaluate_ldap(Q, Args, User, State);
 
-handle_call({check_resource, Args},
+handle_call({check_resource, Args, User},
             _From, State = #state{resource_access_query = Q}) ->
-    evaluate_ldap(Q, Args, State);
+    evaluate_ldap(Q, Args, User, State);
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.

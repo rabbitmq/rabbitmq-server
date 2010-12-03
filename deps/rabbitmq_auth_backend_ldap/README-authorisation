@@ -61,6 +61,15 @@ is_admin_query:
   ${username}
   ${user_dn}
 
+In Group Query
+--------------
+
+{in_group, Pattern}
+
+Like the Exists Query, substitutes arguments into a pattern to look
+for an object. However, this query assumes that the object pointed to
+is a groupOfNames and returns true if the logged in user is a member.
+
 For Query
 ---------
 
@@ -78,13 +87,16 @@ So the example:
 
      {resource_access_query,
       {for, [{resource, exchange,
-              {for, [{permission, configure, {constant, false}},
-                     {permission, write,     {constant, true}},
-                     {permission, read,      {constant, true}}
+              {for, [{permission, configure,
+                      { in_group, "cn=wheel,ou=groups,dc=example,dc=com" }
+                     },
+                     {permission, write, {constant, true}},
+                     {permission, read,  {constant, true}}
                     ]}},
              {resource, queue, {constant, true}} ]}}
 
-would allow all users to do anything but declare and delete exchanges.
+would allow members of the "wheel" group to declare and delete
+exchanges, and allow all users to do everything else.
 
 Example Configuration
 =====================
@@ -100,9 +112,11 @@ TODO improve and explain this
                               "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
      {resource_access_query,
       {for, [{resource, exchange,
-              {for, [{permission, configure, {constant, false}},
-                     {permission, write,     {constant, true}},
-                     {permission, read,      {constant, true}}
+              {for, [{permission, configure,
+                      { in_group, "cn=wheel,ou=groups,dc=example,dc=com" }
+                     },
+                     {permission, write, {constant, true}},
+                     {permission, read,  {constant, true}}
                     ]}},
              {resource, queue, {constant, true}} ]}},
      {is_admin_query,        {constant, false}},
