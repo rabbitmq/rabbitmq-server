@@ -930,7 +930,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                                    ChPid, Consumer,
                                    State1#q.active_consumers)})
                 end,
-            emit_consumer_created(ConsumerTag, ChPid, ExclusiveConsume,
+            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   not NoAck),
             reply(ok, State2)
     end;
