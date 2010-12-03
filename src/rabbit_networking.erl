@@ -87,6 +87,28 @@
 -spec(check_tcp_listener_address/3 ::
         (atom(), hostname(), ip_port()) -> {inet:ip_address(), atom()}).
 
+-spec(boot/0 :: () -> 'ok').
+-spec(start_client/1 ::
+	(port() | #ssl_socket{ssl::{'sslsocket',_,_}}) ->
+			     atom() | pid() | port() | {atom(),atom()}).
+-spec(start_ssl_client/2 ::
+	(_,port() | #ssl_socket{ssl::{'sslsocket',_,_}}) ->
+				 atom() | pid() | port() | {atom(),atom()}).
+-spec(tcp_listener_started/3 ::
+	(_,
+         string() |
+	 {byte(),byte(),byte(),byte()} |
+	 {char(),char(),char(),char(),char(),char(),char(),char()},
+	 _) ->
+				     'ok').
+-spec(tcp_listener_stopped/3 ::
+	(_,
+         string() |
+	 {byte(),byte(),byte(),byte()} |
+	 {char(),char(),char(),char(),char(),char(),char(),char()},
+	 _) ->
+				     'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

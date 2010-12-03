@@ -44,6 +44,234 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(add_log_handlers/1 :: ([any()]) -> 'ok').
+-spec(all_tests/0 :: () -> 'passed').
+-spec(assert_prop/3 :: ([any()],_,_) -> any()).
+-spec(assert_props/2 :: (_,[any()]) -> [any()]).
+-spec(await_response/1 :: (non_neg_integer()) -> 'ok').
+-spec(bpqueue_mff/4 ::
+	(fun((_,_,_,_) -> any()),_,{_,_},_) -> {[{_,[any()]}],_}).
+-spec(bpqueue_mffl/3 :: (_,{_,_},_) -> {[{_,[any()]}],_}).
+-spec(bpqueue_mffr/3 :: (_,{_,_},_) -> {[{_,[any()]}],_}).
+-spec(bpqueue_test/5 ::
+	(fun((_,_,_) -> any()),
+	 fun((_) -> any()),
+	 fun((_) -> any()),
+	 fun((_,_,_) -> any()),
+	 fun((_,_,_,_) -> any())) ->
+                                      {_,_}).
+-spec(check_get_options/3 :: ({_,[any()]},[any()],_) -> 'ok').
+-spec(check_pg_local/3 :: ('ok',[any()],[any()]) -> ['true',...]).
+-spec(check_variable_queue_status/2 ::
+	(_,[any()]) ->
+					    {'vqstate',
+					     queue(),
+					     {_,_},
+					     _,
+					     {_,_},
+					     queue(),
+					     _,
+					     dict(),
+					     _,
+					     _,
+					     {'sync',_,_,_,[any()]},
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     _,
+					     {'rates',_,_,_,_,_}}).
+-spec(clean_logs/2 :: ([atom() | [atom() | [any()] | char()]],_) -> 'ok').
+-spec(control_action/2 :: (_,_) -> any()).
+-spec(control_action/3 :: (_,_,_) -> any()).
+-spec(control_action/4 :: (_,_,_,_) -> any()).
+-spec(default_options/0 ::
+	() ->
+				[{[45 | 112 | 113,...],
+				  [47 | 97 | 101 | 102 | 108 | 115,...]},
+				 ...]).
+-spec(delete_file/1 ::
+	(atom() | [atom() | [any()] | char()]) -> 'ok' | {'error',atom()}).
+-spec(delete_log_handlers/1 :: ([atom()]) -> 'ok').
+-spec(empty_files/1 :: ([atom() | [any()]]) -> [boolean() | {'error',atom()}]).
+-spec(empty_test_queue/0 :: () -> 'ok').
+-spec(expand_options/2 :: ([any()],_) -> any()).
+-spec(foreach_with_msg_store_client/4 :: (_,_,_,[any()]) -> 'ok').
+-spec(guid_bin/1 :: (_) -> binary()).
+-spec(info_action/3 :: (_,[any()],_) -> 'ok').
+-spec(init_test_queue/0 ::
+	() -> {'undefined' | number(),{'qistate',_,_,_,_,_}}).
+-spec(make_files_non_writable/1 :: ([atom() | [any()]]) -> 'ok').
+-spec(make_responder/1 :: (_) -> fun(() -> any())).
+-spec(make_responder/2 :: (_,_) -> fun(() -> any())).
+-spec(maybe_run_cluster_dependent_tests/0 :: () -> 'passed').
+-spec(msg_store_contains/3 :: (_,[any()],_) -> any()).
+-spec(msg_store_read/2 :: ([any()],_) -> any()).
+-spec(msg_store_remove/2 :: (_,_) -> 'ok').
+-spec(msg_store_remove/3 :: (_,_,_) -> 'ok').
+-spec(msg_store_sync/2 ::
+	(_,
+	 {'client_msstate',atom() | pid() | {atom(),_},_,_,_,_,_,_,_,_,_,_}) ->
+			       'ok').
+-spec(msg_store_write/2 :: ([any()],_) -> 'ok').
+-spec(must_exit/1 :: (_) -> 'ok').
+-spec(non_empty_files/1 ::
+	([atom() | [any()]]) -> [boolean() | {'error',atom()}]).
+-spec(priority_queue_in_all/2 :: (_,[any()]) -> any()).
+-spec(priority_queue_out_all/1 ::
+	({'pqueue',nonempty_maybe_improper_list()} |
+	 {'queue',maybe_improper_list(),maybe_improper_list()}) ->
+				       [any()]).
+-spec(publish_fetch_and_ack/3 :: (non_neg_integer(),_,_) -> any()).
+-spec(queue_index_publish/3 ::
+	([any()],boolean(),_) -> {_,maybe_improper_list()}).
+-spec(queue_name/1 :: (binary()) -> #resource{name::binary()}).
+-spec(restart_msg_store_empty/0 :: () -> 'ok').
+-spec(restart_test_queue/1 ::
+	({'qistate',_,{dict(),[any()]},_,_,_}) ->
+				   {'undefined' | number(),
+				    {'qistate',_,_,_,_,_}}).
+-spec(run_cluster_dependent_tests/1 :: (atom()) -> 'passed').
+-spec(sequence_with_content/1 :: ([any()]) -> any()).
+-spec(set_permissions/2 :: (atom() | [any()],_) -> 'ok' | {'error',atom()}).
+-spec(spawn_responders/3 :: (_,_,integer()) -> [pid()]).
+-spec(test_app_management/0 :: () -> 'passed').
+-spec(test_backing_queue/0 :: () -> 'passed').
+-spec(test_bpqueue/0 :: () -> 'passed').
+-spec(test_cluster_management/0 :: () -> 'passed').
+-spec(test_cluster_management2/1 :: (atom()) -> 'passed').
+-spec(test_content_framing/0 :: () -> 'passed').
+-spec(test_content_framing/2 :: (number(),binary() | tuple()) -> 'passed').
+-spec(test_content_prop_roundtrip/2 :: ([tuple()],binary()) -> binary()).
+-spec(test_content_properties/0 :: () -> 'passed').
+-spec(test_content_transcoding/0 :: () -> 'passed').
+-spec(test_delegates_async/1 :: (atom()) -> 'passed').
+-spec(test_delegates_sync/1 :: (atom()) -> 'passed').
+-spec(test_dropwhile/1 ::
+	(_) -> {_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_}).
+-spec(test_field_values/0 :: () -> 'passed').
+-spec(test_file_handle_cache/0 :: () -> 'passed').
+-spec(test_log_management/0 :: () -> 'passed').
+-spec(test_log_management_during_startup/0 :: () -> 'passed').
+-spec(test_logs_working/2 :: (atom() | [any()],atom() | [any()]) -> 'ok').
+-spec(test_msg_store/0 :: () -> 'passed').
+-spec(test_option_parser/0 :: () -> 'passed').
+-spec(test_parsing/0 :: () -> 'passed').
+-spec(test_pg_local/0 :: () -> 'passed').
+-spec(test_priority_queue/0 :: () -> 'passed').
+-spec(test_priority_queue/1 :: ({'pqueue',[any(),...]} | {'queue',[any()],[any()]}) -> {'false',boolean(),number(),[{number(),_}],[any()]} | {'true',boolean(),number(),[{number(),_}],[any()]}).
+-spec(test_queue/0 :: () -> #resource{name::binary()}).
+-spec(test_queue_index/0 :: () -> 'passed').
+-spec(test_queue_index_props/0 :: () -> 'passed').
+-spec(test_queue_recover/0 :: () -> 'passed').
+-spec(test_server_status/0 :: () -> 'passed').
+-spec(test_simple_n_element_queue/1 :: (integer()) -> 'passed').
+-spec(test_spawn/1 :: (_) -> {pid(),pid()}).
+-spec(test_statistics/0 :: () -> 'passed').
+-spec(test_statistics_event_receiver/1 ::
+	(atom() | pid() | port() | {atom(),atom()}) -> no_return()).
+-spec(test_statistics_receive_event/2 ::
+	(atom() | pid() | {atom(),_},fun((_) -> any())) -> any()).
+-spec(test_statistics_receive_event1/2 :: (_,fun((_) -> any())) -> any()).
+-spec(test_statistics_receiver/1 :: (_) -> 'ok').
+-spec(test_supervisor_delayed_restart/0 :: () -> 'passed').
+-spec(test_topic_match/2 ::
+	(maybe_improper_list(
+	   binary() | 
+	   maybe_improper_list(any(),binary() | []) |
+	   byte(),
+	   binary() | []),
+	 maybe_improper_list(
+	   binary() |
+	   maybe_improper_list(any(),binary() | []) |
+	   byte(),
+	   binary() | [])) ->
+				 'passed' |
+				 {'topic_match_failure',
+				  maybe_improper_list(
+				    binary() |
+				    maybe_improper_list(
+				      any(),
+				      binary() | []) |
+				    byte(),
+				    binary() |
+				    []),
+				  maybe_improper_list(
+				    binary() |
+				    maybe_improper_list(any(),binary() | []) |
+				    byte(),
+				    binary() | [])}).
+-spec(test_topic_match/3 ::
+	(maybe_improper_list(
+	   binary() |
+	   maybe_improper_list(
+	     any(),
+	     binary() | []) |
+	   byte(),
+	   binary() | []),
+	 maybe_improper_list(
+	   binary() |
+	   maybe_improper_list(any(),binary() | []) |
+	   byte(),
+	   binary() | []),
+	 _) ->
+				 'passed' |
+				 {'topic_match_failure',
+				  maybe_improper_list(
+				    binary() |
+				    maybe_improper_list(any(),binary() | []) |
+				    byte(),
+				    binary() | []),
+				  maybe_improper_list(
+				    binary() |
+				    maybe_improper_list(any(),binary() | []) |
+				    byte(),
+				    binary() | [])}).
+-spec(test_topic_matching/0 :: () -> 'passed').
+-spec(test_unfold/0 :: () -> 'passed').
+-spec(test_user_management/0 :: () -> 'passed').
+-spec(test_variable_queue/0 :: () -> 'passed').
+-spec(test_variable_queue_all_the_bits_not_covered_elsewhere1/1 ::
+	(_) -> any()).
+-spec(test_variable_queue_all_the_bits_not_covered_elsewhere2/1 ::
+	({'vqstate',_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,
+	  {'rates',_,_,number(),number(),_}}) ->
+									{_,_,_,
+									 _,_,_,
+									 _,_,_,
+									 _,_,_,
+									 _,_,_,
+									 _,_,_,
+									 _,_,_,
+									 _,_}).
+-spec(test_variable_queue_dynamic_duration_change/1 ::
+	(_) -> {_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_}).
+-spec(test_variable_queue_partial_segments_delta_thing/1 ::
+	(_) -> {_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_}).
+-spec(variable_queue_fetch/5 ::
+	(integer(),_,_,_,_) -> {_,maybe_improper_list()}).
+-spec(variable_queue_publish/3 :: (_,integer(),_) -> any()).
+-spec(variable_queue_wait_for_shuffling_end/1 :: (_) -> any()).
+-spec(verify_read_with_published/4 :: (_,_,_,_) -> 'ko' | 'ok').
+-spec(with_empty_test_queue/1 ::
+	(fun((_) -> any())) -> {'qistate',_,'undefined','undefined',_,_}).
+-spec(with_fresh_variable_queue/1 :: (fun((_) -> any())) -> 'passed').
+-spec(with_msg_store_client/3 :: (_,_,fun((_) -> any())) -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
     Values = [element(2, E) || E <- Datum],

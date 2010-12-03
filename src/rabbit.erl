@@ -200,6 +200,15 @@
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(start/2 :: ('normal',[]) ->
+		      {'error',
+		       {'erlang_version_too_old',
+			{'found',[any()]},
+			{'required',[any(),...]}}} |
+		      {'ok',pid()}).
+-spec(stop/1 :: (_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------

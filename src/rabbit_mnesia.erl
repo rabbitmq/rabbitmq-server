@@ -67,6 +67,8 @@
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 
+-spec(table_names/0 :: () -> [atom()]).
+
 -endif.
 
 %%----------------------------------------------------------------------------

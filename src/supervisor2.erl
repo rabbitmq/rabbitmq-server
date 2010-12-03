@@ -100,6 +100,17 @@
 -define(is_terminate_simple(State),
         State#state.strategy =:= simple_one_for_one_terminate).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(delayed_restart/2 :: (atom() | pid() | {atom(),_},_) -> 'ok').
+-spec(find_child/2 :: (_,_) -> [any()]).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 behaviour_info(callbacks) ->
     [{init,1}];
 behaviour_info(_Other) ->

@@ -178,6 +178,22 @@
                      rabbit_types:ok_or_error2(
                        rabbit_net:socket(), any()))) -> no_return()).
 
+-spec(analyze_frame/3 ::
+	(_,_,_) ->
+			      'error' |
+			      'heartbeat' |
+			      {'content_body',_} |
+			      {'method',_,binary()} |
+			      {'content_header',
+			       char(),
+			       char(),
+			       non_neg_integer(),
+			       binary()}).
+-spec(mainloop/2 :: (_,#v1{}) -> any()).
+-spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
+-spec(system_continue/3 :: (_,_,#v1{}) -> any()).
+-spec(system_terminate/4 :: (_,_,_,_) -> none()).
+
 -endif.
 
 %%--------------------------------------------------------------------------

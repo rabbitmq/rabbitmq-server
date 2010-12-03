@@ -82,6 +82,16 @@
              txn,
              unsent_message_count}).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(info_keys/0 :: () -> [atom(),...]).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 -define(STATISTICS_KEYS,
         [pid,
          exclusive_consumer_pid,

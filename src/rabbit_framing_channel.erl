@@ -37,6 +37,16 @@
 %% internal
 -export([mainloop/3]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(mainloop/3 :: (_,_,_) -> any()).
+-spec(process/2 :: (atom() | pid() | port() | {atom(),atom()},_) -> 'ok').
+-spec(shutdown/1 :: (atom() | pid() | port() | {atom(),atom()}) -> 'ok').
+
+-endif.
+
 %%--------------------------------------------------------------------
 
 start_link(Parent, ChannelPid, Protocol) ->

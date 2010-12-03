@@ -167,6 +167,8 @@
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 
+-spec(drop_expired/1 :: (atom() | pid() | {atom(),_}) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------
