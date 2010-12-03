@@ -31,11 +31,10 @@ Exists Query
 {exists, Pattern}
 
 This will substitute variables into the pattern, and return true if
-there exists an object with the resulting DN *which the user has
-permission to read*. Substitution occurs with ${} syntax. The
-vhost_access_query in the example configuration below therefore allows
-you to control access to vhosts by controlling the read ACLs of OUs in
-a vhosts OU.
+there exists an object with the resulting DN. Substitution occurs with
+${} syntax. The vhost_access_query in the example configuration below
+therefore allows you to control access to vhosts by controlling the
+existence of OUs in a vhosts OU.
 
 Each of the three queries allow different substitutions:
 

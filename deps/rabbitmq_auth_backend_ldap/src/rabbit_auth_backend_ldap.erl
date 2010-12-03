@@ -50,8 +50,16 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, { servers, user_dn_pattern, vhost_access_query,
-                 resource_access_query, is_admin_query, use_ssl, log, port }).
+-record(state, { servers,
+                 user_dn_pattern,
+                 admin_dn,
+                 admin_password,
+                 vhost_access_query,
+                 resource_access_query,
+                 is_admin_query,
+                 use_ssl,
+                 log,
+                 port }).
 
 %%--------------------------------------------------------------------
 
@@ -73,20 +81,23 @@ check_user_login(Username, [{password, Password}]) ->
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
-check_vhost_access(User = #user{username = Username}, VHost, Permission) ->
-    gen_server:call(?SERVER, {check_vhost, User, [{username,   Username},
-                                                  {vhost,      VHost},
-                                                  {permission, Permission}]},
+check_vhost_access(#user{username = Username,
+                         impl = UserDN}, VHost, Permission) ->
+    gen_server:call(?SERVER, {check_vhost, [{username,   Username},
+                                            {user_dn,    UserDN},
+                                            {vhost,      VHost},
+                                            {permission, Permission}]},
                     infinity).
 
-check_resource_access(User = #user{username = Username},
+check_resource_access(#user{username = Username, impl = UserDN},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
-    gen_server:call(?SERVER, {check_resource, User, [{username,   Username},
-                                                     {vhost,      VHost},
-                                                     {resource,   Type},
-                                                     {name,       Name},
-                                                     {permission, Permission}]},
+    gen_server:call(?SERVER, {check_resource, [{username,   Username},
+                                               {user_dn,    UserDN},
+                                               {vhost,      VHost},
+                                               {resource,   Type},
+                                               {name,       Name},
+                                               {permission, Permission}]},
                     infinity).
 
 %%--------------------------------------------------------------------
@@ -104,9 +115,9 @@ evaluate({for, [{Type, Value, SubQuery}|Rest]}, Args, LDAP) ->
 evaluate({for, []}, _Args, _LDAP) ->
     {error, {for_query_incomplete}};
 
-evaluate({exists, DnPattern}, Args, LDAP) ->
-    Dn = rabbit_auth_backend_ldap_util:fill(DnPattern, Args),
-    Base = {base, Dn},
+evaluate({exists, DNPattern}, Args, LDAP) ->
+    DN = rabbit_auth_backend_ldap_util:fill(DNPattern, Args),
+    Base = {base, DN},
     Scope = {scope, eldap:baseObject()},
     %% eldap forces us to have a filter. objectClass should always be there.
     Filter = {filter, eldap:present("objectClass")},
@@ -120,20 +131,19 @@ evaluate({exists, DnPattern}, Args, LDAP) ->
 evaluate(Q, Args, _LDAP) ->
     {error, {unrecognised_query, Q, Args}}.
 
-evaluate_ldap(#user{username = U, impl = P}, Q, Args, State) ->
-    with_ldap(U, P, fun(LDAP) -> evaluate(Q, Args, LDAP) end, State).
+evaluate_ldap(Q, Args,
+              State = #state {admin_dn       = AdminDN,
+                              admin_password = AdminPassword}) ->
+    with_ldap(AdminDN, AdminPassword,
+              fun(LDAP) -> evaluate(Q, Args, LDAP) end, State).
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-%% Also this requires that we store the password in #user.impl, which
-%% is quite dodgy - all sorts of crash scenarios lead to the contents of
-%% #user getting logged.
-with_ldap(Username, Password, Fun,
-          State = #state{ servers         = Servers,
-                          user_dn_pattern = UserDnPattern,
-                          use_ssl         = SSL,
-                          log             = Log,
-                          port            = Port }) ->
+with_ldap(UserDN, Password, Fun,
+          State = #state{ servers = Servers,
+                          use_ssl = SSL,
+                          log     = Log,
+                          port    = Port }) ->
     Opts0 = [{ssl, SSL}, {port, Port}],
     Opts = case Log of
                true ->
@@ -143,16 +153,14 @@ with_ldap(Username, Password, Fun,
                _ ->
                    Opts0
            end,
-    Dn = rabbit_auth_backend_ldap_util:fill(UserDnPattern,
-                                            [{username, Username}]),
     case eldap:open(Servers, Opts) of
         {ok, LDAP} ->
             Reply = try
-                        case eldap:simple_bind(LDAP, Dn, Password) of
+                        case eldap:simple_bind(LDAP, UserDN, Password) of
                             ok ->
                                 Fun(LDAP);
                             {error, invalidCredentials} ->
-                                {refused, Username};
+                                {refused, UserDN};
                             {error, _} = E ->
                                 E
                         end
@@ -175,9 +183,12 @@ init([]) ->
            [state | [get_env(F) || F <- record_info(fields, state)]])}.
 
 handle_call({login, Username, Password}, _From,
-            State = #state{ is_admin_query = IsAdminQuery }) ->
+            State = #state{ user_dn_pattern = UserDNPattern,
+                            is_admin_query = IsAdminQuery }) ->
+    UserDN = rabbit_auth_backend_ldap_util:fill(UserDNPattern,
+                                                [{username, Username}]),
     with_ldap(
-      Username, Password,
+      UserDN, Password,
       fun(LDAP) ->
               case evaluate(IsAdminQuery, [{username, Username}], LDAP) of
                   {error, _} = E ->
@@ -185,18 +196,17 @@ handle_call({login, Username, Password}, _From,
                   IsAdmin ->
                       {ok, #user{username     = Username,
                                  is_admin     = IsAdmin,
-                                 auth_backend = ?MODULE,
-                                 impl         = Password}}
+                                 auth_backend = ?MODULE}}
               end
       end, State);
 
-handle_call({check_vhost, User, Args},
+handle_call({check_vhost, Args},
             _From, State = #state{vhost_access_query = Q}) ->
-    evaluate_ldap(User, Q, Args, State);
+    evaluate_ldap(Q, Args, State);
 
-handle_call({check_resource, User, Args},
+handle_call({check_resource, Args},
             _From, State = #state{resource_access_query = Q}) ->
-    evaluate_ldap(User, Q, Args, State);
+    evaluate_ldap(Q, Args, State);
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
