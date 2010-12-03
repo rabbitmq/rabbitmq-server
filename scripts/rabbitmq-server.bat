@@ -123,8 +123,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
        "!RABBITMQ_NODENAME!"
 
 set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
-if not exist "!RABBITMQ_BOOT_FILE!.boot" (
-    echo Custom Boot File "!RABBITMQ_BOOT_FILE!.boot" is missing.
+if ERRORLEVEL 1 (
     exit /B 1
 )
 

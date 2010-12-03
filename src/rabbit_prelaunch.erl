@@ -34,6 +34,7 @@
 -export([start/0, stop/0]).
 
 -define(BaseApps, [rabbit]).
+-define(ERROR_CODE, 1).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -135,14 +136,16 @@ start() ->
     case net_kernel:start([list_to_atom(NodeName), shortnames]) of
         {ok, _Pid}      -> ok = net_kernel:stop();
         {error, Result} ->
+             % consistent layout by flushing error_log mailbox
+             gen_event:which_handlers(error_logger),
              io:format("starting node with name ~p failed. "
                        "(is RabbitMQ already running?)~n~p~n",
                        [NodeName, Result]),
             [io:format(Fmt ++ "~n", Args) ||
              {Fmt, Args} <- rabbit_control:diagnostics(NodeName)],
-            halt(1)
+            terminate(?ERROR_CODE)
     end,
-    halt(),
+    terminate(0),
     ok.
 
 stop() ->
@@ -265,4 +268,16 @@ process_entry(Entry) ->
 
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    halt(1).
+    terminate(?ERROR_CODE).
+
+terminate(Status) ->
+    case os:type() of
+        {unix, _} ->
+            halt(Status);
+        {win32, _} ->
+            init:stop(Status),
+            receive
+                after infinity -> ok
+            end
+    end.
+
