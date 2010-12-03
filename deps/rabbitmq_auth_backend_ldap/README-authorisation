@@ -40,12 +40,14 @@ Each of the three queries allow different substitutions:
 
 vhost_access_query:
   ${username}
+  ${user_dn}
   ${vhost}
   ${permission} (read, meaning see it in the management plugin,
                  or write, meaning log in)
 
 resource_access_query:
   ${username}
+  ${user_dn}
   ${vhost}
   ${resource} (one of exchange or queue)
   ${name}
@@ -57,6 +59,7 @@ see http://www.rabbitmq.com/admin-guide.html#access-control
 
 is_admin_query:
   ${username}
+  ${user_dn}
 
 For Query
 ---------

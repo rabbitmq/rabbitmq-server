@@ -190,7 +190,8 @@ handle_call({login, Username, Password}, _From,
     with_ldap(
       UserDN, Password,
       fun(LDAP) ->
-              case evaluate(IsAdminQuery, [{username, Username}], LDAP) of
+              case evaluate(IsAdminQuery, [{username, Username},
+                                           {user_dn,  UserDN}], LDAP) of
                   {error, _} = E ->
                       E;
                   IsAdmin ->
