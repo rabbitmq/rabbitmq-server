@@ -72,8 +72,8 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 
-check_user_login(_Username, []) ->
-    exit(passwordless_not_supported_yet);
+check_user_login(Username, []) ->
+    gen_server:call(?SERVER, {login, Username}, infinity);
 
 check_user_login(Username, [{password, Password}]) ->
     gen_server:call(?SERVER, {login, Username, Password}, infinity);
@@ -140,11 +140,14 @@ object_exists(DNPattern, Filter, Args, LDAP) ->
             false
     end.
 
-evaluate_ldap(Q, Args, User,
-              State = #state {admin_dn       = AdminDN,
+evaluate_ldap(Q, Args, User, State) ->
+    with_ldap(fun(LDAP) -> evaluate(Q, Args, User, LDAP) end, State).
+
+%%--------------------------------------------------------------------
+
+with_ldap(Fun, State = #state{admin_dn       = AdminDN,
                               admin_password = AdminPassword}) ->
-    with_ldap(AdminDN, AdminPassword,
-              fun(LDAP) -> evaluate(Q, Args, User, LDAP) end, State).
+    with_ldap(AdminDN, AdminPassword, Fun, State).
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
@@ -181,35 +184,39 @@ with_ldap(UserDN, Password, Fun,
             {reply, Error, State}
     end.
 
-%%--------------------------------------------------------------------
-
 get_env(F) ->
     {ok, V} = application:get_env(F),
     V.
+
+do_login(Username, LDAP, State = #state{ is_admin_query  = IsAdminQuery }) ->
+    UserDN = username_to_dn(Username, State),
+    User = #user{username     = Username,
+                 auth_backend = ?MODULE,
+                 impl         = UserDN},
+    case evaluate(IsAdminQuery, [{username, Username},
+                                 {user_dn,  UserDN}], User, LDAP) of
+        {error, _} = E ->
+            E;
+        IsAdmin ->
+            {ok, User#user{is_admin = IsAdmin}}
+    end.
+
+username_to_dn(Username, #state{ user_dn_pattern = UserDNPattern }) ->
+    rabbit_auth_backend_ldap_util:fill(UserDNPattern, [{username, Username}]).
+
+%%--------------------------------------------------------------------
 
 init([]) ->
     {ok, list_to_tuple(
            [state | [get_env(F) || F <- record_info(fields, state)]])}.
 
-handle_call({login, Username, Password}, _From,
-            State = #state{ user_dn_pattern = UserDNPattern,
-                            is_admin_query = IsAdminQuery }) ->
-    UserDN = rabbit_auth_backend_ldap_util:fill(UserDNPattern,
-                                                [{username, Username}]),
-    with_ldap(
-      UserDN, Password,
-      fun(LDAP) ->
-              User = #user{username     = Username,
-                           auth_backend = ?MODULE,
-                           impl         = UserDN},
-              case evaluate(IsAdminQuery, [{username, Username},
-                                           {user_dn,  UserDN}], User, LDAP) of
-                  {error, _} = E ->
-                      E;
-                  IsAdmin ->
-                      {ok, User#user{is_admin = IsAdmin}}
-              end
-      end, State);
+handle_call({login, Username}, _From, State) ->
+    %% Without password, e.g. EXTERNAL
+    with_ldap(fun(LDAP) -> do_login(Username, LDAP, State) end, State);
+
+handle_call({login, Username, Password}, _From, State) ->
+    with_ldap(username_to_dn(Username, State), Password,
+              fun(LDAP) -> do_login(Username, LDAP, State) end, State);
 
 handle_call({check_vhost, Args, User},
             _From, State = #state{vhost_access_query = Q}) ->

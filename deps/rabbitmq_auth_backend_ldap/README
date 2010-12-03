@@ -66,9 +66,11 @@ admin_dn
 
 Default: "cn=admin,dc=example,dc=com"
 
-User DN to use for any authorisation queries.
+User DN to use for any authorisation queries, and for checking login
+details when the user is not presenting a password (e.g. SASL
+EXTERNAL).
+
 TODO: anon auth
-TODO: passwordless login
 
 admin_password
 --------------
@@ -123,6 +125,4 @@ Limitations
 
 Currently this plugin is very chatty with LDAP connections.
 
-Login without passwords (e.g. using SASL EXTERNAL) is not yet supported.
-
-There probably need to be several more types of queries.
+There might need to be more types of queries.
