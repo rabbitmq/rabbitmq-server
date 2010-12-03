@@ -6,14 +6,3 @@ dn: ou=test,ou=vhosts,dc=example,dc=com
 objectClass: top
 objectClass: organizationalUnit
 ou: test
-
-dn: ou=exchanges,ou=test,ou=vhosts,dc=example,dc=com
-objectClass: top
-objectClass: organizationalUnit
-ou: exchanges
-
-# This should only be visible to Simon, not MikeB.
-dn: cn=simonexchange,ou=exchanges,ou=test,ou=vhosts,dc=example,dc=com
-Objectclass: top
-objectClass: device
-ou: simonexchange

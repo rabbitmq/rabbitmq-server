@@ -21,9 +21,6 @@ olcAccess: to attrs=userPassword
   by anonymous auth
   by dn.base="cn=admin,dc=example,dc=com" write
   by * none
-olcAccess: to dn="cn=simonexchange,ou=exchanges,ou=test,ou=vhosts,dc=example,dc=com"
-  by dn="cn=Simon MacMullen,ou=people,dc=example,dc=com" manage
-  by * none
 olcAccess: to *
   by self write
   by dn.base="cn=admin,dc=example,dc=com" write
