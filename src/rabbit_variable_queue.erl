@@ -1471,31 +1471,22 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
     {Reduce, State1} =
         case chunk_size(RamMsgCount + gb_trees:size(RamAckIndex),
                         TargetRamItemCount) of
-            0 ->
-                {false, State};
-            S1 ->
-                ReduceFuns =
-                    case (AvgAckIngress - AvgAckEgress) >
-                        (AvgIngress - AvgEgress) of
-                        true ->
-                            %% ACKs are growing faster than the queue,
-                            %% push messages from there first.
-                            [AckFun, AlphaBetaFun];
-                        false ->
-                            %% The queue is growing faster than the
-                            %% acks, push queue messages first.
-                            [AlphaBetaFun, AckFun]
-                    end,
-                {_, State2} =
-                    %% Both reduce functions get a chance to reduce
-                    %% memory. The second may very well get a quota of
-                    %% 0 if the first function managed to push out the
-                    %% maximum number of messages.
-                    lists:foldl(
-                      fun (ReduceFun, {QuotaN, StateN}) ->
-                              ReduceFun(QuotaN, StateN)
-                      end, {S1, State}, ReduceFuns),
-                {true, State2}
+            0  -> {false, State};
+            %% Reduce memory of pending acks and alphas. The order is
+            %% determined based on which is growing faster. Whichever
+            %% comes second may very well get a quota of 0 if the
+            %% first manages to push out the max number of messages.
+            S1 -> {_, State2} =
+                      lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                                          ReduceFun(QuotaN, StateN)
+                                  end,
+                                  {S1, State},
+                                  case (AvgAckIngress - AvgAckEgress) >
+                                      (AvgIngress - AvgEgress) of
+                                      true  -> [AckFun, AlphaBetaFun];
+                                      false -> [AlphaBetaFun, AckFun]
+                                  end),
+                  {true, State2}
         end,
 
     case State1 #vqstate.target_ram_item_count of
