@@ -873,7 +873,7 @@ auth_phase(Response,
               access_refused, "~s login refused: ~s",
               [proplists:get_value(name, AuthMechanism:description()), Reason]);
         {protocol_error, Msg, Args} ->
-            rabbit_misc:protocol_error(access_refused, Msg, Args);
+            rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'connection.secure'{challenge = Challenge},
             ok = send_on_channel0(Sock, Secure, Protocol),

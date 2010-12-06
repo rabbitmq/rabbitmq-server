@@ -51,7 +51,7 @@
 %% Provides equivalent security to PLAIN but demos use of Connection.Secure(Ok)
 %% START-OK: Username
 %% SECURE: "Please tell me your password"
-%% SECURE-OK: Password
+%% SECURE-OK: "My password is ~s", [Password]
 
 description() ->
     [{name, <<"RABBIT-CR-DEMO">>},
@@ -66,4 +66,9 @@ handle_response(Response, State = #state{username = undefined}) ->
      State#state{username = Response}};
 
 handle_response(Response, #state{username = Username}) ->
-    rabbit_access_control:check_user_pass_login(Username, Response).
+    case Response of
+        <<"My password is ", Password/binary>> ->
+            rabbit_access_control:check_user_pass_login(Username, Password);
+        _ ->
+            {protocol_error, "Invalid response '~s'", [Response]}
+    end.
