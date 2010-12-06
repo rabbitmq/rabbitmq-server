@@ -289,8 +289,12 @@ handle_cast(flush_multiple_acks, State) ->
 
 handle_cast({confirm, MsgSeqNo, From},
             State = #ch{exchange_for_msg = EFM}) ->
-    {ok, ExchangeName} = dict:find(MsgSeqNo, EFM),
-    {noreply, send_or_enqueue_ack(MsgSeqNo, From, ExchangeName, State)}.
+    State1 = case dict:find(MsgSeqNo, EFM) of
+                 {ok, ExchangeName} ->
+                     send_or_enqueue_ack(MsgSeqNo, From, ExchangeName, State);
+                 _ -> State %% no entry in EFM means it's already been confirmed
+             end,
+    {noreply, State1}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{queues_for_msg = QFM, exchange_for_msg = EFM}) ->
@@ -1366,7 +1370,6 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
-            io:format("Stats: ~p~n", [Extra ++ CoarseStats ++ FineStats]),
             rabbit_event:notify(channel_stats,
                                 Extra ++ CoarseStats ++ FineStats)
     end.
