@@ -31,7 +31,7 @@
 
 -module(rabbit_variable_queue).
 
--export([init/5, init/3, terminate/1, delete_and_terminate/1,
+-export([init/3, terminate/1, delete_and_terminate/1,
          purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
          tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
@@ -42,7 +42,7 @@
 -export([start/1, stop/0]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0]).
+-export([start_msg_store/2, stop_msg_store/0, init/5]).
 
 %%----------------------------------------------------------------------------
 %% Definitions:
