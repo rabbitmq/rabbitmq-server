@@ -90,7 +90,8 @@
                 sender    :: pid(),
                 message   :: message()}).
 -type(message_properties() ::
-        #message_properties{expiry :: pos_integer() | 'undefined'}).
+        #message_properties{expiry :: pos_integer() | 'undefined',
+                            needs_confirming :: boolean()}).
 
 %% this is really an abstract type, but dialyzer does not support them
 -type(txn() :: rabbit_guid:guid()).

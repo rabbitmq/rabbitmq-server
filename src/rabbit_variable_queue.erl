@@ -42,7 +42,7 @@
 -export([start/1, stop/0]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0]).
+-export([start_msg_store/2, stop_msg_store/0, init/4]).
 
 %%----------------------------------------------------------------------------
 %% Definitions:
@@ -158,7 +158,7 @@
 %% The conversion from alphas to betas is also chunked, but only to
 %% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
 %% any one time. This further smooths the effects of changes to the
-%% target_ram_item_count and ensures the queue remains responsive
+%% target_ram_count and ensures the queue remains responsive
 %% even when there is a large amount of IO work to do. The
 %% idle_timeout callback is utilised to ensure that conversions are
 %% done as promptly as possible whilst ensuring the queue remains
@@ -256,18 +256,21 @@
           len,
           persistent_count,
 
-          target_ram_item_count,
+          target_ram_count,
           ram_msg_count,
           ram_msg_count_prev,
           ram_ack_count_prev,
           ram_index_count,
           out_counter,
           in_counter,
+          rates,
+          msgs_on_disk,
+          msg_indices_on_disk,
+          unconfirmed,
           ack_out_counter,
           ack_in_counter,
-          rates,
           ack_rates
-         }).
+        }).
 
 -record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
 
@@ -348,15 +351,18 @@
              persistent_count      :: non_neg_integer(),
 
              transient_threshold   :: non_neg_integer(),
-             target_ram_item_count :: non_neg_integer() | 'infinity',
+             target_ram_count      :: non_neg_integer() | 'infinity',
              ram_msg_count         :: non_neg_integer(),
              ram_msg_count_prev    :: non_neg_integer(),
              ram_index_count       :: non_neg_integer(),
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
+             rates                 :: rates(),
+             msgs_on_disk          :: gb_set(),
+             msg_indices_on_disk   :: gb_set(),
+             unconfirmed           :: gb_set(),
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
-             rates                 :: rates(),
              ack_rates             :: rates() }).
 
 -include("rabbit_backing_queue_spec.hrl").
@@ -403,16 +409,25 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(#amqqueue { name = QueueName, durable = IsDurable }, false) ->
-    IndexState = rabbit_queue_index:init(QueueName),
+init(Queue, Recover) ->
+    Self = self(),
+    init(Queue, Recover,
+         fun (Guids) -> msgs_written_to_disk(Self, Guids) end,
+         fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
+
+init(#amqqueue { name = QueueName, durable = IsDurable }, false,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
+    IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
     init(IsDurable, IndexState, 0, [],
          case IsDurable of
-             true  -> msg_store_client_init(?PERSISTENT_MSG_STORE);
+             true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
+                                            MsgOnDiskFun);
              false -> undefined
          end,
-         msg_store_client_init(?TRANSIENT_MSG_STORE));
+         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
 
-init(#amqqueue { name = QueueName, durable = true }, true) ->
+init(#amqqueue { name = QueueName }, true,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -422,16 +437,17 @@ init(#amqqueue { name = QueueName, durable = true }, true) ->
             _  -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
         end,
     PersistentClient = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE,
-                                                    PRef),
+                                                    PRef, MsgOnDiskFun),
     TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE,
-                                                    TRef),
+                                                    TRef, undefined),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
           QueueName, Terms1,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
           fun (Guid) ->
                   rabbit_msg_store:contains(Guid, PersistentClient)
-          end),
+          end,
+          MsgIdxOnDiskFun),
     init(true, IndexState, DeltaCount, Terms1,
          PersistentClient, TransientClient).
 
@@ -508,25 +524,31 @@ publish(Msg, MsgProps, _ChPid, State) ->
 publish_delivered(false, _Msg, _MsgProps, _ChPid,
                   State = #vqstate { len = 0 }) ->
     {blank_ack, a(State)};
-publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent },
-                  MsgProps, _ChPid,
+publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
+                                               guid = Guid },
+                  MsgProps = #message_properties {
+                    needs_confirming = NeedsConfirming },
+                  _ChPid,
                   State = #vqstate { len              = 0,
                                      next_seq_id      = SeqId,
                                      out_counter      = OutCount,
                                      in_counter       = InCount,
                                      persistent_count = PCount,
-                                     durable          = IsDurable }) ->
+                                     durable          = IsDurable,
+                                     unconfirmed      = Unconfirmed }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
         #msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
+    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, a(reduce_memory_use(
                 State2 #vqstate { next_seq_id      = SeqId    + 1,
                                   out_counter      = OutCount + 1,
                                   in_counter       = InCount  + 1,
-                                  persistent_count = PCount1 }))}.
+                                  persistent_count = PCount1,
+                                  unconfirmed      = Unconfirmed1 }))}.
 
 dropwhile(Pred, State) ->
     {_OkOrEmpty, State1} = dropwhile1(Pred, State),
@@ -636,9 +658,15 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                          persistent_count = PCount1 })}.
 
 ack(AckTags, State) ->
-    a(ack(fun msg_store_remove/3,
-          fun (_AckEntry, State1) -> State1 end,
-          AckTags, State)).
+    {Guids, State1} =
+        ack(fun msg_store_remove/3,
+            fun ({_IsPersistent, Guid, _MsgProps}, State1) ->
+                    remove_confirms(gb_sets:singleton(Guid), State1);
+                (#msg_status{msg = #basic_message{guid = Guid}}, State1) ->
+                    remove_confirms(gb_sets:singleton(Guid), State1)
+            end,
+            AckTags, State),
+    {Guids, a(State1)}.
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
            _ChPid, State = #vqstate { durable           = IsDurable,
@@ -688,7 +716,7 @@ tx_commit(Txn, Fun, MsgPropsFun,
        end)}.
 
 requeue(AckTags, MsgPropsFun, State) ->
-    a(reduce_memory_use(
+    {_Guids, State1} =
         ack(fun msg_store_release/3,
             fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
                     {_SeqId, State2} = publish(Msg, MsgPropsFun(MsgProps),
@@ -703,32 +731,31 @@ requeue(AckTags, MsgPropsFun, State) ->
                                                true, true, State2),
                     State3
             end,
-            AckTags, State))).
+            AckTags, State),
+    a(reduce_memory_use(State1)).
 
 len(#vqstate { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
 
-set_ram_duration_target(DurationTarget,
-                        State = #vqstate {
-                          rates =
-                              #rates { avg_egress  = AvgEgressRate,
-                                       avg_ingress = AvgIngressRate },
-                          ack_rates =
-                              #rates { avg_egress  = AvgAckEgressRate,
-                                       avg_ingress = AvgAckIngressRate },
-                          target_ram_item_count = TargetRamItemCount }) ->
+set_ram_duration_target(
+  DurationTarget, State = #vqstate {
+                    rates     = #rates { avg_egress  = AvgEgressRate,
+                                         avg_ingress = AvgIngressRate },
+                    ack_rates = #rates { avg_egress  = AvgAckEgressRate,
+                                         avg_ingress = AvgAckIngressRate },
+                    target_ram_count = TargetRamCount }) ->
     Rate =
         AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
-    TargetRamItemCount1 =
+    TargetRamCount1 =
         case DurationTarget of
             infinity  -> infinity;
             _         -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
         end,
-    State1 = State #vqstate { target_ram_item_count = TargetRamItemCount1 },
-    a(case TargetRamItemCount1 == infinity orelse
-          (TargetRamItemCount =/= infinity andalso
-           TargetRamItemCount1 >= TargetRamItemCount) of
+    State1 = State #vqstate { target_ram_count = TargetRamCount1 },
+    a(case TargetRamCount1 == infinity orelse
+          (TargetRamCount =/= infinity andalso
+           TargetRamCount1 >= TargetRamCount) of
           true  -> State1;
           false -> reduce_memory_use(State1)
       end).
@@ -804,40 +831,39 @@ idle_timeout(State) -> a(reduce_memory_use(tx_commit_index(State))).
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
 
-status(#vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
-                  len                   = Len,
-                  pending_ack           = PA,
-                  ram_ack_index         = RAI,
-                  on_sync               = #sync { funs = From },
-                  target_ram_item_count = TargetRamItemCount,
-                  ram_msg_count         = RamMsgCount,
-                  ram_index_count       = RamIndexCount,
-                  next_seq_id           = NextSeqId,
-                  persistent_count      = PersistentCount,
-                  rates                 = #rates {
-                    avg_egress  = AvgEgressRate,
-                    avg_ingress = AvgIngressRate },
-                  ack_rates             = #rates {
-                    avg_egress  = AvgAckEgressRate,
-                    avg_ingress = AvgAckIngressRate } }) ->
-    [ {q1                    , queue:len(Q1)},
-      {q2                    , bpqueue:len(Q2)},
-      {delta                 , Delta},
-      {q3                    , bpqueue:len(Q3)},
-      {q4                    , queue:len(Q4)},
-      {len                   , Len},
-      {pending_acks          , dict:size(PA)},
-      {outstanding_txns      , length(From)},
-      {target_ram_item_count , TargetRamItemCount},
-      {ram_msg_count         , RamMsgCount},
-      {ram_ack_count         , gb_trees:size(RAI)},
-      {ram_index_count       , RamIndexCount},
-      {next_seq_id           , NextSeqId},
-      {persistent_count      , PersistentCount},
-      {avg_ingress_rate      , AvgIngressRate},
-      {avg_egress_rate       , AvgEgressRate},
-      {avg_ack_ingress_rate  , AvgAckIngressRate},
-      {avg_ack_egress_rate   , AvgAckEgressRate} ].
+status(#vqstate {
+          q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+          len              = Len,
+          pending_ack      = PA,
+          ram_ack_index    = RAI,
+          on_sync          = #sync { funs = From },
+          target_ram_count = TargetRamCount,
+          ram_msg_count    = RamMsgCount,
+          ram_index_count  = RamIndexCount,
+          next_seq_id      = NextSeqId,
+          persistent_count = PersistentCount,
+          rates            = #rates { avg_egress  = AvgEgressRate,
+                                      avg_ingress = AvgIngressRate },
+          ack_rates        = #rates { avg_egress  = AvgAckEgressRate,
+                                      avg_ingress = AvgAckIngressRate } }) ->
+    [ {q1                  , queue:len(Q1)},
+      {q2                  , bpqueue:len(Q2)},
+      {delta               , Delta},
+      {q3                  , bpqueue:len(Q3)},
+      {q4                  , queue:len(Q4)},
+      {len                 , Len},
+      {pending_acks        , dict:size(PA)},
+      {outstanding_txns    , length(From)},
+      {target_ram_count    , TargetRamCount},
+      {ram_msg_count       , RamMsgCount},
+      {ram_ack_count       , gb_trees:size(RAI)},
+      {ram_index_count     , RamIndexCount},
+      {next_seq_id         , NextSeqId},
+      {persistent_count    , PersistentCount},
+      {avg_ingress_rate    , AvgIngressRate},
+      {avg_egress_rate     , AvgEgressRate},
+      {avg_ack_ingress_rate, AvgAckIngressRate},
+      {avg_ack_egress_rate , AvgAckEgressRate} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -883,6 +909,10 @@ one_if(false) -> 0.
 cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
+gb_sets_maybe_insert(false, _Val, Set) -> Set;
+%% when requeueing, we re-add a guid to the unconfimred set
+gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
+
 msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid },
            MsgProps) ->
     #msg_status { seq_id = SeqId, guid = Guid, msg = Msg,
@@ -904,8 +934,8 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
                                            end),
     Res.
 
-msg_store_client_init(MsgStore) ->
-    rabbit_msg_store:client_init(MsgStore, rabbit_guid:guid()).
+msg_store_client_init(MsgStore, MsgOnDiskFun) ->
+    rabbit_msg_store:client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
 
 msg_store_write(MSCState, IsPersistent, Guid, Msg) ->
     with_immutable_msg_store_state(
@@ -1027,34 +1057,37 @@ init(IsDurable, IndexState, DeltaCount, Terms,
             end,
     Now = now(),
     State = #vqstate {
-      q1                    = queue:new(),
-      q2                    = bpqueue:new(),
-      delta                 = Delta,
-      q3                    = bpqueue:new(),
-      q4                    = queue:new(),
-      next_seq_id           = NextSeqId,
-      pending_ack           = dict:new(),
-      ram_ack_index         = gb_trees:empty(),
-      index_state           = IndexState1,
-      msg_store_clients     = {PersistentClient, TransientClient},
-      on_sync               = ?BLANK_SYNC,
-      durable               = IsDurable,
-      transient_threshold   = NextSeqId,
+      q1                  = queue:new(),
+      q2                  = bpqueue:new(),
+      delta               = Delta,
+      q3                  = bpqueue:new(),
+      q4                  = queue:new(),
+      next_seq_id         = NextSeqId,
+      pending_ack         = dict:new(),
+      ram_ack_index       = gb_trees:empty(),
+      index_state         = IndexState1,
+      msg_store_clients   = {PersistentClient, TransientClient},
+      on_sync             = ?BLANK_SYNC,
+      durable             = IsDurable,
+      transient_threshold = NextSeqId,
 
-      len                   = DeltaCount1,
-      persistent_count      = DeltaCount1,
+      len                 = DeltaCount1,
+      persistent_count    = DeltaCount1,
 
-      target_ram_item_count = infinity,
-      ram_msg_count         = 0,
-      ram_msg_count_prev    = 0,
-      ram_ack_count_prev    = 0,
-      ram_index_count       = 0,
-      out_counter           = 0,
-      in_counter            = 0,
-      ack_out_counter       = 0,
-      ack_in_counter        = 0,
-      rates                 = blank_rate(Now, DeltaCount1),
-      ack_rates             = blank_rate(Now, 0) },
+      target_ram_count    = infinity,
+      ram_msg_count       = 0,
+      ram_msg_count_prev  = 0,
+      ram_ack_count_prev  = 0,
+      ram_index_count     = 0,
+      out_counter         = 0,
+      in_counter          = 0,
+      rates               = blank_rate(Now, DeltaCount1),
+      msgs_on_disk        = gb_sets:new(),
+      msg_indices_on_disk = gb_sets:new(),
+      unconfirmed         = gb_sets:new(),
+      ack_out_counter     = 0,
+      ack_in_counter      = 0,
+      ack_rates           = blank_rate(Now, 0) },
     a(maybe_deltas_to_betas(State)).
 
 blank_rate(Timestamp, IngressLength) ->
@@ -1080,7 +1113,7 @@ msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
     end.
 
 remove_persistent_messages(Guids) ->
-    PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE),
+    PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, undefined),
     ok = rabbit_msg_store:remove(Guids, PersistentClient),
     rabbit_msg_store:client_delete_and_terminate(PersistentClient).
 
@@ -1131,6 +1164,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
                                    durable = IsDurable }) ->
     PAcks = lists:append(SPAcks),
     Acks  = lists:append(SAcks),
+    {_Guids, NewState} = ack(Acks, State),
     Pubs  = [{Msg, Fun(MsgProps)} || {Fun, PubsN}    <- lists:reverse(SPubs),
                                      {Msg, MsgProps} <- lists:reverse(PubsN)],
     {SeqIds, State1 = #vqstate { index_state = IndexState }} =
@@ -1142,7 +1176,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
                   {SeqId, State3} =
                       publish(Msg, MsgProps, false, IsPersistent1, State2),
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
-          end, {PAcks, ack(Acks, State)}, Pubs),
+          end, {PAcks, NewState}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
     reduce_memory_use(
@@ -1196,15 +1230,17 @@ sum_guids_by_store_to_len(LensByStore, GuidsByStore) ->
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
-publish(Msg = #basic_message { is_persistent = IsPersistent },
-        MsgProps, IsDelivered, MsgOnDisk,
+publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
+        MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+        IsDelivered, MsgOnDisk,
         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
                            next_seq_id      = SeqId,
                            len              = Len,
                            in_counter       = InCount,
                            persistent_count = PCount,
                            durable          = IsDurable,
-                           ram_msg_count    = RamMsgCount }) ->
+                           ram_msg_count    = RamMsgCount,
+                           unconfirmed      = Unconfirmed }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
@@ -1214,11 +1250,13 @@ publish(Msg = #basic_message { is_persistent = IsPersistent },
                  true  -> State1 #vqstate { q4 = queue:in(m(MsgStatus1), Q4) }
              end,
     PCount1 = PCount + one_if(IsPersistent1),
+    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, State2 #vqstate { next_seq_id      = SeqId   + 1,
                               len              = Len     + 1,
                               in_counter       = InCount + 1,
                               persistent_count = PCount1,
-                              ram_msg_count    = RamMsgCount + 1}}.
+                              ram_msg_count    = RamMsgCount + 1,
+                              unconfirmed      = Unconfirmed1 }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, _MSCState) ->
@@ -1311,7 +1349,7 @@ remove_pending_ack(KeepPersistent,
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
-    State;
+    {[], State};
 ack(MsgStoreFun, Fun, AckTags, State) ->
     {{SeqIds, GuidsByStore},
      State1 = #vqstate { index_state       = IndexState,
@@ -1329,14 +1367,17 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                                        gb_trees:delete_any(SeqId, RAI)})}
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-    ok = orddict:fold(fun (IsPersistent, Guids, ok) ->
-                              MsgStoreFun(MSCState, IsPersistent, Guids)
-                      end, ok, GuidsByStore),
+    AckdGuids = lists:concat(
+                  orddict:fold(
+                    fun (IsPersistent, Guids, Gs) ->
+                            MsgStoreFun(MSCState, IsPersistent, Guids),
+                            [Guids | Gs]
+                    end, [], GuidsByStore)),
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
-    State1 #vqstate { index_state      = IndexState1,
+    {AckdGuids, State1 #vqstate { index_state      = IndexState1,
                       persistent_count = PCount1,
-                      ack_out_counter  = AckOutCount + length(AckTags) }.
+                      ack_out_counter  = AckOutCount + length(AckTags) }}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
@@ -1353,6 +1394,44 @@ find_persistent_count(LensByStore) ->
     end.
 
 %%----------------------------------------------------------------------------
+%% Internal plumbing for confirms (aka publisher acks)
+%%----------------------------------------------------------------------------
+
+remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
+                                            msg_indices_on_disk = MIOD,
+                                            unconfirmed         = UC }) ->
+    State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  GuidSet),
+                     msg_indices_on_disk = gb_sets:difference(MIOD, GuidSet),
+                     unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
+
+msgs_confirmed(GuidSet, State) ->
+    {{confirm, gb_sets:to_list(GuidSet)}, remove_confirms(GuidSet, State)}.
+
+msgs_written_to_disk(QPid, GuidSet) ->
+    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
+                                   msg_indices_on_disk = MIOD,
+                                   unconfirmed         = UC }) ->
+                    msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
+                                   State #vqstate {
+                                     msgs_on_disk =
+                                         gb_sets:intersection(
+                                           gb_sets:union(MOD, GuidSet), UC) })
+            end).
+
+msg_indices_written_to_disk(QPid, GuidSet) ->
+    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
+                                   msg_indices_on_disk = MIOD,
+                                   unconfirmed         = UC }) ->
+                    msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
+                                   State #vqstate {
+                                     msg_indices_on_disk =
+                                         gb_sets:intersection(
+                                           gb_sets:union(MIOD, GuidSet), UC) })
+            end).
+
+%%----------------------------------------------------------------------------
 %% Phase changes
 %%----------------------------------------------------------------------------
 
@@ -1365,7 +1444,7 @@ find_persistent_count(LensByStore) ->
 %% though the conversion function for that is called as necessary. The
 %% reason is twofold. Firstly, this is safe because the conversion is
 %% only ever necessary just after a transition to a
-%% target_ram_item_count of zero or after an incremental alpha->beta
+%% target_ram_count of zero or after an incremental alpha->beta
 %% conversion. In the former case the conversion is performed straight
 %% away (i.e. any betas present at the time are converted to deltas),
 %% and in the latter case the need for a conversion is flagged up
@@ -1376,51 +1455,41 @@ find_persistent_count(LensByStore) ->
 %% perpetually reporting the need for a conversion when no such
 %% conversion is needed. That in turn could cause an infinite loop.
 reduce_memory_use(_AlphaBetaFun, _BetaGammaFun, _BetaDeltaFun, _AckFun,
-                  State = #vqstate {target_ram_item_count = infinity}) ->
+                  State = #vqstate {target_ram_count = infinity}) ->
     {false, State};
 reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
                   State = #vqstate {
-                    ram_ack_index         = RamAckIndex,
-                    ram_msg_count         = RamMsgCount,
-                    target_ram_item_count = TargetRamItemCount,
-                    rates                 = #rates {
-                      avg_ingress = AvgIngress,
-                      avg_egress  = AvgEgress },
-                    ack_rates             = #rates {
-                      avg_ingress = AvgAckIngress,
-                      avg_egress  = AvgAckEgress } }) ->
+                    ram_ack_index    = RamAckIndex,
+                    ram_msg_count    = RamMsgCount,
+                    target_ram_count = TargetRamCount,
+                    rates            = #rates { avg_ingress = AvgIngress,
+                                                avg_egress  = AvgEgress },
+                    ack_rates        = #rates { avg_ingress = AvgAckIngress,
+                                                avg_egress  = AvgAckEgress }
+                   }) ->
 
     {Reduce, State1} =
         case chunk_size(RamMsgCount + gb_trees:size(RamAckIndex),
-                        TargetRamItemCount) of
-            0 ->
-                {false, State};
-            S1 ->
-                ReduceFuns =
-                    case (AvgAckIngress - AvgAckEgress) >
-                        (AvgIngress - AvgEgress) of
-                        true ->
-                            %% ACKs are growing faster than the queue,
-                            %% push messages from there first.
-                            [AckFun, AlphaBetaFun];
-                        false ->
-                            %% The queue is growing faster than the
-                            %% acks, push queue messages first.
-                            [AlphaBetaFun, AckFun]
-                    end,
-                {_, State2} =
-                    %% Both reduce functions get a chance to reduce
-                    %% memory. The second may very well get a quota of
-                    %% 0 if the first function managed to push out the
-                    %% maximum number of messages.
-                    lists:foldl(
-                      fun (ReduceFun, {QuotaN, StateN}) ->
-                              ReduceFun(QuotaN, StateN)
-                      end, {S1, State}, ReduceFuns),
-                {true, State2}
+                        TargetRamCount) of
+            0  -> {false, State};
+            %% Reduce memory of pending acks and alphas. The order is
+            %% determined based on which is growing faster. Whichever
+            %% comes second may very well get a quota of 0 if the
+            %% first manages to push out the max number of messages.
+            S1 -> {_, State2} =
+                      lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                                          ReduceFun(QuotaN, StateN)
+                                  end,
+                                  {S1, State},
+                                  case (AvgAckIngress - AvgAckEgress) >
+                                      (AvgIngress - AvgEgress) of
+                                      true  -> [AckFun, AlphaBetaFun];
+                                      false -> [AlphaBetaFun, AckFun]
+                                  end),
+                  {true, State2}
         end,
 
-    case State1 #vqstate.target_ram_item_count of
+    case State1 #vqstate.target_ram_count of
         0 -> {Reduce, BetaDeltaFun(State1)};
         _ -> case chunk_size(State1 #vqstate.ram_index_count,
                              permitted_ram_index_count(State1)) of
@@ -1616,11 +1685,11 @@ maybe_push_q4_to_betas(Quota, State = #vqstate { q4 = Q4 }) ->
 
 maybe_push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
                            State = #vqstate {
-                             ram_msg_count         = RamMsgCount,
-                             target_ram_item_count = TargetRamItemCount })
+                             ram_msg_count    = RamMsgCount,
+                             target_ram_count = TargetRamCount })
   when Quota =:= 0 orelse
-       TargetRamItemCount =:= infinity orelse
-       TargetRamItemCount >= RamMsgCount ->
+       TargetRamCount =:= infinity orelse
+       TargetRamCount >= RamMsgCount ->
     {Quota, State};
 maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
     case Generator(Q) of
