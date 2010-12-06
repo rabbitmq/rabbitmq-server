@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import sys
 import os
+import re
 from xml.dom.minidom import parse
 
 def safe(str):
@@ -11,6 +12,7 @@ class AMQPType:
         self.name = safe(dom.getAttribute('name'))
         self.source = dom.getAttribute('source')
         self.desc = dom.getElementsByTagName('descriptor')[0].getAttribute('name')
+        self.code = dom.getElementsByTagName('descriptor')[0].getAttribute('code')
         self.fields = [safe(el.getAttribute('name')) for el in
                        dom.getElementsByTagName('field')]
 
@@ -32,6 +34,9 @@ def print_erl(types):
     for t in types:
         print """record_for({symbol, "%s"}) ->
     #'v1_0.%s'{};""" % (t.desc, t.name)
+        if t.code:
+            print """record_for({ulong, "%d"}) ->
+    #'v1_0.%s'{};""" % (parse_code(t.code), t.name)
     print """record_for(Other) -> exit({unknown, Other})."""
     for t in types:
         print """fields(#'v1_0.%s'{}) -> record_info(fields, 'v1_0.%s');""" % (t.name, t.name)
@@ -73,6 +78,10 @@ def want_type(el):
 def want_define(el):
     klass = el.getAttribute('class')
     return klass == 'restricted'
+
+def parse_code(code):
+    res = re.match('0x([0-9a-fA-F]{8,8}):0x([0-9a-fA-F]{8,8})', code)
+    return res and int(res.group(1) + res.group(2), 16)
 
 types = []
 defines = []
