@@ -1,12 +1,23 @@
 Overview
 ========
 
-Currently this needs bug23455 in the server, Erlang client, and
-Management Plugin (if you're using that). Build and install it like
-any other plugin (see http://www.rabbitmq.com/plugin-development.html).
+This plugin provides the ability for your RabbitMQ server to perform
+authentication (determining who can log in) and authorisation
+(determining what permissions they have) by deferring to an external
+LDAP server. To use this plugin, some editing of the RabbitMQ
+configuration file is required. You must enable the plugin, and then
+configure it. You are advised to read this entire file before
+starting.
 
-To use this plugin, some editing of the RabbitMQ configuration file is
-required. You must enable it, and then configure it.
+Requirements
+============
+
+Currently this needs bug23455 in rabbitmq-server. If you want to use
+the management plugin, you'll need bug23455 in rabbitmq-erlang-client
+and rabbitmq-management, and bug23467 in rabbitmq-management-agent.
+
+Once you have the right branches, you can build and install it like
+any other plugin (see http://www.rabbitmq.com/plugin-development.html).
 
 Enabling the plugin
 ===================
