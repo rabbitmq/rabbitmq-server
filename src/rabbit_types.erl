@@ -137,7 +137,8 @@
                 auto_delete     :: boolean(),
                 exclusive_owner :: rabbit_types:maybe(pid()),
                 arguments       :: rabbit_framing:amqp_table(),
-                pid             :: rabbit_types:maybe(pid())}).
+                pid             :: rabbit_types:maybe(pid()),
+                extra_pids      :: [pid()]}).
 
 -type(exchange() ::
       #exchange{name        :: rabbit_exchange:name(),
