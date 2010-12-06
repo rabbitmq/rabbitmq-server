@@ -467,29 +467,30 @@ send_or_enqueue_ack(_MsgSeqNo, _QPid, _EN, State = #ch{confirm_enabled = false})
     State;
 send_or_enqueue_ack(MsgSeqNo, QPid, ExchangeName,
                     State = #ch{confirm_multiple = false}) ->
-    maybe_incr_confirm_stats(QPid, ExchangeName, State),
+    maybe_incr_confirm_queue_stats(QPid, ExchangeName, State),
     do_if_unconfirmed(
       MsgSeqNo, QPid,
       fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
               ok = rabbit_writer:send_command(
                      WriterPid, #'basic.ack'{delivery_tag = MSN}),
+              maybe_incr_stats([{ExchangeName, 1}], confirm, State1),
               State1
       end, State);
 send_or_enqueue_ack(MsgSeqNo, QPid, ExchangeName,
                     State = #ch{confirm_multiple = true}) ->
-    maybe_incr_confirm_stats(QPid, ExchangeName, State),
+    maybe_incr_confirm_queue_stats(QPid, ExchangeName, State),
     do_if_unconfirmed(
       MsgSeqNo, QPid,
       fun(MSN, State1 = #ch{held_confirms = As}) ->
+              maybe_incr_stats([{ExchangeName, 1}], confirm, State1),
               start_confirm_timer(
                 State1#ch{held_confirms = gb_sets:add(MSN, As)})
       end, State).
 
-maybe_incr_confirm_stats(QPid, ExchangeName, State) ->
-    maybe_incr_stats([{ExchangeName, 1}], confirm, State),
+maybe_incr_confirm_queue_stats(QPid, ExchangeName, State) ->
     case QPid of
         undefined -> ok;
-        _         -> maybe_incr_stats({{QPid, ExchangeName}, 1}, confirm, State)
+        _         -> maybe_incr_stats([{{QPid, ExchangeName}, 1}], confirm, State)
     end.
 
 do_if_unconfirmed(MsgSeqNo, QPid, ConfirmFun,
@@ -568,7 +569,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                              content       = DecodedContent,
                              guid          = rabbit_guid:guid(),
                              is_persistent = IsPersistent},
-    io:format("publishing ~p to ~p (~p)~n", [MsgSeqNo, ExchangeName, IsPersistent]),
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
@@ -579,7 +579,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     maybe_incr_stats([{ExchangeName, 1} |
                       [{{QPid, ExchangeName}, 1} ||
                           QPid <- DeliveredQPids]], publish, State2),
-    io:format("did~n"),
     {noreply, case TxnKey of
                   none -> State2;
                   _    -> add_tx_participants(DeliveredQPids, State2)
@@ -1256,7 +1255,6 @@ process_routing_result(routed, QPids, XName, MsgSeqNo, _Msg,
                        State = #ch{queues_for_msg   = QFM,
                                    exchange_for_msg = EFM}) ->
     EFM1 = dict:store(MsgSeqNo, XName, EFM),
-    io:format("Msg -> X: ~p -> ~p~n", [MsgSeqNo, XName]),
     QFM1 = dict:store(MsgSeqNo, sets:from_list(QPids), QFM),
     [maybe_monitor(QPid) || QPid <- QPids],
     State#ch{queues_for_msg = QFM1, exchange_for_msg = EFM1}.
@@ -1368,6 +1366,7 @@ internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
                  {channel_queue_exchange_stats,
                   [{QX, Stats} ||
                       {{queue_exchange_stats, QX}, Stats} <- get()]}],
+            io:format("Stats: ~p~n", [Extra ++ CoarseStats ++ FineStats]),
             rabbit_event:notify(channel_stats,
                                 Extra ++ CoarseStats ++ FineStats)
     end.
