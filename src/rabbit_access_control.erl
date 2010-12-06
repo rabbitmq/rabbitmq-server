@@ -109,14 +109,16 @@ user_pass_login(User, Pass) ->
     end.
 
 check_user_pass_login(Username, Pass) ->
+    Refused = {refused, io_lib:format("user '~s' - invalid credentials",
+                                      [Username])},
     case lookup_user(Username) of
         {ok, User} ->
             case check_password(Pass, User#user.password_hash) of
-                true -> {ok,      User};
-                _    -> {refused, Username}
+                true -> {ok, User};
+                _    -> Refused
             end;
         {error, not_found} ->
-            {refused, Username}
+            Refused
     end.
 
 internal_lookup_vhost_access(Username, VHostPath) ->
