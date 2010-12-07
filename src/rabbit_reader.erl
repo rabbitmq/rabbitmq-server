@@ -63,6 +63,8 @@
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
+                              peer_cert_validity, ssl_protocol,
+                              ssl_key_exchange, ssl_cipher, ssl_hash,
                               peer_cert_validity,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
@@ -843,6 +845,14 @@ i(peer_port, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
 i(ssl, #v1{sock = Sock}) ->
     rabbit_net:is_ssl(Sock);
+i(ssl_protocol, #v1{sock = Sock}) ->
+    ssl_info(fun ({P, _}) -> P end, Sock);
+i(ssl_key_exchange, #v1{sock = Sock}) ->
+    ssl_info(fun ({_, {K, _, _}}) -> K end, Sock);
+i(ssl_cipher, #v1{sock = Sock}) ->
+    ssl_info(fun ({_, {_, C, _}}) -> C end, Sock);
+i(ssl_hash, #v1{sock = Sock}) ->
+    ssl_info(fun ({_, {_, _, H}}) -> H end, Sock);
 i(peer_cert_issuer, #v1{sock = Sock}) ->
     cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
 i(peer_cert_subject, #v1{sock = Sock}) ->
@@ -887,6 +897,13 @@ socket_info(Get, Select) ->
     case Get() of
         {ok,    T} -> Select(T);
         {error, _} -> ''
+    end.
+
+ssl_info(F, Sock) ->
+    case rabbit_net:ssl_info(Sock) of
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Info}  -> F(Info)
     end.
 
 cert_info(F, Sock) ->
