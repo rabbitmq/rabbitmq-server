@@ -260,25 +260,21 @@ duplicate_node_check([]) ->
     %% Ignore running node while installing windows service
     ok;
 duplicate_node_check(Node) ->
-    case Node of
-        [] -> ok;
-        _  -> {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-              case net_adm:names(NodeHost) of
-                  {ok, NamePorts}  ->
-                      case proplists:is_defined(NodeName, NamePorts) of
-                               true -> io:format("node with name ~p "
-                                                 "already running on ~p~n",
-                                                 [NodeName, NodeHost]),
-                                       [io:format(Fmt ++ "~n", Args) ||
-                                        {Fmt, Args} <-
-                                             rabbit_control:diagnostics(Node)],
-                                       terminate(?ERROR_CODE);
-                               false -> ok
-                      end;
-                  {error, address}    -> ok;
-                  {error, EpmdReason} -> terminate("unexpected epmd error:~p~n",
-                                                   [EpmdReason])
-              end
+    {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+    case net_adm:names(NodeHost) of
+        {ok, NamePorts}  ->
+            case proplists:is_defined(NodeName, NamePorts) of
+                     true -> io:format("node with name ~p "
+                                       "already running on ~p~n",
+                                       [NodeName, NodeHost]),
+                             [io:format(Fmt ++ "~n", Args) ||
+                              {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                             terminate(?ERROR_CODE);
+                     false -> ok
+            end;
+        {error, address}    -> ok;
+        {error, EpmdReason} -> terminate("unexpected epmd error:~p~n",
+                                         [EpmdReason])
     end.
 
 terminate(Fmt, Args) ->
