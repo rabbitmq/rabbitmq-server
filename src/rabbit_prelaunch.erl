@@ -132,27 +132,7 @@ start() ->
      || App <- PluginApps],
     io:nl(),
 
-    % check whether a node with the same name is already running
-    case Node of
-        [] -> ok;
-        _  -> {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-              case net_adm:names(NodeHost) of
-                  {ok, NamePorts}  ->
-                      case proplists:is_defined(NodeName, NamePorts) of
-                               true -> io:format("node with name ~p "
-                                                 "already running on ~p~n",
-                                                 [NodeName, NodeHost]),
-                                       [io:format(Fmt ++ "~n", Args) ||
-                                        {Fmt, Args} <-
-                                             rabbit_control:diagnostics(Node)],
-                                       terminate(?ERROR_CODE);
-                               false -> ok
-                      end;
-                  {error, address}    -> ok;
-                  {error, EpmdReason} -> terminate("unexpected epmd error:~p~n",
-                                                     [EpmdReason])
-              end
-    end,
+    ok = duplicate_node_check(Node),
 
     terminate(0),
     ok.
@@ -274,6 +254,32 @@ process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
     [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
+
+%% Check whether a node with the same name is already running
+duplicate_node_check([]) ->
+    %% Ignore running node while installing windows service
+    ok;
+duplicate_node_check(Node) ->
+    case Node of
+        [] -> ok;
+        _  -> {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+              case net_adm:names(NodeHost) of
+                  {ok, NamePorts}  ->
+                      case proplists:is_defined(NodeName, NamePorts) of
+                               true -> io:format("node with name ~p "
+                                                 "already running on ~p~n",
+                                                 [NodeName, NodeHost]),
+                                       [io:format(Fmt ++ "~n", Args) ||
+                                        {Fmt, Args} <-
+                                             rabbit_control:diagnostics(Node)],
+                                       terminate(?ERROR_CODE);
+                               false -> ok
+                      end;
+                  {error, address}    -> ok;
+                  {error, EpmdReason} -> terminate("unexpected epmd error:~p~n",
+                                                   [EpmdReason])
+              end
+    end.
 
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
