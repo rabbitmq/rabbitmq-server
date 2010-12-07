@@ -53,7 +53,7 @@ start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
 
     %% Determine our various directories
-    [PluginDir, UnpackedPluginDir, NodeName] = init:get_plain_arguments(),
+    [PluginDir, UnpackedPluginDir, Node] = init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
@@ -132,19 +132,28 @@ start() ->
      || App <- PluginApps],
     io:nl(),
 
-    % check whether it is possible to start a node with the requested nodename
-    case net_kernel:start([list_to_atom(NodeName), shortnames]) of
-        {ok, _Pid}      -> ok = net_kernel:stop();
-        {error, Result} ->
-             % consistent layout by flushing error_log mailbox
-             gen_event:which_handlers(error_logger),
-             io:format("starting node with name ~p failed. "
-                       "(is RabbitMQ already running?)~n~p~n",
-                       [NodeName, Result]),
-            [io:format(Fmt ++ "~n", Args) ||
-             {Fmt, Args} <- rabbit_control:diagnostics(NodeName)],
-            terminate(?ERROR_CODE)
+    % check whether a node with the same name is already running
+    case Node of
+        [] -> ok;
+        _  -> {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+              case net_adm:names(NodeHost) of
+                  {ok, NamePorts}  ->
+                      case proplists:is_defined(NodeName, NamePorts) of
+                               true -> io:format("node with name ~p "
+                                                 "already running on ~p~n",
+                                                 [NodeName, NodeHost]),
+                                       [io:format(Fmt ++ "~n", Args) ||
+                                        {Fmt, Args} <-
+                                             rabbit_control:diagnostics(Node)],
+                                       terminate(?ERROR_CODE);
+                               false -> ok
+                      end;
+                  {error, address}    -> ok;
+                  {error, EpmdReason} -> terminate("unexpected epmd error:~p~n",
+                                                     [EpmdReason])
+              end
     end,
+
     terminate(0),
     ok.
 
