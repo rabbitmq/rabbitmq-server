@@ -41,19 +41,34 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
-%% We have to keep track of a few things for sessions,
-%% across outgoing links:
-%%  - transfer number
-%%  - unsettled_lwm
-%% across incoming links:
-%%  - unsettled_lwm
-%%  - session credit
-%% and for each outgoing link,
-%%  - credit we've been issued
-%%  - unsettled messages
-%% and for each incoming link,
-%%  - how much credit we've issued
+%% Session LWM and credit: (largely TODO)
 %%
+%% transfer-id, unsettled-lwm, and session-credit define a window:
+%% |<-LWM      |<-txfr     |<-hwm
+%% [ | | | | | | | | | | | ]
+%% session-credit can either bound the hwm, or the total number of
+%% unsettled messages.
+%%
+%% For incoming links, we simply echo the session credit; we are happy
+%% for the client to do whatever it likes, since we don't keep track of
+%% incoming messages (we're either about to settle them, or they're
+%% settled when they come in).
+%%
+%% For outgoing links, we try to follow what the client says by using
+%% basic.qos.  Unless told to change it, we try to keep an accurate
+%% credit count.
+%%
+%% Link credit:
+%% 
+%% For incoming links we simply issue a large credit, and maintain it.
+%% TODO reduce it if we get backpressure.
+%%
+%% For outgoing frames, there's not much we can do since there's no
+%% way to credit-control individual queue consumers (and cancelling
+%% would almost always be too late, leaving messages in limbo in a
+%% process mailbox).  Currently we act as if we have unlimited credit.
+
+
 %% TODO figure out how much of this actually needs to be serialised.
 %% TODO links can be migrated between sessions -- seriously.
 
@@ -80,7 +95,12 @@ init([Channel, ReaderPid, WriterPid]) ->
                    xfer_num_to_tag    = gb_trees:empty()}}.
 
 terminate(_Reason, #session{ backing_connection = Conn,
+                             declaring_channel = DeclCh,
                              backing_channel    = Ch}) ->
+    case DeclCh of
+        undefined -> ok;
+        Channel   -> amqp_channel:close(Channel)
+    end,
     amqp_channel:close(Ch),
     %% TODO: closing the connection here leads to errors in the logs
     amqp_connection:close(Conn),
@@ -179,7 +199,11 @@ handle_control(#'v1_0.attach'{name = Name,
                  source = Source,
                  target = ServerTarget },
                flow_state = #'v1_0.flow_state'{
-                 link_credit = {uint, 50},
+                 %% we ought to be able to issue unlimited credit by
+                 %% supplying a null ('undefined') here, but this is
+                 %% apparently not accounted for in the Python client
+                 %% code.
+                 link_credit = {uint, 1000000},
                  unsettled_lwm = {uint, LWM},
                  transfer_count = {uint, 0}},
                transfer_unit = Unit,
@@ -245,14 +269,16 @@ handle_control(#'v1_0.disposition'{ batchable = Batchable,
                             {Settled, State2} = settle(Extent, Batchable, State1),
                             {[Settled | SettledExtents1], State2}
                     end, {[], State}, Extents),
+    LWM = gb_trees:smallest(NewState#session.xfer_num_to_tag),
+    NewState1 = NewState#session { outgoing_lwm = LWM },
     case lists:filter(fun (none) -> false;
                           (_Ext)  -> true
                       end, SettledExtents) of
-        []   -> {noreply, NewState}; %% everything in its place
+        []   -> {noreply, NewState1}; %% everything in its place
         Exts -> {reply,
                  Disp#'v1_0.disposition'{ extents = Exts,
                                           role = ?SEND_ROLE }, %% server is sender
-                 NewState}
+                 NewState1}
     end;
 
 handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
@@ -372,7 +398,7 @@ transfer(WriterPid, LinkHandle,
     NewSession = Session#session {outgoing_session_credit = SessionCredit - 1},
     T = #'v1_0.transfer'{handle = LinkHandle,
                          flow_state = flow_state(NewLink, NewSession),
-                         delivery_tag = {binary, <<DeliveryTag/integer>>},
+                         delivery_tag = {binary, <<DeliveryTag:64>>},
                          transfer_id = {uint, TransferNumber},
                          settled = NoAck,
                          state = #'v1_0.transfer_state'{
@@ -403,6 +429,7 @@ settle(#'v1_0.extent'{
        _Batchable, %% TODO is this documented anywhere? Handle it.
        State = #session{backing_channel = Ch,
                         outgoing_session_credit = SessionCredit,
+                        outgoing_lwm = LWM,
                         xfer_num_to_tag = Dict}) ->
     {Dict1, SessionCredit1} =
         lists:foldl(
@@ -424,7 +451,7 @@ settle(#'v1_0.extent'{
                   ok = amqp_channel:call(Ch, Ack),
                   {gb_trees:delete(Transfer, TransferMap), SC + 1}
           end,
-          {Dict, SessionCredit}, lists:seq(First, Last)),
+          {Dict, SessionCredit}, lists:seq(max(LWM, First), Last)),
     {case Settled of
          true  -> none;
          false -> Extent#'v1_0.extent'{ settled = true }

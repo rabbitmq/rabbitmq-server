@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_binary_parser).
 
--export([parse/1]).
+-export([parse/1, parse1/1]).
 
 -include("rabbit_amqp1_0.hrl").
 

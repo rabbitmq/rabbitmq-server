@@ -35,7 +35,8 @@ def print_erl(types):
         print """record_for({symbol, "%s"}) ->
     #'v1_0.%s'{};""" % (t.desc, t.name)
         if t.code:
-            print """record_for({ulong, "%d"}) ->
+            print "%% %s\n" % t.code
+            print """record_for({ulong, %d}) ->
     #'v1_0.%s'{};""" % (parse_code(t.code), t.name)
     print """record_for(Other) -> exit({unknown, Other})."""
     for t in types:
