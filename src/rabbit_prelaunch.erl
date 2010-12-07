@@ -273,7 +273,7 @@ duplicate_node_check(Node) ->
                      false -> ok
             end;
         {error, address}    -> ok;
-        {error, EpmdReason} -> terminate("unexpected epmd error:~p~n",
+        {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
                                          [EpmdReason])
     end.
 
