@@ -170,12 +170,6 @@
 
 %%---------------------------------------------------------------------------
 
--import(application).
--import(mnesia).
--import(lists).
--import(inet).
--import(gen_tcp).
-
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
