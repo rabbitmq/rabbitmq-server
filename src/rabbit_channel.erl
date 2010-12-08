@@ -1070,11 +1070,12 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
 basic_return(#basic_message{exchange_name = ExchangeName,
                             routing_key   = RoutingKey,
                             content       = Content},
-             WriterPid, Reason) ->
+             State, Reason) ->
+    maybe_incr_stats([{ExchangeName, 1}], return, State),
     {_Close, ReplyCode, ReplyText} =
         rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
-           WriterPid,
+           State#ch.writer_pid,
            #'basic.return'{reply_code  = ReplyCode,
                            reply_text  = ReplyText,
                            exchange    = ExchangeName#resource.name,
@@ -1219,17 +1220,11 @@ is_message_persistent(Content) ->
             IsPersistent
     end.
 
-process_routing_result(unroutable,    _, MsgSeqNo,
-		       Message = #basic_message{exchange_name = ExchangeName},
-		       State) ->
-    maybe_incr_stats([{ExchangeName, 1}], return, State),
-    ok = basic_return(Message, State#ch.writer_pid, no_route),
+process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
+    ok = basic_return(Message, State, no_route),
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
-process_routing_result(not_delivered, _, MsgSeqNo,
-		       Message = #basic_message{exchange_name = ExchangeName},
-		       State) ->
-    maybe_incr_stats([{ExchangeName, 1}], return, State),
-    ok = basic_return(Message, State#ch.writer_pid, no_consumers),
+process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
+    ok = basic_return(Message, State, no_consumers),
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
