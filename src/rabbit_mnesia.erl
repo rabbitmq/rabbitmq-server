@@ -214,6 +214,8 @@ table_definitions() ->
        {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
         ++ plugin_table_definitions().
 
+%% TODO: re-work this abuse of the application env as a register with
+%% the generic registry that should be landing at some point.
 add_table_definition(Def) ->
     ok = application:set_env(rabbit, plugin_mnesia_tables,
                              [Def | plugin_table_definitions()], infinity).
