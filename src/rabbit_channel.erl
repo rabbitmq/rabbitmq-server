@@ -266,7 +266,19 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
-    ok = internal_deliver(WriterPid, ConsumerTag, DeliveryTag, Msg),
+
+    {_QName, QPid, _MsgId, Redelivered,
+     #basic_message{exchange_name = ExchangeName,
+		    routing_key = RoutingKey,
+		    content = Content}} = Msg,
+
+    M = #'basic.deliver'{consumer_tag = ConsumerTag,
+                         delivery_tag = DeliveryTag,
+                         redelivered = Redelivered,
+                         exchange = ExchangeName#resource.name,
+                         routing_key = RoutingKey},
+    rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
+
     {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
     maybe_incr_stats([{QPid, 1}],
                      case AckRequired of
@@ -1239,19 +1251,6 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
-
-internal_deliver(WriterPid, ConsumerTag, DeliveryTag,
-                 {_QName, QPid, _MsgId, Redelivered,
-                  #basic_message{exchange_name = ExchangeName,
-                                 routing_key = RoutingKey,
-                                 content = Content}}) ->
-    M = #'basic.deliver'{consumer_tag = ConsumerTag,
-                         delivery_tag = DeliveryTag,
-                         redelivered = Redelivered,
-                         exchange = ExchangeName#resource.name,
-                         routing_key = RoutingKey},
-    rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
-    ok.
 
 terminate(State) ->
     stop_confirm_timer(State),
