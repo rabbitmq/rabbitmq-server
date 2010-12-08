@@ -42,6 +42,9 @@ function fmt_parameters(obj) {
     if (obj.auto_delete) {
         res += '<acronym title="Auto-delete">AD</acronym> ';
     }
+    if (obj.internal != undefined && obj.internal) {
+        res += '<acronym title="Internal">I</acronym> ';
+    }
     var args = fmt_table_short(obj.arguments);
     if (args != '') {
         res += '<p>' + args + '</p>';

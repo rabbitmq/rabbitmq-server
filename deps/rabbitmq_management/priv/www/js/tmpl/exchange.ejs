@@ -7,6 +7,7 @@
       <tr>
         <th>Type</th>
         <td><%= exchange.type %></td>
+        <th>Internal</th>
       </tr>
       <tr>
         <th>Parameters</th>
@@ -16,6 +17,7 @@
       <tr>
         <th>Virtual host</th>
         <td><%= exchange.vhost %></td>
+        <td><%= fmt_boolean(exchange.internal) %></td>
       </tr>
 <% } %>
     </table>

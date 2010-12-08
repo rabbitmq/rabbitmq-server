@@ -42,7 +42,8 @@ URIS = {
 
 DECLARABLE = {
     'exchange':   {'mandatory': ['name', 'type'],
-                   'optional':  {'auto_delete': 'false', 'durable': 'true'}},
+                   'optional':  {'auto_delete': 'false', 'durable': 'true',
+                                 'internal': 'false'}},
     'queue':      {'mandatory': ['name'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true'}},
     'binding':    {'mandatory': ['source', 'destination_type', 'destination',

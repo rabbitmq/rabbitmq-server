@@ -96,7 +96,7 @@ Content-Length: 0</pre>
       <li>
         Create a new exchange in the default virtual host:
 <pre>$ curl -i -u guest:guest -H "content-type:application/json" \
-  -XPUT -d'{"type":"direct","auto_delete":false,"durable":true,"arguments":[]}' \
+  -XPUT -d'{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":[]}' \
   http://localhost:55672/api/exchanges/%2f/my-new-exchange
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
@@ -234,7 +234,7 @@ Content-Length: 0</pre>
         <td></td>
         <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i></td>
         <td>An individual exchange. To PUT an exchange, you will need a body looking something like this:
-<pre>{"type":"direct","auto_delete":false,"durable":true,"arguments":[]}</pre></td>
+<pre>{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":[]}</pre></td>
       </tr>
       <tr>
         <td>X</td>
