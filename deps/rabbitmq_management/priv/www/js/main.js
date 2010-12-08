@@ -352,6 +352,15 @@ function postprocess() {
     $('.multifield input').live('blur', function() {
             update_multifields();
         });
+    $('#has-password').change(function() {
+        if ($(this).val() == 'true') {
+            debug("down");
+            $('#password').slideDown(100);
+        } else {
+            debug("up");
+            $('#password').slideUp(100);
+        }
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -497,7 +506,7 @@ function sync_post(sammy, path_template) {
 }
 
 function sync_req(type, params0, path_template) {
-    var params = collapse_multifields(params0);
+    var params = params_magic(params0);
     var path;
     try {
         path = fill_path_template(path_template, params);
@@ -556,6 +565,11 @@ function fill_path_template(template, params) {
 // Better suggestions appreciated
 var INTEGER_ARGUMENTS = map(['x-expires']);
 
+function params_magic(params) {
+    return maybe_remove_password(
+        collapse_multifields(params));
+}
+
 function collapse_multifields(params0) {
     var params = {};
     for (key in params0) {
@@ -583,6 +597,14 @@ function collapse_multifields(params0) {
             }
         }
     }
+    return params;
+}
+
+function maybe_remove_password(params) {
+    if (params['has-password'] == 'false') {
+        delete params['password'];
+    }
+
     return params;
 }
 

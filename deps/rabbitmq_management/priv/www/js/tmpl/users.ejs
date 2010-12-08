@@ -13,6 +13,7 @@
     <% for (var i = 0; i < users.length; i++) { %>
        <tr<%= alt_rows(i)%>>
          <td><%= link_user(users[i].name) %></td>
+         <td><%= users[i].password_hash %></td>
          <td class="c"><%= fmt_boolean(users[i].administrator) %></td>
        </tr>
     <% } %>
@@ -21,7 +22,7 @@
   </div>
 </div>
 
-<div class="section-hidden">
+<div class="section">
   <h2>Add / update a user</h2>
   <div class="hider">
     <form action="#/users" method="put">
@@ -32,7 +33,16 @@
         </tr>
         <tr>
           <th><label>Password:</label></th>
-          <td><input type="text" name="password"/></td>
+          <td>
+            <select name="has-password" id="has-password">
+              <option value="true">can log in with password:</option>
+              <option value="false">cannot log in with password</option>
+            </select>
+            <br/>
+            <div id="password">
+              <input type="text" name="password" />
+            </div>
+          </td>
         </tr>
         <tr>
           <th><label>Administrator:</label></th>
