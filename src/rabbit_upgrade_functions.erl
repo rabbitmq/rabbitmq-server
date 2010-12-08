@@ -74,18 +74,16 @@ add_ip_to_listener() ->
       [node, protocol, host, ip_address, port]).
 
 add_internal_to_exchange_and_durable_exchange() ->
+    Tables = [rabbit_exchange, rabbit_durable_exchange],
     AddInternalFun =
         fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
                 {exchange, Name, Type, Durable, AutoDelete, false, Args}
         end,
-    ok = mnesia(
-           rabbit_exchange,
-           AddInternalFun,
-           [name, type, durable, auto_delete, internal, arguments]),
-    mnesia(
-      rabbit_durable_exchange,
-      AddInternalFun,
-      [name, type, durable, auto_delete, internal, arguments]).
+    [ ok = mnesia(T,
+                  AddInternalFun,
+                  [name, type, durable, auto_delete, internal, arguments])
+      || T <- Tables ],
+    ok.
 
 %%--------------------------------------------------------------------
 
