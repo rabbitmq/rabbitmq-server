@@ -260,17 +260,16 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Msg),
     noreply(State);
 
-handle_cast({deliver, ConsumerTag, AckRequired, Msg},
+handle_cast({deliver, ConsumerTag, AckRequired,
+	     Msg = {_QName, QPid, _MsgId, Redelivered,
+		    #basic_message{exchange_name = ExchangeName,
+				   routing_key = RoutingKey,
+				   content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
-
-    {_QName, QPid, _MsgId, Redelivered,
-     #basic_message{exchange_name = ExchangeName,
-		    routing_key = RoutingKey,
-		    content = Content}} = Msg,
 
     M = #'basic.deliver'{consumer_tag = ConsumerTag,
                          delivery_tag = DeliveryTag,
@@ -279,7 +278,6 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
                          routing_key = RoutingKey},
     rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
 
-    {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
     maybe_incr_stats([{QPid, 1}],
                      case AckRequired of
                          true  -> deliver;
