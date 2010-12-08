@@ -479,7 +479,7 @@
             <para role="example">
               This command instructs the RabbitMQ broker to clear the
               password for the user named
-              <command>tonyg</command>. This user now cannot log in.
+              <command>tonyg</command>. This user now cannot log in with a password (but may be able to through e.g. SASL EXTERNAL if configured).
             </para>
           </listitem>
         </varlistentry>
