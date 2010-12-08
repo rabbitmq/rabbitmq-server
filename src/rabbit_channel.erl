@@ -49,7 +49,7 @@
              uncommitted_ack_q, unacked_message_q,
              username, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, publish_seqno, confirm_duration, confirm_tref,
+             publish_seqno, confirm_duration, confirm_tref,
              held_confirms, unconfirmed, queues_for_msg}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
@@ -188,9 +188,8 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 blocking                = dict:new(),
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = StatsTimer,
-                confirm_enabled         = false,
                 publish_seqno           = 0,
-                confirm_duration        = 0,
+                confirm_duration        = none,
                 held_confirms           = gb_sets:new(),
                 unconfirmed             = gb_sets:new(),
                 queues_for_msg          = dict:new()},
@@ -455,7 +454,7 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
 
 send_or_enqueue_ack(undefined, _QPid, State) ->
     State;
-send_or_enqueue_ack(_MsgSeqNo, _QPid, State = #ch{confirm_enabled = false}) ->
+send_or_enqueue_ack(_MsgSeqNo, _QPid, State = #ch{confirm_duration = none}) ->
     State;
 send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_duration = 0}) ->
     do_if_unconfirmed(MsgSeqNo, QPid,
@@ -524,7 +523,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                immediate   = Immediate},
               Content, State = #ch{virtual_host    = VHostPath,
                                    transaction_id  = TxnKey,
-                                   confirm_enabled = ConfirmEnabled}) ->
+                                   confirm_duration = Duration}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -533,7 +532,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1}
-        = case ConfirmEnabled of
+        = case Duration =/= none of
               false -> {undefined, State};
               true  -> SeqNo = State#ch.publish_seqno,
                        {SeqNo,
@@ -948,7 +947,8 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
 
 
-handle_method(#'tx.select'{}, _, #ch{confirm_enabled = true}) ->
+handle_method(#'tx.select'{}, _, #ch{confirm_duration = Duration})
+  when Duration =/= none ->
     rabbit_misc:protocol_error(
       precondition_failed, "cannot switch from confirm to tx mode", []);
 
@@ -983,7 +983,7 @@ handle_method(#'confirm.select'{batch_duration = Duration, nowait = NoWait},
                  true  -> State;
                  false -> flush_multiple(State)
              end,
-    return_ok(State1#ch{confirm_enabled = true, confirm_duration = Duration},
+    return_ok(State1#ch{confirm_duration = Duration},
               NoWait, #'confirm.select_ok'{});
 
 handle_method(#'channel.flow'{active = true}, _,
