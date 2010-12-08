@@ -532,13 +532,13 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1}
-        = case Duration =/= none of
-              false -> {undefined, State};
-              true  -> SeqNo = State#ch.publish_seqno,
-                       {SeqNo,
-                        State#ch{publish_seqno = SeqNo + 1,
-                                 unconfirmed =
-                                     gb_sets:add(SeqNo, State#ch.unconfirmed)}}
+        = case Duration of
+              none -> {undefined, State};
+              _    -> SeqNo = State#ch.publish_seqno,
+                      {SeqNo,
+                       State#ch{publish_seqno = SeqNo + 1,
+                                unconfirmed =
+                                    gb_sets:add(SeqNo, State#ch.unconfirmed)}}
           end,
     Message = #basic_message{exchange_name = ExchangeName,
                              routing_key   = RoutingKey,
