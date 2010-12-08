@@ -69,12 +69,13 @@
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, immediate, txn, sender, message}).
+-record(delivery, {mandatory, immediate, txn, sender, message,
+                   msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, timestamp}).
 
--record(message_properties, {expiry}).
+-record(message_properties, {expiry, needs_confirming = false}).
 
 %%----------------------------------------------------------------------------
 

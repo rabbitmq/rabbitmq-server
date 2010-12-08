@@ -6,7 +6,6 @@
   {registered, [rabbit_amqqueue_sup,
                 rabbit_log,
                 rabbit_node_monitor,
-                rabbit_persister,
                 rabbit_router,
                 rabbit_sup,
                 rabbit_tcp_client_sup]},

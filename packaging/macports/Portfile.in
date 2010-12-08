@@ -7,6 +7,8 @@ version		@VERSION@
 categories	net 
 maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
 platforms	darwin
+supported_archs	noarch
+
 description	The RabbitMQ AMQP Server
 long_description	\
     RabbitMQ is an implementation of AMQP, the emerging standard for \
@@ -31,17 +33,13 @@ checksums \
 depends_lib	port:erlang
 depends_build	port:libxslt
 
-platform darwin 7 {
-    depends_build-append port:py25-simplejson
-    build.args      PYTHON=${prefix}/bin/python2.5
-}
 platform darwin 8 {
-    depends_build-append port:py25-simplejson
-    build.args      PYTHON=${prefix}/bin/python2.5
+    depends_build-append port:py26-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.6
 }
 platform darwin 9 {
-    depends_build-append port:py25-simplejson
-    build.args      PYTHON=${prefix}/bin/python2.5
+    depends_build-append port:py26-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.6
 }
 # no need for simplejson on Snow Leopard or higher
 

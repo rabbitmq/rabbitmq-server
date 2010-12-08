@@ -178,9 +178,6 @@ start-rabbit-on-node: all
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
-force-snapshot: all
-	echo "rabbit_persister:force_snapshot()." | $(ERL_CALL)
-
 set-memory-alarm: all
 	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \
 	$(ERL_CALL)

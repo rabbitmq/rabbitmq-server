@@ -32,7 +32,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -50,6 +50,7 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
+-spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -94,9 +95,7 @@ start() ->
             halt();
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
-                        [lists:flatten(
-                           rabbit_misc:intersperse(
-                             " ", [atom_to_list(Command) | Args]))]),
+                        [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
@@ -118,24 +117,28 @@ fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    fmt_stderr("diagnostics:", []),
+    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
+
+diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    case net_adm:names(NodeHost) of
-        {error, EpmdReason} ->
-            fmt_stderr("- unable to connect to epmd on ~s: ~w",
-                       [NodeHost, EpmdReason]);
-        {ok, NamePorts} ->
-            fmt_stderr("- nodes and their ports on ~s: ~p",
-                       [NodeHost, [{list_to_atom(Name), Port} ||
-                                      {Name, Port} <- NamePorts]])
-            end,
-    fmt_stderr("- current node: ~w", [node()]),
-    case init:get_argument(home) of
-        {ok, [[Home]]} -> fmt_stderr("- current node home dir: ~s", [Home]);
-        Other          -> fmt_stderr("- no current node home dir: ~p", [Other])
-    end,
-    fmt_stderr("- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]),
-    ok.
+    [
+        {"diagnostics:", []},
+        case net_adm:names(NodeHost) of
+            {error, EpmdReason} ->
+                {"- unable to connect to epmd on ~s: ~w",
+                    [NodeHost, EpmdReason]};
+            {ok, NamePorts} ->
+                {"- nodes and their ports on ~s: ~p",
+                              [NodeHost, [{list_to_atom(Name), Port} ||
+                                          {Name, Port} <- NamePorts]]}
+        end,
+        {"- current node: ~w", [node()]},
+        case init:get_argument(home) of
+            {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+            Other          -> {"- no current node home dir: ~p", [Other]}
+        end,
+        {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}
+    ].
 
 stop() ->
     ok.
@@ -321,7 +324,7 @@ display_info_list(Other, _) ->
     Other.
 
 display_row(Row) ->
-    io:fwrite(lists:flatten(rabbit_misc:intersperse("\t", Row))),
+    io:fwrite(string:join(Row, "\t")),
     io:nl().
 
 -define(IS_U8(X),  (X >= 0 andalso X =< 255)).

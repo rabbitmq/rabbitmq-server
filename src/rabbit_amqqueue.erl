@@ -34,6 +34,7 @@
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
+         maybe_run_queue_via_backing_queue_async/2,
          update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
@@ -47,11 +48,6 @@
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
-
--import(mnesia).
--import(gen_server2).
--import(lists).
--import(queue).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -156,7 +152,9 @@
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
 -spec(maybe_run_queue_via_backing_queue/2 ::
-        (pid(), (fun ((A) -> A))) -> 'ok').
+        (pid(), (fun ((A) -> A | {any(), A}))) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue_async/2 ::
+        (pid(), (fun ((A) -> A | {any(), A}))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -279,7 +277,7 @@ assert_equivalence(#amqqueue{durable     = Durable,
 assert_equivalence(#amqqueue{name = QueueName},
                    _Durable, _AutoDelete, _RequiredArgs, _Owner) ->
     rabbit_misc:protocol_error(
-      not_allowed, "parameters for ~s not equivalent",
+      precondition_failed, "parameters for ~s not equivalent",
       [rabbit_misc:rs(QueueName)]).
 
 check_exclusive_access(Q, Owner) -> check_exclusive_access(Q, Owner, lax).
@@ -380,16 +378,13 @@ delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
 
 purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
 
-deliver(QPid, #delivery{immediate = true,
-                        txn = Txn, sender = ChPid, message = Message}) ->
-    gen_server2:call(QPid, {deliver_immediately, Txn, Message, ChPid},
-                     infinity);
-deliver(QPid, #delivery{mandatory = true,
-                        txn = Txn, sender = ChPid, message = Message}) ->
-    gen_server2:call(QPid, {deliver, Txn, Message, ChPid}, infinity),
+deliver(QPid, Delivery = #delivery{immediate = true}) ->
+    gen_server2:call(QPid, {deliver_immediately, Delivery}, infinity);
+deliver(QPid, Delivery = #delivery{mandatory = true}) ->
+    gen_server2:call(QPid, {deliver, Delivery}, infinity),
     true;
-deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
-    gen_server2:cast(QPid, {deliver, Txn, Message, ChPid}),
+deliver(QPid, Delivery) ->
+    gen_server2:cast(QPid, {deliver, Delivery}),
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
@@ -465,6 +460,9 @@ internal_delete(QueueName) ->
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
     gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
+
+maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
+    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
 
 update_ram_duration(QPid) ->
     gen_server2:cast(QPid, update_ram_duration).
