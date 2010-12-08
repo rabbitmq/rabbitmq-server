@@ -266,7 +266,7 @@ handle_cast({deliver, ConsumerTag, AckRequired, Msg},
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
-    ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
+    ok = internal_deliver(WriterPid, ConsumerTag, DeliveryTag, Msg),
     {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
     maybe_incr_stats([{QPid, 1}],
                      case AckRequired of
@@ -1240,7 +1240,7 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
-internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
+internal_deliver(WriterPid, ConsumerTag, DeliveryTag,
                  {_QName, QPid, _MsgId, Redelivered,
                   #basic_message{exchange_name = ExchangeName,
                                  routing_key = RoutingKey,
@@ -1250,11 +1250,8 @@ internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
                          redelivered = Redelivered,
                          exchange = ExchangeName#resource.name,
                          routing_key = RoutingKey},
-    ok = case Notify of
-             true  -> rabbit_writer:send_command_and_notify(
-                        WriterPid, QPid, self(), M, Content);
-             false -> rabbit_writer:send_command(WriterPid, M, Content)
-         end.
+    rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
+    ok.
 
 terminate(State) ->
     stop_confirm_timer(State),
