@@ -36,7 +36,7 @@
 -export([check_login/2, user_pass_login/2, check_user_pass_login/2,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
-         clear_admin/1, list_users/0, lookup_user/1]).
+         clear_admin/1, list_users/0, lookup_user/1, clear_password/1]).
 -export([change_password_hash/2, hash_password/1]).
 -export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, clear_permissions/2,
@@ -72,6 +72,7 @@
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
+-spec(clear_password/1 :: (username()) -> 'ok').
 -spec(change_password_hash/2 :: (username(), password_hash()) -> 'ok').
 -spec(hash_password/1 :: (password()) -> password_hash()).
 -spec(set_admin/1 :: (username()) -> 'ok').
@@ -249,6 +250,9 @@ delete_user(Username) ->
 
 change_password(Username, Password) ->
     change_password_hash(Username, hash_password(Password)).
+
+clear_password(Username) ->
+    change_password_hash(Username, <<"">>).
 
 change_password_hash(Username, PasswordHash) ->
     R = update_user(Username, fun(User) ->

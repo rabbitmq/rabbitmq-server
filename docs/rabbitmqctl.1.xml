@@ -466,6 +466,25 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>clear_password</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose password is to be cleared.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_password tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to clear the
+              password for the user named
+              <command>tonyg</command>. This user now cannot log in.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
