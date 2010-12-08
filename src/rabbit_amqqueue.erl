@@ -492,9 +492,11 @@ on_node_down(Node) ->
         rabbit_binding:new_deletions(),
         rabbit_misc:execute_mnesia_transaction(
           fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
-                                    #amqqueue{name = QueueName, pid = Pid}
+                                    #amqqueue{name = QueueName, pid = Pid,
+                                              extra_pids = EPids}
                                         <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node]))
+                                    node(Pid) == Node,
+                                    [] =:= EPids]))
           end))).
 
 delete_queue(QueueName) ->
