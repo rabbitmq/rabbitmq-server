@@ -1219,10 +1219,16 @@ is_message_persistent(Content) ->
             IsPersistent
     end.
 
-process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
+process_routing_result(unroutable,    _, MsgSeqNo,
+		       Message = #basic_message{exchange_name = ExchangeName},
+		       State) ->
+    maybe_incr_stats([{ExchangeName, 1}], return, State),
     ok = basic_return(Message, State#ch.writer_pid, no_route),
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
-process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
+process_routing_result(not_delivered, _, MsgSeqNo,
+		       Message = #basic_message{exchange_name = ExchangeName},
+		       State) ->
+    maybe_incr_stats([{ExchangeName, 1}], return, State),
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
     send_or_enqueue_ack(MsgSeqNo, undefined, State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
