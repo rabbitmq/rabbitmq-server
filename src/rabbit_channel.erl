@@ -1294,12 +1294,9 @@ i(number,         #ch{channel          = Channel})   -> Channel;
 i(user,           #ch{username         = Username})  -> Username;
 i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
 i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
-i(confirm,        #ch{confirm_enabled  = CE,
-                      confirm_multiple = CM})        -> case {CE, CM} of
-                                                            {false, _} -> none;
-                                                            {_, false} -> single;
-                                                            {_, true}  -> multiple
-                                                        end;
+i(confirm,        #ch{confirm_enabled  = false})     -> none;
+i(confirm,        #ch{confirm_multiple = false})     -> single;
+i(confirm,        _)                                 -> multiple;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
 i(unconfirmed,   #ch{unconfirmed = UC}) ->
