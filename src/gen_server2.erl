@@ -880,6 +880,10 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
                                        debug = Debug1 });
+        {become, Mod, NState} ->
+            loop(find_prioritisers(
+                   GS2State #gs2_state { mod   = Mod,
+                                         state = NState }));
         _ ->
             handle_common_termination(Reply, Msg, GS2State)
     end.
