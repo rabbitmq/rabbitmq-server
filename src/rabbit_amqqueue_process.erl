@@ -48,7 +48,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
--export([init_with_backing_queue_state/3]).
+-export([init_with_backing_queue_state/4]).
 
 -import(queue).
 -import(erlang).
@@ -135,7 +135,7 @@ init(Q) ->
             guid_to_channel     = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-init_with_backing_queue_state(Q, BQ, BQS) ->
+init_with_backing_queue_state(Q, BQ, BQS, RateTRef) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
     process_args(#q{q                   = Q#amqqueue{pid = self()},
@@ -147,7 +147,7 @@ init_with_backing_queue_state(Q, BQ, BQS) ->
                     blocked_consumers   = queue:new(),
                     expires             = undefined,
                     sync_timer_ref      = undefined,
-                    rate_timer_ref      = undefined,
+                    rate_timer_ref      = RateTRef,
                     expiry_timer_ref    = undefined,
                     ttl                 = undefined,
                     stats_timer         = rabbit_event:init_stats_timer(),
