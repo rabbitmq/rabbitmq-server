@@ -474,6 +474,7 @@ send_or_enqueue_ack(MsgSeqNo, QPid, ExchangeName,
     maybe_incr_confirm_queue_stats(QPid, ExchangeName, State),
     do_if_unconfirmed(MsgSeqNo, QPid,
                       fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
+                              maybe_incr_stats([{ExchangeName, 1}], confirm, State1),
                               ok = rabbit_writer:send_command(
                                      WriterPid, #'basic.ack'{
                                        delivery_tag = MSN}),
@@ -484,6 +485,7 @@ send_or_enqueue_ack(MsgSeqNo, QPid, ExchangeName,
     maybe_incr_confirm_queue_stats(QPid, ExchangeName, State),
     do_if_unconfirmed(MsgSeqNo, QPid,
                       fun(MSN, State1 = #ch{held_confirms = As}) ->
+                              maybe_incr_stats([{ExchangeName, 1}], confirm, State1),
                               start_confirm_timer(
                                 State1#ch{held_confirms = gb_sets:add(MSN, As)})
                       end, State).
