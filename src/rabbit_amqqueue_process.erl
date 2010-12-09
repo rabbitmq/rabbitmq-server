@@ -48,6 +48,8 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
+-export([init_with_backing_queue_state/3]).
+
 -import(queue).
 -import(erlang).
 -import(lists).
@@ -132,6 +134,28 @@ init(Q) ->
             stats_timer         = rabbit_event:init_stats_timer(),
             guid_to_channel     = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+init_with_backing_queue_state(Q, BQ, BQS) ->
+    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
+    process_flag(trap_exit, true),
+    ok = file_handle_cache:register_callback(
+           rabbit_amqqueue, set_maximum_since_use, [self()]),
+    ok = rabbit_memory_monitor:register(
+           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
+    process_args(#q{q                   = Q#amqqueue{pid = self()},
+                    exclusive_consumer  = none,
+                    has_had_consumers   = false,
+                    backing_queue       = BQ,
+                    backing_queue_state = BQS,
+                    active_consumers    = queue:new(),
+                    blocked_consumers   = queue:new(),
+                    expires             = undefined,
+                    sync_timer_ref      = undefined,
+                    rate_timer_ref      = undefined,
+                    expiry_timer_ref    = undefined,
+                    ttl                 = undefined,
+                    stats_timer         = rabbit_event:init_stats_timer(),
+                    guid_to_channel     = dict:new()}).
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
