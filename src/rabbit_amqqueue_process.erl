@@ -137,7 +137,6 @@ init(Q) ->
 
 init_with_backing_queue_state(Q, BQ, BQS, RateTRef) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
-    process_flag(trap_exit, true),
     process_args(#q{q                   = Q#amqqueue{pid = self()},
                     exclusive_consumer  = none,
                     has_had_consumers   = false,
