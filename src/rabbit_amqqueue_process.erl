@@ -138,10 +138,6 @@ init(Q) ->
 init_with_backing_queue_state(Q, BQ, BQS) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
-    ok = file_handle_cache:register_callback(
-           rabbit_amqqueue, set_maximum_since_use, [self()]),
-    ok = rabbit_memory_monitor:register(
-           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     process_args(#q{q                   = Q#amqqueue{pid = self()},
                     exclusive_consumer  = none,
                     has_had_consumers   = false,
