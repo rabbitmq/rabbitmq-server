@@ -46,13 +46,11 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    User = rabbit_mgmt_util:id(user, ReqData),
-    rabbit_mgmt_util:with_decode(
-      [password, administrator], ReqData, Context,
-      fun([Password, IsAdmin]) ->
-              put_user([{name, User},
-                        {password, Password},
-                        {administrator, IsAdmin}]),
+    Username = rabbit_mgmt_util:id(user, ReqData),
+    rabbit_mgmt_util:with_decode_opts(
+      [administrator], ReqData, Context,
+      fun(User) ->
+              put_user([{name, Username} | User]),
               {true, ReqData, Context}
       end).
 
@@ -70,14 +68,18 @@ user(ReqData) ->
     rabbit_access_control:lookup_user(rabbit_mgmt_util:id(user, ReqData)).
 
 put_user(User) ->
-    case proplists:is_defined(password_hash, User) of
-        true ->
+    case {proplists:is_defined(password, User),
+          proplists:is_defined(password_hash, User)} of
+        {true, _} ->
+            Pass = proplists:get_value(password, User),
+            put_user(User, Pass, fun rabbit_access_control:change_password/2);
+        {_, true} ->
             Hash = base64:decode(proplists:get_value(password_hash, User)),
             put_user(User, Hash,
                      fun rabbit_access_control:change_password_hash/2);
-        false ->
-            Pass = proplists:get_value(password, User),
-            put_user(User, Pass, fun rabbit_access_control:change_password/2)
+        _ ->
+            put_user(User, <<>>,
+                     fun rabbit_access_control:change_password_hash/2)
     end.
 
 put_user(User, PWArg, PWFun) ->
