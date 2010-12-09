@@ -50,10 +50,6 @@
 
 -export([init_with_backing_queue_state/4]).
 
--import(queue).
--import(erlang).
--import(lists).
-
 % Queue's state
 -record(q, {q,
             exclusive_consumer,

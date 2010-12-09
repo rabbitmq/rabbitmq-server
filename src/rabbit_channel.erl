@@ -260,14 +260,24 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Msg),
     noreply(State);
 
-handle_cast({deliver, ConsumerTag, AckRequired, Msg},
+handle_cast({deliver, ConsumerTag, AckRequired,
+	     Msg = {_QName, QPid, _MsgId, Redelivered,
+		    #basic_message{exchange_name = ExchangeName,
+				   routing_key = RoutingKey,
+				   content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
-    ok = internal_deliver(WriterPid, true, ConsumerTag, DeliveryTag, Msg),
-    {_QName, QPid, _MsgId, _Redelivered, _Msg} = Msg,
+
+    M = #'basic.deliver'{consumer_tag = ConsumerTag,
+                         delivery_tag = DeliveryTag,
+                         redelivered = Redelivered,
+                         exchange = ExchangeName#resource.name,
+                         routing_key = RoutingKey},
+    rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
+
     maybe_incr_stats([{QPid, 1}],
                      case AckRequired of
                          true  -> deliver;
@@ -1239,22 +1249,6 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
-
-internal_deliver(WriterPid, Notify, ConsumerTag, DeliveryTag,
-                 {_QName, QPid, _MsgId, Redelivered,
-                  #basic_message{exchange_name = ExchangeName,
-                                 routing_key = RoutingKey,
-                                 content = Content}}) ->
-    M = #'basic.deliver'{consumer_tag = ConsumerTag,
-                         delivery_tag = DeliveryTag,
-                         redelivered = Redelivered,
-                         exchange = ExchangeName#resource.name,
-                         routing_key = RoutingKey},
-    ok = case Notify of
-             true  -> rabbit_writer:send_command_and_notify(
-                        WriterPid, QPid, self(), M, Content);
-             false -> rabbit_writer:send_command(WriterPid, M, Content)
-         end.
 
 terminate(State) ->
     stop_confirm_timer(State),

@@ -35,8 +35,6 @@
 
 -export([all_tests/0, test_parsing/0]).
 
--import(lists).
-
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").

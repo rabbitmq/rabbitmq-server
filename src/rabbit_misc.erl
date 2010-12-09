@@ -68,11 +68,6 @@
 -export([now_ms/0]).
 -export([lock_file/1]).
 
--import(mnesia).
--import(lists).
--import(cover).
--import(disk_log).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).

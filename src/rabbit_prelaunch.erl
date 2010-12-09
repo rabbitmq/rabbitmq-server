@@ -29,11 +29,12 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_plugin_activator).
+-module(rabbit_prelaunch).
 
 -export([start/0, stop/0]).
 
 -define(BaseApps, [rabbit]).
+-define(ERROR_CODE, 1).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -52,7 +53,7 @@ start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
 
     %% Determine our various directories
-    [PluginDir, UnpackedPluginDir] = init:get_plain_arguments(),
+    [PluginDir, UnpackedPluginDir, Node] = init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
@@ -130,7 +131,10 @@ start() ->
     [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
      || App <- PluginApps],
     io:nl(),
-    halt(),
+
+    ok = duplicate_node_check(Node),
+
+    terminate(0),
     ok.
 
 stop() ->
@@ -251,6 +255,40 @@ process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
 process_entry(Entry) ->
     [Entry].
 
+%% Check whether a node with the same name is already running
+duplicate_node_check([]) ->
+    %% Ignore running node while installing windows service
+    ok;
+duplicate_node_check(Node) ->
+    {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+    case net_adm:names(NodeHost) of
+        {ok, NamePorts}  ->
+            case proplists:is_defined(NodeName, NamePorts) of
+                     true -> io:format("node with name ~p "
+                                       "already running on ~p~n",
+                                       [NodeName, NodeHost]),
+                             [io:format(Fmt ++ "~n", Args) ||
+                              {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                             terminate(?ERROR_CODE);
+                     false -> ok
+            end;
+        {error, address}    -> ok;
+        {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
+                                         [EpmdReason])
+    end.
+
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    halt(1).
+    terminate(?ERROR_CODE).
+
+terminate(Status) ->
+    case os:type() of
+        {unix, _} ->
+            halt(Status);
+        {win32, _} ->
+            init:stop(Status),
+            receive
+                after infinity -> ok
+            end
+    end.
+
