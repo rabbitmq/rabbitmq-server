@@ -354,11 +354,11 @@ function postprocess() {
         });
     $('#has-password').change(function() {
         if ($(this).val() == 'true') {
-            debug("down");
             $('#password').slideDown(100);
+            $('#no-password').slideUp(100);
         } else {
-            debug("up");
             $('#password').slideUp(100);
+            $('#no-password').slideDown(100);
         }
     });
     if (! user_administrator) {

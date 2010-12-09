@@ -13,7 +13,6 @@
     <% for (var i = 0; i < users.length; i++) { %>
        <tr<%= alt_rows(i)%>>
          <td><%= link_user(users[i].name) %></td>
-         <td><%= users[i].password_hash %></td>
          <td class="c"><%= fmt_boolean(users[i].administrator) %></td>
        </tr>
     <% } %>
@@ -32,15 +31,20 @@
           <td><input type="text" name="username"/></td>
         </tr>
         <tr>
-          <th><label>Password:</label></th>
+          <th>
+            <label>
+              <select name="has-password" id="has-password" class="narrow">
+                <option value="true">Password:</option>
+                <option value="false">No password</option>
+              </select>
+            </label>
+          </th>
           <td>
-            <select name="has-password" id="has-password">
-              <option value="true">can log in with password:</option>
-              <option value="false">cannot log in with password</option>
-            </select>
-            <br/>
             <div id="password">
               <input type="text" name="password" />
+            </div>
+            <div id="no-password">
+              User cannot log in using password.
             </div>
           </td>
         </tr>
