@@ -30,9 +30,6 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
-NODENAME=rabbit@${HOSTNAME%%.*}
-
 . `dirname $0`/rabbitmq-env
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
