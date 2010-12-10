@@ -36,7 +36,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/7, do/2, do/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2, confirm/2, flush_confirms/1]).
+-export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([emit_stats/1]).
 
@@ -98,7 +98,6 @@
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(confirm/2 ::(pid(), non_neg_integer()) -> 'ok').
--spec(flush_confirms/1 :: (pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
@@ -139,9 +138,6 @@ flushed(Pid, QPid) ->
 
 confirm(Pid, MsgSeqNo) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNo, self()}).
-
-flush_confirms(Pid) ->
-    gen_server2:cast(Pid, flush_confirms).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -292,11 +288,11 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
      State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
      hibernate};
 
-handle_cast(flush_confirms, State) ->
-    {noreply, internal_flush_confirms(State)};
-
 handle_cast({confirm, MsgSeqNo, From}, State) ->
     {noreply, confirm(MsgSeqNo, From, State)}.
+
+handle_info(flush_confirms, State) ->
+    {noreply, internal_flush_confirms(State)};
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{queues_for_msg = QFM}) ->
@@ -1252,8 +1248,7 @@ lock_message(false, _MsgStruct, State) ->
     State.
 
 start_confirm_timer(State = #ch{confirm_tref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?FLUSH_CONFIRMS_INTERVAL,
-                                   ?MODULE, flush_confirms, [self()]),
+    TRef = erlang:send_after(?FLUSH_CONFIRMS_INTERVAL, self(), flush_confirms),
     State#ch{confirm_tref = TRef};
 start_confirm_timer(State) ->
     State.
@@ -1261,7 +1256,7 @@ start_confirm_timer(State) ->
 stop_confirm_timer(State = #ch{confirm_tref = undefined}) ->
     State;
 stop_confirm_timer(State = #ch{confirm_tref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    _TimeLeft = erlang:cancel_timer(TRef),
     State#ch{confirm_tref = undefined}.
 
 internal_flush_confirms(State = #ch{writer_pid    = WriterPid,
