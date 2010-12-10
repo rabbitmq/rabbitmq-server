@@ -283,12 +283,9 @@ terminate(Fmt, Args) ->
 
 terminate(Status) ->
     case os:type() of
-        {unix, _} ->
-            halt(Status);
-        {win32, _} ->
-            init:stop(Status),
-            receive
-                after infinity -> ok
-            end
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status),
+                      receive
+                      after infinity -> ok
+                      end
     end.
-
