@@ -259,7 +259,7 @@ stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    _TimeLeft = erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry
@@ -271,8 +271,7 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
     case is_unused(State) of
         true ->
             NewState = stop_expiry_timer(State),
-            {ok, TRef} = timer:apply_after(
-                           Expires, rabbit_amqqueue, maybe_expire, [self()]),
+            TRef = erlang:send_after(Expires, self(), maybe_expire),
             NewState#q{expiry_timer_ref = TRef};
         false ->
             State
@@ -759,7 +758,11 @@ prioritise_cast(Msg, _State) ->
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
                 #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
-prioritise_info(_Msg, _State)                                 -> 0.
+prioritise_info(Msg, _State) ->
+    case Msg of
+        maybe_expire                         -> 8;
+        _                                    -> 0
+    end.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -1073,13 +1076,6 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast(maybe_expire, State) ->
-    case is_unused(State) of
-        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
-                 {stop, normal, State};
-        false -> noreply(ensure_expiry_timer(State))
-    end;
-
 handle_cast(drop_expired, State) ->
     noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
@@ -1089,6 +1085,13 @@ handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     assert_invariant(State1),
     {noreply, State1, hibernate}.
+
+handle_info(maybe_expire, State) ->
+    case is_unused(State) of
+        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
+                 {stop, normal, State};
+        false -> noreply(ensure_expiry_timer(State))
+    end;
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
