@@ -262,10 +262,10 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     noreply(State);
 
 handle_cast({deliver, ConsumerTag, AckRequired,
-	     Msg = {_QName, QPid, _MsgId, Redelivered,
-		    #basic_message{exchange_name = ExchangeName,
-				   routing_key = RoutingKey,
-				   content = Content}}},
+             Msg = {_QName, QPid, _MsgId, Redelivered,
+                    #basic_message{exchange_name = ExchangeName,
+                                   routing_key = RoutingKey,
+                                   content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired,
