@@ -48,6 +48,8 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
+-export([init_with_backing_queue_state/4]).
+
 % Queue's state
 -record(q, {q,
             exclusive_consumer,
@@ -112,12 +114,11 @@ info_keys() -> ?INFO_KEYS.
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
-    {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q                   = Q#amqqueue{pid = self()},
             exclusive_consumer  = none,
             has_had_consumers   = false,
-            backing_queue       = BQ,
+            backing_queue       = backing_queue_module(Q),
             backing_queue_state = undefined,
             active_consumers    = queue:new(),
             blocked_consumers   = queue:new(),
@@ -129,6 +130,23 @@ init(Q) ->
             stats_timer         = rabbit_event:init_stats_timer(),
             guid_to_channel     = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+init_with_backing_queue_state(Q, BQ, BQS, RateTRef) ->
+    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
+    process_args(#q{q                   = Q#amqqueue{pid = self()},
+                    exclusive_consumer  = none,
+                    has_had_consumers   = false,
+                    backing_queue       = BQ,
+                    backing_queue_state = BQS,
+                    active_consumers    = queue:new(),
+                    blocked_consumers   = queue:new(),
+                    expires             = undefined,
+                    sync_timer_ref      = undefined,
+                    rate_timer_ref      = RateTRef,
+                    expiry_timer_ref    = undefined,
+                    ttl                 = undefined,
+                    stats_timer         = rabbit_event:init_stats_timer(),
+                    guid_to_channel     = dict:new()}).
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
@@ -150,8 +168,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 declare(Recover, From,
-        State = #q{q = Q = #amqqueue{name = QName, durable = IsDurable},
-                   backing_queue = BQ, backing_queue_state = undefined,
+        State = #q{q = Q, backing_queue = BQ, backing_queue_state = undefined,
                    stats_timer = StatsTimer}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
         not_found -> {stop, normal, not_found, State};
@@ -162,7 +179,7 @@ declare(Recover, From,
                      ok = rabbit_memory_monitor:register(
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
-                     BQS = BQ:init(QName, IsDurable, Recover),
+                     BQS = BQ:init(Q, Recover),
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
@@ -220,6 +237,13 @@ next_state(State) ->
     case BQ:needs_idle_timeout(BQS) of
         true  -> {ensure_sync_timer(State2), 0};
         false -> {stop_sync_timer(State2), hibernate}
+    end.
+
+backing_queue_module(#amqqueue{arguments = Args}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-mirror">>) of
+        undefined -> {ok, BQM} = application:get_env(backing_queue_module),
+                     BQM;
+        _Nodes    -> rabbit_mirror_queue_master
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
@@ -489,7 +513,7 @@ attempt_delivery(#delivery{txn        = none,
                       AckRequired, Message,
                       (?BASE_MESSAGE_PROPERTIES)#message_properties{
                         needs_confirming = NeedsConfirming},
-                      BQS),
+                      ChPid, BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
         end,
@@ -500,9 +524,9 @@ attempt_delivery(#delivery{txn = Txn,
                  State = #q{backing_queue = BQ,
                             backing_queue_state = BQS}) ->
     record_current_channel_tx(ChPid, Txn),
-    {true,
-     State#q{backing_queue_state =
-                 BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, BQS)}}.
+    {true, State#q{backing_queue_state =
+                       BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES,
+                                     ChPid, BQS)}}.
 
 deliver_or_enqueue(Delivery, State) ->
     case attempt_delivery(Delivery, record_confirm_message(Delivery, State)) of
@@ -513,7 +537,7 @@ deliver_or_enqueue(Delivery, State) ->
             BQS1 = BQ:publish(Message,
                               (message_properties(State)) #message_properties{
                                 needs_confirming = (MsgSeqNo =/= undefined)},
-                              BQS),
+                              Delivery #delivery.sender, BQS),
             {false, ensure_ttl_timer(State1#q{backing_queue_state = BQS1})}
     end.
 
