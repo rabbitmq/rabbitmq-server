@@ -38,11 +38,12 @@
          client_ref/1,
          write/3, read/2, contains/2, remove/2, release/2, sync/3]).
 
--export([sync/1, set_maximum_since_use/2,
+-export([set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
+         terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2,
+	 prioritise_info/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -164,7 +165,6 @@
 -spec(sync/3 :: ([rabbit_guid:guid()], fun (() -> any()), client_msstate()) ->
              'ok').
 
--spec(sync/1 :: (server()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
@@ -404,9 +404,6 @@ release([],   _CState) -> ok;
 release(Guids, CState) -> server_cast(CState, {release, Guids}).
 sync(Guids, K, CState) -> server_cast(CState, {sync, Guids, K}).
 
-sync(Server) ->
-    gen_server2:cast(Server, sync).
-
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
 
@@ -639,10 +636,15 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        sync                                               -> 8;
         {combine_files, _Source, _Destination, _Reclaimed} -> 8;
         {delete_file, _File, _Reclaimed}                   -> 8;
         {set_maximum_since_use, _Age}                      -> 8;
+        _                                                  -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        sync                                               -> 8;
         _                                                  -> 0
     end.
 
@@ -762,9 +764,6 @@ handle_cast({sync, Guids, K},
         true  -> noreply(State #msstate { on_sync = [K | Syncs] })
     end;
 
-handle_cast(sync, State) ->
-    noreply(internal_sync(State));
-
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
                                file_handles_ets = FileHandlesEts,
@@ -786,6 +785,9 @@ handle_cast({delete_file, File, Reclaimed},
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
+
+handle_info(sync, State) ->
+    noreply(internal_sync(State));
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
@@ -852,13 +854,13 @@ next_state(State = #msstate { on_sync       = Syncs,
     end.
 
 start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, sync, [self()]),
+    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync),
     State #msstate { sync_timer_ref = TRef }.
 
 stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
     State;
 stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
+    _TimeLeft = erlang:cancel_timer(TRef),
     State #msstate { sync_timer_ref = undefined }.
 
 internal_sync(State = #msstate { current_file_handle    = CurHdl,
