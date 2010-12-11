@@ -164,7 +164,7 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 emit_stats(Pid) ->
-    gen_server2:cast(Pid, emit_stats).
+    gen_server2:info(Pid, emit_stats).
 
 %%---------------------------------------------------------------------------
 
@@ -212,8 +212,13 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats -> 7;
-        _          -> 0
+        _              -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        emit_stats     -> 7;
+        _              -> 0
     end.
 
 handle_call(flush, _From, State) ->
@@ -286,17 +291,17 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
-    internal_emit_stats(State),
-    {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-     hibernate};
-
 handle_cast(flush_confirms, State) ->
     {noreply, internal_flush_confirms(State)};
 
 handle_cast({confirm, MsgSeqNo, From}, State) ->
     {noreply, confirm(MsgSeqNo, From, State)}.
+
+handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+    internal_emit_stats(State),
+    {noreply,
+     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
+     hibernate};
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{queues_for_msg = QFM}) ->
