@@ -208,13 +208,13 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        _          -> 0
+        _              -> 0
     end.
 
 prioritise_info(Msg, _State) ->
     case Msg of
-        emit_stats -> 7;
-        _          -> 0
+        emit_stats     -> 7;
+        _              -> 0
     end.
 
 handle_call(flush, _From, State) ->
