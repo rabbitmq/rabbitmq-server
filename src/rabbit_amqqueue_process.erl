@@ -742,7 +742,6 @@ prioritise_cast(Msg, _State) ->
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
-        emit_stats                           -> 7;
         {ack, _Txn, _MsgIds, _ChPid}         -> 7;
         {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
         {notify_sent, _ChPid}                -> 7;
@@ -757,6 +756,7 @@ prioritise_info(Msg, _State) ->
         update_ram_duration                  -> 8;
         maybe_expire                         -> 8;
         drop_expired                         -> 8;
+        emit_stats                           -> 7;
         _                                    -> 0
     end.
 
