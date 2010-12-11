@@ -749,6 +749,7 @@ prioritise_cast(Msg, _State) ->
         {set_maximum_since_use, _Age}        -> 8;
         maybe_expire                         -> 8;
         drop_expired                         -> 8;
+        emit_stats                           -> 7;
         {ack, _Txn, _MsgIds, _ChPid}         -> 7;
         {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
         {notify_sent, _ChPid}                -> 7;
@@ -758,12 +759,7 @@ prioritise_cast(Msg, _State) ->
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
                 #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
-prioritise_info(Msg, _State) ->
-    case Msg of
-        emit_stats                           -> 7;
-        _                                    -> 0
-    end.
-
+prioritise_info(_Msg, _State)                                 -> 0.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->

@@ -368,7 +368,7 @@ consumers_all(VHostPath) ->
 stat(#amqqueue{pid = QPid}) -> delegate_call(QPid, stat, infinity).
 
 emit_stats(#amqqueue{pid = QPid}) ->
-    delegate_info(QPid, emit_stats).
+    delegate_cast(QPid, emit_stats).
 
 delete_immediately(#amqqueue{ pid = QPid }) ->
     gen_server2:cast(QPid, delete_immediately).
@@ -519,6 +519,3 @@ delegate_call(Pid, Msg, Timeout) ->
 
 delegate_cast(Pid, Msg) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
-
-delegate_info(Pid, Msg) ->
-    delegate:invoke(Pid, fun (P) -> gen_server2:info(P, Msg) end).
