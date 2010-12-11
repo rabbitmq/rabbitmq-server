@@ -509,4 +509,4 @@ delegate_cast(Pid, Msg) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
 
 delegate_info(Pid, Msg) ->
-    delegate:invoke(Pid, fun (P) -> gen_server2:info(P, Msg) end).
+    delegate:invoke(Pid, fun (P) -> catch erlang:send(P, Msg) end).

@@ -219,7 +219,7 @@ info(Pid, Items) ->
     end.
 
 emit_stats(Pid) ->
-    gen_server:cast(Pid, emit_stats).
+    catch erlang:send(Pid, emit_stats).
 
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
@@ -377,7 +377,7 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                                    catch Error -> {error, Error}
                                    end),
             mainloop(Deb, State);
-        {'$gen_cast', emit_stats} ->
+        emit_stats ->
             State1 = internal_emit_stats(State),
             mainloop(Deb, State1);
         {system, From, Request} ->

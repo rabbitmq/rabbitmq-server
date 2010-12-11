@@ -1061,14 +1061,8 @@ handle_cast({set_ram_duration_target, Duration},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
+    noreply(State).
 
-handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
-    %% Do not invoke noreply as it would see no timer and create a new one.
-    emit_stats(State),
-    State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-    assert_invariant(State1),
-    {noreply, State1, hibernate}.
 
 handle_info(update_ram_duration, State = #q{backing_queue = BQ,
                                             backing_queue_state = BQS}) ->
@@ -1088,6 +1082,13 @@ handle_info(maybe_expire, State) ->
 
 handle_info(drop_expired, State) ->
     noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
+
+handle_info(emit_stats, State = #q{stats_timer = StatsTimer}) ->
+    %% Do not invoke noreply as it would see no timer and create a new one.
+    emit_stats(State),
+    State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
+    assert_invariant(State1),
+    {noreply, State1, hibernate};
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
