@@ -68,7 +68,7 @@
         (rabbit_types:txn(), fun (() -> any()),
          message_properties_transformer(), state()) -> {[ack()], state()}).
 -spec(requeue/3 :: ([ack()], message_properties_transformer(), state())
-                   -> state()).
+                   -> {[rabbit_guid:guid()], state()}).
 -spec(len/1 :: (state()) -> non_neg_integer()).
 -spec(is_empty/1 :: (state()) -> boolean()).
 -spec(set_ram_duration_target/2 ::

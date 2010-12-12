@@ -544,7 +544,9 @@ deliver_or_enqueue(Delivery, State) ->
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
     maybe_run_queue_via_backing_queue(
       fun (BQS) ->
-              BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS)
+              {_Guids, BQS1} =
+                  BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS),
+              BQS1
       end, State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,

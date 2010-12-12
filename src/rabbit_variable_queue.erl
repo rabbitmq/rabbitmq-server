@@ -716,7 +716,7 @@ tx_commit(Txn, Fun, MsgPropsFun,
        end)}.
 
 requeue(AckTags, MsgPropsFun, State) ->
-    {_Guids, State1} =
+    {Guids, State1} =
         ack(fun msg_store_release/3,
             fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
                     {_SeqId, State2} = publish(Msg, MsgPropsFun(MsgProps),
@@ -732,7 +732,7 @@ requeue(AckTags, MsgPropsFun, State) ->
                     State3
             end,
             AckTags, State),
-    a(reduce_memory_use(State1)).
+    {Guids, a(reduce_memory_use(State1))}.
 
 len(#vqstate { len = Len }) -> Len.
 
