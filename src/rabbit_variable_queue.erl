@@ -1363,7 +1363,7 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                                        gb_trees:delete_any(SeqId, RAI)})}
           end, {{[], orddict:new()}, State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-    AckdGuids = lists:concat(
+    AckdGuids = lists:append(
                   orddict:fold(
                     fun (IsPersistent, Guids, Gs) ->
                             MsgStoreFun(MSCState, IsPersistent, Guids),
