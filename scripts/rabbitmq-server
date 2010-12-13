@@ -90,6 +90,7 @@ if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
 	-noinput \
 	-hidden \
 	-s rabbit_prelaunch \
+	-sname rabbitmqprelaunch$$ \
 	-extra "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}" "${RABBITMQ_NODENAME}"
     then
 	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
