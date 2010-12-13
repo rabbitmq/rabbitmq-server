@@ -118,6 +118,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_prelaunch ^
+-sname rabbitmqprelaunch%RANDOM% ^
 -extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        "!RABBITMQ_NODENAME!"
