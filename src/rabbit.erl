@@ -69,10 +69,10 @@
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
 
--rabbit_boot_step({rabbit_exchange_type_registry,
-                   [{description, "exchange type registry"},
+-rabbit_boot_step({rabbit_registry,
+                   [{description, "plugin registry"},
                     {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_exchange_type_registry]}},
+                                   [rabbit_registry]}},
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
