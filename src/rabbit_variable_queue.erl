@@ -31,9 +31,9 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/1, delete_and_terminate/1,
-         purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
-         tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
+-export([init/2, terminate/1, delete_and_terminate/1,
+         purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
+         tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
@@ -42,7 +42,7 @@
 -export([start/1, stop/0]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/5]).
+-export([start_msg_store/2, stop_msg_store/0, init/4]).
 
 %%----------------------------------------------------------------------------
 %% Definitions:
@@ -409,13 +409,14 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(QueueName, IsDurable, Recover) ->
+init(Queue, Recover) ->
     Self = self(),
-    init(QueueName, IsDurable, Recover,
+    init(Queue, Recover,
          fun (Guids) -> msgs_written_to_disk(Self, Guids) end,
          fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
 
-init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(#amqqueue { name = QueueName, durable = IsDurable }, false,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
     init(IsDurable, IndexState, 0, [],
          case IsDurable of
@@ -425,7 +426,8 @@ init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
 
-init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(#amqqueue { name = QueueName }, true,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -515,16 +517,18 @@ purge(State = #vqstate { q4                = Q4,
                               ram_index_count   = 0,
                               persistent_count  = PCount1 })}.
 
-publish(Msg, MsgProps, State) ->
+publish(Msg, MsgProps, _ChPid, State) ->
     {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
     a(reduce_memory_use(State1)).
 
-publish_delivered(false, _Msg, _MsgProps, State = #vqstate { len = 0 }) ->
+publish_delivered(false, _Msg, _MsgProps, _ChPid,
+                  State = #vqstate { len = 0 }) ->
     {blank_ack, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
+                  _ChPid,
                   State = #vqstate { len              = 0,
                                      next_seq_id      = SeqId,
                                      out_counter      = OutCount,
@@ -665,8 +669,8 @@ ack(AckTags, State) ->
     {Guids, a(State1)}.
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
-           State = #vqstate { durable           = IsDurable,
-                              msg_store_clients = MSCState }) ->
+           _ChPid, State = #vqstate { durable           = IsDurable,
+                                      msg_store_clients = MSCState }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
     case IsPersistent andalso IsDurable of
@@ -712,7 +716,7 @@ tx_commit(Txn, Fun, MsgPropsFun,
        end)}.
 
 requeue(AckTags, MsgPropsFun, State) ->
-    {_Guids, State1} =
+    {Guids, State1} =
         ack(fun msg_store_release/3,
             fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
                     {_SeqId, State2} = publish(Msg, MsgPropsFun(MsgProps),
@@ -728,7 +732,7 @@ requeue(AckTags, MsgPropsFun, State) ->
                     State3
             end,
             AckTags, State),
-    a(reduce_memory_use(State1)).
+    {Guids, a(reduce_memory_use(State1))}.
 
 len(#vqstate { len = Len }) -> Len.
 

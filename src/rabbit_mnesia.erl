@@ -34,7 +34,8 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0, copy_db/1]).
+         is_clustered/0, empty_ram_only_tables/0, copy_db/1,
+         add_table_definition/1]).
 
 -export([table_names/0]).
 
@@ -210,7 +211,20 @@ table_definitions() ->
      {rabbit_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
-       {match, #amqqueue{name = queue_name_match(), _='_'}}]}].
+       {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
+        ++ plugin_table_definitions().
+
+%% TODO: re-work this abuse of the application env as a register with
+%% the generic registry that should be landing at some point.
+add_table_definition(Def) ->
+    ok = application:set_env(rabbit, plugin_mnesia_tables,
+                             [Def | plugin_table_definitions()], infinity).
+
+plugin_table_definitions() ->
+    case application:get_env(rabbit, plugin_mnesia_tables) of
+        {ok, Defs} -> Defs;
+        undefined  -> []
+    end.
 
 binding_match() ->
     #binding{source = exchange_name_match(),
