@@ -39,8 +39,6 @@
          send_command_and_notify/4, send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
 
--import(gen_tcp).
-
 -record(wstate, {sock, channel, frame_max, protocol}).
 
 -define(HIBERNATE_AFTER, 5000).

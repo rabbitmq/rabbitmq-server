@@ -29,36 +29,37 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_direct).
+-module(rabbit_auth_mechanism_plain).
 -include("rabbit.hrl").
 
--behaviour(rabbit_exchange_type).
+-behaviour(rabbit_auth_mechanism).
 
--export([description/0, route/2]).
--export([validate/1, create/1, recover/2, delete/2,
-         add_binding/2, remove_bindings/2, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+-export([description/0, init/1, handle_response/2]).
+
+-include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "exchange type direct"},
+                   [{description, "auth mechanism plain"},
                     {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"direct">>, ?MODULE]}},
+                                   [auth_mechanism, <<"PLAIN">>, ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
+%% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
+%% apparently, by OpenAMQ.
+
 description() ->
-    [{name, <<"direct">>},
-     {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
+    [{name, <<"PLAIN">>},
+     {description, <<"SASL PLAIN authentication mechanism">>}].
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_routing_key(Name, RoutingKey).
+init(_Sock) ->
+    [].
 
-validate(_X) -> ok.
-create(_X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_X, _Bs) -> ok.
-add_binding(_X, _B) -> ok.
-remove_bindings(_X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+handle_response(Response, _State) ->
+    case re:run(Response, "\\0([^\\0]*)", [{capture, all_but_first, binary},
+                                           global]) of
+        {match, [[User],[Pass]]} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        _ ->
+            {refused, io_lib:format("response ~p invalid", [Response])}
+    end.

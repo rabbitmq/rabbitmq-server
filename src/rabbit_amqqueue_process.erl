@@ -48,10 +48,6 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
--import(queue).
--import(erlang).
--import(lists).
-
 % Queue's state
 -record(q, {q,
             exclusive_consumer,

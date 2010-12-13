@@ -69,10 +69,10 @@
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
 
--rabbit_boot_step({rabbit_exchange_type_registry,
-                   [{description, "exchange type registry"},
+-rabbit_boot_step({rabbit_registry,
+                   [{description, "plugin registry"},
                     {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_exchange_type_registry]}},
+                                   [rabbit_registry]}},
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
@@ -169,12 +169,6 @@
                    [{description, "network listeners available"}]}).
 
 %%---------------------------------------------------------------------------
-
--import(application).
--import(mnesia).
--import(lists).
--import(inet).
--import(gen_tcp).
 
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").

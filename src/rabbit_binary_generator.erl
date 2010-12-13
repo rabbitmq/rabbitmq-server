@@ -49,8 +49,6 @@
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
 -export([map_exception/3]).
 
--import(lists).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).

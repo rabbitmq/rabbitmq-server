@@ -35,8 +35,6 @@
 
 -export([all_tests/0, test_parsing/0]).
 
--import(lists).
-
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -1898,7 +1896,7 @@ test_variable_queue_ack_limiting(VQ0) ->
     VQ6 = check_variable_queue_status(
             rabbit_variable_queue:set_ram_duration_target(0, VQ5),
             [{len, Len div 2},
-             {target_ram_item_count, 0},
+             {target_ram_count, 0},
              {ram_msg_count, 0},
              {ram_ack_count, 0}]),
 
