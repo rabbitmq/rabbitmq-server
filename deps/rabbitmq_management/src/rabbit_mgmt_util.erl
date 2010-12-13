@@ -72,7 +72,7 @@ is_authorized(ReqData, Context, Fun) ->
                                                   is_admin = IsAdmin}};
                         false -> Unauthorized
                     end;
-                refused ->
+                {refused, _} ->
                     Unauthorized
             end;
         _ ->
