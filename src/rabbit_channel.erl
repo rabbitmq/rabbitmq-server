@@ -35,10 +35,10 @@
 
 -behaviour(gen_server2).
 
--export([start_link/7, do/2, do/3, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2]).
+-export([start_link/7, do/2, do/3, flush/1, shutdown/1]).
+-export([send_command/2, deliver/4, flushed/2, confirm/2, flush_confirms/1]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1, flush/1, flush_multiple_acks/1, confirm/2]).
+-export([emit_stats/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -72,7 +72,7 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
--define(FLUSH_MULTIPLE_ACKS_INTERVAL, 1000).
+-define(FLUSH_CONFIRMS_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -90,12 +90,15 @@
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
+-spec(flush/1 :: (pid()) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(deliver/4 ::
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
+-spec(confirm/2 ::(pid(), non_neg_integer()) -> 'ok').
+-spec(flush_confirms/1 :: (pid()) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
@@ -103,8 +106,6 @@
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
--spec(flush_multiple_acks/1 :: (pid()) -> 'ok').
--spec(confirm/2 ::(pid(), non_neg_integer()) -> 'ok').
 
 -endif.
 
@@ -121,6 +122,9 @@ do(Pid, Method) ->
 do(Pid, Method, Content) ->
     gen_server2:cast(Pid, {method, Method, Content}).
 
+flush(Pid) ->
+    gen_server2:call(Pid, flush).
+
 shutdown(Pid) ->
     gen_server2:cast(Pid, terminate).
 
@@ -132,6 +136,12 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
+
+confirm(Pid, MsgSeqNo) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNo, self()}).
+
+flush_confirms(Pid) ->
+    gen_server2:cast(Pid, flush_confirms).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -155,15 +165,6 @@ info_all(Items) ->
 
 emit_stats(Pid) ->
     gen_server2:cast(Pid, emit_stats).
-
-flush(Pid) ->
-    gen_server2:call(Pid, flush).
-
-flush_multiple_acks(Pid) ->
-    gen_server2:cast(Pid, flush_multiple_acks).
-
-confirm(Pid, MsgSeqNo) ->
-    gen_server2:cast(Pid, {confirm, MsgSeqNo, self()}).
 
 %%---------------------------------------------------------------------------
 
@@ -215,6 +216,9 @@ prioritise_cast(Msg, _State) ->
         _          -> 0
     end.
 
+handle_call(flush, _From, State) ->
+    reply(ok, State);
+
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State);
 
@@ -223,9 +227,6 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
-
-handle_call(flush, _From, State) ->
-    reply(ok, State);
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -261,10 +262,10 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     noreply(State);
 
 handle_cast({deliver, ConsumerTag, AckRequired,
-	     Msg = {_QName, QPid, _MsgId, Redelivered,
-		    #basic_message{exchange_name = ExchangeName,
-				   routing_key = RoutingKey,
-				   content = Content}}},
+             Msg = {_QName, QPid, _MsgId, Redelivered,
+                    #basic_message{exchange_name = ExchangeName,
+                                   routing_key = RoutingKey,
+                                   content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired,
@@ -291,11 +292,11 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
      State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
      hibernate};
 
-handle_cast(flush_multiple_acks, State) ->
-    {noreply, flush_multiple(State)};
+handle_cast(flush_confirms, State) ->
+    {noreply, internal_flush_confirms(State)};
 
 handle_cast({confirm, MsgSeqNo, From}, State) ->
-    {noreply, send_or_enqueue_ack(MsgSeqNo, From, State)}.
+    {noreply, confirm(MsgSeqNo, From, State)}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{queues_for_msg = QFM}) ->
@@ -303,7 +304,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
                fun(Msg, QPids, State0 = #ch{queues_for_msg = QFM0}) ->
                        Qs = sets:del_element(QPid, QPids),
                        case sets:size(Qs) of
-                           0 -> send_or_enqueue_ack(Msg, QPid, State0);
+                           0 -> confirm(Msg, QPid, State0);
                            _ -> State0#ch{queues_for_msg =
                                               dict:store(Msg, Qs, QFM0)}
                        end
@@ -313,7 +314,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
 
 handle_pre_hibernate(State = #ch{stats_timer   = StatsTimer}) ->
     ok = clear_permission_cache(),
-    State1 = flush_multiple(State),
+    State1 = internal_flush_confirms(State),
     rabbit_event:if_enabled(StatsTimer,
                             fun () ->
                                     internal_emit_stats(
@@ -465,11 +466,11 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-send_or_enqueue_ack(undefined, _QPid, State) ->
+confirm(undefined, _QPid, State) ->
     State;
-send_or_enqueue_ack(_MsgSeqNo, _QPid, State = #ch{confirm_enabled = false}) ->
+confirm(_MsgSeqNo, _QPid, State = #ch{confirm_enabled = false}) ->
     State;
-send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_multiple = false}) ->
+confirm(MsgSeqNo, QPid, State = #ch{confirm_multiple = false}) ->
     do_if_unconfirmed(MsgSeqNo, QPid,
                       fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
                               ok = rabbit_writer:send_command(
@@ -477,7 +478,7 @@ send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_multiple = false}) ->
                                        delivery_tag = MSN}),
                               State1
                       end, State);
-send_or_enqueue_ack(MsgSeqNo, QPid, State = #ch{confirm_multiple = true}) ->
+confirm(MsgSeqNo, QPid, State = #ch{confirm_multiple = true}) ->
     do_if_unconfirmed(MsgSeqNo, QPid,
                       fun(MSN, State1 = #ch{held_confirms = As}) ->
                               start_confirm_timer(
@@ -1231,12 +1232,12 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
-    send_or_enqueue_ack(MsgSeqNo, undefined, State);
+    confirm(MsgSeqNo, undefined, State);
 process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
-    send_or_enqueue_ack(MsgSeqNo, undefined, State);
+    confirm(MsgSeqNo, undefined, State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
-    send_or_enqueue_ack(MsgSeqNo, undefined, State);
+    confirm(MsgSeqNo, undefined, State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
 process_routing_result(routed,    QPids, MsgSeqNo,       _,
@@ -1249,6 +1250,45 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
+
+start_confirm_timer(State = #ch{confirm_tref = undefined}) ->
+    {ok, TRef} = timer:apply_after(?FLUSH_CONFIRMS_INTERVAL,
+                                   ?MODULE, flush_confirms, [self()]),
+    State#ch{confirm_tref = TRef};
+start_confirm_timer(State) ->
+    State.
+
+stop_confirm_timer(State = #ch{confirm_tref = undefined}) ->
+    State;
+stop_confirm_timer(State = #ch{confirm_tref = TRef}) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State#ch{confirm_tref = undefined}.
+
+internal_flush_confirms(State = #ch{writer_pid    = WriterPid,
+                                    held_confirms = Cs}) ->
+    case gb_sets:is_empty(Cs) of
+        true  -> State#ch{confirm_tref = undefined};
+        false -> [First | Rest] = gb_sets:to_list(Cs),
+                 {Mult, Inds} = find_consecutive_sequence(First, Rest),
+                 ok = rabbit_writer:send_command(
+                        WriterPid,
+                        #'basic.ack'{delivery_tag = Mult, multiple = true}),
+                 ok = lists:foldl(
+                        fun(T, ok) -> rabbit_writer:send_command(
+                                        WriterPid,
+                                        #'basic.ack'{delivery_tag = T})
+                        end, ok, Inds),
+                 State#ch{held_confirms = gb_sets:new(),
+                          confirm_tref  = undefined}
+    end.
+
+%% Find longest sequence of consecutive numbers at the beginning.
+find_consecutive_sequence(Last, []) ->
+    {Last, []};
+find_consecutive_sequence(Last, [N | Ns]) when N == (Last + 1) ->
+    find_consecutive_sequence(N, Ns);
+find_consecutive_sequence(Last, Ns) ->
+    {Last, Ns}.
 
 terminate(State) ->
     stop_confirm_timer(State),
@@ -1337,42 +1377,3 @@ erase_queue_stats(QPid) ->
     erase({queue_stats, QPid}),
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
-
-start_confirm_timer(State = #ch{confirm_tref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?FLUSH_MULTIPLE_ACKS_INTERVAL,
-                                   ?MODULE, flush_multiple_acks, [self()]),
-    State#ch{confirm_tref = TRef};
-start_confirm_timer(State) ->
-    State.
-
-stop_confirm_timer(State = #ch{confirm_tref = undefined}) ->
-    State;
-stop_confirm_timer(State = #ch{confirm_tref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State#ch{confirm_tref = undefined}.
-
-flush_multiple(State = #ch{writer_pid    = WriterPid,
-                           held_confirms = Cs}) ->
-    case gb_sets:is_empty(Cs) of
-        true  -> State#ch{confirm_tref = undefined};
-        false -> [First | Rest] = gb_sets:to_list(Cs),
-                 {Mult, Inds} = find_consecutive_sequence(First, Rest),
-                 ok = rabbit_writer:send_command(
-                        WriterPid,
-                        #'basic.ack'{delivery_tag = Mult, multiple = true}),
-                 ok = lists:foldl(
-                        fun(T, ok) -> rabbit_writer:send_command(
-                                        WriterPid,
-                                        #'basic.ack'{delivery_tag = T})
-                        end, ok, Inds),
-                 State#ch{held_confirms = gb_sets:new(),
-                          confirm_tref  = undefined}
-    end.
-
-%% Find longest sequence of consecutive numbers at the beginning.
-find_consecutive_sequence(Last, []) ->
-    {Last, []};
-find_consecutive_sequence(Last, [N | Ns]) when N == (Last + 1) ->
-    find_consecutive_sequence(N, Ns);
-find_consecutive_sequence(Last, Ns) ->
-    {Last, Ns}.
