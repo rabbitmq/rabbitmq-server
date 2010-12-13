@@ -349,10 +349,8 @@ noreply(NewState) ->
     {noreply, ensure_stats_timer(NewState), hibernate}.
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    ChPid = self(),
-    State#ch{stats_timer = rabbit_event:old_ensure_stats_timer(
-                             StatsTimer,
-                             fun() -> emit_stats(ChPid) end)}.
+    State#ch{stats_timer = rabbit_event:ensure_stats_timer(
+                             StatsTimer, self(), emit_stats)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
