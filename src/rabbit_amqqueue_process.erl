@@ -277,8 +277,9 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
 
 ensure_stats_timer(State = #q{stats_timer = StatsTimer,
                               q = Q}) ->
-    State#q{stats_timer = rabbit_event:ensure_stats_timer(
-                            StatsTimer, Q, emit_stats)}.
+    State#q{stats_timer = rabbit_event:old_ensure_stats_timer(
+                            StatsTimer,
+                            fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
