@@ -3,6 +3,9 @@
     <tr>
       <th>Name</th>
       <th>Description</th>
+<% if (show_enabled) { %>
+      <th>Enabled</th>
+<% } %>
     </tr>
     <%
       for (var i = 0; i < list.length; i++) {
@@ -11,6 +14,9 @@
        <tr<%= alt_rows(i)%>>
          <td><%= item.name %></td>
          <td><%= item.description %></td>
+<% if (show_enabled) { %>
+         <td class="c"><%= fmt_boolean(item.enabled) %></td>
+<% } %>
        </tr>
     <% } %>
 </table>
