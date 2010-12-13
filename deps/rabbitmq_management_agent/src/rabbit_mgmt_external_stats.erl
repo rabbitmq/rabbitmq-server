@@ -35,7 +35,7 @@
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
                mem_used, mem_limit, proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
-               auth_mechanisms]).
+               auth_mechanisms, applications]).
 
 %%--------------------------------------------------------------------
 
@@ -156,7 +156,11 @@ i(auth_mechanisms, _State) ->
     {ok, Mechanisms} = application:get_env(rabbit, auth_mechanisms),
     list_registry_plugins(
       auth_mechanism,
-      fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end).
+      fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
+i(applications, _State) ->
+    rabbit_mgmt_util:sort_list([rabbit_mgmt_format:application(A) ||
+                                   A <- application:which_applications()],
+                               [], "name", false).
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
