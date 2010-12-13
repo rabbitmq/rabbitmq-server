@@ -399,16 +399,12 @@ check_write_permitted(Resource, #ch{username = Username}) ->
 check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-check_internal_exchange(#exchange{name     = Name,
-                                  internal = IsInternal}) ->
-    case IsInternal of
-        true  ->
-            rabbit_misc:protocol_error(access_refused,
-                                       "cannot publish to internal exchange: "
-                                          ++ "~p~n",
-                                       [Name]);
-        false -> ok
-    end.
+check_internal_exchange(#exchange{name = Name, internal = true}) ->
+    rabbit_misc:protocol_error(access_refused,
+                               "cannot publish to internal exchange: ~p~n",
+                               [Name]);
+check_internal_exchange(_) ->
+    ok.
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(

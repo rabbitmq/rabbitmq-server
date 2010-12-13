@@ -176,13 +176,12 @@ assert_equivalence(X = #exchange{ durable     = Durable,
                                   type        = Type},
                    Type, Durable, AutoDelete, Internal, RequiredArgs) ->
     (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
-assert_equivalence(#exchange{ name = Name }, 
-                   _Type, _Durable, _Internal, _AutoDelete,
-                   _Args) ->
+assert_equivalence(#exchange{ name = Name },
+                   _Type, _Durable, _Internal, _AutoDelete, _Args) ->
     rabbit_misc:protocol_error(
       precondition_failed,
-      "cannot redeclare ~s with different type, durable, " ++
-          "internal or autodelete value",
+      "cannot redeclare ~s with different type, durable, "
+      "internal or autodelete value",
       [rabbit_misc:rs(Name)]).
 
 assert_args_equivalence(#exchange{ name = Name, arguments = Args },
