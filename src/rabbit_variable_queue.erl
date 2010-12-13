@@ -1096,9 +1096,9 @@ blank_rate(Timestamp, IngressLength) ->
 msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                    Self, fun (StateN) -> tx_commit_post_msg_store(
-                                            true, Pubs, AckTags,
-                                            Fun, MsgPropsFun, StateN)
+                    Self, fun (StateN) -> {[], tx_commit_post_msg_store(
+                                                 true, Pubs, AckTags,
+                                                 Fun, MsgPropsFun, StateN)}
                           end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
@@ -1401,7 +1401,7 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                      unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
 
 msgs_confirmed(GuidSet, State) ->
-    {{confirm, gb_sets:to_list(GuidSet)}, remove_confirms(GuidSet, State)}.
+    {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
 
 msgs_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
