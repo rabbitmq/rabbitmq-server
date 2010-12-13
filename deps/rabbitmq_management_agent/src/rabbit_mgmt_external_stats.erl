@@ -151,12 +151,22 @@ i(statistics_level, _State) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     StatsLevel;
 i(exchange_types, _State) ->
-    types_to_descriptions(rabbit_registry:lookup_all(exchange));
+    list_registry_plugins(exchange);
 i(auth_mechanisms, _State) ->
-    types_to_descriptions(rabbit_registry:lookup_all(auth_mechanism)).
+    {ok, Mechanisms} = application:get_env(rabbit, auth_mechanisms),
+    list_registry_plugins(
+      auth_mechanism,
+      fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end).
 
-types_to_descriptions(Types) ->
-    [Module:description() || {_, Module} <- Types].
+list_registry_plugins(Type) ->
+    list_registry_plugins(Type, fun(_) -> true end).
+
+list_registry_plugins(Type, Fun) ->
+    [registry_plugin_enabled(Module:description(), Fun) ||
+        {_, Module} <- rabbit_registry:lookup_all(Type)].
+
+registry_plugin_enabled(Desc, Fun) ->
+    Desc ++ [{enabled, Fun(proplists:get_value(name, Desc))}].
 
 %%--------------------------------------------------------------------
 
