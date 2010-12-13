@@ -30,14 +30,8 @@
 %%
 -module(rabbit_stomp).
 
--export([start/0, stop/0, start/2, stop/1]).
-
-start() ->
-    start(normal,[]),
-    ok.
-
-stop() ->
-    ok.
+-behaviour(application).
+-export([start/2, stop/1]).
 
 start(normal, []) ->
     Listeners = parse_listener_configuration(),
