@@ -53,7 +53,7 @@ start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
 
     %% Determine our various directories
-    [PluginDir, UnpackedPluginDir, Node] = init:get_plain_arguments(),
+    [PluginDir, UnpackedPluginDir, NodeStr] = init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
@@ -132,7 +132,7 @@ start() ->
      || App <- PluginApps],
     io:nl(),
 
-    ok = duplicate_node_check(Node),
+    ok = duplicate_node_check(NodeStr),
 
     terminate(0),
     ok.
@@ -259,8 +259,9 @@ process_entry(Entry) ->
 duplicate_node_check([]) ->
     %% Ignore running node while installing windows service
     ok;
-duplicate_node_check(Node) ->
-    {NodeName, NodeHost} = rabbit_misc:nodeparts(rabbit_misc:makenode(Node)),
+duplicate_node_check(NodeStr) ->
+    Node = rabbit_misc:makenode(NodeStr),
+    {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
     case net_adm:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
