@@ -700,7 +700,7 @@ refuse_connection(Sock, Exception) ->
 ensure_stats_timer(State = #v1{stats_timer = StatsTimer,
                                connection_state = running}) ->
     Self = self(),
-    State#v1{stats_timer = rabbit_event:ensure_stats_timer(
+    State#v1{stats_timer = rabbit_event:old_ensure_stats_timer(
                              StatsTimer,
                              fun() -> emit_stats(Self) end)};
 ensure_stats_timer(State) ->

@@ -350,7 +350,7 @@ noreply(NewState) ->
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
-    State#ch{stats_timer = rabbit_event:ensure_stats_timer(
+    State#ch{stats_timer = rabbit_event:old_ensure_stats_timer(
                              StatsTimer,
                              fun() -> emit_stats(ChPid) end)}.
 
