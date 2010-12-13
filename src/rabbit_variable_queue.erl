@@ -658,7 +658,7 @@ ack(AckTags, State) ->
         ack(fun msg_store_remove/3,
             fun ({_IsPersistent, Guid, _MsgProps}, State1) ->
                     remove_confirms(gb_sets:singleton(Guid), State1);
-                (#msg_status{msg = #basic_message{guid = Guid}}, State1) ->
+                (#msg_status{msg = #basic_message { guid = Guid }}, State1) ->
                     remove_confirms(gb_sets:singleton(Guid), State1)
             end,
             AckTags, State),
@@ -1405,9 +1405,9 @@ msgs_confirmed(GuidSet, State) ->
 
 msgs_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
-                                   msg_indices_on_disk = MIOD,
-                                   unconfirmed         = UC }) ->
+      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
+                                    msg_indices_on_disk = MIOD,
+                                    unconfirmed         = UC }) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
                                    State #vqstate {
                                      msgs_on_disk =
@@ -1417,9 +1417,9 @@ msgs_written_to_disk(QPid, GuidSet) ->
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
-                                   msg_indices_on_disk = MIOD,
-                                   unconfirmed         = UC }) ->
+      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
+                                    msg_indices_on_disk = MIOD,
+                                    unconfirmed         = UC }) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
                                    State #vqstate {
                                      msg_indices_on_disk =
