@@ -31,8 +31,22 @@
           <td><input type="text" name="username"/></td>
         </tr>
         <tr>
-          <th><label>Password:</label></th>
-          <td><input type="text" name="password"/></td>
+          <th>
+            <label>
+              <select name="has-password" id="has-password" class="narrow">
+                <option value="true">Password:</option>
+                <option value="false">No password</option>
+              </select>
+            </label>
+          </th>
+          <td>
+            <div id="password">
+              <input type="text" name="password" />
+            </div>
+            <div id="no-password">
+              User cannot log in using password.
+            </div>
+          </td>
         </tr>
         <tr>
           <th><label>Administrator:</label></th>

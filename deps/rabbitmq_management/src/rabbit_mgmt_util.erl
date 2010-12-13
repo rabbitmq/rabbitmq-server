@@ -19,7 +19,7 @@
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1]).
--export([with_decode/4, not_found/3, amqp_request/4]).
+-export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
 -export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
@@ -176,6 +176,21 @@ id0(Key, ReqData) ->
         error    -> none
     end.
 
+%% TODO unify this with the function below after bug23384 is merged
+with_decode_opts(Keys, ReqData, Context, Fun) ->
+    Body = wrq:req_body(ReqData),
+    case decode(Keys, Body) of
+        {error, Reason} -> bad_request(Reason, ReqData, Context);
+        _Values         -> try
+                               {ok, Obj0} = decode(Body),
+                               Obj = [{list_to_atom(binary_to_list(K)), V} ||
+                                         {K, V} <- Obj0],
+                               Fun(Obj)
+                           catch {error, Error} ->
+                                   bad_request(Error, ReqData, Context)
+                           end
+    end.
+
 with_decode(Keys, ReqData, Context, Fun) ->
     with_decode(Keys, wrq:req_body(ReqData), ReqData, Context, Fun).
 
@@ -190,20 +205,22 @@ with_decode(Keys, Body, ReqData, Context, Fun) ->
     end.
 
 decode(Keys, Body) ->
-    {Res, Json} = try
-                      {struct, J} = mochijson2:decode(Body),
-                      {ok, J}
-                  catch error:_ -> {error, not_json}
-                  end,
-    case Res of
-        ok -> Results =
-                  [get_or_missing(list_to_binary(atom_to_list(K)), Json) ||
-                      K <- Keys],
-              case [E || E = {key_missing, _} <- Results] of
-                  []      -> Results;
-                  Errors  -> {error, Errors}
-              end;
-        _  -> {Res, Json}
+    case decode(Body) of
+        {ok, J} -> Results =
+                       [get_or_missing(list_to_binary(atom_to_list(K)), J) ||
+                           K <- Keys],
+                   case [E || E = {key_missing, _} <- Results] of
+                       []      -> Results;
+                       Errors  -> {error, Errors}
+                   end;
+        Else    -> Else
+    end.
+
+decode(Body) ->
+    try
+        {struct, J} = mochijson2:decode(Body),
+        {ok, J}
+    catch error:_ -> {error, not_json}
     end.
 
 with_decode_vhost(Keys, ReqData, Context, Fun) ->
