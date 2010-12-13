@@ -323,7 +323,7 @@
                           timestamp   :: timestamp() }).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
-                          count        :: non_neg_integer (),
+                          count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
 -type(sync() :: #sync { acks_persistent :: [[seq_id()]],
