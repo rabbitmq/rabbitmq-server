@@ -1120,8 +1120,8 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
     end,
     case TRef of
         undefined -> TRef1 = erlang:send_after(
-			       ?FILE_HANDLES_CHECK_INTERVAL, ?SERVER,
-			       check_counts),
+                               ?FILE_HANDLES_CHECK_INTERVAL, ?SERVER,
+                               check_counts),
                      State #fhc_state { timer_ref = TRef1 };
         _         -> State
     end.

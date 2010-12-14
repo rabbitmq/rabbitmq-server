@@ -2,7 +2,7 @@
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
 %%   http://www.mozilla.org/MPL/
-%%
+%%`<
 %%   Software distributed under the License is distributed on an "AS IS"
 %%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
 %%   License for the specific language governing rights and limitations
@@ -35,7 +35,7 @@
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          maybe_run_queue_via_backing_queue_async/2, set_ram_duration_target/2,
-	 set_maximum_since_use/2]).
+         set_maximum_since_use/2]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
