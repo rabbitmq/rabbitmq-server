@@ -534,7 +534,6 @@ merge_stats(Objs, FineSpecs, Type, Tables) ->
     WithCoarse =
         case orddict:find(Type, Tables) of
             {ok, Table} ->
-                Table = orddict:fetch(Type, Tables),
                 [Obj ++ zero_old_rates(
                           lookup_element(Table, {pget(pid, Obj), stats}))
                  || Obj <- Objs];
