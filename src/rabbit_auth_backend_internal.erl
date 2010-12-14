@@ -74,7 +74,7 @@ internal_check_user_login(Username, Fun) ->
 check_vhost_access(#user{is_admin = true},    _VHostPath, read) ->
     true;
 
-check_vhost_access(#user{username = Username}, VHostPath, write) ->
+check_vhost_access(#user{username = Username}, VHostPath, _) ->
     %% TODO: use dirty ops instead
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
