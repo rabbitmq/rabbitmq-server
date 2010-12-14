@@ -17,7 +17,8 @@ build_frame(Channel, Payload) ->
     [ <<Size:32/unsigned, 2:8, ?AMQP_FRAME_TYPE:8, Channel:16/unsigned>>, Payload ].
 
 build_heartbeat_frame() ->
-    <<0:32, ?DOFF:8, ?AMQP_FRAME_TYPE:8, 0:16>>.
+    %% length is inclusive
+    <<8:32, ?DOFF:8, ?AMQP_FRAME_TYPE:8, 0:16>>.
 
 generate({described, Descriptor, Value}) ->
     DescBin = generate(Descriptor),
@@ -44,20 +45,32 @@ generate({char, Value}) -> <<?FIXED_4:4,3:4,Value:4/binary>>;
 generate({timestamp, Value}) -> <<?FIXED_8:4,3:4,Value:64/signed>>;
 generate({uuid, Value}) -> <<?FIXED_16:4,8:4,Value:16/binary>>;
 
-generate({binary, Value}) -> [ <<?VAR_1:4,0:4,(size(Value)):8>>, Value ];
+generate({binary, Value}) ->
+    Size = iolist_size(Value),
+    if  Size < 16#ff ->
+            [ <<?VAR_1:4,0:4,Size:8>>, Value ];
+        true ->
+            [ <<?VAR_4:4,0:4,Size:32>>, Value ]
+    end;
+
+%% FIXME variable sizes too
 generate({utf8, Value}) -> [ <<?VAR_1:4,1:4,(size(Value)):8>>, Value ];
 generate({utf16, Value}) -> [ <<?VAR_1:4,2:4,(size(Value)):8>>, Value ];
 
 generate({symbol, Value}) -> [ <<?VAR_1:4,3:4,(length(Value)):8>>,
-                              list_to_binary(Value) ];
+                               list_to_binary(Value) ];
 
 generate({list, List}) ->
     Count = length(List),
     Compound = lists:map(fun generate/1, List),
     Size = iolist_size(Compound),
-    %% TODO look at the size to see if it needs a different encoding
-    [ <<?COMPOUND_1:4, 0:4, (Size + 1):8/unsigned, Count:8/unsigned>>,
-      Compound ];
+    if Size > 255  -> % Size < 256 -> Count < 256
+            [ <<?COMPOUND_4:4, 0:4, (Size + 4):32/unsigned, Count:32/unsigned>>,
+              Compound ];
+       true ->
+            [ <<?COMPOUND_1:4, 0:4, (Size + 1):8/unsigned, Count:8/unsigned>>,
+              Compound ]
+    end;
 
 generate({map, ListOfPairs}) ->
     Count = length(ListOfPairs) * 2,
@@ -66,5 +79,10 @@ generate({map, ListOfPairs}) ->
                                   (generate(Val))]
                          end, ListOfPairs),
     Size = iolist_size(Compound),
-    [ <<?COMPOUND_1:4,1:4,(Size + 1):8,Count:8>>,
-       Compound ].
+    if Size > 255 ->
+            [ <<?COMPOUND_4:4,1:4,(Size + 4):32,Count:32>>,
+              Compound ];
+       true ->
+            [ <<?COMPOUND_1:4,1:4,(Size + 1):8,Count:8>>,
+              Compound ]
+    end.
