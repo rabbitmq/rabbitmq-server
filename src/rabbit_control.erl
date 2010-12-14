@@ -211,6 +211,10 @@ action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
     Inform("Changing password for user ~p", [Username]),
     call(Node, {rabbit_access_control, change_password, Args});
 
+action(clear_password, Node, Args = [Username], _Opts, Inform) ->
+    Inform("Clearing password for user ~p", [Username]),
+    call(Node, {rabbit_access_control, clear_password, Args});
+
 action(set_admin, Node, [Username], _Opts, Inform) ->
     Inform("Setting administrative status for user ~p", [Username]),
     call(Node, {rabbit_access_control, set_admin, [Username]});

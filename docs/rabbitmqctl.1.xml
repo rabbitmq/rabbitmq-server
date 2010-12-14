@@ -466,6 +466,25 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>clear_password</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose password is to be cleared.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_password tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to clear the
+              password for the user named
+              <command>tonyg</command>. This user now cannot log in with a password (but may be able to through e.g. SASL EXTERNAL if configured).
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -1003,6 +1022,10 @@
               <varlistentry>
                 <term>protocol</term>
                 <listitem><para>Version of the AMQP protocol in use (currently one of <command>{0,9,1}</command> or <command>{0,8,0}</command>). Note that if a client requests an AMQP 0-9 connection, we treat it as AMQP 0-9-1.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>auth_mechanism</term>
+                <listitem><para>SASL authentication mechanism used, such as <command>PLAIN</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>user</term>

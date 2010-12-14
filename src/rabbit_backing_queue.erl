@@ -77,7 +77,7 @@ behaviour_info(callbacks) ->
      {fetch, 2},
 
      %% Acktags supplied are for messages which can now be forgotten
-     %% about.
+     %% about. Must return 1 guid per Ack, in the same order as Acks.
      {ack, 2},
 
      %% A publish, but in the context of a transaction.

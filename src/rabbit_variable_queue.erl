@@ -662,7 +662,7 @@ ack(AckTags, State) ->
         ack(fun msg_store_remove/3,
             fun ({_IsPersistent, Guid, _MsgProps}, State1) ->
                     remove_confirms(gb_sets:singleton(Guid), State1);
-                (#msg_status{msg = #basic_message{guid = Guid}}, State1) ->
+                (#msg_status{msg = #basic_message { guid = Guid }}, State1) ->
                     remove_confirms(gb_sets:singleton(Guid), State1)
             end,
             AckTags, State),
@@ -1100,9 +1100,9 @@ blank_rate(Timestamp, IngressLength) ->
 msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                    Self, fun (StateN) -> tx_commit_post_msg_store(
-                                            true, Pubs, AckTags,
-                                            Fun, MsgPropsFun, StateN)
+                    Self, fun (StateN) -> {[], tx_commit_post_msg_store(
+                                                 true, Pubs, AckTags,
+                                                 Fun, MsgPropsFun, StateN)}
                           end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
@@ -1315,10 +1315,8 @@ record_pending_ack(#msg_status { seq_id        = SeqId,
                                       ack_in_counter  = AckInCount}) ->
     {AckEntry, RAI1} =
         case MsgOnDisk of
-            true ->
-                {{IsPersistent, Guid, MsgProps}, RAI};
-            false ->
-                {MsgStatus, gb_trees:insert(SeqId, Guid, RAI)}
+            true  -> {{IsPersistent, Guid, MsgProps}, RAI};
+            false -> {MsgStatus, gb_trees:insert(SeqId, Guid, RAI)}
         end,
     PA1 = dict:store(SeqId, AckEntry, PA),
     State #vqstate { pending_ack    = PA1,
@@ -1329,8 +1327,8 @@ remove_pending_ack(KeepPersistent,
                    State = #vqstate { pending_ack       = PA,
                                       index_state       = IndexState,
                                       msg_store_clients = MSCState }) ->
-    {SeqIds, GuidsByStore} = dict:fold(fun accumulate_ack/3,
-                                       {[], orddict:new()}, PA),
+    {PersistentSeqIds, GuidsByStore, _AllGuids} =
+        dict:fold(fun accumulate_ack/3, accumulate_ack_init(), PA),
     State1 = State #vqstate { pending_ack   = dict:new(),
                               ram_ack_index = gb_trees:empty() },
     case KeepPersistent of
@@ -1340,18 +1338,17 @@ remove_pending_ack(KeepPersistent,
                                                           Guids),
                                     State1
                  end;
-        false -> IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-                 ok = orddict:fold(
-                        fun (IsPersistent, Guids, ok) ->
-                                msg_store_remove(MSCState, IsPersistent, Guids)
-                        end, ok, GuidsByStore),
+        false -> IndexState1 =
+                     rabbit_queue_index:ack(PersistentSeqIds, IndexState),
+                 [ok = msg_store_remove(MSCState, IsPersistent, Guids)
+                  || {IsPersistent, Guids} <- orddict:to_list(GuidsByStore)],
                  State1 #vqstate { index_state = IndexState1 }
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
     {[], State};
 ack(MsgStoreFun, Fun, AckTags, State) ->
-    {{SeqIds, GuidsByStore},
+    {{PersistentSeqIds, GuidsByStore, AllGuids},
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
                          persistent_count  = PCount,
@@ -1365,27 +1362,30 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
                                    pending_ack   = dict:erase(SeqId, PA),
                                    ram_ack_index =
                                        gb_trees:delete_any(SeqId, RAI)})}
-          end, {{[], orddict:new()}, State}, AckTags),
-    IndexState1 = rabbit_queue_index:ack(SeqIds, IndexState),
-    AckdGuids = lists:concat(
-                  orddict:fold(
-                    fun (IsPersistent, Guids, Gs) ->
-                            MsgStoreFun(MSCState, IsPersistent, Guids),
-                            [Guids | Gs]
-                    end, [], GuidsByStore)),
+          end, {accumulate_ack_init(), State}, AckTags),
+    IndexState1 = rabbit_queue_index:ack(PersistentSeqIds, IndexState),
+    [ok = MsgStoreFun(MSCState, IsPersistent, Guids)
+     || {IsPersistent, Guids} <- orddict:to_list(GuidsByStore)],
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
-    {AckdGuids, State1 #vqstate { index_state      = IndexState1,
-                      persistent_count = PCount1,
-                      ack_out_counter  = AckOutCount + length(AckTags) }}.
+    {lists:reverse(AllGuids),
+     State1 #vqstate { index_state      = IndexState1,
+                       persistent_count = PCount1,
+                       ack_out_counter  = AckOutCount + length(AckTags) }}.
+
+accumulate_ack_init() -> {[], orddict:new(), []}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
-                                     index_on_disk = false }, Acc) ->
-    Acc;
-accumulate_ack(SeqId, {IsPersistent, Guid, _MsgProps}, {SeqIdsAcc, Dict}) ->
-    {cons_if(IsPersistent, SeqId, SeqIdsAcc),
-     rabbit_misc:orddict_cons(IsPersistent, Guid, Dict)}.
+                                     index_on_disk = false,
+                                     guid          = Guid },
+              {PersistentSeqIdsAcc, GuidsByStore, AllGuids}) ->
+    {PersistentSeqIdsAcc, GuidsByStore, [Guid | AllGuids]};
+accumulate_ack(SeqId, {IsPersistent, Guid, _MsgProps},
+               {PersistentSeqIdsAcc, GuidsByStore, AllGuids}) ->
+    {cons_if(IsPersistent, SeqId, PersistentSeqIdsAcc),
+     rabbit_misc:orddict_cons(IsPersistent, Guid, GuidsByStore),
+     [Guid | AllGuids]}.
 
 find_persistent_count(LensByStore) ->
     case orddict:find(true, LensByStore) of
@@ -1405,13 +1405,13 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                      unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
 
 msgs_confirmed(GuidSet, State) ->
-    {{confirm, gb_sets:to_list(GuidSet)}, remove_confirms(GuidSet, State)}.
+    {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
 
 msgs_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
-                                   msg_indices_on_disk = MIOD,
-                                   unconfirmed         = UC }) ->
+      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
+                                    msg_indices_on_disk = MIOD,
+                                    unconfirmed         = UC }) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
                                    State #vqstate {
                                      msgs_on_disk =
@@ -1421,9 +1421,9 @@ msgs_written_to_disk(QPid, GuidSet) ->
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun(State = #vqstate { msgs_on_disk        = MOD,
-                                   msg_indices_on_disk = MIOD,
-                                   unconfirmed         = UC }) ->
+      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
+                                    msg_indices_on_disk = MIOD,
+                                    unconfirmed         = UC }) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
                                    State #vqstate {
                                      msg_indices_on_disk =
