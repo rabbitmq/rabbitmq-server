@@ -43,8 +43,6 @@
 
 -export([analyze_frame/3]).
 
--export([emit_stats/1]).
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
@@ -163,7 +161,6 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
--spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
@@ -217,9 +214,6 @@ info(Pid, Items) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
-
-emit_stats(Pid) ->
-    catch erlang:send(Pid, emit_stats).
 
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
