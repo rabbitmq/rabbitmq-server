@@ -4,10 +4,11 @@
         <tr>
 <% if (mode == 'queue') { %>
           <th>Channel</th>
+          <th>Consumer Tag</th>
 <% } else { %>
+          <th>Consumer Tag</th>
           <th>Queue</th>
 <% } %>
-          <th>Consumer Tag</th>
           <th>Ack Required</th>
           <th>Exclusive</th>
         </tr>
@@ -19,10 +20,11 @@
       <tr<%= alt_rows(i) %>>
 <% if (mode == 'queue') { %>
         <td><%= link_channel(consumer.channel_details.name) %></td>
+        <td><%= consumer.consumer_tag %></td>
 <% } else { %>
+        <td><%= consumer.consumer_tag %></td>
         <td><%= link_queue(consumer.queue_details.vhost, consumer.queue_details.name) %></td>
 <% } %>
-        <td><%= consumer.consumer_tag %></td>
         <td class="c"><%= fmt_boolean(consumer.ack_required) %></td>
         <td class="c"><%= fmt_boolean(consumer.exclusive) %></td>
       </tr>
