@@ -56,7 +56,7 @@
 
 %%----------------------------------------------------------------------------
 
-start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
+start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, User, VHost,
             Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
@@ -69,7 +69,7 @@ start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
-                     [Channel, ReaderPid, WriterPid, Username, VHost,
+                     [Channel, ReaderPid, WriterPid, User, VHost,
                       Collector, start_limiter_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, FramingChannelPid} =

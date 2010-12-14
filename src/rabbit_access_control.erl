@@ -33,8 +33,9 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([user_pass_login/2, check_user_pass_login/2, make_salt/0,
-         check_vhost_access/2, check_resource_access/3]).
+-export([user_pass_login/2, check_user_pass_login/2, check_user_login/2,
+         make_salt/0, check_password/2, check_vhost_access/2,
+         check_resource_access/3, list_vhosts/1]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1, clear_password/1]).
 -export([change_password_hash/2, hash_password/1]).
@@ -47,7 +48,7 @@
 
 -ifdef(use_specs).
 
--export_type([username/0, password/0, password_hash/0]).
+-export_type([username/0, password/0, password_hash/0, permission_atom/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(username() :: binary()).
@@ -61,11 +62,12 @@
         (username(), password())
         -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
 -spec(make_salt/0 :: () -> binary()).
+-spec(check_password/2 :: (password(), password_hash()) -> boolean()).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
-        (username(), rabbit_types:r(atom()), permission_atom())
+        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
@@ -77,7 +79,7 @@
 -spec(clear_admin/1 :: (username()) -> 'ok').
 -spec(list_users/0 :: () -> [{username(), boolean()}]).
 -spec(lookup_user/1 ::
-        (username()) -> rabbit_types:ok(rabbit_types:user())
+        (username()) -> rabbit_types:ok(rabbit_types:internal_user())
                             | rabbit_types:error('not_found')).
 -spec(add_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(delete_vhost/1 :: (rabbit_types:vhost()) -> 'ok').
@@ -109,88 +111,94 @@ user_pass_login(User, Pass) ->
             U
     end.
 
-check_user_pass_login(Username, Pass) ->
-    Refused = {refused, "user '~s' - invalid credentials", [Username]},
-    case lookup_user(Username) of
-        {ok, User} ->
-            case check_password(Pass, User#user.password_hash) of
-                true -> {ok, User};
-                _    -> Refused
-            end;
-        {error, not_found} ->
-            Refused
-    end.
+check_user_pass_login(Username, Password) ->
+    check_user_login(Username, [{password, Password}]).
 
-internal_lookup_vhost_access(Username, VHostPath) ->
-    %% TODO: use dirty ops instead
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({rabbit_user_permission,
-                                #user_vhost{username     = Username,
-                                            virtual_host = VHostPath}}) of
-                  [] -> not_found;
-                  [R] -> {ok, R}
-              end
-      end).
+check_user_login(Username, AuthProps) ->
+    {ok, Modules} = application:get_env(rabbit, auth_backends),
+    lists:foldl(
+      fun(Module, {refused, _, _}) ->
+              case Module:check_user_login(Username, AuthProps) of
+                  {error, E} ->
+                      {refused, "~s failed authenticating ~s: ~p~n",
+                       [Module, Username, E]};
+                  Else ->
+                      Else
+              end;
+         (_, {ok, User}) ->
+              {ok, User}
+      end, {refused, "No modules checked '~s'", [Username]}, Modules).
 
-check_vhost_access(#user{username = Username}, VHostPath) ->
+check_vhost_access(User = #user{ username     = Username,
+                                 auth_backend = Module }, VHostPath) ->
     ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
-    case internal_lookup_vhost_access(Username, VHostPath) of
-        {ok, _R} ->
-            ok;
-        not_found ->
-            rabbit_misc:protocol_error(
-              access_refused, "access to vhost '~s' refused for user '~s'",
-              [VHostPath, Username])
-    end.
+    check_access(
+      fun() ->
+              vhost_exists(VHostPath) andalso
+                  Module:check_vhost_access(User, VHostPath, write)
+      end,
+      "~s failed checking vhost access to ~s for ~s: ~p~n",
+      [Module, VHostPath, Username],
+      "access to vhost '~s' refused for user '~s'",
+      [VHostPath, Username]).
 
-permission_index(configure) -> #permission.configure;
-permission_index(write)     -> #permission.write;
-permission_index(read)      -> #permission.read.
-
-check_resource_access(Username,
-                      R = #resource{kind = exchange, name = <<"">>},
+check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->
-    check_resource_access(Username,
-                          R#resource{name = <<"amq.default">>},
+    check_resource_access(User, R#resource{name = <<"amq.default">>},
                           Permission);
-check_resource_access(Username,
-                      R = #resource{virtual_host = VHostPath, name = Name},
-                      Permission) ->
-    Res = case mnesia:dirty_read({rabbit_user_permission,
-                                  #user_vhost{username     = Username,
-                                              virtual_host = VHostPath}}) of
-              [] ->
-                  false;
-              [#user_permission{permission = P}] ->
-                  PermRegexp =
-                      case element(permission_index(Permission), P) of
-                          %% <<"^$">> breaks Emacs' erlang mode
-                          <<"">> -> <<$^, $$>>;
-                          RE     -> RE
-                      end,
-                  case re:run(Name, PermRegexp, [{capture, none}]) of
-                      match    -> true;
-                      nomatch  -> false
-                  end
-          end,
-    if Res  -> ok;
-       true -> rabbit_misc:protocol_error(
-                 access_refused, "access to ~s refused for user '~s'",
-                 [rabbit_misc:rs(R), Username])
+check_resource_access(User = #user{username = Username, auth_backend = Module},
+                      Resource, Permission) ->
+    check_access(
+      fun() -> Module:check_resource_access(User, Resource, Permission) end,
+      "~s failed checking resource access to ~p for ~s: ~p~n",
+      [Module, Resource, Username],
+      "access to ~s refused for user '~s'",
+      [rabbit_misc:rs(Resource), Username]).
+
+check_access(Fun, ErrStr, ErrArgs, RefStr, RefArgs) ->
+    Allow = case Fun() of
+                {error, _} = E ->
+                    rabbit_log:error(ErrStr, ErrArgs ++ [E]),
+                    false;
+                Else ->
+                    Else
+            end,
+    case Allow of
+        true ->
+            ok;
+        false ->
+            rabbit_misc:protocol_error(access_refused, RefStr, RefArgs)
     end.
+
+list_vhosts(User = #user{username = Username, auth_backend = Module}) ->
+    lists:filter(
+      fun(VHost) ->
+              case Module:check_vhost_access(User, VHost, read) of
+                  {error, _} = E ->
+                      rabbit_log:warning("~w failed checking vhost access "
+                                         "to ~s for ~s: ~p~n",
+                                         [Module, VHost, Username, E]),
+                      false;
+                  Else ->
+                      Else
+              end
+      end, list_vhosts()).
+
+%% TODO move almost everything below this line to rabbit_auth_backend_internal
+%%----------------------------------------------------------------------------
 
 add_user(Username, Password) ->
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_user, Username}) of
                       [] ->
-                          ok = mnesia:write(rabbit_user,
-                                            #user{username = Username,
-                                                  password_hash =
-                                                      hash_password(Password),
-                                                  is_admin = false},
-                                            write);
+                          ok = mnesia:write(
+                                 rabbit_user,
+                                 #internal_user{username = Username,
+                                                password_hash =
+                                                    hash_password(Password),
+                                                is_admin = false},
+                                 write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
                   end
@@ -226,7 +234,8 @@ clear_password(Username) ->
 
 change_password_hash(Username, PasswordHash) ->
     R = update_user(Username, fun(User) ->
-                                      User#user{ password_hash = PasswordHash }
+                                      User#internal_user{
+                                        password_hash = PasswordHash }
                               end),
     rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
@@ -257,7 +266,7 @@ clear_admin(Username) ->
 
 set_admin(Username, IsAdmin) ->
     R = update_user(Username, fun(User) ->
-                                      User#user{is_admin = IsAdmin}
+                                      User#internal_user{is_admin = IsAdmin}
                               end),
     rabbit_log:info("Set user admin flag for user ~p to ~p~n",
                     [Username, IsAdmin]),
@@ -274,8 +283,8 @@ update_user(Username, Fun) ->
 
 list_users() ->
     [{Username, IsAdmin} ||
-        #user{username = Username, is_admin = IsAdmin} <-
-            mnesia:dirty_match_object(rabbit_user, #user{_ = '_'})].
+        #internal_user{username = Username, is_admin = IsAdmin} <-
+            mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).

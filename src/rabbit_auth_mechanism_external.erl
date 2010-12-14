@@ -81,7 +81,7 @@ handle_response(_Response, #state{username = Username}) ->
         {refused, _, _} = E ->
             E;
         _ ->
-            case rabbit_access_control:lookup_user(Username) of
+            case rabbit_access_control:check_user_login(Username, []) of
                 {ok, User} ->
                     {ok, User};
                 {error, not_found} ->

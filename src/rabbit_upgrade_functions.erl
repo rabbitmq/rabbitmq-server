@@ -27,6 +27,7 @@
 -rabbit_upgrade({remove_user_scope,  []}).
 -rabbit_upgrade({hash_passwords,     []}).
 -rabbit_upgrade({add_ip_to_listener, []}).
+-rabbit_upgrade({user_to_internal_user, []}).
 
 %% -------------------------------------------------------------------
 
@@ -35,6 +36,7 @@
 -spec(remove_user_scope/0  :: () -> 'ok').
 -spec(hash_passwords/0     :: () -> 'ok').
 -spec(add_ip_to_listener/0 :: () -> 'ok').
+-spec(user_to_internal_user/0 :: () -> 'ok').
 
 -endif.
 
@@ -71,8 +73,21 @@ add_ip_to_listener() ->
       end,
       [node, protocol, host, ip_address, port]).
 
+user_to_internal_user() ->
+    mnesia(
+      rabbit_user,
+      fun({user, Username, PasswordHash, IsAdmin}) ->
+              {internal_user, Username, PasswordHash, IsAdmin}
+      end,
+      [username, password_hash, is_admin], internal_user).
+
 %%--------------------------------------------------------------------
 
 mnesia(TableName, Fun, FieldList) ->
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList),
+    ok.
+
+mnesia(TableName, Fun, FieldList, NewRecordName) ->
+    {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList,
+                                          NewRecordName),
     ok.

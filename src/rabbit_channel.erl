@@ -47,7 +47,7 @@
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
-             username, virtual_host, most_recently_declared_queue,
+             user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
              confirm_enabled, publish_seqno, confirm_multiple, confirm_tref,
              held_confirms, unconfirmed, queues_for_msg}).
@@ -83,7 +83,7 @@
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/7 ::
-      (channel_number(), pid(), pid(), rabbit_access_control:username(),
+      (channel_number(), pid(), pid(), rabbit_types:user(),
        rabbit_types:vhost(), pid(),
        fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
@@ -111,9 +111,9 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
+start_link(Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
            StartLimiterFun) ->
-    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid, Username,
+    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid, User,
                                      VHost, CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
@@ -168,7 +168,7 @@ emit_stats(Pid) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
+init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
@@ -184,7 +184,7 @@ init([Channel, ReaderPid, WriterPid, Username, VHost, CollectorPid,
                 next_tag                = 1,
                 uncommitted_ack_q       = queue:new(),
                 unacked_message_q       = queue:new(),
-                username                = Username,
+                user                    = User,
                 virtual_host            = VHost,
                 most_recently_declared_queue = <<>>,
                 consumer_mapping        = dict:new(),
@@ -371,7 +371,7 @@ return_queue_declare_ok(#resource{name = ActualName},
                                   message_count  = MessageCount,
                                   consumer_count = ConsumerCount}).
 
-check_resource_access(Username, Resource, Perm) ->
+check_resource_access(User, Resource, Perm) ->
     V = {Resource, Perm},
     Cache = case get(permission_cache) of
                 undefined -> [];
@@ -381,7 +381,7 @@ check_resource_access(Username, Resource, Perm) ->
         case lists:member(V, Cache) of
             true  -> lists:delete(V, Cache);
             false -> ok = rabbit_access_control:check_resource_access(
-                            Username, Resource, Perm),
+                            User, Resource, Perm),
                      lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1)
         end,
     put(permission_cache, [V | CacheTail]),
@@ -391,14 +391,14 @@ clear_permission_cache() ->
     erase(permission_cache),
     ok.
 
-check_configure_permitted(Resource, #ch{username = Username}) ->
-    check_resource_access(Username, Resource, configure).
+check_configure_permitted(Resource, #ch{user = User}) ->
+    check_resource_access(User, Resource, configure).
 
-check_write_permitted(Resource, #ch{username = Username}) ->
-    check_resource_access(Username, Resource, write).
+check_write_permitted(Resource, #ch{user = User}) ->
+    check_resource_access(User, Resource, write).
 
-check_read_permitted(Resource, #ch{username = Username}) ->
-    check_resource_access(Username, Resource, read).
+check_read_permitted(Resource, #ch{user = User}) ->
+    check_resource_access(User, Resource, read).
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
@@ -1300,7 +1300,7 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid,            _)                                 -> self();
 i(connection,     #ch{reader_pid       = ReaderPid}) -> ReaderPid;
 i(number,         #ch{channel          = Channel})   -> Channel;
-i(user,           #ch{username         = Username})  -> Username;
+i(user,           #ch{user             = User})      -> User#user.username;
 i(vhost,          #ch{virtual_host     = VHost})     -> VHost;
 i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->

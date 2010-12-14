@@ -154,10 +154,10 @@ nodes_of_type(Type) ->
 
 table_definitions() ->
     [{rabbit_user,
-      [{record_name, user},
-       {attributes, record_info(fields, user)},
+      [{record_name, internal_user},
+       {attributes, record_info(fields, internal_user)},
        {disc_copies, [node()]},
-       {match, #user{_='_'}}]},
+       {match, #internal_user{_='_'}}]},
      {rabbit_user_permission,
       [{record_name, user_permission},
        {attributes, record_info(fields, user_permission)},
