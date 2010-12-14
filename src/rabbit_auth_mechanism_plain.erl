@@ -62,5 +62,5 @@ handle_response(Response, _State) ->
         {match, [User, Pass]} ->
             rabbit_access_control:check_user_pass_login(User, Pass);
         _ ->
-            {refused, io_lib:format("response ~p invalid", [Response])}
+            {protocol_error, "response ~p invalid", [Response]}
     end.
