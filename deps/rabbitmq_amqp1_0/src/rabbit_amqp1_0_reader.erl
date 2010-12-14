@@ -795,7 +795,7 @@ handle_input(frame_header_1_0, <<Size:32, DOff:8, Type:8, Channel:16>>,
              State) when DOff >= 2 andalso Type == 0 ->
     ?DEBUG("1.0 frame header: doff: ~p size: ~p~n", [DOff, Size]),
     case Size of
-        0 ->
+        8 -> % length inclusive
             {State, frame_header_1_0, 8}; %% heartbeat
         _ ->
             ensure_stats_timer(
@@ -805,7 +805,7 @@ handle_input(frame_header_1_0, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
 handle_input({frame_payload_1_0, DOff, Channel},
             FrameBin, State) ->
-    SkipBits = (DOff * 4 - 8),
+    SkipBits = (DOff * 32 - 64), % DOff = 4-byte words, we've read 8 already
     <<Skip:SkipBits, FramePayload/binary>> = FrameBin,
     Skip = Skip, %% hide warning when debug is off
     ?DEBUG("1.0 frame: ~p (skipped ~p)~n", [FramePayload, Skip]),
