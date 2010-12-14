@@ -5,21 +5,21 @@
   <div class="hider updatable">
     <table class="facts">
       <tr>
-        <th>Type</th>
-        <td><%= exchange.type %></td>
-        <th>Internal</th>
-      </tr>
-      <tr>
-        <th>Parameters</th>
-        <td><%= fmt_parameters(exchange) %></td>
-      </tr>
-<% if (vhosts_interesting) { %>
-      <tr>
         <th>Virtual host</th>
-        <td><%= exchange.vhost %></td>
-        <td><%= fmt_boolean(exchange.internal) %></td>
+        <th>Type</th>
+        <th>Durable</th>
+        <th>Auto delete</th>
+        <th>Internal</th>
+        <th>Arguments</th>
       </tr>
-<% } %>
+      <tr>
+        <td><%= exchange.vhost %></td>
+        <td><%= exchange.type %></td>
+        <td><%= fmt_boolean(exchange.durable) %></td>
+        <td><%= fmt_boolean(exchange.auto_delete) %></td>
+        <td><%= fmt_boolean(exchange.internal) %></td>
+        <td><%= fmt_table_short(exchange.arguments) %></td>
+      </tr>
     </table>
     <span class="br"></span>
   </div>
