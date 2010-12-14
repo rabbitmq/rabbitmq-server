@@ -42,7 +42,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, prioritise_info/2]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
@@ -160,7 +160,7 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 emit_stats(Pid) ->
-    gen_server2:cast(Pid, emit_stats).
+    catch erlang:send(Pid, emit_stats).
 
 %%---------------------------------------------------------------------------
 
@@ -208,8 +208,13 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats -> 7;
-        _          -> 0
+        _              -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        emit_stats     -> 7;
+        _              -> 0
     end.
 
 handle_call(flush, _From, State) ->
@@ -282,14 +287,14 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+handle_cast({confirm, MsgSeqNo, From}, State) ->
+    {noreply, confirm(MsgSeqNo, From, State)}.
+
+handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
     {noreply,
      State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
      hibernate};
-
-handle_cast({confirm, MsgSeqNo, From}, State) ->
-    {noreply, confirm(MsgSeqNo, From, State)}.
 
 handle_info(flush_confirms, State) ->
     {noreply, internal_flush_confirms(State)};
@@ -344,10 +349,8 @@ noreply(NewState) ->
     {noreply, ensure_stats_timer(NewState), hibernate}.
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
-                             StatsTimer,
-                             fun() -> emit_stats(ChPid) end)}.
+                             StatsTimer, self(), emit_stats)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.

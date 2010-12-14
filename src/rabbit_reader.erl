@@ -43,8 +43,6 @@
 
 -export([analyze_frame/3]).
 
--export([emit_stats/1]).
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
@@ -163,7 +161,6 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
--spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
@@ -217,9 +214,6 @@ info(Pid, Items) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
-
-emit_stats(Pid) ->
-    gen_server:cast(Pid, emit_stats).
 
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
@@ -377,7 +371,7 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                                    catch Error -> {error, Error}
                                    end),
             mainloop(Deb, State);
-        {'$gen_cast', emit_stats} ->
+        emit_stats ->
             State1 = internal_emit_stats(State),
             mainloop(Deb, State1);
         {system, From, Request} ->
@@ -699,10 +693,8 @@ refuse_connection(Sock, Exception) ->
 
 ensure_stats_timer(State = #v1{stats_timer = StatsTimer,
                                connection_state = running}) ->
-    Self = self(),
     State#v1{stats_timer = rabbit_event:ensure_stats_timer(
-                             StatsTimer,
-                             fun() -> emit_stats(Self) end)};
+                             StatsTimer, self(), emit_stats)};
 ensure_stats_timer(State) ->
     State.
 

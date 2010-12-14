@@ -166,8 +166,9 @@ declare(Recover, From,
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
-                     rabbit_event:if_enabled(StatsTimer,
-                                             fun() -> emit_stats(State1) end),
+                     rabbit_event:if_enabled(
+		       StatsTimer,
+		       fun() -> internal_emit_stats(State1) end),
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -276,10 +277,9 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
     end.
 
 ensure_stats_timer(State = #q{stats_timer = StatsTimer,
-                              q = Q}) ->
+                              q = #amqqueue{pid = QPid}}) ->
     State#q{stats_timer = rabbit_event:ensure_stats_timer(
-                            StatsTimer,
-                            fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
+                            StatsTimer, QPid, emit_stats)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -720,10 +720,10 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-emit_stats(State) ->
-    emit_stats(State, []).
+internal_emit_stats(State) ->
+    internal_emit_stats(State, []).
 
-emit_stats(State, Extra) ->
+internal_emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
 %---------------------------------------------------------------------------
@@ -742,7 +742,6 @@ prioritise_cast(Msg, _State) ->
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
-        emit_stats                           -> 7;
         {ack, _Txn, _MsgIds, _ChPid}         -> 7;
         {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
         {notify_sent, _ChPid}                -> 7;
@@ -757,6 +756,7 @@ prioritise_info(Msg, _State) ->
         update_ram_duration                  -> 8;
         maybe_expire                         -> 8;
         drop_expired                         -> 8;
+        emit_stats                           -> 7;
         _                                    -> 0
     end.
 
@@ -1061,14 +1061,8 @@ handle_cast({set_ram_duration_target, Duration},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
+    noreply(State).
 
-handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
-    %% Do not invoke noreply as it would see no timer and create a new one.
-    emit_stats(State),
-    State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-    assert_invariant(State1),
-    {noreply, State1, hibernate}.
 
 handle_info(update_ram_duration, State = #q{backing_queue = BQ,
                                             backing_queue_state = BQS}) ->
@@ -1088,6 +1082,13 @@ handle_info(maybe_expire, State) ->
 
 handle_info(drop_expired, State) ->
     noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
+
+handle_info(emit_stats, State = #q{stats_timer = StatsTimer}) ->
+    %% Do not invoke noreply as it would see no timer and create a new one.
+    internal_emit_stats(State),
+    State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
+    assert_invariant(State1),
+    {noreply, State1, hibernate};
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -1125,10 +1126,9 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     DesiredDuration =
         rabbit_memory_monitor:report_ram_duration(self(), infinity),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun () ->
-                                    emit_stats(State, [{idle_since, now()}])
-                            end),
+    rabbit_event:if_enabled(
+      StatsTimer,
+      fun () -> internal_emit_stats(State, [{idle_since, now()}]) end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS2},
     {hibernate, stop_rate_timer(State1)}.
