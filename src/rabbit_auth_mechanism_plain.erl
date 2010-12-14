@@ -56,9 +56,10 @@ init(_Sock) ->
     [].
 
 handle_response(Response, _State) ->
-    case re:run(Response, "\\0([^\\0]*)", [{capture, all_but_first, binary},
-                                           global]) of
-        {match, [[User],[Pass]]} ->
+    %% The '%%"' at the end of the next line is for Emacs
+    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
+                [{capture, all_but_first, binary}]) of
+        {match, [User, Pass]} ->
             rabbit_access_control:check_user_pass_login(User, Pass);
         _ ->
             {refused, io_lib:format("response ~p invalid", [Response])}
