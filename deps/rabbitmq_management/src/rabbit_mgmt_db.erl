@@ -297,7 +297,7 @@ handle_call({get_exchanges, Xs, Mode}, _From,
                     list   -> ?FINE_STATS_EXCHANGE_LIST;
                     detail -> ?FINE_STATS_EXCHANGE_DETAIL
                 end,
-    {reply, merge_stats(Xs, FineStats, none, Tables),
+    {reply, merge_stats(Xs, FineStats, exchange_stats, Tables),
      State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->
@@ -532,14 +532,14 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
 
 merge_stats(Objs, FineSpecs, Type, Tables) ->
     WithCoarse =
-        case Type of
-            none ->
-                Objs;
-            _ ->
+        case orddict:find(Type, Tables) of
+            {ok, Table} ->
                 Table = orddict:fetch(Type, Tables),
                 [Obj ++ zero_old_rates(
                           lookup_element(Table, {pget(pid, Obj), stats}))
-                 || Obj <- Objs]
+                 || Obj <- Objs];
+            error ->
+                Objs
         end,
     FineStats = [{AttachName, AttachBy,
                   get_fine_stats(FineStatsType, GroupBy, Tables)}
