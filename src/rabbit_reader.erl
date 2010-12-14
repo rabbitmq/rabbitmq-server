@@ -869,10 +869,11 @@ auth_phase(Response,
                            #connection{protocol = Protocol},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
-        {refused, Reason} ->
+        {refused, Msg, Args} ->
             rabbit_misc:protocol_error(
               access_refused, "~s login refused: ~s",
-              [proplists:get_value(name, AuthMechanism:description()), Reason]);
+              [proplists:get_value(name, AuthMechanism:description()),
+               io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->

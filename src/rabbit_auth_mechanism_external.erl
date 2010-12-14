@@ -62,23 +62,23 @@ init(Sock) ->
                    {ok, C} ->
                        CN = case rabbit_ssl:peer_cert_subject_item(
                                    C, ?'id-at-commonName') of
-                                not_found -> {refused, "no CN found"};
+                                not_found -> {refused, "no CN found", []};
                                 CN0       -> list_to_binary(CN0)
                             end,
                        case config_sane() of
                            true  -> CN;
-                           false -> {refused, "configuration unsafe"}
+                           false -> {refused, "configuration unsafe", []}
                        end;
                    {error, no_peercert} ->
-                       {refused, "no peer certificate"};
+                       {refused, "no peer certificate", []};
                    nossl ->
-                       {refused, "not SSL connection"}
+                       {refused, "not SSL connection", []}
                end,
     #state{username = Username}.
 
 handle_response(_Response, #state{username = Username}) ->
     case Username of
-        {refused, _} = E ->
+        {refused, _, _} = E ->
             E;
         _ ->
             case rabbit_access_control:lookup_user(Username) of
@@ -87,7 +87,7 @@ handle_response(_Response, #state{username = Username}) ->
                 {error, not_found} ->
                     %% This is not an information leak as we have to
                     %% have validated a client cert to get this far.
-                    {refused, io_lib:format("user '~s' not found", [Username])}
+                    {refused, "user '~s' not found", [Username]}
             end
     end.
 

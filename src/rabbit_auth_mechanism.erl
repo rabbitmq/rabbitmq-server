@@ -49,7 +49,7 @@ behaviour_info(callbacks) ->
      %%     Another round is needed. Here's the state I want next time.
      %% {protocol_error, Msg, Args}
      %%     Client got the protocol wrong. Log and die.
-     %% {refused, Username}
+     %% {refused, Msg, Args}
      %%     Client failed authentication. Log and die.
      {handle_response, 2}
     ];
