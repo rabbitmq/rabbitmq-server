@@ -56,6 +56,11 @@ init(_Sock) ->
     [].
 
 handle_response(Response, _State) ->
-    [User, Pass] = [list_to_binary(T) ||
-                       T <- string:tokens(binary_to_list(Response), [0])],
-    rabbit_access_control:check_user_pass_login(User, Pass).
+    %% The '%%"' at the end of the next line is for Emacs
+    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
+                [{capture, all_but_first, binary}]) of
+        {match, [User, Pass]} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        _ ->
+            {refused, io_lib:format("response ~p invalid", [Response])}
+    end.
