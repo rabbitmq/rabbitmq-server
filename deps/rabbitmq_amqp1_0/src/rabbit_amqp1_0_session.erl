@@ -94,9 +94,10 @@ init([Channel, ReaderPid, WriterPid]) ->
                    writer_pid         = WriterPid,
                    xfer_num_to_tag    = gb_trees:empty()}}.
 
-terminate(_Reason, #session{ backing_connection = Conn,
-                             declaring_channel = DeclCh,
-                             backing_channel    = Ch}) ->
+terminate(_Reason, State = #session{ backing_connection = Conn,
+                                     declaring_channel = DeclCh,
+                                     backing_channel    = Ch}) ->
+    ?DEBUG("Shutting down session ~p", [State]),
     case DeclCh of
         undefined -> ok;
         Channel   -> amqp_channel:close(Channel)
@@ -246,19 +247,28 @@ handle_control(#'v1_0.attach'{local = Linkage,
                                "Outcomes not supported: ~p", [Bad])
     end;
 
-handle_control(#'v1_0.transfer'{handle = Handle,
+handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
+                                settled = Settled,
                                 fragments = Fragments},
                           State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK } ->
             Msg = rabbit_amqp1_0_message:assemble(Fragments),
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
-                                                     routing_key = RK }, Msg);
+                                                     routing_key = RK }, Msg),
+            %% TODO use publisher acknowledgement
+            case Settled of
+                true  -> {noreply, State};
+                %% Move LWM, credit etc.
+                false -> {reply,
+                          acknowledgement([Txfr],
+                                          #'v1_0.disposition'{
+                                            role = ?RECV_ROLE}), State}
+            end;
         undefined ->
-            %% FIXME What am I supposed to do here
-            no_such_handle
-    end,
-    {noreply, State};
+            protocol_error(?V_1_0_ILLEGAL_STATE,
+                           "Unknown link handle ~p", [Handle])
+    end;
 
 handle_control(#'v1_0.disposition'{ batchable = Batchable,
                                     extents = Extents,
@@ -269,7 +279,7 @@ handle_control(#'v1_0.disposition'{ batchable = Batchable,
                             {Settled, State2} = settle(Extent, Batchable, State1),
                             {[Settled | SettledExtents1], State2}
                     end, {[], State}, Extents),
-    LWM = gb_trees:smallest(NewState#session.xfer_num_to_tag),
+    LWM = get_lwm(State),
     NewState1 = NewState#session { outgoing_lwm = LWM },
     case lists:filter(fun (none) -> false;
                           (_Ext)  -> true
@@ -285,13 +295,12 @@ handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
     erase({incoming, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
-handle_control(#'v1_0.end'{}, #session{ writer_pid = Sock }) ->
+handle_control(#'v1_0.end'{}, State = #session{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
 handle_control(#'v1_0.flow'{ flow_state = #'v1_0.flow_state' {
-                               unsettled_lwm = NewLWM
-                              }},
+                               unsettled_lwm = {uint, NewLWM}}},
                State = #session{ outgoing_lwm = CurrentLWM }) ->
     State1 = case NewLWM < CurrentLWM of
                  true ->
@@ -301,7 +310,9 @@ handle_control(#'v1_0.flow'{ flow_state = #'v1_0.flow_state' {
                  _ ->
                      implicit_settle(NewLWM, State)
              end,
-    {noreply, State1#session{ outgoing_lwm = NewLWM }};
+    %%% implicit settle sets the LWM
+    ?DEBUG("Implicitly settled up to ~p", [NewLWM]),
+    {noreply, State1};
 
 handle_control(Frame, State) ->
     io:format("Ignoring frame: ~p~n", [Frame]),
@@ -420,8 +431,8 @@ transfer(WriterPid, LinkHandle,
     {NewLink, NewSession#session { xfer_num_to_tag = Dict1 }}.
 
 settle(#'v1_0.extent'{
-          first = {uint, First},
-          last = {uint, Last}, %% TODO handle this
+          first = {uint, First0},
+          last = Last0,
           handle = _Handle, %% TODO DUBIOUS what on earth is this for?
           settled = Settled,
           state = #'v1_0.transfer_state'{ outcome = Outcome }
@@ -431,64 +442,90 @@ settle(#'v1_0.extent'{
                         outgoing_session_credit = SessionCredit,
                         outgoing_lwm = LWM,
                         xfer_num_to_tag = Dict}) ->
-    {Dict1, SessionCredit1} =
-        lists:foldl(
-          fun (Transfer, {TransferMap, SC}) ->
-                  #outgoing_transfer{ delivery_tag = DeliveryTag }
-                      = gb_trees:get(Transfer, TransferMap),
-                  Ack =
-                      case Outcome of
-                          #'v1_0.accepted'{} ->
-                              #'basic.ack' {delivery_tag = DeliveryTag,
-                                            multiple     = false };
-                          #'v1_0.rejected'{} ->
-                              #'basic.reject' {delivery_tag = DeliveryTag,
-                                               requeue      = false };
-                          #'v1_0.released'{} ->
-                              #'basic.reject' {delivery_tag = DeliveryTag,
-                                               requeue      = true }
-                      end,
-                  ok = amqp_channel:call(Ch, Ack),
-                  {gb_trees:delete(Transfer, TransferMap), SC + 1}
-          end,
-          {Dict, SessionCredit}, lists:seq(max(LWM, First), Last)),
-    {case Settled of
-         true  -> none;
-         false -> Extent#'v1_0.extent'{ settled = true }
-     end,
-     State#session{outgoing_session_credit = SessionCredit1,
-                   xfer_num_to_tag = Dict1}}.
+    %% Last may be omitted, in which case it's the same as first
+    Last = case Last0 of
+               {uint, L} -> L;
+               undefined -> First0
+           end,
+    %% TODO check that Last < First
+    First = max(First0, LWM),
+    if Last < LWM -> % FIXME it's a sequence number
+            %% This is talking about transfers we've forgotten about
+            {none, State};
+       true ->
+            {Dict1, SessionCredit1} =
+                lists:foldl(
+                  fun (Transfer, {TransferMap, SC}) ->
+                          ?DEBUG("Settling ~p with ~p~n", [Transfer, Outcome]),
+                          #outgoing_transfer{ delivery_tag = DeliveryTag }
+                              = gb_trees:get(Transfer, TransferMap),
+                          Ack =
+                              case Outcome of
+                                  #'v1_0.accepted'{} ->
+                                      #'basic.ack' {delivery_tag = DeliveryTag,
+                                                    multiple     = false };
+                                  #'v1_0.rejected'{} ->
+                                      #'basic.reject' {delivery_tag = DeliveryTag,
+                                                       requeue      = false };
+                                  #'v1_0.released'{} ->
+                                      #'basic.reject' {delivery_tag = DeliveryTag,
+                                                       requeue      = true }
+                              end,
+                          ok = amqp_channel:call(Ch, Ack),
+                          {gb_trees:delete(Transfer, TransferMap), SC + 1}
+                  end,
+                  {Dict, SessionCredit}, lists:seq(max(LWM, First), Last)),
+            {case Settled of
+                 true  -> none;
+                 false -> Extent#'v1_0.extent'{ settled = true }
+             end,
+             State#session{outgoing_session_credit = SessionCredit1,
+                           xfer_num_to_tag = Dict1}}
+    end.
 
 implicit_settle(NewLWM, State = #session{
                           backing_channel = Ch,
+                          outgoing_lwm = LWM,
                           outgoing_session_credit = SessionCredit,
                           xfer_num_to_tag = TransferMap }) ->
-    TransferId = gb_trees:smallest(TransferMap),
-    case TransferId of
-        NewLWM ->
-            ok; %% Nothing more to settle; the LWM is the smallest unsettled
-                %% transfer
-        _ ->
-            #outgoing_transfer { delivery_tag = DeliveryTag,
-                                 expected_outcome = Outcome } =
-                gb_trees:get(TransferId, TransferMap),
-            Ack =
-                case Outcome of
-                    ?V_1_0_SYMBOL_ACCEPTED ->
-                        #'basic.ack' {delivery_tag = DeliveryTag,
-                                      multiple     = false };
-                    ?V_1_0_SYMBOL_REJECTED ->
-                        #'basic.reject' {delivery_tag = DeliveryTag,
-                                         requeue      = false };
-                    ?V_1_0_SYMBOL_RELEASED ->
-                        #'basic.reject' {delivery_tag = DeliveryTag,
-                                         requeue      = true }
-                end,
-            ok = amqp_channel:call(Ch, Ack),
-            TransferMap1 = gb_trees:delete(TransferId, TransferMap),
-            State1 = State#session{ outgoing_session_credit = SessionCredit + 1,
-                                    xfer_num_to_tag = TransferMap1 },
-            implicit_settle(NewLWM, State1)
+
+    if NewLWM =< LWM ->
+            %% Nothing more to settle; our LWM is brought up to the new one
+            ?DEBUG("(no more to implicitly settle, given LWM ~p~n)", [NewLWM]),
+            State;
+       true ->
+            case gb_trees:is_empty(TransferMap) of
+                true ->
+                    %% We have been told the LWM is higher than our
+                    %% _H_WM.  This may happen if we have expired
+                    %% messages but not yet told anyone (if we expired
+                    %% messages).
+                    State;
+                false ->
+                    {Id, Value, NewMap} =
+                        gb_trees:take_smallest(TransferMap),
+                    #outgoing_transfer{ delivery_tag = DeliveryTag,
+                                        expected_outcome = Outcome } = Value,
+                    ?DEBUG("Implicitly settling ~p as ~p~n", [Id, Outcome]),
+                    Ack =
+                        case Outcome of
+                            ?V_1_0_SYMBOL_ACCEPTED ->
+                                #'basic.ack' {delivery_tag = DeliveryTag,
+                                              multiple     = false };
+                            ?V_1_0_SYMBOL_REJECTED ->
+                                #'basic.reject' {delivery_tag = DeliveryTag,
+                                                 requeue      = false };
+                            ?V_1_0_SYMBOL_RELEASED ->
+                                #'basic.reject' {delivery_tag = DeliveryTag,
+                                                 requeue      = true }
+                        end,
+                    ok = amqp_channel:call(Ch, Ack),
+                    State1 = State#session{
+                               outgoing_session_credit = SessionCredit + 1,
+                               outgoing_lwm = get_lwm(State),
+                               xfer_num_to_tag = NewMap },
+                    implicit_settle(NewLWM, State1)
+            end
     end.
 
 flow_state(#outgoing_link{credit = Credit,
@@ -501,6 +538,21 @@ flow_state(#outgoing_link{credit = Credit,
             transfer_count = {uint, Count},
             link_credit = {uint, Credit}
            }.
+
+acknowledgement(Txfrs, Disposition) ->
+    acknowledgement(Txfrs, Disposition, []).
+
+acknowledgement([], Disposition, Extents) ->
+    %% TODO We could reverse this to be friendly to clients ..
+    Disposition#'v1_0.disposition'{extents = Extents};
+acknowledgement([#'v1_0.transfer'{ transfer_id = TxfrId } | Rest],
+                Disposition, Exts) ->
+    %% TODO coalesce extents
+    Ext = #'v1_0.extent'{ first = TxfrId,
+                          last = TxfrId,
+                          settled = true,
+                          state = #'v1_0.accepted'{}},
+    acknowledgement(Rest, Disposition, [Ext | Exts]).
 
 ensure_declaring_channel(State = #session{
                            backing_connection = Conn,
@@ -557,8 +609,9 @@ ensure_target(Target = #'v1_0.target'{address=Address,
     case Dynamic of
         undefined ->
             case Address of
-                {utf8, Destination} ->
-                    case parse_destination(Destination) of
+                {Enc, Destination}
+                when Enc =:= utf8 orelse Enc =:= utf16 ->
+                    case parse_destination(Destination, Enc) of
                         ["queue", Name] ->
                             case check_queue(Name, State) of
                                 {ok, QueueName, _Available, State1} ->
@@ -609,8 +662,9 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
     case Dynamic of
         undefined ->
             case Address of
-                {utf8, Destination} ->
-                    case parse_destination(Destination) of
+                {Enc, Destination}
+                when Enc =:= utf8 orelse Enc =:= utf16 ->
+                    case parse_destination(Destination, Enc) of
                         ["queue", Name] ->
                             case check_queue(Name, State) of
                                 {ok, QueueName, Available, State1} ->
@@ -655,8 +709,9 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
             end
     end.
 
-parse_destination(Destination) when is_binary(Destination) ->
-    parse_destination(binary_to_list(Destination));
+parse_destination(Destination, Enc) when is_binary(Destination) ->
+    parse_destination(unicode:characters_to_list(Destination, Enc)).
+
 parse_destination(Destination) when is_list(Destination) ->
     case regexp:split(Destination, "/") of
         {ok, ["", Type | Tail]} when
@@ -718,6 +773,16 @@ queue_address(QueueName) when is_binary(QueueName) ->
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
     TransferNumber + 1.
+
+get_lwm(#session{ transfer_number = Txfr,
+                  xfer_num_to_tag = Map}) ->
+    case gb_trees:is_empty(Map) of
+        true ->
+            Txfr; 
+        false ->
+            {LWM, _} = gb_trees:smallest(Map),
+            LWM
+    end.
 
 %% FIXME
 transfer_size(_Content, _Unit) ->
