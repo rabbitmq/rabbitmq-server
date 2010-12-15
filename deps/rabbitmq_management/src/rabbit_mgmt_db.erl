@@ -224,7 +224,7 @@ if_unknown(Val,    _Def) -> Val.
 %%----------------------------------------------------------------------------
 
 augment(Items, Funs, Tables) ->
-    Augmented = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs] ++ Items,
+    Augmented = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs],
     [{K, V} || {K, V} <- Augmented, V =/= unknown].
 
 augment(K, Items, Fun, Tables) ->
@@ -264,13 +264,15 @@ augment_queue_pid(Pid, _Tables) ->
     [{name,  Name#resource.name},
      {vhost, Name#resource.virtual_host}].
 
-augment_msg_stats(Stats, Tables) ->
-    [augment_msg_stats_items(Props, Tables) || Props <- Stats].
+augment_msg_stats_fun(Tables) ->
+    Funs = [{connection, fun augment_connection_pid/2},
+            {channel,    fun augment_channel_pid/2},
+            {queue,      fun augment_queue_pid/2},
+            {owner_pid,  fun augment_connection_pid/2}],
+    fun (Props) -> augment(Props, Funs, Tables) end.
 
-augment_msg_stats_items(Props, Tables) ->
-    augment(Props, [{connection, fun augment_connection_pid/2},
-                    {channel,    fun augment_channel_pid/2},
-                    {queue,      fun augment_queue_pid/2}], Tables).
+augment_msg_stats(Props, Tables) ->
+    Props ++ (augment_msg_stats_fun(Tables))(Props).
 
 %%----------------------------------------------------------------------------
 
@@ -287,9 +289,7 @@ handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
     Qs1 = queue_stats(Qs0, FineSpecs, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
-    Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
-              Q <- Qs2],
-    {reply, Qs3, State};
+    {reply, Qs2, State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -339,8 +339,8 @@ handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
                 get_fine_stats(
                   [], [R || R = {Id, _, _}
                                 <- ets:tab2list(orddict:fetch(Type, Tables)),
-                            Filter(augment_msg_stats_items(
-                                     format_id(Id), Tables), Name)])
+                            Filter(augment_msg_stats(format_id(Id), Tables),
+                                   Name)])
         end,
     Publish = F(channel_exchange_stats, exchange),
     Consume = F(channel_queue_stats, queue_details),
@@ -583,13 +583,10 @@ fine_stat(Props, StatProps, {AttachName, AttachBy, Dict}, Tables) ->
 
 augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
     [[{stats, augment_fine_stats(Stats, Tables)} |
-      augment_msg_stats_items([IdTuple], Tables)]
+      augment_msg_stats([IdTuple], Tables)]
      || {IdTuple, Stats} <- dict:to_list(Dict)];
 augment_fine_stats(Stats, _Tables) ->
     Stats.
-
-augment_msg_stats_fun(Tables) ->
-    fun (Props) -> augment_msg_stats_items(Props, Tables) end.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
@@ -611,8 +608,8 @@ details_key(Key) ->
 
 consumer_details(Pattern, Tables) ->
     Table = orddict:fetch(consumers, Tables),
-    case augment_msg_stats(
-           lists:append(ets:match(Table, {Pattern, '$1'})), Tables) of
+    case [augment_msg_stats(Props, Tables)
+          || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))] of
         [] -> [];
         C  -> [{consumer_details, C}]
     end.
