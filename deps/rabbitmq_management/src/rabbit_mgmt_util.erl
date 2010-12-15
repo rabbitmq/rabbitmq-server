@@ -44,7 +44,8 @@ is_authorized_vhost(ReqData, Context) ->
                   not_found -> true;
                   none      -> true;
                   V         -> lists:member(
-                                 V, rabbit_access_control:list_vhosts(User))
+                                 V,
+                                 rabbit_access_control:list_vhosts(User, write))
               end
       end).
 
@@ -275,14 +276,14 @@ amqp_request(VHost, ReqData, Context, Method) ->
 all_or_one_vhost(ReqData, #context{ user = User }, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none      -> lists:append(
-                       [Fun(V) ||
-                           V <- rabbit_access_control:list_vhosts(User)]);
+                       [Fun(V) || V <- rabbit_access_control:list_vhosts(
+                                         User, write)]);
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
     end.
 
 filter_vhost(List, _ReqData, Context) ->
-    VHosts = rabbit_access_control:list_vhosts(Context#context.user),
+    VHosts = rabbit_access_control:list_vhosts(Context#context.user, write),
     [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
 
 filter_user(List, _ReqData, #context{user = #user{is_admin = true}}) ->
