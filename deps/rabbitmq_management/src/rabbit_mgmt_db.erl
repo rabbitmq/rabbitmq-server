@@ -561,6 +561,14 @@ augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
 augment_fine_stats(Stats, _Tables) ->
     Stats.
 
+consumer_details(Pattern, Tables) ->
+    Table = orddict:fetch(consumers, Tables),
+    case [augment_msg_stats(Props, Tables)
+          || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))] of
+        [] -> [];
+        C  -> [{consumer_details, C}]
+    end.
+
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
@@ -576,14 +584,6 @@ maybe_zero_rate({Key, Val}) ->
 is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
-
-consumer_details(Pattern, Tables) ->
-    Table = orddict:fetch(consumers, Tables),
-    case [augment_msg_stats(Props, Tables)
-          || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))] of
-        [] -> [];
-        C  -> [{consumer_details, C}]
-    end.
 
 %%----------------------------------------------------------------------------
 
