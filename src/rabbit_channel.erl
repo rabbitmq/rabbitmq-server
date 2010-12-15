@@ -42,7 +42,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2]).
+         prioritise_info/2]).
 
 -record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
@@ -203,11 +203,6 @@ prioritise_call(Msg, _From, _State) ->
     case Msg of
         info           -> 9;
         {info, _Items} -> 9;
-        _              -> 0
-    end.
-
-prioritise_cast(Msg, _State) ->
-    case Msg of
         _              -> 0
     end.
 
