@@ -33,7 +33,7 @@
 -record(state, {tables}).
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
--define(TABLES, [queue_stats, connection_stats, channel_stats] ++
+-define(TABLES, [queue_stats, connection_stats, channel_stats, consumers] ++
             ?FINE_STATS_TYPES).
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
@@ -284,7 +284,8 @@ handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
                     list   -> ?FINE_STATS_QUEUE_LIST;
                     detail -> ?FINE_STATS_QUEUE_DETAIL
                 end,
-    Qs1 = merge_stats(Qs0, FineStats, queue_stats, Tables),
+    Qs1 = merge_stats(Qs0, FineStats, queue_stats, fun extra_queue_stats/2,
+                      Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     Qs3 = [augment(Q, [{owner_pid, fun augment_connection_pid/2}], Tables) ||
@@ -312,12 +313,14 @@ handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
 
 handle_call(get_channels, _From, State = #state{tables = Tables}) ->
     Chs = created_events(channel_stats, Tables),
-    Res = merge_stats(Chs, ?FINE_STATS_CHANNEL_LIST, channel_stats, Tables),
+    Res = merge_stats(Chs, ?FINE_STATS_CHANNEL_LIST, channel_stats,
+                      fun extra_channel_stats/2, Tables),
     {reply, Res, State};
 
 handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Chs = created_event(Name, channel_stats, Tables),
-    [Res] = merge_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, channel_stats, Tables),
+    [Res] = merge_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, channel_stats,
+                        fun extra_channel_stats/2, Tables),
     {reply, result_or_error(Res), State};
 
 handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
@@ -428,6 +431,14 @@ handle_event(Event = #event{type = channel_closed,
         Type <- ?FINE_STATS_TYPES],
     {ok, State};
 
+handle_event(#event{type = consumer_created, props = Props}, State) ->
+    handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
+                    Props, State);
+
+handle_event(#event{type = consumer_deleted, props = Props}, State) ->
+    handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
+                    Props, State);
+
 handle_event(_Event, State) ->
     {ok, State}.
 
@@ -459,6 +470,14 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     Table = orddict:fetch(TName, Tables),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
+    {ok, State}.
+
+handle_consumer(Fun, Props,
+                State = #state{tables = Tables}) ->
+    P = rabbit_mgmt_format:format(
+          Props, [{fun rabbit_mgmt_format:pid/1, [queue, channel]}]),
+    Table = orddict:fetch(consumers, Tables),
+    Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
 
 handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
@@ -531,11 +550,15 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
      {exchange, [{name, XName}, {vhost, XVhost}]}].
 
 merge_stats(Objs, FineSpecs, Type, Tables) ->
+    merge_stats(Objs, FineSpecs, Type, fun(_, _) -> [] end, Tables).
+
+merge_stats(Objs, FineSpecs, Type, Fun, Tables) ->
     WithCoarse =
         case orddict:find(Type, Tables) of
             {ok, Table} ->
                 [Obj ++ zero_old_rates(
-                          lookup_element(Table, {pget(pid, Obj), stats}))
+                          lookup_element(Table, {pget(pid, Obj), stats})) ++
+                     Fun(Obj, Tables)
                  || Obj <- Objs];
             error ->
                 Objs
@@ -573,6 +596,20 @@ augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
      || {IdTuple, Stats} <- dict:to_list(Dict)];
 augment_fine_stats(Stats, _Tables) ->
     Stats.
+
+extra_queue_stats(Q, Tables) ->
+    consumer_details({pget(pid, Q), '_'}, Tables).
+
+extra_channel_stats(Ch, Tables) ->
+    consumer_details({'_', pget(pid, Ch)}, Tables).
+
+consumer_details(Pattern, Tables) ->
+    Table = orddict:fetch(consumers, Tables),
+    case augment_msg_stats(
+           lists:append(ets:match(Table, {Pattern, '$1'})), Tables) of
+        [] -> [];
+        C  -> [{consumer_details, C}]
+    end.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
