@@ -91,56 +91,32 @@ start_link() ->
             Else
     end.
 
-get_queues(Qs) ->
-    safe_call({get_queues, Qs, list}, Qs).
+get_queues(Qs)         -> safe_call({get_queues, Qs, list}, Qs).
+get_queue(Q)           -> safe_call({get_queues, [Q], detail}, [Q]).
+get_exchanges(Xs)      -> safe_call({get_exchanges, Xs, list}, Xs).
+get_exchange(X)        -> safe_call({get_exchanges, [X], detail}, [X]).
+get_connections()      -> safe_call(get_connections).
+get_connection(Name)   -> safe_call({get_connection, Name}).
+get_channels()         -> safe_call(get_channels).
+get_channel(Name)      -> safe_call({get_channel, Name}).
+get_overview(Username) -> safe_call({get_overview, Username}).
+get_overview()         -> safe_call({get_overview, all}).
 
-get_queue(Q) ->
-    safe_call({get_queues, [Q], detail}, [Q]).
-
-get_exchanges(Xs) ->
-    safe_call({get_exchanges, Xs, list}, Xs).
-
-get_exchange(X) ->
-    safe_call({get_exchanges, [X], detail}, [X]).
-
-get_connections() ->
-    safe_call(get_connections).
-
-get_connection(Name) ->
-    safe_call({get_connection, Name}).
-
-get_channels() ->
-    safe_call(get_channels).
-
-get_channel(Name) ->
-    safe_call({get_channel, Name}).
-
-get_overview(Username) ->
-    safe_call({get_overview, Username}).
-
-get_overview() ->
-    safe_call({get_overview, all}).
-
-safe_call(Term) ->
-    safe_call(Term, []).
+safe_call(Term) -> safe_call(Term, []).
 
 safe_call(Term, Item) ->
     try
         gen_server:call({global, ?MODULE}, Term, infinity)
-    catch exit:{noproc, _} ->
-            Item
+    catch exit:{noproc, _} -> Item
     end.
 
 %%----------------------------------------------------------------------------
 
-pget(Key, List) ->
-    pget(Key, List, unknown).
+pget(Key, List) -> pget(Key, List, unknown).
 
-pget(Key, List, Default) ->
-    proplists:get_value(Key, List, Default).
+pget(Key, List, Default) -> proplists:get_value(Key, List, Default).
 
-pset(Key, Value, List) ->
-    [{Key, Value} | proplists:delete(Key, List)].
+pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
 id(Pid) when is_pid(Pid) -> rabbit_mgmt_format:pid(Pid);
 id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
@@ -149,8 +125,7 @@ add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
 add(A, B)       -> A + B.
 
-lookup_element(Table, Key) ->
-    lookup_element(Table, Key, 2).
+lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
 
 lookup_element(Table, Key, Pos) ->
     try ets:lookup_element(Table, Key, Pos)
@@ -623,8 +598,6 @@ maybe_zero_rate({Key, Val}) ->
         false -> {Key, Val}
     end.
 
-is_details(Key) ->
-    lists:suffix("_details", atom_to_list(Key)).
+is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).
 
-details_key(Key) ->
-    list_to_atom(atom_to_list(Key) ++ "_details").
+details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
