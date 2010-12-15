@@ -150,8 +150,8 @@ rw_state() ->
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
-     {exchanges,   [name, vhost, type, durable, auto_delete, arguments,
-     		    internal]},
+     {exchanges,   [name, vhost, type, durable, auto_delete, internal,
+                    arguments]},
      {bindings,    [source, vhost, destination, destination_type, routing_key,
                     arguments]}].
 
