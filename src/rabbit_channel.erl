@@ -1259,7 +1259,7 @@ start_confirm_timer(State) ->
 stop_confirm_timer(State = #ch{confirm_tref = undefined}) ->
     State;
 stop_confirm_timer(State = #ch{confirm_tref = TRef}) ->
-    _TimeLeft = erlang:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#ch{confirm_tref = undefined}.
 
 internal_flush_confirms(State = #ch{writer_pid    = WriterPid,

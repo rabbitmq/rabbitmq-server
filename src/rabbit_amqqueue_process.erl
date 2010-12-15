@@ -252,13 +252,13 @@ stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
 stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    _TimeLeft = erlang:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    _TimeLeft = erlang:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry

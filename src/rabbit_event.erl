@@ -124,7 +124,7 @@ stop_stats_timer(State = #state{level = none}) ->
 stop_stats_timer(State = #state{timer = undefined}) ->
     State;
 stop_stats_timer(State = #state{timer = TRef}) ->
-    _TimeLeft = erlang:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#state{timer = undefined}.
 
 reset_stats_timer(State) ->
