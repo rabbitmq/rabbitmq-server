@@ -551,14 +551,9 @@ merge_stats(Objs, Funs) ->
      || Obj <- Objs].
 
 basic_stats_fun(Type, Tables) ->
-    case orddict:find(Type, Tables) of
-        {ok, Table} ->
-            fun (Props) ->
-                    zero_old_rates(
-                      lookup_element(Table, {pget(pid, Props), stats}))
-            end;
-        error ->
-            fun (_Props) -> [] end
+    Table = orddict:fetch(Type, Tables),
+    fun (Props) ->
+            zero_old_rates(lookup_element(Table, {pget(pid, Props), stats}))
     end.
 
 fine_stats_fun(FineSpecs, Tables) ->
@@ -637,8 +632,7 @@ queue_stats(Objs, FineSpecs, Tables) ->
                        augment_msg_stats_fun(Tables)]).
 
 exchange_stats(Objs, FineSpecs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(exchange_stats, Tables),
-                       fine_stats_fun(FineSpecs, Tables),
+    merge_stats(Objs, [fine_stats_fun(FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
 
 connection_stats(Objs, Tables) ->
