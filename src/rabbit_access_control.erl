@@ -35,7 +35,7 @@
 
 -export([user_pass_login/2, check_user_pass_login/2, check_user_login/2,
          make_salt/0, check_password/2, check_vhost_access/2,
-         check_resource_access/3, list_vhosts/1]).
+         check_resource_access/3, list_vhosts/2]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
          clear_admin/1, list_users/0, lookup_user/1, clear_password/1]).
 -export([change_password_hash/2, hash_password/1]).
@@ -51,6 +51,7 @@
 -export_type([username/0, password/0, password_hash/0, permission_atom/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
+-type(vhost_permission_atom() :: 'read' | 'write').
 -type(username() :: binary()).
 -type(password() :: binary()).
 -type(password_hash() :: binary()).
@@ -69,6 +70,8 @@
 -spec(check_resource_access/3 ::
         (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
         -> 'ok' | rabbit_types:channel_exit()).
+-spec(list_vhosts/2 :: (rabbit_types:user(), vhost_permission_atom())
+                       -> [rabbit_types:vhost()]).
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
@@ -170,10 +173,14 @@ check_access(Fun, ErrStr, ErrArgs, RefStr, RefArgs) ->
             rabbit_misc:protocol_error(access_refused, RefStr, RefArgs)
     end.
 
-list_vhosts(User = #user{username = Username, auth_backend = Module}) ->
+%% Permission = write -> log in
+%% Permission = read  -> learn of the existence of (only relevant for
+%%                       management plugin)
+list_vhosts(User = #user{username = Username, auth_backend = Module},
+            Permission) ->
     lists:filter(
       fun(VHost) ->
-              case Module:check_vhost_access(User, VHost, read) of
+              case Module:check_vhost_access(User, VHost, Permission) of
                   {error, _} = E ->
                       rabbit_log:warning("~w failed checking vhost access "
                                          "to ~s for ~s: ~p~n",
