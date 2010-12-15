@@ -211,24 +211,22 @@ augment(K, Items, Fun, Tables) ->
     end.
 
 augment_channel_pid(Pid, Tables) ->
-    Ch = lookup_element(
-           orddict:fetch(channel_stats, Tables),
-           {Pid, create}),
-    Conn = lookup_element(
-             orddict:fetch(connection_stats, Tables),
-             {pget(connection, Ch), create}),
-    [{number,          pget(number, Ch)},
-     {name,            pget(name, Ch)},
-     {connection_name, pget(name, Conn)},
+    Ch = lookup_element(orddict:fetch(channel_stats, Tables),
+                        {Pid, create}),
+    Conn = lookup_element(orddict:fetch(connection_stats, Tables),
+                          {pget(connection, Ch), create}),
+    [{name,            pget(name,   Ch)},
+     {number,          pget(number, Ch)},
+     {connection_name, pget(name,         Conn)},
      {peer_address,    pget(peer_address, Conn)},
-     {peer_port,       pget(peer_port, Conn)}].
+     {peer_port,       pget(peer_port,    Conn)}].
 
 augment_connection_pid(Pid, Tables) ->
     Conn = lookup_element(orddict:fetch(connection_stats, Tables),
                           {Pid, create}),
-    [{peer_address, pget(peer_address, Conn)},
-     {peer_port,    pget(peer_port,    Conn)},
-     {name,         pget(name,         Conn)}].
+    [{name,         pget(name,         Conn)},
+     {peer_address, pget(peer_address, Conn)},
+     {peer_port,    pget(peer_port,    Conn)}].
 
 augment_queue_pid(Pid, _Tables) ->
     %% TODO This should be in rabbit_amqqueue?
