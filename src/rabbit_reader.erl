@@ -738,7 +738,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                            sock = Sock}) ->
     User = rabbit_access_control:check_login(Mechanism, Response),
     Tune = #'connection.tune'{channel_max = 0,
-                              frame_max = my_frame_max(),
+                              frame_max = server_frame_max(),
                               heartbeat = 0},
     ok = send_on_channel0(Sock, Tune, Protocol),
     State#v1{connection_state = tuning,
@@ -751,15 +751,15 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                            connection = Connection,
                            sock = Sock,
                            start_heartbeat_fun = SHF}) ->
-    MyFrameMax = my_frame_max(),
+    ServerFrameMax = server_frame_max(),
     if FrameMax /= 0 andalso FrameMax < ?FRAME_MIN_SIZE ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w < ~w min size",
               [FrameMax, ?FRAME_MIN_SIZE]);
-       MyFrameMax /= 0 andalso FrameMax > MyFrameMax ->
+       ServerFrameMax /= 0 andalso FrameMax > ServerFrameMax ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w > ~w max size",
-              [FrameMax, MyFrameMax]);
+              [FrameMax, ServerFrameMax]);
        true ->
             SendFun =
                 fun() ->
@@ -824,13 +824,11 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-%% Compute frame_max for this instance. Could use 0, but breaks QPid Java
-%% client. Default is 131072, but user can override in rabbitmq.config.
-my_frame_max() ->
-    case application:get_env(rabbit, frame_max) of
-	{ok, FM} -> FM;
-	_        -> 131072
-    end.
+%% Compute frame_max for this instance. Could simply use 0, but breaks
+%% QPid Java client.
+server_frame_max() ->
+    {ok, FrameMax} = application:get_env(rabbit, frame_max),
+    FrameMax.
 
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
