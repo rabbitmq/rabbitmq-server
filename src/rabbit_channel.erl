@@ -400,6 +400,15 @@ check_write_permitted(Resource, #ch{username = Username}) ->
 check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
+check_user_id_header(#'P_basic'{user_id = undefined}, _) ->
+    ok;
+check_user_id_header(#'P_basic'{user_id = User}, #ch{username = User}) ->
+    ok;
+check_user_id_header(#'P_basic'{user_id = Claimed}, #ch{username = Actual}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed, "claimed to be '~s' but was '~s'",
+      [Claimed, Actual]).
+
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
       not_found, "no previously declared queue", []);
@@ -543,6 +552,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
+    check_user_id_header(DecodedContent#content.properties, State),
     IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1}
         = case ConfirmEnabled of
