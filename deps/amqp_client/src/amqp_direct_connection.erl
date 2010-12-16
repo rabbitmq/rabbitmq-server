@@ -80,7 +80,7 @@ do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
     catch exit:#amqp_error{name = access_refused} -> exit(auth_failure)
     end,
     try rabbit_access_control:check_vhost_access(
-        #user{username = User}, VHost) of
+            #user{username = User}, VHost) of
             _ -> ok
     catch exit:#amqp_error{name = access_refused} -> exit(access_refused)
     end,

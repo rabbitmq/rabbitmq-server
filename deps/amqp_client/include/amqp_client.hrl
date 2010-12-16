@@ -35,6 +35,8 @@
                       frame_max         = 0,
                       heartbeat         = 0,
                       ssl_options       = none,
+                      auth_mechanisms   = [fun amqp_auth_mechanisms:plain/3,
+                                           fun amqp_auth_mechanisms:amqplain/3],
                       client_properties = []}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
