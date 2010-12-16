@@ -34,10 +34,11 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0, copy_db/1,
-         add_table_definition/1]).
+         is_clustered/0, empty_ram_only_tables/0, copy_db/1]).
 
 -export([table_names/0]).
+
+-export([behaviour_info/1]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
@@ -71,6 +72,9 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+behaviour_info(callbacks) -> [{table_definitions, 0}];
+behaviour_info(_Other)    -> undefined.
 
 status() ->
     [{nodes, case mnesia:system_info(is_running) of
@@ -214,17 +218,9 @@ table_definitions() ->
        {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
         ++ plugin_table_definitions().
 
-%% TODO: re-work this abuse of the application env as a register with
-%% the generic registry that should be landing at some point.
-add_table_definition(Def) ->
-    ok = application:set_env(rabbit, plugin_mnesia_tables,
-                             [Def | plugin_table_definitions()], infinity).
-
 plugin_table_definitions() ->
-    case application:get_env(rabbit, plugin_mnesia_tables) of
-        {ok, Defs} -> Defs;
-        undefined  -> []
-    end.
+    lists:append([Mod:table_definitions()
+                  || {_Type, Mod} <- rabbit_registry:lookup_all(mnesia)]).
 
 binding_match() ->
     #binding{source = exchange_name_match(),

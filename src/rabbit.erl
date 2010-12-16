@@ -51,6 +51,12 @@
                                    []}},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({rabbit_registry,
+                   [{description, "plugin registry"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_registry]}},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {enables,     external_infrastructure}]}).
@@ -68,13 +74,6 @@
 
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
-
--rabbit_boot_step({rabbit_registry,
-                   [{description, "plugin registry"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_registry]}},
-                    {requires,    external_infrastructure},
-                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},

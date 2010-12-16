@@ -372,6 +372,7 @@
 
 
 -behaviour(gen_server2).
+-behaviour(rabbit_mnesia).
 
 -export([create_tables/0, start_link/3, leave/1, broadcast/2,
          confirmed_broadcast/2, group_members/1]).
@@ -381,7 +382,7 @@
 
 -export([behaviour_info/1]).
 
--export([add_to_rabbit_mnesia/0]).
+-export([table_definitions/0]).
 
 -define(GROUP_TABLE, gm_group).
 -define(HIBERNATE_AFTER_MIN, 1000).
@@ -413,7 +414,9 @@
 
 -rabbit_boot_step({gm_tables,
                    [{description, "add GM tables to rabbit_mnesia"},
-                    {mfa,         {?MODULE, add_to_rabbit_mnesia, []}},
+                    {mfa,         {rabbit_registry, register,
+                                   [mnesia, <<"gm">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
                     {enables,     database}]}).
 
 -define(TAG, '$gm').
@@ -480,10 +483,9 @@ create_tables([{Table, Attributes} | Tables]) ->
         Err                                   -> Err
     end.
 
-add_to_rabbit_mnesia() ->
+table_definitions() ->
     {Name, Attributes} = ?TABLE,
-    ok = rabbit_mnesia:add_table_definition(
-           {Name, [?TABLE_MATCH | Attributes]}).
+    [{Name, [?TABLE_MATCH | Attributes]}].
 
 start_link(GroupName, Module, Args) ->
     gen_server2:start_link(?MODULE, [GroupName, Module, Args], []).
