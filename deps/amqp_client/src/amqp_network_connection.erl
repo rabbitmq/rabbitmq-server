@@ -239,12 +239,10 @@ client_properties(UserProperties) ->
 handshake_recv(Expecting) ->
     receive
         {'$gen_cast', {method, Method, none}} ->
-            case Expecting =:= element(1, Method) of
-                true when Expecting =:= 'connection.start';
-                          Expecting =:= 'connection.tune';
-                          Expecting =:= 'connection.open_ok' ->
+            case {Expecting, element(1, Method)} of
+                {E, M} when E =:= M ->
                     Method;
-                false when Expecting =:= 'connection.open_ok' ->
+                {'connection.open_ok', _} ->
                     {closing,
                      #amqp_error{name        = command_invalid,
                                  explanation = "was expecting "
