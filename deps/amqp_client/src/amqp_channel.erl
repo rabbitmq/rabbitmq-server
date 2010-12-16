@@ -259,20 +259,20 @@ init([Sup, Driver, ChannelNumber, SWF]) ->
 
 %% @private
 handle_call({call, Method, AmqpMsg}, From, State) ->
-    handle_method_call(Method, AmqpMsg, From, State);
+    handle_method_to_server(Method, AmqpMsg, From, State);
 %% @private
 handle_call({subscribe, Method, Consumer}, From, State) ->
     handle_subscribe(Method, Consumer, From, State);
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
-    Ret = handle_method(Method, Content, State),
+    Ret = handle_method_from_server(Method, Content, State),
     gen_server:reply(From, ok),
     Ret;
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method}, From, State) ->
-    Ret = handle_method(Method, none, State),
+    Ret = handle_method_from_server(Method, none, State),
     gen_server:reply(From, ok),
     Ret;
 %% Get the number of published messages since the channel was put in
@@ -284,7 +284,7 @@ handle_call(get_published_message_count, _From,
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
-    handle_method_call(Method, AmqpMsg, none, State);
+    handle_method_to_server(Method, AmqpMsg, none, State);
 %% Registers a handler to process return messages
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
@@ -308,7 +308,7 @@ handle_cast({register_default_consumer, Consumer}, State) ->
 %% Received from framing channel
 %% @private
 handle_cast({method, Method, Content}, State) ->
-    handle_method(Method, Content, State);
+    handle_method_from_server(Method, Content, State);
 %% Handles the situation when the connection closes without closing the channel
 %% beforehand. The channel must block all further RPCs,
 %% flush the RPC queue (optional), and terminate
@@ -325,15 +325,15 @@ handle_cast({shutdown, Reason}, State) ->
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command, Method}, State) ->
-    handle_method(Method, none, State);
+    handle_method_from_server(Method, none, State);
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command, Method, Content}, State) ->
-    handle_method(Method, Content, State);
+    handle_method_from_server(Method, Content, State);
 %% Received from rabbit_channel in the direct case
 %% @private
 handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
-    handle_method(Method, Content, State),
+    handle_method_from_server(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
 %% This comes from framing channel, the writer or rabbit_channel
@@ -351,8 +351,29 @@ handle_info(timed_out_waiting_close_ok, State) ->
               "channel.close_ok while connection closing~n", [self()]),
     {stop, timed_out_waiting_close_ok, State};
 %% @private
-handle_info({'DOWN', _, process, Pid, Reason}, State) ->
-    handle_down(Pid, Reason, State).
+handle_info({'DOWN', _, process, ReturnHandler, Reason},
+            State = #state{return_handler_pid = ReturnHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
+              "Reason: ~p~n", [self(), ReturnHandler, Reason]),
+    {noreply, State#state{return_handler_pid = none}};
+%% @private
+handle_info({'DOWN', _, process, AckHandler, Reason},
+            State = #state{ack_handler_pid = AckHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering ack handler ~p because it died. "
+              "Reason: ~p~n", [self(), AckHandler, Reason]),
+    {noreply, State#state{ack_handler_pid = none}};
+%% @private
+handle_info({'DOWN', _, process, FlowHandler, Reason},
+            State = #state{flow_handler_pid = FlowHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
+              "Reason: ~p~n", [self(), FlowHandler, Reason]),
+    {noreply, State#state{flow_handler_pid = none}};
+%% @private
+handle_info({'DOWN', _, process, DefaultConsumer, Reason},
+            State = #state{default_consumer = DefaultConsumer}) ->
+    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
+              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
+    {noreply, State#state{default_consumer = none}}.
 
 %% @private
 terminate(Reason, #state{rpc_requests = RpcQueue}) ->
@@ -374,7 +395,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
-handle_method_call(Method, AmqpMsg, From, State) ->
+handle_method_to_server(Method, AmqpMsg, From, State) ->
     case {Method, From, check_block(Method, AmqpMsg, State)} of
         {#'basic.consume'{}, none, _} ->
             ?LOG_WARN("Channel (~p): ignoring cast of ~p method. "
@@ -481,7 +502,7 @@ pre_do(_, _, State) ->
 %% Handling of methods from the server
 %%---------------------------------------------------------------------------
 
-handle_method(Method, Content, State = #state{closing = Closing}) ->
+handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
     case is_connection_method(Method) of
         true -> server_misbehaved(
                     #amqp_error{name        = command_invalid,
@@ -499,19 +520,21 @@ handle_method(Method, Content, State = #state{closing = Closing}) ->
                                       "server because channel is closing~n",
                                       [self(), {Method, Content}]),
                                       {noreply, State};
-                    true -> handle_method1(Method, amqp_msg(Content), State)
+                    true -> handle_method_from_server1(Method,
+                                                       amqp_msg(Content), State)
                  end
     end.
 
-handle_method1(#'channel.close'{reply_code = Code, reply_text = Text}, none,
-               State) ->
+handle_method_from_server1(#'channel.close'{reply_code = Code,
+                                            reply_text = Text}, none, State) ->
     do(#'channel.close_ok'{}, none, State),
     {stop, {server_initiated_close, Code, Text}, State};
-handle_method1(#'channel.close_ok'{} = CloseOk, none, State) ->
+handle_method_from_server1(#'channel.close_ok'{} = CloseOk, none, State) ->
     {stop, normal, rpc_bottom_half(CloseOk, State)};
-handle_method1(#'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
-               none, State = #state{tagged_sub_requests = Tagged,
-                                    anon_sub_requests = Anon}) ->
+handle_method_from_server1(
+        #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
+        none, State = #state{tagged_sub_requests = Tagged,
+                             anon_sub_requests = Anon}) ->
     {Consumer, State0} =
         case dict:find(ConsumerTag, Tagged) of
             {ok, C} ->
@@ -524,14 +547,15 @@ handle_method1(#'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
     Consumer ! ConsumeOk,
     State1 = register_consumer(ConsumerTag, Consumer, State0),
     {noreply, rpc_bottom_half(ConsumeOk, State1)};
-handle_method1(#'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
-               State) ->
+handle_method_from_server1(
+        #'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
+        State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
     Consumer ! CancelOk,
     NewState = unregister_consumer(ConsumerTag, State),
     {noreply, rpc_bottom_half(CancelOk, NewState)};
-handle_method1(#'channel.flow'{active = Active} = Flow, none,
-               State = #state{flow_handler_pid = FlowHandler}) ->
+handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
+                           State = #state{flow_handler_pid = FlowHandler}) ->
     case FlowHandler of none -> ok;
                         _    -> FlowHandler ! Flow
     end,
@@ -540,13 +564,15 @@ handle_method1(#'channel.flow'{active = Active} = Flow, none,
     %% blocked in any circumstance.
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
                            State#state{flow_active = Active})};
-handle_method1(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
-               State) ->
+handle_method_from_server1(
+        #'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
+        State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
     Consumer ! {Deliver, AmqpMsg},
     {noreply, State};
-handle_method1(#'basic.return'{} = BasicReturn, AmqpMsg,
-               State = #state{return_handler_pid = ReturnHandler}) ->
+handle_method_from_server1(
+        #'basic.return'{} = BasicReturn, AmqpMsg,
+        State = #state{return_handler_pid = ReturnHandler}) ->
     case ReturnHandler of
         none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
                           "return handler registered~n",
@@ -554,8 +580,8 @@ handle_method1(#'basic.return'{} = BasicReturn, AmqpMsg,
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
     {noreply, State};
-handle_method1(#'basic.ack'{} = BasicAck, AmqpMsg,
-               #state{ack_handler_pid = AckHandler} = State) ->
+handle_method_from_server1(#'basic.ack'{} = BasicAck, AmqpMsg,
+                           #state{ack_handler_pid = AckHandler} = State) ->
     case AckHandler of
         none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
                           "ack handler registered~n",
@@ -563,9 +589,9 @@ handle_method1(#'basic.ack'{} = BasicAck, AmqpMsg,
         _    -> AckHandler ! {BasicAck, AmqpMsg}
     end,
     {noreply, State};
-handle_method1(Method, none, State) ->
+handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
-handle_method1(Method, Content, State) ->
+handle_method_from_server1(Method, Content, State) ->
     {noreply, rpc_bottom_half({Method, Content}, State)}.
 
 %%---------------------------------------------------------------------------
@@ -601,29 +627,6 @@ handle_channel_exit(Reason, State) ->
         _ ->
             {stop, {infrastructure_died, Reason}, State}
     end.
-
-handle_down(ReturnHandler, Reason,
-            State = #state{return_handler_pid = ReturnHandler}) ->
-    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
-              "Reason: ~p~n", [self(), ReturnHandler, Reason]),
-    {noreply, State#state{return_handler_pid = none}};
-handle_down(AckHandler, Reason,
-            State = #state{ack_handler_pid = AckHandler}) ->
-    ?LOG_WARN("Channel (~p): Unregistering ack handler ~p because it died. "
-              "Reason: ~p~n", [self(), AckHandler, Reason]),
-    {noreply, State#state{ack_handler_pid = none}};
-handle_down(FlowHandler, Reason,
-            State = #state{flow_handler_pid = FlowHandler}) ->
-    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
-              "Reason: ~p~n", [self(), FlowHandler, Reason]),
-    {noreply, State#state{flow_handler_pid = none}};
-handle_down(DefaultConsumer, Reason,
-            State = #state{default_consumer = DefaultConsumer}) ->
-    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
-              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
-    {noreply, State#state{default_consumer = none}};
-handle_down(Other, Reason, State) ->
-    {stop, {unexpected_down, Other, Reason}, State}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -701,6 +704,6 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             ?LOG_WARN("Channel (~p) flushing and closing due to soft "
                       "error caused by the server ~p~n", [self(), AmqpError]),
             Self = self(),
-            spawn(fun() -> call(Self, Close) end),
+            spawn(fun () -> call(Self, Close) end),
             {noreply, State}
     end.
