@@ -33,10 +33,10 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 
--export([check_login/2, user_pass_login/2, check_user_pass_login/2,
+-export([user_pass_login/2, check_user_pass_login/2, make_salt/0,
          check_vhost_access/2, check_resource_access/3]).
 -export([add_user/2, delete_user/1, change_password/2, set_admin/1,
-         clear_admin/1, list_users/0, lookup_user/1]).
+         clear_admin/1, list_users/0, lookup_user/1, clear_password/1]).
 -export([change_password_hash/2, hash_password/1]).
 -export([add_vhost/1, delete_vhost/1, vhost_exists/1, list_vhosts/0]).
 -export([set_permissions/5, clear_permissions/2,
@@ -54,15 +54,13 @@
 -type(password() :: binary()).
 -type(password_hash() :: binary()).
 -type(regexp() :: binary()).
--spec(check_login/2 ::
-        (binary(), binary()) -> rabbit_types:user() |
-                                rabbit_types:channel_exit()).
 -spec(user_pass_login/2 ::
         (username(), password())
         -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
-        -> {'ok', rabbit_types:user()} | 'refused').
+        -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
+-spec(make_salt/0 :: () -> binary()).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).
@@ -72,6 +70,7 @@
 -spec(add_user/2 :: (username(), password()) -> 'ok').
 -spec(delete_user/1 :: (username()) -> 'ok').
 -spec(change_password/2 :: (username(), password()) -> 'ok').
+-spec(clear_password/1 :: (username()) -> 'ok').
 -spec(change_password_hash/2 :: (username(), password_hash()) -> 'ok').
 -spec(hash_password/1 :: (password()) -> password_hash()).
 -spec(set_admin/1 :: (username()) -> 'ok').
@@ -100,54 +99,26 @@
 
 %%----------------------------------------------------------------------------
 
-%% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
-%% apparently, by OpenAMQ.
-check_login(<<"PLAIN">>, Response) ->
-    [User, Pass] = [list_to_binary(T) ||
-                       T <- string:tokens(binary_to_list(Response), [0])],
-    user_pass_login(User, Pass);
-%% AMQPLAIN, as used by Qpid Python test suite. The 0-8 spec actually
-%% defines this as PLAIN, but in 0-9 that definition is gone, instead
-%% referring generically to "SASL security mechanism", i.e. the above.
-check_login(<<"AMQPLAIN">>, Response) ->
-    LoginTable = rabbit_binary_parser:parse_table(Response),
-    case {lists:keysearch(<<"LOGIN">>, 1, LoginTable),
-          lists:keysearch(<<"PASSWORD">>, 1, LoginTable)} of
-        {{value, {_, longstr, User}},
-         {value, {_, longstr, Pass}}} ->
-            user_pass_login(User, Pass);
-        _ ->
-            %% Is this an information leak?
-            rabbit_misc:protocol_error(
-              access_refused,
-              "AMQPPLAIN auth info ~w is missing LOGIN or PASSWORD field",
-              [LoginTable])
-    end;
-
-check_login(Mechanism, _Response) ->
-    rabbit_misc:protocol_error(
-      access_refused, "unsupported authentication mechanism '~s'",
-      [Mechanism]).
-
 user_pass_login(User, Pass) ->
     ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
     case check_user_pass_login(User, Pass) of
-        refused ->
+        {refused, Msg, Args} ->
             rabbit_misc:protocol_error(
-              access_refused, "login refused for user '~s'", [User]);
+              access_refused, "login refused: ~s", [io_lib:format(Msg, Args)]);
         {ok, U} ->
             U
     end.
 
-check_user_pass_login(User, Pass) ->
-    case lookup_user(User) of
-        {ok, U} ->
-            case check_password(Pass, U#user.password_hash) of
-                true -> {ok, U};
-                _    -> refused
+check_user_pass_login(Username, Pass) ->
+    Refused = {refused, "user '~s' - invalid credentials", [Username]},
+    case lookup_user(Username) of
+        {ok, User} ->
+            case check_password(Pass, User#user.password_hash) of
+                true -> {ok, User};
+                _    -> Refused
             end;
         {error, not_found} ->
-            refused
+            Refused
     end.
 
 internal_lookup_vhost_access(Username, VHostPath) ->
@@ -249,6 +220,9 @@ delete_user(Username) ->
 
 change_password(Username, Password) ->
     change_password_hash(Username, hash_password(Password)).
+
+clear_password(Username) ->
+    change_password_hash(Username, <<"">>).
 
 change_password_hash(Username, PasswordHash) ->
     R = update_user(Username, fun(User) ->

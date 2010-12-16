@@ -36,6 +36,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
+-export([peer_cert_subject_item/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -45,9 +46,11 @@
 
 -type(certificate() :: binary()).
 
--spec(peer_cert_issuer/1   :: (certificate()) -> string()).
--spec(peer_cert_subject/1  :: (certificate()) -> string()).
--spec(peer_cert_validity/1 :: (certificate()) -> string()).
+-spec(peer_cert_issuer/1        :: (certificate()) -> string()).
+-spec(peer_cert_subject/1       :: (certificate()) -> string()).
+-spec(peer_cert_validity/1      :: (certificate()) -> string()).
+-spec(peer_cert_subject_item/2  ::
+        (certificate(), tuple()) -> string() | 'not_found').
 
 -endif.
 
@@ -71,6 +74,14 @@ peer_cert_subject(Cert) ->
                       format_rdn_sequence(Subject)
               end, Cert).
 
+%% Return a part of the certificate's subject.
+peer_cert_subject_item(Cert, Type) ->
+    cert_info(fun(#'OTPCertificate' {
+                     tbsCertificate = #'OTPTBSCertificate' {
+                       subject = Subject }}) ->
+                      find_by_type(Type, Subject)
+              end, Cert).
+
 %% Return a string describing the certificate's validity.
 peer_cert_validity(Cert) ->
     cert_info(fun(#'OTPCertificate' {
@@ -88,6 +99,14 @@ cert_info(F, Cert) ->
           {ok, DecCert} -> DecCert; %%pre R14B
           DecCert       -> DecCert  %%R14B onwards
       end).
+
+find_by_type(Type, {rdnSequence, RDNs}) ->
+    case [V || #'AttributeTypeAndValue'{type = T, value = V}
+                     <- lists:flatten(RDNs),
+                 T == Type] of
+        [{printableString, S}] -> S;
+        []                     -> not_found
+    end.
 
 %%--------------------------------------------------------------------------
 %% Formatting functions

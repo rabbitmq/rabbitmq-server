@@ -388,7 +388,7 @@ init_db(ClusterNodes, Force) ->
                     ensure_version_ok(rabbit_upgrade:read_version()),
                     ensure_schema_ok();
                 {[], false, _} ->
-                    %% First RAM node in cluster, start from scratch
+                    %% Nothing there at all, start from scratch
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
