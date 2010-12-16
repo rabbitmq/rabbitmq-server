@@ -142,15 +142,15 @@ start_infrastructure(SIF, ChMgr, State = #state{sock = Sock}) ->
 network_handshake(AmqpParams, SHF, State0) ->
     Start = #'connection.start'{server_properties = ServerProperties,
                                 mechanisms = Mechanisms} =
-        handshake_recv(expecting_start),
+        handshake_recv('connection.start'),
     ok = check_version(Start),
-    Tune = login(AmqpParams, Mechanisms, State),
+    Tune = login(AmqpParams, Mechanisms, State0),
     {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, SHF, State0),
     do2(TuneOk, State1),
     do2(#'connection.open'{virtual_host = AmqpParams#amqp_params.virtual_host},
         State1),
     Params = {ServerProperties, ChannelMax, State1},
-    case handshake_recv(expecting_open_ok) of
+    case handshake_recv('connection.open_ok') of
         #'connection.open_ok'{}                     -> {ok, Params};
         {closing, #amqp_error{} = AmqpError, Error} -> {closing, Params,
                                                         AmqpError, Error}
@@ -213,7 +213,7 @@ login(Params = #amqp_params{auth_mechanisms = ClientMechanisms,
     end.
 
 login_loop(Mech, MState0, Params, State) ->
-    case handshake_recv() of
+    case handshake_recv('connection.tune') of
         Tune = #'connection.tune'{} ->
             Tune;
         #'connection.secure'{challenge = Challenge} ->
@@ -228,9 +228,7 @@ client_properties(UserProperties) ->
                {<<"version">>,   longstr, list_to_binary(Vsn)},
                {<<"platform">>,  longstr, <<"Erlang">>},
                {<<"copyright">>, longstr,
-                <<"Copyright (C) 2007-2009 LShift Ltd., "
-                  "Cohesive Financial Technologies LLC., "
-                  "and Rabbit Technologies Ltd.">>},
+                <<"Copyright (c) 2007-2010 VMware, Inc.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
                   "See http://www.rabbitmq.com/">>}],
@@ -238,40 +236,41 @@ client_properties(UserProperties) ->
                     lists:keystore(K, 1, Acc, Tuple)
                 end, Default, UserProperties).
 
-handshake_recv(Phase) ->
+handshake_recv(Expecting) ->
     receive
         {'$gen_cast', {method, Method, none}} ->
-            case {Phase, Method} of
-                {expecting_start, #'connection.start'{}} ->
+            case Expecting =:= element(1, Method) of
+                true when Expecting =:= 'connection.start';
+                          Expecting =:= 'connection.tune';
+                          Expecting =:= 'connection.open_ok' ->
                     Method;
-                {expecting_tune, #'connection.tune'{}} ->
-                    Method;
-                {expecting_open_ok, #'connection.open_ok'{}} ->
-                    Method;
-                {expecting_open_ok, _} ->
+                false when Expecting =:= 'connection.open_ok' ->
                     {closing,
                      #amqp_error{name        = command_invalid,
                                  explanation = "was expecting "
                                                "connection.open_ok"},
-                     {error, {unexpected_method, Method, Phase}}};
+                     {error, {unexpected_method, Method,
+                              {expecting, Expecting}}}};
                 _ ->
-                    exit({unexpected_method, Method, Phase})
+                    exit({unexpected_method, Method,
+                          {expecting, Expecting}})
             end;
         socket_closed ->
-            case Phase of expecting_tune    -> exit(auth_failure);
-                          expecting_open_ok -> exit(access_refused);
-                          _                 -> exit({socket_closed_unexpectedly,
-                                                     Phase})
+            case Expecting of
+                'connection.tune'    -> exit(auth_failure);
+                'connection.open_ok' -> exit(access_refused);
+                _                    -> exit({socket_closed_unexpectedly,
+                                              Expecting})
             end;
         {socket_error, _} = SocketError ->
-            exit({SocketError, Phase});
+            exit({SocketError, {expecting, Expecting}});
         heartbeat_timeout ->
             exit(heartbeat_timeout);
         Other ->
             exit({handshake_recv_unexpected_message, Other})
     after ?HANDSHAKE_RECEIVE_TIMEOUT ->
-        case Phase of
-            expecting_open_ok ->
+        case Expecting of
+            'connection.open_ok' ->
                 {closing,
                  #amqp_error{name        = internal_error,
                              explanation = "handshake timed out waiting "
