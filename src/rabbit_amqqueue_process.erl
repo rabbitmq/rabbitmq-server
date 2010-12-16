@@ -89,7 +89,8 @@
          messages,
          consumers,
          memory,
-         backing_queue_status
+         backing_queue_status,
+         mirror_pids
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -761,6 +762,9 @@ i(memory, _) ->
     M;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
+i(mirror_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_pids = MPids}} = rabbit_amqqueue:lookup(Name),
+    MPids;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
