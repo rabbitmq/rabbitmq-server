@@ -59,7 +59,7 @@
         -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (username(), password())
-        -> {'ok', rabbit_types:user()} | {'refused', username()}).
+        -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
 -spec(make_salt/0 :: () -> binary()).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
@@ -102,16 +102,15 @@
 user_pass_login(User, Pass) ->
     ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
     case check_user_pass_login(User, Pass) of
-        {refused, _} ->
+        {refused, Msg, Args} ->
             rabbit_misc:protocol_error(
-              access_refused, "login refused for user '~s'", [User]);
+              access_refused, "login refused: ~s", [io_lib:format(Msg, Args)]);
         {ok, U} ->
             U
     end.
 
 check_user_pass_login(Username, Pass) ->
-    Refused = {refused, io_lib:format("user '~s' - invalid credentials",
-                                      [Username])},
+    Refused = {refused, "user '~s' - invalid credentials", [Username]},
     case lookup_user(Username) of
         {ok, User} ->
             case check_password(Pass, User#user.password_hash) of

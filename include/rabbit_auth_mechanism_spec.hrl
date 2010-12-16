@@ -36,6 +36,6 @@
                                 {'ok', rabbit_types:user()} |
                                 {'challenge', binary(), any()} |
                                 {'protocol_error', string(), [any()]} |
-                                {'refused', rabbit_access_control:username()}).
+                                {'refused', string(), [any()]}).
 
 -endif.
