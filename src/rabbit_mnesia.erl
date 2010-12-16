@@ -38,8 +38,6 @@
 
 -export([table_names/0]).
 
--export([behaviour_info/1]).
-
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
@@ -72,9 +70,6 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
-behaviour_info(callbacks) -> [{table_definitions, 0}];
-behaviour_info(_Other)    -> undefined.
 
 status() ->
     [{nodes, case mnesia:system_info(is_running) of
@@ -216,11 +211,7 @@ table_definitions() ->
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
        {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
-        ++ plugin_table_definitions().
-
-plugin_table_definitions() ->
-    lists:append([Mod:table_definitions()
-                  || {_Type, Mod} <- rabbit_registry:lookup_all(mnesia)]).
+        ++ gm:table_definitions().
 
 binding_match() ->
     #binding{source = exchange_name_match(),

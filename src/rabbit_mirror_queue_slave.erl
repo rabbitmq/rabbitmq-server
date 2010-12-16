@@ -108,13 +108,13 @@ init([#amqqueue { name = QueueName } = Q]) ->
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   [Q1 = #amqqueue { pid = QPid, extra_pids = EPids }] =
+                   [Q1 = #amqqueue { pid = QPid, mirror_pids = MPids }] =
                        mnesia:read({rabbit_queue, QueueName}),
-                   case [Pid || Pid <- [QPid | EPids], node(Pid) =:= Node] of
+                   case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
                        [] ->
-                           EPids1 = EPids ++ [Self],
+                           MPids1 = MPids ++ [Self],
                            mnesia:write(rabbit_queue,
-                                        Q1 #amqqueue { extra_pids = EPids1 },
+                                        Q1 #amqqueue { mirror_pids = MPids1 },
                                         write),
                            {ok, QPid};
                        _ ->

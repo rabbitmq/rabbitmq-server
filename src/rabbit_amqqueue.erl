@@ -207,7 +207,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       arguments       = Args,
                                       exclusive_owner = Owner,
                                       pid             = none,
-                                      extra_pids      = []}),
+                                      mirror_pids     = []}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}) of
         not_found -> rabbit_misc:not_found(QueueName);
         Q1        -> Q1
@@ -488,7 +488,7 @@ on_node_down(Node) ->
         rabbit_misc:execute_mnesia_transaction(
           fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
                                     #amqqueue{name = QueueName, pid = Pid,
-                                              extra_pids = []}
+                                              mirror_pids = []}
                                         <- mnesia:table(rabbit_queue),
                                     node(Pid) == Node]))
           end))).
@@ -503,7 +503,7 @@ pseudo_queue(QueueName, Pid) ->
               auto_delete = false,
               arguments   = [],
               pid         = Pid,
-              extra_pids  = []}.
+              mirror_pids = []}.
 
 safe_delegate_call_ok(F, Pids) ->
     {_, Bad} = delegate:invoke(Pids,

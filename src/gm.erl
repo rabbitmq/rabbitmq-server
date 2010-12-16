@@ -372,7 +372,6 @@
 
 
 -behaviour(gen_server2).
--behaviour(rabbit_mnesia).
 
 -export([create_tables/0, start_link/3, leave/1, broadcast/2,
          confirmed_broadcast/2, group_members/1]).
@@ -411,13 +410,6 @@
 -define(TABLE, {?GROUP_TABLE, [{record_name, gm_group},
                                {attributes, record_info(fields, gm_group)}]}).
 -define(TABLE_MATCH, {match, #gm_group { _ = '_' }}).
-
--rabbit_boot_step({gm_tables,
-                   [{description, "add GM tables to rabbit_mnesia"},
-                    {mfa,         {rabbit_registry, register,
-                                   [mnesia, <<"gm">>, ?MODULE]}},
-                    {requires,    rabbit_registry},
-                    {enables,     database}]}).
 
 -define(TAG, '$gm').
 

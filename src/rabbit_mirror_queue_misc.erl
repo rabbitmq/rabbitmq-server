@@ -24,18 +24,18 @@ remove_from_queue(QueueName, DeadPids) ->
     DeadNodes = [node(DeadPid) || DeadPid <- DeadPids],
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              [Q = #amqqueue { pid        = QPid,
-                               extra_pids = EPids }] =
+              [Q = #amqqueue { pid         = QPid,
+                               mirror_pids = MPids }] =
                   mnesia:read({rabbit_queue, QueueName}),
-              [QPid1 | EPids1] =
-                  [Pid || Pid <- [QPid | EPids],
+              [QPid1 | MPids1] =
+                  [Pid || Pid <- [QPid | MPids],
                           not lists:member(node(Pid), DeadNodes)],
-              case {{QPid, EPids}, {QPid1, EPids1}} of
+              case {{QPid, MPids}, {QPid1, MPids1}} of
                   {Same, Same} ->
                       QPid;
                   _ ->
-                      Q1 = Q #amqqueue { pid        = QPid1,
-                                         extra_pids = EPids1 },
+                      Q1 = Q #amqqueue { pid         = QPid1,
+                                         mirror_pids = MPids1 },
                       mnesia:write(rabbit_queue, Q1, write),
                       QPid1
               end
