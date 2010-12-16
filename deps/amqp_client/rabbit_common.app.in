@@ -10,6 +10,7 @@
              rabbit_binary_parser,
              rabbit_channel,
              rabbit_exchange_type,
+             rabbit_auth_mechanism,
              rabbit_framing_amqp_0_8,
              rabbit_framing_amqp_0_9_1,
              rabbit_framing_channel,
