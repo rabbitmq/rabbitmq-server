@@ -240,7 +240,7 @@ stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
     TRef = erlang:send_after(
-	     ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
+             ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
     State#q{rate_timer_ref = TRef};
 ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
