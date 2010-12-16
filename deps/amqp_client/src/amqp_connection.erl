@@ -88,7 +88,11 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams) ->
-    amqp_client:start(),
+    case amqp_client:start() of
+        ok                                      -> ok;
+        {error, {already_started, amqp_client}} -> ok;
+        {error, _} = E                          -> throw(E)
+    end,
     {ok, _Sup, Connection} =
         amqp_sup:start_connection_sup(
             Type, case Type of direct  -> amqp_direct_connection;
