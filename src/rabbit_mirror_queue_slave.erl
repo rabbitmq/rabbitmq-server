@@ -456,7 +456,6 @@ process_instruction({ack, Guids},
     {AckTags, GA1} = guids_to_acktags(Guids, GA),
     {Guids1, BQS1} = BQ:ack(AckTags, BQS),
     [] = Guids1 -- Guids, %% ASSERTION
-    %% CONFIRM - persistent but delivered faster than disk sync
     {processed, State #state { guid_ack            = GA1,
                                backing_queue_state = BQS1 }};
 process_instruction({requeue, MsgPropsFun, Guids},
@@ -475,7 +474,6 @@ process_instruction({requeue, MsgPropsFun, Guids},
              %% GA
              {_Count, BQS1} = BQ:purge(BQS),
              {Guids, BQS2} = ack_all(BQ, GA, BQS1),
-             %% CONFIRM these Guids
              State #state { guid_ack            = dict:new(),
                             backing_queue_state = BQS2 }
      end};
