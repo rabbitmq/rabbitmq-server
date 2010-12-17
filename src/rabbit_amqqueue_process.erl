@@ -132,8 +132,13 @@ init(Q) ->
             guid_to_channel     = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-init_with_backing_queue_state(Q, BQ, BQS, RateTRef, AckTags, Deliveries) ->
+init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
+                              RateTRef, AckTags, Deliveries) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
+    case Owner of
+        none -> ok;
+        _    -> erlang:monitor(process, Owner)
+    end,
     State = requeue_and_run(
               AckTags,
               process_args(
