@@ -563,11 +563,9 @@ augment_fine_stats(Stats, _Tables) ->
 
 consumer_details(Pattern, Tables) ->
     Table = orddict:fetch(consumers, Tables),
-    case [augment_msg_stats(Props, Tables)
-          || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))] of
-        [] -> [];
-        C  -> [{consumer_details, C}]
-    end.
+    [{consumer_details,
+      [augment_msg_stats(Props, Tables)
+       || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))]}].
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
