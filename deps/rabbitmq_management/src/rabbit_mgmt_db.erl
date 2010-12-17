@@ -270,13 +270,11 @@ handle_call({get_exchanges, Xs, Mode}, _From,
                     list   -> ?FINE_STATS_EXCHANGE_LIST;
                     detail -> ?FINE_STATS_EXCHANGE_DETAIL
                 end,
-    {reply, exchange_stats(Xs, FineSpecs, Tables),
-     State};
+    {reply, exchange_stats(Xs, FineSpecs, Tables), State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
-    {reply, connection_stats(Conns, Tables),
-     State};
+    {reply, connection_stats(Conns, Tables), State};
 
 handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
     Conns = created_event(Name, connection_stats, Tables),
@@ -285,8 +283,7 @@ handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
 
 handle_call(get_channels, _From, State = #state{tables = Tables}) ->
     Chs = created_events(channel_stats, Tables),
-    Res = channel_stats(Chs, ?FINE_STATS_CHANNEL_LIST, Tables),
-    {reply, Res, State};
+    {reply, channel_stats(Chs, ?FINE_STATS_CHANNEL_LIST, Tables), State};
 
 handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Chs = created_event(Name, channel_stats, Tables),
@@ -317,8 +314,8 @@ handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
         end,
     Publish = F(channel_exchange_stats, exchange),
     Consume = F(channel_queue_stats, queue_details),
-    {reply, [{message_stats, Publish ++ Consume}, {queue_totals, Totals}],
-     State};
+    {reply, [{message_stats, Publish ++ Consume},
+             {queue_totals, Totals}], State};
 
 handle_call(_Request, _From, State) ->
     {reply, not_understood, State}.
