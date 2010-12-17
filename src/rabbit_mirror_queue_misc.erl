@@ -24,19 +24,23 @@ remove_from_queue(QueueName, DeadPids) ->
     DeadNodes = [node(DeadPid) || DeadPid <- DeadPids],
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              [Q = #amqqueue { pid         = QPid,
-                               mirror_pids = MPids }] =
-                  mnesia:read({rabbit_queue, QueueName}),
-              [QPid1 | MPids1] =
-                  [Pid || Pid <- [QPid | MPids],
-                          not lists:member(node(Pid), DeadNodes)],
-              case {{QPid, MPids}, {QPid1, MPids1}} of
-                  {Same, Same} ->
-                      QPid;
-                  _ ->
-                      Q1 = Q #amqqueue { pid         = QPid1,
-                                         mirror_pids = MPids1 },
-                      mnesia:write(rabbit_queue, Q1, write),
-                      QPid1
+              %% Someone else could have deleted the queue before we
+              %% get here.
+              case mnesia:read({rabbit_queue, QueueName}) of
+                  [] -> {error, not_found};
+                  [Q = #amqqueue { pid         = QPid,
+                                   mirror_pids = MPids }] ->
+                      [QPid1 | MPids1] =
+                          [Pid || Pid <- [QPid | MPids],
+                                  not lists:member(node(Pid), DeadNodes)],
+                      case {{QPid, MPids}, {QPid1, MPids1}} of
+                          {Same, Same} ->
+                              {ok, QPid};
+                          _ ->
+                              Q1 = Q #amqqueue { pid         = QPid1,
+                                                 mirror_pids = MPids1 },
+                              mnesia:write(rabbit_queue, Q1, write),
+                              {ok, QPid1}
+                      end
               end
       end).

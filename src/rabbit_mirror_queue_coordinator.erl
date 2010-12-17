@@ -79,9 +79,12 @@ handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName } }) ->
     rabbit_log:info("Master ~p saw deaths ~p for queue ~p~n",
                     [self(), Deaths, QueueName]),
-    Node = node(),
-    Node = node(rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths)),
-    noreply(State).
+    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
+        {ok, Pid} when node(Pid) =:= node() ->
+            noreply(State);
+        {error, not_found} ->
+            {stop, normal, State}
+    end.
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.

@@ -166,16 +166,18 @@ handle_call({gm_deaths, Deaths}, From,
                              master_node = MNode }) ->
     rabbit_log:info("Slave ~p saw deaths ~p for queue ~p~n",
                     [self(), Deaths, QueueName]),
-    case {node(), node(rabbit_mirror_queue_misc:remove_from_queue(
-                         QueueName, Deaths))} of
-        {_Node, MNode} ->
+    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
+        {ok, Pid} when node(Pid) =:= MNode ->
             reply(ok, State);
-        {Node, Node} ->
+        {ok, Pid} when node(Pid) =:= node() ->
             promote_me(From, State);
-        {_Node, MNode1} ->
+        {ok, Pid} ->
             gen_server2:reply(From, ok),
             ok = gm:broadcast(GM, heartbeat),
-            noreply(State #state { master_node = MNode1 })
+            noreply(State #state { master_node = node(Pid) });
+        {error, not_found} ->
+            gen_server2:reply(From, ok),
+            {stop, normal, State}
     end;
 
 handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
