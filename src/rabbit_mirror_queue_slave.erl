@@ -224,6 +224,10 @@ handle_info(Msg, State) ->
 %% slave, we have no idea whether or not we'll be the only copy coming
 %% back up. Thus we must assume we will be, and preserve anything we
 %% have on disk.
+terminate(_Reason, #state { backing_queue_state = undefined }) ->
+    %% We've received a delete_and_terminate from gm, thus nothing to
+    %% do here.
+    ok;
 terminate(Reason, #state { q                   = Q,
                            gm                  = GM,
                            backing_queue       = BQ,
@@ -411,15 +415,15 @@ process_instruction({publish, Deliver, Guid, MsgProps, ChPid},
     case dict:find(ChPid, SQ) of
         error ->
             blocked;
-        {ok, Q} ->
-            case queue:out(Q) of
-                {empty, _Q} ->
+        {ok, MQ} ->
+            case queue:out(MQ) of
+                {empty, _MQ} ->
                     blocked;
                 {{value, Delivery = #delivery {
                            message = Msg = #basic_message { guid = Guid } }},
-                 Q1} ->
+                 MQ1} ->
                     State1 = State #state { sender_queues =
-                                                dict:store(ChPid, Q1, SQ) },
+                                                dict:store(ChPid, MQ1, SQ) },
                     GTC1 = record_confirm_or_confirm(Delivery, Q, GTC),
                     {processed,
                      case Deliver of
@@ -442,7 +446,7 @@ process_instruction({publish, Deliver, Guid, MsgProps, ChPid},
                                              guid_ack            = GA1,
                                              guid_to_channel     = GTC2 }
                      end};
-                {{value, #delivery {}}, _Q1} ->
+                {{value, #delivery {}}, _MQ1} ->
                     %% throw away the instruction: we'll never receive
                     %% the message to which it corresponds.
                     {processed, State}
@@ -512,8 +516,8 @@ process_instruction({requeue, MsgPropsFun, Guids},
 process_instruction(delete_and_terminate,
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    {stop, State #state {
-             backing_queue_state = BQ:delete_and_terminate(BQS) }}.
+    BQ:delete_and_terminate(BQS),
+    {stop, State #state { backing_queue_state = undefined }}.
 
 guids_to_acktags(Guids, GA) ->
     {AckTags, GA1} =
