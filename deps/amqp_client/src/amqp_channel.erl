@@ -477,7 +477,7 @@ handle_method1(#'basic.return'{} = BasicReturn, AmqpMsg,
 handle_method1(#'basic.ack'{} = BasicAck, none,
                #state{ack_handler_pid = AckHandler} = State) ->
     case AckHandler of
-        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
+        none -> ?LOG_WARN("Channel (~p): received ~p but there is no "
                           "ack handler registered~n",
                           [self(), BasicAck]);
         _    -> AckHandler ! BasicAck
