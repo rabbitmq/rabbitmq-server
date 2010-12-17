@@ -31,6 +31,14 @@
 
 -module(delegate).
 
+%% The reason we have local delegate processes is because we want to
+%% be able to issue calls to remote nodes in parallel. This requires
+%% segmenting the destination Pids by node, and then getting local
+%% delegates to issue calls/casts to the remote delegates in
+%% parallel. In order to ensure consistent ordering, even casts to
+%% remote Pids have to go through the local delegates rather than be
+%% sent directly.
+
 -define(DELEGATE_PROCESS_COUNT_MULTIPLIER, 2).
 
 -behaviour(gen_server2).
