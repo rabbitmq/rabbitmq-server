@@ -231,7 +231,7 @@ terminate_shutdown(Fun, State) ->
                                       BQSN1
                               end, BQS, all_ch_record()),
                      [emit_consumer_deleted(Ch, CTag)
-                      || {CTag, Ch, _} <- consumers(State1)],
+                      || {Ch, CTag, _} <- consumers(State1)],
                      rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
