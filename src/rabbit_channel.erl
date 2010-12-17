@@ -406,8 +406,8 @@ check_user_id_header(#'P_basic'{user_id = User}, #ch{username = User}) ->
     ok;
 check_user_id_header(#'P_basic'{user_id = Claimed}, #ch{username = Actual}) ->
     rabbit_misc:protocol_error(
-      precondition_failed, "claimed to be '~s' but was '~s'",
-      [Claimed, Actual]).
+      precondition_failed, "user_id property set to '~s' but "
+      "authenticated user was '~s'", [Claimed, Actual]).
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
