@@ -301,9 +301,8 @@ handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
                  all -> rabbit_access_control:list_vhosts();
                  _   -> rabbit_mgmt_util:vhosts(Username)
              end,
-    Qs0 = lists:append(
-            [[rabbit_mgmt_format:queue(Q) || Q <- rabbit_amqqueue:list(V)]
-             || V <- VHosts]),
+    Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
+                                          Q <- rabbit_amqqueue:list(V)],
     Qs1 = merge_stats(Qs0, ?FINE_STATS_NONE, queue_stats, Tables),
     Totals0 = sum(Qs1, [messages_ready, messages_unacknowledged]),
     Totals = [{messages, add(pget(messages_ready, Totals0),
