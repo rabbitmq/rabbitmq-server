@@ -557,11 +557,15 @@ augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
 augment_fine_stats(Stats, _Tables) ->
     Stats.
 
-consumer_details(Pattern, Tables) ->
+consumer_details_fun(PatternFun, Tables) ->
     Table = orddict:fetch(consumers, Tables),
-    [{consumer_details,
-      [augment_msg_stats(Props, Tables)
-       || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))]}].
+    fun ([])    -> [];
+        (Props) -> Pattern = PatternFun(Props),
+                   [{consumer_details,
+                     [augment_msg_stats(Obj, Tables)
+                      || Obj <- lists:append(
+                                  ets:match(Table, {Pattern, '$1'}))]}]
+    end.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
@@ -587,9 +591,8 @@ basic_queue_stats(Objs, Tables) ->
 
 queue_stats(Objs, FineSpecs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
-                       fun (Props) ->
-                               consumer_details({pget(pid, Props), '_'}, Tables)
-                       end,
+                       consumer_details_fun(
+                         fun (Props) -> {pget(pid, Props), '_'} end, Tables),
                        fine_stats_fun(FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
 
@@ -603,8 +606,7 @@ connection_stats(Objs, Tables) ->
 
 channel_stats(Objs, FineSpecs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
-                       fun (Props) ->
-                               consumer_details({'_', pget(pid, Props)}, Tables)
-                       end,
+                       consumer_details_fun(
+                         fun (Props) -> {'_', pget(pid, Props)} end, Tables),
                        fine_stats_fun(FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
