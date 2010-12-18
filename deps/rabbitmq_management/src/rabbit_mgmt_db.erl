@@ -569,9 +569,13 @@ augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
 augment_fine_stats(Stats, _Tables) ->
     Stats.
 
+extra_queue_stats([], _Tables) ->
+    [];
 extra_queue_stats(Q, Tables) ->
     consumer_details({pget(pid, Q), '_'}, Tables).
 
+extra_channel_stats([], _Tables) ->
+    [];
 extra_channel_stats(Ch, Tables) ->
     consumer_details({'_', pget(pid, Ch)}, Tables).
 
