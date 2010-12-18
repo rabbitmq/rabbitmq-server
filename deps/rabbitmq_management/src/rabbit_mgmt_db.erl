@@ -578,7 +578,7 @@ extra_channel_stats(Ch, Tables) ->
 consumer_details(Pattern, Tables) ->
     Table = orddict:fetch(consumers, Tables),
     [{consumer_details,
-      [augment_msg_stats(Props, Tables)
+      [augment_msg_stats_items(Props, Tables)
        || Props <- lists:append(ets:match(Table, {Pattern, '$1'}))]}].
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
