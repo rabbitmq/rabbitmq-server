@@ -377,7 +377,7 @@
          confirmed_broadcast/2, group_members/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+         code_change/3, prioritise_info/2]).
 
 -export([behaviour_info/1]).
 
@@ -656,6 +656,10 @@ terminate(Reason, #state { module        = Module,
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _State) -> 1;
+prioritise_info(_                                      , _State) -> 0.
 
 
 handle_msg(check_neighbours, State) ->
