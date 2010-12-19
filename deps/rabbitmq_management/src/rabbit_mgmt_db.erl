@@ -263,7 +263,7 @@ augment_queue_pid(Pid, _Tables) ->
         [Q] -> Name = Q#amqqueue.name,
                [{name,  Name#resource.name},
                 {vhost, Name#resource.virtual_host}];
-        _   -> [] %% Queue went away before we could get its details.
+        []  -> [] %% Queue went away before we could get its details.
     end.
 
 augment_msg_stats(Stats, Tables) ->
