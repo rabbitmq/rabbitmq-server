@@ -245,7 +245,7 @@ augment_msg_stats_fun(Tables) ->
     fun (Props) -> augment(Props, Funs, Tables) end.
 
 augment_msg_stats(Props, Tables) ->
-    Props ++ (augment_msg_stats_fun(Tables))(Props).
+    (augment_msg_stats_fun(Tables))(Props) ++ Props.
 
 %%----------------------------------------------------------------------------
 
@@ -516,7 +516,7 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
      {exchange, [{name, XName}, {vhost, XVhost}]}].
 
 merge_stats(Objs, Funs) ->
-    [lists:foldl(fun (Fun, Props) -> Props ++ Fun(Props) end, Obj, Funs)
+    [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
      || Obj <- Objs].
 
 basic_stats_fun(Type, Tables) ->
