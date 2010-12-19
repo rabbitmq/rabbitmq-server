@@ -76,13 +76,12 @@ invoke(Pid, Fun) when is_pid(Pid) ->
     end;
 
 invoke(Pids, Fun) when is_list(Pids) ->
-    Grouped = group_pids_by_node(Pids),
-    LocalNode = node(),
+    {LocalPids, Grouped} = group_pids_by_node(Pids),
     %% The use of multi_call is only safe because the timeout is
     %% infinity, and thus there is no process spawned in order to do
     %% the sending. Thus calls can't overtake preceding calls/casts.
     {Replies, BadNodes} =
-        case orddict:fetch_keys(Grouped) -- [LocalNode] of
+        case orddict:fetch_keys(Grouped) of
             [] ->
                 {[], []};
             RemoteNodes ->
@@ -94,11 +93,7 @@ invoke(Pids, Fun) when is_list(Pids) ->
                         [{Pid, {exit, badnode, []}} ||
                             Pid <- orddict:fetch(BadNode, Grouped)] ++ Acc
                 end, [], BadNodes),
-    LocalResults = case orddict:find(LocalNode, Grouped) of
-                       error           -> [];
-                       {ok, LocalPids} -> safe_invoke(LocalPids, Fun)
-                   end,
-    ResultsNoNode = lists:append([LocalResults |
+    ResultsNoNode = lists:append([safe_invoke(LocalPids, Fun) |
                                   [Results || {_Node, Results} <- Replies]]),
     lists:foldl(fun ({ok, Pid, Result},   {Good, Bad}) ->
                         {[{Pid, Result} | Good], Bad};
@@ -113,26 +108,27 @@ invoke_no_result(Pid, Fun) when is_pid(Pid) ->
     invoke_no_result([Pid], Fun);
 
 invoke_no_result(Pids, Fun) when is_list(Pids) ->
-    Grouped = group_pids_by_node(Pids),
-    LocalNode = node(),
-    case orddict:fetch_keys(Grouped) -- [LocalNode] of
+    {LocalPids, Grouped} = group_pids_by_node(Pids),
+    case orddict:fetch_keys(Grouped) of
         []          -> ok;
         RemoteNodes -> gen_server2:abcast(
                          RemoteNodes, delegate(), {invoke, Fun, Grouped})
     end,
-    case orddict:find(LocalNode, Grouped) of
-        error           -> ok;
-        {ok, LocalPids} -> safe_invoke(LocalPids, Fun) %% must not die
-    end,
+    safe_invoke(LocalPids, Fun), %% must not die
     ok.
 
 %%----------------------------------------------------------------------------
 
 group_pids_by_node(Pids) ->
-    lists:foldl(fun (Pid, Acc) ->
-                        orddict:update(
-                          node(Pid), fun (List) -> [Pid | List] end, [Pid], Acc)
-                end, orddict:new(), Pids).
+    LocalNode = node(),
+    lists:foldl(
+      fun (Pid, {Local, Remote}) when node(Pid) =:= LocalNode ->
+              {[Pid | Local], Remote};
+          (Pid, {Local, Remote}) ->
+              {Local,
+               orddict:update(
+                 node(Pid), fun (List) -> [Pid | List] end, [Pid], Remote)}
+      end, {[], orddict:new()}, Pids).
 
 delegate_count() ->
     {ok, Count} = application:get_env(rabbit, delegate_count),
