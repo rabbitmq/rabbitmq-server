@@ -59,7 +59,7 @@ members_changed([], Births, Deaths) ->
               lists:foldl(
                 fun (Died, StateN) ->
                         true = dict:is_key(Died, StateN),
-                        dict:erase(Died, StateN)
+                        dict:store(Died, died, StateN)
                 end, State1, Deaths)
       end),
     ok.
@@ -69,6 +69,9 @@ handle_msg([], From, {test_msg, Num}) ->
     with_state(
       fun (State) ->
               ok = case dict:find(From, State) of
+                       {ok, died} ->
+                           exit({{from, From},
+                                 {received_posthumous_delivery, Num}});
                        {ok, empty} -> ok;
                        {ok, Num}   -> ok;
                        {ok, Num1} when Num < Num1 ->
@@ -78,7 +81,10 @@ handle_msg([], From, {test_msg, Num}) ->
                        {ok, Num1} ->
                            exit({{from, From},
                                  {missing_delivery_of, Num},
-                                 {received_early, Num1}})
+                                 {received_early, Num1}});
+                       error ->
+                           exit({{from, From},
+                                 {received_premature_delivery, Num}})
                    end,
               dict:store(From, Num + 1, State)
       end),
