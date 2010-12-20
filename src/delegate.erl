@@ -87,7 +87,7 @@ invoke(Pids, Fun) when is_list(Pids) ->
                                                   {invoke, Fun, Grouped},
                                                   infinity)
         end,
-    BadPids = [{Pid, {exit, badnode, []}} ||
+    BadPids = [{Pid, {exit, {nodedown, BadNode}, []}} ||
                   BadNode <- BadNodes,
                   Pid     <- orddict:fetch(BadNode, Grouped)],
     ResultsNoNode = lists:append([safe_invoke(LocalPids, Fun) |
