@@ -400,13 +400,10 @@ check_write_permitted(Resource, #ch{username = Username}) ->
 check_read_permitted(Resource, #ch{username = Username}) ->
     check_resource_access(Username, Resource, read).
 
-check_internal_exchange(#exchange{name = #resource{name = Name,
-                                                   virtual_host = VHost},
-                                  internal = true}) ->
+check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
-                               "cannot publish to internal exchange '~s' in "
-                               "virtual host '~s'",
-                               [Name, VHost]);
+                               "cannot publish to internal ~s",
+                               [rabbit_misc:rs(Name)]);
 check_internal_exchange(_) ->
     ok.
 
