@@ -17,7 +17,7 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([allowed_methods/2, post_is_create/2, create_path/2]).
 -export([content_types_accepted/2, accept_content/2, resource_exists/2]).
--export([bindings/2]).
+-export([bindings/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -32,7 +32,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 resource_exists(ReqData, {Mode, Context}) ->
-    {case list_bindings(Mode, ReqData, Context) of
+    {case list_bindings(Mode, ReqData) of
          vhost_not_found -> false;
          _               -> true
      end, ReqData, {Mode, Context}}.
@@ -50,8 +50,7 @@ post_is_create(ReqData, Context) ->
     {true, ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
-    Bs = [rabbit_mgmt_format:binding(B) ||
-             B <- list_bindings(Mode, ReqData, Context)],
+    Bs = [rabbit_mgmt_format:binding(B) || B <- list_bindings(Mode, ReqData)],
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_util:filter_vhost(Bs, ReqData, Context),
       ["vhost", "exchange", "queue", "routing_key", "properties_key"],
@@ -103,24 +102,24 @@ is_authorized(ReqData, {Mode, Context}) ->
 
 %%--------------------------------------------------------------------
 
-bindings(ReqData, Context) ->
+bindings(ReqData) ->
     [rabbit_mgmt_format:binding(B) ||
-        B <- list_bindings(all, ReqData, Context)].
+        B <- list_bindings(all, ReqData)].
 
 %%--------------------------------------------------------------------
 
-list_bindings(all, ReqData, Context) ->
-    rabbit_mgmt_util:all_or_one_vhost(ReqData, Context,
-                                      fun (VHost) ->
-                                              rabbit_binding:list(VHost)
-                                      end);
-list_bindings(exchange_source, ReqData, _Context) ->
+list_bindings(all, ReqData) ->
+    rabbit_mgmt_util:all_or_one_vhost(ReqData,
+                                     fun (VHost) ->
+                                             rabbit_binding:list(VHost)
+                                     end);
+list_bindings(exchange_source, ReqData) ->
     rabbit_binding:list_for_source(r(exchange, exchange, ReqData));
-list_bindings(exchange_destination, ReqData, _Context) ->
+list_bindings(exchange_destination, ReqData) ->
     rabbit_binding:list_for_destination(r(exchange, exchange, ReqData));
-list_bindings(queue, ReqData, _Context) ->
+list_bindings(queue, ReqData) ->
     rabbit_binding:list_for_destination(r(queue, destination, ReqData));
-list_bindings(source_destination, ReqData, _Context) ->
+list_bindings(source_destination, ReqData) ->
     DestType = rabbit_mgmt_util:destination_type(ReqData),
     rabbit_binding:list_for_source_and_destination(
       r(exchange, source, ReqData),

@@ -20,7 +20,7 @@
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1]).
 -export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
--export([all_or_one_vhost/3, with_decode_vhost/4, reply/3, filter_vhost/3]).
+-export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
 
@@ -273,11 +273,10 @@ amqp_request(VHost, ReqData, Context, Method) ->
         E:R -> io:format("~p~n", [{E,R}])
     end.
 
-all_or_one_vhost(ReqData, #context{ user = User }, Fun) ->
+all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none      -> lists:append(
-                       [Fun(V) || V <- rabbit_access_control:list_vhosts(
-                                         User, write)]);
+                       [Fun(V) || V <- rabbit_access_control:list_vhosts()]);
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
     end.

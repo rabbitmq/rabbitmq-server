@@ -37,7 +37,6 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-%% This is used by export config and so should list all in Mnesia
 vhosts() ->
     format(rabbit_access_control:list_vhosts()).
 
