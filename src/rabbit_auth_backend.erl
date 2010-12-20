@@ -35,13 +35,41 @@
 
 behaviour_info(callbacks) ->
     [
-     %% A description (TODO should this be here if we're not using registry?).
+     %% A description proplist as with auth mechanisms,
+     %% exchanges. Currently unused.
      {description, 0},
 
+     %% Check a user can log in, given a username and a proplist of
+     %% authentication information (e.g. [{password, Password}]).
+     %%
+     %% Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {error, Msg, Args}
+     %%     Something went wrong. Log and die.
+     %% {refused, Msg, Args}
+     %%     Client failed authentication. Log and die.
      {check_user_login, 2},
 
+     %% Given #user, vhost path and permission, can a user access a vhost?
+     %% Permission is read  - learn of the existence of (only relevant for
+     %%                       management plugin)
+     %%            or write - log in
+     %%
+     %% Possible responses:
+     %% true
+     %% false
+     %% {error, Msg}
+     %%     Something went wrong. Log and die.
      {check_vhost_access, 3},
 
+     %% Given #user, resource and permission, can a user access a resource?
+     %%
+     %% Possible responses:
+     %% true
+     %% false
+     %% {error, Msg}
+     %%     Something went wrong. Log and die.
      {check_resource_access, 3}
     ];
 behaviour_info(_Other) ->
