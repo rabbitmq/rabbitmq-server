@@ -199,6 +199,8 @@ terminate_shutdown(Fun, State) ->
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
+                     [emit_consumer_deleted(Ch, CTag)
+                      || {Ch, CTag, _} <- consumers(State1)],
                      rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
@@ -536,12 +538,19 @@ remove_consumer(ChPid, ConsumerTag, Queue) ->
                  end, Queue).
 
 remove_consumers(ChPid, Queue) ->
-    queue:filter(fun ({CP, _}) -> CP /= ChPid end, Queue).
+    {Kept, Removed} = split_by_channel(ChPid, Queue),
+    [emit_consumer_deleted(Ch, CTag) ||
+        {Ch, #consumer{tag = CTag}} <- queue:to_list(Removed)],
+    Kept.
 
 move_consumers(ChPid, From, To) ->
+    {Kept, Removed} = split_by_channel(ChPid, From),
+    {Kept, queue:join(To, Removed)}.
+
+split_by_channel(ChPid, Queue) ->
     {Kept, Removed} = lists:partition(fun ({CP, _}) -> CP /= ChPid end,
-                                      queue:to_list(From)),
-    {queue:from_list(Kept), queue:join(To, queue:from_list(Removed))}.
+                                      queue:to_list(Queue)),
+    {queue:from_list(Kept), queue:from_list(Removed)}.
 
 possibly_unblock(State, ChPid, Update) ->
     case lookup_ch(ChPid) of
@@ -721,11 +730,33 @@ i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
+consumers(#q{active_consumers = ActiveConsumers,
+             blocked_consumers = BlockedConsumers}) ->
+    rabbit_misc:queue_fold(
+            fun ({ChPid, #consumer{tag = ConsumerTag,
+                                   ack_required = AckRequired}}, Acc) ->
+                    [{ChPid, ConsumerTag, AckRequired} | Acc]
+            end, [], queue:join(ActiveConsumers, BlockedConsumers)).
+
 emit_stats(State) ->
     emit_stats(State, []).
 
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
+
+emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+    rabbit_event:notify(consumer_created,
+                        [{consumer_tag, ConsumerTag},
+                         {exclusive,    Exclusive},
+                         {ack_required, AckRequired},
+                         {channel,      ChPid},
+                         {queue,        self()}]).
+
+emit_consumer_deleted(ChPid, ConsumerTag) ->
+    rabbit_event:notify(consumer_deleted,
+                        [{consumer_tag, ConsumerTag},
+                         {channel,      ChPid},
+                         {queue,        self()}]).
 
 %---------------------------------------------------------------------------
 
@@ -789,14 +820,8 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
-handle_call(consumers, _From,
-            State = #q{active_consumers = ActiveConsumers,
-                       blocked_consumers = BlockedConsumers}) ->
-    reply(rabbit_misc:queue_fold(
-            fun ({ChPid, #consumer{tag = ConsumerTag,
-                                   ack_required = AckRequired}}, Acc) ->
-                    [{ChPid, ConsumerTag, AckRequired} | Acc]
-            end, [], queue:join(ActiveConsumers, BlockedConsumers)), State);
+handle_call(consumers, _From, State) ->
+    reply(consumers(State), State);
 
 handle_call({deliver_immediately, Delivery = #delivery{message = Message}},
             _From, State) ->
@@ -899,6 +924,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                                    ChPid, Consumer,
                                    State1#q.active_consumers)})
                 end,
+            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                  not NoAck),
             reply(ok, State2)
     end;
 
@@ -917,6 +944,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                        C1#cr{limiter_pid = undefined};
                   _ -> C1
               end),
+            emit_consumer_deleted(ChPid, ConsumerTag),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,

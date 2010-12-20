@@ -27,6 +27,7 @@
 -rabbit_upgrade({remove_user_scope,  []}).
 -rabbit_upgrade({hash_passwords,     []}).
 -rabbit_upgrade({add_ip_to_listener, []}).
+-rabbit_upgrade({internal_exchanges, []}).
 -rabbit_upgrade({user_to_internal_user, []}).
 
 %% -------------------------------------------------------------------
@@ -36,6 +37,7 @@
 -spec(remove_user_scope/0  :: () -> 'ok').
 -spec(hash_passwords/0     :: () -> 'ok').
 -spec(add_ip_to_listener/0 :: () -> 'ok').
+-spec(internal_exchanges/0 :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
 
 -endif.
@@ -72,6 +74,18 @@ add_ip_to_listener() ->
               {listener, Node, Protocol, Host, {0,0,0,0}, Port}
       end,
       [node, protocol, host, ip_address, port]).
+
+internal_exchanges() ->
+    Tables = [rabbit_exchange, rabbit_durable_exchange],
+    AddInternalFun =
+        fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
+                {exchange, Name, Type, Durable, AutoDelete, false, Args}
+        end,
+    [ ok = mnesia(T,
+                  AddInternalFun,
+                  [name, type, durable, auto_delete, internal, arguments])
+      || T <- Tables ],
+    ok.
 
 user_to_internal_user() ->
     mnesia(

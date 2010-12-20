@@ -57,7 +57,7 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, arguments}).
+-record(exchange, {name, type, durable, auto_delete, internal, arguments}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
                    arguments, pid}).
