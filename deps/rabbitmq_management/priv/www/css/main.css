@@ -90,7 +90,7 @@ table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; vertical-align: top; }
 table.form input[type=text] { width: 200px; }
 table.form select { width: 200px; }
-table.form select.narrow { width: 80px; }
+table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }
 table.form .multifield p { margin: 0; padding: 0; }
 
@@ -109,6 +109,8 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 table.bindings { margin-bottom: 2em; }
 td.binding-endpoint span.object { border: 2px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
 td.binding-endpoint span.arrow { font-size: 200%; }
+
+#no-password { display: none; }
 
 #scratch { display: none; }
 

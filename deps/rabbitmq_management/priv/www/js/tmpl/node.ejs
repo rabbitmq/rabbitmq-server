@@ -88,7 +88,7 @@
 </div>
 
 
-<div class="section">
+<div class="section-hidden">
 <h2>Applications</h2>
 <div class="hider updatable">
 <% if (node.running) { %>
@@ -113,5 +113,15 @@
 <% } else {%>
 <p>...node not running...</p>
 <% } %>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Registry</h2>
+<div class="hider updatable">
+<h3>Exchange Types</h3>
+<%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
+<h3>Authentication Mechanisms</h3>
+<%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
 </div>
 </div>

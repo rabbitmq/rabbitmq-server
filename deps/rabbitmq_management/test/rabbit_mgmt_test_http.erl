@@ -72,7 +72,9 @@ users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{password, <<"myuser">>},
+    http_put("/users/myuser", [{administrator, false}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password_hash,
+                                <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
                                {administrator, true}], ?NO_CONTENT),
@@ -458,8 +460,8 @@ permissions_amqp_test() ->
 
 get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(network, #amqp_params{
-                                        username = Username,
-                                        password = Password}),
+                                        username = list_to_binary(Username),
+                                        password = list_to_binary(Password)}),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     ConnPath = binary_to_list(
                  rabbit_mgmt_format:print(

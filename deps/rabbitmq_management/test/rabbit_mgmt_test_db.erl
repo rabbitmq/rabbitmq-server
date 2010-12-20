@@ -209,7 +209,7 @@ test_channel_aggregation(Conn, Chan) ->
                                [{publish, 100}], pget(publishes, Ch))
      end].
 
-test_exchange_aggregation(Conn, Chan) ->
+test_exchange_aggregation(_Conn, Chan) ->
     X1 = <<"exchange-aggregation">>,
     declare_exchange(Chan, X1),
     Q1 = declare_queue(Chan),
@@ -229,7 +229,7 @@ test_exchange_aggregation(Conn, Chan) ->
                                [{publish, 100}], pget(outgoing, X))
      end].
 
-test_queue_aggregation(Conn, Chan) ->
+test_queue_aggregation(_Conn, Chan) ->
     X1 = <<"queue-aggregation-1">>,
     X2 = <<"queue-aggregation-2">>,
     declare_exchange(Chan, X1),

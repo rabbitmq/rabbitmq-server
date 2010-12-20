@@ -48,6 +48,10 @@
  <th>SSL</th>
  <td><%= fmt_boolean(connection.ssl) %></td>
 </tr>
+<tr>
+ <th>Authentication</th>
+ <td><%= connection.auth_mechanism %></td>
+</tr>
 </table>
 
 <table class="facts">

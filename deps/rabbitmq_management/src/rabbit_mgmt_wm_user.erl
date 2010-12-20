@@ -17,7 +17,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, put_user/3, put_user_hashed/3]).
+         delete_resource/2, put_user/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -46,11 +46,11 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    User = rabbit_mgmt_util:id(user, ReqData),
-    rabbit_mgmt_util:with_decode(
-      [password, administrator], ReqData, Context,
-      fun([Password, IsAdmin]) ->
-              put_user(User, Password, IsAdmin),
+    Username = rabbit_mgmt_util:id(user, ReqData),
+    rabbit_mgmt_util:with_decode_opts(
+      [administrator], ReqData, Context,
+      fun(User) ->
+              put_user([{name, Username} | User]),
               {true, ReqData, Context}
       end).
 
@@ -67,31 +67,33 @@ is_authorized(ReqData, Context) ->
 user(ReqData) ->
     rabbit_access_control:lookup_user(rabbit_mgmt_util:id(user, ReqData)).
 
-put_user(User, Password, IsAdmin) ->
-    put_user0(
-      User, IsAdmin,
-      fun (User0) ->
-              rabbit_access_control:change_password(User0, Password)
-      end).
+put_user(User) ->
+    case {proplists:is_defined(password, User),
+          proplists:is_defined(password_hash, User)} of
+        {true, _} ->
+            Pass = proplists:get_value(password, User),
+            put_user(User, Pass, fun rabbit_access_control:change_password/2);
+        {_, true} ->
+            Hash = base64:decode(proplists:get_value(password_hash, User)),
+            put_user(User, Hash,
+                     fun rabbit_access_control:change_password_hash/2);
+        _ ->
+            put_user(User, <<>>,
+                     fun rabbit_access_control:change_password_hash/2)
+    end.
 
-put_user_hashed(User, PasswordHash64, IsAdmin) ->
-    PasswordHash = base64:decode(PasswordHash64),
-    put_user0(
-      User, IsAdmin,
-      fun (User0) ->
-              rabbit_access_control:change_password_hash(User0, PasswordHash)
-      end).
-
-put_user0(User, IsAdmin, PWFun) ->
-    case rabbit_access_control:lookup_user(User) of
+put_user(User, PWArg, PWFun) ->
+    Username = proplists:get_value(name, User),
+    IsAdmin = proplists:get_value(administrator, User),
+    case rabbit_access_control:lookup_user(Username) of
         {error, not_found} ->
             rabbit_access_control:add_user(
-              User, rabbit_guid:binstring_guid("tmp_"));
+              Username, rabbit_guid:binstring_guid("tmp_"));
         _ ->
             ok
     end,
-    PWFun(User),
+    PWFun(Username, PWArg),
     case rabbit_mgmt_util:parse_bool(IsAdmin) of
-        true  -> rabbit_access_control:set_admin(User);
-        false -> rabbit_access_control:clear_admin(User)
+        true  -> rabbit_access_control:set_admin(Username);
+        false -> rabbit_access_control:clear_admin(Username)
     end.

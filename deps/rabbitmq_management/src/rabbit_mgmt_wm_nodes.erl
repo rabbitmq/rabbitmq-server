@@ -54,16 +54,6 @@ all_nodes() ->
 make_entry(Node, Type, Running) ->
     [{name, Node}, {type, Type}, {running, Running}]
         ++ case Running of
-               true -> rabbit_mgmt_external_stats:info(Node) ++
-                           [{applications, applications(Node)}];
+               true -> rabbit_mgmt_external_stats:info(Node);
                _    -> []
            end.
-
-applications(Node) ->
-    case rpc:call(Node, application, which_applications, []) of
-        {badrpc, _Reason} -> [];
-        Applications      -> rabbit_mgmt_util:sort_list(
-                               [rabbit_mgmt_format:application(A) ||
-                                   A <- Applications],
-                               [], "name", false)
-    end.
