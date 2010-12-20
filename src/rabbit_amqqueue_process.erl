@@ -79,7 +79,8 @@
              unsent_message_count}).
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [name,
+         pid,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -91,8 +92,7 @@
         ]).
 
 -define(CREATION_EVENT_KEYS,
-        [pid,
-         name,
+        [name,
          durable,
          auto_delete,
          arguments,
@@ -199,9 +199,9 @@ terminate_shutdown(Fun, State) ->
                                           BQ:tx_rollback(Txn, BQSN),
                                       BQSN1
                               end, BQS, all_ch_record()),
-                     [emit_consumer_deleted(Ch, CTag)
+                     [emit_consumer_deleted(Ch, CTag, State1)
                       || {Ch, CTag, _} <- consumers(State1)],
-                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
+                     rabbit_event:notify(queue_deleted, infos([name], State)),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
@@ -537,9 +537,9 @@ remove_consumer(ChPid, ConsumerTag, Queue) ->
                          (CP /= ChPid) or (CT /= ConsumerTag)
                  end, Queue).
 
-remove_consumers(ChPid, Queue) ->
+remove_consumers(ChPid, Queue, State) ->
     {Kept, Removed} = split_by_channel(ChPid, Queue),
-    [emit_consumer_deleted(Ch, CTag) ||
+    [emit_consumer_deleted(Ch, CTag, State) ||
         {Ch, #consumer{tag = CTag}} <- queue:to_list(Removed)],
     Kept.
 
@@ -587,9 +587,11 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                                                 Other      -> Other
                                             end,
                        active_consumers = remove_consumers(
-                                            ChPid, State#q.active_consumers),
+                                            ChPid, State#q.active_consumers,
+                                            State),
                        blocked_consumers = remove_consumers(
-                                             ChPid, State#q.blocked_consumers)},
+                                             ChPid, State#q.blocked_consumers,
+                                             State)},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
                 false -> State2 = case Txn of
@@ -744,19 +746,19 @@ emit_stats(State) ->
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
-emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired, State) ->
     rabbit_event:notify(consumer_created,
                         [{consumer_tag, ConsumerTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
                          {channel,      ChPid},
-                         {queue,        self()}]).
+                         {queue,        i(name, State)}]).
 
-emit_consumer_deleted(ChPid, ConsumerTag) ->
+emit_consumer_deleted(ChPid, ConsumerTag, State) ->
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
-                         {queue,        self()}]).
+                         {queue,        i(name, State)}]).
 
 %---------------------------------------------------------------------------
 
@@ -925,7 +927,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                                    State1#q.active_consumers)})
                 end,
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  not NoAck),
+                                  not NoAck, State2),
             reply(ok, State2)
     end;
 
@@ -944,7 +946,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                        C1#cr{limiter_pid = undefined};
                   _ -> C1
               end),
-            emit_consumer_deleted(ChPid, ConsumerTag),
+            emit_consumer_deleted(ChPid, ConsumerTag, State),
             ok = maybe_send_reply(ChPid, OkMsg),
             NewState =
                 State#q{exclusive_consumer = cancel_holder(ChPid,
