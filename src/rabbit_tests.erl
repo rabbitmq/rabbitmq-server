@@ -96,6 +96,22 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
 
+    %% we now run the tests remotely, so that code coverage on the
+    %% local node picks up more of the delegate
+    Node = node(),
+    Self = self(),
+    Remote = spawn(SecondaryNode,
+                   fun () -> A = test_delegates_async(Node),
+                             B = test_delegates_sync(Node),
+                             Self ! {self(), {A, B}}
+                   end),
+    receive
+        {Remote, Result} ->
+            Result = {passed, passed}
+    after 2000 ->
+            throw(timeout)
+    end,
+
     passed.
 
 test_priority_queue() ->
