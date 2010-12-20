@@ -1016,8 +1016,8 @@ handle_cast({ack, Txn, AckTags, ChPid},
                 case Txn of
                     none -> ChAckTags1 = subtract_acks(ChAckTags, AckTags),
                             NewC = C#cr{acktags = ChAckTags1},
-                            NewState = ack_by_acktags(AckTags, State),
-                            {NewC, NewState};
+                            {_AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
+                            {NewC, State#q{backing_queue_state = BQS1}};
                     _    -> BQS1 = BQ:tx_ack(Txn, AckTags, BQS),
                             {C#cr{txn = Txn},
                              State#q{backing_queue_state = BQS1}}

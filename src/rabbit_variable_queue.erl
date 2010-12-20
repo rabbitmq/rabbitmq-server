@@ -656,11 +656,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 ack(AckTags, State) ->
     {Guids, State1} =
         ack(fun msg_store_remove/3,
-            fun ({_IsPersistent, Guid, _MsgProps}, State1) ->
-                    remove_confirms(gb_sets:singleton(Guid), State1);
-                (#msg_status{msg = #basic_message { guid = Guid }}, State1) ->
-                    remove_confirms(gb_sets:singleton(Guid), State1)
-            end,
+            fun (_, State0) -> State0 end,
             AckTags, State),
     {Guids, a(State1)}.
 
