@@ -198,59 +198,6 @@ if_unknown(Val,    _Def) -> Val.
 
 %%----------------------------------------------------------------------------
 
-augment(Items, Funs, Tables) ->
-    Augmented = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs],
-    [{K, V} || {K, V} <- Augmented, V =/= unknown].
-
-augment(K, Items, Fun, Tables) ->
-    Key = details_key(K),
-    case pget(K, Items) of
-        none    -> {Key, unknown};
-        unknown -> {Key, unknown};
-        Id      -> {Key, Fun(Id, Tables)}
-    end.
-
-augment_channel_pid(Pid, Tables) ->
-    Ch = lookup_element(orddict:fetch(channel_stats, Tables),
-                        {Pid, create}),
-    Conn = lookup_element(orddict:fetch(connection_stats, Tables),
-                          {pget(connection, Ch), create}),
-    [{name,            pget(name,   Ch)},
-     {number,          pget(number, Ch)},
-     {connection_name, pget(name,         Conn)},
-     {peer_address,    pget(peer_address, Conn)},
-     {peer_port,       pget(peer_port,    Conn)}].
-
-augment_connection_pid(Pid, Tables) ->
-    Conn = lookup_element(orddict:fetch(connection_stats, Tables),
-                          {Pid, create}),
-    [{name,         pget(name,         Conn)},
-     {peer_address, pget(peer_address, Conn)},
-     {peer_port,    pget(peer_port,    Conn)}].
-
-augment_queue_pid(Pid, _Tables) ->
-    %% TODO This should be in rabbit_amqqueue?
-    case mnesia:dirty_match_object(
-           rabbit_queue,
-           #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}) of
-        [Q] -> Name = Q#amqqueue.name,
-               [{name,  Name#resource.name},
-                {vhost, Name#resource.virtual_host}];
-        []  -> [] %% Queue went away before we could get its details.
-    end.
-
-augment_msg_stats_fun(Tables) ->
-    Funs = [{connection, fun augment_connection_pid/2},
-            {channel,    fun augment_channel_pid/2},
-            {queue,      fun augment_queue_pid/2},
-            {owner_pid,  fun augment_connection_pid/2}],
-    fun (Props) -> augment(Props, Funs, Tables) end.
-
-augment_msg_stats(Props, Tables) ->
-    (augment_msg_stats_fun(Tables))(Props) ++ Props.
-
-%%----------------------------------------------------------------------------
-
 init([]) ->
     {ok, #state{tables = orddict:from_list(
                            [{Key, ets:new(anon, [private])} ||
@@ -517,6 +464,8 @@ format_id({ChPid, QPid, #resource{name=XName, virtual_host=XVhost}}) ->
     [{channel, ChPid}, {queue, QPid},
      {exchange, [{name, XName}, {vhost, XVhost}]}].
 
+%%----------------------------------------------------------------------------
+
 merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
      || Obj <- Objs].
@@ -584,6 +533,59 @@ maybe_zero_rate({Key, Val}) ->
 is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
+
+%%----------------------------------------------------------------------------
+
+augment_msg_stats(Props, Tables) ->
+    (augment_msg_stats_fun(Tables))(Props) ++ Props.
+
+augment_msg_stats_fun(Tables) ->
+    Funs = [{connection, fun augment_connection_pid/2},
+            {channel,    fun augment_channel_pid/2},
+            {queue,      fun augment_queue_pid/2},
+            {owner_pid,  fun augment_connection_pid/2}],
+    fun (Props) -> augment(Props, Funs, Tables) end.
+
+augment(Items, Funs, Tables) ->
+    Augmented = [augment(K, Items, Fun, Tables) || {K, Fun} <- Funs],
+    [{K, V} || {K, V} <- Augmented, V =/= unknown].
+
+augment(K, Items, Fun, Tables) ->
+    Key = details_key(K),
+    case pget(K, Items) of
+        none    -> {Key, unknown};
+        unknown -> {Key, unknown};
+        Id      -> {Key, Fun(Id, Tables)}
+    end.
+
+augment_channel_pid(Pid, Tables) ->
+    Ch = lookup_element(orddict:fetch(channel_stats, Tables),
+                        {Pid, create}),
+    Conn = lookup_element(orddict:fetch(connection_stats, Tables),
+                          {pget(connection, Ch), create}),
+    [{name,            pget(name,   Ch)},
+     {number,          pget(number, Ch)},
+     {connection_name, pget(name,         Conn)},
+     {peer_address,    pget(peer_address, Conn)},
+     {peer_port,       pget(peer_port,    Conn)}].
+
+augment_connection_pid(Pid, Tables) ->
+    Conn = lookup_element(orddict:fetch(connection_stats, Tables),
+                          {Pid, create}),
+    [{name,         pget(name,         Conn)},
+     {peer_address, pget(peer_address, Conn)},
+     {peer_port,    pget(peer_port,    Conn)}].
+
+augment_queue_pid(Pid, _Tables) ->
+    %% TODO This should be in rabbit_amqqueue?
+    case mnesia:dirty_match_object(
+           rabbit_queue,
+           #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}) of
+        [Q] -> Name = Q#amqqueue.name,
+               [{name,  Name#resource.name},
+                {vhost, Name#resource.virtual_host}];
+        []  -> [] %% Queue went away before we could get its details.
+    end.
 
 %%----------------------------------------------------------------------------
 
