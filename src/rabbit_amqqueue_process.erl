@@ -455,11 +455,6 @@ record_confirm_message(#delivery{sender     = ChPid,
 record_confirm_message(_Delivery, State) ->
     State.
 
-ack_by_acktags(AckTags, State = #q{backing_queue       = BQ,
-                                   backing_queue_state = BQS}) ->
-    {AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
-    confirm_messages(AckdGuids, State#q{backing_queue_state = BQS1}).
-
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
             fun deliver_from_queue_deliver/3},
@@ -1026,7 +1021,9 @@ handle_cast({ack, Txn, AckTags, ChPid},
             noreply(State1)
     end;
 
-handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
+handle_cast({reject, AckTags, Requeue, ChPid},
+            State = #q{backing_queue       = BQ,
+                       backing_queue_state = BQS}) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
@@ -1035,7 +1032,8 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
             maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> ack_by_acktags(AckTags, State)
+                        false -> {_AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
+                                 State#q{backing_queue_state = BQS1}
                     end)
     end;
 
