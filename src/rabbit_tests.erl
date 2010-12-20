@@ -1258,10 +1258,11 @@ test_delegates_sync(SecondaryNode) ->
     Bad = lists:usort(BadResPids),
 
     MagicalPids = [rabbit_misc:string_to_pid(Str) ||
-                      Str <- ["<nonode.1.0>", "<nonode.2.0>"]],
+                      Str <- ["<nonode@nohost.1.0>", "<nonode@nohost.2.0>"]],
     {[], BadNodes} = delegate:invoke(MagicalPids, Sender),
-    true = lists:all(fun ({_, {exit, {nodedown, nonode}, []}}) -> true end,
-                     BadNodes),
+    true = lists:all(
+             fun ({_, {exit, {nodedown, nonode@nohost}, _Stack}}) -> true end,
+             BadNodes),
     BadNodesPids = [Pid || {Pid, _} <- BadNodes],
 
     Magical = lists:usort(MagicalPids),
