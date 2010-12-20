@@ -230,12 +230,14 @@ augment_connection_pid(Pid, Tables) ->
 
 augment_queue_pid(Pid, _Tables) ->
     %% TODO This should be in rabbit_amqqueue?
-    [Q] = mnesia:dirty_match_object(
-            rabbit_queue,
-            #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}),
-    Name = Q#amqqueue.name,
-    [{name,  Name#resource.name},
-     {vhost, Name#resource.virtual_host}].
+    case mnesia:dirty_match_object(
+           rabbit_queue,
+           #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}) of
+        [Q] -> Name = Q#amqqueue.name,
+               [{name,  Name#resource.name},
+                {vhost, Name#resource.virtual_host}];
+        []  -> [] %% Queue went away before we could get its details.
+    end.
 
 augment_msg_stats_fun(Tables) ->
     Funs = [{connection, fun augment_connection_pid/2},
