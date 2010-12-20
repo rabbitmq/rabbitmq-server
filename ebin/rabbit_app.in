@@ -32,8 +32,4 @@
          {server_properties, []},
          {collect_statistics, none},
          {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
-         {delegate_count, 16}
-        ]
-  }
- ]
-}.
+         {delegate_count, 16}]}]}.

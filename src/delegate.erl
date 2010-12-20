@@ -82,24 +82,20 @@ invoke(Pids, Fun) when is_list(Pids) ->
     %% the sending. Thus calls can't overtake preceding calls/casts.
     {Replies, BadNodes} =
         case orddict:fetch_keys(Grouped) of
-            [] ->
-                {[], []};
-            RemoteNodes ->
-                gen_server2:multi_call(
-                  RemoteNodes, delegate(), {invoke, Fun, Grouped}, infinity)
+            []          -> {[], []};
+            RemoteNodes -> gen_server2:multi_call(RemoteNodes, delegate(),
+                                                  {invoke, Fun, Grouped},
+                                                  infinity)
         end,
-    BadPids = lists:foldl(
-                fun (BadNode, Acc) ->
-                        [{Pid, {exit, badnode, []}} ||
-                            Pid <- orddict:fetch(BadNode, Grouped)] ++ Acc
-                end, [], BadNodes),
+    BadPids = [{Pid, {exit, badnode, []}} ||
+                  BadNode <- BadNodes,
+                  Pid     <- orddict:fetch(BadNode, Grouped)],
     ResultsNoNode = lists:append([safe_invoke(LocalPids, Fun) |
                                   [Results || {_Node, Results} <- Replies]]),
-    lists:foldl(fun ({ok, Pid, Result},   {Good, Bad}) ->
-                        {[{Pid, Result} | Good], Bad};
-                    ({error, Pid, Error}, {Good, Bad})  ->
-                        {Good, [{Pid, Error} | Bad]}
-                end, {[], BadPids}, ResultsNoNode).
+    lists:foldl(
+      fun ({ok,    Pid, Result}, {Good, Bad}) -> {[{Pid, Result} | Good], Bad};
+          ({error, Pid, Error},  {Good, Bad}) -> {Good, [{Pid, Error} | Bad]}
+      end, {[], BadPids}, ResultsNoNode).
 
 invoke_no_result(Pid, Fun) when is_pid(Pid) andalso node(Pid) =:= node() ->
     safe_invoke(Pid, Fun), %% we don't care about any error
@@ -111,8 +107,8 @@ invoke_no_result(Pids, Fun) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     case orddict:fetch_keys(Grouped) of
         []          -> ok;
-        RemoteNodes -> gen_server2:abcast(
-                         RemoteNodes, delegate(), {invoke, Fun, Grouped})
+        RemoteNodes -> gen_server2:abcast(RemoteNodes, delegate(),
+                                          {invoke, Fun, Grouped})
     end,
     safe_invoke(LocalPids, Fun), %% must not die
     ok.
@@ -139,12 +135,11 @@ delegate_name(Hash) ->
 
 delegate() ->
     case get(delegate) of
-        undefined ->
-            Name = delegate_name(erlang:phash2(self(), delegate_count())),
-            put(delegate, Name),
-            Name;
-        Name ->
-            Name
+        undefined -> Name = delegate_name(
+                              erlang:phash2(self(), delegate_count())),
+                     put(delegate, Name),
+                     Name;
+        Name      -> Name
     end.
 
 safe_invoke(Pids, Fun) when is_list(Pids) ->
@@ -152,8 +147,7 @@ safe_invoke(Pids, Fun) when is_list(Pids) ->
 safe_invoke(Pid, Fun) when is_pid(Pid) ->
     try
         {ok, Pid, Fun(Pid)}
-    catch
-        Class:Reason ->
+    catch Class:Reason ->
             {error, Pid, {Class, Reason, erlang:get_stacktrace()}}
     end.
 
