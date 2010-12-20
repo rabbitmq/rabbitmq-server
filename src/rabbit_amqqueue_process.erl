@@ -878,7 +878,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                                                sets:add_element(AckTag,
                                                                 ChAckTags)}),
                              State2;
-                    false -> confirm_message(Message, State2)
+                    false -> State2
                 end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
             reply({ok, Remaining, Msg}, State3)
