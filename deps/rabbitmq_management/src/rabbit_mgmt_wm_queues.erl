@@ -15,7 +15,7 @@
 -module(rabbit_mgmt_wm_queues).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2, queues/1]).
+         resource_exists/2, queues/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -29,13 +29,13 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case queues0(ReqData) of
+    {case queues0(ReqData, Context) of
          vhost_not_found -> false;
          _               -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Qs = rabbit_mgmt_db:get_queues(queues(ReqData)),
+    Qs = rabbit_mgmt_db:get_queues(queues(ReqData, Context)),
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_util:filter_vhost(Qs, ReqData, Context),
       ReqData, Context).
@@ -45,8 +45,9 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-queues(ReqData) ->
-    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)].
+queues(ReqData, Context) ->
+    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData, Context)].
 
-queues0(ReqData) ->
-    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).
+queues0(ReqData, Context) ->
+    rabbit_mgmt_util:all_or_one_vhost(ReqData, Context,
+                                      fun rabbit_amqqueue:list/1).

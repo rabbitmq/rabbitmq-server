@@ -28,12 +28,8 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{username = Username,
-                                    is_admin = IsAdmin}) ->
-    VHosts = case IsAdmin of
-                 true  -> vhosts();
-                 false -> format(rabbit_mgmt_util:vhosts(Username))
-             end,
+to_json(ReqData, Context = #context{user = User}) ->
+    VHosts = format(rabbit_access_control:list_vhosts(User, read)),
     rabbit_mgmt_util:reply_list(VHosts, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
@@ -41,6 +37,7 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
+%% This is used by export config and so should list all in Mnesia
 vhosts() ->
     format(rabbit_access_control:list_vhosts()).
 

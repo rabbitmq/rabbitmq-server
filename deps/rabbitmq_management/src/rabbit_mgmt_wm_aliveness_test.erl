@@ -37,7 +37,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Params = #amqp_params{username = Context#context.username,
+    Params = #amqp_params{username = Context#context.user#user.username,
                           password = Context#context.password,
                           virtual_host = rabbit_mgmt_util:vhost(ReqData)},
     %% TODO use network connection (need to check what we're bound to)
