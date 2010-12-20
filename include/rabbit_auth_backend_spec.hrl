@@ -36,7 +36,7 @@
 
 -spec(check_user_login/2 :: (rabbit_access_control:username(), [term()]) ->
                                  {'ok', rabbit_types:user()} |
-                                 {'refused', rabbit_access_control:username()} |
+                                 {'refused', string(), [any()]} |
                                  {'error', any()}).
 -spec(check_vhost_access/3 :: (rabbit_types:user(), rabbit_types:vhost(),
                                vhost_permission_atom()) ->
