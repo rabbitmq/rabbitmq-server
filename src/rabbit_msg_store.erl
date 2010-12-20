@@ -875,7 +875,7 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
        true                            -> file_handle_cache:sync(CurHdl)
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    [client_confirm(CRef, Guids, State1) || {CRef, Guids} <- CGs],
+    %%[client_confirm(CRef, Guids, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
 

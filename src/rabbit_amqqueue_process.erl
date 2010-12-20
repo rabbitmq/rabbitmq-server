@@ -840,10 +840,7 @@ handle_call({deliver_immediately, Delivery = #delivery{message = Message}},
     %%
     {Delivered, State1} =
         attempt_delivery(Delivery, record_confirm_message(Delivery, State)),
-    reply(Delivered, case Delivered of
-                         true  -> State1;
-                         false -> confirm_message(Message, State1)
-                     end);
+    reply(Delivered, State1);
 
 handle_call({deliver, Delivery}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
