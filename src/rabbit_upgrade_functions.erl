@@ -36,7 +36,7 @@
 -spec(remove_user_scope/0  :: () -> 'ok').
 -spec(hash_passwords/0     :: () -> 'ok').
 -spec(add_ip_to_listener/0 :: () -> 'ok').
--spec(add_internal_to_exchange_and_durable_exchange/0 :: () -> 'ok').
+-spec(internal_exchanges/0 :: () -> 'ok').
 
 -endif.
 
@@ -73,7 +73,7 @@ add_ip_to_listener() ->
       end,
       [node, protocol, host, ip_address, port]).
 
-add_internal_to_exchange_and_durable_exchange() ->
+internal_exchanges() ->
     Tables = [rabbit_exchange, rabbit_durable_exchange],
     AddInternalFun =
         fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
