@@ -26,7 +26,7 @@
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/4]).
+-export([promote_backing_queue_state/5]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -36,7 +36,8 @@
                  coordinator,
                  backing_queue,
                  backing_queue_state,
-                 set_delivered
+                 set_delivered,
+                 seen
                }).
 
 %% ---------------------------------------------------------------------------
@@ -64,14 +65,16 @@ init(#amqqueue { arguments = Args } = Q, Recover) ->
              coordinator         = CPid,
              backing_queue       = BQ,
              backing_queue_state = BQS,
-             set_delivered       = 0 }.
+             set_delivered       = 0,
+             seen                = sets:new() }.
 
-promote_backing_queue_state(CPid, BQ, BQS, GM) ->
+promote_backing_queue_state(CPid, BQ, BQS, GM, Seen) ->
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
              backing_queue_state = BQS,
-             set_delivered       = BQ:len(BQS) }.
+             set_delivered       = BQ:len(BQS),
+             seen                = Seen }.
 
 terminate(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
@@ -94,22 +97,31 @@ purge(State = #state { gm                  = GM,
     {Count, State #state { backing_queue_state = BQS1,
                            set_delivered       = 0 }}.
 
-publish(Msg = #basic_message { guid = Guid },
-        MsgProps, ChPid, State = #state { gm                  = GM,
-                                          backing_queue       = BQ,
-                                          backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {publish, false, Guid, MsgProps, ChPid}),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
-    State #state { backing_queue_state = BQS1 }.
+publish(Msg = #basic_message { guid = Guid }, MsgProps, ChPid,
+        State = #state { gm                  = GM,
+                         backing_queue       = BQ,
+                         backing_queue_state = BQS,
+                         seen                = Seen }) ->
+    case sets:is_element(Guid, Seen) of
+        true  -> State #state { seen = sets:del_element(Guid, Seen) };
+        false -> ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg}),
+                 BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+                 State #state { backing_queue_state = BQS1 }
+    end.
 
-publish_delivered(AckRequired, Msg = #basic_message { guid = Guid },
-                  MsgProps, ChPid,
-                  State = #state { gm                  = GM,
-                                   backing_queue       = BQ,
-                                   backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {publish, {true, AckRequired}, Guid, MsgProps, ChPid}),
-    {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
-    {AckTag, State #state { backing_queue_state = BQS1 }}.
+publish_delivered(AckRequired, Msg = #basic_message { guid = Guid }, MsgProps,
+                  ChPid, State = #state { gm                  = GM,
+                                          backing_queue       = BQ,
+                                          backing_queue_state = BQS,
+                                          seen                = Seen }) ->
+    case sets:is_element(Guid, Seen) of
+        true  -> State #state { seen = sets:del_element(Guid, Seen) };
+        false -> ok = gm:broadcast(GM, {publish, {true, AckRequired}, ChPid,
+                                        MsgProps, Msg}),
+                 {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg,
+                                                       MsgProps, ChPid, BQS),
+                 {AckTag, State #state { backing_queue_state = BQS1 }}
+    end.
 
 dropwhile(Fun, State = #state { gm                  = GM,
                                 backing_queue       = BQ,
@@ -126,7 +138,8 @@ dropwhile(Fun, State = #state { gm                  = GM,
 fetch(AckRequired, State = #state { gm                  = GM,
                                     backing_queue       = BQ,
                                     backing_queue_state = BQS,
-                                    set_delivered       = SetDelivered }) ->
+                                    set_delivered       = SetDelivered,
+                                    seen                = Seen }) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     case Result of
@@ -137,8 +150,13 @@ fetch(AckRequired, State = #state { gm                  = GM,
             ok = gm:broadcast(GM, {fetch, AckRequired, Guid, Remaining}),
             IsDelivered1 = IsDelivered orelse SetDelivered > 0,
             SetDelivered1 = lists:max([0, SetDelivered - 1]),
+            Seen1 = case SetDelivered + SetDelivered1 of
+                        1 -> sets:new(); %% transition to empty
+                        _ -> Seen
+                    end,
             {{Message, IsDelivered1, AckTag, Remaining},
-             State1 #state { set_delivered = SetDelivered1 }}
+             State1 #state { set_delivered = SetDelivered1,
+                             seen          = Seen1 }}
     end.
 
 ack(AckTags, State = #state { gm                  = GM,
