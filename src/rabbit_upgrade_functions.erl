@@ -27,7 +27,7 @@
 -rabbit_upgrade({remove_user_scope,  []}).
 -rabbit_upgrade({hash_passwords,     []}).
 -rabbit_upgrade({add_ip_to_listener, []}).
--rabbit_upgrade({add_internal_to_exchange_and_durable_exchange, []}).
+-rabbit_upgrade({internal_exchanges, []}).
 
 %% -------------------------------------------------------------------
 
