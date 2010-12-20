@@ -503,15 +503,13 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_delegate_call_ok(F, Pids) ->
-    {_, Bad} = delegate:invoke(Pids,
-                               fun (Pid) ->
+    case delegate:invoke(Pids, fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
                                          fun () -> ok end,
                                          fun () -> F(Pid) end)
-                               end),
-    case Bad of
-        [] -> ok;
-        _  -> {error, Bad}
+                               end) of
+        {_,  []} -> ok;
+        {_, Bad} -> {error, Bad}
     end.
 
 delegate_call(Pid, Msg, Timeout) ->
