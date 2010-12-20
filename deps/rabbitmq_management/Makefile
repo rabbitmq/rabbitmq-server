@@ -4,7 +4,7 @@ DEPS=rabbitmq-mochiweb rabbitmq-server rabbitmq-erlang-client rabbitmq-managemen
 INTERNAL_DEPS=webmachine
 RUNTIME_DEPS=webmachine
 
-TEST_APPS=crypto inets mochiweb rabbit_mochiweb webmachine rabbit_management_agent amqp_client rabbit_management
+TEST_APPS=inets mochiweb rabbit_mochiweb webmachine rabbit_management_agent amqp_client rabbit_management
 TEST_ARGS=-rabbit_mochiweb port 55672
 START_RABBIT_IN_TESTS=true
 TEST_COMMANDS=rabbit_mgmt_test_all:all_tests()
