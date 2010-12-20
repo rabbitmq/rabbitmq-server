@@ -57,8 +57,12 @@ init(#amqqueue { arguments = Args } = Q, Recover) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, undefined),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     {_Type, Nodes} = rabbit_misc:table_lookup(Args, <<"x-mirror">>),
-    [rabbit_mirror_queue_coordinator:add_slave(CPid, binary_to_atom(Node, utf8))
-     || {longstr, Node} <- Nodes],
+    Nodes1 = case Nodes of
+                 [] -> nodes();
+                 _  -> [list_to_atom(binary_to_list(Node)) ||
+                           {longstr, Node} <- Nodes]
+             end,
+    [rabbit_mirror_queue_coordinator:add_slave(CPid, Node) || Node <- Nodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover),
     #state { gm                  = GM,
