@@ -26,7 +26,7 @@ plain(none, _, init) ->
     {<<"PLAIN">>, []};
 plain(none, #amqp_params{username = Username,
                          password = Password}, _State) ->
-    {<<Username/binary, 0, Password/binary, 0>>, _State}.
+    {<<0, Username/binary, 0, Password/binary>>, _State}.
 
 amqplain(none, _, init) ->
     {<<"AMQPLAIN">>, []};
