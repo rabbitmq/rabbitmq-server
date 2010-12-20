@@ -38,7 +38,7 @@ index ff49c06..6ae812c 100755
      eunit:test(Modules, [verbose,{report,{eunit_surefire,[{dir,"../_test"}]}}]),
      analyze_cover(Modules);
 diff --git a/src/mochitemp.erl b/src/mochitemp.erl
-index bb23d2a..dc085f4 100644
+index bb23d2a..22e34bc 100644
 --- a/src/mochitemp.erl
 +++ b/src/mochitemp.erl
 @@ -1,7 +1,7 @@
@@ -50,23 +50,15 @@ index bb23d2a..dc085f4 100644
  
  -module(mochitemp).
  -export([gettempdir/0]).
-@@ -84,13 +84,13 @@ rngpath_fun(Prefix, Suffix, Dir) ->
- rngchars(0) ->
-     "";
- rngchars(N) ->
--    [rngchar() | rngchars(N - 1)].
-+    [rngchar() | rngchars(N)].
+@@ -87,7 +87,7 @@ rngchars(N) ->
+     [rngchar() | rngchars(N - 1)].
  
  rngchar() ->
 -    rngchar(crypto:rand_uniform(0, tuple_size(?SAFE_CHARS))).
-+    rngchar(random:uniform(tuple_size(?SAFE_CHARS))).
++    rngchar(mochiweb_util:rand_uniform(0, tuple_size(?SAFE_CHARS))).
  
  rngchar(C) ->
--    element(1 + C, ?SAFE_CHARS).
-+    element(C, ?SAFE_CHARS).
- 
- %% @spec gettempdir() -> string()
- %% @doc Get a usable temporary directory using the first of these that is a directory:
+     element(1 + C, ?SAFE_CHARS).
 @@ -176,7 +176,6 @@ gettempdir_cwd_test() ->
      ok.
  
@@ -110,7 +102,7 @@ index 5664003..a28cde3 100644
 -  {applications, [kernel, stdlib, crypto, inets]}]}.
 +  {applications, [kernel, stdlib, inets]}]}.
 diff --git a/src/mochiweb.erl b/src/mochiweb.erl
-index 3118028..eee69e8 100644
+index 3118028..6302b41 100644
 --- a/src/mochiweb.erl
 +++ b/src/mochiweb.erl
 @@ -13,15 +13,12 @@
@@ -152,12 +144,12 @@ index 3118028..eee69e8 100644
      TestReqs = [begin
                      Path = "/stuff/" ++ integer_to_list(N),
 -                    Body = crypto:rand_bytes(Size),
-+                    Body = list_to_binary(mochiweb_util:rand_list(Size)),
++                    Body = mochiweb_util:rand_bytes(Size)),
                      #treq{path=Path, body=Body, xreply=Body}
                  end || N <- lists:seq(1, Times)],
      ClientFun = new_client_fun('POST', TestReqs),
 diff --git a/src/mochiweb_multipart.erl b/src/mochiweb_multipart.erl
-index 3069cf4..f7dc08e 100644
+index 3069cf4..28e7e8d 100644
 --- a/src/mochiweb_multipart.erl
 +++ b/src/mochiweb_multipart.erl
 @@ -38,7 +38,7 @@ parts_to_body([{Start, End, Body}], ContentType, Size) ->
@@ -165,12 +157,12 @@ index 3069cf4..f7dc08e 100644
  parts_to_body(BodyList, ContentType, Size) when is_list(BodyList) ->
      parts_to_multipart_body(BodyList, ContentType, Size,
 -                            mochihex:to_hex(crypto:rand_bytes(8))).
-+                            mochiweb_util:rand_list(70)).
++                            mochihex:to_hex(mochiweb_util:rand_bytes(8))).
  
  %% @spec parts_to_multipart_body([bodypart()], ContentType::string(),
  %%                               Size::integer(), Boundary::string()) ->
 diff --git a/src/mochiweb_util.erl b/src/mochiweb_util.erl
-index d1cc59d..abdc316 100644
+index d1cc59d..b633d26 100644
 --- a/src/mochiweb_util.erl
 +++ b/src/mochiweb_util.erl
 @@ -13,7 +13,7 @@
@@ -178,16 +170,19 @@ index d1cc59d..abdc316 100644
  -export([safe_relative_path/1, partition/2]).
  -export([parse_qvalues/1, pick_accepted_encodings/3]).
 --export([make_io/1]).
-+-export([make_io/1, rand_list/1]).
++-export([make_io/1, rand_bytes/1, rand_uniform/2]).
  
  -define(PERCENT, 37).  % $\%
  -define(FULLSTOP, 46). % $\.
-@@ -545,6 +545,9 @@ make_io(Integer) when is_integer(Integer) ->
+@@ -545,6 +545,12 @@ make_io(Integer) when is_integer(Integer) ->
  make_io(Io) when is_list(Io); is_binary(Io) ->
      Io.
  
-+rand_list(Count) ->
-+    [96 + random:uniform(26) || _ <- lists:seq(1, Count)].
++rand_bytes(Count) ->
++    list_to_binary([rand_uniform(0, 16#FF + 1) || _ <- lists:seq(1, Count)]).
++
++rand_uniform(Lo, Hi) ->
++    random:uniform(Hi - Lo) - Lo - 1.
 +
  %%
  %% Tests
