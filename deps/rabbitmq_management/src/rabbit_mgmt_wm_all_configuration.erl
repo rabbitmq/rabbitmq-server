@@ -212,7 +212,7 @@ add_queue(Queue) ->
 
 add_exchange(Exchange) ->
     Internal = case pget(internal, Exchange) of
-                   undefined -> false; %% =< 2.1.1
+                   undefined -> false; %% =< 2.2.0
                    I         -> I
                end,
     rabbit_exchange:declare(r(exchange,                           Exchange),
