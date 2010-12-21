@@ -589,19 +589,19 @@ sort_field_table(Arguments) ->
 pid_to_string(Pid) when is_pid(Pid) ->
     %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
     %% 8.7)
-    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,_Cre:8>>
+    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).
+    lists:flatten(io_lib:format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser])).
 
 %% inverse of above
 string_to_pid(Str) ->
     Err = {error, {invalid_pid_syntax, Str}},
     %% The \ before the trailing $ is only there to keep emacs
     %% font-lock from getting confused.
-    case re:run(Str, "^<(.*)\\.([0-9]+)\\.([0-9]+)>\$",
+    case re:run(Str, "^<(.*)\\.(\\d+)\\.(\\d+)\\.(\\d+)>\$",
                 [{capture,all_but_first,list}]) of
-        {match, [NodeStr, IdStr, SerStr]} ->
+        {match, [NodeStr, CreStr, IdStr, SerStr]} ->
             %% the NodeStr atom might be quoted, so we have to parse
             %% it rather than doing a simple list_to_atom
             NodeAtom = case erl_scan:string(NodeStr) of
@@ -609,9 +609,9 @@ string_to_pid(Str) ->
                            {error, _, _} -> throw(Err)
                        end,
             <<131,NodeEnc/binary>> = term_to_binary(NodeAtom),
-            Id = list_to_integer(IdStr),
-            Ser = list_to_integer(SerStr),
-            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
+            [Cre, Id, Ser] = lists:map(fun list_to_integer/1,
+                                       [CreStr, IdStr, SerStr]),
+            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>);
         nomatch ->
             throw(Err)
     end.
