@@ -521,7 +521,9 @@ publish(Msg, MsgProps, State) ->
     {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
     a(reduce_memory_use(State1)).
 
-publish_delivered(false, _Msg, _MsgProps, State = #vqstate { len = 0 }) ->
+publish_delivered(false, #basic_message { guid = Guid },
+                  _MsgProps, State = #vqstate { len = 0 }) ->
+    blind_confirm(self(), gb_sets:singleton(Guid)),
     {blank_ack, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
@@ -1394,14 +1396,15 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
 msgs_confirmed(GuidSet, State) ->
     {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
 
-msgs_written_to_disk(QPid, GuidSet, false) ->
+blind_confirm(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (State) ->
                     msgs_confirmed(GuidSet, State)
-            end);
+            end).
+
+msgs_written_to_disk(QPid, GuidSet, false) ->
+    blind_confirm(QPid, GuidSet);
 msgs_written_to_disk(QPid, GuidSet, true) ->
-    %%io:format("variable queue notified of msgs written to disk: ~p~n",
-    %%          [gb_sets:size(GuidSet)]),
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
                                     msg_indices_on_disk = MIOD,
@@ -1414,8 +1417,6 @@ msgs_written_to_disk(QPid, GuidSet, true) ->
             end).
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
-    %%io:format("variable queue notified of msg idx written to disk: ~p~n",
-    %%          [gb_sets:size(GuidSet)]),
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
                                     msg_indices_on_disk = MIOD,

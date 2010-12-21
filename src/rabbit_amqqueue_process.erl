@@ -378,8 +378,9 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                         case AckRequired of
                             true  -> {State1,
                                       sets:add_element(AckTag, ChAckTags)};
-                            false -> {confirm_message(Message, State1),
-                                      ChAckTags}
+                            false -> {State1, ChAckTags}
+                                     %%{confirm_message(Message, State1),
+                                     %% ChAckTags}
                         end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
@@ -432,7 +433,6 @@ confirm_messages(Guids, State) ->
 
 confirm_message_by_guid(Guid, State = #q{guid_to_channel = GTC}) ->
     case dict:find(Guid, GTC) of
-        {ok, {_    , undefined}} -> ok;
         {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
         _                        -> ok
     end,
