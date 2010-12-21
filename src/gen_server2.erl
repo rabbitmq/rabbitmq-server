@@ -880,6 +880,22 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
                                        debug = Debug1 });
+        {become, Mod, NState} ->
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
+                                  {become, Mod, NState}),
+            loop(find_prioritisers(
+                   GS2State #gs2_state { mod   = Mod,
+                                         state = NState,
+                                         time  = infinity,
+                                         debug = Debug1 }));
+        {become, Mod, NState, Time1} ->
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
+                                  {become, Mod, NState}),
+            loop(find_prioritisers(
+                   GS2State #gs2_state { mod   = Mod,
+                                         state = NState,
+                                         time  = Time1,
+                                         debug = Debug1 }));
         _ ->
             handle_common_termination(Reply, Msg, GS2State)
     end.
