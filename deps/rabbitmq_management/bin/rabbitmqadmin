@@ -93,7 +93,7 @@ where cmd is one of:
 
 """
     for l in LISTABLE:
-        usage += "  list {0}\n".format(l)
+        usage += "  list {0} [<column>...]\n".format(l)
     usage += fmt_usage_stanza(DECLARABLE, 'declare')
     usage += fmt_usage_stanza(DELETABLE,  'delete')
     usage += fmt_usage_stanza(CLOSABLE,   'close')
@@ -239,13 +239,14 @@ class Management:
                      % (self.options.hostname, path))
 
     def invoke_list(self):
-        obj_type = self.get_arg()
+        obj_type = self.args[0]
         assert_usage(obj_type in LISTABLE,
                      "Don't know how to list {0}".format(obj_type))
         uri = "/%s" % obj_type
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
-        format_list(self.get(uri), self.options)
+        columns = self.args[1:]
+        format_list(self.get(uri), columns, self.options)
 
     def invoke_declare(self):
         (obj_type, uri, payload) = self.declare_delete_parse(DECLARABLE)
@@ -302,7 +303,7 @@ class Management:
         uri = root[obj_type]['uri'].format(**uri_args)
         return (obj_type, uri, payload)
 
-def format_list(json_list, options):
+def format_list(json_list, columns, options):
     format = options.format
     formatter = None
     if format == "raw_json":
@@ -316,7 +317,7 @@ def format_list(json_list, options):
         formatter = FORMATS[format]
     assert_usage(formatter != None,
                  "Format {0} not recognised".format(format))
-    formatter_instance = formatter(options)
+    formatter_instance = formatter(columns, options)
     formatter_instance.display(json_list)
 
 class Lister:
@@ -325,8 +326,10 @@ class Lister:
             print string
 
     def display(self, json_list):
-        (columns, table) = self.list_to_table(json.loads(json_list),
-                                              int(self.options.depth))
+        depth = sys.maxint
+        if len(self.columns) == 0:
+            depth = int(self.options.depth)
+        (columns, table) = self.list_to_table(json.loads(json_list), depth)
         if len(table) > 0:
             self.display_list(columns, table)
         else:
@@ -355,12 +358,17 @@ class Lister:
             columns[col] = True
 
         def add_to_row(col, val):
-            row[column_ix[col]] = str(val)
+            if col in column_ix:
+                row[column_ix[col]] = str(val)
 
-        for item in items:
-            add('', 1, item, add_to_columns)
-        columns = columns.keys()
-        columns.sort(key=column_sort_key)
+        if len(self.columns) == 0:
+            for item in items:
+                add('', 1, item, add_to_columns)
+            columns = columns.keys()
+            columns.sort(key=column_sort_key)
+        else:
+            columns = self.columns
+
         for i in xrange(0, len(columns)):
             column_ix[columns[i]] = i
         for item in items:
@@ -371,7 +379,8 @@ class Lister:
         return (columns, table)
 
 class TSVList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -387,7 +396,8 @@ class TSVList(Lister):
             print line
 
 class LongList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -403,7 +413,8 @@ class LongList(Lister):
             print sep
 
 class TableList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -438,7 +449,8 @@ class TableList(Lister):
         print txt
 
 class KeyValueList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -450,7 +462,8 @@ class KeyValueList(Lister):
 
 # TODO handle spaces etc in completable names
 class BashList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
