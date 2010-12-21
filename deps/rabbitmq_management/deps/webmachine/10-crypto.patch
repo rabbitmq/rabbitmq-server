@@ -111,7 +111,7 @@ diff -r 0c4b60ac68b4 src/webmachine_request.erl
  		CT
  	end,
 -    Boundary = mochihex:to_hex(crypto:rand_bytes(8)),
-+    Boundary = [96 + random:uniform(26) || _ <- lists:seq(1,70)],
++    Boundary = mochihex:to_hex(mochiweb_util:rand_bytes(8)),
      HeaderList = [{"Content-Type",
                     ["multipart/byteranges; ",
                      "boundary=", Boundary]}],
