@@ -34,7 +34,8 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0, copy_db/1]).
+         is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
+         empty_ram_only_tables/0, copy_db/1]).
 
 -export([table_names/0]).
 
@@ -63,6 +64,8 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
+-spec(running_clustered_nodes/0 :: () -> [node()]).
+-spec(all_clustered_nodes/0 :: () -> [node()]).
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
@@ -81,12 +84,12 @@ status() ->
                                 Nodes = nodes_of_type(CopyType),
                                 Nodes =/= []
                             end];
-                 no -> case mnesia:system_info(db_nodes) of
+                 no -> case all_clustered_nodes() of
                            [] -> [];
                            Nodes -> [{unknown, Nodes}]
                        end
              end},
-     {running_nodes, mnesia:system_info(running_db_nodes)}].
+     {running_nodes, running_clustered_nodes()}].
 
 init() ->
     ok = ensure_mnesia_running(),
@@ -127,8 +130,14 @@ reset()       -> reset(false).
 force_reset() -> reset(true).
 
 is_clustered() ->
-    RunningNodes = mnesia:system_info(running_db_nodes),
+    RunningNodes = running_clustered_nodes(),
     [node()] /= RunningNodes andalso [] /= RunningNodes.
+
+all_clustered_nodes() ->
+    mnesia:system_info(db_nodes).
+
+running_clustered_nodes() ->
+    mnesia:system_info(running_db_nodes).
 
 empty_ram_only_tables() ->
     Node = node(),
@@ -372,8 +381,7 @@ init_db(ClusterNodes, Force) ->
                          end;
                 true  -> ok
             end,
-            case {Nodes, mnesia:system_info(use_dir),
-                  mnesia:system_info(db_nodes)} of
+            case {Nodes, mnesia:system_info(use_dir), all_clustered_nodes()} of
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
                     ok = wait_for_tables(),
@@ -566,8 +574,8 @@ reset(Force) ->
             {Nodes, RunningNodes} =
                 try
                     ok = init(),
-                    {mnesia:system_info(db_nodes) -- [Node],
-                     mnesia:system_info(running_db_nodes) -- [Node]}
+                    {all_clustered_nodes() -- [Node],
+                     running_clustered_nodes() -- [Node]}
                 after
                     mnesia:stop()
                 end,
