@@ -412,7 +412,9 @@ stop_msg_store() ->
 init(QueueName, IsDurable, Recover) ->
     Self = self(),
     init(QueueName, IsDurable, Recover,
-         fun (Guids) -> msgs_written_to_disk(Self, Guids) end,
+         fun (Guids, WaitForIndex) ->
+                 msgs_written_to_disk(Self, Guids, WaitForIndex)
+         end,
          fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
 
 init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
@@ -1392,7 +1394,12 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
 msgs_confirmed(GuidSet, State) ->
     {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
 
-msgs_written_to_disk(QPid, GuidSet) ->
+msgs_written_to_disk(QPid, GuidSet, false) ->
+    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+      QPid, fun (State) ->
+                    msgs_confirmed(GuidSet, State)
+            end);
+msgs_written_to_disk(QPid, GuidSet, true) ->
     %%io:format("variable queue notified of msgs written to disk: ~p~n",
     %%          [gb_sets:size(GuidSet)]),
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
