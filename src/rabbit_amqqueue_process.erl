@@ -818,7 +818,7 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver_immediately, Delivery = #delivery{message = Message}},
+handle_call({deliver_immediately, Delivery},
             _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
@@ -1011,7 +1011,7 @@ handle_cast({ack, Txn, AckTags, ChPid},
                 case Txn of
                     none -> ChAckTags1 = subtract_acks(ChAckTags, AckTags),
                             NewC = C#cr{acktags = ChAckTags1},
-                            {_AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
+                            BQS1 = BQ:ack(AckTags, BQS),
                             {NewC, State#q{backing_queue_state = BQS1}};
                     _    -> BQS1 = BQ:tx_ack(Txn, AckTags, BQS),
                             {C#cr{txn = Txn},
@@ -1032,7 +1032,7 @@ handle_cast({reject, AckTags, Requeue, ChPid},
             maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> {_AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
+                        false -> BQS1 = BQ:ack(AckTags, BQS),
                                  State#q{backing_queue_state = BQS1}
                     end)
     end;
