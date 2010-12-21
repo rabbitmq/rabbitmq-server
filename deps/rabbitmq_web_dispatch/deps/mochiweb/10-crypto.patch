@@ -182,7 +182,7 @@ index d1cc59d..b633d26 100644
 +    list_to_binary([rand_uniform(0, 16#FF + 1) || _ <- lists:seq(1, Count)]).
 +
 +rand_uniform(Lo, Hi) ->
-+    random:uniform(Hi - Lo) - Lo - 1.
++    random:uniform(Hi - Lo) + Lo - 1.
 +
  %%
  %% Tests
