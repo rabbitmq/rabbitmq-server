@@ -1,33 +1,33 @@
-%%    The contents of this file are subject to the Mozilla Public License
-%%    Version 1.1 (the "License"); you may not use this file except in
-%%    compliance with the License. You may obtain a copy of the License at
-%%    http://www.mozilla.org/MPL/
-%%   
-%%    Software distributed under the License is distributed on an "AS IS"
-%%    basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%    License for the specific language governing rights and limitations
-%%    under the License.
-%%   
-%%    The Original Code is RabbitMQ.
-%%   
-%%    The Initial Developers of the Original Code are LShift Ltd,
-%%    Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%   
-%%    Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%    Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%    are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%    Technologies LLC, and Rabbit Technologies Ltd.
-%%   
-%%    Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%    Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%    Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%    LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%    (C) 2007-2010 Rabbit Technologies Ltd.
-%%   
-%%    All Rights Reserved.
-%%   
-%%    Contributor(s): ______________________________________.
-%%   
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ.
+%%
+%%   The Initial Developers of the Original Code are LShift Ltd,
+%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%   Technologies LLC, and Rabbit Technologies Ltd.
+%%
+%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
+%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
+%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%   (C) 2007-2010 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
 
 -module(rabbit_mnesia_queue).
 
@@ -70,17 +70,16 @@
 %% appears. Instead, gammas are defined by betas who have had their
 %% queue position recorded on disk.
 %%
-%% In general, messages move q1 -> q2 -> delta -> q3 -> q4, though
-%% many of these steps are frequently skipped. q1 and q4 only hold
-%% alphas, q2 and q3 hold both betas and gammas (as queues of queues,
-%% using the bpqueue module where the block prefix determines whether
-%% they're betas or gammas). When a message arrives, its
-%% classification is determined. It is then added to the rightmost
-%% appropriate queue.
+%% In general, messages move q1 -> delta -> q3 -> q4, though many of
+%% these steps are frequently skipped. q1 and q4 only hold alphas, q3
+%% holds both betas and gammas (as queues of queues, using the bpqueue
+%% module where the block prefix determines whether they're betas or
+%% gammas). When a message arrives, its classification is
+%% determined. It is then added to the rightmost appropriate queue.
 %%
 %% If a new message is determined to be a beta or gamma, q1 is
-%% empty. If a new message is determined to be a delta, q1 and q2 are
-%% empty (and actually q4 too).
+%% empty. If a new message is determined to be a delta, q1 is empty
+%% (and actually q4 too).
 %%
 %% When removing messages from a queue, if q4 is empty then q3 is read
 %% directly. If q3 becomes empty then the next segment's worth of
@@ -150,12 +149,11 @@
 %%
 %% The conversion of betas to gammas is done in batches of exactly
 %% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
-%% frequent operations on the queues of q2 and q3 will not be
-%% effectively amortised (switching the direction of queue access
-%% defeats amortisation), nor should it be too big, otherwise
-%% converting a batch stalls the queue for too long. Therefore, it
-%% must be just right. ram_index_count is used here and is the number
-%% of betas.
+%% frequent operations on q3 will not be effectively amortised
+%% (switching the direction of queue access defeats amortisation), nor
+%% should it be too big, otherwise converting a batch stalls the queue
+%% for too long. Therefore, it must be just right. ram_index_count is
+%% used here and is the number of betas.
 %%
 %% The conversion from alphas to betas is also chunked, but only to
 %% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
@@ -241,7 +239,6 @@
 
 -record(mqstate,
 	{ q1,
-	  q2,
 	  delta,
 	  q3,
 	  q4,
@@ -254,10 +251,10 @@
 	  on_sync,
 	  durable,
 	  transient_threshold,
-	  
+
 	  len,
 	  persistent_count,
-	  
+
 	  target_ram_count,
 	  ram_msg_count,
 	  ram_msg_count_prev,
@@ -335,7 +332,6 @@
 
 -type(state() :: #mqstate {
 	     q1 :: queue(),
-	     q2 :: bpqueue:bpqueue(),
 	     delta :: delta(),
 	     q3 :: bpqueue:bpqueue(),
 	     q4 :: queue(),
@@ -347,10 +343,10 @@
 						 {any(), binary()}},
 	     on_sync :: sync(),
 	     durable :: boolean(),
-	     
+
 	     len :: non_neg_integer(),
 	     persistent_count :: non_neg_integer(),
-	     
+
 	     transient_threshold :: non_neg_integer(),
 	     target_ram_count :: non_neg_integer() | 'infinity',
 	     ram_msg_count :: non_neg_integer(),
@@ -696,7 +692,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
     IndexState1 = maybe_write_delivered(
 		    IndexOnDisk andalso not IsDelivered,
 		    SeqId, IndexState),
-    
+
     %% 2. Remove from msg_store and queue index, if necessary
     Rem = fun () ->
 		  ok = msg_store_remove(MSCState, IsPersistent, [Guid])
@@ -709,7 +705,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 	    { true, true, true, false} -> Ack();
 	    _ -> IndexState1
 	end,
-    
+
     %% 3. If an ack is required, add something sensible to PA
     {AckTag, State1} = case AckRequired of
 			   true -> StateN = record_pending_ack(
@@ -718,11 +714,11 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 				   {SeqId, StateN};
 			   false -> {blank_ack, State}
 		       end,
-    
+
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
     Len1 = Len - 1,
     RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
-    
+
     {{Msg, IsDelivered, AckTag, Len1},
      a(State1 #mqstate { ram_msg_count = RamMsgCount1,
 			 out_counter = OutCount + 1,
@@ -919,14 +915,14 @@ ram_duration(State = #mqstate {
     Now = now(),
     {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
     {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
-    
+
     {AvgAckEgressRate, AckEgress1} =
 	update_rate(Now, AckTimestamp, AckOutCount, AckEgress),
     {AvgAckIngressRate, AckIngress1} =
 	update_rate(Now, AckTimestamp, AckInCount, AckIngress),
-    
+
     RamAckCount = gb_trees:size(RamAckIndex),
-    
+
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
 	case AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
 	    AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0 of
@@ -936,7 +932,7 @@ ram_duration(State = #mqstate {
 			 (4 * (AvgEgressRate + AvgIngressRate +
 				   AvgAckEgressRate + AvgAckIngressRate))
 	end,
-    
+
     {Duration, State #mqstate {
 		 rates = Rates #rates {
 			   egress = Egress1,
@@ -999,7 +995,7 @@ handle_pre_hibernate(State = #mqstate { index_state = IndexState }) ->
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
 status(#mqstate {
-	  q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+	  q1 = Q1, delta = Delta, q3 = Q3, q4 = Q4,
 	  len = Len,
 	  pending_ack = PA,
 	  ram_ack_index = RAI,
@@ -1014,7 +1010,6 @@ status(#mqstate {
 	  ack_rates = #rates { avg_egress = AvgAckEgressRate,
 			       avg_ingress = AvgAckIngressRate } }) ->
     [ {q1 , queue:len(Q1)},
-      {q2 , bpqueue:len(Q2)},
       {delta , Delta},
       {q3 , bpqueue:len(Q3)},
       {q4 , queue:len(Q4)},
@@ -1036,28 +1031,26 @@ status(#mqstate {
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-a(State = #mqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+a(State = #mqstate { q1 = Q1, delta = Delta, q3 = Q3, q4 = Q4,
 		     len = Len,
 		     persistent_count = PersistentCount,
 		     ram_msg_count = RamMsgCount,
 		     ram_index_count = RamIndexCount }) ->
     E1 = queue:is_empty(Q1),
-    E2 = bpqueue:is_empty(Q2),
     ED = Delta#delta.count == 0,
     E3 = bpqueue:is_empty(Q3),
     E4 = queue:is_empty(Q4),
     LZ = Len == 0,
-    
+
     true = E1 or not E3,
-    true = E2 or not ED,
     true = ED or not E3,
     true = LZ == (E3 and E4),
-    
+
     true = Len >= 0,
     true = PersistentCount >= 0,
     true = RamMsgCount >= 0,
     true = RamIndexCount >= 0,
-    
+
     State.
 
 m(MsgStatus = #msg_status { msg = Msg,
@@ -1067,7 +1060,7 @@ m(MsgStatus = #msg_status { msg = Msg,
     true = (not IsPersistent) or IndexOnDisk,
     true = (not IndexOnDisk) or MsgOnDisk,
     true = (Msg =/= undefined) or MsgOnDisk,
-    
+
     MsgStatus.
 
 one_if(true ) -> 1;
@@ -1188,7 +1181,7 @@ update_rate(Now, Then, Count, {OThen, OCount}) ->
 init(IsDurable, IndexState, DeltaCount, Terms,
      PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
-    
+
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
 		true -> ?BLANK_DELTA;
@@ -1199,7 +1192,6 @@ init(IsDurable, IndexState, DeltaCount, Terms,
     Now = now(),
     State = #mqstate {
       q1 = queue:new(),
-      q2 = bpqueue:new(),
       delta = Delta,
       q3 = bpqueue:new(),
       q4 = queue:new(),
@@ -1211,10 +1203,10 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       on_sync = ?BLANK_SYNC,
       durable = IsDurable,
       transient_threshold = NextSeqId,
-      
+
       len = DeltaCount1,
       persistent_count = DeltaCount1,
-      
+
       target_ram_count = infinity,
       ram_msg_count = 0,
       ram_msg_count_prev = 0,
@@ -1610,7 +1602,7 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
 		    ack_rates = #rates { avg_ingress = AvgAckIngress,
 					 avg_egress = AvgAckEgress }
 		   }) ->
-    
+
     {Reduce, State1} =
 	case chunk_size(RamMsgCount + gb_trees:size(RamAckIndex),
 			TargetRamCount) of
@@ -1631,7 +1623,7 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
 				  end),
 		  {true, State2}
 	end,
-    
+
     case State1 #mqstate.target_ram_count of
 	0 -> {Reduce, BetaDeltaFun(State1)};
 	_ -> case chunk_size(State1 #mqstate.ram_index_count,
@@ -1644,10 +1636,9 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
 permitted_ram_index_count(#mqstate { len = 0 }) ->
     infinity;
 permitted_ram_index_count(#mqstate { len = Len,
-				     q2 = Q2,
 				     q3 = Q3,
 				     delta = #delta { count = DeltaCount } }) ->
-    BetaLen = bpqueue:len(Q2) + bpqueue:len(Q3),
+    BetaLen = bpqueue:len(Q3),
     BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
 
 chunk_size(Current, Permitted)
@@ -1658,7 +1649,6 @@ chunk_size(Current, Permitted) ->
 
 fetch_from_q3(State = #mqstate {
 		q1 = Q1,
-		q2 = Q2,
 		delta = #delta { count = DeltaCount },
 		q3 = Q3,
 		q4 = Q4,
@@ -1675,11 +1665,9 @@ fetch_from_q3(State = #mqstate {
 		case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
 		    {true, true} ->
 			%% q3 is now empty, it wasn't before; delta is
-			%% still empty. So q2 must be empty, and we
-			%% know q4 is empty otherwise we wouldn't be
-			%% loading from q3. As such, we can just set
-			%% q4 to Q1.
-			true = bpqueue:is_empty(Q2), %% ASSERTION
+			%% still empty. We know q4 is empty otherwise
+			%% we wouldn't be loading from q3. As such, we
+			%% can just set q4 to Q1.
 			true = queue:is_empty(Q4), %% ASSERTION
 			State1 #mqstate { q1 = queue:new(),
 					  q4 = Q1 };
@@ -1687,8 +1675,8 @@ fetch_from_q3(State = #mqstate {
 			maybe_deltas_to_betas(State1);
 		    {false, _} ->
 			%% q3 still isn't empty, we've not touched
-			%% delta, so the invariants between q1, q2,
-			%% delta and q3 are maintained
+			%% delta, so the invariants between q1, delta
+			%% and q3 are maintained
 			State1
 		end,
 	    {loaded, {MsgStatus, State2}}
@@ -1697,7 +1685,6 @@ fetch_from_q3(State = #mqstate {
 maybe_deltas_to_betas(State = #mqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
     State;
 maybe_deltas_to_betas(State = #mqstate {
-			q2 = Q2,
 			delta = Delta,
 			q3 = Q3,
 			index_state = IndexState,
@@ -1724,11 +1711,8 @@ maybe_deltas_to_betas(State = #mqstate {
 	    Q3b = bpqueue:join(Q3, Q3a),
 	    case DeltaCount - Q3aLen of
 		0 ->
-		    %% delta is now empty, but it wasn't before, so
-		    %% can now join q2 onto q3
-		    State1 #mqstate { q2 = bpqueue:new(),
-				      delta = ?BLANK_DELTA,
-				      q3 = bpqueue:join(Q3b, Q2) };
+		    State1 #mqstate { delta = ?BLANK_DELTA,
+				      q3 = Q3b };
 		N when N > 0 ->
 		    Delta1 = #delta { start_seq_id = DeltaSeqId1,
 				      count = N,
