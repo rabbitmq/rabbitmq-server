@@ -116,13 +116,13 @@
       </li>
       <li>
         Declare an exchange:
-<pre>$ rabbitmqadmin declare exchange my-new-exchange fanout
+<pre>$ rabbitmqadmin declare exchange name=my-new-exchange type=fanout
 exchange declared
 </pre>
       </li>
       <li>
         Declare a queue, with optional parameters:
-<pre>$ rabbitmqadmin declare queue my-new-queue durable=false
+<pre>$ rabbitmqadmin declare queue name=my-new-queue durable=false
 queue declared
 </pre>
       </li>
