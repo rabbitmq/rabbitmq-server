@@ -1,33 +1,33 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
-%%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%% License for the specific language governing rights and limitations
-%% under the License.
-%%
-%% The Original Code is RabbitMQ.
-%%
-%% The Initial Developers of the Original Code are LShift Ltd,
-%% Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%% Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%% Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%% are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%% Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%% Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%% Ltd. Portions created by Cohesive Financial Technologies LLC are
-%% Copyright (C) 2007-2010 Cohesive Financial Technologies
-%% LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%% (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%% All Rights Reserved.
-%%
-%% Contributor(s): ______________________________________.
-%%
+%%    The contents of this file are subject to the Mozilla Public License
+%%    Version 1.1 (the "License"); you may not use this file except in
+%%    compliance with the License. You may obtain a copy of the License at
+%%    http://www.mozilla.org/MPL/
+%%   
+%%    Software distributed under the License is distributed on an "AS IS"
+%%    basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%    License for the specific language governing rights and limitations
+%%    under the License.
+%%   
+%%    The Original Code is RabbitMQ.
+%%   
+%%    The Initial Developers of the Original Code are LShift Ltd,
+%%    Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
+%%   
+%%    Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
+%%    Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
+%%    are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
+%%    Technologies LLC, and Rabbit Technologies Ltd.
+%%   
+%%    Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
+%%    Ltd. Portions created by Cohesive Financial Technologies LLC are
+%%    Copyright (C) 2007-2010 Cohesive Financial Technologies
+%%    LLC. Portions created by Rabbit Technologies Ltd are Copyright
+%%    (C) 2007-2010 Rabbit Technologies Ltd.
+%%   
+%%    All Rights Reserved.
+%%   
+%%    Contributor(s): ______________________________________.
+%%   
 
 -module(rabbit_mnesia_queue).
 
@@ -43,8 +43,7 @@
 %%----------------------------------------------------------------------------
 %% This is Take Three of a simple initial Mnesia implementation of the
 %% rabbit_backing_queue behavior. This version was created by starting
-%% with rabbit_variable_queue.erl, and removing everything
-%% unneeded.
+%% with rabbit_variable_queue.erl, and removing everything unneeded.
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
@@ -574,7 +573,7 @@ purge(State = #mqstate { q4 = Q4,
 
 publish(Msg, MsgProps, State) ->
     {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
-    a(reduce_memory_use(State1)).
+    a(State1).
 
 %%----------------------------------------------------------------------------
 %% publish_delivered/4 is called for messages which have already been
@@ -605,12 +604,11 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
-    {SeqId, a(reduce_memory_use(
-		State2 #mqstate { next_seq_id = SeqId + 1,
-				  out_counter = OutCount + 1,
-				  in_counter = InCount + 1,
-				  persistent_count = PCount1,
-				  unconfirmed = Unconfirmed1 }))}.
+    {SeqId, a(State2 #mqstate { next_seq_id = SeqId + 1,
+				out_counter = OutCount + 1,
+				in_counter = InCount + 1,
+				persistent_count = PCount1,
+				unconfirmed = Unconfirmed1 })}.
 
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops messages from the head of the queue while the
@@ -848,7 +846,7 @@ requeue(AckTags, MsgPropsFun, State) ->
 		    State3
 	    end,
 	    AckTags, State),
-    a(reduce_memory_use(State1)).
+    a(State1).
 
 %%----------------------------------------------------------------------------
 %% len/1 returns the queue length.
@@ -885,8 +883,7 @@ set_ram_duration_target(
 		    rates = #rates { avg_egress = AvgEgressRate,
 				     avg_ingress = AvgIngressRate },
 		    ack_rates = #rates { avg_egress = AvgAckEgressRate,
-					 avg_ingress = AvgAckIngressRate },
-		    target_ram_count = TargetRamCount }) ->
+					 avg_ingress = AvgAckIngressRate } }) ->
     Rate =
 	AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
     TargetRamCount1 =
@@ -894,13 +891,7 @@ set_ram_duration_target(
 	    infinity -> infinity;
 	    _ -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
 	end,
-    State1 = State #mqstate { target_ram_count = TargetRamCount1 },
-    a(case TargetRamCount1 == infinity orelse
-	  (TargetRamCount =/= infinity andalso
-	   TargetRamCount1 >= TargetRamCount) of
-	  true -> State1;
-	  false -> reduce_memory_use(State1)
-      end).
+    a(State #mqstate { target_ram_count = TargetRamCount1 }).
 
 %%----------------------------------------------------------------------------
 %% ram_duration/1 optionally recalculates the duration internally
@@ -990,7 +981,7 @@ needs_idle_timeout(_State) ->
 
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
-idle_timeout(State) -> a(reduce_memory_use(tx_commit_index(State))).
+idle_timeout(State) -> a(tx_commit_index(State)).
 
 %%----------------------------------------------------------------------------
 %% handle_pre_hibernate/1 is called immediately before the queue
@@ -1183,32 +1174,6 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
      rabbit_queue_index:ack(Acks,
 			    rabbit_queue_index:deliver(Delivers, IndexState))}.
 
-%% the first arg is the older delta
-combine_deltas(?BLANK_DELTA_PATTERN(X), ?BLANK_DELTA_PATTERN(Y)) ->
-    ?BLANK_DELTA;
-combine_deltas(?BLANK_DELTA_PATTERN(X), #delta { start_seq_id = Start,
-						 count = Count,
-						 end_seq_id = End } = B) ->
-    true = Start + Count =< End, %% ASSERTION
-    B;
-combine_deltas(#delta { start_seq_id = Start,
-			count = Count,
-			end_seq_id = End } = A, ?BLANK_DELTA_PATTERN(Y)) ->
-    true = Start + Count =< End, %% ASSERTION
-    A;
-combine_deltas(#delta { start_seq_id = StartLow,
-			count = CountLow,
-			end_seq_id = EndLow },
-	       #delta { start_seq_id = StartHigh,
-			count = CountHigh,
-			end_seq_id = EndHigh }) ->
-    Count = CountLow + CountHigh,
-    true = (StartLow =< StartHigh) %% ASSERTIONS
-	andalso ((StartLow + CountLow) =< EndLow)
-	andalso ((StartHigh + CountHigh) =< EndHigh)
-	andalso ((StartLow + Count) =< EndHigh),
-    #delta { start_seq_id = StartLow, count = Count, end_seq_id = EndHigh }.
-
 beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
@@ -1355,8 +1320,7 @@ tx_commit_index(State = #mqstate { on_sync = #sync {
 	  end, {PAcks, NewState}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
-    reduce_memory_use(
-      State1 #mqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }).
+    State1 #mqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }.
 
 purge_betas_and_deltas(LensByStore,
 		       State = #mqstate { q3 = Q3,
@@ -1630,6 +1594,9 @@ msg_indices_written_to_disk(QPid, GuidSet) ->
 %% one segment's worth of messages in q3 - and thus would risk
 %% perpetually reporting the need for a conversion when no such
 %% conversion is needed. That in turn could cause an infinite loop.
+
+%% This version modified never to call reduce_memory_use/1.
+
 reduce_memory_use(_AlphaBetaFun, _BetaGammaFun, _BetaDeltaFun, _AckFun,
 		  State = #mqstate {target_ram_count = infinity}) ->
     {false, State};
@@ -1673,67 +1640,6 @@ reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
 		 _ -> {Reduce, State1}
 	     end
     end.
-
-limit_ram_acks(0, State) ->
-    {0, State};
-limit_ram_acks(Quota, State = #mqstate { pending_ack = PA,
-					 ram_ack_index = RAI }) ->
-    case gb_trees:is_empty(RAI) of
-	true ->
-	    {Quota, State};
-	false ->
-	    {SeqId, Guid, RAI1} = gb_trees:take_largest(RAI),
-	    MsgStatus = #msg_status {
-	      guid = Guid, %% ASSERTION
-	      is_persistent = false, %% ASSERTION
-	      msg_props = MsgProps } = dict:fetch(SeqId, PA),
-	    {_, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
-	    limit_ram_acks(Quota - 1,
-			   State1 #mqstate {
-			     pending_ack =
-				 dict:store(SeqId, {false, Guid, MsgProps}, PA),
-			     ram_ack_index = RAI1 })
-    end.
-
-
-reduce_memory_use(State) ->
-    {_, State1} = reduce_memory_use(fun push_alphas_to_betas/2,
-				    fun limit_ram_index/2,
-				    fun push_betas_to_deltas/1,
-				    fun limit_ram_acks/2,
-				    State),
-    State1.
-
-limit_ram_index(Quota, State = #mqstate { q2 = Q2, q3 = Q3,
-					  index_state = IndexState,
-					  ram_index_count = RamIndexCount }) ->
-    {Q2a, {Quota1, IndexState1}} = limit_ram_index(
-				     fun bpqueue:map_fold_filter_r/4,
-				     Q2, {Quota, IndexState}),
-    %% TODO: we shouldn't be writing index entries for messages that
-    %% can never end up in delta due them residing in the only segment
-    %% held by q3.
-    {Q3a, {Quota2, IndexState2}} = limit_ram_index(
-				     fun bpqueue:map_fold_filter_r/4,
-				     Q3, {Quota1, IndexState1}),
-    State #mqstate { q2 = Q2a, q3 = Q3a,
-		     index_state = IndexState2,
-		     ram_index_count = RamIndexCount - (Quota - Quota2) }.
-
-limit_ram_index(_MapFoldFilterFun, Q, {0, IndexState}) ->
-    {Q, {0, IndexState}};
-limit_ram_index(MapFoldFilterFun, Q, {Quota, IndexState}) ->
-    MapFoldFilterFun(
-      fun erlang:'not'/1,
-      fun (MsgStatus, {0, _IndexStateN}) ->
-	      false = MsgStatus #msg_status.index_on_disk, %% ASSERTION
-	      stop;
-	  (MsgStatus, {N, IndexStateN}) when N > 0 ->
-	      false = MsgStatus #msg_status.index_on_disk, %% ASSERTION
-	      {MsgStatus1, IndexStateN1} =
-		  maybe_write_index_to_disk(true, MsgStatus, IndexStateN),
-	      {true, m(MsgStatus1), {N-1, IndexStateN1}}
-      end, {Quota, IndexState}, Q).
 
 permitted_ram_index_count(#mqstate { len = 0 }) ->
     infinity;
@@ -1832,116 +1738,3 @@ maybe_deltas_to_betas(State = #mqstate {
 	    end
     end.
 
-push_alphas_to_betas(Quota, State) ->
-    {Quota1, State1} = maybe_push_q1_to_betas(Quota, State),
-    {Quota2, State2} = maybe_push_q4_to_betas(Quota1, State1),
-    {Quota2, State2}.
-
-maybe_push_q1_to_betas(Quota, State = #mqstate { q1 = Q1 }) ->
-    maybe_push_alphas_to_betas(
-      fun queue:out/1,
-      fun (MsgStatus = #msg_status { index_on_disk = IndexOnDisk },
-	   Q1a, State1 = #mqstate { q3 = Q3, delta = #delta { count = 0 } }) ->
-	      State1 #mqstate { q1 = Q1a,
-				q3 = bpqueue:in(IndexOnDisk, MsgStatus, Q3) };
-	  (MsgStatus = #msg_status { index_on_disk = IndexOnDisk },
-	   Q1a, State1 = #mqstate { q2 = Q2 }) ->
-	      State1 #mqstate { q1 = Q1a,
-				q2 = bpqueue:in(IndexOnDisk, MsgStatus, Q2) }
-      end, Quota, Q1, State).
-
-maybe_push_q4_to_betas(Quota, State = #mqstate { q4 = Q4 }) ->
-    maybe_push_alphas_to_betas(
-      fun queue:out_r/1,
-      fun (MsgStatus = #msg_status { index_on_disk = IndexOnDisk },
-	   Q4a, State1 = #mqstate { q3 = Q3 }) ->
-	      State1 #mqstate { q3 = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
-				q4 = Q4a }
-      end, Quota, Q4, State).
-
-maybe_push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
-			   State = #mqstate {
-			     ram_msg_count = RamMsgCount,
-			     target_ram_count = TargetRamCount })
-  when Quota =:= 0 orelse
-       TargetRamCount =:= infinity orelse
-       TargetRamCount >= RamMsgCount ->
-    {Quota, State};
-maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
-    case Generator(Q) of
-	{empty, _Q} ->
-	    {Quota, State};
-	{{value, MsgStatus}, Qa} ->
-	    {MsgStatus1 = #msg_status { msg_on_disk = true,
-					index_on_disk = IndexOnDisk },
-	     State1 = #mqstate { ram_msg_count = RamMsgCount,
-				 ram_index_count = RamIndexCount }} =
-		maybe_write_to_disk(true, false, MsgStatus, State),
-	    MsgStatus2 = m(MsgStatus1 #msg_status { msg = undefined }),
-	    RamIndexCount1 = RamIndexCount + one_if(not IndexOnDisk),
-	    State2 = State1 #mqstate { ram_msg_count = RamMsgCount - 1,
-				       ram_index_count = RamIndexCount1 },
-	    maybe_push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
-				       Consumer(MsgStatus2, Qa, State2))
-    end.
-
-push_betas_to_deltas(State = #mqstate { q2 = Q2,
-					delta = Delta,
-					q3 = Q3,
-					index_state = IndexState,
-					ram_index_count = RamIndexCount }) ->
-    {Delta2, Q2a, RamIndexCount2, IndexState2} =
-	push_betas_to_deltas(fun (Q2MinSeqId) -> Q2MinSeqId end,
-			     fun bpqueue:out/1, Q2,
-			     RamIndexCount, IndexState),
-    {Delta3, Q3a, RamIndexCount3, IndexState3} =
-	push_betas_to_deltas(fun rabbit_queue_index:next_segment_boundary/1,
-			     fun bpqueue:out_r/1, Q3,
-			     RamIndexCount2, IndexState2),
-    Delta4 = combine_deltas(Delta3, combine_deltas(Delta, Delta2)),
-    State #mqstate { q2 = Q2a,
-		     delta = Delta4,
-		     q3 = Q3a,
-		     index_state = IndexState3,
-		     ram_index_count = RamIndexCount3 }.
-
-push_betas_to_deltas(LimitFun, Generator, Q, RamIndexCount, IndexState) ->
-    case bpqueue:out(Q) of
-	{empty, _Q} ->
-	    {?BLANK_DELTA, Q, RamIndexCount, IndexState};
-	{{value, _IndexOnDisk1, #msg_status { seq_id = MinSeqId }}, _Qa} ->
-	    {{value, _IndexOnDisk2, #msg_status { seq_id = MaxSeqId }}, _Qb} =
-		bpqueue:out_r(Q),
-	    Limit = LimitFun(MinSeqId),
-	    case MaxSeqId < Limit of
-		true -> {?BLANK_DELTA, Q, RamIndexCount, IndexState};
-		false -> {Len, Qc, RamIndexCount1, IndexState1} =
-			     push_betas_to_deltas(Generator, Limit, Q, 0,
-						  RamIndexCount, IndexState),
-			 {#delta { start_seq_id = Limit,
-				   count = Len,
-				   end_seq_id = MaxSeqId + 1 },
-			  Qc, RamIndexCount1, IndexState1}
-	    end
-    end.
-
-push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
-    case Generator(Q) of
-	{empty, _Q} ->
-	    {Count, Q, RamIndexCount, IndexState};
-	{{value, _IndexOnDisk, #msg_status { seq_id = SeqId }}, _Qa}
-	  when SeqId < Limit ->
-	    {Count, Q, RamIndexCount, IndexState};
-	{{value, IndexOnDisk, MsgStatus}, Qa} ->
-	    {RamIndexCount1, IndexState1} =
-		case IndexOnDisk of
-		    true -> {RamIndexCount, IndexState};
-		    false -> {#msg_status { index_on_disk = true },
-			      IndexState2} =
-				 maybe_write_index_to_disk(true, MsgStatus,
-							   IndexState),
-			     {RamIndexCount - 1, IndexState2}
-		end,
-	    push_betas_to_deltas(
-	      Generator, Limit, Qa, Count + 1, RamIndexCount1, IndexState1)
-    end.
