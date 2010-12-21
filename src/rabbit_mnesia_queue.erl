@@ -38,7 +38,7 @@
 	 idle_timeout/1, handle_pre_hibernate/1, status/1]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/5]).
+-export([start_msg_store/2, stop_msg_store/0, init/4]).
 
 %%----------------------------------------------------------------------------
 %% This is Take Three of a simple initial Mnesia implementation of the
@@ -153,12 +153,13 @@
 %% queue_index adds to these terms the details of its segments and
 %% stores the terms in the queue directory.
 %%
+%% All queues are durable in this version.
+%%
 %% Two message stores are used. One is created for persistent messages
-%% to durable queues that must survive restarts, and the other is used
-%% for all other messages that just happen to need to be written to
-%% disk. On start up we can therefore nuke the transient message
-%% store, and be sure that the messages in the persistent store are
-%% all that we need.
+%% that must survive restarts, and the other is used for all other
+%% messages that just happen to need to be written to disk. On start
+%% up we can therefore nuke the transient message store, and be sure
+%% that the messages in the persistent store are all that we need.
 %%
 %% The references to the msg_stores are there so that the msg_store
 %% knows to only trust its saved state if all of the queues it was
@@ -188,7 +189,6 @@
 	  index_state,
 	  msg_store_clients,
 	  on_sync,
-	  durable,
 
 	  len,
 	  persistent_count,
@@ -268,7 +268,6 @@
 	     msg_store_clients :: 'undefined' | {{any(), binary()},
 						 {any(), binary()}},
 	     on_sync :: sync(),
-	     durable :: boolean(),
 
 	     len :: non_neg_integer(),
 	     persistent_count :: non_neg_integer(),
@@ -306,7 +305,7 @@
 %% Specs are in rabbit_backing_queue_spec.hrl but are repeated here.
 
 %%----------------------------------------------------------------------------
-%% start/1 is called on startup with a list of durable queue
+%% start/1 is called on startup with a list of (durable) queue
 %% names. The queues aren't being started at this point, but this call
 %% allows the backing queue to perform any checking necessary for the
 %% consistency of those queues, or initialise any other shared
@@ -356,23 +355,19 @@ stop_msg_store() ->
 %% -spec(init/3 :: (rabbit_amqqueue:name(), is_durable(), attempt_recovery()) ->
 %% state()).
 
-init(QueueName, IsDurable, Recover) ->
+init(QueueName, _IsDurable, Recover) ->
     Self = self(),
-    init(QueueName, IsDurable, Recover,
+    init(QueueName, Recover,
 	 fun (Guids) -> msgs_written_to_disk(Self, Guids) end,
 	 fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
 
-init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(QueueName, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
-    init(IsDurable, IndexState, 0, [],
-	 case IsDurable of
-	     true -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-					   MsgOnDiskFun);
-	     false -> undefined
-	 end,
+    init(IndexState, 0, [],
+	 msg_store_client_init(?PERSISTENT_MSG_STORE, MsgOnDiskFun),
 	 msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
 
-init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(QueueName, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
 	case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -393,8 +388,7 @@ init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
 		  rabbit_msg_store:contains(Guid, PersistentClient)
 	  end,
 	  MsgIdxOnDiskFun),
-    init(true, IndexState, DeltaCount, Terms1,
-	 PersistentClient, TransientClient).
+    init(IndexState, DeltaCount, Terms1, PersistentClient, TransientClient).
 
 %%----------------------------------------------------------------------------
 %% terminate/1 is called on queue shutdown when the queue isn't being
@@ -513,14 +507,12 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
 				     out_counter = OutCount,
 				     in_counter = InCount,
 				     persistent_count = PCount,
-				     durable = IsDurable,
 				     unconfirmed = Unconfirmed }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
+    MsgStatus = (msg_status(IsPersistent, SeqId, Msg, MsgProps))
 	#msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
-    PCount1 = PCount + one_if(IsPersistent1),
+    PCount1 = PCount + one_if(IsPersistent),
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, a(State2 #mqstate { next_seq_id = SeqId + 1,
 				out_counter = OutCount + 1,
@@ -674,11 +666,10 @@ ack(AckTags, State) ->
 %% -> state()).
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
-	   State = #mqstate { durable = IsDurable,
-			      msg_store_clients = MSCState }) ->
+	   State = #mqstate { msg_store_clients = MSCState }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
-    case IsPersistent andalso IsDurable of
+    case IsPersistent of
 	true -> MsgStatus = msg_status(true, undefined, Msg, MsgProps),
 		#msg_status { msg_on_disk = true } =
 		    maybe_write_msg_to_disk(false, MsgStatus, MSCState);
@@ -702,14 +693,10 @@ tx_ack(Txn, AckTags, State) ->
 
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
-tx_rollback(Txn, State = #mqstate { durable = IsDurable,
-				    msg_store_clients = MSCState }) ->
+tx_rollback(Txn, State = #mqstate { msg_store_clients = MSCState }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
-    ok = case IsDurable of
-	     true -> msg_store_remove(MSCState, true, persistent_guids(Pubs));
-	     false -> ok
-	 end,
+    ok = msg_store_remove(MSCState, true, persistent_guids(Pubs)),
     {lists:append(AckTags), a(State)}.
 
 %%----------------------------------------------------------------------------
@@ -722,15 +709,14 @@ tx_rollback(Txn, State = #mqstate { durable = IsDurable,
 %% message_properties_transformer(), state()) -> {[ack()], state()}).
 
 tx_commit(Txn, Fun, MsgPropsFun,
-	  State = #mqstate { durable = IsDurable,
-			     msg_store_clients = MSCState }) ->
+	  State = #mqstate { msg_store_clients = MSCState }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     AckTags1 = lists:append(AckTags),
     PersistentGuids = persistent_guids(Pubs),
     HasPersistentPubs = PersistentGuids =/= [],
     {AckTags1,
-     a(case IsDurable andalso HasPersistentPubs of
+     a(case HasPersistentPubs of
 	   true -> ok = msg_store_sync(
 			  MSCState, true, PersistentGuids,
 			  msg_store_callback(PersistentGuids, Pubs, AckTags1,
@@ -1014,8 +1000,7 @@ beta_fold(Fun, Init, Q) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-init(IsDurable, IndexState, DeltaCount, Terms,
-     PersistentClient, TransientClient) ->
+init(IndexState, DeltaCount, Terms, PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
@@ -1036,7 +1021,6 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       index_state = IndexState1,
       msg_store_clients = {PersistentClient, TransientClient},
       on_sync = ?BLANK_SYNC,
-      durable = IsDurable,
 
       len = DeltaCount1,
       persistent_count = DeltaCount1,
@@ -1081,20 +1065,14 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun, MsgPropsFun,
 				       acks_all = SAcks,
 				       pubs = SPubs,
 				       funs = SFuns },
-			   pending_ack = PA,
-			   durable = IsDurable }) ->
+			   pending_ack = PA }) ->
     PersistentAcks =
-	case IsDurable of
-	    true -> [AckTag || AckTag <- AckTags,
-			       case dict:fetch(AckTag, PA) of
-				   #msg_status {} ->
-				       false;
-				   {IsPersistent, _Guid, _MsgProps} ->
-				       IsPersistent
-			       end];
-	    false -> []
-	end,
-    case IsDurable andalso (HasPersistentPubs orelse PersistentAcks =/= []) of
+	[AckTag || AckTag <- AckTags,
+		   case dict:fetch(AckTag, PA) of
+		       #msg_status {} -> false;
+		       {IsPersistent, _Guid, _MsgProps} -> IsPersistent
+		   end],
+    case (HasPersistentPubs orelse PersistentAcks =/= []) of
 	true -> State #mqstate {
 		  on_sync = #sync {
 		    acks_persistent = [PersistentAcks | SPAcks],
@@ -1117,8 +1095,7 @@ tx_commit_index(State = #mqstate { on_sync = #sync {
 				     acks_persistent = SPAcks,
 				     acks_all = SAcks,
 				     pubs = SPubs,
-				     funs = SFuns },
-				   durable = IsDurable }) ->
+				     funs = SFuns } }) ->
     PAcks = lists:append(SPAcks),
     Acks = lists:append(SAcks),
     {_Guids, NewState} = ack(Acks, State),
@@ -1129,10 +1106,9 @@ tx_commit_index(State = #mqstate { on_sync = #sync {
 	  fun ({Msg = #basic_message { is_persistent = IsPersistent },
 		MsgProps},
 	       {SeqIdsAcc, State2}) ->
-		  IsPersistent1 = IsDurable andalso IsPersistent,
 		  {SeqId, State3} =
-		      publish(Msg, MsgProps, false, IsPersistent1, State2),
-		  {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
+		      publish(Msg, MsgProps, false, IsPersistent, State2),
+		  {cons_if(IsPersistent, SeqId, SeqIdsAcc), State3}
 	  end, {PAcks, NewState}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
@@ -1194,18 +1170,16 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
 			   len = Len,
 			   in_counter = InCount,
 			   persistent_count = PCount,
-			   durable = IsDurable,
 			   ram_msg_count = RamMsgCount,
 			   unconfirmed = Unconfirmed }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
+    MsgStatus = (msg_status(IsPersistent, SeqId, Msg, MsgProps))
 	#msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = case bpqueue:is_empty(Q3) of
 		 false -> State1 #mqstate { q1 = queue:in(m(MsgStatus1), Q1) };
 		 true -> State1 #mqstate { q4 = queue:in(m(MsgStatus1), Q4) }
 	     end,
-    PCount1 = PCount + one_if(IsPersistent1),
+    PCount1 = PCount + one_if(IsPersistent),
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, State2 #mqstate { next_seq_id = SeqId + 1,
 			      len = Len + 1,
