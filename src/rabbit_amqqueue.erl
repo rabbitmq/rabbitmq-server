@@ -48,6 +48,7 @@
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
+-export([store_queue/1]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").

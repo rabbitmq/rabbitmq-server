@@ -39,7 +39,7 @@ remove_from_queue(QueueName, DeadPids) ->
                           _ ->
                               Q1 = Q #amqqueue { pid         = QPid1,
                                                  mirror_pids = MPids1 },
-                              mnesia:write(rabbit_queue, Q1, write),
+                              ok = rabbit_amqqueue:store_queue(Q1),
                               {ok, QPid1}
                       end
               end
