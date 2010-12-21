@@ -21,7 +21,7 @@ clean:
 	make -C $(LIB_PACKAGE_DIR) clean
 
 distclean: clean
-	rm -rf $(CHECKOUT_DIR)
+	rm -rf $(CHECKOUT_DIR) $(LIB_PACKAGE_DIR)
 
 $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 	cp -r $< $@
