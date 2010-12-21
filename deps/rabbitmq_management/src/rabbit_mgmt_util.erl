@@ -96,7 +96,16 @@ destination_type(ReqData) ->
 
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
-    {mochijson2:encode(Facts), ReqData1, Context}.
+    try
+        {mochijson2:encode(Facts), ReqData1, Context}
+    catch
+        exit:{json_encode, Error} ->
+            halt_response(
+              500,
+              iolist_to_binary(io_lib:format("JSON encode error: ~p", [Error])),
+              iolist_to_binary(io_lib:format("While encoding:~n~p", [Facts])),
+              ReqData1, Context)
+    end.
 
 reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context).
