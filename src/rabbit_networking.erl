@@ -258,10 +258,7 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
-    case lists:member(Pid, connections()) of
-        true  -> rabbit_reader:shutdown(Pid, Explanation);
-        false -> throw({error, {not_a_connection_pid, Pid}})
-    end.
+    rabbit_reader:shutdown(Pid, Explanation).
 
 %%--------------------------------------------------------------------
 
