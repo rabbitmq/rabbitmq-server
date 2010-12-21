@@ -33,8 +33,8 @@
 
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
-         maybe_run_queue_via_backing_queue/2,
-         maybe_run_queue_via_backing_queue_async/2,
+         maybe_run_queue_via_backing_queue/3,
+         maybe_run_queue_via_backing_queue_async/3,
          update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
@@ -151,10 +151,10 @@
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
--spec(maybe_run_queue_via_backing_queue/2 ::
-        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
--spec(maybe_run_queue_via_backing_queue_async/2 ::
-        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue/3 ::
+        (pid(), atom(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue_async/3 ::
+        (pid(), atom(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -459,11 +459,12 @@ internal_delete(QueueName) ->
         Deletions        -> ok = rabbit_binding:process_deletions(Deletions)
     end.
 
-maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
+maybe_run_queue_via_backing_queue(QPid, Mod, Fun) ->
+    gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Mod, Fun},
+                     infinity).
 
-maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
-    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
+maybe_run_queue_via_backing_queue_async(QPid, Mod, Fun) ->
+    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Mod, Fun}).
 
 update_ram_duration(QPid) ->
     gen_server2:cast(QPid, update_ram_duration).

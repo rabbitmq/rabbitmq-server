@@ -137,7 +137,12 @@ behaviour_info(callbacks) ->
 
      %% Exists for debugging purposes, to be able to expose state via
      %% rabbitmqctl list_queues backing_queue_status
-     {status, 1}
+     {status, 1},
+
+     %% Passed a function to be invoked with the relevant backing
+     %% queue's state. Useful for when the backing queue or other
+     %% components need to pass functions into the backing queue.
+     {invoke, 3}
     ];
 behaviour_info(_Other) ->
     undefined.

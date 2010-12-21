@@ -37,7 +37,7 @@
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1]).
+         status/1, invoke/3]).
 
 -export([start/1, stop/0]).
 
@@ -865,6 +865,9 @@ status(#vqstate {
       {avg_ack_ingress_rate, AvgAckIngressRate},
       {avg_ack_egress_rate , AvgAckEgressRate} ].
 
+invoke(?MODULE, Fun, State) ->
+    Fun(State).
+
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
@@ -1100,10 +1103,11 @@ blank_rate(Timestamp, IngressLength) ->
 msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                    Self, fun (StateN) -> {[], tx_commit_post_msg_store(
-                                                 true, Pubs, AckTags,
-                                                 Fun, MsgPropsFun, StateN)}
-                          end)
+                    Self, ?MODULE,
+                    fun (StateN) -> {[], tx_commit_post_msg_store(
+                                           true, Pubs, AckTags,
+                                           Fun, MsgPropsFun, StateN)}
+                    end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
                                      fun () -> remove_persistent_messages(
@@ -1409,27 +1413,29 @@ msgs_confirmed(GuidSet, State) ->
 
 msgs_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
-                                    msg_indices_on_disk = MIOD,
-                                    unconfirmed         = UC }) ->
-                    msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
-                                   State #vqstate {
-                                     msgs_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MOD, GuidSet), UC) })
-            end).
+      QPid, ?MODULE,
+      fun (State = #vqstate { msgs_on_disk        = MOD,
+                              msg_indices_on_disk = MIOD,
+                              unconfirmed         = UC }) ->
+              msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
+                             State #vqstate {
+                               msgs_on_disk =
+                                   gb_sets:intersection(
+                                     gb_sets:union(MOD, GuidSet), UC) })
+      end).
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
-                                    msg_indices_on_disk = MIOD,
-                                    unconfirmed         = UC }) ->
-                    msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
-                                   State #vqstate {
-                                     msg_indices_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MIOD, GuidSet), UC) })
-            end).
+      QPid, ?MODULE,
+      fun (State = #vqstate { msgs_on_disk        = MOD,
+                              msg_indices_on_disk = MIOD,
+                              unconfirmed         = UC }) ->
+              msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
+                             State #vqstate {
+                               msg_indices_on_disk =
+                                   gb_sets:intersection(
+                                     gb_sets:union(MIOD, GuidSet), UC) })
+      end).
 
 %%----------------------------------------------------------------------------
 %% Phase changes

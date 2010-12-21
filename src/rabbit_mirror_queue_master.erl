@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1]).
+         status/1, invoke/3]).
 
 -export([start/1, stop/0]).
 
@@ -241,3 +241,10 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 
 status(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
     BQ:status(BQS).
+
+invoke(?MODULE, Fun, State) ->
+    Fun(State);
+invoke(Mod, Fun, State = #state { backing_queue = BQ,
+                                  backing_queue_state = BQS }) ->
+    {Guids, BQS1} = BQ:invoke(Mod, Fun, BQS),
+    {Guids, State #state { backing_queue_state = BQS1 }}.

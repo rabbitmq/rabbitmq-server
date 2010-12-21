@@ -78,3 +78,5 @@
 -spec(idle_timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
+-spec(invoke/3 :: (atom(), fun ((A) -> A), state()) ->
+      {[rabbit_guid:guid()], state()}).

@@ -180,12 +180,12 @@ handle_call({gm_deaths, Deaths}, From,
             {stop, normal, State}
     end;
 
-handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
-    reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
+handle_call({maybe_run_queue_via_backing_queue, Mod, Fun}, _From, State) ->
+    reply(ok, maybe_run_queue_via_backing_queue(Mod, Fun, State)).
 
 
-handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
-    noreply(maybe_run_queue_via_backing_queue(Fun, State));
+handle_cast({maybe_run_queue_via_backing_queue, Mod, Fun}, State) ->
+    noreply(maybe_run_queue_via_backing_queue(Mod, Fun, State));
 
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
@@ -284,9 +284,10 @@ handle_msg([SPid], _From, Msg) ->
 %% ---------------------------------------------------------------------------
 
 maybe_run_queue_via_backing_queue(
-  Fun, State = #state { backing_queue_state = BQS,
-                        guid_to_channel     = GTC }) ->
-    {Guids, BQS1} = Fun(BQS),
+  Mod, Fun, State = #state { backing_queue       = BQ,
+                             backing_queue_state = BQS,
+                             guid_to_channel     = GTC }) ->
+    {Guids, BQS1} = BQ:invoke(Mod, Fun, BQS),
     GTC1 = lists:foldl(fun maybe_confirm_message/2, GTC, Guids),
     State #state { backing_queue_state = BQS1,
                    guid_to_channel     = GTC1 }.
