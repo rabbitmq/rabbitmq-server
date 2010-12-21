@@ -30,6 +30,8 @@
 -define(NOT_AUTHORISED, 401).
 %%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
 -define(PREFIX, "http://localhost:55672/api").
+%% httpc seems to get racy when using HTTP 1.1
+-define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
 
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
@@ -166,6 +168,8 @@ connections_test() ->
                "/connections/127.0.0.1%3A~w", [LocalPort])),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
+    %% TODO lose this, what is async?
+    timer:sleep(200),
     http_get(Path, ?NOT_FOUND).
 
 test_auth(Code, Headers) ->
@@ -727,12 +731,10 @@ http_put_raw(Path, Body, User, Pass, CodeExp) ->
 http_post_raw(Path, Body, CodeExp) ->
     http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
 
-%% TODO Lose the sleep below. What is happening async?
 http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Type, Path, [auth_header(User, Pass)], Body),
     assert_code(CodeExp, CodeAct, Type, Path, ResBody),
-    timer:sleep(100),
     decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
@@ -749,11 +751,11 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 req(Type, Path, Headers) ->
-    httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
+    httpc:request(Type, {?PREFIX ++ Path, Headers}, ?HTTPC_OPTS, []).
 
 req(Type, Path, Headers, Body) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
-                  [], []).
+                  ?HTTPC_OPTS, []).
 
 decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
 decode(_,    Headers, _ResBody) -> Headers.
