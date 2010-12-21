@@ -105,7 +105,7 @@ behaviour_info(callbacks) ->
      %% Is my queue empty?
      {is_empty, 1},
 
-     %% For the next three functions, the assumption is that you're
+     %% For the next two functions, the assumption is that you're
      %% monitoring something like the ingress and egress rates of the
      %% queue. The RAM duration is thus the length of time represented
      %% by the messages held in RAM given the current rates. If you
