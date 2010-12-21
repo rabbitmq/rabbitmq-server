@@ -62,7 +62,7 @@ hash_passwords() ->
     mnesia(
       rabbit_user,
       fun ({user, Username, Password, IsAdmin}) ->
-              Hash = rabbit_access_control:hash_password(Password),
+              Hash = rabbit_auth_backend_internal:hash_password(Password),
               {user, Username, Hash, IsAdmin}
       end,
       [username, password_hash, is_admin]).

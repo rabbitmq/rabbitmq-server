@@ -42,7 +42,8 @@
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
               binding/0, binding_source/0, binding_destination/0,
               amqqueue/0, exchange/0,
-              connection/0, protocol/0, user/0, internal_user/0, ok/1, error/1,
+              connection/0, protocol/0, user/0, internal_user/0,
+              username/0, password/0, password_hash/0, ok/1, error/1,
               ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0, channel_exit/0,
               connection_exit/0]).
 
@@ -151,15 +152,19 @@
 -type(protocol() :: rabbit_framing:protocol()).
 
 -type(user() ::
-        #user{username     :: rabbit_access_control:username(),
+        #user{username     :: username(),
               is_admin     :: boolean(),
               auth_backend :: atom(),
               impl         :: any()}).
 
 -type(internal_user() ::
-        #internal_user{username      :: rabbit_access_control:username(),
-                       password_hash :: rabbit_access_control:password_hash(),
+        #internal_user{username      :: username(),
+                       password_hash :: password_hash(),
                        is_admin      :: boolean()}).
+
+-type(username() :: binary()).
+-type(password() :: binary()).
+-type(password_hash() :: binary()).
 
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).

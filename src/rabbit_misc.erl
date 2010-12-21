@@ -46,7 +46,7 @@
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
--export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
+-export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
@@ -72,7 +72,7 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0]).
+-export_type([resource_name/0, thunk/1]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -137,10 +137,9 @@
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
--spec(with_vhost/2 :: (rabbit_types:vhost(), thunk(A)) -> A).
+-spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
-        (rabbit_access_control:username(), rabbit_types:vhost(), thunk(A))
+        (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
         -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
@@ -366,19 +365,8 @@ with_user(Username, Thunk) ->
             end
     end.
 
-with_vhost(VHostPath, Thunk) ->
-    fun () ->
-            case mnesia:read({rabbit_vhost, VHostPath}) of
-                [] ->
-                    mnesia:abort({no_such_vhost, VHostPath});
-                [_V] ->
-                    Thunk()
-            end
-    end.
-
 with_user_and_vhost(Username, VHostPath, Thunk) ->
-    with_user(Username, with_vhost(VHostPath, Thunk)).
-
+    with_user(Username, rabbit_vhost:with(VHostPath, Thunk)).
 
 execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
