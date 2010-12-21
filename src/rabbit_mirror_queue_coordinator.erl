@@ -70,9 +70,17 @@ handle_call(get_gm, _From, State = #state { gm = GM }) ->
     reply(GM, State).
 
 handle_cast({add_slave, Node}, State = #state { q = Q }) ->
-    Result = rabbit_mirror_queue_slave_sup:start_child(Node, [Q]),
-    rabbit_log:info("Adding slave node for queue ~p: ~p~n",
-                    [Q #amqqueue.name, Result]),
+    Nodes = nodes(),
+    case lists:member(Node, Nodes) of
+        true ->
+            Result = rabbit_mirror_queue_slave_sup:start_child(Node, [Q]),
+            rabbit_log:info("Adding slave node for queue ~p: ~p~n",
+                            [Q #amqqueue.name, Result]);
+        false ->
+            rabbit_log:info(
+              "Ignoring request to add slave on node ~p for queue ~p~n",
+              [Q #amqqueue.name, Node])
+    end,
     noreply(State);
 
 handle_cast({gm_deaths, Deaths},
