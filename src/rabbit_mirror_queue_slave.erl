@@ -266,7 +266,7 @@ members_changed([SPid], _Births, Deaths) ->
     rabbit_misc:with_exit_handler(
       fun () -> {stop, normal} end,
       fun () ->
-              case gen_server2:call(SPid, {gm_deaths, Deaths}) of
+              case gen_server2:call(SPid, {gm_deaths, Deaths}, infinity) of
                   ok ->
                       ok;
                   {promote, CPid} ->
