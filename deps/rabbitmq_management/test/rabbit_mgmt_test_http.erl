@@ -168,7 +168,8 @@ connections_test() ->
                "/connections/127.0.0.1%3A~w", [LocalPort])),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
-    %% TODO lose this, what is async?
+    %% TODO rabbit_reader:shutdown/2 returns before the connection is
+    %% closed. It may not be worth fixing.
     timer:sleep(200),
     http_get(Path, ?NOT_FOUND).
 
