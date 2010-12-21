@@ -38,7 +38,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 vhosts() ->
-    format(rabbit_access_control:list_vhosts()).
+    format(rabbit_vhost:list()).
 
 format(Vs) ->
     [[{name, N}] || N <- Vs].

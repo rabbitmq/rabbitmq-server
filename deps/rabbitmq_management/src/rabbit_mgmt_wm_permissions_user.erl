@@ -29,7 +29,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    Perms = rabbit_access_control:list_user_permissions(User),
+    Perms = rabbit_auth_backend_internal:list_user_permissions(User),
     rabbit_mgmt_util:reply_list(
       [rabbit_mgmt_format:permissions({User, VHost,
                                        Conf, Write, Read}) ||

@@ -38,6 +38,6 @@ is_authorized(ReqData, Context) ->
 
 users() ->
     [begin
-         {ok, User} = rabbit_access_control:lookup_user(U),
+         {ok, User} = rabbit_auth_backend_internal:lookup_user(U),
          rabbit_mgmt_format:internal_user(User)
-     end || {U, _} <- rabbit_access_control:list_users()].
+     end || {U, _} <- rabbit_auth_backend_internal:list_users()].

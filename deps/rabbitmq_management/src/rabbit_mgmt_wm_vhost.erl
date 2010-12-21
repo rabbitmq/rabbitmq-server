@@ -36,7 +36,7 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {rabbit_access_control:vhost_exists(id(ReqData)), ReqData, Context}.
+    {rabbit_vhost:exists(id(ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
     VHost = [{name, id(ReqData)}],
@@ -48,7 +48,7 @@ accept_content(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     VHost = id(ReqData),
-    rabbit_access_control:delete_vhost(VHost),
+    rabbit_vhost:delete(VHost),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -60,7 +60,7 @@ id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
 
 put_vhost(VHost) ->
-    case rabbit_access_control:vhost_exists(VHost) of
+    case rabbit_vhost:exists(VHost) of
         true  -> ok;
-        false -> rabbit_access_control:add_vhost(VHost)
+        false -> rabbit_vhost:add(VHost)
     end.

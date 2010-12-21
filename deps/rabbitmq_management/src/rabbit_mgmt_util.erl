@@ -85,7 +85,7 @@ is_authorized(ReqData, Context, Fun) ->
 vhost(ReqData) ->
     case id(vhost, ReqData) of
         none  -> none;
-        VHost -> case rabbit_access_control:vhost_exists(VHost) of
+        VHost -> case rabbit_vhost:exists(VHost) of
                      true  -> VHost;
                      false -> not_found
                  end
@@ -275,8 +275,7 @@ amqp_request(VHost, ReqData, Context, Method) ->
 
 all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        none      -> lists:append(
-                       [Fun(V) || V <- rabbit_access_control:list_vhosts()]);
+        none      -> lists:append([Fun(V) || V <- rabbit_vhost:list()]);
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
     end.

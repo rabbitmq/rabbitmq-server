@@ -186,7 +186,7 @@ add_vhost(VHost) ->
     rabbit_mgmt_wm_vhost:put_vhost(VHostName).
 
 add_permission(Permission) ->
-    rabbit_access_control:set_permissions(pget(user,      Permission),
+    rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
                                           pget(vhost,     Permission),
                                           pget(configure, Permission),
                                           pget(write,     Permission),
