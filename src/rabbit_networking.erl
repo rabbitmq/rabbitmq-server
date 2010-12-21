@@ -245,11 +245,10 @@ start_ssl_client(SslOpts, Sock) ->
       end).
 
 connections() ->
-    lists:flatten(
-      [[rabbit_connection_sup:reader(ConnSup) ||
-          {_, ConnSup, supervisor, _}
-              <- supervisor:which_children({rabbit_tcp_client_sup, Node})]
-       || Node <- mnesia:system_info(running_db_nodes)]).
+    [rabbit_connection_sup:reader(ConnSup) ||
+        Node <- mnesia:system_info(running_db_nodes),
+        {_, ConnSup, supervisor, _}
+            <- supervisor:which_children({rabbit_tcp_client_sup, Node})].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
