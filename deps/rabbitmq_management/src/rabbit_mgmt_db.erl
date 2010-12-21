@@ -290,7 +290,8 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
-                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
+                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
+                  {fun rabbit_mgmt_format:pid/1, [exclusive_consumer_pid]}],
                  [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
