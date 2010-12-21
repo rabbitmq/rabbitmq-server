@@ -169,16 +169,8 @@
 %% wrong in shutdown (or there was subsequent manual tampering), all
 %% messages and queues that can be recovered are recovered, safely.
 %%
-%% To delete transient messages lazily, the Mnesia queue, on startup,
-%% stores the next_seq_id reported by the queue_index as the
-%% transient_threshold. From that point on, whenever it's reading a
-%% message off disk via the queue_index, if the seq_id is below this
-%% threshold and the message is transient then it drops the message
-%% (the message itself won't exist on disk because it would have been
-%% stored in the transient msg_store which would have had its saved
-%% state nuked on startup). This avoids the expensive operation of
-%% scanning the entire queue on startup in order to delete transient
-%% messages that were only pushed to disk to save memory.
+%% May need to add code to throw away transient messages upon
+%% initialization, depending on storage strategy.
 %%
 %%----------------------------------------------------------------------------
 
@@ -197,7 +189,6 @@
 	  msg_store_clients,
 	  on_sync,
 	  durable,
-	  transient_threshold,
 
 	  len,
 	  persistent_count,
@@ -282,7 +273,6 @@
 	     len :: non_neg_integer(),
 	     persistent_count :: non_neg_integer(),
 
-	     transient_threshold :: non_neg_integer(),
 	     ram_msg_count :: non_neg_integer(),
 	     ram_msg_count_prev :: non_neg_integer(),
 	     ram_index_count :: non_neg_integer(),
@@ -991,12 +981,12 @@ persistent_guids(Pubs) ->
     [Guid || {#basic_message { guid = Guid,
 			       is_persistent = true }, _MsgProps} <- Pubs].
 
-betas_from_index_entries(List, TransientThreshold, IndexState) ->
+betas_from_index_entries(List, IndexState) ->
     {Filtered, Delivers, Acks} =
 	lists:foldr(
 	  fun ({Guid, SeqId, MsgProps, IsPersistent, IsDelivered},
 	       {Filtered1, Delivers1, Acks1}) ->
-		  case SeqId < TransientThreshold andalso not IsPersistent of
+		  case not IsPersistent of
 		      true -> {Filtered1,
 			       cons_if(not IsDelivered, SeqId, Delivers1),
 			       [SeqId | Acks1]};
@@ -1047,7 +1037,6 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       msg_store_clients = {PersistentClient, TransientClient},
       on_sync = ?BLANK_SYNC,
       durable = IsDurable,
-      transient_threshold = NextSeqId,
 
       len = DeltaCount1,
       persistent_count = DeltaCount1,
@@ -1442,8 +1431,7 @@ maybe_deltas_to_betas(State = #mqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
 maybe_deltas_to_betas(State = #mqstate {
 			delta = Delta,
 			q3 = Q3,
-			index_state = IndexState,
-			transient_threshold = TransientThreshold }) ->
+			index_state = IndexState }) ->
     #delta { start_seq_id = DeltaSeqId,
 	     count = DeltaCount,
 	     end_seq_id = DeltaSeqIdEnd } = Delta,
@@ -1453,7 +1441,7 @@ maybe_deltas_to_betas(State = #mqstate {
     {List, IndexState1} =
 	rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
     {Q3a, IndexState2} =
-	betas_from_index_entries(List, TransientThreshold, IndexState1),
+	betas_from_index_entries(List, IndexState1),
     State1 = State #mqstate { index_state = IndexState2 },
     case bpqueue:len(Q3a) of
 	0 ->
