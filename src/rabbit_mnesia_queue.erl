@@ -88,52 +88,11 @@
 %% entries. It is never permitted for delta to hold all the messages
 %% in the queue.
 %%
-%% The duration indicated to us by the memory_monitor is used to
-%% calculate, given our current ingress and egress rates, how many
-%% messages we should hold in RAM. We track the ingress and egress
-%% rates for both messages and pending acks and rates for both are
-%% considered when calculating the number of messages to hold in
-%% RAM. When we need to push alphas to betas or betas to gammas, we
-%% favour writing out messages that are further from the head of the
-%% queue. This minimises writes to disk, as the messages closer to the
-%% tail of the queue stay in the queue for longer, thus do not need to
-%% be replaced as quickly by sending other messages to disk.
-%%
 %% Whilst messages are pushed to disk and forgotten from RAM as soon
 %% as requested by a new setting of the queue RAM duration, the
 %% inverse is not true: we only load messages back into RAM as
 %% demanded as the queue is read from. Thus only publishes to the
 %% queue will take up available spare capacity.
-%%
-%% When we report our duration to the memory monitor, we calculate
-%% average ingress and egress rates over the last two samples, and
-%% then calculate our duration based on the sum of the ingress and
-%% egress rates. More than two samples could be used, but it's a
-%% balance between responding quickly enough to changes in
-%% producers/consumers versus ignoring temporary blips. The problem
-%% with temporary blips is that with just a few queues, they can have
-%% substantial impact on the calculation of the average duration and
-%% hence cause unnecessary I/O. Another alternative is to increase the
-%% amqqueue_process:RAM_DURATION_UPDATE_PERIOD to beyond 5
-%% seconds. However, that then runs the risk of being too slow to
-%% inform the memory monitor of changes. Thus a 5 second interval,
-%% plus a rolling average over the last two samples seems to work
-%% well in practice.
-%%
-%% The sum of the ingress and egress rates is used because the egress
-%% rate alone is not sufficient. Adding in the ingress rate means that
-%% queues which are being flooded by messages are given more memory,
-%% resulting in them being able to process the messages faster (by
-%% doing less I/O, or at least deferring it) and thus helping keep
-%% their mailboxes empty and thus the queue as a whole is more
-%% responsive. If such a queue also has fast but previously idle
-%% consumers, the consumer can then start to be driven as fast as it
-%% can go, whereas if only egress rate was being used, the incoming
-%% messages may have to be written to disk and then read back in,
-%% resulting in the hard disk being a bottleneck in driving the
-%% consumers. Generally, we want to give Rabbit every chance of
-%% getting rid of messages as fast as possible and remaining
-%% responsive, and using only the egress rate impacts that goal.
 %%
 %% If a queue is full of transient messages, then the transition from
 %% betas to deltas will be potentially very expensive as millions of
@@ -157,8 +116,7 @@
 %%
 %% The conversion from alphas to betas is also chunked, but only to
 %% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
-%% any one time. This further smooths the effects of changes to the
-%% target_ram_count and ensures the queue remains responsive
+%% any one time. This further ensures the queue remains responsive
 %% even when there is a large amount of IO work to do. The
 %% idle_timeout callback is utilised to ensure that conversions are
 %% done as promptly as possible whilst ensuring the queue remains
@@ -181,17 +139,6 @@
 %% During memory reduction, acks stored in message-form are converted
 %% to tuple-form, and the corresponding messages are pushed out to
 %% disk.
-%%
-%% The order in which alphas are pushed to betas and message-form acks
-%% are pushed to disk is determined dynamically. We always prefer to
-%% push messages for the source (alphas or acks) that is growing the
-%% fastest (with growth measured as avg. ingress - avg. egress). In
-%% each round of memory reduction a chunk of messages at most
-%% ?IO_BATCH_SIZE in size is allocated to be pushed to disk. The
-%% fastest growing source will be reduced by as much of this chunk as
-%% possible. If there is any remaining allocation in the chunk after
-%% the first source has been reduced to zero, the second source will
-%% be reduced by as much of the remaining chunk as possible.
 %%
 %% Notes on Clean Shutdown
 %% (This documents behaviour in variable_queue, queue_index and
@@ -222,8 +169,8 @@
 %% wrong in shutdown (or there was subsequent manual tampering), all
 %% messages and queues that can be recovered are recovered, safely.
 %%
-%% To delete transient messages lazily, the variable_queue, on
-%% startup, stores the next_seq_id reported by the queue_index as the
+%% To delete transient messages lazily, the Mnesia queue, on startup,
+%% stores the next_seq_id reported by the queue_index as the
 %% transient_threshold. From that point on, whenever it's reading a
 %% message off disk via the queue_index, if the seq_id is below this
 %% threshold and the message is transient then it drops the message
@@ -255,23 +202,18 @@
 	  len,
 	  persistent_count,
 
-	  target_ram_count,
 	  ram_msg_count,
 	  ram_msg_count_prev,
 	  ram_ack_count_prev,
 	  ram_index_count,
 	  out_counter,
 	  in_counter,
-	  rates,
 	  msgs_on_disk,
 	  msg_indices_on_disk,
 	  unconfirmed,
 	  ack_out_counter,
-	  ack_in_counter,
-	  ack_rates
+	  ack_in_counter
 	}).
-
--record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
 
 -record(msg_status,
 	{ seq_id,
@@ -310,15 +252,8 @@
 
 -ifdef(use_specs).
 
--type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
-
--type(rates() :: #rates { egress :: {timestamp(), non_neg_integer()},
-			  ingress :: {timestamp(), non_neg_integer()},
-			  avg_egress :: float(),
-			  avg_ingress :: float(),
-			  timestamp :: timestamp() }).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
 			  count :: non_neg_integer(),
@@ -348,19 +283,16 @@
 	     persistent_count :: non_neg_integer(),
 
 	     transient_threshold :: non_neg_integer(),
-	     target_ram_count :: non_neg_integer() | 'infinity',
 	     ram_msg_count :: non_neg_integer(),
 	     ram_msg_count_prev :: non_neg_integer(),
 	     ram_index_count :: non_neg_integer(),
 	     out_counter :: non_neg_integer(),
 	     in_counter :: non_neg_integer(),
-	     rates :: rates(),
 	     msgs_on_disk :: gb_set(),
 	     msg_indices_on_disk :: gb_set(),
 	     unconfirmed :: gb_set(),
 	     ack_out_counter :: non_neg_integer(),
-	     ack_in_counter :: non_neg_integer(),
-	     ack_rates :: rates() }).
+	     ack_in_counter :: non_neg_integer() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -874,20 +806,7 @@ is_empty(State) -> 0 == len(State).
 %% -spec(set_ram_duration_target/2 ::
 %% (('undefined' | 'infinity' | number()), state()) -> state()).
 
-set_ram_duration_target(
-  DurationTarget, State = #mqstate {
-		    rates = #rates { avg_egress = AvgEgressRate,
-				     avg_ingress = AvgIngressRate },
-		    ack_rates = #rates { avg_egress = AvgAckEgressRate,
-					 avg_ingress = AvgAckIngressRate } }) ->
-    Rate =
-	AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
-    TargetRamCount1 =
-	case DurationTarget of
-	    infinity -> infinity;
-	    _ -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
-	end,
-    a(State #mqstate { target_ram_count = TargetRamCount1 }).
+set_ram_duration_target(_DurationTarget, State) -> State.
 
 %%----------------------------------------------------------------------------
 %% ram_duration/1 optionally recalculates the duration internally
@@ -897,61 +816,7 @@ set_ram_duration_target(
 
 %% -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 
-ram_duration(State = #mqstate {
-	       rates = #rates { timestamp = Timestamp,
-				egress = Egress,
-				ingress = Ingress } = Rates,
-	       ack_rates = #rates { timestamp = AckTimestamp,
-				    egress = AckEgress,
-				    ingress = AckIngress } = ARates,
-	       in_counter = InCount,
-	       out_counter = OutCount,
-	       ack_in_counter = AckInCount,
-	       ack_out_counter = AckOutCount,
-	       ram_msg_count = RamMsgCount,
-	       ram_msg_count_prev = RamMsgCountPrev,
-	       ram_ack_index = RamAckIndex,
-	       ram_ack_count_prev = RamAckCountPrev }) ->
-    Now = now(),
-    {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
-    {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
-
-    {AvgAckEgressRate, AckEgress1} =
-	update_rate(Now, AckTimestamp, AckOutCount, AckEgress),
-    {AvgAckIngressRate, AckIngress1} =
-	update_rate(Now, AckTimestamp, AckInCount, AckIngress),
-
-    RamAckCount = gb_trees:size(RamAckIndex),
-
-    Duration = %% msgs+acks / (msgs+acks/sec) == sec
-	case AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
-	    AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0 of
-	    true -> infinity;
-	    false -> (RamMsgCountPrev + RamMsgCount +
-			  RamAckCount + RamAckCountPrev) /
-			 (4 * (AvgEgressRate + AvgIngressRate +
-				   AvgAckEgressRate + AvgAckIngressRate))
-	end,
-
-    {Duration, State #mqstate {
-		 rates = Rates #rates {
-			   egress = Egress1,
-			   ingress = Ingress1,
-			   avg_egress = AvgEgressRate,
-			   avg_ingress = AvgIngressRate,
-			   timestamp = Now },
-		 ack_rates = ARates #rates {
-			       egress = AckEgress1,
-			       ingress = AckIngress1,
-			       avg_egress = AvgAckEgressRate,
-			       avg_ingress = AvgAckIngressRate,
-			       timestamp = Now },
-		 in_counter = 0,
-		 out_counter = 0,
-		 ack_in_counter = 0,
-		 ack_out_counter = 0,
-		 ram_msg_count_prev = RamMsgCount,
-		 ram_ack_count_prev = RamAckCount }}.
+ram_duration(State) -> {0, State}.
 
 %%----------------------------------------------------------------------------
 %% needs_idle_timeout/1 returns 'true' if 'idle_timeout' should be
@@ -960,13 +825,8 @@ ram_duration(State = #mqstate {
 
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
-needs_idle_timeout(State = #mqstate { on_sync = ?BLANK_SYNC }) ->
-    {Res, _State} = reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
-				      fun (_Quota, State1) -> State1 end,
-				      fun (State1) -> State1 end,
-				      fun (_Quota, State1) -> {0, State1} end,
-				      State),
-    Res;
+needs_idle_timeout(_State = #mqstate { on_sync = ?BLANK_SYNC }) ->
+    false;
 needs_idle_timeout(_State) ->
     true.
 
@@ -1000,15 +860,10 @@ status(#mqstate {
 	  pending_ack = PA,
 	  ram_ack_index = RAI,
 	  on_sync = #sync { funs = From },
-	  target_ram_count = TargetRamCount,
 	  ram_msg_count = RamMsgCount,
 	  ram_index_count = RamIndexCount,
 	  next_seq_id = NextSeqId,
-	  persistent_count = PersistentCount,
-	  rates = #rates { avg_egress = AvgEgressRate,
-			   avg_ingress = AvgIngressRate },
-	  ack_rates = #rates { avg_egress = AvgAckEgressRate,
-			       avg_ingress = AvgAckIngressRate } }) ->
+	  persistent_count = PersistentCount }) ->
     [ {q1 , queue:len(Q1)},
       {delta , Delta},
       {q3 , bpqueue:len(Q3)},
@@ -1016,16 +871,11 @@ status(#mqstate {
       {len , Len},
       {pending_acks , dict:size(PA)},
       {outstanding_txns , length(From)},
-      {target_ram_count , TargetRamCount},
       {ram_msg_count , RamMsgCount},
       {ram_ack_count , gb_trees:size(RAI)},
       {ram_index_count , RamIndexCount},
       {next_seq_id , NextSeqId},
-      {persistent_count , PersistentCount},
-      {avg_ingress_rate , AvgIngressRate},
-      {avg_egress_rate , AvgEgressRate},
-      {avg_ack_ingress_rate, AvgAckIngressRate},
-      {avg_ack_egress_rate , AvgAckEgressRate} ].
+      {persistent_count , PersistentCount} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -1170,10 +1020,6 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
 beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
-update_rate(Now, Then, Count, {OThen, OCount}) ->
-    %% avg over the current period and the previous
-    {1000000.0 * (Count + OCount) / timer:now_diff(Now, OThen), {Then, Count}}.
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -1189,7 +1035,6 @@ init(IsDurable, IndexState, DeltaCount, Terms,
 				  count = DeltaCount1,
 				  end_seq_id = NextSeqId }
 	    end,
-    Now = now(),
     State = #mqstate {
       q1 = queue:new(),
       delta = Delta,
@@ -1207,28 +1052,18 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       len = DeltaCount1,
       persistent_count = DeltaCount1,
 
-      target_ram_count = infinity,
       ram_msg_count = 0,
       ram_msg_count_prev = 0,
       ram_ack_count_prev = 0,
       ram_index_count = 0,
       out_counter = 0,
       in_counter = 0,
-      rates = blank_rate(Now, DeltaCount1),
       msgs_on_disk = gb_sets:new(),
       msg_indices_on_disk = gb_sets:new(),
       unconfirmed = gb_sets:new(),
       ack_out_counter = 0,
-      ack_in_counter = 0,
-      ack_rates = blank_rate(Now, 0) },
+      ack_in_counter = 0 },
     a(maybe_deltas_to_betas(State)).
-
-blank_rate(Timestamp, IngressLength) ->
-    #rates { egress = {Timestamp, 0},
-	     ingress = {Timestamp, IngressLength},
-	     avg_egress = 0.0,
-	     avg_ingress = 0.0,
-	     timestamp = Timestamp }.
 
 msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
     Self = self(),
@@ -1566,86 +1401,6 @@ msg_indices_written_to_disk(QPid, GuidSet) ->
 %%----------------------------------------------------------------------------
 %% Phase changes
 %%----------------------------------------------------------------------------
-
-%% Determine whether a reduction in memory use is necessary, and call
-%% functions to perform the required phase changes. The function can
-%% also be used to just do the former, by passing in dummy phase
-%% change functions.
-%%
-%% The function does not report on any needed beta->delta conversions,
-%% though the conversion function for that is called as necessary. The
-%% reason is twofold. Firstly, this is safe because the conversion is
-%% only ever necessary just after a transition to a
-%% target_ram_count of zero or after an incremental alpha->beta
-%% conversion. In the former case the conversion is performed straight
-%% away (i.e. any betas present at the time are converted to deltas),
-%% and in the latter case the need for a conversion is flagged up
-%% anyway. Secondly, this is necessary because we do not have a
-%% precise and cheap predicate for determining whether a beta->delta
-%% conversion is necessary - due to the complexities of retaining up
-%% one segment's worth of messages in q3 - and thus would risk
-%% perpetually reporting the need for a conversion when no such
-%% conversion is needed. That in turn could cause an infinite loop.
-
-%% This version modified never to call reduce_memory_use/1.
-
-reduce_memory_use(_AlphaBetaFun, _BetaGammaFun, _BetaDeltaFun, _AckFun,
-		  State = #mqstate {target_ram_count = infinity}) ->
-    {false, State};
-reduce_memory_use(AlphaBetaFun, BetaGammaFun, BetaDeltaFun, AckFun,
-		  State = #mqstate {
-		    ram_ack_index = RamAckIndex,
-		    ram_msg_count = RamMsgCount,
-		    target_ram_count = TargetRamCount,
-		    rates = #rates { avg_ingress = AvgIngress,
-				     avg_egress = AvgEgress },
-		    ack_rates = #rates { avg_ingress = AvgAckIngress,
-					 avg_egress = AvgAckEgress }
-		   }) ->
-
-    {Reduce, State1} =
-	case chunk_size(RamMsgCount + gb_trees:size(RamAckIndex),
-			TargetRamCount) of
-	    0 -> {false, State};
-	    %% Reduce memory of pending acks and alphas. The order is
-	    %% determined based on which is growing faster. Whichever
-	    %% comes second may very well get a quota of 0 if the
-	    %% first manages to push out the max number of messages.
-	    S1 -> {_, State2} =
-		      lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
-					  ReduceFun(QuotaN, StateN)
-				  end,
-				  {S1, State},
-				  case (AvgAckIngress - AvgAckEgress) >
-				      (AvgIngress - AvgEgress) of
-				      true -> [AckFun, AlphaBetaFun];
-				      false -> [AlphaBetaFun, AckFun]
-				  end),
-		  {true, State2}
-	end,
-
-    case State1 #mqstate.target_ram_count of
-	0 -> {Reduce, BetaDeltaFun(State1)};
-	_ -> case chunk_size(State1 #mqstate.ram_index_count,
-			     permitted_ram_index_count(State1)) of
-		 ?IO_BATCH_SIZE = S2 -> {true, BetaGammaFun(S2, State1)};
-		 _ -> {Reduce, State1}
-	     end
-    end.
-
-permitted_ram_index_count(#mqstate { len = 0 }) ->
-    infinity;
-permitted_ram_index_count(#mqstate { len = Len,
-				     q3 = Q3,
-				     delta = #delta { count = DeltaCount } }) ->
-    BetaLen = bpqueue:len(Q3),
-    BetaLen - trunc(BetaLen * BetaLen / (Len - DeltaCount)).
-
-chunk_size(Current, Permitted)
-  when Permitted =:= infinity orelse Permitted >= Current ->
-    0;
-chunk_size(Current, Permitted) ->
-    lists:min([Current - Permitted, ?IO_BATCH_SIZE]).
 
 fetch_from_q3(State = #mqstate {
 		q1 = Q1,
