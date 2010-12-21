@@ -153,7 +153,9 @@
 %% queue_index adds to these terms the details of its segments and
 %% stores the terms in the queue directory.
 %%
-%% All queues are durable in this version.
+%% All queues are durable in this version, however they are
+%% requested. (We may need to remember the requested type to catch
+%% accidental redeclares.)
 %%
 %% Two message stores are used. One is created for persistent messages
 %% that must survive restarts, and the other is used for all other
