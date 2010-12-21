@@ -1393,8 +1393,8 @@ msgs_confirmed(GuidSet, State) ->
     {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
 
 msgs_written_to_disk(QPid, GuidSet) ->
-    io:format("variable queue notified of msgs written to disk: ~p~n",
-              [gb_sets:size(GuidSet)]),
+    %%io:format("variable queue notified of msgs written to disk: ~p~n",
+    %%          [gb_sets:size(GuidSet)]),
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
                                     msg_indices_on_disk = MIOD,
@@ -1407,8 +1407,8 @@ msgs_written_to_disk(QPid, GuidSet) ->
             end).
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
-    io:format("variable queue notified of msg idx written to disk: ~p~n",
-              [gb_sets:size(GuidSet)]),
+    %%io:format("variable queue notified of msg idx written to disk: ~p~n",
+    %%          [gb_sets:size(GuidSet)]),
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
                                     msg_indices_on_disk = MIOD,
