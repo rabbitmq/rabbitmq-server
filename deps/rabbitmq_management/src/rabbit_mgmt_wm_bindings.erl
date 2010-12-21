@@ -60,41 +60,38 @@ create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
 
 accept_content(ReqData, {_Mode, Context}) ->
-    rabbit_mgmt_util:with_decode_vhost(
-      [routing_key, arguments], ReqData, Context,
-      fun(VHost, [Key, Args0]) ->
-              Source = rabbit_mgmt_util:id(source, ReqData),
-              Dest = rabbit_mgmt_util:id(destination, ReqData),
-              DestType = rabbit_mgmt_util:id(dtype, ReqData),
-              Args = rabbit_mgmt_util:args(Args0),
-              Method =
-                  case DestType of
-                      <<"q">> ->
-                          #'queue.bind'{ exchange    = Source,
-                                         queue       = Dest,
-                                         routing_key = Key,
-                                         arguments   = Args };
-                      <<"e">> ->
-                          #'exchange.bind'{ source      = Source,
-                                            destination = Dest,
-                                            routing_key = Key,
-                                            arguments   = Args}
-                  end,
-              case rabbit_mgmt_util:amqp_request(
-                     VHost, ReqData, Context, Method) of
-                  {{halt, _}, _, _} = Res ->
-                      Res;
-                  {true, ReqData, Context2} ->
+    Source = rabbit_mgmt_util:id(source, ReqData),
+    Dest = rabbit_mgmt_util:id(destination, ReqData),
+    DestType = rabbit_mgmt_util:id(dtype, ReqData),
+    VHost = rabbit_mgmt_util:vhost(ReqData),
+    Response =
+        case DestType of
+            <<"q">> ->
+                rabbit_mgmt_util:http_to_amqp(
+                  'queue.bind', ReqData, Context,
+                  [], [{exchange, Source}, {queue,       Dest}]);
+            <<"e">> ->
+                rabbit_mgmt_util:http_to_amqp(
+                  'exchange.bind', ReqData, Context,
+                  [], [{source,   Source}, {destination, Dest}])
+        end,
+    case Response of
+        {{halt, _}, _, _} = Res ->
+            Res;
+        {true, ReqData, Context2} ->
+            rabbit_mgmt_util:with_decode(
+              [routing_key, arguments], ReqData, Context,
+              fun([Key, Args]) ->
                       Loc = binary_to_list(
                               rabbit_mgmt_format:url(
                                 "/api/bindings/~s/e/~s/~s/~s/~s",
                                 [VHost, Source, DestType, Dest,
                                  rabbit_mgmt_format:pack_binding_props(
-                                   Key, Args)])),
+                                   Key, rabbit_mgmt_util:args(Args))])),
                       ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
                       {true, ReqData2, Context2}
-              end
-      end).
+              end)
+    end.
 
 is_authorized(ReqData, {Mode, Context}) ->
     {Res, RD2, C2} = rabbit_mgmt_util:is_authorized_vhost(ReqData, Context),

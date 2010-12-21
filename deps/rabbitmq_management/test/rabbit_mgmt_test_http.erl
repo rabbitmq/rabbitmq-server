@@ -178,9 +178,7 @@ test_auth(Code, Headers) ->
 
 exchanges_test() ->
     %% Can pass booleans or strings
-    Good = [{type, <<"direct">>}, {durable, <<"true">>},
-            {auto_delete, <<"false">>}, {internal, <<"false">>},
-            {arguments, []}],
+    Good = [{type, <<"direct">>}, {durable, <<"true">>}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
@@ -201,20 +199,12 @@ exchanges_test() ->
         http_get("/exchanges/myvhost/foo"),
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
-    http_put("/exchanges/myvhost/bar",
-             [{type, <<"bad_exchange_type">>},
-              {durable, true}, {auto_delete, false}, {internal, false},
-              {arguments, []}],
+    http_put("/exchanges/myvhost/bar", [{type, <<"bad_exchange_type">>}],
              ?BAD_REQUEST),
-    http_put("/exchanges/myvhost/bar",
-             [{type, <<"direct">>},
-              {durable, <<"troo">>}, {auto_delete, false}, {internal, false},
-              {arguments, []}],
+    http_put("/exchanges/myvhost/bar", [{type, <<"direct">>},
+                                        {durable, <<"troo">>}],
              ?BAD_REQUEST),
-    http_put("/exchanges/myvhost/foo",
-             [{type, <<"direct">>},
-              {durable, false}, {auto_delete, false}, {internal, false},
-              {arguments, []}],
+    http_put("/exchanges/myvhost/foo", [{type, <<"direct">>}],
              ?BAD_REQUEST),
 
     http_delete("/exchanges/myvhost/foo", ?NO_CONTENT),
@@ -225,7 +215,7 @@ exchanges_test() ->
     ok.
 
 queues_test() ->
-    Good = [{durable, true}, {auto_delete, false}, {arguments, []}],
+    Good = [{durable, true}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
@@ -233,10 +223,10 @@ queues_test() ->
 
     http_put("/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/queues/%2f/bar",
-             [{durable, <<"troo">>}, {auto_delete, false}, {arguments, []}],
+             [{durable, <<"troo">>}],
              ?BAD_REQUEST),
     http_put("/queues/%2f/foo",
-             [{durable, false}, {auto_delete, false}, {arguments, []}],
+             [{durable, false}],
              ?BAD_REQUEST),
 
     http_put("/queues/%2f/baz", Good, ?NO_CONTENT),
@@ -266,9 +256,8 @@ queues_test() ->
     ok.
 
 bindings_test() ->
-    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {internal, false}, {arguments, []}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    XArgs = [{type, <<"direct">>}],
+    QArgs = [],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_put("/bindings/%2f/e/myexchange/q/badqueue/routing", [], ?NOT_FOUND),
@@ -310,9 +299,8 @@ bindings_test() ->
     ok.
 
 bindings_post_test() ->
-    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {internal, false}, {arguments, []}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    XArgs = [{type, <<"direct">>}],
+    QArgs = [],
     BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
@@ -339,7 +327,6 @@ bindings_e2e_test() ->
     BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
     http_post("/bindings/%2f/e/amq.direct/e/badexchange", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/badexchange/e/amq.fanout", BArgs, ?NOT_FOUND),
-    http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", [{a, "b"}], ?BAD_REQUEST),
     Headers = http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
     "/api/bindings/%2F/e/amq.direct/e/amq.fanout/routing" =
         pget("location", Headers),
@@ -399,7 +386,7 @@ permissions_administrator_test() ->
     ok.
 
 permissions_vhost_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
@@ -452,14 +439,16 @@ permissions_vhost_test() ->
 
 permissions_amqp_test() ->
     %% Just test that it works at all, not that it works in all possible cases.
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
                 {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser", ?NOT_AUTHORISED),
-    http_put("/queues/%2f/bar-queue", QArgs, "nonexistent", "nonexistent", ?NOT_AUTHORISED),
+    http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser",
+             ?NOT_AUTHORISED),
+    http_put("/queues/%2f/bar-queue", QArgs, "nonexistent", "nonexistent",
+             ?NOT_AUTHORISED),
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
@@ -506,16 +495,15 @@ permissions_connection_channel_test() ->
     ok.
 
 unicode_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
     http_get("/queues/%2f/♫♪♫♪", ?OK),
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
 all_configuration_test() ->
-    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {internal, false}, {arguments, []}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    XArgs = [{type, <<"direct">>}],
+    QArgs = [],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
     http_put("/bindings/%2f/e/my-exchange/q/my-queue/routing", [], ?NO_CONTENT),
@@ -601,11 +589,9 @@ aliveness_test() ->
     ok.
 
 arguments_test() ->
-    XArgs = [{type, <<"headers">>}, {durable, false}, {auto_delete, false},
-             {internal, false},
+    XArgs = [{type, <<"headers">>},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
-    QArgs = [{durable, false}, {auto_delete, false},
-             {arguments, [{'x-expires', 1800000}]}],
+    QArgs = [{arguments, [{'x-expires', 1800000}]}],
     BArgs = [{routing_key, <<"">>},
              {arguments, [{'x-match', <<"all">>},
                           {foo, <<"bar">>}]}],
@@ -629,7 +615,7 @@ arguments_test() ->
     ok.
 
 queue_purge_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -657,7 +643,7 @@ queue_purge_test() ->
     ok.
 
 sorting_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/vhosts/vh1", [], ?NO_CONTENT),
     http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),

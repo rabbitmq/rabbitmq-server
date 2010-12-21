@@ -20,12 +20,15 @@
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1]).
 -export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
--export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
+-export([props_to_method/2]).
+-export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+
+-define(FRAMING, rabbit_framing_amqp_0_9_1).
 
 %%--------------------------------------------------------------------
 
@@ -236,18 +239,52 @@ decode(Body) ->
     catch error:_ -> {error, not_json}
     end.
 
-with_decode_vhost(Keys, ReqData, Context, Fun) ->
-    case vhost(ReqData) of
-        not_found -> not_found(vhost_not_found, ReqData, Context);
-        VHost     -> with_decode(Keys, ReqData, Context,
-                                 fun (Vals) -> Fun(VHost, Vals) end)
-    end.
-
 get_or_missing(K, L) ->
     case proplists:get_value(K, L) of
         undefined -> {key_missing, K};
         V         -> V
     end.
+
+http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
+    case vhost(ReqData) of
+        not_found ->
+            not_found(vhost_not_found, ReqData, Context);
+        VHost ->
+            case decode(wrq:req_body(ReqData)) of
+                {ok, Props} ->
+                    try
+                        rabbit_mgmt_util:amqp_request(
+                          VHost, ReqData, Context,
+                          props_to_method(
+                            MethodName, Props, Transformers, Extra))
+                    catch {error, Error} ->
+                            bad_request(Error, ReqData, Context)
+                    end;
+                {error, Reason} ->
+                    bad_request(Reason, ReqData, Context)
+            end
+    end.
+
+props_to_method(MethodName, Props, Transformers, Extra) ->
+    Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- Props],
+    props_to_method(
+      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, Transformers)).
+
+props_to_method(MethodName, Props) ->
+    Props1 = rabbit_mgmt_format:format(
+               Props,
+               [{fun (Args) -> [{arguments, args(Args)}] end, [arguments]}]),
+    FieldNames = ?FRAMING:method_fieldnames(MethodName),
+    {Res, _Idx} = lists:foldl(
+                    fun (K, {R, Idx}) ->
+                            NewR = case proplists:get_value(K, Props1) of
+                                       undefined -> R;
+                                       V         -> setelement(Idx, R, V)
+                                   end,
+                            {NewR, Idx + 1}
+                    end, {?FRAMING:method_record(MethodName), 2},
+                    FieldNames),
+    Res.
 
 parse_bool(<<"true">>)  -> true;
 parse_bool(<<"false">>) -> false;
