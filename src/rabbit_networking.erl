@@ -245,9 +245,11 @@ start_ssl_client(SslOpts, Sock) ->
       end).
 
 connections() ->
-    [rabbit_connection_sup:reader(ConnSup) ||
-        {_, ConnSup, supervisor, _}
-            <- supervisor:which_children(rabbit_tcp_client_sup)].
+    lists:flatten(
+      [[rabbit_connection_sup:reader(ConnSup) ||
+          {_, ConnSup, supervisor, _}
+              <- supervisor:which_children({rabbit_tcp_client_sup, Node})]
+       || Node <- mnesia:system_info(running_db_nodes)]).
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
@@ -258,7 +260,10 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
-    rabbit_reader:shutdown(Pid, Explanation).
+    case lists:member(Pid, connections()) of
+        true  -> rabbit_reader:shutdown(Pid, Explanation);
+        false -> throw({error, {not_a_connection_pid, Pid}})
+    end.
 
 %%--------------------------------------------------------------------
 
