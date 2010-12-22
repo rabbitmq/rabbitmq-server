@@ -49,83 +49,10 @@
 %%----------------------------------------------------------------------------
 %% Definitions:
 
-%% alpha: this is a message where both the message itself, and its
-%% position within the queue are held in RAM
-%%
-%% beta: this is a message where the message itself is only held on
-%% disk, but its position within the queue is held in RAM.
-%%
-%% gamma: this is a message where the message itself is only held on
-%% disk, but its position is both in RAM and on disk.
-%%
-%% delta: this is a collection of messages, represented by a single
-%% term, where the messages and their position are only held on
-%% disk.
-%%
-%% Note that for persistent messages, the message and its position
-%% within the queue are always held on disk, *in addition* to being in
-%% one of the above classifications.
-%%
-%% Also note that within this code, the term gamma never
-%% appears. Instead, gammas are defined by betas who have had their
-%% queue position recorded on disk.
-%%
-%% In general, messages move q1 -> delta -> q3 -> q4, though many of
-%% these steps are frequently skipped. q1 and q4 only hold alphas, q3
-%% holds both betas and gammas (as queues of queues, using the bpqueue
-%% module where the block prefix determines whether they're betas or
-%% gammas). When a message arrives, its classification is
-%% determined. It is then added to the rightmost appropriate queue.
-%%
-%% If a new message is determined to be a beta or gamma, q1 is
-%% empty. If a new message is determined to be a delta, q1 is empty
-%% (and actually q4 too).
-%%
-%% When removing messages from a queue, if q4 is empty then q3 is read
-%% directly. If q3 becomes empty then the next segment's worth of
-%% messages from delta are read into q3, reducing the size of
-%% delta. If the queue is non empty, either q4 or q3 contain
-%% entries. It is never permitted for delta to hold all the messages
-%% in the queue.
-%%
-%% Whilst messages are pushed to disk and forgotten from RAM as soon
-%% as requested by a new setting of the queue RAM duration, the
-%% inverse is not true: we only load messages back into RAM as
-%% demanded as the queue is read from. Thus only publishes to the
-%% queue will take up available spare capacity.
-%%
-%% If a queue is full of messages, then the transition from betas to
-%% deltas will be potentially very expensive as millions of entries
-%% must be written to disk by the queue_index module. This can badly
-%% stall the queue. In order to avoid this, the proportion of gammas /
-%% (betas+gammas) must not be lower than (betas+gammas) /
-%% (alphas+betas+gammas). As the queue grows or available memory
-%% shrinks, the latter ratio increases, requiring the conversion of
-%% more gammas to betas in order to maintain the invariant. At the
-%% point at which betas and gammas must be converted to deltas, there
-%% should be very few betas remaining, thus the transition is fast (no
-%% work needs to be done for the gamma -> delta transition).
-%%
-%% The conversion of betas to gammas is done in batches of exactly
-%% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
-%% frequent operations on q3 will not be effectively amortised
-%% (switching the direction of queue access defeats amortisation), nor
-%% should it be too big, otherwise converting a batch stalls the queue
-%% for too long. Therefore, it must be just right. ram_index_count is
-%% used here and is the number of betas.
-%%
-%% The conversion from alphas to betas is also chunked, but only to
-%% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
-%% any one time. This further ensures the queue remains responsive
-%% even when there is a large amount of IO work to do. The
-%% idle_timeout callback is utilised to ensure that conversions are
-%% done as promptly as possible whilst ensuring the queue remains
-%% responsive.
-%%
 %% In the queue we keep track of both messages that are pending
 %% delivery and messages that are pending acks. This ensures that
 %% purging (deleting the former) and deletion (deleting the former and
-%% the latter) are both cheap and do require any scanning through qi
+%% the latter) are both cheap and do require any scanning through q
 %% segments.
 %%
 %% Pending acks are recorded in memory either as the tuple {SeqId,
@@ -183,10 +110,7 @@
 -behaviour(rabbit_backing_queue).
 
 -record(mqstate,
-	{ q1,
-	  delta,
-	  q3,
-	  q4,
+	{ q,
 	  next_seq_id,
 	  pending_ack,
 	  pending_ack_index,
@@ -221,23 +145,10 @@
 	  msg_props
 	}).
 
--record(delta,
-	{ start_seq_id, %% start_seq_id is inclusive
-	  count,
-	  end_seq_id %% end_seq_id is exclusive
-	}).
-
 -record(tx, { pending_messages, pending_acks }).
 
 -record(sync, { acks_persistent, acks_all, pubs, funs }).
 
-%% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
-%% that we must be due to write indices for before we do any work at
-%% all. This is both a minimum and a maximum - we don't write fewer
-%% than RAM_INDEX_BATCH_SIZE indices out in one go, and we don't write
-%% more - we can always come back on the next publish to do more.
--define(IO_BATCH_SIZE, 64).
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE, msg_store_transient).
 
@@ -250,10 +161,6 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(delta() :: #delta { start_seq_id :: non_neg_integer(),
-			  count :: non_neg_integer(),
-			  end_seq_id :: non_neg_integer() }).
-
 -type(sync() :: #sync { acks_persistent :: [[seq_id()]],
 			acks_all :: [[seq_id()]],
 			pubs :: [{message_properties_transformer(),
@@ -261,10 +168,7 @@
 			funs :: [fun (() -> any())] }).
 
 -type(state() :: #mqstate {
-	     q1 :: queue(),
-	     delta :: delta(),
-	     q3 :: bpqueue:bpqueue(),
-	     q4 :: queue(),
+	     q :: queue(),
 	     next_seq_id :: seq_id(),
 	     pending_ack :: dict(),
 	     ram_ack_index :: gb_tree(),
@@ -292,13 +196,6 @@
 -include("rabbit_backing_queue_spec.hrl").
 
 -endif.
-
--define(BLANK_DELTA, #delta { start_seq_id = undefined,
-			      count = 0,
-			      end_seq_id = undefined }).
--define(BLANK_DELTA_PATTERN(Z), #delta { start_seq_id = Z,
-					 count = 0,
-					 end_seq_id = Z }).
 
 -define(BLANK_SYNC, #sync { acks_persistent = [],
 			    acks_all = [],
@@ -433,7 +330,7 @@ terminate(State) ->
 %% needs to delete everything that's been delivered and not ack'd.
 
 delete_and_terminate(State) ->
-    %% TODO: there is no need to interact with qi at all - which we do
+    %% TODO: there is no need to interact with q at all - which we do
     %% as part of 'purge' and 'remove_pending_ack', other than
     %% deleting it.
     {_PurgeCount, State1} = purge(State),
@@ -455,29 +352,27 @@ delete_and_terminate(State) ->
 
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
-purge(State = #mqstate { q4 = Q4,
+purge(State = #mqstate { q = Q,
 			 index_state = IndexState,
 			 msg_store_clients = MSCState,
 			 len = Len,
 			 persistent_count = PCount }) ->
     %% TODO: when there are no pending acks, which is a common case,
-    %% we could simply wipe the qi instead of issuing delivers and
+    %% we could simply wipe the q instead of issuing delivers and
     %% acks for all the messages.
     {LensByStore, IndexState1} = remove_queue_entries(
-				   fun rabbit_misc:queue_fold/3, Q4,
+				   fun rabbit_misc:queue_fold/3, Q,
 				   orddict:new(), IndexState, MSCState),
-    {LensByStore1, State1 = #mqstate { q1 = Q1,
-				       index_state = IndexState2,
+    {LensByStore1, State1 = #mqstate { index_state = IndexState2,
 				       msg_store_clients = MSCState1 }} =
-	purge_betas_and_deltas(LensByStore,
-			       State #mqstate { q4 = queue:new(),
-						index_state = IndexState1 }),
+	purge_betas(LensByStore,
+		    State #mqstate { q = queue:new(),
+				     index_state = IndexState1 }),
     {LensByStore2, IndexState3} = remove_queue_entries(
-				    fun rabbit_misc:queue_fold/3, Q1,
+				    fun rabbit_misc:queue_fold/3, queue:new(),
 				    LensByStore1, IndexState2, MSCState1),
     PCount1 = PCount - find_persistent_count(LensByStore2),
-    {Len, a(State1 #mqstate { q1 = queue:new(),
-			      index_state = IndexState3,
+    {Len, a(State1 #mqstate { index_state = IndexState3,
 			      len = 0,
 			      ram_msg_count = 0,
 			      ram_index_count = 0,
@@ -514,10 +409,9 @@ publish_delivered(true, Msg = #basic_message { guid = Guid },
 				     unconfirmed = Unconfirmed }) ->
     MsgStatus = (msg_status(SeqId, Msg, MsgProps))
 	#msg_status { is_delivered = true },
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = record_pending_ack(m(MsgStatus1), State1),
+    State1 = record_pending_ack(m(MsgStatus), State),
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
-    {SeqId, a(State2 #mqstate { next_seq_id = SeqId + 1,
+    {SeqId, a(State1 #mqstate { next_seq_id = SeqId + 1,
 				out_counter = OutCount + 1,
 				in_counter = InCount + 1,
 				unconfirmed = Unconfirmed1 })}.
@@ -542,13 +436,12 @@ dropwhile1(Pred, State) ->
 		      {_, State2} = internal_fetch(false, MsgStatus, State1),
 		      dropwhile1(Pred, State2);
 		  false ->
-		      %% message needs to go back into Q4 (or maybe go
-		      %% in for the first time if it was loaded from
-		      %% Q3). Also the msg contents might not be in
-		      %% RAM, so read them in now
-		      {MsgStatus1, State2 = #mqstate { q4 = Q4 }} =
+		      %% message needs to go back into Q. Also the
+		      %% msg contents might not be in RAM, so read
+		      %% them in now
+		      {MsgStatus1, State2 = #mqstate { q = Q }} =
 			  read_msg(MsgStatus, State1),
-		      {ok, State2 #mqstate {q4 = queue:in_r(MsgStatus1, Q4) }}
+		      {ok, State2 #mqstate {q = queue:in_r(MsgStatus1, Q) }}
 	      end
       end, State).
 
@@ -566,15 +459,12 @@ fetch(AckRequired, State) ->
 	      internal_fetch(AckRequired, MsgStatus1, State2)
       end, State).
 
-internal_queue_out(Fun, State = #mqstate { q4 = Q4 }) ->
-    case queue:out(Q4) of
-	{empty, _Q4} ->
-	    case fetch_from_q3(State) of
-		{empty, State1} = Result -> a(State1), Result;
-		{loaded, {MsgStatus, State1}} -> Fun(MsgStatus, State1)
-	    end;
-	{{value, MsgStatus}, Q4a} ->
-	    Fun(MsgStatus, State #mqstate { q4 = Q4a })
+internal_queue_out(Fun, State = #mqstate { q = Q }) ->
+    case queue:out(Q) of
+	{empty, _Q} -> a(State),
+			{empty, State};
+	{{value, MsgStatus}, Qa} ->
+	    Fun(MsgStatus, State #mqstate { q = Qa })
     end.
 
 read_msg(MsgStatus = #msg_status { msg = undefined,
@@ -810,7 +700,7 @@ handle_pre_hibernate(State = #mqstate { index_state = IndexState }) ->
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
 status(#mqstate {
-	  q1 = Q1, delta = Delta, q3 = Q3, q4 = Q4,
+	  q = Q,
 	  len = Len,
 	  pending_ack = PA,
 	  ram_ack_index = RAI,
@@ -819,37 +709,29 @@ status(#mqstate {
 	  ram_index_count = RamIndexCount,
 	  next_seq_id = NextSeqId,
 	  persistent_count = PersistentCount }) ->
-    [ {q1 , queue:len(Q1)},
-      {delta , Delta},
-      {q3 , bpqueue:len(Q3)},
-      {q4 , queue:len(Q4)},
-      {len , Len},
-      {pending_acks , dict:size(PA)},
-      {outstanding_txns , length(From)},
-      {ram_msg_count , RamMsgCount},
-      {ram_ack_count , gb_trees:size(RAI)},
-      {ram_index_count , RamIndexCount},
-      {next_seq_id , NextSeqId},
-      {persistent_count , PersistentCount} ].
+    [ {q, queue:len(Q)},
+      {len, Len},
+      {pending_acks, dict:size(PA)},
+      {outstanding_txns, length(From)},
+      {ram_msg_count, RamMsgCount},
+      {ram_ack_count, gb_trees:size(RAI)},
+      {ram_index_count, RamIndexCount},
+      {next_seq_id, NextSeqId},
+      {persistent_count, PersistentCount} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-a(State = #mqstate { q1 = Q1, delta = Delta, q3 = Q3, q4 = Q4,
+a(State = #mqstate { q = Q,
 		     len = Len,
 		     persistent_count = PersistentCount,
 		     ram_msg_count = RamMsgCount,
 		     ram_index_count = RamIndexCount }) ->
-    E1 = queue:is_empty(Q1),
-    ED = Delta#delta.count == 0,
-    E3 = bpqueue:is_empty(Q3),
-    E4 = queue:is_empty(Q4),
+    E4 = queue:is_empty(Q),
     LZ = Len == 0,
 
-    true = E1 or not E3,
-    true = ED or not E3,
-    true = LZ == (E3 and E4),
+    true = LZ == E4,
 
     true = Len >= 0,
     true = PersistentCount >= 0,
@@ -898,11 +780,6 @@ with_immutable_msg_store_state(MSCState, Fun) ->
 msg_store_client_init(MsgStore, MsgOnDiskFun) ->
     rabbit_msg_store:client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
 
-msg_store_write(MSCState, _IsPersistent, Guid, Msg) ->
-    with_immutable_msg_store_state(
-      MSCState,
-      fun (MSCState1) -> rabbit_msg_store:write(Guid, Msg, MSCState1) end).
-
 msg_store_read(MSCState, _IsPersistent, Guid) ->
     with_msg_store_state(
       MSCState, false,
@@ -933,40 +810,18 @@ store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
 
 erase_tx(Txn) -> erase({txn, Txn}).
 
-betas_from_index_entries(List, IndexState) ->
-    {Filtered, Delivers, Acks} =
-	lists:foldr(
-	  fun ({_Guid, SeqId, _MsgProps, _IsPersistent, IsDelivered},
-	       {Filtered1, Delivers1, Acks1}) ->
-		  {Filtered1, cons_if(not IsDelivered, SeqId, Delivers1),
-		   [SeqId | Acks1]}
-	  end, {[], [], []}, List),
-    {bpqueue:from_list([{true, Filtered}]),
-     rabbit_queue_index:ack(Acks,
-			    rabbit_queue_index:deliver(Delivers, IndexState))}.
-
-beta_fold(Fun, Init, Q) ->
-    bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
 init(IndexState, DeltaCount, Terms, PersistentClient, TransientClient) ->
-    {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
+    {_LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
+    DeltaCount = 0,       % Sure hope so!
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
-    Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
-		true -> ?BLANK_DELTA;
-		false -> #delta { start_seq_id = LowSeqId,
-				  count = DeltaCount1,
-				  end_seq_id = NextSeqId }
-	    end,
+    DeltaCount1 = 0,      % Sure hope so!
     State = #mqstate {
-      q1 = queue:new(),
-      delta = Delta,
-      q3 = bpqueue:new(),
-      q4 = queue:new(),
+      q = queue:new(),
       next_seq_id = NextSeqId,
       pending_ack = dict:new(),
       ram_ack_index = gb_trees:empty(),
@@ -988,7 +843,7 @@ init(IndexState, DeltaCount, Terms, PersistentClient, TransientClient) ->
       unconfirmed = gb_sets:new(),
       ack_out_counter = 0,
       ack_in_counter = 0 },
-    a(maybe_deltas_to_betas(State)).
+    a(State).
 
 tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun, MsgPropsFun,
 			 State = #mqstate {
@@ -1037,21 +892,7 @@ tx_commit_index(State = #mqstate { on_sync = #sync {
     [ Fun() || Fun <- lists:reverse(SFuns) ],
     State1 #mqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }.
 
-purge_betas_and_deltas(LensByStore,
-		       State = #mqstate { q3 = Q3,
-					  index_state = IndexState,
-					  msg_store_clients = MSCState }) ->
-    case bpqueue:is_empty(Q3) of
-	true -> {LensByStore, State};
-	false -> {LensByStore1, IndexState1} =
-		     remove_queue_entries(fun beta_fold/3, Q3,
-					  LensByStore, IndexState, MSCState),
-		 purge_betas_and_deltas(LensByStore1,
-					maybe_deltas_to_betas(
-					  State #mqstate {
-					    q3 = bpqueue:new(),
-					    index_state = IndexState1 }))
-    end.
+purge_betas(LensByStore, State) -> {LensByStore, State}.
 
 remove_queue_entries(Fold, Q, LensByStore, IndexState, MSCState) ->
     {GuidsByStore, Delivers, Acks} =
@@ -1088,7 +929,7 @@ sum_guids_by_store_to_len(LensByStore, GuidsByStore) ->
 publish(Msg = #basic_message { guid = Guid },
 	MsgProps = #message_properties { needs_confirming = NeedsConfirming },
 	IsDelivered, MsgOnDisk,
-	State = #mqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+	State = #mqstate { q = Q,
 			   next_seq_id = SeqId,
 			   len = Len,
 			   in_counter = InCount,
@@ -1096,58 +937,13 @@ publish(Msg = #basic_message { guid = Guid },
 			   unconfirmed = Unconfirmed }) ->
     MsgStatus = (msg_status(SeqId, Msg, MsgProps))
 	#msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = case bpqueue:is_empty(Q3) of
-		 false -> State1 #mqstate { q1 = queue:in(m(MsgStatus1), Q1) };
-		 true -> State1 #mqstate { q4 = queue:in(m(MsgStatus1), Q4) }
-	     end,
+    State1 = State #mqstate { q = queue:in(m(MsgStatus), Q) },
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
-    {SeqId, State2 #mqstate { next_seq_id = SeqId + 1,
+    {SeqId, State1 #mqstate { next_seq_id = SeqId + 1,
 			      len = Len + 1,
 			      in_counter = InCount + 1,
 			      ram_msg_count = RamMsgCount + 1,
 			      unconfirmed = Unconfirmed1 }}.
-
-maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
-				  msg_on_disk = true }, _MSCState) ->
-    MsgStatus;
-maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
-				 msg = Msg, guid = Guid }, MSCState)
-  when Force ->
-    Msg1 = Msg #basic_message {
-	     %% don't persist any recoverable decoded properties
-	     content = rabbit_binary_parser:clear_decoded_content(
-			 Msg #basic_message.content)},
-    ok = msg_store_write(MSCState, false, Guid, Msg1),
-    MsgStatus #msg_status { msg_on_disk = true };
-maybe_write_msg_to_disk(_Force, MsgStatus, _MSCState) ->
-    MsgStatus.
-
-maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
-				    index_on_disk = true }, IndexState) ->
-    true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
-    {MsgStatus, IndexState};
-maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
-				   guid = Guid,
-				   seq_id = SeqId,
-				   is_delivered = IsDelivered,
-				   msg_props = MsgProps}, IndexState)
-  when Force ->
-    true = MsgStatus #msg_status.msg_on_disk, %% ASSERTION
-    IndexState1 = rabbit_queue_index:publish(
-		    Guid, SeqId, MsgProps, false, IndexState),
-    {MsgStatus #msg_status { index_on_disk = true },
-     maybe_write_delivered(IsDelivered, SeqId, IndexState1)};
-maybe_write_index_to_disk(_Force, MsgStatus, IndexState) ->
-    {MsgStatus, IndexState}.
-
-maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
-		    State = #mqstate { index_state = IndexState,
-				       msg_store_clients = MSCState }) ->
-    MsgStatus1 = maybe_write_msg_to_disk(ForceMsg, MsgStatus, MSCState),
-    {MsgStatus2, IndexState1} =
-	maybe_write_index_to_disk(ForceIndex, MsgStatus1, IndexState),
-    {MsgStatus2, State #mqstate { index_state = IndexState1 }}.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
@@ -1274,82 +1070,3 @@ msg_indices_written_to_disk(QPid, GuidSet) ->
 					 gb_sets:intersection(
 					   gb_sets:union(MIOD, GuidSet), UC) })
 	    end).
-
-%%----------------------------------------------------------------------------
-%% Phase changes
-%%----------------------------------------------------------------------------
-
-fetch_from_q3(State = #mqstate {
-		q1 = Q1,
-		delta = #delta { count = DeltaCount },
-		q3 = Q3,
-		q4 = Q4,
-		ram_index_count = RamIndexCount}) ->
-    case bpqueue:out(Q3) of
-	{empty, _Q3} ->
-	    {empty, State};
-	{{value, IndexOnDisk, MsgStatus}, Q3a} ->
-	    RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
-	    true = RamIndexCount1 >= 0, %% ASSERTION
-	    State1 = State #mqstate { q3 = Q3a,
-				      ram_index_count = RamIndexCount1 },
-	    State2 =
-		case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
-		    {true, true} ->
-			%% q3 is now empty, it wasn't before; delta is
-			%% still empty. We know q4 is empty otherwise
-			%% we wouldn't be loading from q3. As such, we
-			%% can just set q4 to Q1.
-			true = queue:is_empty(Q4), %% ASSERTION
-			State1 #mqstate { q1 = queue:new(),
-					  q4 = Q1 };
-		    {true, false} ->
-			maybe_deltas_to_betas(State1);
-		    {false, _} ->
-			%% q3 still isn't empty, we've not touched
-			%% delta, so the invariants between q1, delta
-			%% and q3 are maintained
-			State1
-		end,
-	    {loaded, {MsgStatus, State2}}
-    end.
-
-maybe_deltas_to_betas(State = #mqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
-    State;
-maybe_deltas_to_betas(State = #mqstate {
-			delta = Delta,
-			q3 = Q3,
-			index_state = IndexState }) ->
-    #delta { start_seq_id = DeltaSeqId,
-	     count = DeltaCount,
-	     end_seq_id = DeltaSeqIdEnd } = Delta,
-    DeltaSeqId1 =
-	lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
-		   DeltaSeqIdEnd]),
-    {List, IndexState1} =
-	rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
-    {Q3a, IndexState2} =
-	betas_from_index_entries(List, IndexState1),
-    State1 = State #mqstate { index_state = IndexState2 },
-    case bpqueue:len(Q3a) of
-	0 ->
-	    %% we ignored every message in the segment due to it being
-	    %% transient and below the threshold
-	    maybe_deltas_to_betas(
-	      State1 #mqstate {
-		delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
-	Q3aLen ->
-	    Q3b = bpqueue:join(Q3, Q3a),
-	    case DeltaCount - Q3aLen of
-		0 ->
-		    State1 #mqstate { delta = ?BLANK_DELTA,
-				      q3 = Q3b };
-		N when N > 0 ->
-		    Delta1 = #delta { start_seq_id = DeltaSeqId1,
-				      count = N,
-				      end_seq_id = DeltaSeqIdEnd },
-		    State1 #mqstate { delta = Delta1,
-				      q3 = Q3b }
-	    end
-    end.
-
