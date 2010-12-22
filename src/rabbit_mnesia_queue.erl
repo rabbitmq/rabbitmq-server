@@ -512,7 +512,7 @@ publish_delivered(true, Msg = #basic_message { guid = Guid },
 				     out_counter = OutCount,
 				     in_counter = InCount,
 				     unconfirmed = Unconfirmed }) ->
-    MsgStatus = (msg_status(false, SeqId, Msg, MsgProps))
+    MsgStatus = (msg_status(SeqId, Msg, MsgProps))
 	#msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
@@ -876,8 +876,7 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 %% when requeueing, we re-add a guid to the unconfirmed set
 gb_sets_maybe_insert(true, Val, Set) -> gb_sets:add(Val, Set).
 
-msg_status(_IsPersistent, SeqId, Msg = #basic_message { guid = Guid },
-	   MsgProps) ->
+msg_status(SeqId, Msg = #basic_message { guid = Guid }, MsgProps) ->
     #msg_status { seq_id = SeqId, guid = Guid, msg = Msg, is_delivered = false,
 		  msg_on_disk = false, index_on_disk = false,
 		  msg_props = MsgProps }.
@@ -889,7 +888,7 @@ with_msg_store_state({MSCStateP, MSCStateT}, false, Fun) ->
     {Result, MSCStateT1} = Fun(MSCStateT),
     {Result, {MSCStateP, MSCStateT1}}.
 
-with_immutable_msg_store_state(MSCState, _IsPersistent, Fun) ->
+with_immutable_msg_store_state(MSCState, Fun) ->
     {Res, MSCState} = with_msg_store_state(MSCState, false,
 					   fun (MSCState1) ->
 						   {Fun(MSCState1), MSCState1}
@@ -901,7 +900,7 @@ msg_store_client_init(MsgStore, MsgOnDiskFun) ->
 
 msg_store_write(MSCState, _IsPersistent, Guid, Msg) ->
     with_immutable_msg_store_state(
-      MSCState, false,
+      MSCState,
       fun (MSCState1) -> rabbit_msg_store:write(Guid, Msg, MSCState1) end).
 
 msg_store_read(MSCState, _IsPersistent, Guid) ->
@@ -911,12 +910,12 @@ msg_store_read(MSCState, _IsPersistent, Guid) ->
 
 msg_store_remove(MSCState, _IsPersistent, Guids) ->
     with_immutable_msg_store_state(
-      MSCState, false,
+      MSCState,
       fun (MCSState1) -> rabbit_msg_store:remove(Guids, MCSState1) end).
 
 msg_store_release(MSCState, _IsPersistent, Guids) ->
     with_immutable_msg_store_state(
-      MSCState, false,
+      MSCState,
       fun (MCSState1) -> rabbit_msg_store:release(Guids, MCSState1) end).
 
 maybe_write_delivered(false, _SeqId, IndexState) ->
@@ -1095,7 +1094,7 @@ publish(Msg = #basic_message { guid = Guid },
 			   in_counter = InCount,
 			   ram_msg_count = RamMsgCount,
 			   unconfirmed = Unconfirmed }) ->
-    MsgStatus = (msg_status(false, SeqId, Msg, MsgProps))
+    MsgStatus = (msg_status(SeqId, Msg, MsgProps))
 	#msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = case bpqueue:is_empty(Q3) of
@@ -1193,8 +1192,7 @@ remove_pending_ack(KeepPersistent,
 		 State1 #mqstate { index_state = IndexState1 }
     end.
 
-ack(_MsgStoreFun, _Fun, [], State) ->
-    {[], State};
+ack(_MsgStoreFun, _Fun, [], State) -> {[], State};
 ack(MsgStoreFun, Fun, AckTags, State) ->
     {{PersistentSeqIds, GuidsByStore, AllGuids},
      State1 = #mqstate { index_state = IndexState,
