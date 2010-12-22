@@ -866,6 +866,10 @@
                 <listitem><para>Whether the exchange will be deleted automatically when no longer used.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>internal</term>
+                <listitem><para>Whether the exchange is internal, i.e. cannot be directly published to by a client.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Exchange arguments.</para></listitem>
               </varlistentry>
@@ -1077,7 +1081,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">rabbitmqctl list_connections send_pend server_port</screen>
+            <screen role="example">rabbitmqctl list_connections send_pend port</screen>
             <para role="example">
               This command displays the send queue size and server port for each
               connection.

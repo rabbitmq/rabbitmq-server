@@ -96,6 +96,22 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
 
+    %% we now run the tests remotely, so that code coverage on the
+    %% local node picks up more of the delegate
+    Node = node(),
+    Self = self(),
+    Remote = spawn(SecondaryNode,
+                   fun () -> A = test_delegates_async(Node),
+                             B = test_delegates_sync(Node),
+                             Self ! {self(), {A, B}}
+                   end),
+    receive
+        {Remote, Result} ->
+            Result = {passed, passed}
+    after 2000 ->
+            throw(timeout)
+    end,
+
     passed.
 
 test_priority_queue() ->
@@ -1247,15 +1263,26 @@ test_delegates_sync(SecondaryNode) ->
     true = lists:all(fun ({_, response}) -> true end, GoodRes),
     GoodResPids = [Pid || {Pid, _} <- GoodRes],
 
-    Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
-    Good = ordsets:from_list(GoodResPids),
+    Good = lists:usort(LocalGoodPids ++ RemoteGoodPids),
+    Good = lists:usort(GoodResPids),
 
     {[], BadRes} = delegate:invoke(LocalBadPids ++ RemoteBadPids, BadSender),
     true = lists:all(fun ({_, {exit, exception, _}}) -> true end, BadRes),
     BadResPids = [Pid || {Pid, _} <- BadRes],
 
-    Bad = ordsets:from_list(LocalBadPids ++ RemoteBadPids),
-    Bad = ordsets:from_list(BadResPids),
+    Bad = lists:usort(LocalBadPids ++ RemoteBadPids),
+    Bad = lists:usort(BadResPids),
+
+    MagicalPids = [rabbit_misc:string_to_pid(Str) ||
+                      Str <- ["<nonode@nohost.0.1.0>", "<nonode@nohost.0.2.0>"]],
+    {[], BadNodes} = delegate:invoke(MagicalPids, Sender),
+    true = lists:all(
+             fun ({_, {exit, {nodedown, nonode@nohost}, _Stack}}) -> true end,
+             BadNodes),
+    BadNodesPids = [Pid || {Pid, _} <- BadNodes],
+
+    Magical = lists:usort(MagicalPids),
+    Magical = lists:usort(BadNodesPids),
 
     passed.
 

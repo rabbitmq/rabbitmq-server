@@ -701,7 +701,7 @@ handle_cast({write, CRef, Guid},
                {ok, _} -> dict:update(CRef, fun(Guids) ->
                                                     gb_sets:add(Guid, Guids)
                                             end,
-                                      gb_sets:empty(), CTG);
+                                      gb_sets:singleton(Guid), CTG);
                error   -> CTG
            end,
     State1 = State #msstate { cref_to_guids = CTG1 },

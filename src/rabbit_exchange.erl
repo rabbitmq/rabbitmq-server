@@ -33,11 +33,11 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/5, lookup/1, lookup_or_die/1, list/1, info_keys/0,
+-export([recover/0, declare/6, lookup/1, lookup_or_die/1, list/1, info_keys/0,
          info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
--export([assert_equivalence/5, assert_args_equivalence/2, check_type/1]).
+-export([assert_equivalence/6, assert_args_equivalence/2, check_type/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -49,13 +49,14 @@
 -type(type() :: atom()).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 ::
-        (name(), type(), boolean(), boolean(), rabbit_framing:amqp_table())
+-spec(declare/6 ::
+        (name(), type(), boolean(), boolean(), boolean(),
+         rabbit_framing:amqp_table())
         -> rabbit_types:exchange()).
 -spec(check_type/1 ::
         (binary()) -> atom() | rabbit_types:connection_exit()).
--spec(assert_equivalence/5 ::
-        (rabbit_types:exchange(), atom(), boolean(), boolean(),
+-spec(assert_equivalence/6 ::
+        (rabbit_types:exchange(), atom(), boolean(), boolean(), boolean(),
          rabbit_framing:amqp_table())
         -> 'ok' | rabbit_types:connection_exit()).
 -spec(assert_args_equivalence/2 ::
@@ -90,7 +91,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
+-define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
     Xs = rabbit_misc:table_fold(
@@ -113,11 +114,12 @@ recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
 recover_with_bindings([], [], []) ->
     ok.
 
-declare(XName, Type, Durable, AutoDelete, Args) ->
+declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = #exchange{name        = XName,
                   type        = Type,
                   durable     = Durable,
                   auto_delete = AutoDelete,
+                  internal    = Internal,
                   arguments   = Args},
     %% We want to upset things if it isn't ok; this is different from
     %% the other hooks invocations, where we tend to ignore the return
@@ -170,14 +172,16 @@ check_type(TypeBin) ->
 
 assert_equivalence(X = #exchange{ durable     = Durable,
                                   auto_delete = AutoDelete,
+                                  internal    = Internal,
                                   type        = Type},
-                   Type, Durable, AutoDelete, RequiredArgs) ->
+                   Type, Durable, AutoDelete, Internal, RequiredArgs) ->
     (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
-assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
-                   _Args) ->
+assert_equivalence(#exchange{ name = Name },
+                   _Type, _Durable, _Internal, _AutoDelete, _Args) ->
     rabbit_misc:protocol_error(
       precondition_failed,
-      "cannot redeclare ~s with different type, durable or autodelete value",
+      "cannot redeclare ~s with different type, durable, "
+      "internal or autodelete value",
       [rabbit_misc:rs(Name)]).
 
 assert_args_equivalence(#exchange{ name = Name, arguments = Args },
@@ -215,6 +219,7 @@ i(name,        #exchange{name        = Name})       -> Name;
 i(type,        #exchange{type        = Type})       -> Type;
 i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
+i(internal,    #exchange{internal    = Internal})   -> Internal;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
