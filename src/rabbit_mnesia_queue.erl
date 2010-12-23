@@ -32,10 +32,11 @@
 -module(rabbit_mnesia_queue).
 
 -export([start/1, stop/0, init/3, terminate/1, delete_and_terminate/1, purge/1,
-	 publish/3, publish_delivered/4, fetch/2, ack/2, tx_publish/4, tx_ack/3,
-	 tx_rollback/2, tx_commit/4, requeue/3, len/1, is_empty/1, dropwhile/2,
-	 set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
-	 idle_timeout/1, handle_pre_hibernate/1, status/1]).
+         publish/3, publish_delivered/4, fetch/2, ack/2, tx_publish/4,
+	 tx_ack/3, tx_rollback/2, tx_commit/4, requeue/3, len/1, is_empty/1,
+	 dropwhile/2, set_ram_duration_target/2, ram_duration/1,
+	 needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
+	 status/1]).
 
 %%----------------------------------------------------------------------------
 %% This is Take Three of a simple initial Mnesia implementation of the
@@ -425,9 +426,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 ack(AckTags, State) ->
     {Guids, State1} =
 	ack(fun msg_store_remove/3,
-	    fun ({_IsPersistent, Guid, _MsgProps}, State1) ->
-		    remove_confirms(gb_sets:singleton(Guid), State1);
-		(#msg_status{msg = #basic_message { guid = Guid }}, State1) ->
+	    fun (#msg_status{msg = #basic_message { guid = Guid }}, State1) ->
 		    remove_confirms(gb_sets:singleton(Guid), State1)
 	    end,
 	    AckTags, State),
@@ -502,15 +501,7 @@ requeue(AckTags, MsgPropsFun, State) ->
 	    fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
 		    {_SeqId, State2} = publish(Msg, MsgPropsFun(MsgProps),
 					       true, false, State1),
-		    State2;
-		({_IsPersistent, Guid, MsgProps}, State1) ->
-		    #state { msg_store_clients = MSCState } = State1,
-		    {{ok, Msg = #basic_message{}}, MSCState1} =
-			msg_store_read(MSCState, false, Guid),
-		    State2 = State1 #state { msg_store_clients = MSCState1 },
-		    {_SeqId, State3} = publish(Msg, MsgPropsFun(MsgProps),
-					       true, true, State2),
-		    State3
+		    State2
 	    end,
 	    AckTags, State),
     a(State1).
@@ -645,11 +636,6 @@ with_immutable_msg_store_state(MSCState, Fun) ->
 
 msg_store_client_init(MsgStore, MsgOnDiskFun) ->
     rabbit_msg_store:client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
-
-msg_store_read(MSCState, _IsPersistent, Guid) ->
-    with_msg_store_state(
-      MSCState, false,
-      fun (MSCState1) -> rabbit_msg_store:read(Guid, MSCState1) end).
 
 msg_store_remove(MSCState, _IsPersistent, Guids) ->
     with_immutable_msg_store_state(
@@ -840,11 +826,7 @@ accumulate_ack_init() -> {[], orddict:new(), []}.
 
 accumulate_ack(_SeqId, #msg_status { guid = Guid },
 	       {PersistentSeqIdsAcc, GuidsByStore, AllGuids}) ->
-    {PersistentSeqIdsAcc, GuidsByStore, [Guid | AllGuids]};
-accumulate_ack(_SeqId, {_IsPersistent, Guid, _MsgProps},
-	       {PersistentSeqIdsAcc, GuidsByStore, AllGuids}) ->
-    {PersistentSeqIdsAcc, rabbit_misc:orddict_cons(false, Guid, GuidsByStore),
-     [Guid | AllGuids]}.
+    {PersistentSeqIdsAcc, GuidsByStore, [Guid | AllGuids]}.
 
 %%----------------------------------------------------------------------------
 %% Internal plumbing for confirms (aka publisher acks)
