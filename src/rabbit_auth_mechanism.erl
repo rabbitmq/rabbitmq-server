@@ -29,35 +29,29 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_fanout).
--include("rabbit.hrl").
+-module(rabbit_auth_mechanism).
 
--behaviour(rabbit_exchange_type).
+-export([behaviour_info/1]).
 
--export([description/0, route/2]).
--export([validate/1, create/2, recover/2, delete/3, add_binding/3,
-         remove_bindings/3, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+behaviour_info(callbacks) ->
+    [
+     %% A description.
+     {description, 0},
 
--rabbit_boot_step({?MODULE,
-                   [{description, "exchange type fanout"},
-                    {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"fanout">>, ?MODULE]}},
-                    {requires,    rabbit_registry},
-                    {enables,     kernel_ready}]}).
+     %% Called before authentication starts. Should create a state
+     %% object to be passed through all the stages of authentication.
+     {init, 1},
 
-description() ->
-    [{name, <<"fanout">>},
-     {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
-
-route(#exchange{name = Name}, _Delivery) ->
-    rabbit_router:match_routing_key(Name, '_').
-
-validate(_X) -> ok.
-create(_Tx, _X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+     %% Handle a stage of authentication. Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {challenge, Challenge, NextState}
+     %%     Another round is needed. Here's the state I want next time.
+     %% {protocol_error, Msg, Args}
+     %%     Client got the protocol wrong. Log and die.
+     %% {refused, Msg, Args}
+     %%     Client failed authentication. Log and die.
+     {handle_response, 2}
+    ];
+behaviour_info(_Other) ->
+    undefined.

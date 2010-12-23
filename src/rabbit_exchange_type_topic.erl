@@ -41,9 +41,9 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type topic"},
-                    {mfa,         {rabbit_exchange_type_registry, register,
-                                   [<<"topic">>, ?MODULE]}},
-                    {requires,    rabbit_exchange_type_registry},
+                    {mfa,         {rabbit_registry, register,
+                                   [exchange, <<"topic">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
 -export([topic_matches/2]).

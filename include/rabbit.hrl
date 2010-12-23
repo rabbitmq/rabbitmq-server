@@ -51,7 +51,7 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, arguments}).
+-record(exchange, {name, type, durable, auto_delete, internal, arguments}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
                    arguments, pid}).
@@ -69,12 +69,13 @@
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, immediate, txn, sender, message}).
+-record(delivery, {mandatory, immediate, txn, sender, message,
+                   msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, timestamp}).
 
--record(message_properties, {expiry}).
+-record(message_properties, {expiry, needs_confirming = false}).
 
 %%----------------------------------------------------------------------------
 

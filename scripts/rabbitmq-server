@@ -30,8 +30,6 @@
 ##   Contributor(s): ______________________________________.
 ##
 
-[ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -s`
-NODENAME=rabbit@${HOSTNAME%%.*}
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_listen_options [{nodelay,true}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
@@ -91,8 +89,9 @@ if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
 	-pa "$RABBITMQ_EBIN_ROOT" \
 	-noinput \
 	-hidden \
-	-s rabbit_plugin_activator \
-	-extra "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}"
+	-s rabbit_prelaunch \
+	-sname rabbitmqprelaunch$$ \
+	-extra "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}" "${RABBITMQ_NODENAME}"
     then
 	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
 	RABBITMQ_EBIN_PATH=""

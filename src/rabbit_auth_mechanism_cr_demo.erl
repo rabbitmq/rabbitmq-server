@@ -29,35 +29,46 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_fanout).
+-module(rabbit_auth_mechanism_cr_demo).
 -include("rabbit.hrl").
 
--behaviour(rabbit_exchange_type).
+-behaviour(rabbit_auth_mechanism).
 
--export([description/0, route/2]).
--export([validate/1, create/2, recover/2, delete/3, add_binding/3,
-         remove_bindings/3, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+-export([description/0, init/1, handle_response/2]).
+
+-include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "exchange type fanout"},
+                   [{description, "auth mechanism cr-demo"},
                     {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"fanout">>, ?MODULE]}},
+                                   [auth_mechanism, <<"RABBIT-CR-DEMO">>,
+                                    ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
+-record(state, {username = undefined}).
+
+%% Provides equivalent security to PLAIN but demos use of Connection.Secure(Ok)
+%% START-OK: Username
+%% SECURE: "Please tell me your password"
+%% SECURE-OK: "My password is ~s", [Password]
+
 description() ->
-    [{name, <<"fanout">>},
-     {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
+    [{name, <<"RABBIT-CR-DEMO">>},
+     {description, <<"RabbitMQ Demo challenge-response authentication "
+                     "mechanism">>}].
 
-route(#exchange{name = Name}, _Delivery) ->
-    rabbit_router:match_routing_key(Name, '_').
+init(_Sock) ->
+    #state{}.
 
-validate(_X) -> ok.
-create(_Tx, _X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+handle_response(Response, State = #state{username = undefined}) ->
+    {challenge, <<"Please tell me your password">>,
+     State#state{username = Response}};
+
+handle_response(Response, #state{username = Username}) ->
+    case Response of
+        <<"My password is ", Password/binary>> ->
+            rabbit_access_control:check_user_pass_login(Username, Password);
+        _ ->
+            {protocol_error, "Invalid response '~s'", [Response]}
+    end.

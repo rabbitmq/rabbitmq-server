@@ -126,19 +126,35 @@ heads(G) ->
 %% -------------------------------------------------------------------
 
 apply_upgrades(Upgrades) ->
-    LockFile = lock_filename(),
-    case file:open(LockFile, [write, exclusive]) of
-        {ok, Lock} ->
-            ok = file:close(Lock),
+    LockFile = lock_filename(dir()),
+    case rabbit_misc:lock_file(LockFile) of
+        ok ->
+            BackupDir = dir() ++ "-upgrade-backup",
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
-            [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
-            info("Upgrades: All applied~n", []),
-            ok = write_version(),
-            ok = file:delete(LockFile);
+            case rabbit_mnesia:copy_db(BackupDir) of
+                ok ->
+                    %% We need to make the backup after creating the
+                    %% lock file so that it protects us from trying to
+                    %% overwrite the backup. Unfortunately this means
+                    %% the lock file exists in the backup too, which
+                    %% is not intuitive. Remove it.
+                    ok = file:delete(lock_filename(BackupDir)),
+                    info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
+                    [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
+                    info("Upgrades: All upgrades applied successfully~n", []),
+                    ok = write_version(),
+                    ok = rabbit_misc:recursive_delete([BackupDir]),
+                    info("Upgrades: Mnesia backup removed~n", []),
+                    ok = file:delete(LockFile);
+                {error, E} ->
+                    %% If we can't backup, the upgrade hasn't started
+                    %% hence we don't need the lockfile since the real
+                    %% mnesia dir is the good one.
+                    ok = file:delete(LockFile),
+                    throw({could_not_back_up_mnesia_dir, E})
+            end;
         {error, eexist} ->
-            throw({error, previous_upgrade_failed});
-        {error, _} = Error ->
-            throw(Error)
+            throw({error, previous_upgrade_failed})
     end.
 
 apply_upgrade({M, F}) ->
@@ -151,7 +167,7 @@ dir() -> rabbit_mnesia:dir().
 
 schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
 
-lock_filename()   -> filename:join(dir(), ?LOCK_FILENAME).
+lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet

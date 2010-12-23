@@ -32,7 +32,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -50,6 +50,7 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
+-spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -116,24 +117,28 @@ fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    fmt_stderr("diagnostics:", []),
+    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
+
+diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    case net_adm:names(NodeHost) of
-        {error, EpmdReason} ->
-            fmt_stderr("- unable to connect to epmd on ~s: ~w",
-                       [NodeHost, EpmdReason]);
-        {ok, NamePorts} ->
-            fmt_stderr("- nodes and their ports on ~s: ~p",
-                       [NodeHost, [{list_to_atom(Name), Port} ||
-                                      {Name, Port} <- NamePorts]])
-            end,
-    fmt_stderr("- current node: ~w", [node()]),
-    case init:get_argument(home) of
-        {ok, [[Home]]} -> fmt_stderr("- current node home dir: ~s", [Home]);
-        Other          -> fmt_stderr("- no current node home dir: ~p", [Other])
-    end,
-    fmt_stderr("- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]),
-    ok.
+    [
+        {"diagnostics:", []},
+        case net_adm:names(NodeHost) of
+            {error, EpmdReason} ->
+                {"- unable to connect to epmd on ~s: ~w",
+                    [NodeHost, EpmdReason]};
+            {ok, NamePorts} ->
+                {"- nodes and their ports on ~s: ~p",
+                              [NodeHost, [{list_to_atom(Name), Port} ||
+                                          {Name, Port} <- NamePorts]]}
+        end,
+        {"- current node: ~w", [node()]},
+        case init:get_argument(home) of
+            {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+            Other          -> {"- no current node home dir: ~p", [Other]}
+        end,
+        {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}
+    ].
 
 stop() ->
     ok.
@@ -205,6 +210,10 @@ action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
     Inform("Changing password for user ~p", [Username]),
     call(Node, {rabbit_access_control, change_password, Args});
+
+action(clear_password, Node, Args = [Username], _Opts, Inform) ->
+    Inform("Clearing password for user ~p", [Username]),
+    call(Node, {rabbit_access_control, clear_password, Args});
 
 action(set_admin, Node, [Username], _Opts, Inform) ->
     Inform("Setting administrative status for user ~p", [Username]),

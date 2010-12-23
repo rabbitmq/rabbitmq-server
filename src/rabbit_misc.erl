@@ -64,16 +64,12 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, dict_cons/3, orddict_cons/3,
+-export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3,
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
-
--import(mnesia).
--import(lists).
--import(cover).
--import(disk_log).
+-export([lock_file/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -192,6 +188,9 @@
 -spec(recursive_delete/1 ::
         ([file:filename()])
         -> rabbit_types:ok_or_error({file:filename(), any()})).
+-spec(recursive_copy/2 ::
+        (file:filename(), file:filename())
+        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
@@ -206,6 +205,7 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
+-spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 
 -endif.
 
@@ -251,7 +251,7 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
     case {table_lookup(Orig, Key), table_lookup(New, Key)} of
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
-                           not_allowed,
+                           precondition_failed,
                            "inequivalent arg '~s' for ~s:  "
                            "required ~w, received ~w",
                            [Key, rabbit_misc:rs(Name), New1, Orig1])
@@ -353,8 +353,8 @@ throw_on_error(E, Thunk) ->
 with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
-    catch
-        exit:{R, _} when R =:= noproc; R =:= normal; R =:= shutdown ->
+    catch exit:{R, _} when R =:= noproc; R =:= nodedown;
+                           R =:= normal; R =:= shutdown ->
             Handler()
     end.
 
@@ -637,19 +637,19 @@ sort_field_table(Arguments) ->
 pid_to_string(Pid) when is_pid(Pid) ->
     %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
     %% 8.7)
-    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,_Cre:8>>
+    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    lists:flatten(io_lib:format("<~w.~B.~B>", [Node, Id, Ser])).
+    lists:flatten(io_lib:format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser])).
 
 %% inverse of above
 string_to_pid(Str) ->
     Err = {error, {invalid_pid_syntax, Str}},
     %% The \ before the trailing $ is only there to keep emacs
     %% font-lock from getting confused.
-    case re:run(Str, "^<(.*)\\.([0-9]+)\\.([0-9]+)>\$",
+    case re:run(Str, "^<(.*)\\.(\\d+)\\.(\\d+)\\.(\\d+)>\$",
                 [{capture,all_but_first,list}]) of
-        {match, [NodeStr, IdStr, SerStr]} ->
+        {match, [NodeStr, CreStr, IdStr, SerStr]} ->
             %% the NodeStr atom might be quoted, so we have to parse
             %% it rather than doing a simple list_to_atom
             NodeAtom = case erl_scan:string(NodeStr) of
@@ -657,9 +657,9 @@ string_to_pid(Str) ->
                            {error, _, _} -> throw(Err)
                        end,
             <<131,NodeEnc/binary>> = term_to_binary(NodeAtom),
-            Id = list_to_integer(IdStr),
-            Ser = list_to_integer(SerStr),
-            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,0:8>>);
+            [Cre, Id, Ser] = lists:map(fun list_to_integer/1,
+                                       [CreStr, IdStr, SerStr]),
+            binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>);
         nomatch ->
             throw(Err)
     end.
@@ -732,6 +732,33 @@ recursive_delete1(Path) ->
                          end;
                      {error, Err} ->
                          {error, {Path, Err}}
+                 end
+    end.
+
+recursive_copy(Src, Dest) ->
+    case filelib:is_dir(Src) of
+        false -> case file:copy(Src, Dest) of
+                     {ok, _Bytes}    -> ok;
+                     {error, enoent} -> ok; %% Path doesn't exist anyway
+                     {error, Err}    -> {error, {Src, Dest, Err}}
+                 end;
+        true  -> case file:list_dir(Src) of
+                     {ok, FileNames} ->
+                         case file:make_dir(Dest) of
+                             ok ->
+                                 lists:foldl(
+                                   fun (FileName, ok) ->
+                                           recursive_copy(
+                                             filename:join(Src, FileName),
+                                             filename:join(Dest, FileName));
+                                       (_FileName, Error) ->
+                                           Error
+                                   end, ok, FileNames);
+                             {error, Err} ->
+                                 {error, {Src, Dest, Err}}
+                         end;
+                     {error, Err} ->
+                         {error, {Src, Dest, Err}}
                  end
     end.
 
@@ -828,4 +855,13 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     catch {graph_error, Reason} ->
             true = digraph:delete(G),
             {error, Reason}
+    end.
+
+%% TODO: When we stop supporting Erlang prior to R14, this should be
+%% replaced with file:open [write, exclusive]
+lock_file(Path) ->
+    case filelib:is_file(Path) of
+        true  -> {error, eexist};
+        false -> {ok, Lock} = file:open(Path, [write]),
+                 ok = file:close(Lock)
     end.

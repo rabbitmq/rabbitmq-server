@@ -246,8 +246,9 @@ start_ssl_client(SslOpts, Sock) ->
 
 connections() ->
     [rabbit_connection_sup:reader(ConnSup) ||
+        Node <- rabbit_mnesia:running_clustered_nodes(),
         {_, ConnSup, supervisor, _}
-            <- supervisor:which_children(rabbit_tcp_client_sup)].
+            <- supervisor:which_children({rabbit_tcp_client_sup, Node})].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 

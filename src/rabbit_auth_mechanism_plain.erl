@@ -29,35 +29,38 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_exchange_type_fanout).
+-module(rabbit_auth_mechanism_plain).
 -include("rabbit.hrl").
 
--behaviour(rabbit_exchange_type).
+-behaviour(rabbit_auth_mechanism).
 
--export([description/0, route/2]).
--export([validate/1, create/2, recover/2, delete/3, add_binding/3,
-         remove_bindings/3, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
+-export([description/0, init/1, handle_response/2]).
+
+-include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "exchange type fanout"},
+                   [{description, "auth mechanism plain"},
                     {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"fanout">>, ?MODULE]}},
+                                   [auth_mechanism, <<"PLAIN">>, ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
+%% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
+%% apparently, by OpenAMQ.
+
 description() ->
-    [{name, <<"fanout">>},
-     {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
+    [{name, <<"PLAIN">>},
+     {description, <<"SASL PLAIN authentication mechanism">>}].
 
-route(#exchange{name = Name}, _Delivery) ->
-    rabbit_router:match_routing_key(Name, '_').
+init(_Sock) ->
+    [].
 
-validate(_X) -> ok.
-create(_Tx, _X) -> ok.
-recover(_X, _Bs) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
-assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+handle_response(Response, _State) ->
+    %% The '%%"' at the end of the next line is for Emacs
+    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
+                [{capture, all_but_first, binary}]) of
+        {match, [User, Pass]} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        _ ->
+            {protocol_error, "response ~p invalid", [Response]}
+    end.
