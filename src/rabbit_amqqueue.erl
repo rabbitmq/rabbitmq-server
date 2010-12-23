@@ -215,29 +215,33 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     end.
 
 internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
-    rabbit_misc:execute_mnesia_transaction(
+    EmptyFun = fun (_) -> ok end,
+    rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
+          {ReturnArg, TailFun} =
               case Recover of
                   true ->
                       ok = store_queue(Q),
-                      {false, Q};
+                      {Q, EmptyFun};
                   false ->
                       case mnesia:wread({rabbit_queue, QueueName}) of
                           [] ->
                               case mnesia:read({rabbit_durable_queue,
                                                 QueueName}) of
                                   []  -> ok = store_queue(Q),
-                                         {true, Q};
+                                         B = add_default_binding(Q),
+                                         {Q, B};
                                          %% Q exists on stopped node
-                                  [_] -> {false, not_found}
+                                  [_] -> {not_found, EmptyFun}
                               end;
                           [ExistingQ] ->
-                              {false, ExistingQ}
+                              {ExistingQ, EmptyFun}
                       end
+              end,
+              fun (Tx) ->
+                  TailFun(Tx),
+                  ReturnArg
               end
-      end,
-      fun ({true, Q}, false)        -> ok = add_default_binding(Q), Q;
-          ({_AddBinding, Arg}, _Tx) -> Arg
       end).
 
 store_queue(Q = #amqqueue{durable = true}) ->
@@ -463,7 +467,7 @@ internal_delete(QueueName) ->
                    end
            end,
            fun ({error, _} = Err, _Tx) -> Err;
-               (Deletions, Tx)        ->
+               (Deletions, Tx)         ->
                    ok = rabbit_binding:process_deletions(Deletions, Tx)
            end).
 

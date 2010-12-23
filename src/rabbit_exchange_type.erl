@@ -42,23 +42,19 @@ behaviour_info(callbacks) ->
      {validate, 1},
 
      %% called after declaration when previously absent
-     %% registration determines whether this is called in a mnesia transaction
-     {create, 1},
+     {create, 2},
 
      %% called when recovering
      {recover, 2},
 
      %% called after exchange deletion.
-     %% registration determines whether this is called in a mnesia transaction
-     {delete, 2},
+     {delete, 3},
 
      %% called after a binding has been added
-     %% registration determines whether this is called in a mnesia transaction
-     {add_binding, 2},
+     {add_binding, 3},
 
      %% called after bindings have been deleted.
-     %% registration determines whether this is called in a mnesia transaction
-     {remove_bindings, 2},
+     {remove_bindings, 3},
 
      %% called when comparing exchanges for equivalence - should return ok or
      %% exit with #amqp_error{}

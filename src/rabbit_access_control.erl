@@ -316,8 +316,8 @@ add_vhost(VHostPath) ->
                       [_] -> mnesia:abort({vhost_already_exists, VHostPath})
                   end
           end,
-          fun (Arg, true)   -> Arg;
-              (_Arg, false) ->
+          fun (ok) -> ok end,
+          fun (ok) ->
                   [rabbit_exchange:declare(
                       rabbit_misc:r(VHostPath, exchange, Name),
                       Type, true, false, []) ||
@@ -329,25 +329,20 @@ add_vhost(VHostPath) ->
                               {<<"amq.headers">>, headers}, %% per 0-9-1 xml
                               {<<"amq.fanout">>,  fanout}]],
                   ok
-          end
-          ),
+          end),
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),
     R.
 
 delete_vhost(VHostPath) ->
-    %%FIXME: We are forced to delete the queues outside the TX below
-    %%because queue deletion involves sending messages to the queue
-    %%process, which in turn results in further mnesia actions and
-    %%eventually the termination of that process.
-    lists:foreach(fun (Q) ->
-                          {ok,_} = rabbit_amqqueue:delete(Q, false, false)
-                  end,
-                  rabbit_amqqueue:list(VHostPath)),
-    %%Exchange deletion causes notifications which must be sent outside the TX
-    lists:foreach(fun (#exchange{name = Name}) ->
-                          ok = rabbit_exchange:delete(Name, false)
-                  end,
-                  rabbit_exchange:list(VHostPath)),
+    %% FIXME: We are forced to delete the queues and exchanges outside
+    %% the TX below. Queue deletion involves sending messages to the queue
+    %% process, which in turn results in further mnesia actions and
+    %% eventually the termination of that process. Exchange deletion causes
+    %% notifications which must be sent outside the TX
+    [{ok,_} = rabbit_amqqueue:delete(Q, false, false) ||
+        Q <- rabbit_amqqueue:list(VHostPath)],
+    [ok = rabbit_exchange:delete(Name, false) ||
+        #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     R = rabbit_misc:execute_mnesia_transaction(
           rabbit_misc:with_vhost(
             VHostPath,

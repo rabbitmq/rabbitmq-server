@@ -49,6 +49,8 @@
 -export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
+-export([execute_mnesia_transaction/3]).
+-export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
@@ -150,6 +152,10 @@
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(execute_mnesia_transaction/2 ::
         (thunk(A), fun ((A, boolean()) -> B)) -> B).
+-spec(execute_mnesia_transaction/3 ::
+        (thunk(A), fun ((A) -> B), fun ((A) -> B)) -> B).
+-spec(execute_mnesia_tx_with_tail/1 ::
+        (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B))).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(makenode/1 :: ({string(), string()} | string()) -> node()).
 -spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
@@ -392,20 +398,44 @@ execute_mnesia_transaction(TxFun) ->
         {aborted, Reason} -> throw({error, Reason})
     end.
 
-%% Like execute_mnesia_transaction/2, with an additional Fun that gets called
-%% immediately before and after the mnesia tx commit. It gets called with the
-%% result of TxFun and a flag indicating whether mnesia is in a tx.
-execute_mnesia_transaction(TxFun, TriggerFun) ->
-    Tx = mnesia:is_transaction(),
-    if Tx   -> throw(unexpected_transaction);
-       true -> ok
+
+%% Like execute_mnesia_transaction/1 with additional Pre- and Post-
+%% commit functions
+execute_mnesia_transaction(TxFun, PreCommit, PostCommit) ->
+    case mnesia:is_transaction() of
+        true  -> throw(unexpected_transaction);
+        false -> ok
     end,
-    Result = execute_mnesia_transaction(
-                 fun () -> R = TxFun(),
-                           TriggerFun(R, true),
-                           R
-                 end),
-    TriggerFun(Result, false).
+    PostCommit(execute_mnesia_transaction(
+                   fun () ->
+                           PreCommit(TxFun())
+                   end)).
+
+%% Like execute_mnesia_transaction/3 with similar Pre- and PostCommit funs
+execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
+    execute_mnesia_transaction(TxFun,
+                               fun (Result) ->
+                                   PrePostCommitFun(Result, true),
+                                   Result
+                               end,
+                               fun (Result) ->
+                                   PrePostCommitFun(Result, false)
+                               end).
+
+%% Like execute_mnesia_transaction/2, but TxFun is expected to return a
+%% TailFun which gets called immediately before and after the tx commit
+execute_mnesia_tx_with_tail(TxFun) ->
+    case mnesia:is_transaction() of
+        true  -> execute_mnesia_transaction(TxFun);
+        false -> TailFun =
+                     execute_mnesia_transaction(
+                       fun () ->
+                               TailFun = TxFun(),
+                               TailFun(true),
+                               TailFun
+                       end),
+                 TailFun(false)
+    end.
 
 ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).

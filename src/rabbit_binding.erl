@@ -119,8 +119,11 @@ recover() ->
 exists(Binding) ->
     binding_action(
       Binding,
-      fun (_Src, _Dst, B) -> mnesia:read({rabbit_route, B}) /= [] end,
-      fun (_, _) -> ok end).
+      fun (_Src, _Dst, B) ->
+          fun (_Tx) ->
+              mnesia:read({rabbit_route, B}) /= []
+          end
+      end).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
@@ -139,26 +142,26 @@ add(Binding, InnerFun) ->
                                []  -> ok = sync_binding(
                                              B, all_durable([Src, Dst]),
                                              fun mnesia:write/3),
-                                      {new, Src, B};
-                               [_] -> {existing, Src, B}
+                                      fun (Tx) ->
+                                          ok = rabbit_exchange:callback(
+                                                   Src, add_binding,
+                                                   [Tx, Src, B]),
+                                          rabbit_event:notify_if(
+                                                   not(Tx),
+                                                   binding_created, info(B))
+                                      end;
+                               [_] -> fun (_Tx) -> ok end
                            end;
-                       {error, _} = E ->
-                           E
+                       {error, _} = Err ->
+                           fun (_Tx) -> Err end
                    end
-           end,
-           fun({new, Src, B}, Tx) ->
-                  ok = rabbit_exchange:callback(Src, add_binding, [Src, B], Tx),
-                  rabbit_event:notify(binding_created, info(B), Tx);
-              ({existing, _, _}, _Tx) ->
-                  ok;
-              ({error, _} = Err, _Tx) ->
-                  Err
            end).
 
 remove(Binding, InnerFun) ->
     binding_action(
            Binding,
            fun (Src, Dst, B) ->
+               Result =
                    case mnesia:match_object(rabbit_route, #route{binding = B},
                                             write) of
                        [] ->
@@ -175,12 +178,15 @@ remove(Binding, InnerFun) ->
                                {error, _} = E ->
                                    E
                            end
+                   end,
+                   fun (Tx) ->
+                           case {Result, Tx} of
+                               {{ok, Deletions}, _} ->
+                                   ok = process_deletions(Deletions, Tx);
+                               {{error, _} = Err, _} ->
+                                  Err
+                           end
                    end
-           end,
-           fun ({error, _} = Err, _Tx) ->
-                   Err;
-               ({ok, Deletions}, Tx) ->
-                   ok = process_deletions(Deletions, Tx)
            end).
 
 list(VHostPath) ->
@@ -269,14 +275,13 @@ all_durable(Resources) ->
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,
-                                  args        = Arguments}, Fun, TriggerFun) ->
+                                  args        = Arguments}, Fun) ->
     call_with_source_and_destination(
       SrcName, DstName,
       fun (Src, Dst) ->
               SortedArgs = rabbit_misc:sort_field_table(Arguments),
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
-      end,
-      TriggerFun).
+      end).
 
 sync_binding(Binding, Durable, Fun) ->
     ok = case Durable of
@@ -289,10 +294,10 @@ sync_binding(Binding, Durable, Fun) ->
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
 
-call_with_source_and_destination(SrcName, DstName, Fun, TriggerFun) ->
+call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> case {mnesia:read({SrcTable, SrcName}),
                       mnesia:read({DstTable, DstName})} of
                     {[Src], [Dst]} -> Fun(Src, Dst);
@@ -300,8 +305,7 @@ call_with_source_and_destination(SrcName, DstName, Fun, TriggerFun) ->
                     {[_],   []   } -> {error, destination_not_found};
                     {[],    []   } -> {error, source_and_destination_not_found}
                 end
-      end,
-      TriggerFun).
+      end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
 table_for_resource(#resource{kind = queue})    -> rabbit_queue.
@@ -424,17 +428,15 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
 process_deletions(Deletions, Tx) ->
     dict:fold(
       fun (_XName, {X, Deleted, Bindings}, ok) ->
-              FlatBindings = lists:flatten(Bindings),
-              [rabbit_event:notify(binding_deleted, info(B), Tx) ||
-                  B <- FlatBindings],
-              case Deleted of
-                  not_deleted -> rabbit_exchange:callback(X, remove_bindings,
-                                                         [X, FlatBindings], Tx);
-                  deleted     -> rabbit_event:notify(
-                                     exchange_deleted,
-                                     [{name, X#exchange.name}],
-                                     Tx),
-                                 rabbit_exchange:callback(X, delete,
-                                                          [X, FlatBindings], Tx)
-              end
+          FlatBindings = lists:flatten(Bindings),
+          [rabbit_event:notify_if(not(Tx), binding_deleted, info(B)) ||
+              B <- FlatBindings],
+          case Deleted of
+              not_deleted -> rabbit_exchange:callback(X, remove_bindings,
+                                                      [Tx, X, FlatBindings]);
+              deleted     -> rabbit_event:notify_if(not(Tx), exchange_deleted,
+                                                    [{name, X#exchange.name}]),
+                             rabbit_exchange:callback(X, delete,
+                                                      [Tx, X, FlatBindings])
+          end
       end, ok, Deletions).
