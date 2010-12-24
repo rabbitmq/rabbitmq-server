@@ -170,6 +170,10 @@
 %% the latter) are both cheap and do require any scanning through qi
 %% segments.
 %%
+%% I believe the following is wrong. Pending acks may be message
+%% statuses, not messages themselves. If they are triples, the first
+%% element is a boolean IsPersistent.
+%%
 %% Pending acks are recorded in memory either as the tuple {SeqId,
 %% Guid, MsgProps} (tuple-form) or as the message itself (message-
 %% form). Acks for persistent messages are always stored in the tuple-
