@@ -445,8 +445,9 @@ annote_confirms_with_channel(Guids, State) ->
 
 group_confirms_by_channel([]) ->
     [];
-group_confirms_by_channel([{Ch, Msg} | CMs]) ->
-    group_confirms_by_channel(lists:usort(CMs), [{Ch, [Msg]}]).
+group_confirms_by_channel(CMs) ->
+    [{Ch, Msg} | CMs1] = lists:usort(CMs),
+    group_confirms_by_channel(CMs1, [{Ch, [Msg]}]).
 
 group_confirms_by_channel([], Acc) ->
     Acc;
