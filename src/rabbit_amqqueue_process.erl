@@ -374,12 +374,10 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     rabbit_channel:deliver(
                       ChPid, ConsumerTag, AckRequired,
                       {QName, self(), AckTag, IsDelivered, Message}),
-                    {State2, ChAckTags1} =
+                    ChAckTags1 =
                         case AckRequired of
-                            true  -> {State1,
-                                      sets:add_element(AckTag, ChAckTags)};
-                            false -> {confirm_message(Message, State1),
-                                      ChAckTags}
+                            true  -> sets:add_element(AckTag, ChAckTags);
+                            false -> ChAckTags
                         end,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
@@ -396,10 +394,10 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                                 {ActiveConsumers1,
                                  queue:in(QEntry, BlockedConsumers1)}
                         end,
-                    State3 = State2#q{
+                    State2 = State1#q{
                                active_consumers = NewActiveConsumers,
                                blocked_consumers = NewBlockedConsumers},
-                    deliver_msgs_to_consumers(Funs, FunAcc1, State3);
+                    deliver_msgs_to_consumers(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
                     true = maybe_store_ch_record(C#cr{is_limit_active = true}),
@@ -432,14 +430,10 @@ confirm_messages(Guids, State) ->
 
 confirm_message_by_guid(Guid, State = #q{guid_to_channel = GTC}) ->
     case dict:find(Guid, GTC) of
-        {ok, {_    , undefined}} -> ok;
         {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
         _                        -> ok
     end,
     State#q{guid_to_channel = dict:erase(Guid, GTC)}.
-
-confirm_message(#basic_message{guid = Guid}, State) ->
-    confirm_message_by_guid(Guid, State).
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     State;
@@ -454,11 +448,6 @@ record_confirm_message(#delivery{sender     = ChPid,
     State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)};
 record_confirm_message(_Delivery, State) ->
     State.
-
-ack_by_acktags(AckTags, State = #q{backing_queue       = BQ,
-                                   backing_queue_state = BQS}) ->
-    {AckdGuids, BQS1} = BQ:ack(AckTags, BQS),
-    confirm_messages(AckdGuids, State#q{backing_queue_state = BQS1}).
 
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -823,7 +812,7 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver_immediately, Delivery = #delivery{message = Message}},
+handle_call({deliver_immediately, Delivery},
             _From, State) ->
     %% Synchronous, "immediate" delivery mode
     %%
@@ -840,10 +829,7 @@ handle_call({deliver_immediately, Delivery = #delivery{message = Message}},
     %%
     {Delivered, State1} =
         attempt_delivery(Delivery, record_confirm_message(Delivery, State)),
-    reply(Delivered, case Delivered of
-                         true  -> State1;
-                         false -> confirm_message(Message, State1)
-                     end);
+    reply(Delivered, State1);
 
 handle_call({deliver, Delivery}, _From, State) ->
     %% Synchronous, "mandatory" delivery mode
@@ -881,7 +867,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
                                                sets:add_element(AckTag,
                                                                 ChAckTags)}),
                              State2;
-                    false -> confirm_message(Message, State2)
+                    false -> State2
                 end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
             reply({ok, Remaining, Msg}, State3)
@@ -1019,8 +1005,8 @@ handle_cast({ack, Txn, AckTags, ChPid},
                 case Txn of
                     none -> ChAckTags1 = subtract_acks(ChAckTags, AckTags),
                             NewC = C#cr{acktags = ChAckTags1},
-                            NewState = ack_by_acktags(AckTags, State),
-                            {NewC, NewState};
+                            BQS1 = BQ:ack(AckTags, BQS),
+                            {NewC, State#q{backing_queue_state = BQS1}};
                     _    -> BQS1 = BQ:tx_ack(Txn, AckTags, BQS),
                             {C#cr{txn = Txn},
                              State#q{backing_queue_state = BQS1}}
@@ -1029,7 +1015,9 @@ handle_cast({ack, Txn, AckTags, ChPid},
             noreply(State1)
     end;
 
-handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
+handle_cast({reject, AckTags, Requeue, ChPid},
+            State = #q{backing_queue       = BQ,
+                       backing_queue_state = BQS}) ->
     case lookup_ch(ChPid) of
         not_found ->
             noreply(State);
@@ -1038,7 +1026,8 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
             maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> ack_by_acktags(AckTags, State)
+                        false -> BQS1 = BQ:ack(AckTags, BQS),
+                                 State#q{backing_queue_state = BQS1}
                     end)
     end;
 
