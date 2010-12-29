@@ -44,15 +44,17 @@
 %% Session LWM and credit: (largely TODO)
 %%
 %% transfer-id, unsettled-lwm, and session-credit define a window:
-%% |<-LWM      |<-txfr     |<-hwm
+%% |<- LWM     |<- txfr    |<- LWM + session-credit
 %% [ | | | | | | | | | | | ]
-%% session-credit can either bound the hwm, or the total number of
-%% unsettled messages.
+%%
+%% session-credit gives an offset from the lwm (it is given as txfr-id
+%% in the spec, but this is a typo).  It can be used to bound the
+%% amount of unsettled state.
 %%
 %% For incoming links, we simply echo the session credit; we are happy
 %% for the client to do whatever it likes, since we don't keep track of
 %% incoming messages (we're either about to settle them, or they're
-%% settled when they come in).
+%% settled when they come in; this will change if we use publisher acks).
 %%
 %% For outgoing links, we try to follow what the client says by using
 %% basic.qos.  Unless told to change it, we try to keep an accurate
@@ -67,9 +69,14 @@
 %% way to credit-control individual queue consumers (and cancelling
 %% would almost always be too late, leaving messages in limbo in a
 %% process mailbox).  Currently we act as if we have unlimited credit.
+%%
+%% Likewise, we cannot support the drain flag since in general, we
+%% don't know the state at the queue.  However, we may be able to
+%% approximate this and link flow control by cancelling consume,
+%% exhausting the credit, and requeueing the rest.  Since link flow
+%% control will be the rule rather than the exception, though, this is
+%% pretty horrible.
 
-
-%% TODO figure out how much of this actually needs to be serialised.
 %% TODO links can be migrated between sessions -- seriously.
 
 %% TODO account for all these things
