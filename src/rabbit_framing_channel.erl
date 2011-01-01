@@ -32,51 +32,11 @@
 -module(rabbit_framing_channel).
 -include("rabbit.hrl").
 
--export([start_link/3, process/2, shutdown/1]).
-
-%% internal
--export([mainloop/3]).
+-export([init/1, collect/2]).
 
 %%--------------------------------------------------------------------
 
-start_link(Parent, ChannelPid, Protocol) ->
-    {ok, proc_lib:spawn_link(
-           fun () -> mainloop(Parent, ChannelPid, {method, Protocol}) end)}.
-
-process(Pid, Frame) ->
-    Pid ! {frame, Frame},
-    ok.
-
-shutdown(Pid) ->
-    Pid ! terminate,
-    ok.
-
-%%--------------------------------------------------------------------
-
-mainloop(Parent, ChannelPid, State) ->
-    Loop = fun (NewState) ->
-                   ?MODULE:mainloop(Parent, ChannelPid, NewState)
-           end,
-    receive
-        {frame, Frame} ->
-            case collect(Frame, State) of
-                {ok, NewState} ->
-                    Loop(NewState);
-                {ok, Method, NewState} ->
-                    rabbit_channel:do(ChannelPid, Method),
-                    Loop(NewState);
-                {ok, Method, Content, NewState} ->
-                    rabbit_channel:do(ChannelPid, Method, Content),
-                    Loop(NewState);
-                {error, Reason} ->
-                    Parent ! {channel_exit, self(), Reason}
-            end;
-        terminate ->
-            rabbit_channel:shutdown(ChannelPid),
-            Loop(State);
-        Msg ->
-            exit({unexpected_message, Msg})
-    end.
+init(Protocol) -> {ok, {method, Protocol}}.
 
 collect({method, MethodName, FieldsBin}, {method, Protocol}) ->
     Method = Protocol:decode_method_fields(MethodName, FieldsBin),
@@ -116,6 +76,8 @@ collect({content_body, FragmentBin},
 collect(_Frame, {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
     unexpected_frame("expected content body, "
                      "got non content body frame instead", [], Method).
+
+%%--------------------------------------------------------------------
 
 empty_content(ClassId, PropertiesBin, Protocol) ->
     #content{class_id              = ClassId,
