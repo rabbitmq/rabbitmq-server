@@ -92,11 +92,14 @@ analyze_frame(_Type, _Body, _Protocol) ->
 init(Protocol) -> {ok, {method, Protocol}}.
 
 process({method, MethodName, FieldsBin}, {method, Protocol}) ->
-    Method = Protocol:decode_method_fields(MethodName, FieldsBin),
-    case Protocol:method_has_content(MethodName) of
-        true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
-                 {ok, {content_header, Method, ClassId, Protocol}};
-        false -> {ok, Method, {method, Protocol}}
+    try
+        Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+        case Protocol:method_has_content(MethodName) of
+            true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
+                     {ok, {content_header, Method, ClassId, Protocol}};
+            false -> {ok, Method, {method, Protocol}}
+        end
+    catch exit:#amqp_error{} = Reason -> {error, Reason}
     end;
 process(_Frame, {method, _Protocol}) ->
     unexpected_frame("expected method frame, "
