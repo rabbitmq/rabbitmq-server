@@ -41,8 +41,6 @@
 
 -export([conserve_memory/2, server_properties/0]).
 
--export([analyze_frame/3]).
-
 -export([emit_stats/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
@@ -528,7 +526,7 @@ handle_frame(Type, 0, Payload,
              State = #v1{connection_state = CS,
                          connection = #connection{protocol = Protocol}})
   when CS =:= closing; CS =:= closed ->
-    case analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
@@ -538,7 +536,7 @@ handle_frame(_Type, _Channel, _Payload, State = #v1{connection_state = CS})
     State;
 handle_frame(Type, 0, Payload,
              State = #v1{connection = #connection{protocol = Protocol}}) ->
-    case analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         error     -> throw({unknown_frame, 0, Type, Payload});
         heartbeat -> State;
         {method, MethodName, FieldsBin} ->
@@ -547,7 +545,7 @@ handle_frame(Type, 0, Payload,
     end;
 handle_frame(Type, Channel, Payload,
              State = #v1{connection = #connection{protocol = Protocol}}) ->
-    case analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
@@ -599,22 +597,6 @@ handle_frame(Type, Channel, Payload,
                     end
             end
     end.
-
-analyze_frame(?FRAME_METHOD,
-              <<ClassId:16, MethodId:16, MethodFields/binary>>,
-              Protocol) ->
-    MethodName = Protocol:lookup_method_name({ClassId, MethodId}),
-    {method, MethodName, MethodFields};
-analyze_frame(?FRAME_HEADER,
-              <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
-              _Protocol) ->
-    {content_header, ClassId, Weight, BodySize, Properties};
-analyze_frame(?FRAME_BODY, Body, _Protocol) ->
-    {content_body, Body};
-analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
-    heartbeat;
-analyze_frame(_Type, _Body, _Protocol) ->
-    error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(

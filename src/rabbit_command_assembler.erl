@@ -30,11 +30,64 @@
 %%
 
 -module(rabbit_command_assembler).
+-include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([init/1, process/2]).
+-export([analyze_frame/3, init/1, process/2]).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(frame_type() :: ?FRAME_METHOD | ?FRAME_HEADER | ?FRAME_BODY |
+                      ?FRAME_OOB_METHOD | ?FRAME_OOB_HEADER | ?FRAME_OOB_BODY |
+                      ?FRAME_TRACE | ?FRAME_HEARTBEAT).
+-type(protocol()   :: rabbit_framing:protocol()).
+-type(method()     :: rabbit_framing:amqp_method_record()).
+-type(class_id()   :: rabbit_framing:amqp_class_id()).
+-type(weight()     :: non_neg_integer()).
+-type(body_size()  :: non_neg_integer()).
+-type(content()    :: rabbit_types:undecoded_content()).
+
+-type(frame() ::
+        {'method',         rabbit_framing:amqp_method_name(), binary()} |
+        {'content_header', class_id(), weight(), body_size(), binary()} |
+        {'content_body',   binary()}).
+
+-type(state() ::
+        {'method',         protocol()} |
+        {'content_header', method(), class_id(), protocol()} |
+        {'content_body',   method(), body_size(), class_id(), protocol()}).
+
+-spec(analyze_frame/3 :: (frame_type(), binary(), protocol()) ->
+                              frame() | 'heartbeat' | 'error').
+
+-spec(init/1 :: (protocol()) -> {ok, state()}).
+-spec(process/2 :: (frame(), state()) ->
+                        {ok, state()} |
+                        {ok, method(), state()} |
+                        {ok, method(), content(), state()} |
+                        {error, rabbit_types:amqp_error()}).
+
+-endif.
 
 %%--------------------------------------------------------------------
+
+analyze_frame(?FRAME_METHOD,
+              <<ClassId:16, MethodId:16, MethodFields/binary>>,
+              Protocol) ->
+    MethodName = Protocol:lookup_method_name({ClassId, MethodId}),
+    {method, MethodName, MethodFields};
+analyze_frame(?FRAME_HEADER,
+              <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
+              _Protocol) ->
+    {content_header, ClassId, Weight, BodySize, Properties};
+analyze_frame(?FRAME_BODY, Body, _Protocol) ->
+    {content_body, Body};
+analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
+    heartbeat;
+analyze_frame(_Type, _Body, _Protocol) ->
+    error.
 
 init(Protocol) -> {ok, {method, Protocol}}.
 
