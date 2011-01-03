@@ -960,29 +960,29 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  frame_max = FrameMax,
                                  user      = #user{username = Username},
                                  vhost     = VHost}} = State,
-    {ok, _ChSupPid, {ChPid, ChFrSt}} =
+    {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
                        self(), Username, VHost, Collector}),
     erlang:monitor(process, ChPid),
-    put({channel, Channel}, {ChPid, ChFrSt}),
+    put({channel, Channel}, {ChPid, AState}),
     put({ch_pid, ChPid}, Channel),
-    process_channel_frame(AnalyzedFrame, Channel, ChPid, ChFrSt, State).
+    process_channel_frame(AnalyzedFrame, Channel, ChPid, AState, State).
 
-process_channel_frame(Frame, Channel, ChPid, ChFrSt, State) ->
-    UpdateFramingState = fun (NewChFrSt) ->
-                                 put({channel, Channel}, {ChPid, NewChFrSt}),
+process_channel_frame(Frame, Channel, ChPid, AState, State) ->
+    UpdateFramingState = fun (NewAState) ->
+                                 put({channel, Channel}, {ChPid, NewAState}),
                                  State
                          end,
-    case rabbit_framing_channel:collect(Frame, ChFrSt) of
-        {ok, NewChFrSt} ->
-            UpdateFramingState(NewChFrSt);
-        {ok, Method, NewChFrSt} ->
+    case rabbit_command_assembler:process(Frame, AState) of
+        {ok, NewAState} ->
+            UpdateFramingState(NewAState);
+        {ok, Method, NewAState} ->
             rabbit_channel:do(ChPid, Method),
-            UpdateFramingState(NewChFrSt);
-        {ok, Method, Content, NewChFrSt} ->
+            UpdateFramingState(NewAState);
+        {ok, Method, Content, NewAState} ->
             rabbit_channel:do(ChPid, Method, Content),
-            UpdateFramingState(NewChFrSt);
+            UpdateFramingState(NewAState);
         {error, Reason} ->
             handle_exception(State, Channel, Reason)
     end.

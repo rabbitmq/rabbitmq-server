@@ -72,7 +72,7 @@ start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
                      [Channel, ReaderPid, WriterPid, Username, VHost,
                       Collector, start_limiter_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
-    {ok, FramingState} = rabbit_framing_channel:init(Protocol),
+    {ok, FramingState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, FramingState}}.
 
 %%----------------------------------------------------------------------------
