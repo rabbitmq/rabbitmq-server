@@ -27,6 +27,8 @@ import socket
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
             'users', 'vhosts', 'permissions', 'nodes']
 
+SHOWABLE = ['overview']
+
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
 
@@ -94,6 +96,8 @@ where cmd is one of:
 """
     for l in LISTABLE:
         usage += "  list {0} [<column>...]\n".format(l)
+    for s in SHOWABLE:
+        usage += "  show {0} [<column>...]\n".format(s)
     usage += fmt_usage_stanza(DECLARABLE, 'declare')
     usage += fmt_usage_stanza(DELETABLE,  'delete')
     usage += fmt_usage_stanza(CLOSABLE,   'close')
@@ -239,14 +243,21 @@ class Management:
                      % (self.options.hostname, path))
 
     def invoke_list(self):
+        uri = self.list_show_uri(LISTABLE, 'list')
+        format_list(self.get(uri), self.args[1:], self.options)
+
+    def invoke_show(self):
+        uri = self.list_show_uri(SHOWABLE, 'show')
+        format_list('[{0}]'.format(self.get(uri)), self.args[1:], self.options)
+
+    def list_show_uri(self, obj_types, verb):
         obj_type = self.args[0]
-        assert_usage(obj_type in LISTABLE,
-                     "Don't know how to list {0}".format(obj_type))
+        assert_usage(obj_type in obj_types,
+                     "Don't know how to {0} {1}".format(verb, obj_type))
         uri = "/%s" % obj_type
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
-        columns = self.args[1:]
-        format_list(self.get(uri), columns, self.options)
+        return uri
 
     def invoke_declare(self):
         (obj_type, uri, payload) = self.declare_delete_parse(DECLARABLE)
@@ -498,12 +509,16 @@ _rabbitmqadmin()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="list declare delete close purge import export"
+    opts="list show declare delete close purge import export"
     fargs="--help --host --port --vhost --username --password --format --depth"
 
     case "${prev}" in
 	list)
 	    COMPREPLY=( $(compgen -W '""" + " ".join(LISTABLE) + """' -- ${cur}) )
+            return 0
+            ;;
+	show)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(SHOWABLE) + """' -- ${cur}) )
             return 0
             ;;
 	declare)
