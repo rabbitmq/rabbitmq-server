@@ -85,32 +85,9 @@ To run simplistic test suite and see the code coverage type:
 
     make cover
 
-After successful run, you should be able to see output similar to:
+After a successful run, you should see the `OK` message followed by the code coverage summary.
 
-    ............
-    ----------------------------------------------------------------------
-    Ran 32 tests in 38.309s
-
-    OK
-
-    **** Code coverage ****
-     54.55 rabbit_stomp
-     75.00 rabbit_stomp_frame
-     84.24 rabbit_stomp_server
-    100.00 rabbit_stomp_sup
-     89.29 rabbit_stomp_util
-     81.73 'TOTAL'
-
-The view the code coverage, see html files in .cover:
-
-    ls ./cover
-
-    rabbit_stomp_frame.html
-    rabbit_stomp.html
-    rabbit_stomp_server.html
-    rabbit_stomp_sup.html
-    summary.txt
-
+The view the code coverage details, see the html files in the `cover` directory.
 
 ## Running the examples
 
@@ -137,6 +114,34 @@ It will transfer 10,000 short messages, and end up displaying
 
 in the receiver-side terminal.
 
+### Ruby Topic Examples
+
+You can test topic publishing using the `topic-sender.rb` and `topic-broadcast-receiver.rb` scripts.
+
+The `topic-sender.rb` script sends one message to each of the `/topic/x.y`, `/topic/x.z` and `/topic/x` destinations. The `topic-broadcast-receiver` subscribes to a configurable topic, defaulting to `/topic/x`.
+
+Start the receiver with no extra arguments, and you'll see it bind to the default topic:
+
+    ruby examples/ruby/topic-broadcast-receiver.rb
+    Binding to /topic/x
+
+Now start the sender:
+
+    ruby examples/ruby/topic-sender.rb
+
+In the receiver-side terminal, you'll see that one message comes through, the one sent to `/topic/x`.
+
+Stop the receiver and start it, specifying an argument of `x.*`:
+
+    ruby examples/ruby/topic-broadcast-receiver.rb x.*
+    Binding to /topic/x.*
+
+Run the sender again, and this time the receiver-side terminal will show two messages: the ones sent to `/topic/x.y` and `/topic/x.z`. Restart, the receiver again, this time specifying an argument of `x.#`:
+
+    ruby topic-broadcast-receiver.rb x.#
+    Binding to /topic/x.#
+
+Run the sender one more time, and this time the receiver-side terminal will show all three messages.
 
 ### Perl
 
