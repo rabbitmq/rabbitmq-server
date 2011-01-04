@@ -15,14 +15,18 @@ RabbitMQ blog and mailing list.
 
 ## Installing from binary
 
-Binary packages for the STOMP adapter can be found on the [plugins page](http://www.rabbitmq.com/plugins.html).
+Binary packages for the STOMP adapter can be found on the
+[plugins page](http://www.rabbitmq.com/plugins.html).
 
-Instructions for installing binary plugins can be in the [Admin Guide](http://www.rabbitmq.com/admin-guide.html#plugins).
+Instructions for installing binary plugins can be in the
+[Admin Guide](http://www.rabbitmq.com/admin-guide.html#plugins).
 
 
 ## Compiling and installing from source
 
-To build the STOMP adapter from source, follow the instructions for building the umbrella repository contained in the [Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html).
+To build the STOMP adapter from source, follow the instructions for
+building the umbrella repository contained in the
+[Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html).
 
 You need to install the rabbit\_stomp.ez and amqp\_client.ez packages.
 
@@ -40,7 +44,6 @@ add the following text to `/etc/rabbitmq/rabbitmq.conf`:
 Then restart the server with
 
     sudo /etc/init.d/rabbitmq-server restart
-
 
 When no configuration is specified STOMP Adapter will listen on localhost by
 default.
@@ -70,7 +73,9 @@ adapter -- see below.
 
 ### Running the adapter during development
 
-If you checked out and built the `rabbitmq-public-umbrella` tree as per the instructions in the Plugin Development Guide, then you can run RabbitMQ with STOMP adapter directly from the source tree:
+If you checked out and built the `rabbitmq-public-umbrella` tree as
+per the instructions in the Plugin Development Guide, then you can run
+RabbitMQ with STOMP adapter directly from the source tree:
 
     cd rabbitmq-public-umbrella/rabbitmq-stomp
     make run
@@ -85,9 +90,67 @@ To run simplistic test suite and see the code coverage type:
 
     make cover
 
-After a successful run, you should see the `OK` message followed by the code coverage summary.
+After a successful run, you should see the `OK` message followed by
+the code coverage summary.
 
 The view the code coverage details, see the html files in the `cover` directory.
+
+## Usage
+
+The STOMP adapter currently supports the 1.0 version of the STOMP
+specification which can be found
+[here](http://stomp.github.com/stomp-specification-1.0.html).
+
+The STOMP specification does not prescribe what kinds of destinations
+a broker must support, instead the value of the `destination` header
+in `SEND` and `MESSAGE` frames is broker-specific. The RabbitMQ STOMP
+adapter supports three kinds of destination: `/exchange`, `/queue` and
+`/topic`.
+
+### Exchange Destinations
+
+Any exchange/queue or exchange/routing key combination can be accessed
+using destinations prefixed with `/exchange`.
+
+For `SUBSCRIBE` frames, a destination of the form
+`/exchange/<name>[/<pattern>]` can be used. This destination:
+
+1. Creates an exclusive, auto-delete queue on `<name>` exchange.
+2. If `<pattern>` is supplied, binds the queue to `<name>` exchange
+   using `<pattern>`
+3. Registers a subscription against the queue, for the current STOMP session
+
+For `SEND` frames, a destination of the form
+`/exchange/<name>[/<routing-key>]` can be used. This destination:
+
+1. Sends to exchange `<name>`with the routing key `<routing-key>`
+
+### Queue Destinations
+
+For simple queues destinations of the form `/queue/<name>` can be
+used.
+
+For both `SEND` and `SUBSCRIBE` frames, these destinations create
+the queue `<name>`.
+
+For `SEND` frames, the message is sent to the default exchange
+with the routing key `<name>`. For `SUBSCRIBE` frames, a subscription
+against the queue `<name>` is created for the current STOMP
+session.
+
+### Topic Destinations
+
+For simple topic destinations which deliver a copy of each message to
+all active subscribers, destinations of the form `/topic/<name>` can
+be used. Topic destinations support all the routing patterns of AMQP
+topic exchanges.
+
+For `SEND` frames, the message is sent to the `amq.topic` exchange
+with the routing key `<name>`.
+
+For `SUBSCRIBE` frames, an exclusive queue is created and bound to the
+`amq.topic` exchange with routing key `<name>`. A subscription is
+created against the exclusive queue.
 
 ## Running the examples
 
@@ -116,11 +179,16 @@ in the receiver-side terminal.
 
 ### Ruby Topic Examples
 
-You can test topic publishing using the `topic-sender.rb` and `topic-broadcast-receiver.rb` scripts.
+You can test topic publishing using the `topic-sender.rb` and
+`topic-broadcast-receiver.rb` scripts.
 
-The `topic-sender.rb` script sends one message to each of the `/topic/x.y`, `/topic/x.z` and `/topic/x` destinations. The `topic-broadcast-receiver` subscribes to a configurable topic, defaulting to `/topic/x`.
+The `topic-sender.rb` script sends one message to each of the
+`/topic/x.y`, `/topic/x.z` and `/topic/x` destinations. The
+`topic-broadcast-receiver.rb` script subscribes to a configurable
+topic, defaulting to `/topic/x`.
 
-Start the receiver with no extra arguments, and you'll see it bind to the default topic:
+Start the receiver with no extra arguments, and you'll see it bind to
+the default topic:
 
     ruby examples/ruby/topic-broadcast-receiver.rb
     Binding to /topic/x
@@ -129,19 +197,24 @@ Now start the sender:
 
     ruby examples/ruby/topic-sender.rb
 
-In the receiver-side terminal, you'll see that one message comes through, the one sent to `/topic/x`.
+In the receiver-side terminal, you'll see that one message comes
+through, the one sent to `/topic/x`.
 
 Stop the receiver and start it, specifying an argument of `x.*`:
 
     ruby examples/ruby/topic-broadcast-receiver.rb x.*
     Binding to /topic/x.*
 
-Run the sender again, and this time the receiver-side terminal will show two messages: the ones sent to `/topic/x.y` and `/topic/x.z`. Restart, the receiver again, this time specifying an argument of `x.#`:
+Run the sender again, and this time the receiver-side terminal will
+show two messages: the ones sent to `/topic/x.y` and
+`/topic/x.z`. Restart, the receiver again, this time specifying an
+argument of `x.#`:
 
     ruby topic-broadcast-receiver.rb x.#
     Binding to /topic/x.#
 
-Run the sender one more time, and this time the receiver-side terminal will show all three messages.
+Run the sender one more time, and this time the receiver-side terminal
+will show all three messages.
 
 ### Perl
 
