@@ -21,7 +21,7 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade/0, read_version/0, write_version/0, desired_version/0]).
+-export([maybe_upgrade/1, read_version/0, write_version/0, desired_version/0]).
 
 -include("rabbit.hrl").
 
@@ -33,9 +33,10 @@
 -ifdef(use_specs).
 
 -type(step() :: atom()).
+-type(scope() :: 'mnesia' | 'local').
 -type(version() :: [step()]).
 
--spec(maybe_upgrade/0 :: () -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade/1 :: ([scope()]) -> 'ok' | 'version_not_available').
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
@@ -47,22 +48,26 @@
 %% Try to upgrade the schema. If no information on the existing schema
 %% could be found, do nothing. rabbit_mnesia:check_schema_integrity()
 %% will catch the problem.
-maybe_upgrade() ->
+maybe_upgrade(Scopes) ->
     case read_version() of
         {ok, CurrentHeads} ->
             with_upgrade_graph(
-              fun (G) ->
-                      case unknown_heads(CurrentHeads, G) of
-                          []      -> case upgrades_to_apply(CurrentHeads, G) of
-                                         []       -> ok;
-                                         Upgrades -> apply_upgrades(Upgrades)
-                                     end;
-                          Unknown -> throw({error,
-                                            {future_upgrades_found, Unknown}})
-                      end
-              end);
+              fun (G) -> maybe_upgrade_graph(CurrentHeads, Scopes, G) end);
         {error, enoent} ->
             version_not_available
+    end.
+
+maybe_upgrade_graph(CurrentHeads, Scopes, G) ->
+    case unknown_heads(CurrentHeads, G) of
+        [] ->
+            case upgrades_to_apply(CurrentHeads, Scopes, G) of
+                [] ->
+                    ok;
+                Upgrades ->
+                    apply_upgrades(Upgrades, lists:member(mnesia, Scopes))
+            end;
+        Unknown ->
+            throw({error, {future_upgrades_found, Unknown}})
     end.
 
 read_version() ->
@@ -98,16 +103,17 @@ with_upgrade_graph(Fun) ->
     end.
 
 vertices(Module, Steps) ->
-    [{StepName, {Module, StepName}} || {StepName, _Reqs} <- Steps].
+    [{StepName, {Scope, {Module, StepName}}} ||
+        {StepName, Scope, _Reqs} <- Steps].
 
 edges(_Module, Steps) ->
-    [{Require, StepName} || {StepName, Requires} <- Steps, Require <- Requires].
-
+    [{Require, StepName} || {StepName, _Scope, Requires} <- Steps,
+                            Require <- Requires].
 
 unknown_heads(Heads, G) ->
     [H || H <- Heads, digraph:vertex(G, H) =:= false].
 
-upgrades_to_apply(Heads, G) ->
+upgrades_to_apply(Heads, Scopes, G) ->
     %% Take all the vertices which can reach the known heads. That's
     %% everything we've already applied. Subtract that from all
     %% vertices: that's what we have to apply.
@@ -117,15 +123,17 @@ upgrades_to_apply(Heads, G) ->
                   sets:from_list(digraph_utils:reaching(Heads, G)))),
     %% Form a subgraph from that list and find a topological ordering
     %% so we can invoke them in order.
-    [element(2, digraph:vertex(G, StepName)) ||
-        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
+    Sorted = [element(2, digraph:vertex(G, StepName)) ||
+        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))],
+    %% Only return the upgrades for the appropriate scopes
+    [Upgrade || {Scope, Upgrade} <- Sorted, lists:member(Scope, Scopes)].
 
 heads(G) ->
     lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).
 
 %% -------------------------------------------------------------------
 
-apply_upgrades(Upgrades) ->
+apply_upgrades(Upgrades, ForgetOthers) ->
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
         ok ->
@@ -140,6 +148,10 @@ apply_upgrades(Upgrades) ->
                     %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
                     info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
+                    case ForgetOthers of
+                        true -> rabbit_mnesia:forget_other_nodes();
+                        _    -> ok
+                    end,
                     [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
                     info("Upgrades: All upgrades applied successfully~n", []),
                     ok = write_version(),

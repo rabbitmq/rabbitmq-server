@@ -24,10 +24,14 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({remove_user_scope,  []}).
--rabbit_upgrade({hash_passwords,     []}).
--rabbit_upgrade({add_ip_to_listener, []}).
--rabbit_upgrade({internal_exchanges, []}).
+-rabbit_upgrade({remove_user_scope,  mnesia, []}).
+-rabbit_upgrade({hash_passwords,     mnesia, []}).
+-rabbit_upgrade({add_ip_to_listener, mnesia, []}).
+-rabbit_upgrade({internal_exchanges, mnesia, []}).
+
+-rabbit_upgrade({one,   mnesia, []}).
+-rabbit_upgrade({two,   local,  [one]}).
+-rabbit_upgrade({three, mnesia, [two]}).
 
 %% -------------------------------------------------------------------
 
@@ -84,6 +88,27 @@ internal_exchanges() ->
                   [name, type, durable, auto_delete, internal, arguments])
       || T <- Tables ],
     ok.
+
+one() ->
+    mnesia(
+      rabbit_user,
+      fun ({user, Username, Hash, IsAdmin}) ->
+              {user, Username, Hash, IsAdmin, foo}
+      end,
+      [username, password_hash, is_admin, extra]).
+
+two() ->
+    ok = rabbit_misc:write_term_file(filename:join(rabbit_mnesia:dir(), "test"),
+                                     [test]).
+
+three() ->
+    mnesia(
+      rabbit_user,
+      fun ({user, Username, Hash, IsAdmin, _}) ->
+              {user, Username, Hash, IsAdmin}
+      end,
+      [username, password_hash, is_admin]).
+
 
 %%--------------------------------------------------------------------
 
