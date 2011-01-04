@@ -404,11 +404,8 @@ init_db(ClusterNodes, Force) ->
                     %% ensure_version_ok(rabbit_upgrade:read_version()),
                     %% ensure_version_ok(
                     %%   rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
-                    Type = case ClusterNodes == [] orelse
-                               lists:member(node(), ClusterNodes) of
-                               true  -> disc;
-                               false -> ram
-                           end,
+                    IsDiskNode = ClusterNodes == [] orelse
+                        lists:member(node(), ClusterNodes),
                     case rabbit_upgrade:maybe_upgrade(
                            [local], reset_fun(ProperClusterNodes)) of
                         ok ->
@@ -420,7 +417,10 @@ init_db(ClusterNodes, Force) ->
                     end,
                     ok = wait_for_replicated_tables(),
                     ok = create_local_table_copy(schema, disc_copies),
-                    ok = create_local_table_copies(Type),
+                    ok = create_local_table_copies(case IsDiskNode of
+                                                       true  -> disc;
+                                                       false -> ram
+                                                   end),
                     ensure_schema_ok()
             end;
         {error, Reason} ->
