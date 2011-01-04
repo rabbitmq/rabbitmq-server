@@ -6,26 +6,15 @@
 -export([static_context_selector/1, static_context_handler/3, static_context_handler/2]).
 -export([register_authenticated_static_context/5]).
 
-ensure_started(App) ->
-    case application:start(App) of
-        ok ->
-            ok;
-        {error, {already_started, App}} ->
-            ok
-    end.
-        
 %% @spec start() -> ok
 %% @doc Start the rabbit_mochiweb server.
 start() ->
-    ensure_started(crypto),
     application:start(rabbit_mochiweb).
 
 %% @spec stop() -> ok
 %% @doc Stop the rabbit_mochiweb server.
 stop() ->
-    Res = application:stop(rabbit_mochiweb),
-    application:stop(crypto),
-    Res.
+    application:stop(rabbit_mochiweb).
 
 %% Handler Registration
 

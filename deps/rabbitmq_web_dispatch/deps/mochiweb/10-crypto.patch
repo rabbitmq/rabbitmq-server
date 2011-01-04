@@ -1,0 +1,201 @@
+diff --git a/priv/skel/src/skel.app b/priv/skel/src/skel.app
+index fc16aae..2b064dd 100644
+--- a/priv/skel/src/skel.app
++++ b/priv/skel/src/skel.app
+@@ -11,4 +11,4 @@
+   {registered, []},
+   {mod, {skel_app, []}},
+   {env, []},
+-  {applications, [kernel, stdlib, crypto]}]}.
++  {applications, [kernel, stdlib]}]}.
+diff --git a/priv/skel/src/skel.erl b/priv/skel/src/skel.erl
+index 7ac4e2b..9776e02 100644
+--- a/priv/skel/src/skel.erl
++++ b/priv/skel/src/skel.erl
+@@ -19,12 +19,10 @@ ensure_started(App) ->
+ %% @doc Start the skel server.
+ start() ->
+     skel_deps:ensure(),
+-    ensure_started(crypto),
+     application:start(skel).
+ 
+ %% @spec stop() -> ok
+ %% @doc Stop the skel server.
+ stop() ->
+     Res = application:stop(skel),
+-    application:stop(crypto),
+     Res.
+diff --git a/priv/skel/support/run_tests.escript b/priv/skel/support/run_tests.escript
+index ff49c06..6ae812c 100755
+--- a/priv/skel/support/run_tests.escript
++++ b/priv/skel/support/run_tests.escript
+@@ -18,7 +18,6 @@ main([Ebin]) ->
+                          ModuleNames)],
+ 
+ 
+-    crypto:start(),
+     start_cover(Modules),
+     eunit:test(Modules, [verbose,{report,{eunit_surefire,[{dir,"../_test"}]}}]),
+     analyze_cover(Modules);
+diff --git a/src/mochitemp.erl b/src/mochitemp.erl
+index bb23d2a..22e34bc 100644
+--- a/src/mochitemp.erl
++++ b/src/mochitemp.erl
+@@ -1,7 +1,7 @@
+ %% @author Bob Ippolito <bob@mochimedia.com>
+ %% @copyright 2010 Mochi Media, Inc.
+ 
+-%% @doc Create temporary files and directories. Requires crypto to be started.
++%% @doc Create temporary files and directories.
+ 
+ -module(mochitemp).
+ -export([gettempdir/0]).
+@@ -87,7 +87,7 @@ rngchars(N) ->
+     [rngchar() | rngchars(N - 1)].
+ 
+ rngchar() ->
+-    rngchar(crypto:rand_uniform(0, tuple_size(?SAFE_CHARS))).
++    rngchar(mochiweb_util:rand_uniform(0, tuple_size(?SAFE_CHARS))).
+ 
+ rngchar(C) ->
+     element(1 + C, ?SAFE_CHARS).
+@@ -176,7 +176,6 @@ gettempdir_cwd_test() ->
+     ok.
+ 
+ rngchars_test() ->
+-    crypto:start(),
+     ?assertEqual(
+        "",
+        rngchars(0)),
+@@ -198,7 +197,6 @@ rngchar_test() ->
+     ok.
+ 
+ mkdtemp_n_failonce_test() ->
+-    crypto:start(),
+     D = mkdtemp(),
+     Path = filename:join([D, "testdir"]),
+     %% Toggle the existence of a dir so that it fails
+@@ -245,7 +243,6 @@ make_dir_fail_test() ->
+     ok.
+ 
+ mkdtemp_test() ->
+-    crypto:start(),
+     D = mkdtemp(),
+     ?assertEqual(
+        true,
+@@ -256,7 +253,6 @@ mkdtemp_test() ->
+     ok.
+ 
+ rmtempdir_test() ->
+-    crypto:start(),
+     D1 = mkdtemp(),
+     ?assertEqual(
+        true,
+diff --git a/src/mochiweb.app.src b/src/mochiweb.app.src
+index 5664003..a28cde3 100644
+--- a/src/mochiweb.app.src
++++ b/src/mochiweb.app.src
+@@ -6,4 +6,4 @@
+   {registered, []},
+   {mod, {mochiweb_app, []}},
+   {env, []},
+-  {applications, [kernel, stdlib, crypto, inets]}]}.
++  {applications, [kernel, stdlib, inets]}]}.
+diff --git a/src/mochiweb.erl b/src/mochiweb.erl
+index 3118028..6302b41 100644
+--- a/src/mochiweb.erl
++++ b/src/mochiweb.erl
+@@ -13,15 +13,12 @@
+ %% @spec start() -> ok
+ %% @doc Start the MochiWeb server.
+ start() ->
+-    ensure_started(crypto),
+     application:start(mochiweb).
+ 
+ %% @spec stop() -> ok
+ %% @doc Stop the MochiWeb server.
+ stop() ->
+-    Res = application:stop(mochiweb),
+-    application:stop(crypto),
+-    Res.
++    application:stop(mochiweb).
+ 
+ reload() ->
+     [c:l(Module) || Module <- all_loaded()].
+@@ -78,16 +75,6 @@ new_response({Request, Code, Headers}) ->
+                           Code,
+                           mochiweb_headers:make(Headers)).
+ 
+-%% Internal API
+-
+-ensure_started(App) ->
+-    case application:start(App) of
+-        ok ->
+-            ok;
+-        {error, {already_started, App}} ->
+-            ok
+-    end.
+-
+ 
+ %%
+ %% Tests
+@@ -195,7 +182,7 @@ do_POST(Transport, Size, Times) ->
+                 end,
+     TestReqs = [begin
+                     Path = "/stuff/" ++ integer_to_list(N),
+-                    Body = crypto:rand_bytes(Size),
++                    Body = mochiweb_util:rand_bytes(Size)),
+                     #treq{path=Path, body=Body, xreply=Body}
+                 end || N <- lists:seq(1, Times)],
+     ClientFun = new_client_fun('POST', TestReqs),
+diff --git a/src/mochiweb_multipart.erl b/src/mochiweb_multipart.erl
+index 3069cf4..28e7e8d 100644
+--- a/src/mochiweb_multipart.erl
++++ b/src/mochiweb_multipart.erl
+@@ -38,7 +38,7 @@ parts_to_body([{Start, End, Body}], ContentType, Size) ->
+     {HeaderList, Body};
+ parts_to_body(BodyList, ContentType, Size) when is_list(BodyList) ->
+     parts_to_multipart_body(BodyList, ContentType, Size,
+-                            mochihex:to_hex(crypto:rand_bytes(8))).
++                            mochihex:to_hex(mochiweb_util:rand_bytes(8))).
+ 
+ %% @spec parts_to_multipart_body([bodypart()], ContentType::string(),
+ %%                               Size::integer(), Boundary::string()) ->
+diff --git a/src/mochiweb_util.erl b/src/mochiweb_util.erl
+index d1cc59d..b633d26 100644
+--- a/src/mochiweb_util.erl
++++ b/src/mochiweb_util.erl
+@@ -13,7 +13,7 @@
+ -export([record_to_proplist/2, record_to_proplist/3]).
+ -export([safe_relative_path/1, partition/2]).
+ -export([parse_qvalues/1, pick_accepted_encodings/3]).
+--export([make_io/1]).
++-export([make_io/1, rand_bytes/1, rand_uniform/2]).
+ 
+ -define(PERCENT, 37).  % $\%
+ -define(FULLSTOP, 46). % $\.
+@@ -545,6 +545,12 @@ make_io(Integer) when is_integer(Integer) ->
+ make_io(Io) when is_list(Io); is_binary(Io) ->
+     Io.
+ 
++rand_bytes(Count) ->
++    list_to_binary([rand_uniform(0, 16#FF + 1) || _ <- lists:seq(1, Count)]).
++
++rand_uniform(Lo, Hi) ->
++    random:uniform(Hi - Lo) + Lo - 1.
++
+ %%
+ %% Tests
+ %%
+diff --git a/support/run_tests.escript b/support/run_tests.escript
+index ff49c06..6ae812c 100755
+--- a/support/run_tests.escript
++++ b/support/run_tests.escript
+@@ -18,7 +18,6 @@ main([Ebin]) ->
+                          ModuleNames)],
+ 
+ 
+-    crypto:start(),
+     start_cover(Modules),
+     eunit:test(Modules, [verbose,{report,{eunit_surefire,[{dir,"../_test"}]}}]),
+     analyze_cover(Modules);

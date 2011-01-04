@@ -23,7 +23,7 @@ distclean: clean
 
 $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 	cp -r $< $@
-	cd $@ && patch -p1 < ../mochiweb-12b3.patch
+	cd $@ && patch -p1 < ../mochiweb-12b3.patch && patch -p1 < ../10-crypto.patch
 
 $(CHECKOUT_DIR):
 	git clone $(UPSTREAM_GIT) $@
