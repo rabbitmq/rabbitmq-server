@@ -41,6 +41,9 @@
           list exchanges, queues, bindings, vhosts, users, permissions, connections and channels.
         </li>
         <li>
+          show overview information.
+        </li>
+        <li>
           declare and delete exchanges, queues, bindings, vhosts, users and permissions.
         </li>
         <li>
@@ -79,6 +82,32 @@
 | amq.topic   | True    | test  | topic   | False       |
 +-------------+---------+-------+---------+-------------+</pre>
       </li>
+
+      <li>
+        Get a list of queues, with some columns specified:
+<pre>$ rabbitmqadmin list queues vhost name node messages message_stats_publish_details_rate
++-------+----------------------------------+-------------------+----------+------------------------------------+
+| vhost |               name               |       node        | messages | message_stats_publish_details_rate |
++-------+----------------------------------+-------------------+----------+------------------------------------+
+| /     | amq.gen-UELtxwb8OGJ9XHlHJq0Jug== | rabbit@smacmullen | 0        | 100.985821591                      |
+| /     | test                             | rabbit@misstiny   | 5052     | 100.985821591                      |
++-------+----------------------------------+-------------------+----------+------------------------------------+</pre>
+      </li>
+      <li>
+        Get a list of queues, with all the detail we can take:
+<pre>$ rabbitmqadmin -f long -d 3 list queues
+
+--------------------------------------------------------------------------------
+
+                                       vhost: /
+                                        name: amq.gen-UELtxwb8OGJ9XHlHJq0Jug==
+                                 auto_delete: False
+    backing_queue_status_avg_ack_egress_rate: 100.944672225
+   backing_queue_status_avg_ack_ingress_rate: 100.944672225
+
+<i>and so on, and on...</i></pre>
+      </li>
+
       <li>
         Connect to another host as another user:
 <pre>$ rabbitmqadmin -H myserver -u simon -p simon list vhosts
@@ -90,13 +119,13 @@
       </li>
       <li>
         Declare an exchange:
-<pre>$ rabbitmqadmin declare exchange my-new-exchange fanout
+<pre>$ rabbitmqadmin declare exchange name=my-new-exchange type=fanout
 exchange declared
 </pre>
       </li>
       <li>
         Declare a queue, with optional parameters:
-<pre>$ rabbitmqadmin declare queue my-new-queue durable=false
+<pre>$ rabbitmqadmin declare queue name=my-new-queue durable=false
 queue declared
 </pre>
       </li>
@@ -111,7 +140,7 @@ Exported configuration for localhost to "rabbit.config"</pre>
       </li>
       <li>
         Close all connections:
-<pre>rabbitmqadmin -f tsv -q list connections | cut -f 2 | while read conn ; do rabbitmqadmin close connection ${conn} ; done</pre>
+<pre>rabbitmqadmin -f tsv -q list connections name | while read conn ; do rabbitmqadmin close connection name=${conn} ; done</pre>
       </li>
     </ul>
   </body>

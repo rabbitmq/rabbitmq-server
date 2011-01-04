@@ -150,7 +150,8 @@ rw_state() ->
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
-     {exchanges,   [name, vhost, type, durable, auto_delete, arguments]},
+     {exchanges,   [name, vhost, type, durable, auto_delete, internal,
+                    arguments]},
      {bindings,    [source, vhost, destination, destination_type, routing_key,
                     arguments]}].
 
@@ -199,10 +200,15 @@ add_queue(Queue) ->
                             none).
 
 add_exchange(Exchange) ->
+    Internal = case pget(internal, Exchange) of
+                   undefined -> false; %% =< 2.2.0
+                   I         -> I
+               end,
     rabbit_exchange:declare(r(exchange,                           Exchange),
                             rabbit_exchange:check_type(pget(type, Exchange)),
                             pget(durable,                         Exchange),
                             pget(auto_delete,                     Exchange),
+                            Internal,
                             rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
 add_binding(Binding) ->

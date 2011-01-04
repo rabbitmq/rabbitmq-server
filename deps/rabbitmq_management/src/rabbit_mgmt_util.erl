@@ -96,7 +96,16 @@ destination_type(ReqData) ->
 
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
-    {mochijson2:encode(Facts), ReqData1, Context}.
+    try
+        {mochijson2:encode(Facts), ReqData1, Context}
+    catch
+        exit:{json_encode, E} ->
+            Error = iolist_to_binary(
+                      io_lib:format("JSON encode error: ~p", [E])),
+            Reason = iolist_to_binary(
+                       io_lib:format("While encoding:~n~p", [Facts])),
+            internal_server_error(Error, Reason, ReqData1, Context)
+    end.
 
 reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context).
@@ -153,6 +162,10 @@ not_authorised(Reason, ReqData, Context) ->
 
 not_found(Reason, ReqData, Context) ->
     halt_response(404, not_found, Reason, ReqData, Context).
+
+internal_server_error(Error, Reason, ReqData, Context) ->
+    rabbit_log:error("~s~n~s~n", [Error, Reason]),
+    halt_response(500, Error, Reason, ReqData, Context).
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
     Json = {struct, [{error, Type},

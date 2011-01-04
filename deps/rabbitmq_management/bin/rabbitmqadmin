@@ -27,6 +27,8 @@ import socket
 LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
             'users', 'vhosts', 'permissions', 'nodes']
 
+SHOWABLE = ['overview']
+
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
 
@@ -42,7 +44,8 @@ URIS = {
 
 DECLARABLE = {
     'exchange':   {'mandatory': ['name', 'type'],
-                   'optional':  {'auto_delete': 'false', 'durable': 'true'}},
+                   'optional':  {'auto_delete': 'false', 'durable': 'true',
+                                 'internal': 'false'}},
     'queue':      {'mandatory': ['name'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true'}},
     'binding':    {'mandatory': ['source', 'destination_type', 'destination',
@@ -92,7 +95,9 @@ where cmd is one of:
 
 """
     for l in LISTABLE:
-        usage += "  list {0}\n".format(l)
+        usage += "  list {0} [<column>...]\n".format(l)
+    for s in SHOWABLE:
+        usage += "  show {0} [<column>...]\n".format(s)
     usage += fmt_usage_stanza(DECLARABLE, 'declare')
     usage += fmt_usage_stanza(DELETABLE,  'delete')
     usage += fmt_usage_stanza(CLOSABLE,   'close')
@@ -238,13 +243,21 @@ class Management:
                      % (self.options.hostname, path))
 
     def invoke_list(self):
-        obj_type = self.get_arg()
-        assert_usage(obj_type in LISTABLE,
-                     "Don't know how to list {0}".format(obj_type))
+        uri = self.list_show_uri(LISTABLE, 'list')
+        format_list(self.get(uri), self.args[1:], self.options)
+
+    def invoke_show(self):
+        uri = self.list_show_uri(SHOWABLE, 'show')
+        format_list('[{0}]'.format(self.get(uri)), self.args[1:], self.options)
+
+    def list_show_uri(self, obj_types, verb):
+        obj_type = self.args[0]
+        assert_usage(obj_type in obj_types,
+                     "Don't know how to {0} {1}".format(verb, obj_type))
         uri = "/%s" % obj_type
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
-        format_list(self.get(uri), self.options)
+        return uri
 
     def invoke_declare(self):
         (obj_type, uri, payload) = self.declare_delete_parse(DECLARABLE)
@@ -301,7 +314,7 @@ class Management:
         uri = root[obj_type]['uri'].format(**uri_args)
         return (obj_type, uri, payload)
 
-def format_list(json_list, options):
+def format_list(json_list, columns, options):
     format = options.format
     formatter = None
     if format == "raw_json":
@@ -315,7 +328,7 @@ def format_list(json_list, options):
         formatter = FORMATS[format]
     assert_usage(formatter != None,
                  "Format {0} not recognised".format(format))
-    formatter_instance = formatter(options)
+    formatter_instance = formatter(columns, options)
     formatter_instance.display(json_list)
 
 class Lister:
@@ -324,8 +337,10 @@ class Lister:
             print string
 
     def display(self, json_list):
-        (columns, table) = self.list_to_table(json.loads(json_list),
-                                              int(self.options.depth))
+        depth = sys.maxint
+        if len(self.columns) == 0:
+            depth = int(self.options.depth)
+        (columns, table) = self.list_to_table(json.loads(json_list), depth)
         if len(table) > 0:
             self.display_list(columns, table)
         else:
@@ -354,12 +369,17 @@ class Lister:
             columns[col] = True
 
         def add_to_row(col, val):
-            row[column_ix[col]] = str(val)
+            if col in column_ix:
+                row[column_ix[col]] = str(val)
 
-        for item in items:
-            add('', 1, item, add_to_columns)
-        columns = columns.keys()
-        columns.sort(key=column_sort_key)
+        if len(self.columns) == 0:
+            for item in items:
+                add('', 1, item, add_to_columns)
+            columns = columns.keys()
+            columns.sort(key=column_sort_key)
+        else:
+            columns = self.columns
+
         for i in xrange(0, len(columns)):
             column_ix[columns[i]] = i
         for item in items:
@@ -370,7 +390,8 @@ class Lister:
         return (columns, table)
 
 class TSVList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -386,7 +407,8 @@ class TSVList(Lister):
             print line
 
 class LongList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -402,7 +424,8 @@ class LongList(Lister):
             print sep
 
 class TableList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -437,7 +460,8 @@ class TableList(Lister):
         print txt
 
 class KeyValueList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -449,7 +473,8 @@ class KeyValueList(Lister):
 
 # TODO handle spaces etc in completable names
 class BashList(Lister):
-    def __init__(self, options):
+    def __init__(self, columns, options):
+        self.columns = columns
         self.options = options
 
     def display_list(self, columns, table):
@@ -484,12 +509,16 @@ _rabbitmqadmin()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="list declare delete close purge import export"
+    opts="list show declare delete close purge import export"
     fargs="--help --host --port --vhost --username --password --format --depth"
 
     case "${prev}" in
 	list)
 	    COMPREPLY=( $(compgen -W '""" + " ".join(LISTABLE) + """' -- ${cur}) )
+            return 0
+            ;;
+	show)
+	    COMPREPLY=( $(compgen -W '""" + " ".join(SHOWABLE) + """' -- ${cur}) )
             return 0
             ;;
 	declare)

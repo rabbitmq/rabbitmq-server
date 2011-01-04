@@ -30,6 +30,8 @@
 -define(NOT_AUTHORISED, 401).
 %%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
 -define(PREFIX, "http://localhost:55672/api").
+%% httpc seems to get racy when using HTTP 1.1
+-define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
 
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
@@ -166,6 +168,9 @@ connections_test() ->
                "/connections/127.0.0.1%3A~w", [LocalPort])),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
+    %% TODO rabbit_reader:shutdown/2 returns before the connection is
+    %% closed. It may not be worth fixing.
+    timer:sleep(200),
     http_get(Path, ?NOT_FOUND).
 
 test_auth(Code, Headers) ->
@@ -174,7 +179,8 @@ test_auth(Code, Headers) ->
 exchanges_test() ->
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>},
-            {auto_delete, <<"false">>}, {arguments, []}],
+            {auto_delete, <<"false">>}, {internal, <<"false">>},
+            {arguments, []}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
@@ -190,21 +196,25 @@ exchanges_test() ->
      {type,<<"direct">>},
      {durable,true},
      {auto_delete,false},
+     {internal,false},
      {arguments,[]}] =
         http_get("/exchanges/myvhost/foo"),
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/exchanges/myvhost/bar",
              [{type, <<"bad_exchange_type">>},
-              {durable, true}, {auto_delete, false}, {arguments, []}],
+              {durable, true}, {auto_delete, false}, {internal, false},
+              {arguments, []}],
              ?BAD_REQUEST),
     http_put("/exchanges/myvhost/bar",
              [{type, <<"direct">>},
-              {durable, <<"troo">>}, {auto_delete, false}, {arguments, []}],
+              {durable, <<"troo">>}, {auto_delete, false}, {internal, false},
+              {arguments, []}],
              ?BAD_REQUEST),
     http_put("/exchanges/myvhost/foo",
              [{type, <<"direct">>},
-              {durable, false}, {auto_delete, false}, {arguments, []}],
+              {durable, false}, {auto_delete, false}, {internal, false},
+              {arguments, []}],
              ?BAD_REQUEST),
 
     http_delete("/exchanges/myvhost/foo", ?NO_CONTENT),
@@ -257,7 +267,7 @@ queues_test() ->
 
 bindings_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, []}],
+             {internal, false}, {arguments, []}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
@@ -301,7 +311,7 @@ bindings_test() ->
 
 bindings_post_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, []}],
+             {internal, false}, {arguments, []}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
@@ -504,7 +514,7 @@ unicode_test() ->
 
 all_configuration_test() ->
     XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, []}],
+             {internal, false}, {arguments, []}],
     QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
@@ -592,6 +602,7 @@ aliveness_test() ->
 
 arguments_test() ->
     XArgs = [{type, <<"headers">>}, {durable, false}, {auto_delete, false},
+             {internal, false},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
     QArgs = [{durable, false}, {auto_delete, false},
              {arguments, [{'x-expires', 1800000}]}],
@@ -721,12 +732,10 @@ http_put_raw(Path, Body, User, Pass, CodeExp) ->
 http_post_raw(Path, Body, CodeExp) ->
     http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
 
-%% TODO Lose the sleep below. What is happening async?
 http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Type, Path, [auth_header(User, Pass)], Body),
     assert_code(CodeExp, CodeAct, Type, Path, ResBody),
-    timer:sleep(100),
     decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
@@ -743,11 +752,11 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 req(Type, Path, Headers) ->
-    httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
+    httpc:request(Type, {?PREFIX ++ Path, Headers}, ?HTTPC_OPTS, []).
 
 req(Type, Path, Headers, Body) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
-                  [], []).
+                  ?HTTPC_OPTS, []).
 
 decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
 decode(_,    Headers, _ResBody) -> Headers.
