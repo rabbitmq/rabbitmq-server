@@ -36,8 +36,8 @@
 -type(scope() :: 'mnesia' | 'local').
 -type(version() :: [step()]).
 
-%% TODO update
-%%-spec(maybe_upgrade/1 :: ([scope()]) -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade/2 :: ([scope()], fun (() -> 'ok'))
+         -> 'ok' | 'version_not_available').
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
@@ -147,7 +147,7 @@ apply_upgrades(Upgrades, Fun) ->
                     %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
                     info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
-                    Fun(),
+                    ok = Fun(),
                     [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
                     info("Upgrades: All upgrades applied successfully~n", []),
                     ok = write_version(),

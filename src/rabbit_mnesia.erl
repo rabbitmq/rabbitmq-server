@@ -141,7 +141,8 @@ running_clustered_nodes() ->
 
 forget_other_nodes() ->
     Nodes = all_clustered_nodes() -- [node()],
-    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Nodes].
+    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Nodes],
+    ok.
 
 empty_ram_only_tables() ->
     Node = node(),
@@ -467,7 +468,8 @@ reset_fun(ProperClusterNodes) ->
                                   cannot_delete_schema),
             rabbit_misc:ensure_ok(mnesia:start(),
                                   cannot_start_mnesia),
-            {ok, _} = mnesia:change_config(extra_db_nodes, ProperClusterNodes)
+            {ok, _} = mnesia:change_config(extra_db_nodes, ProperClusterNodes),
+            ok
     end.
 
 create_schema() ->
