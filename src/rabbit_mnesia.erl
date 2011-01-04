@@ -401,10 +401,8 @@ init_db(ClusterNodes, Force) ->
                     ok = create_schema();
                 {[AnotherNode|_], _} ->
                     %% Subsequent node in cluster, catch up
-                    %% TODO what should we ensure?
-                    %% ensure_version_ok(rabbit_upgrade:read_version()),
-                    %% ensure_version_ok(
-                    %%   rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
+                    ensure_version_ok(
+                      rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     case rabbit_upgrade:maybe_upgrade(
