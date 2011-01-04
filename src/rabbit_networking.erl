@@ -31,15 +31,15 @@
 
 -module(rabbit_networking).
 
--export([boot/0, start/0, start_tcp_listener/2, start_ssl_listener/3,
-         stop_tcp_listener/2, on_node_down/1, active_listeners/0,
+-export([boot/0, start/0, start_tcp_listener/3, start_ssl_listener/4,
+         stop_tcp_listener/3, on_node_down/1, active_listeners/0,
          node_listeners/1, connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          close_connection/2]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
--export([check_tcp_listener_address/3]).
+-export([check_tcp_listener_address/4]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
@@ -65,11 +65,13 @@
 
 -export_type([ip_port/0, hostname/0]).
 
+-type(family() :: atom()).
+
 -spec(start/0 :: () -> 'ok').
--spec(start_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
--spec(start_ssl_listener/3 :: (hostname(), ip_port(), rabbit_types:infos())
-                              -> 'ok').
--spec(stop_tcp_listener/2 :: (hostname(), ip_port()) -> 'ok').
+-spec(start_tcp_listener/3 :: (hostname(), ip_port(), family()) -> 'ok').
+-spec(start_ssl_listener/4 :: (hostname(), ip_port(), rabbit_types:infos(),
+                               family()) -> 'ok').
+-spec(stop_tcp_listener/3 :: (hostname(), ip_port(), family()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
@@ -84,8 +86,9 @@
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(check_tcp_listener_address/3 ::
-        (atom(), hostname(), ip_port()) -> {inet:ip_address(), atom()}).
+-spec(check_tcp_listener_address/4 ::
+        (atom(), hostname(), ip_port(), family())
+        -> {inet:ip_address(), atom()}).
 
 -endif.
 
@@ -98,7 +101,9 @@ boot() ->
 
 boot_tcp() ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
-    [ok = start_tcp_listener(Host, Port) || {Host, Port} <- TcpListeners],
+    CheckedListeners = [check_listener(Opts) || Opts <- TcpListeners],
+    [ok = start_tcp_listener(Host, Port, Family)
+     || {Host, Port, Family} <- CheckedListeners],
     ok.
 
 boot_ssl() ->
@@ -118,7 +123,9 @@ boot_ssl() ->
                                                  end}
                                    | SslOptsConfig]
                 end,
-            [start_ssl_listener(Host, Port, SslOpts) || {Host, Port} <- SslListeners],
+            CheckedListeners = [check_listener(Opts) || Opts <- SslListeners],
+            [start_ssl_listener(Host, Port, Family, SslOpts)
+             || {Host, Port, Family} <- CheckedListeners],
             ok
     end.
 
@@ -132,7 +139,13 @@ start() ->
                 transient, infinity, supervisor, [tcp_client_sup]}),
     ok.
 
-getaddr(Host) ->
+check_listener({Host, Port}) ->
+    %% Default to IPv4.
+    {Host, Port, inet};
+check_listener({Host, Port, Family}) ->
+    {Host, Port, Family}.
+
+getaddr(Host, Family) ->
     %% inet_parse:address takes care of ip string, like "0.0.0.0"
     %% inet:getaddr returns immediately for ip tuple {0,0,0,0},
     %%  and runs 'inet_gethost' port process for dns lookups.
@@ -140,7 +153,7 @@ getaddr(Host) ->
     case inet_parse:address(Host) of
         {ok, IPAddress1} -> IPAddress1;
         {error, _} ->
-            case inet:getaddr(Host, inet) of
+            case inet:getaddr(Host, Family) of
                 {ok, IPAddress2} -> IPAddress2;
                 {error, Reason} ->
                     error_logger:error_msg("invalid host ~p - ~p~n",
@@ -149,8 +162,8 @@ getaddr(Host) ->
             end
     end.
 
-check_tcp_listener_address(NamePrefix, Host, Port) ->
-    IPAddress = getaddr(Host),
+check_tcp_listener_address(NamePrefix, Host, Port, Family) ->
+    IPAddress = getaddr(Host, Family),
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
@@ -159,30 +172,30 @@ check_tcp_listener_address(NamePrefix, Host, Port) ->
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
     {IPAddress, Name}.
 
-start_tcp_listener(Host, Port) ->
-    start_listener(Host, Port, amqp, "TCP Listener",
+start_tcp_listener(Host, Port, Family) ->
+    start_listener(Host, Port, amqp, Family, "TCP Listener",
                    {?MODULE, start_client, []}).
 
-start_ssl_listener(Host, Port, SslOpts) ->
-    start_listener(Host, Port, 'amqp/ssl', "SSL Listener",
+start_ssl_listener(Host, Port, Family, SslOpts) ->
+    start_listener(Host, Port, 'amqp/ssl', Family, "SSL Listener",
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
-start_listener(Host, Port, Protocol, Label, OnConnect) ->
+start_listener(Host, Port, Protocol, Family, Label, OnConnect) ->
     {IPAddress, Name} =
-        check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port),
+        check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port, Family),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {Name,
                 {tcp_listener_sup, start_link,
-                 [IPAddress, Port, ?RABBIT_TCP_OPTS ,
+                 [IPAddress, Port, [Family | ?RABBIT_TCP_OPTS],
                   {?MODULE, tcp_listener_started, [Protocol]},
                   {?MODULE, tcp_listener_stopped, [Protocol]},
                   OnConnect, Label]},
                 transient, infinity, supervisor, [tcp_listener_sup]}),
     ok.
 
-stop_tcp_listener(Host, Port) ->
-    IPAddress = getaddr(Host),
+stop_tcp_listener(Host, Port, Family) ->
+    IPAddress = getaddr(Host, Family),
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name),
