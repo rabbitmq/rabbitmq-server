@@ -386,26 +386,19 @@ init_db(ClusterNodes, Force) ->
                          end;
                 true  -> ok
             end,
-            case {Nodes, mnesia:system_info(use_dir), all_clustered_nodes()} of
-                {[], true, [_]} ->
-                    %% True single disc node, attempt upgrade
+            case {Nodes, mnesia:system_info(use_dir)} of
+                {[], true} ->
+                    %% True single disc node, or master" (i.e. without
+                    %% config) disc node in cluster, attempt upgrade
                     ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade([mnesia, local]) of
                         ok                    -> ensure_schema_ok();
                         version_not_available -> schema_ok_or_move()
                     end;
-                {[], true, _} ->
-                    %% "Master" (i.e. without config) disc node in cluster,
-                    %% do upgrade
-                    ok = wait_for_tables(),
-                    case rabbit_upgrade:maybe_upgrade([mnesia, local]) of
-                        ok                    -> ensure_schema_ok();
-                        version_not_available -> schema_ok_or_move()
-                    end;
-                {[], false, _} ->
+                {[], false} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
-                {[AnotherNode|_], _, _} ->
+                {[AnotherNode|_], _} ->
                     %% Subsequent node in cluster, catch up
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
