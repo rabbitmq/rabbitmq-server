@@ -4,71 +4,27 @@
 
 This is a STOMP adapter plugin for use with RabbitMQ.
 
- - <http://stomp.codehaus.org/>
+ - <http://stomp.github.com/>
  - <http://www.rabbitmq.com/>
- - <https://dev.rabbitmq.com/wiki/StompGateway>
-
-You can get the code by checking it out from our repository with
-
-    hg clone http://hg.rabbitmq.com/rabbitmq-stomp/
-
-Please make sure that after you have cloned the repository you update
-it to the correct tag for your RabbitMQ server version -- see below
-for details.
 
 Announcements regarding the adapter are periodically made on the
-RabbitMQ mailing list and on LShift's blog.
+RabbitMQ blog and mailing list.
 
  - <http://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss>
- - <http://www.lshift.net/blog/>
- - <http://www.lshift.net/blog/category/lshift-sw/rabbitmq/>
+ - <http://www.rabbitmq.com/blog/>
+
+## Installing from binary
+
+Binary packages for the STOMP adapter can be found on the [plugins page](http://www.rabbitmq.com/plugins.html).
+
+Instructions for installing binary plugins can be in the [Admin Guide](http://www.rabbitmq.com/admin-guide.html#plugins).
 
 
-### Compiling from a Mercurial checkout
+## Compiling and installing from source
 
-(This instructions work only for RabbitMQ 1.7.0 or newer.)
+To build the STOMP adapter from source, follow the instructions for building the umbrella repository contained in the [Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html).
 
-To compile RabbitMQ STOMP adapter plugin, you will need to download
-rabbitmq-public-umbrella package:
-
-    hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
-
-Umbrella is a placeholder for various packages. You need to actually
-download and compile the dependencies. The simplest way is to run:
-
-    cd rabbitmq-public-umbrella
-    make co
-    make
-
-This will download and compile all the rabbitmq related packages. Actually
-you don't have to compile everything, the required packages are only
-rabbitmq-codegen, rabbitmq-server and rabbitmq-stomp.
-
-
-If you want to compile a plugin for a specific release of the broker,
-you just need to update mercurial repository to a proper tag. To do
-that you can say from the umbrella directory:
-
-    hg -R rabbitmq-codegen  up rabbitmq_v1_X_X
-    hg -R rabbitmq-server   up rabbitmq_v1_X_X
-    hg -R rabbitmq-stomp    up rabbitmq_v1_X_X
-
-
-### Building plugin package
-
-To build a plugin package (*.ez file), run 'make package' from the
-rabbitmq-stomp directory. Package should appear in 'dist' directory.
-
-    cd rabbitmq-stomp
-    make package
-    ls dist/rabbitmq_stomp.ez
-
-
-To install and activate package, please follow the instructions from
-Plugin Development Guide:
-    http://www.rabbitmq.com/plugin-development.html#activating-a-plugin
-
-You need to install rabbit_stomp.ez package.
+You need to install the rabbit\_stomp.ez and amqp\_client.ez packages.
 
 ## Running the STOMP adapter
 
@@ -102,9 +58,9 @@ using a STOMP client of your choice. In a pinch, `telnet` or netcat
     message:Invalid frame
     content-type:text/plain
     content-length:22
-    
+
     Could not parse frame
-    $ 
+    $
 
 That `ERROR` message indicates that the adapter is listening and
 attempting to parse STOMP frames.
@@ -114,9 +70,9 @@ adapter -- see below.
 
 ### Running the adapter during development
 
-If you are working with the full source code for the RabbitMQ server,
-and you have the `../rabbitmq-server` directory you can simply say `make run`:
+If you checked out and built the `rabbitmq-public-umbrella` tree as per the instructions in the Plugin Development Guide, then you can run RabbitMQ with STOMP adapter directly from the source tree:
 
+    cd rabbitmq-public-umbrella/rabbitmq-stomp
     make run
 
 If this is successful, you should end up with `starting
@@ -203,7 +159,7 @@ In another terminal window, run the sender:
 
 The receiver's window should contain the received messages:
 
-    $ perl examples/perl/rabbitmq_stomp_recv.pl 
+    $ perl examples/perl/rabbitmq_stomp_recv.pl
     test message
     hello
     QUIT

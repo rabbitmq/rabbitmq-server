@@ -2,10 +2,13 @@
  [{description, "Embedded Rabbit Stomp Adapter"},
   {vsn, "%%VSN%%"},
   {modules, [
-    rabbit_stomp,
-    rabbit_stomp_sup,
-    rabbit_stomp_server,
-    rabbit_stomp_frame
+            rabbit_stomp,
+            rabbit_stomp_client_sup,
+            rabbit_stomp_frame,
+            rabbit_stomp_processor,
+            rabbit_stomp_reader,
+            rabbit_stomp_sup,
+            rabbit_stomp_util
   ]},
   {registered, []},
   {mod, {rabbit_stomp, []}},

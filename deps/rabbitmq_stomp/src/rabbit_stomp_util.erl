@@ -32,7 +32,12 @@
 -module(rabbit_stomp_util).
 
 -export([parse_destination/1, parse_routing_information/1,
-         create_message_id/3, parse_message_id/1]).
+         parse_message_id/1]).
+-export([longstr_field/2]).
+-export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
+
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_stomp_frame.hrl").
 
 -define(QUEUE_PREFIX, "/queue").
 -define(TOPIC_PREFIX, "/topic").
@@ -40,12 +45,77 @@
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
-create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
-    [ConsumerTag,
-     ?MESSAGE_ID_SEPARATOR,
-     SessionId,
-     ?MESSAGE_ID_SEPARATOR,
-     integer_to_list(DeliveryTag)].
+%%--------------------------------------------------------------------
+%% Frame and Header Parsing
+%%--------------------------------------------------------------------
+
+consumer_tag(Frame) ->
+    case rabbit_stomp_frame:header(Frame, "id") of
+        {ok, Str} ->
+            {ok, list_to_binary("T_" ++ Str)};
+        not_found ->
+            case rabbit_stomp_frame:header(Frame, "destination") of
+                {ok, DestHdr} ->
+                    {ok, list_to_binary("Q_" ++ DestHdr)};
+                not_found ->
+                    {error, missing_destination_header}
+            end
+    end.
+
+ack_mode(Frame) ->
+    case rabbit_stomp_frame:header(Frame, "ack", "auto") of
+        "auto"   -> auto;
+        "client" -> client
+    end.
+
+message_properties(Frame = #stomp_frame{headers = Headers}) ->
+    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
+    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
+
+
+    #'P_basic'{
+      content_type     = BinH("content-type",     <<"text/plain">>),
+      content_encoding = BinH("content-encoding", undefined),
+      delivery_mode    = IntH("delivery-mode",    undefined),
+      priority         = IntH("priority",         undefined),
+      correlation_id   = BinH("correlation-id",   undefined),
+      reply_to         = BinH("reply-to",         undefined),
+      message_id       = BinH("amqp-message-id",  undefined),
+      headers          = [longstr_field(K, V) || {"X-" ++ K, V} <- Headers]}.
+
+message_headers(Destination, SessionId,
+                #'basic.deliver'{consumer_tag = ConsumerTag,
+                                 delivery_tag = DeliveryTag},
+                #'P_basic'{headers          = Headers,
+                           content_type     = ContentType,
+                           content_encoding = ContentEncoding,
+                           delivery_mode    = DeliveryMode,
+                           priority         = Priority,
+                           correlation_id   = CorrelationId,
+                           reply_to         = ReplyTo,
+                           message_id       = MessageId}) ->
+    [{"destination", Destination},
+       %% TODO append ContentEncoding as ContentType;
+       %% charset=ContentEncoding?  The STOMP SEND handler could also
+       %% parse "content-type" to split it, perhaps?
+       {"message-id", create_message_id(ConsumerTag,
+                                        SessionId,
+                                        DeliveryTag)}]
+      ++ maybe_header("content-type", ContentType)
+      ++ maybe_header("content-encoding", ContentEncoding)
+      ++ case ConsumerTag of
+             <<"Q_",  _/binary>> -> [];
+             <<"T_", Id/binary>> -> [{"subscription", binary_to_list(Id)}]
+         end
+      ++ adhoc_convert_headers(case Headers of
+                                   undefined -> [];
+                                   _         -> Headers
+                               end)
+      ++ maybe_header("delivery-mode", DeliveryMode)
+      ++ maybe_header("priority", Priority)
+      ++ maybe_header("correlation-id", CorrelationId)
+      ++ maybe_header("reply-to", ReplyTo)
+      ++ maybe_header("amqp-message-id", MessageId).
 
 parse_message_id(MessageId) ->
     {ok, Pieces} = regexp:split(MessageId, ?MESSAGE_ID_SEPARATOR),
@@ -57,6 +127,40 @@ parse_message_id(MessageId) ->
         _ ->
             {error, invalid_message_id}
     end.
+
+%% ---- Header processing helpers ----
+
+longstr_field(K, V) ->
+    {list_to_binary(K), longstr, list_to_binary(V)}.
+
+maybe_header(_Key, undefined) ->
+    [];
+maybe_header(Key, Value) when is_binary(Value) ->
+    [{Key, binary_to_list(Value)}];
+maybe_header(Key, Value) when is_integer(Value) ->
+    [{Key, integer_to_list(Value)}];
+maybe_header(_Key, _Value) ->
+    [].
+
+adhoc_convert_headers(Headers) ->
+    lists:foldr(fun ({K, longstr, V}, Acc) ->
+                        [{"X-" ++ binary_to_list(K), binary_to_list(V)} | Acc];
+                    ({K, signedint, V}, Acc) ->
+                        [{"X-" ++ binary_to_list(K), integer_to_list(V)} | Acc];
+                    (_, Acc) ->
+                        Acc
+                end, [], Headers).
+
+create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
+    [ConsumerTag,
+     ?MESSAGE_ID_SEPARATOR,
+     SessionId,
+     ?MESSAGE_ID_SEPARATOR,
+     integer_to_list(DeliveryTag)].
+
+%%--------------------------------------------------------------------
+%% Destination Parsing
+%%--------------------------------------------------------------------
 
 parse_destination(?QUEUE_PREFIX ++ Rest) ->
     parse_simple_destination(queue, Rest);

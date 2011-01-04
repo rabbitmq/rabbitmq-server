@@ -21,6 +21,113 @@
 -module(rabbit_stomp_test_util).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_stomp_frame.hrl").
+
+%%--------------------------------------------------------------------
+%% Header Processing Tests
+%%--------------------------------------------------------------------
+
+longstr_field_test() ->
+    {<<"ABC">>, longstr, <<"DEF">>} =
+        rabbit_stomp_util:longstr_field("ABC", "DEF").
+
+message_properties_test() ->
+    Headers = [
+                {"content-type", "text/plain"},
+                {"content-encoding", "UTF-8"},
+                {"delivery-mode", "2"},
+                {"priority", "1"},
+                {"correlation-id", "123"},
+                {"reply-to", "something"},
+                {"amqp-message-id", "M123"},
+                {"X-str", "foo"},
+                {"X-int", "123"}
+              ],
+
+    #'P_basic'{
+                content_type = <<"text/plain">>,
+                content_encoding = <<"UTF-8">>,
+                delivery_mode = 2,
+                priority = 1,
+                correlation_id = <<"123">>,
+                reply_to = <<"something">>,
+                message_id = <<"M123">>,
+                headers = [
+                           {<<"str">>, longstr, <<"foo">>},
+                           {<<"int">>, longstr, <<"123">>}]
+                } =
+        rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
+
+message_headers_test() ->
+    Destination = "/queue/foo",
+    SessionId = "1234567",
+
+    Delivery = #'basic.deliver'{
+      consumer_tag = <<"Q_123">>,
+      delivery_tag = 123},
+
+    Properties = #'P_basic'{
+      headers          = [{<<"str">>, longstr, <<"foo">>},
+                          {<<"int">>, signedint, 123}],
+      content_type     = <<"text/plain">>,
+      content_encoding = <<"UTF-8">>,
+      delivery_mode    = 2,
+      priority         = 1,
+      correlation_id   = 123,
+      reply_to         = <<"something">>,
+      message_id       = <<"M123">>},
+
+    Headers = rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+
+    Expected = [
+                {"destination", Destination},
+                {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},
+                {"content-type", "text/plain"},
+                {"content-encoding", "UTF-8"},
+                {"delivery-mode", "2"},
+                {"priority", "1"},
+                {"correlation-id", "123"},
+                {"reply-to", "something"},
+                {"amqp-message-id", "M123"},
+                {"X-str", "foo"},
+                {"X-int", "123"}
+               ],
+
+    [] = lists:subtract(Headers, Expected).
+
+%%--------------------------------------------------------------------
+%% Frame Parsing Tests
+%%--------------------------------------------------------------------
+
+ack_mode_auto_test() ->
+    Frame = #stomp_frame{headers = [{"ack", "auto"}]},
+    auto = rabbit_stomp_util:ack_mode(Frame).
+
+ack_mode_auto_default_test() ->
+    Frame = #stomp_frame{headers = []},
+    auto = rabbit_stomp_util:ack_mode(Frame).
+
+ack_mode_client_test() ->
+    Frame = #stomp_frame{headers = [{"ack", "client"}]},
+    client = rabbit_stomp_util:ack_mode(Frame).
+
+consumer_tag_id_test() ->
+    Frame = #stomp_frame{headers = [{"id", "foo"}]},
+    {ok, <<"T_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+
+consumer_tag_destination_test() ->
+    Frame = #stomp_frame{headers = [{"destination", "foo"}]},
+    {ok, <<"Q_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+
+consumer_tag_invalid_test() ->
+    Frame = #stomp_frame{headers = []},
+    {error, missing_destination_header} = rabbit_stomp_util:consumer_tag(Frame).
+
+%%--------------------------------------------------------------------
+%% Destination Parsing Tests
+%%--------------------------------------------------------------------
 
 valid_queue_test() ->
     {ok, {queue, "test"}} = parse_destination("/queue/test").
@@ -82,10 +189,6 @@ valid_exchange_with_escaped_name_and_pattern_test() ->
     {ok, {exchange, {"te/st", "pa/tt/ern"}}} =
         parse_destination("/exchange/te%2Fst/pa%2Ftt%2Fern").
 
-create_message_id_test() ->
-    [<<"baz">>, "@@", "abc", "@@", "123"] =
-        rabbit_stomp_util:create_message_id(<<"baz">>, "abc", 123).
-
 parse_valid_message_id_test() ->
     {ok, {<<"bar">>, "abc", 123}} =
         rabbit_stomp_util:parse_message_id("bar@@abc@@123").
@@ -94,5 +197,8 @@ parse_invalid_message_id_test() ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id("blah").
 
+%%--------------------------------------------------------------------
+%% Test Helpers
+%%--------------------------------------------------------------------
 parse_destination(Destination) ->
     rabbit_stomp_util:parse_destination(Destination).
