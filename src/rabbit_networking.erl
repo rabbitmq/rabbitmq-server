@@ -66,12 +66,13 @@
 -export_type([ip_port/0, hostname/0]).
 
 -type(family() :: atom()).
--type(listener_spec() :: {hostname(), ip_port()} |
-                         {hostname(), ip_port(), family()}).
+-type(listener_config() :: {hostname(), ip_port()} |
+                           {hostname(), ip_port(), family()}).
 
 -spec(start/0 :: () -> 'ok').
--spec(start_tcp_listener/1 :: (listener_spec()) -> 'ok').
--spec(start_ssl_listener/2 :: (listener_spec(), rabbit_types:infos()) -> 'ok').
+-spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
+-spec(start_ssl_listener/2 ::
+        (listener_config(), rabbit_types:infos()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
@@ -86,8 +87,8 @@
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(check_tcp_listener_address/2 :: (atom(), listener_spec())
-        -> {inet:ip_address(), ip_port(), family(), atom()}).
+-spec(check_tcp_listener_address/2 :: (atom(), listener_config())
+        -> [{inet:ip_address(), ip_port(), family(), atom()}]).
 
 -endif.
 
@@ -184,7 +185,7 @@ check_tcp_listener_address(NamePrefix, {Host, Port, Family0}) ->
                throw({error, {invalid_port, Port}})
     end,
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-    {IPAddress, Port, Family, Name}.
+    [{IPAddress, Port, Family, Name}].
 
 start_tcp_listener(Listener) ->
     start_listener(Listener, amqp, "TCP Listener",
@@ -195,8 +196,11 @@ start_ssl_listener(Listener, SslOpts) ->
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
 start_listener(Listener, Protocol, Label, OnConnect) ->
-    {IPAddress, Port, Family, Name} = check_tcp_listener_address(
-                                        rabbit_tcp_listener_sup, Listener),
+    [start_listener0(Spec, Protocol, Label, OnConnect) ||
+        Spec <- check_tcp_listener_address(rabbit_tcp_listener_sup, Listener)],
+    ok.
+
+start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {Name,
@@ -205,8 +209,7 @@ start_listener(Listener, Protocol, Label, OnConnect) ->
                   {?MODULE, tcp_listener_started, [Protocol]},
                   {?MODULE, tcp_listener_stopped, [Protocol]},
                   OnConnect, Label]},
-                transient, infinity, supervisor, [tcp_listener_sup]}),
-    ok.
+                transient, infinity, supervisor, [tcp_listener_sup]}).
 
 %% TODO this appears not to be used by anything in Rabbit or plugins
 %% stop_tcp_listener(Host, Port, Family) ->
