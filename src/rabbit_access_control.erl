@@ -30,7 +30,7 @@
 %%
 
 -module(rabbit_access_control).
--include_lib("stdlib/include/qlc.hrl").
+
 -include("rabbit.hrl").
 
 -export([user_pass_login/2, check_user_pass_login/2, check_user_login/2,

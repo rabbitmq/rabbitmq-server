@@ -30,16 +30,14 @@
 %%
 -ifdef(use_specs).
 
--type(vhost_permission_atom() :: 'read' | 'write').
-
 -spec(description/0 :: () -> [{atom(), any()}]).
 
--spec(check_user_login/2 :: (rabbit_access_control:username(), [term()]) ->
+-spec(check_user_login/2 :: (rabbit_types:username(), [term()]) ->
                                  {'ok', rabbit_types:user()} |
                                  {'refused', string(), [any()]} |
                                  {'error', any()}).
 -spec(check_vhost_access/3 :: (rabbit_types:user(), rabbit_types:vhost(),
-                               vhost_permission_atom()) ->
+                               rabbit_access_control:vhost_permission_atom()) ->
                                    boolean() | {'error', any()}).
 -spec(check_resource_access/3 :: (rabbit_types:user(),
                                   rabbit_types:r(atom()),

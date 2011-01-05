@@ -30,7 +30,7 @@
 %%
 
 -module(rabbit_vhost).
-%%-include_lib("stdlib/include/qlc.hrl").
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
