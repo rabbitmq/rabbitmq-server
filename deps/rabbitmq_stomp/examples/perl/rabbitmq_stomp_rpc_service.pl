@@ -5,7 +5,7 @@ use Net::Stomp;
 my $stomp = Net::Stomp->new({hostname=>'localhost', port=>'61613'});
 $stomp->connect({login=>'guest', passcode=>'guest'});
 
-$stomp->subscribe({'destination'=>'rabbitmq_stomp_rpc_service', 'ack'=>'client'});
+$stomp->subscribe({'destination'=>'/queue/rabbitmq_stomp_rpc_service', 'ack'=>'client'});
 while (1) {
     print "Waiting for request...\n";
     my $frame = $stomp->receive_frame;

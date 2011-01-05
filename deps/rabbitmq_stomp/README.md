@@ -4,71 +4,31 @@
 
 This is a STOMP adapter plugin for use with RabbitMQ.
 
- - <http://stomp.codehaus.org/>
+ - <http://stomp.github.com/>
  - <http://www.rabbitmq.com/>
- - <https://dev.rabbitmq.com/wiki/StompGateway>
-
-You can get the code by checking it out from our repository with
-
-    hg clone http://hg.rabbitmq.com/rabbitmq-stomp/
-
-Please make sure that after you have cloned the repository you update
-it to the correct tag for your RabbitMQ server version -- see below
-for details.
 
 Announcements regarding the adapter are periodically made on the
-RabbitMQ mailing list and on LShift's blog.
+RabbitMQ blog and mailing list.
 
  - <http://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss>
- - <http://www.lshift.net/blog/>
- - <http://www.lshift.net/blog/category/lshift-sw/rabbitmq/>
+ - <http://www.rabbitmq.com/blog/>
+
+## Installing from binary
+
+Binary packages for the STOMP adapter can be found on the
+[plugins page](http://www.rabbitmq.com/plugins.html).
+
+Instructions for installing binary plugins can be found in the
+[Admin Guide](http://www.rabbitmq.com/admin-guide.html#plugins).
 
 
-### Compiling from a Mercurial checkout
+## Compiling and installing from source
 
-(This instructions work only for RabbitMQ 1.7.0 or newer.)
+To build the STOMP adapter from source, follow the instructions for
+building the umbrella repository contained in the
+[Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html).
 
-To compile RabbitMQ STOMP adapter plugin, you will need to download
-rabbitmq-public-umbrella package:
-
-    hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
-
-Umbrella is a placeholder for various packages. You need to actually
-download and compile the dependencies. The simplest way is to run:
-
-    cd rabbitmq-public-umbrella
-    make co
-    make
-
-This will download and compile all the rabbitmq related packages. Actually
-you don't have to compile everything, the required packages are only
-rabbitmq-codegen, rabbitmq-server and rabbitmq-stomp.
-
-
-If you want to compile a plugin for a specific release of the broker,
-you just need to update mercurial repository to a proper tag. To do
-that you can say from the umbrella directory:
-
-    hg -R rabbitmq-codegen  up rabbitmq_v1_X_X
-    hg -R rabbitmq-server   up rabbitmq_v1_X_X
-    hg -R rabbitmq-stomp    up rabbitmq_v1_X_X
-
-
-### Building plugin package
-
-To build a plugin package (*.ez file), run 'make package' from the
-rabbitmq-stomp directory. Package should appear in 'dist' directory.
-
-    cd rabbitmq-stomp
-    make package
-    ls dist/rabbitmq_stomp.ez
-
-
-To install and activate package, please follow the instructions from
-Plugin Development Guide:
-    http://www.rabbitmq.com/plugin-development.html#activating-a-plugin
-
-You need to install rabbit_stomp.ez package.
+You need to install the rabbit\_stomp.ez and amqp\_client.ez packages.
 
 ## Running the STOMP adapter
 
@@ -85,9 +45,8 @@ Then restart the server with
 
     sudo /etc/init.d/rabbitmq-server restart
 
-
-When no configuration is specified STOMP Adapter will listen on localhost by
-default.
+When no configuration is specified the STOMP Adapter will listen on 
+localhost by default.
 
 ### Checking that the adapter is running
 
@@ -102,9 +61,9 @@ using a STOMP client of your choice. In a pinch, `telnet` or netcat
     message:Invalid frame
     content-type:text/plain
     content-length:22
-    
+
     Could not parse frame
-    $ 
+    $
 
 That `ERROR` message indicates that the adapter is listening and
 attempting to parse STOMP frames.
@@ -114,9 +73,11 @@ adapter -- see below.
 
 ### Running the adapter during development
 
-If you are working with the full source code for the RabbitMQ server,
-and you have the `../rabbitmq-server` directory you can simply say `make run`:
+If you checked out and built the `rabbitmq-public-umbrella` tree as
+per the instructions in the Plugin Development Guide, then you can run
+RabbitMQ with the STOMP adapter directly from the source tree:
 
+    cd rabbitmq-public-umbrella/rabbitmq-stomp
     make run
 
 If this is successful, you should end up with `starting
@@ -125,33 +86,71 @@ STOMP Adapter ...done` and `broker running` in your terminal.
 
 ## Running tests and code coverage
 
-To run simplistic test suite and see the code coverage type:
+To run a simplistic test suite and see the code coverage type:
 
     make cover
 
-After successfull run, you should be able to see output similar to:
+After a successful run, you should see the `OK` message followed by
+the code coverage summary.
 
-    ............
-    ----------------------------------------------------------------------
-    Ran 12 tests in 0.300s
-    [...]
-    **** Code coverage ****
-     54.55 rabbit_stomp
-     80.88 rabbit_stomp_frame
-     74.87 rabbit_stomp_server
-    100.00 rabbit_stomp_sup
-     75.72 'TOTAL'
+The view the code coverage details, see the html files in the `cover` directory.
 
-The view the code coverage, see html files in .cover:
+## Usage
 
-    ls ./cover
+The STOMP adapter currently supports the 1.0 version of the STOMP
+specification which can be found
+[here](http://stomp.github.com/stomp-specification-1.0.html).
 
-    rabbit_stomp_frame.html
-    rabbit_stomp.html
-    rabbit_stomp_server.html
-    rabbit_stomp_sup.html
-    summary.txt
+The STOMP specification does not prescribe what kinds of destinations
+a broker must support, instead the value of the `destination` header
+in `SEND` and `MESSAGE` frames is broker-specific. The RabbitMQ STOMP
+adapter supports three kinds of destination: `/exchange`, `/queue` and
+`/topic`.
 
+### Exchange Destinations
+
+Any exchange/queue or exchange/routing key combination can be accessed
+using destinations prefixed with `/exchange`.
+
+For `SUBSCRIBE` frames, a destination of the form
+`/exchange/<name>[/<pattern>]` can be used. This destination:
+
+1. creates an exclusive, auto-delete queue on `<name>` exchange;
+2. if `<pattern>` is supplied, binds the queue to `<name>` exchange
+   using `<pattern>`; and
+3. registers a subscription against the queue, for the current STOMP session.
+
+For `SEND` frames, a destination of the form
+`/exchange/<name>[/<routing-key>]` can be used. This destination:
+
+1. sends to exchange `<name>` with the routing key `<routing-key>`.
+
+### Queue Destinations
+
+For simple queues destinations of the form `/queue/<name>` can be
+used.
+
+For both `SEND` and `SUBSCRIBE` frames, these destinations create
+the queue `<name>`.
+
+For `SEND` frames, the message is sent to the default exchange
+with the routing key `<name>`. For `SUBSCRIBE` frames, a subscription
+against the queue `<name>` is created for the current STOMP
+session.
+
+### Topic Destinations
+
+For simple topic destinations which deliver a copy of each message to
+all active subscribers, destinations of the form `/topic/<name>` can
+be used. Topic destinations support all the routing patterns of AMQP
+topic exchanges.
+
+For `SEND` frames, the message is sent to the `amq.topic` exchange
+with the routing key `<name>`.
+
+For `SUBSCRIBE` frames, an exclusive queue is created and bound to the
+`amq.topic` exchange with routing key `<name>`. A subscription is
+created against the exclusive queue.
 
 ## Running the examples
 
@@ -178,6 +177,44 @@ It will transfer 10,000 short messages, and end up displaying
 
 in the receiver-side terminal.
 
+### Ruby Topic Examples
+
+You can test topic publishing using the `topic-sender.rb` and
+`topic-broadcast-receiver.rb` scripts.
+
+The `topic-sender.rb` script sends one message to each of the
+`/topic/x.y`, `/topic/x.z` and `/topic/x` destinations. The
+`topic-broadcast-receiver.rb` script subscribes to a configurable
+topic, defaulting to `/topic/x`.
+
+Start the receiver with no extra arguments, and you'll see it bind to
+the default topic:
+
+    ruby examples/ruby/topic-broadcast-receiver.rb
+    Binding to /topic/x
+
+Now start the sender:
+
+    ruby examples/ruby/topic-sender.rb
+
+In the receiver-side terminal, you'll see that one message comes
+through, the one sent to `/topic/x`.
+
+Stop the receiver and start it, specifying an argument of `x.*`:
+
+    ruby examples/ruby/topic-broadcast-receiver.rb x.*
+    Binding to /topic/x.*
+
+Run the sender again, and this time the receiver-side terminal will
+show two messages: the ones sent to `/topic/x.y` and
+`/topic/x.z`. Restart the receiver again, this time specifying an
+argument of `x.#`:
+
+    ruby topic-broadcast-receiver.rb x.#
+    Binding to /topic/x.#
+
+Run the sender one more time, and this time the receiver-side terminal
+will show all three messages.
 
 ### Perl
 
@@ -200,7 +237,7 @@ In another terminal window, run the sender:
 
 The receiver's window should contain the received messages:
 
-    $ perl examples/perl/rabbitmq_stomp_recv.pl 
+    $ perl examples/perl/rabbitmq_stomp_recv.pl
     test message
     hello
     QUIT

@@ -2,6 +2,6 @@ require 'rubygems'
 require 'stomp'
 
 client = Stomp::Client.new("guest", "guest", "localhost", 61613)
-client.send 'x.x', 'first message', :exchange => 'amq.topic'
-client.send 'y.y', 'second message', :exchange => 'amq.topic'
-client.send 'x.y', 'third message', :exchange => 'amq.topic'
+client.publish '/topic/x.y', 'first message'
+client.publish '/topic/x.z', 'second message'
+client.publish '/topic/x', 'third message'
