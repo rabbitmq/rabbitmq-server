@@ -300,7 +300,7 @@ handle_event(Event = #event{type = queue_deleted}, State) ->
 handle_event(#event{type = connection_created, props = Stats}, State) ->
     Name = rabbit_mgmt_format:print(
              "~s:~w",
-             [rabbit_mgmt_format:ip(pget(peer_address, Stats)),
+             [rabbit_mgmt_format:ipb(pget(peer_address, Stats)),
               pget(peer_port, Stats)]),
     handle_created(
       connection_stats, [{name, Name} | Stats],
@@ -322,10 +322,9 @@ handle_event(#event{type = channel_created, props = Stats},
              State = #state{tables = Tables}) ->
     ConnTable = orddict:fetch(connection_stats, Tables),
     Conn = lookup_element(ConnTable, {id(pget(connection, Stats)), create}),
-    Name = rabbit_mgmt_format:print("~s:~w:~w",
-                                    [pget(peer_address, Conn),
-                                     pget(peer_port,    Conn),
-                                     pget(number,       Stats)]),
+    Name = rabbit_mgmt_format:print("~s:~w",
+                                    [pget(name,   Conn),
+                                     pget(number, Stats)]),
     handle_created(channel_stats, [{name, Name}|Stats],
                    [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
                     {fun rabbit_mgmt_format:pid/1,          [connection]}],

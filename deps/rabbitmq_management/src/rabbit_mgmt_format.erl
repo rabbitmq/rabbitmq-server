@@ -15,8 +15,8 @@
 
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, pid/1, ip/1, amqp_table/1, tuple/1, timestamp/1]).
--export([timestamp_ms/1]).
+-export([format/2, print/2, pid/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
+-export([timestamp/1, timestamp_ms/1]).
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, binding/1, url/2, application/1]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
@@ -61,7 +61,10 @@ node_and_pid(unknown) -> [];
 node_and_pid(none)    -> [].
 
 ip(unknown) -> unknown;
-ip(IP)      -> list_to_binary(inet_parse:ntoa(IP)).
+ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
+
+ipb(unknown) -> unknown;
+ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
 properties(unknown) -> unknown;
 properties(Table)   -> {struct, [{Name, tuple(Value)} ||
