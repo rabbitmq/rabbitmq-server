@@ -18,7 +18,7 @@ RabbitMQ blog and mailing list.
 Binary packages for the STOMP adapter can be found on the
 [plugins page](http://www.rabbitmq.com/plugins.html).
 
-Instructions for installing binary plugins can be in the
+Instructions for installing binary plugins can be found in the
 [Admin Guide](http://www.rabbitmq.com/admin-guide.html#plugins).
 
 
@@ -45,8 +45,8 @@ Then restart the server with
 
     sudo /etc/init.d/rabbitmq-server restart
 
-When no configuration is specified STOMP Adapter will listen on localhost by
-default.
+When no configuration is specified the STOMP Adapter will listen on 
+localhost by default.
 
 ### Checking that the adapter is running
 
@@ -75,7 +75,7 @@ adapter -- see below.
 
 If you checked out and built the `rabbitmq-public-umbrella` tree as
 per the instructions in the Plugin Development Guide, then you can run
-RabbitMQ with STOMP adapter directly from the source tree:
+RabbitMQ with the STOMP adapter directly from the source tree:
 
     cd rabbitmq-public-umbrella/rabbitmq-stomp
     make run
@@ -86,7 +86,7 @@ STOMP Adapter ...done` and `broker running` in your terminal.
 
 ## Running tests and code coverage
 
-To run simplistic test suite and see the code coverage type:
+To run a simplistic test suite and see the code coverage type:
 
     make cover
 
@@ -115,15 +115,15 @@ using destinations prefixed with `/exchange`.
 For `SUBSCRIBE` frames, a destination of the form
 `/exchange/<name>[/<pattern>]` can be used. This destination:
 
-1. Creates an exclusive, auto-delete queue on `<name>` exchange.
-2. If `<pattern>` is supplied, binds the queue to `<name>` exchange
-   using `<pattern>`
-3. Registers a subscription against the queue, for the current STOMP session
+1. creates an exclusive, auto-delete queue on `<name>` exchange;
+2. if `<pattern>` is supplied, binds the queue to `<name>` exchange
+   using `<pattern>`; and
+3. registers a subscription against the queue, for the current STOMP session.
 
 For `SEND` frames, a destination of the form
 `/exchange/<name>[/<routing-key>]` can be used. This destination:
 
-1. Sends to exchange `<name>`with the routing key `<routing-key>`
+1. sends to exchange `<name>` with the routing key `<routing-key>`.
 
 ### Queue Destinations
 
@@ -207,7 +207,7 @@ Stop the receiver and start it, specifying an argument of `x.*`:
 
 Run the sender again, and this time the receiver-side terminal will
 show two messages: the ones sent to `/topic/x.y` and
-`/topic/x.z`. Restart, the receiver again, this time specifying an
+`/topic/x.z`. Restart the receiver again, this time specifying an
 argument of `x.#`:
 
     ruby topic-broadcast-receiver.rb x.#
