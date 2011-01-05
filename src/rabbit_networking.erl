@@ -174,6 +174,17 @@ resolve_family({_,_,_,_,_,_,_,_}, auto) -> inet6;
 resolve_family(IP,                auto) -> throw({error, {strange_family, IP}});
 resolve_family(_,                 F)    -> F.
 
+check_tcp_listener_address(NamePrefix, Port) when is_integer(Port) ->
+    case ipv6_status(Port) of
+        ipv4_only ->
+            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet});
+        ipv6_single_stack ->
+            check_tcp_listener_address(NamePrefix, {"::", Port, inet6});
+        ipv6_dual_stack ->
+            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet})
+                ++ check_tcp_listener_address(NamePrefix, {"::", Port, inet6})
+    end;
+
 check_tcp_listener_address(NamePrefix, {Host, Port}) ->
     %% auto: determine family IPv4 / IPv6 after converting to IP address
     check_tcp_listener_address(NamePrefix, {Host, Port, auto});
@@ -320,3 +331,37 @@ hostname() ->
     end.
 
 cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
+
+%%--------------------------------------------------------------------
+
+%% How to test on Linux:
+%% Single stack (default):
+%% echo 0 > /proc/sys/net/ipv6/bindv6only
+%% Dual stack:
+%% echo 1 > /proc/sys/net/ipv6/bindv6only
+%% IPv4 only:
+%% add ipv6.disable=1 to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub then
+%% sudo update-grub && sudo reboot
+
+ipv6_status(Port) ->
+    %% Unfortunately it seems there is no way to detect single vs dual stack
+    %% apart from attempting to bind to the socket.
+    IPv4 = [inet,  {ip, {0,0,0,0}}],
+    IPv6 = [inet6, {ip, {0,0,0,0,0,0,0,0}}],
+    case gen_tcp:listen(Port, IPv6) of
+        {ok, LSock6} ->
+            Status = case gen_tcp:listen(Port, IPv4) of
+                         {ok, LSock4} ->
+                             gen_tcp:close(LSock4),
+                             ipv6_dual_stack;
+                         {error, _} ->
+                             ipv6_single_stack
+                     end,
+            gen_tcp:close(LSock6),
+            Status;
+        {error, _} ->
+            %% It could be that there's a general problem binding to
+            %% the port, but plow on; the error will get picked up
+            %% later when we bind for real.
+            ipv4_only
+    end.
