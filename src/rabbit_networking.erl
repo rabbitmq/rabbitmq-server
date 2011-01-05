@@ -280,15 +280,22 @@ close_connection(Pid, Explanation) ->
 %%--------------------------------------------------------------------
 
 tcp_host({0,0,0,0}) ->
-    {ok, Hostname} = inet:gethostname(),
-    case inet:gethostbyname(Hostname) of
-        {ok, #hostent{h_name = Name}} -> Name;
-        {error, _Reason} -> Hostname
-    end;
+    hostname();
+
+tcp_host({0,0,0,0,0,0,0,0}) ->
+    hostname();
+
 tcp_host(IPAddress) ->
     case inet:gethostbyaddr(IPAddress) of
         {ok, #hostent{h_name = Name}} -> Name;
         {error, _Reason} -> inet_parse:ntoa(IPAddress)
+    end.
+
+hostname() ->
+    {ok, Hostname} = inet:gethostname(),
+    case inet:gethostbyname(Hostname) of
+        {ok,    #hostent{h_name = Name}} -> Name;
+        {error, _Reason}                 -> Hostname
     end.
 
 cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
