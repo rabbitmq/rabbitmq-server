@@ -1081,7 +1081,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">rabbitmqctl list_connections send_pend server_port</screen>
+            <screen role="example">rabbitmqctl list_connections send_pend port</screen>
             <para role="example">
               This command displays the send queue size and server port for each
               connection.
