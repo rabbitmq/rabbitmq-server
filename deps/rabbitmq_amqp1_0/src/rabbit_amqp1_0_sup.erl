@@ -35,22 +35,20 @@ init([Listeners]) ->
     {ok, {{one_for_all, 10, 10}, ChildSpecs}}.
 
 make_listener_specs(Listeners) ->
-    lists:foldl(
-      fun({Host, Port}, Acc) ->
-              {IPAddress, Name} = rabbit_networking:check_tcp_listener_address(
-                                    rabbit_amqp1_0_listener_sup,
-                                    Host,
-                                    Port),
-              [{Name,
-                {tcp_listener_sup, start_link,
-                 [IPAddress, Port,
-                  ?RABBIT_TCP_OPTS,
-                  {?MODULE, listener_started, []},
-                  {?MODULE, listener_stopped, []},
-                  {?MODULE, start_client, []}, "AMQP 1.0 Listener"]},
-                transient, infinity, supervisor, [tcp_listener_sup]} | Acc]
+    [make_listener_spec(Spec)
+     || Spec <- lists:append([rabbit_networking:check_tcp_listener_address(
+                                rabbit_amqp1_0_listener_sup, Listener)
+                              || Listener <- Listeners])].
 
-      end, [], Listeners).
+make_listener_spec({IPAddress, Port, Family, Name}) ->
+    {Name,
+     {tcp_listener_sup, start_link,
+      [IPAddress, Port,
+       [Family|?RABBIT_TCP_OPTS],
+       {?MODULE, listener_started, []},
+       {?MODULE, listener_stopped, []},
+       {?MODULE, start_client, []}, "AMQP 1.0 Listener"]},
+     transient, infinity, supervisor, [tcp_listener_sup]}.
 
 listener_started(IPAddress, Port) ->
     rabbit_networking:tcp_listener_started('amqp 1.0', IPAddress, Port).
