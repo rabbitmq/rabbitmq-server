@@ -398,7 +398,12 @@
 
     <refsect2>
       <title>User management</title>
-
+      <para>
+        Note that <command>rabbitmqctl</command> manages the RabbitMQ
+        internal user database. Users from any alternative
+        authentication backend will not be visible
+        to <command>rabbitmqctl</command>.
+      </para>
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
@@ -544,7 +549,12 @@
 
     <refsect2>
       <title>Access control</title>
-
+      <para>
+        Note that <command>rabbitmqctl</command> manages the RabbitMQ
+        internal user database. Permissions for users from any
+        alternative authorisation backend will not be visible
+        to <command>rabbitmqctl</command>.
+      </para>
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
