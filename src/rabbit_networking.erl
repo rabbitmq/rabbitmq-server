@@ -66,7 +66,8 @@
 -export_type([ip_port/0, hostname/0]).
 
 -type(family() :: atom()).
--type(listener_config() :: {hostname(), ip_port()} |
+-type(listener_config() :: ip_port() |
+                           {hostname(), ip_port()} |
                            {hostname(), ip_port(), family()}).
 
 -spec(start/0 :: () -> 'ok').
@@ -225,13 +226,13 @@ start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Spec) ||
-        Spec <- check_tcp_listener_address(rabbit_tcp_listener_sup, Listener)].
+        Spec <- check_tcp_listener_address(rabbit_tcp_listener_sup, Listener)],
+    ok.
 
 stop_tcp_listener0({IPAddress, Port, _Family, Name}) ->
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
-    ok = supervisor:delete_child(rabbit_sup, Name),
-    ok.
+    ok = supervisor:delete_child(rabbit_sup, Name).
 
 tcp_listener_started(Protocol, IPAddress, Port) ->
     %% We need the ip to distinguish e.g. 0.0.0.0 and 127.0.0.1
