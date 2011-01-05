@@ -290,7 +290,7 @@ add_vhost(VHostPath) ->
                                             write),
                           [rabbit_exchange:declare(
                              rabbit_misc:r(VHostPath, exchange, Name),
-                             Type, true, false, []) ||
+                             Type, true, false, false, []) ||
                               {Name,Type} <-
                                   [{<<"">>,           direct},
                                    {<<"amq.direct">>, direct},
