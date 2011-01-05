@@ -32,7 +32,7 @@
 -module(rabbit_networking).
 
 -export([boot/0, start/0, start_tcp_listener/1, start_ssl_listener/2,
-         on_node_down/1, active_listeners/0,
+         stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
@@ -73,6 +73,7 @@
 -spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(start_ssl_listener/2 ::
         (listener_config(), rabbit_types:infos()) -> 'ok').
+-spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
@@ -211,13 +212,15 @@ start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
                   OnConnect, Label]},
                 transient, infinity, supervisor, [tcp_listener_sup]}).
 
-%% TODO this appears not to be used by anything in Rabbit or plugins
-%% stop_tcp_listener(Host, Port, Family) ->
-%%     {IPAddress, _} = getaddr(Host, Family),
-%%     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
-%%     ok = supervisor:terminate_child(rabbit_sup, Name),
-%%     ok = supervisor:delete_child(rabbit_sup, Name),
-%%     ok.
+stop_tcp_listener(Listener) ->
+    [stop_tcp_listener0(Spec) ||
+        Spec <- check_tcp_listener_address(rabbit_tcp_listener_sup, Listener)].
+
+stop_tcp_listener0({IPAddress, Port, _Family, Name}) ->
+    Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
+    ok = supervisor:terminate_child(rabbit_sup, Name),
+    ok = supervisor:delete_child(rabbit_sup, Name),
+    ok.
 
 tcp_listener_started(Protocol, IPAddress, Port) ->
     %% We need the ip to distinguish e.g. 0.0.0.0 and 127.0.0.1
