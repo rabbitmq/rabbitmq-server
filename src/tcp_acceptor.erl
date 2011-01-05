@@ -74,8 +74,8 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
         {Address, Port}         = inet_op(fun () -> inet:sockname(LSock) end),
         {PeerAddress, PeerPort} = inet_op(fun () -> inet:peername(Sock) end),
         error_logger:info_msg("accepted TCP connection on ~s:~p from ~s:~p~n",
-                              [inet_parse:ntoa(Address), Port,
-                               inet_parse:ntoa(PeerAddress), PeerPort]),
+                              [rabbit_misc:ntoab(Address), Port,
+                               rabbit_misc:ntoab(PeerAddress), PeerPort]),
         %% In the event that somebody floods us with connections we can spew
         %% the above message at error_logger faster than it can keep up.
         %% So error_logger's mailbox grows unbounded until we eat all the

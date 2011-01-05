@@ -320,7 +320,7 @@ tcp_host({0,0,0,0,0,0,0,0}) ->
 tcp_host(IPAddress) ->
     case inet:gethostbyaddr(IPAddress) of
         {ok, #hostent{h_name = Name}} -> Name;
-        {error, _Reason} -> inet_parse:ntoa(IPAddress)
+        {error, _Reason} -> rabbit_misc:ntoa(IPAddress)
     end.
 
 hostname() ->

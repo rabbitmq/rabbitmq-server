@@ -338,11 +338,11 @@ format_info_item(#resource{name = Name}) ->
     escape(Name);
 format_info_item({N1, N2, N3, N4} = Value) when
       ?IS_U8(N1), ?IS_U8(N2), ?IS_U8(N3), ?IS_U8(N4) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value) when
       ?IS_U16(K1), ?IS_U16(K2), ?IS_U16(K3), ?IS_U16(K4),
       ?IS_U16(K5), ?IS_U16(K6), ?IS_U16(K7), ?IS_U16(K8) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item(Value) when is_pid(Value) ->
     rabbit_misc:pid_to_string(Value);
 format_info_item(Value) when is_binary(Value) ->

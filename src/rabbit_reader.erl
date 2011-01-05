@@ -269,7 +269,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
     {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
-    PeerAddressS = inet_parse:ntoa(PeerAddress),
+    PeerAddressS = rabbit_misc:ntoab(PeerAddress),
     rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
                     [self(), PeerAddressS, PeerPort]),
     ClientSock = socket_op(Sock, SockTransform),

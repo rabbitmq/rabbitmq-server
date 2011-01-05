@@ -67,6 +67,7 @@
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([lock_file/1]).
+-export([ntoa/1, ntoab/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -197,6 +198,8 @@
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
+-spec(ntoa/1 :: (inet:ip_address()) -> string()).
+-spec(ntoab/1 :: (inet:ip_address()) -> string()).
 
 -endif.
 
@@ -816,4 +819,18 @@ lock_file(Path) ->
         true  -> {error, eexist};
         false -> {ok, Lock} = file:open(Path, [write]),
                  ok = file:close(Lock)
+    end.
+
+%% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
+%% when IPv6 is enabled but not used (i.e. 99% of the time).
+ntoa({0,0,0,0,0,16#ffff,AB,CD} = Foo) ->
+    inet_parse:ntoa({AB bsr 8, AB rem 256, CD bsr 8, CD rem 256});
+ntoa(IP) ->
+    inet_parse:ntoa(IP).
+
+ntoab(IP) ->
+    Str = ntoa(IP),
+    case string:str(Str, ":") of
+        0 -> Str;
+        _ -> "[" ++ Str ++ "]"
     end.
