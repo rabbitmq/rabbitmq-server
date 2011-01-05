@@ -140,37 +140,58 @@ start() ->
     ok.
 
 check_listener({Host, Port}) ->
-    %% Default to IPv4.
-    {Host, Port, inet};
+    %% auto: determine family IPv4 / IPv6 after converting to IP address
+    {Host, Port, auto};
 check_listener({Host, Port, Family}) ->
     {Host, Port, Family}.
 
+%% inet_parse:address takes care of ip string, like "0.0.0.0"
+%% inet:getaddr returns immediately for ip tuple {0,0,0,0},
+%%  and runs 'inet_gethost' port process for dns lookups.
+%% On Windows inet:getaddr runs dns resolver for ip string, which may fail.
+
 getaddr(Host, Family) ->
-    %% inet_parse:address takes care of ip string, like "0.0.0.0"
-    %% inet:getaddr returns immediately for ip tuple {0,0,0,0},
-    %%  and runs 'inet_gethost' port process for dns lookups.
-    %% On Windows inet:getaddr runs dns resolver for ip string, which may fail.
     case inet_parse:address(Host) of
-        {ok, IPAddress1} -> IPAddress1;
-        {error, _} ->
-            case inet:getaddr(Host, Family) of
-                {ok, IPAddress2} -> IPAddress2;
-                {error, Reason} ->
-                    error_logger:error_msg("invalid host ~p - ~p~n",
-                                           [Host, Reason]),
-                    throw({error, {invalid_host, Host, Reason}})
-            end
+        {ok, IPAddress} -> {IPAddress, resolve_family(IPAddress, Family)};
+        {error, _}      -> gethostaddr(Host, Family)
     end.
 
-check_tcp_listener_address(NamePrefix, Host, Port, Family) ->
-    IPAddress = getaddr(Host, Family),
+gethostaddr(Host, auto) ->
+    case inet:getaddr(Host, inet6) of
+        {ok, IPAddress6} ->
+            {IPAddress6, inet6};
+        {error, Reason6} ->
+            case inet:getaddr(Host, inet) of
+                {ok, IPAddress4} -> {IPAddress4, inet};
+                {error, Reason4} -> host_lookup_error(
+                                      Host, {{ipv6, Reason6}, {ipv4, Reason4}})
+            end
+    end;
+
+gethostaddr(Host, Family) ->
+    case inet:getaddr(Host, Family) of
+        {ok, IPAddress} -> {IPAddress, Family};
+        {error, Reason} -> host_lookup_error(Host, Reason)
+    end.
+
+host_lookup_error(Host, Reason) ->
+    error_logger:error_msg("invalid host ~p - ~p~n", [Host, Reason]),
+    throw({error, {invalid_host, Host, Reason}}).
+
+resolve_family({_,_,_,_},         auto) -> inet;
+resolve_family({_,_,_,_,_,_,_,_}, auto) -> inet6;
+resolve_family(IP,                auto) -> throw({error, {strange_family, IP}});
+resolve_family(_,                 F)    -> F.
+
+check_tcp_listener_address(NamePrefix, Host, Port, Family0) ->
+    {IPAddress, Family} = getaddr(Host, Family0),
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
                throw({error, {invalid_port, Port}})
     end,
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-    {IPAddress, Name}.
+    {IPAddress, Name, Family}.
 
 start_tcp_listener(Host, Port, Family) ->
     start_listener(Host, Port, amqp, Family, "TCP Listener",
@@ -180,9 +201,9 @@ start_ssl_listener(Host, Port, Family, SslOpts) ->
     start_listener(Host, Port, 'amqp/ssl', Family, "SSL Listener",
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
-start_listener(Host, Port, Protocol, Family, Label, OnConnect) ->
-    {IPAddress, Name} =
-        check_tcp_listener_address(rabbit_tcp_listener_sup, Host, Port, Family),
+start_listener(Host, Port, Protocol, Family0, Label, OnConnect) ->
+    {IPAddress, Name, Family} = check_tcp_listener_address(
+                                  rabbit_tcp_listener_sup, Host, Port, Family0),
     {ok,_} = supervisor:start_child(
                rabbit_sup,
                {Name,
@@ -195,7 +216,7 @@ start_listener(Host, Port, Protocol, Family, Label, OnConnect) ->
     ok.
 
 stop_tcp_listener(Host, Port, Family) ->
-    IPAddress = getaddr(Host, Family),
+    {IPAddress, _} = getaddr(Host, Family),
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name),
