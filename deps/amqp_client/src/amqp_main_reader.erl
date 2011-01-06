@@ -114,8 +114,8 @@ pass_frame(0, Frame, State = #state{connection = Conn, astate = AState}) ->
         {ok, Method, Content, NewAState} ->
             rabbit_channel:do(Conn, Method, Content),
             UpdateAState(NewAState);
-        {error, _Reason} ->
-            %%FIXME
+        {error, Reason} ->
+            Conn ! {channel_exit, 0, Reason},
             State
     end;
 pass_frame(Number, Frame, State = #state{channels_manager = ChMgr}) ->

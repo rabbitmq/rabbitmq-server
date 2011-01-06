@@ -641,7 +641,7 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
 
-%% This comes from the writer or rabbit_channel
+%% This comes from the channels_manager, writer or rabbit_channel
 %% @private
 handle_info({channel_exit, _ChNumber, Reason},
             State = #state{number = Number}) ->

@@ -208,8 +208,8 @@ internal_pass_frame(Number, Frame, State) ->
                 {ok, Method, Content, NewAState} ->
                     rabbit_channel:do(ChPid, Method, Content),
                     UpdateAState(NewAState);
-                {error, _Reason} ->
-                    %% FIXME
+                {error, Reason} ->
+                    ChPid ! {channel_exit, Number, Reason},
                     State
             end
     end.
