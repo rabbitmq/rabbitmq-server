@@ -32,6 +32,7 @@
 -module(rabbit_router).
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 
 -export([deliver/2, match_bindings/2, match_routing_key/2]).
 
@@ -68,22 +69,38 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
     %% is preserved. This scales much better than the non-immediate
     %% case below.
     QPids = lookup_qpids(QNames),
+    ModifiedDelivery = strip_header(Delivery, <<"BCC">>),
     delegate:invoke_no_result(
-      QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
+      QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, ModifiedDelivery) end),
     {routed, QPids};
 
 deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
+    ModifiedDelivery = strip_header(Delivery, <<"BCC">>),
     {Success, _} =
         delegate:invoke(QPids,
                         fun (Pid) ->
-                                rabbit_amqqueue:deliver(Pid, Delivery)
+                                rabbit_amqqueue:deliver(Pid, ModifiedDelivery)
                         end),
     {Routed, Handled} =
          lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Mandatory, Immediate, {Routed, Handled}).
 
+strip_header(Delivery = #delivery{message = Message = #basic_message{
+                 content = Content = #content{
+                 properties = Props = #'P_basic'{headers = Headers}}}},
+             Key) when Headers =/= undefined ->
+    case lists:keyfind(Key, 1, Headers) of
+        false -> Delivery;
+        Tuple -> Headers0 = lists:delete(Tuple, Headers),
+                 Delivery#delivery{message = Message#basic_message{
+                     content = Content#content{
+                         properties_bin = none,
+                         properties = Props#'P_basic'{headers = Headers0}}}}
+    end;
+strip_header(Delivery, _Key) ->
+    Delivery.
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source

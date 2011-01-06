@@ -31,6 +31,7 @@
 
 -module(rabbit_exchange_type_direct).
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -50,9 +51,18 @@ description() ->
     [{name, <<"direct">>},
      {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_routing_key(Name, RoutingKey).
+route(#exchange{name = #resource{virtual_host = VHost} = Name},
+      #delivery{message = #basic_message{routing_key = RoutingKey,
+                                         content     = Content}}) ->
+    BindingRoutes = rabbit_router:match_routing_key(Name, RoutingKey),
+    HeaderRKeys =
+        case (Content#content.properties)#'P_basic'.headers of
+            undefined -> [];
+            Headers   -> rabbit_misc:table_lookup(Headers, <<"CC">>, <<0>>) ++
+                         rabbit_misc:table_lookup(Headers, <<"BCC">>, <<0>>)
+        end,
+    HeaderRoutes = [rabbit_misc:r(VHost, queue, RKey) || RKey <- HeaderRKeys],
+    lists:usort(BindingRoutes ++ HeaderRoutes).
 
 validate(_X) -> ok.
 create(_X) -> ok.
