@@ -134,7 +134,7 @@ handle_frame("DISCONNECT", _Frame, State) ->
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
 
-handle_frame("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
+handle_frame("UNSUBSCRIBE", Frame, State) ->
     ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, IdStr} ->
                           list_to_binary("T_" ++ IdStr);
@@ -147,17 +147,7 @@ handle_frame("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
                                   missing
                           end
                   end,
-    if
-        ConsumerTag == missing ->
-            error("Missing destination or id",
-                  "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
-                  State);
-        true ->
-            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                           nowait       = true},
-                           State#state{subscriptions =
-                                           dict:erase(ConsumerTag, Subs)}))
-    end;
+    cancel_subscription_channel(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
@@ -210,6 +200,25 @@ handle_frame(Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
+
+cancel_subscription_channel(missing, State) ->
+    error("Missing destination or id",
+          "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
+          State);
+
+cancel_subscription_channel(ConsumerTag, State = #state{subscriptions = Subs}) ->
+    case dict:find(ConsumerTag, Subs) of
+        error -> 
+            error("No subscription found",
+                  "UNSUBSCRIBE must refer to an existing subscription\n",
+                  State);
+        {ok, {_DestHdr, Channel}} -> 
+            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
+                                           nowait       = true},
+                           Channel,
+                           State#state{subscriptions =
+                                           dict:erase(ConsumerTag, Subs)}))
+    end.
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
@@ -333,6 +342,10 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                                        Delivery, Properties),
      Body,
      State).
+
+send_method(Method, Channel, State) ->
+    amqp_channel:call(Channel, Method),
+    State.
 
 send_method(Method, State = #state{channel = Channel}) ->
     amqp_channel:call(Channel, Method),
