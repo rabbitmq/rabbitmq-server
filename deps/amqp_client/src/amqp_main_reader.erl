@@ -89,7 +89,7 @@ handle_inet_async({inet_async, Sock, _, Msg},
     end.
 
 process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) ->
-    case rabbit_reader:analyze_frame(Type, Payload, ?PROTOCOL) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when ChNumber /= 0 ->
             amqp_gen_connection:server_misbehaved(
                 Connection,
