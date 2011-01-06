@@ -195,23 +195,9 @@ internal_pass_frame(Number, Frame, State) ->
             ?LOG_INFO("Dropping frame ~p for invalid or closed "
                       "channel number ~p~n", [Frame, Number]);
         {ChPid, AState} ->
-            UpdateAState = fun (NewAState) ->
-                                   internal_update_npa(Number, ChPid, NewAState,
-                                                       State)
-                           end,
-            case rabbit_command_assembler:process(Frame, AState) of
-                {ok, NewAState} ->
-                    UpdateAState(NewAState);
-                {ok, Method, NewAState} ->
-                    rabbit_channel:do(ChPid, Method),
-                    UpdateAState(NewAState);
-                {ok, Method, Content, NewAState} ->
-                    rabbit_channel:do(ChPid, Method, Content),
-                    UpdateAState(NewAState);
-                {error, Reason} ->
-                    ChPid ! {channel_exit, Number, Reason},
-                    State
-            end
+            NewAState = rabbit_reader:process_channel_frame(
+                          Frame, ChPid, Number, ChPid, AState),
+            internal_update_npa(Number, ChPid, NewAState, State)
     end.
 
 internal_register(Number, Pid, AState,

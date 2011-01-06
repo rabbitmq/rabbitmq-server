@@ -104,20 +104,8 @@ process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) 
     end.
 
 pass_frame(0, Frame, State = #state{connection = Conn, astate = AState}) ->
-    UpdateAState = fun (NewAState) -> State#state{astate = NewAState} end,
-    case rabbit_command_assembler:process(Frame, AState) of
-        {ok, NewAState} ->
-            UpdateAState(NewAState);
-        {ok, Method, NewAState} ->
-            rabbit_channel:do(Conn, Method),
-            UpdateAState(NewAState);
-        {ok, Method, Content, NewAState} ->
-            rabbit_channel:do(Conn, Method, Content),
-            UpdateAState(NewAState);
-        {error, Reason} ->
-            Conn ! {channel_exit, 0, Reason},
-            State
-    end;
+    State#state{astate = rabbit_reader:process_channel_frame(Frame, Conn,
+                                                             0, Conn, AState)};
 pass_frame(Number, Frame, State = #state{channels_manager = ChMgr}) ->
     amqp_channels_manager:pass_frame(ChMgr, Number, Frame),
     State.
