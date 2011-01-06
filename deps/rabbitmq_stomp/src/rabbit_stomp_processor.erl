@@ -212,12 +212,17 @@ cancel_subscription_channel(ConsumerTag, State = #state{subscriptions = Subs}) -
             error("No subscription found",
                   "UNSUBSCRIBE must refer to an existing subscription\n",
                   State);
-        {ok, {_DestHdr, Channel}} -> 
-            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                           nowait       = true},
-                           Channel,
-                           State#state{subscriptions =
-                                           dict:erase(ConsumerTag, Subs)}))
+        {ok, {_DestHdr, Channel}} ->
+            case amqp_channel:call(Channel,
+                                   #'basic.cancel'{consumer_tag = ConsumerTag}) of
+                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    ok(State#state{subscriptions = dict:erase(ConsumerTag, Subs)});
+                _ ->
+                    error("Failed to cancel subscription",
+                          "UNSUBSCRIBE on channel ~p for subscription ~p failed.\n",
+                          [Channel, ConsumerTag], 
+                          State)
+            end
     end.
 
 with_destination(Command, Frame, State, Fun) ->
@@ -342,10 +347,6 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                                        Delivery, Properties),
      Body,
      State).
-
-send_method(Method, Channel, State) ->
-    amqp_channel:call(Channel, Method),
-    State.
 
 send_method(Method, State = #state{channel = Channel}) ->
     amqp_channel:call(Channel, Method),
