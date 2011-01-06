@@ -12,6 +12,6 @@
           {resource_access_query, {constant, true}},
           {is_admin_query,        {constant, false}},
           {use_ssl,               false},
-          {server_port,           389},
+          {port,                  389},
           {log,                   true} ] },
   {applications, [kernel, stdlib]}]}.
