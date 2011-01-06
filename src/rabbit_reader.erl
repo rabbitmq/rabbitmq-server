@@ -952,19 +952,19 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
     process_channel_frame(AnalyzedFrame, Channel, ChPid, AState, State).
 
 process_channel_frame(Frame, Channel, ChPid, AState, State) ->
-    UpdateFramingState = fun (NewAState) ->
-                                 put({channel, Channel}, {ChPid, NewAState}),
-                                 State
-                         end,
+    UpdateAState = fun (NewAState) ->
+                           put({channel, Channel}, {ChPid, NewAState}),
+                           State
+                   end,
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState} ->
-            UpdateFramingState(NewAState);
+            UpdateAState(NewAState);
         {ok, Method, NewAState} ->
             rabbit_channel:do(ChPid, Method),
-            UpdateFramingState(NewAState);
+            UpdateAState(NewAState);
         {ok, Method, Content, NewAState} ->
             rabbit_channel:do(ChPid, Method, Content),
-            UpdateFramingState(NewAState);
+            UpdateAState(NewAState);
         {error, Reason} ->
             handle_exception(State, Channel, Reason)
     end.
