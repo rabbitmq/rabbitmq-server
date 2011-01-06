@@ -39,12 +39,7 @@ start_link_direct() ->
 
 start_link_network(Sock, Connection, ChMgr) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
-    {ok, Framing} =
-        supervisor2:start_child(
-          Sup,
-          {framing, {rabbit_framing_channel, start_link,
-                     [Connection, Connection, ?PROTOCOL]},
-           transient, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
+    {ok, AState} = rabbit_command_assembler:init(?PROTOCOL),
     {ok, Writer} =
         supervisor2:start_child(
           Sup,
@@ -55,9 +50,9 @@ start_link_network(Sock, Connection, ChMgr) ->
         supervisor2:start_child(
           Sup,
           {main_reader, {amqp_main_reader, start_link,
-                         [Sock, Connection, ChMgr, Framing]},
+                         [Sock, Connection, ChMgr, AState]},
            transient, ?MAX_WAIT, worker, [amqp_main_reader]}),
-    {ok, Sup, {MainReader, Framing, Writer}}.
+    {ok, Sup, {MainReader, AState, Writer}}.
 
 start_heartbeat_fun(SupPid) ->
     rabbit_heartbeat:start_heartbeat_fun(SupPid).

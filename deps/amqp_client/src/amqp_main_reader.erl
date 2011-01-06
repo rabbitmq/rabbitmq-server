@@ -28,7 +28,7 @@
 -record(state, {sock,
                 connection,
                 channels_manager,
-                framing0,
+                astate,
                 message = none %% none | {Type, Channel, Length}
                }).
 
@@ -36,17 +36,17 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Sock, Connection, ChMgr, Framing0) ->
-    gen_server:start_link(?MODULE, [Sock, Connection, ChMgr, Framing0], []).
+start_link(Sock, Connection, ChMgr, AState) ->
+    gen_server:start_link(?MODULE, [Sock, Connection, ChMgr, AState], []).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
 
-init([Sock, Connection, ChMgr, Framing0]) ->
+init([Sock, Connection, ChMgr, AState]) ->
     {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
     {ok, #state{sock = Sock, connection = Connection,
-                channels_manager = ChMgr, framing0 = Framing0}}.
+                channels_manager = ChMgr, astate = AState}}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -74,9 +74,9 @@ handle_inet_async({inet_async, Sock, _, Msg},
                              end,
     case Msg of
         {ok, <<Payload:Length/binary, ?FRAME_END>>} ->
-            process_frame(Type, Number, Payload, State),
+            State1 = process_frame(Type, Number, Payload, State),
             {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-            {noreply, State#state{message = none}};
+            {noreply, State1#state{message = none}};
         {ok, <<NewType:8, NewChannel:16, NewLength:32>>} ->
             {ok, _Ref} = rabbit_net:async_recv(Sock, NewLength + 1, infinity),
             {noreply, State#state{message={NewType, NewChannel, NewLength}}};
@@ -94,15 +94,30 @@ process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) 
             amqp_gen_connection:server_misbehaved(
                 Connection,
                 #amqp_error{name        = command_invalid,
-                            explanation = "heartbeat on non-zero channel"});
+                            explanation = "heartbeat on non-zero channel"}),
+            State;
         %% Match heartbeats but don't do anything with them
         heartbeat ->
-            heartbeat;
+            State;
         AnalyzedFrame ->
             pass_frame(ChNumber, AnalyzedFrame, State)
     end.
 
-pass_frame(0, Frame, #state{framing0 = Framing0}) ->
-    rabbit_framing_channel:process(Framing0, Frame);
-pass_frame(Number, Frame, #state{channels_manager = ChMgr}) ->
-    amqp_channels_manager:pass_frame(ChMgr, Number, Frame).
+pass_frame(0, Frame, State = #state{connection = Conn, astate = AState}) ->
+    UpdateAState = fun (NewAState) -> State#state{astate = NewAState} end,
+    case rabbit_command_assembler:process(Frame, AState) of
+        {ok, NewAState} ->
+            UpdateAState(NewAState);
+        {ok, Method, NewAState} ->
+            rabbit_channel:do(Conn, Method),
+            UpdateAState(NewAState);
+        {ok, Method, Content, NewAState} ->
+            rabbit_channel:do(Conn, Method, Content),
+            UpdateAState(NewAState);
+        {error, _Reason} ->
+            %%FIXME
+            State
+    end;
+pass_frame(Number, Frame, State = #state{channels_manager = ChMgr}) ->
+    amqp_channels_manager:pass_frame(ChMgr, Number, Frame),
+    State.

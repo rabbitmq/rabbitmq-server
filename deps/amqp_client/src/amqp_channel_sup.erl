@@ -36,8 +36,8 @@ start_link(Type, InfraArgs, ChNumber) ->
                                      start_writer_fun(Sup, Type, InfraArgs,
                                                       ChNumber)]},
                           intrinsic, brutal_kill, worker, [amqp_channel]}),
-    {ok, Framing} = start_framing(Sup, Type, ChPid),
-    {ok, Sup, {ChPid, Framing}}.
+    {ok, AState} = init_command_assembler(Type),
+    {ok, Sup, {ChPid, AState}}.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -64,14 +64,8 @@ start_writer_fun(Sup, network, [Sock], ChNumber) ->
                      transient, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
 
-start_framing(_Sup, direct, _ChPid) ->
-    {ok, none};
-start_framing(Sup, network, ChPid) ->
-    {ok, _} = supervisor2:start_child(
-                Sup,
-                {framing, {rabbit_framing_channel, start_link,
-                           [ChPid, ChPid, ?PROTOCOL]},
-                 transient, ?MAX_WAIT, worker, [rabbit_framing_channel]}).
+init_command_assembler(direct)  -> {ok, none};
+init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
 
 start_limiter_fun(Sup) ->
     fun (UnackedCount) ->
