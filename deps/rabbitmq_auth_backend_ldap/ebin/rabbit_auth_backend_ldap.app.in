@@ -13,5 +13,5 @@
           {is_admin_query,        {constant, false}},
           {use_ssl,               false},
           {port,                  389},
-          {log,                   true} ] },
+          {log,                   false} ] },
   {applications, [kernel, stdlib]}]}.
