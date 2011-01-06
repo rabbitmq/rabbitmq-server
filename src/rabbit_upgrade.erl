@@ -21,7 +21,7 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade/2, read_version/0, write_version/0, desired_version/0]).
+-export([maybe_upgrade/3, read_version/0, write_version/0, desired_version/0]).
 
 -include("rabbit.hrl").
 
@@ -36,7 +36,7 @@
 -type(scope() :: 'mnesia' | 'local').
 -type(version() :: [step()]).
 
--spec(maybe_upgrade/2 :: ([scope()], fun (() -> 'ok'))
+-spec(maybe_upgrade/3 :: ([scope()], fun (() -> 'ok'), fun (() -> 'ok'))
          -> 'ok' | 'version_not_available').
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
@@ -49,21 +49,22 @@
 %% Try to upgrade the schema. If no information on the existing schema
 %% could be found, do nothing. rabbit_mnesia:check_schema_integrity()
 %% will catch the problem.
-maybe_upgrade(Scopes, Fun) ->
+maybe_upgrade(Scopes, GuardFun, UpgradeFun) ->
     case read_version() of
         {ok, CurrentHeads} ->
             with_upgrade_graph(
-              fun (G) -> maybe_upgrade_graph(CurrentHeads, Scopes, Fun, G) end);
+              fun (G) -> maybe_upgrade_graph(CurrentHeads, Scopes,
+                                             GuardFun, UpgradeFun, G) end);
         {error, enoent} ->
             version_not_available
     end.
 
-maybe_upgrade_graph(CurrentHeads, Scopes, Fun, G) ->
+maybe_upgrade_graph(CurrentHeads, Scopes, GuardFun, UpgradeFun, G) ->
     case unknown_heads(CurrentHeads, G) of
         [] ->
             case upgrades_to_apply(CurrentHeads, Scopes, G) of
                 []       -> ok;
-                Upgrades -> apply_upgrades(Upgrades, Fun)
+                Upgrades -> apply_upgrades(Upgrades, GuardFun, UpgradeFun)
             end;
         Unknown ->
             throw({error, {future_upgrades_found, Unknown}})
@@ -132,7 +133,8 @@ heads(G) ->
 
 %% -------------------------------------------------------------------
 
-apply_upgrades(Upgrades, Fun) ->
+apply_upgrades(Upgrades, GuardFun, UpgradeFun) ->
+    GuardFun(),
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
         ok ->
@@ -147,7 +149,7 @@ apply_upgrades(Upgrades, Fun) ->
                     %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
                     info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
-                    ok = Fun(),
+                    ok = UpgradeFun(),
                     [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
                     info("Upgrades: All upgrades applied successfully~n", []),
                     ok = write_version(),
