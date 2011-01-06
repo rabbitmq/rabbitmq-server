@@ -175,7 +175,7 @@ with_ldap(BindOpts, Fun,
                                     ok ->
                                         Fun(LDAP);
                                     {error, invalidCredentials} ->
-                                        {refused, UserDN};
+                                        {refused, UserDN, []};
                                     {error, _} = E ->
                                         E
                                 end
