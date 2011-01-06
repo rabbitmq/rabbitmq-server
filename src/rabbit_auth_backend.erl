@@ -45,7 +45,7 @@ behaviour_info(callbacks) ->
      %% Possible responses:
      %% {ok, User}
      %%     Authentication succeeded, and here's the user record.
-     %% {error, Msg, Args}
+     %% {error, Error}
      %%     Something went wrong. Log and die.
      %% {refused, Msg, Args}
      %%     Client failed authentication. Log and die.
@@ -59,7 +59,7 @@ behaviour_info(callbacks) ->
      %% Possible responses:
      %% true
      %% false
-     %% {error, Msg}
+     %% {error, Error}
      %%     Something went wrong. Log and die.
      {check_vhost_access, 3},
 
@@ -68,7 +68,7 @@ behaviour_info(callbacks) ->
      %% Possible responses:
      %% true
      %% false
-     %% {error, Msg}
+     %% {error, Error}
      %%     Something went wrong. Log and die.
      {check_resource_access, 3}
     ];
