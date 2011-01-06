@@ -182,7 +182,7 @@
 
 %%----------------------------------------------------------------------------
 
--rabbit_upgrade({add_queue_ttl, []}).
+-rabbit_upgrade({add_queue_ttl, local, []}).
 
 -ifdef(use_specs).
 

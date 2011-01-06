@@ -43,6 +43,8 @@
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
 
+-define(EXAMPLE_RABBIT_TABLE, rabbit_durable_exchange).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -139,6 +141,11 @@ all_clustered_nodes() ->
 running_clustered_nodes() ->
     mnesia:system_info(running_db_nodes).
 
+forget_other_nodes() ->
+    Nodes = all_clustered_nodes() -- [node()],
+    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Nodes],
+    ok.
+
 empty_ram_only_tables() ->
     Node = node(),
     lists:foreach(
@@ -159,7 +166,7 @@ nodes_of_type(Type) ->
     %% Specifically, we check whether a certain table, which we know
     %% will be written to disk on a disc node, is stored on disk or in
     %% RAM.
-    mnesia:table_info(rabbit_durable_exchange, Type).
+    mnesia:table_info(?EXAMPLE_RABBIT_TABLE, Type).
 
 table_definitions() ->
     [{rabbit_user,
@@ -381,37 +388,51 @@ init_db(ClusterNodes, Force) ->
                          end;
                 true  -> ok
             end,
-            case {Nodes, mnesia:system_info(use_dir), all_clustered_nodes()} of
-                {[], true, [_]} ->
-                    %% True single disc node, attempt upgrade
-                    ok = wait_for_tables(),
-                    case rabbit_upgrade:maybe_upgrade() of
-                        ok                    -> ensure_schema_ok();
-                        version_not_available -> schema_ok_or_move()
-                    end;
-                {[], true, _} ->
-                    %% "Master" (i.e. without config) disc node in cluster,
-                    %% verify schema
-                    ok = wait_for_tables(),
-                    ensure_version_ok(rabbit_upgrade:read_version()),
-                    ensure_schema_ok();
-                {[], false, _} ->
+            case {Nodes, mnesia:system_info(use_dir)} of
+                {[], false} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
-                {[AnotherNode|_], _, _} ->
-                    %% Subsequent node in cluster, catch up
-                    ensure_version_ok(rabbit_upgrade:read_version()),
-                    ensure_version_ok(
-                      rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
-                    IsDiskNode = ClusterNodes == [] orelse
-                        lists:member(node(), ClusterNodes),
-                    ok = wait_for_replicated_tables(),
-                    ok = create_local_table_copy(schema, disc_copies),
-                    ok = create_local_table_copies(case IsDiskNode of
-                                                       true  -> disc;
-                                                       false -> ram
-                                                   end),
-                    ensure_schema_ok()
+                {_, _} ->
+                    DiscNodes = mnesia:table_info(schema, disc_copies),
+                    case are_we_upgrader(DiscNodes) of
+                        true ->
+                            %% True single disc node, or last disc
+                            %% node in cluster to shut down, attempt
+                            %% upgrade
+                            ok = wait_for_tables(),
+                            case rabbit_upgrade:maybe_upgrade(
+                                   [mnesia, local],
+                                   fun () -> ok end,
+                                   fun forget_other_nodes/0) of
+                                ok                    -> ensure_schema_ok();
+                                version_not_available -> schema_ok_or_move()
+                            end;
+                        false ->
+                            %% Subsequent node in cluster, catch up
+                            %% TODO how to do this?
+                            %% ensure_version_ok(
+                            %%   rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
+                            IsDiskNode = ClusterNodes == [] orelse
+                                lists:member(node(), ClusterNodes),
+                            case rabbit_upgrade:maybe_upgrade(
+                                   [local],
+                                   ensure_nodes_running_fun(DiscNodes),
+                                   reset_fun(DiscNodes -- [node()])) of
+                                ok ->
+                                    ok;
+                                %% If we're just starting up a new node
+                                %% we won't have a version
+                                version_not_available ->
+                                    ok = rabbit_upgrade:write_version()
+                            end,
+                            ok = wait_for_replicated_tables(),
+                            ok = create_local_table_copy(schema, disc_copies),
+                            ok = create_local_table_copies(case IsDiskNode of
+                                                               true  -> disc;
+                                                               false -> ram
+                                                           end),
+                            ensure_schema_ok()
+                    end
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -448,6 +469,52 @@ ensure_schema_ok() ->
     case check_schema_integrity() of
         ok              -> ok;
         {error, Reason} -> throw({error, {schema_invalid, Reason}})
+    end.
+
+ensure_nodes_running_fun(Nodes) ->
+    fun() ->
+            case nodes_running(Nodes) of
+                [] ->
+                    exit("Cluster upgrade needed. The first node you start "
+                         "should be the last node to be shut down.");
+                _ ->
+                    ok
+            end
+    end.
+
+reset_fun(Nodes) ->
+    fun() ->
+            mnesia:stop(),
+            rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                                  cannot_delete_schema),
+            rabbit_misc:ensure_ok(mnesia:start(),
+                                  cannot_start_mnesia),
+            {ok, _} = mnesia:change_config(extra_db_nodes, Nodes),
+            ok
+    end.
+
+%% Were we the last node in the cluster to shut down or is there no cluster?
+%% The answer to this is yes if:
+%% * We are our canonical source for reading a table
+%%    - If the canonical source is "nowhere" or another node, we are out of date
+%% * No other nodes are running Mnesia and have finished booting Rabbit.
+%%    - Since any node will be its own canonical source once the cluster is up.
+
+are_we_upgrader(Nodes) ->
+    Where = mnesia:table_info(?EXAMPLE_RABBIT_TABLE, where_to_read),
+    Node = node(),
+    case {Where, nodes_running(Nodes)} of
+        {Node, []} -> true;
+        {_,    _}  -> false
+    end.
+
+nodes_running(Nodes) ->
+    [N || N <- Nodes, node_running(N)].
+
+node_running(Node) ->
+    case rpc:call(Node, application, which_applications, []) of
+        {badrpc, _} -> false;
+        Apps        -> lists:keysearch(rabbit, 1, Apps) =/= false
     end.
 
 create_schema() ->
