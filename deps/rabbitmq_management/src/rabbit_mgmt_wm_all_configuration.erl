@@ -186,11 +186,11 @@ add_vhost(VHost) ->
     rabbit_mgmt_wm_vhost:put_vhost(VHostName).
 
 add_permission(Permission) ->
-    rabbit_access_control:set_permissions(pget(user,      Permission),
-                                          pget(vhost,     Permission),
-                                          pget(configure, Permission),
-                                          pget(write,     Permission),
-                                          pget(read,      Permission)).
+    rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
+                                                 pget(vhost,     Permission),
+                                                 pget(configure, Permission),
+                                                 pget(write,     Permission),
+                                                 pget(read,      Permission)).
 
 add_queue(Queue) ->
     rabbit_amqqueue:declare(r(queue,                              Queue),
