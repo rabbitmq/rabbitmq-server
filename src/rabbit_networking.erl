@@ -176,15 +176,11 @@ resolve_family(IP,                auto) -> throw({error, {strange_family, IP}});
 resolve_family(_,                 F)    -> F.
 
 check_tcp_listener_address(NamePrefix, Port) when is_integer(Port) ->
-    case ipv6_status(Port) of
-        ipv4_only ->
-            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet});
-        ipv6_single_stack ->
-            check_tcp_listener_address(NamePrefix, {"::", Port, inet6});
-        ipv6_dual_stack ->
-            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet})
-                ++ check_tcp_listener_address(NamePrefix, {"::", Port, inet6})
-    end;
+    check_tcp_listener_address_auto(NamePrefix, Port);
+
+check_tcp_listener_address(NamePrefix, {"auto", Port}) ->
+    %% Variant to prevent lots of hacking around in bash and batch files
+    check_tcp_listener_address_auto(NamePrefix, Port);
 
 check_tcp_listener_address(NamePrefix, {Host, Port}) ->
     %% auto: determine family IPv4 / IPv6 after converting to IP address
@@ -199,6 +195,17 @@ check_tcp_listener_address(NamePrefix, {Host, Port, Family0}) ->
     end,
     Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
     [{IPAddress, Port, Family, Name}].
+
+check_tcp_listener_address_auto(NamePrefix, Port) ->
+    case ipv6_status(Port) of
+        ipv4_only ->
+            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet});
+        ipv6_single_stack ->
+            check_tcp_listener_address(NamePrefix, {"::", Port, inet6});
+        ipv6_dual_stack ->
+            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet})
+                ++ check_tcp_listener_address(NamePrefix, {"::", Port, inet6})
+    end.
 
 start_tcp_listener(Listener) ->
     start_listener(Listener, amqp, "TCP Listener",
