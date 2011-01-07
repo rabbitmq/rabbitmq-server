@@ -35,8 +35,6 @@
 
 -export([all_tests/0, test_parsing/0]).
 
--import(lists).
-
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -97,6 +95,22 @@ run_cluster_dependent_tests(SecondaryNode) ->
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
+
+    %% we now run the tests remotely, so that code coverage on the
+    %% local node picks up more of the delegate
+    Node = node(),
+    Self = self(),
+    Remote = spawn(SecondaryNode,
+                   fun () -> A = test_delegates_async(Node),
+                             B = test_delegates_sync(Node),
+                             Self ! {self(), {A, B}}
+                   end),
+    receive
+        {Remote, Result} ->
+            Result = {passed, passed}
+    after 2000 ->
+            throw(timeout)
+    end,
 
     passed.
 
@@ -1016,7 +1030,7 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         <<"user">>, <<"/">>, self(),
+                                         user(<<"user">>), <<"/">>, self(),
                                          fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
@@ -1076,13 +1090,20 @@ test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
     {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
-                                         <<"guest">>, <<"/">>, self(),
+                                         user(<<"guest">>), <<"/">>, self(),
                                          fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch}.
+
+user(Username) ->
+    #user{username     = Username,
+          is_admin     = true,
+          auth_backend = rabbit_auth_backend_internal,
+          impl         = #internal_user{username = Username,
+                                        is_admin = true}}.
 
 test_statistics_receiver(Pid) ->
     receive
@@ -1249,15 +1270,26 @@ test_delegates_sync(SecondaryNode) ->
     true = lists:all(fun ({_, response}) -> true end, GoodRes),
     GoodResPids = [Pid || {Pid, _} <- GoodRes],
 
-    Good = ordsets:from_list(LocalGoodPids ++ RemoteGoodPids),
-    Good = ordsets:from_list(GoodResPids),
+    Good = lists:usort(LocalGoodPids ++ RemoteGoodPids),
+    Good = lists:usort(GoodResPids),
 
     {[], BadRes} = delegate:invoke(LocalBadPids ++ RemoteBadPids, BadSender),
     true = lists:all(fun ({_, {exit, exception, _}}) -> true end, BadRes),
     BadResPids = [Pid || {Pid, _} <- BadRes],
 
-    Bad = ordsets:from_list(LocalBadPids ++ RemoteBadPids),
-    Bad = ordsets:from_list(BadResPids),
+    Bad = lists:usort(LocalBadPids ++ RemoteBadPids),
+    Bad = lists:usort(BadResPids),
+
+    MagicalPids = [rabbit_misc:string_to_pid(Str) ||
+                      Str <- ["<nonode@nohost.0.1.0>", "<nonode@nohost.0.2.0>"]],
+    {[], BadNodes} = delegate:invoke(MagicalPids, Sender),
+    true = lists:all(
+             fun ({_, {exit, {nodedown, nonode@nohost}, _Stack}}) -> true end,
+             BadNodes),
+    BadNodesPids = [Pid || {Pid, _} <- BadNodes],
+
+    Magical = lists:usort(MagicalPids),
+    Magical = lists:usort(BadNodesPids),
 
     passed.
 
@@ -1898,7 +1930,7 @@ test_variable_queue_ack_limiting(VQ0) ->
     VQ6 = check_variable_queue_status(
             rabbit_variable_queue:set_ram_duration_target(0, VQ5),
             [{len, Len div 2},
-             {target_ram_item_count, 0},
+             {target_ram_count, 0},
              {ram_msg_count, 0},
              {ram_ack_count, 0}]),
 

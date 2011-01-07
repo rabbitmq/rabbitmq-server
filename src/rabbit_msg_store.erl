@@ -144,13 +144,13 @@
 -type(startup_fun_state() ::
         {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
          A}).
--type(guid_fun() :: fun ((gb_set()) -> any())).
+-type(maybe_guid_fun() :: 'undefined' | fun ((gb_set()) -> any())).
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
          startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
--spec(client_init/3 :: (server(), client_ref(), guid_fun()) ->
+-spec(client_init/3 :: (server(), client_ref(), maybe_guid_fun()) ->
              client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
@@ -701,7 +701,7 @@ handle_cast({write, CRef, Guid},
                {ok, _} -> dict:update(CRef, fun(Guids) ->
                                                     gb_sets:add(Guid, Guids)
                                             end,
-                                      gb_sets:empty(), CTG);
+                                      gb_sets:singleton(Guid), CTG);
                error   -> CTG
            end,
     State1 = State #msstate { cref_to_guids = CTG1 },

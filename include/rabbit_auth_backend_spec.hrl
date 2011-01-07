@@ -28,35 +28,19 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
-
--module(delegate_sup).
-
--behaviour(supervisor).
-
--export([start_link/0]).
-
--export([init/1]).
-
--define(SERVER, ?MODULE).
-
-%%----------------------------------------------------------------------------
-
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(description/0 :: () -> [{atom(), any()}]).
 
+-spec(check_user_login/2 :: (rabbit_types:username(), [term()]) ->
+                                 {'ok', rabbit_types:user()} |
+                                 {'refused', string(), [any()]} |
+                                 {'error', any()}).
+-spec(check_vhost_access/3 :: (rabbit_types:user(), rabbit_types:vhost(),
+                               rabbit_access_control:vhost_permission_atom()) ->
+                                   boolean() | {'error', any()}).
+-spec(check_resource_access/3 :: (rabbit_types:user(),
+                                  rabbit_types:r(atom()),
+                                  rabbit_access_control:permission_atom()) ->
+                                      boolean() | {'error', any()}).
 -endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    DCount = delegate:delegate_count(),
-    {ok, {{one_for_one, 10, 10},
-          [{Num, {delegate, start_link, [Num]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Num <- lists:seq(0, DCount - 1)]}}.

@@ -29,34 +29,38 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(delegate_sup).
+-module(rabbit_auth_mechanism_plain).
+-include("rabbit.hrl").
 
--behaviour(supervisor).
+-behaviour(rabbit_auth_mechanism).
 
--export([start_link/0]).
+-export([description/0, init/1, handle_response/2]).
 
--export([init/1]).
+-include("rabbit_auth_mechanism_spec.hrl").
 
--define(SERVER, ?MODULE).
+-rabbit_boot_step({?MODULE,
+                   [{description, "auth mechanism plain"},
+                    {mfa,         {rabbit_registry, register,
+                                   [auth_mechanism, <<"PLAIN">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
+                    {enables,     kernel_ready}]}).
 
-%%----------------------------------------------------------------------------
+%% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
+%% apparently, by OpenAMQ.
 
--ifdef(use_specs).
+description() ->
+    [{name, <<"PLAIN">>},
+     {description, <<"SASL PLAIN authentication mechanism">>}].
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+init(_Sock) ->
+    [].
 
--endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    DCount = delegate:delegate_count(),
-    {ok, {{one_for_one, 10, 10},
-          [{Num, {delegate, start_link, [Num]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Num <- lists:seq(0, DCount - 1)]}}.
+handle_response(Response, _State) ->
+    %% The '%%"' at the end of the next line is for Emacs
+    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
+                [{capture, all_but_first, binary}]) of
+        {match, [User, Pass]} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        _ ->
+            {protocol_error, "response ~p invalid", [Response]}
+    end.

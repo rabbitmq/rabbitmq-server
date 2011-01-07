@@ -39,8 +39,6 @@
          send_command_and_notify/4, send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
 
--import(gen_tcp).
-
 -record(wstate, {sock, channel, frame_max, protocol}).
 
 -define(HIBERNATE_AFTER, 5000).
@@ -182,7 +180,7 @@ call(Pid, Msg) ->
 
 %---------------------------------------------------------------------------
 
-assemble_frames(Channel, MethodRecord, Protocol) ->
+assemble_frame(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
@@ -197,17 +195,34 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
                       Channel, Content, FrameMax, Protocol),
     [MethodFrame | ContentFrames].
 
+%% We optimise delivery of small messages. Content-bearing methods
+%% require at least three frames. Small messages always fit into
+%% that. We hand their frames to the Erlang network functions in one
+%% go, which may lead to somewhat more efficient processing in the
+%% runtime and a greater chance of coalescing into fewer TCP packets.
+%%
+%% By contrast, for larger messages, split across many frames, we want
+%% to allow interleaving of frames on different channels. Hence we
+%% hand them to the Erlang network functions one frame at a time.
+send_frames(Fun, Sock, Frames) when length(Frames) =< 3 ->
+    Fun(Sock, Frames);
+send_frames(Fun, Sock, Frames) ->
+    lists:foldl(fun (Frame,     ok) -> Fun(Sock, Frame);
+                    (_Frame, Other) -> Other
+                end, ok, Frames).
+
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(inet_error,
                                fun () -> rabbit_net:send(Sock, Data) end).
 
 internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
-    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord, Protocol)).
+    ok = tcp_send(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
 
 internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
                       Protocol) ->
-    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord,
-                                        Content, FrameMax, Protocol)).
+    ok = send_frames(fun tcp_send/2, Sock,
+                     assemble_frames(Channel, MethodRecord,
+                                     Content, FrameMax, Protocol)).
 
 %% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
 %% Status} to obtain the result. That is bad when it is called from
@@ -231,19 +246,19 @@ internal_send_command_async(MethodRecord,
                             #wstate{sock      = Sock,
                                     channel   = Channel,
                                     protocol  = Protocol}) ->
-    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord, Protocol)),
-    ok.
+    ok = port_cmd(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
 
 internal_send_command_async(MethodRecord, Content,
                             #wstate{sock      = Sock,
                                     channel   = Channel,
                                     frame_max = FrameMax,
                                     protocol  = Protocol}) ->
-    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
-                                          Content, FrameMax, Protocol)),
-    ok.
+    ok = send_frames(fun port_cmd/2, Sock,
+                     assemble_frames(Channel, MethodRecord,
+                                     Content, FrameMax, Protocol)).
 
 port_cmd(Sock, Data) ->
-    try rabbit_net:port_command(Sock, Data)
-    catch error:Error -> exit({writer, send_failed, Error})
-    end.
+    true = try rabbit_net:port_command(Sock, Data)
+           catch error:Error -> exit({writer, send_failed, Error})
+           end,
+    ok.

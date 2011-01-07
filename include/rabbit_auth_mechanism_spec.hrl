@@ -28,35 +28,14 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
-
--module(delegate_sup).
-
--behaviour(supervisor).
-
--export([start_link/0]).
-
--export([init/1]).
-
--define(SERVER, ?MODULE).
-
-%%----------------------------------------------------------------------------
-
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(description/0 :: () -> [{atom(), any()}]).
+-spec(init/1 :: (rabbit_net:socket()) -> any()).
+-spec(handle_response/2 :: (binary(), any()) ->
+                                {'ok', rabbit_types:user()} |
+                                {'challenge', binary(), any()} |
+                                {'protocol_error', string(), [any()]} |
+                                {'refused', string(), [any()]}).
 
 -endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    DCount = delegate:delegate_count(),
-    {ok, {{one_for_one, 10, 10},
-          [{Num, {delegate, start_link, [Num]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Num <- lists:seq(0, DCount - 1)]}}.
