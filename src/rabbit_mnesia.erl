@@ -393,52 +393,56 @@ init_db(ClusterNodes, Force) ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
                 {_, _} ->
-                    DiscNodes = mnesia:table_info(schema, disc_copies),
-                    case are_we_upgrader(DiscNodes) of
-                        true ->
-                            %% True single disc node, or last disc
-                            %% node in cluster to shut down, attempt
-                            %% upgrade
-                            ok = wait_for_tables(),
-                            case rabbit_upgrade:maybe_upgrade(
-                                   [mnesia, local],
-                                   fun () -> ok end,
-                                   fun forget_other_nodes/0) of
-                                ok                    -> ensure_schema_ok();
-                                version_not_available -> schema_ok_or_move()
-                            end;
-                        false ->
-                            %% Subsequent node in cluster, catch up
-                            %% TODO how to do this?
-                            %% ensure_version_ok(
-                            %%   rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
-                            IsDiskNode = ClusterNodes == [] orelse
-                                lists:member(node(), ClusterNodes),
-                            case rabbit_upgrade:maybe_upgrade(
-                                   [local],
-                                   ensure_nodes_running_fun(DiscNodes),
-                                   reset_fun(DiscNodes -- [node()])) of
-                                ok ->
-                                    ok;
-                                %% If we're just starting up a new node
-                                %% we won't have a version
-                                version_not_available ->
-                                    ok = rabbit_upgrade:write_version()
-                            end,
-                            ok = wait_for_replicated_tables(),
-                            ok = create_local_table_copy(schema, disc_copies),
-                            ok = create_local_table_copies(case IsDiskNode of
-                                                               true  -> disc;
-                                                               false -> ram
-                                                           end),
-                            ensure_schema_ok()
-                    end
+                    ok = setup_existing_node(ClusterNodes, Nodes)
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
+    end.
+
+setup_existing_node(ClusterNodes, Nodes) ->
+    DiscNodes = mnesia:table_info(schema, disc_copies),
+    case are_we_upgrader(DiscNodes) of
+        true ->
+            %% True single disc node, or last disc node in cluster to
+            %% shut down, attempt upgrade
+            ok = wait_for_tables(),
+            case rabbit_upgrade:maybe_upgrade(
+                   [mnesia, local], fun () -> ok end,
+                   fun forget_other_nodes/0) of
+                ok                    -> ensure_schema_ok();
+                version_not_available -> schema_ok_or_move()
+            end;
+        false ->
+            %% Subsequent node in cluster, catch up
+            case Nodes of
+                [AnotherNode|_] ->
+                    ensure_version_ok(
+                      rpc:call(AnotherNode, rabbit_upgrade, read_version, []));
+                [] ->
+                    ok
+            end,
+            IsDiskNode = ClusterNodes == [] orelse
+                lists:member(node(), ClusterNodes),
+            case rabbit_upgrade:maybe_upgrade(
+                   [local], ensure_nodes_running_fun(DiscNodes),
+                   reset_fun(DiscNodes -- [node()])) of
+                ok ->
+                    ok;
+                %% If we're just starting up a new node we won't have
+                %% a version
+                version_not_available ->
+                    ok = rabbit_upgrade:write_version()
+            end,
+            ok = wait_for_replicated_tables(),
+            ok = create_local_table_copy(schema, disc_copies),
+            ok = create_local_table_copies(case IsDiskNode of
+                                               true  -> disc;
+                                               false -> ram
+                                           end),
+            ensure_schema_ok()
     end.
 
 schema_ok_or_move() ->
@@ -476,7 +480,7 @@ ensure_nodes_running_fun(Nodes) ->
             case nodes_running(Nodes) of
                 [] ->
                     exit("Cluster upgrade needed. The first node you start "
-                         "should be the last node to be shut down.");
+                         "should be the last disc node to be shut down.");
                 _ ->
                     ok
             end
