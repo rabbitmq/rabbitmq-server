@@ -172,7 +172,7 @@ class AmqpSpec:
 
         self.classes = []
         for element in self.spec['classes']:
-            self.classes.append(AmqpClass(self.spec, element))
+            self.classes.append(AmqpClass(self, element))
         
     def allClasses(self):
         return self.classes
