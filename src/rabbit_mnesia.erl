@@ -407,11 +407,10 @@ setup_existing_node(ClusterNodes, Nodes) ->
     case are_we_upgrader(DiscNodes) of
         true ->
             %% True single disc node, or last disc node in cluster to
-            %% shut down, attempt upgrade
+            %% shut down, attempt upgrade if necessary
             ok = wait_for_tables(),
-            case rabbit_upgrade:maybe_upgrade(
-                   [mnesia, local], fun () -> ok end,
-                   fun forget_other_nodes/0) of
+            case rabbit_upgrade:maybe_upgrade([mnesia, local], fun () -> ok end,
+                                              fun forget_other_nodes/0) of
                 ok                    -> ensure_schema_ok();
                 version_not_available -> schema_ok_or_move()
             end;
@@ -427,7 +426,8 @@ setup_existing_node(ClusterNodes, Nodes) ->
             IsDiskNode = ClusterNodes == [] orelse
                 lists:member(node(), ClusterNodes),
             case rabbit_upgrade:maybe_upgrade(
-                   [local], ensure_nodes_running_fun(DiscNodes),
+                   [local],
+                   ensure_nodes_running_fun(DiscNodes),
                    reset_fun(DiscNodes -- [node()])) of
                 ok ->
                     ok;
@@ -475,9 +475,9 @@ ensure_schema_ok() ->
         {error, Reason} -> throw({error, {schema_invalid, Reason}})
     end.
 
-ensure_nodes_running_fun(Nodes) ->
+ensure_nodes_running_fun(DiscNodes) ->
     fun() ->
-            case nodes_running(Nodes) of
+            case nodes_running(DiscNodes) of
                 [] ->
                     exit("Cluster upgrade needed. The first node you start "
                          "should be the last disc node to be shut down.");
@@ -486,23 +486,28 @@ ensure_nodes_running_fun(Nodes) ->
             end
     end.
 
-reset_fun(Nodes) ->
+reset_fun(OtherNodes) ->
     fun() ->
             mnesia:stop(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                   cannot_delete_schema),
             rabbit_misc:ensure_ok(mnesia:start(),
                                   cannot_start_mnesia),
-            {ok, _} = mnesia:change_config(extra_db_nodes, Nodes),
+            {ok, _} = mnesia:change_config(extra_db_nodes, OtherNodes),
             ok
     end.
 
 %% Were we the last node in the cluster to shut down or is there no cluster?
 %% The answer to this is yes if:
 %% * We are our canonical source for reading a table
-%%    - If the canonical source is "nowhere" or another node, we are out of date
+%%    - If the canonical source is "nowhere" or another node, we are out
+%%      of date
+%% and
 %% * No other nodes are running Mnesia and have finished booting Rabbit.
-%%    - Since any node will be its own canonical source once the cluster is up.
+%%    - Since any node will be its own canonical source once the cluster
+%%      is up, but just having Mnesia running is not enough - that node
+%%      could be halfway through starting (and deciding it is the upgrader
+%%      too)
 
 are_we_upgrader(Nodes) ->
     Where = mnesia:table_info(?EXAMPLE_RABBIT_TABLE, where_to_read),

@@ -134,7 +134,7 @@ heads(G) ->
 %% -------------------------------------------------------------------
 
 apply_upgrades(Upgrades, GuardFun, UpgradeFun) ->
-    GuardFun(),
+    ok = GuardFun(),
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
         ok ->
