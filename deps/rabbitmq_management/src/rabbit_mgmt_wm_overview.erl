@@ -27,7 +27,8 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{username = Username, is_admin = IsAdmin}) ->
+to_json(ReqData, Context = #context{user = #user{username = Username,
+                                                 is_admin = IsAdmin}}) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     %% NB: node and stats level duplicate what's in /nodes but we want
     %% to (a) know which node we're talking to and (b) use the stats

@@ -18,7 +18,7 @@
 -export([format/2, print/2, pid/1, ip/1, amqp_table/1, tuple/1, timestamp/1]).
 -export([timestamp_ms/1]).
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
--export([exchange/1, user/1, binding/1, url/2, application/1]).
+-export([exchange/1, user/1, internal_user/1, binding/1, url/2, application/1]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([args_type/1, listener/1, properties/1]).
 
@@ -106,10 +106,16 @@ permissions({User, VHost, Conf, Write, Read}) ->
      {write,     Write},
      {read,      Read}].
 
+internal_user(User) ->
+    [{name,          User#internal_user.username},
+     {password_hash, base64:encode(User#internal_user.password_hash)},
+     {administrator, User#internal_user.is_admin}].
+
 user(User) ->
     [{name,          User#user.username},
-     {password_hash, base64:encode(User#user.password_hash)},
-     {administrator, User#user.is_admin}].
+     {administrator, User#user.is_admin},
+     {auth_backend,  User#user.auth_backend}].
+
 
 listener(#listener{node = Node, protocol = Protocol,
                    host = Host, ip_address = IPAddress, port = Port}) ->

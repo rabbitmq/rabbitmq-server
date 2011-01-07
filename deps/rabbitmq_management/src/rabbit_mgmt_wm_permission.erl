@@ -58,7 +58,7 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:with_decode(
               [configure, write, read], ReqData, Context,
               fun([Conf, Write, Read]) ->
-                      rabbit_access_control:set_permissions(
+                      rabbit_auth_backend_internal:set_permissions(
                         User, VHost, Conf, Write, Read),
                       {true, ReqData, Context}
               end)
@@ -67,7 +67,7 @@ accept_content(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    rabbit_access_control:clear_permissions(User, VHost),
+    rabbit_auth_backend_internal:clear_permissions(User, VHost),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -77,14 +77,15 @@ is_authorized(ReqData, Context) ->
 
 perms(ReqData) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    case rabbit_access_control:lookup_user(User) of
+    case rabbit_auth_backend_internal:lookup_user(User) of
         {ok, _} ->
             case rabbit_mgmt_util:vhost(ReqData) of
                 not_found ->
                     not_found;
                 VHost ->
-                    Perms = rabbit_access_control:list_user_vhost_permissions(
-                              User, VHost),
+                    Perms =
+                        rabbit_auth_backend_internal:list_user_vhost_permissions(
+                          User, VHost),
                     case Perms of
                         [{Configure, Write, Read}] ->
                             {User, VHost, Configure, Write, Read};

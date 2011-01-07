@@ -26,8 +26,7 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{username = Username}) ->
-    {ok, User} = rabbit_access_control:lookup_user(Username),
+to_json(ReqData, Context = #context{user = User}) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
