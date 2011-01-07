@@ -148,10 +148,11 @@ start_infrastructure(SIF, ChMgr, State = #state{sock = Sock}) ->
 
 network_handshake(AmqpParams, State) ->
     Start = handshake_recv(),
-    #'connection.start'{server_properties = ServerProperties} = Start,
+    #'connection.start'{server_properties = ServerProperties,
+                        mechanisms = Mechanisms} = Start,
     ok = check_version(Start),
-    do2(start_ok(AmqpParams), State),
-    Tune = handshake_recv(),
+
+    Tune = login(AmqpParams, Mechanisms, State),
     TuneOk = negotiate_values(Tune, AmqpParams),
     do2(TuneOk, State),
     ConnectionOpen =
@@ -202,15 +203,34 @@ negotiate_max_value(Client, Server) when Client =:= 0; Server =:= 0 ->
 negotiate_max_value(Client, Server) ->
     lists:min([Client, Server]).
 
-start_ok(#amqp_params{username          = Username,
-                      password          = Password,
-                      client_properties = UserProps}) ->
-    LoginTable = [{<<"LOGIN">>, longstr, Username},
-                  {<<"PASSWORD">>, longstr, Password}],
-    #'connection.start_ok'{
-        client_properties = client_properties(UserProps),
-        mechanism = <<"AMQPLAIN">>,
-        response = rabbit_binary_generator:generate_table(LoginTable)}.
+login(Params = #amqp_params{auth_mechanisms = ClientMechanisms,
+                            client_properties = UserProps},
+      ServerMechanismsStr, State) ->
+    ServerMechanisms = string:tokens(binary_to_list(ServerMechanismsStr), " "),
+    case [{N, S, F} || F <- ClientMechanisms,
+                       {N, S} <- [F(none, Params, init)],
+                       lists:member(binary_to_list(N), ServerMechanisms)] of
+        [{Name, MState0, Mech}|_] ->
+            {Resp, MState1} = Mech(none, Params, MState0),
+            StartOk = #'connection.start_ok'{
+              client_properties = client_properties(UserProps),
+              mechanism = Name,
+              response = Resp},
+            do2(StartOk, State),
+            login_loop(Mech, MState1, Params, State);
+        [] ->
+            exit({no_suitable_auth_mechanism, ServerMechanisms})
+    end.
+
+login_loop(Mech, MState0, Params, State) ->
+    case handshake_recv() of
+        Tune = #'connection.tune'{} ->
+            Tune;
+        #'connection.secure'{challenge = Challenge} ->
+            {Resp, MState1} = Mech(Challenge, Params, MState0),
+            do2(#'connection.secure_ok'{response = Resp}, State),
+            login_loop(Mech, MState1, Params, State)
+    end.
 
 client_properties(UserProperties) ->
     {ok, Vsn} = application:get_key(amqp_client, vsn),
