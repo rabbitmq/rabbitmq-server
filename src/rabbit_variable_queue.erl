@@ -412,8 +412,8 @@ stop_msg_store() ->
 init(QueueName, IsDurable, Recover) ->
     Self = self(),
     init(QueueName, IsDurable, Recover,
-         fun (Guids, WaitForIndex) ->
-                 msgs_written_to_disk(Self, Guids, WaitForIndex)
+         fun (Guids, ActionTaken) ->
+                 msgs_written_to_disk(Self, Guids, ActionTaken)
          end,
          fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
 
@@ -1402,9 +1402,9 @@ blind_confirm(QPid, GuidSet) ->
                     msgs_confirmed(GuidSet, State)
             end).
 
-msgs_written_to_disk(QPid, GuidSet, false) ->
+msgs_written_to_disk(QPid, GuidSet, removed) ->
     blind_confirm(QPid, GuidSet);
-msgs_written_to_disk(QPid, GuidSet, true) ->
+msgs_written_to_disk(QPid, GuidSet, written) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
                                     msg_indices_on_disk = MIOD,

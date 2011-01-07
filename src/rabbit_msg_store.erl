@@ -739,7 +739,7 @@ handle_cast({remove, CRef, Guids}, State) ->
                fun (Guid, State2) -> remove_message(Guid, State2) end,
                State, Guids),
     State2 = client_confirm(CRef, gb_sets:from_list(Guids),
-                            false, State1),
+                            removed, State1),
     noreply(maybe_compact(State2));
 
 handle_cast({release, Guids}, State =
@@ -876,7 +876,7 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
        true                            -> file_handle_cache:sync(CurHdl)
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    [client_confirm(CRef, Guids, true, State1)
+    [client_confirm(CRef, Guids, written, State1)
      || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
@@ -1057,11 +1057,11 @@ orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
     orddict:store(Key, Val, Dict).
 
-client_confirm(CRef, Guids, WaitForIndex,
+client_confirm(CRef, Guids, ActionTaken,
                State = #msstate { client_ondisk_callback = CODC,
                                   cref_to_guids          = CTG }) ->
     case dict:find(CRef, CODC) of
-        {ok, Fun} -> Fun(Guids, WaitForIndex),
+        {ok, Fun} -> Fun(Guids, ActionTaken),
                      CTG1 = case dict:find(CRef, CTG) of
                                 {ok, Gs} ->
                                     Guids1 = gb_sets:difference(Gs, Guids),
