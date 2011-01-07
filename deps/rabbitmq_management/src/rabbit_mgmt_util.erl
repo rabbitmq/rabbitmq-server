@@ -258,10 +258,12 @@ parse_bool(true)        -> true;
 parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
-amqp_request(VHost, ReqData, Context, Method) ->
+amqp_request(VHost, ReqData,
+             Context = #context{ user = #user { username = Username },
+                                 password = Password }, Method) ->
     try
-        Params = #amqp_params{username = Context#context.user#user.username,
-                              password = Context#context.password,
+        Params = #amqp_params{username = Username,
+                              password = Password,
                               virtual_host = VHost},
         case amqp_connection:start(direct, Params) of
             {ok, Conn} ->
