@@ -91,11 +91,21 @@ internal_exchanges() ->
       || T <- Tables ],
     ok.
 
+user_to_internal_user() ->
+    mnesia(
+      rabbit_user,
+      fun({user, Username, PasswordHash, IsAdmin}) ->
+              {internal_user, Username, PasswordHash, IsAdmin}
+      end,
+      [username, password_hash, is_admin], internal_user).
+
+
+
 one() ->
     mnesia(
       rabbit_user,
-      fun ({user, Username, Hash, IsAdmin}) ->
-              {user, Username, Hash, IsAdmin, foo}
+      fun ({internal_user, Username, Hash, IsAdmin}) ->
+              {internal_user, Username, Hash, IsAdmin, foo}
       end,
       [username, password_hash, is_admin, extra]).
 
@@ -106,19 +116,10 @@ two() ->
 three() ->
     mnesia(
       rabbit_user,
-      fun ({user, Username, Hash, IsAdmin, _}) ->
-              {user, Username, Hash, IsAdmin}
+      fun ({internal_user, Username, Hash, IsAdmin, _}) ->
+              {internal_user, Username, Hash, IsAdmin}
       end,
       [username, password_hash, is_admin]).
-
-
-user_to_internal_user() ->
-    mnesia(
-      rabbit_user,
-      fun({user, Username, PasswordHash, IsAdmin}) ->
-              {internal_user, Username, PasswordHash, IsAdmin}
-      end,
-      [username, password_hash, is_admin], internal_user).
 
 %%--------------------------------------------------------------------
 
