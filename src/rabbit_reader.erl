@@ -969,12 +969,12 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{protocol  = Protocol,
                                  frame_max = FrameMax,
-                                 user      = #user{username = Username},
+                                 user      = User,
                                  vhost     = VHost}} = State,
     {ok, ChSupPid, ChFrPid} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
-                       self(), Username, VHost, Collector}),
+                       self(), User, VHost, Collector}),
     erlang:monitor(process, ChSupPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
