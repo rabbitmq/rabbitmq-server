@@ -68,7 +68,7 @@ Content-Length: 5
       </li>
       <li>
         Get a list of channels, fast publishers first:
-<pre>$ curl -i -u guest:guest 'http://localhost:55672/api/channels?sort=message_stats.publish_details.rate&sort_reverse=true'
+<pre>$ curl -i -u guest:guest 'http://localhost:55672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true'
 HTTP/1.1 200 OK
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Tue, 12 Oct 2010 10:03:21 GMT
@@ -235,7 +235,7 @@ Content-Length: 0</pre>
         <td></td>
         <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i></td>
         <td>An individual exchange. To PUT an exchange, you will need a body looking something like this:
-<pre>{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":[]}</pre></td>
+<pre>{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":[]}</pre>
         The <code>type</code> key is mandatory; other keys are optional.</td>
       </tr>
       <tr>
