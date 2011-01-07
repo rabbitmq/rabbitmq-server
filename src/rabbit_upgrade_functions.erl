@@ -24,11 +24,15 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({remove_user_scope,  []}).
--rabbit_upgrade({hash_passwords,     []}).
--rabbit_upgrade({add_ip_to_listener, []}).
--rabbit_upgrade({internal_exchanges, []}).
--rabbit_upgrade({user_to_internal_user, [hash_passwords]}).
+-rabbit_upgrade({remove_user_scope,     mnesia, []}).
+-rabbit_upgrade({hash_passwords,        mnesia, []}).
+-rabbit_upgrade({add_ip_to_listener,    mnesia, []}).
+-rabbit_upgrade({internal_exchanges,    mnesia, []}).
+-rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
+
+-rabbit_upgrade({one,   mnesia, [user_to_internal_user]}).
+-rabbit_upgrade({two,   local,  [one]}).
+-rabbit_upgrade({three, mnesia, [two]}).
 
 %% -------------------------------------------------------------------
 
@@ -94,6 +98,28 @@ user_to_internal_user() ->
               {internal_user, Username, PasswordHash, IsAdmin}
       end,
       [username, password_hash, is_admin], internal_user).
+
+
+
+one() ->
+    mnesia(
+      rabbit_user,
+      fun ({internal_user, Username, Hash, IsAdmin}) ->
+              {internal_user, Username, Hash, IsAdmin, foo}
+      end,
+      [username, password_hash, is_admin, extra]).
+
+two() ->
+    ok = rabbit_misc:write_term_file(filename:join(rabbit_mnesia:dir(), "test"),
+                                     [test]).
+
+three() ->
+    mnesia(
+      rabbit_user,
+      fun ({internal_user, Username, Hash, IsAdmin, _}) ->
+              {internal_user, Username, Hash, IsAdmin}
+      end,
+      [username, password_hash, is_admin]).
 
 %%--------------------------------------------------------------------
 
