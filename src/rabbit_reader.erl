@@ -520,8 +520,6 @@ maybe_close(State) ->
     State.
 
 termination_kind(normal)            -> controlled;
-termination_kind(shutdown)          -> controlled;
-termination_kind({shutdown, _Term}) -> controlled;
 termination_kind(_)                 -> uncontrolled.
 
 handle_frame(Type, 0, Payload,
