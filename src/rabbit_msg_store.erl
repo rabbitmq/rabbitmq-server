@@ -1121,28 +1121,21 @@ client_confirm(CRef, Guids,
 %% itself.
 should_mask_action(CRef, Guid,
                    State = #msstate { dying_clients_ets = DyingClientsEts }) ->
-    Location = index_lookup(Guid, State),
-    {case ets:lookup(DyingClientsEts, CRef) of
-         [] ->
-             false;
-         [{_CRef, const}] ->
-             case Location of
-                 not_found ->
-                     true;
-                 #msg_location { file = File, offset = Offset,
-                                 ref_count = RefCount } ->
-                     #msg_location { file = DeathFile, offset = DeathOffset } =
-                         index_lookup(CRef, State),
-                     case {DeathFile, DeathOffset} < {File, Offset} of
-                         true  -> true;
-                         false -> case RefCount of
-                                      0 -> false_if_increment;
-                                      _ -> false
-                                  end
-                     end
-             end
-     end, Location}.
-
+    case {ets:lookup(DyingClientsEts, CRef), index_lookup(Guid, State)} of
+        {[], Location} ->
+            {false, Location};
+        {[{_CRef, const}], not_found} ->
+            {true, not_found};
+        {[{_CRef, const}], #msg_location { file = File, offset = Offset,
+                                           ref_count = RefCount } = Location} ->
+            #msg_location { file = DeathFile, offset = DeathOffset } =
+                index_lookup(CRef, State),
+            {case {{DeathFile, DeathOffset} < {File, Offset}, RefCount} of
+                 {true,  _} -> true;
+                 {false, 0} -> false_if_increment;
+                 {false, _} -> false
+             end, Location}
+    end.
 
 %%----------------------------------------------------------------------------
 %% file helper functions
