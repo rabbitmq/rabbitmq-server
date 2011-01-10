@@ -811,7 +811,7 @@ ram_duration(State = #vqstate {
 
 needs_idle_timeout(State = #vqstate { on_sync = OnSync, unconfirmed = UC }) ->
     case {OnSync, gb_sets:is_empty(UC)} of
-        {?BLANK_SYNC, 0} ->
+        {?BLANK_SYNC, true} ->
             {Res, _State} = reduce_memory_use(
                               fun (_Quota, State1) -> {0, State1} end,
                               fun (_Quota, State1) -> State1 end,
