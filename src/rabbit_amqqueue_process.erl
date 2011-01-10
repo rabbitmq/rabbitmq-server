@@ -425,15 +425,33 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
-confirm_messages(Guids, State) ->
-    lists:foldl(fun confirm_message_by_guid/2, State, Guids).
-
-confirm_message_by_guid(Guid, State = #q{guid_to_channel = GTC}) ->
-    case dict:find(Guid, GTC) of
-        {ok, {ChPid, MsgSeqNo}}  -> rabbit_channel:confirm(ChPid, MsgSeqNo);
-        _                        -> ok
+confirm_messages(Guids, State = #q{guid_to_channel = GTC}) ->
+    {CMs, GTC1} =
+        lists:foldl(
+          fun(Guid, {CMs, GTC0}) ->
+                  case dict:find(Guid, GTC0) of
+                      {ok, {ChPid, MsgSeqNo}} ->
+                          {[{ChPid, MsgSeqNo} | CMs], dict:erase(Guid, GTC0)};
+                      _ ->
+                          {CMs, GTC0}
+                  end
+          end, {[], GTC}, Guids),
+    case lists:usort(CMs) of
+        [{Ch, MsgSeqNo} | CMs1] ->
+            [rabbit_channel:confirm(ChPid, MsgSeqNos) ||
+                {ChPid, MsgSeqNos} <- group_confirms_by_channel(
+                                        CMs1, [{Ch, [MsgSeqNo]}])];
+        [] ->
+            ok
     end,
-    State#q{guid_to_channel = dict:erase(Guid, GTC)}.
+    State#q{guid_to_channel = GTC1}.
+
+group_confirms_by_channel([], Acc) ->
+    Acc;
+group_confirms_by_channel([{Ch, Msg1} | CMs], [{Ch, Msgs} | Acc]) ->
+    group_confirms_by_channel(CMs, [{Ch, [Msg1 | Msgs]} | Acc]);
+group_confirms_by_channel([{Ch, Msg1} | CMs], Acc) ->
+    group_confirms_by_channel(CMs, [{Ch, [Msg1]} | Acc]).
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     {no_confirm, State};
@@ -467,7 +485,7 @@ attempt_delivery(#delivery{txn        = none,
     %% must confirm immediately if it has a MsgSeqNo and not NeedsConfirming
     case {NeedsConfirming, MsgSeqNo} of
         {_, undefined}  -> ok;
-        {no_confirm, _} -> rabbit_channel:confirm(ChPid, MsgSeqNo);
+        {no_confirm, _} -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
         {confirm, _}    -> ok
     end,
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
