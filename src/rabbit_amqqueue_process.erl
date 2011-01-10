@@ -426,12 +426,12 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
 confirm_messages(Guids, State) ->
-    {CMs, State1} = annote_confirms_with_channel(Guids, State),
+    {CMs, State1} = annotate_confirms_with_channel(Guids, State),
     CMs1 = group_confirms_by_channel(CMs),
     [rabbit_channel:confirm(ChPid, Msgs) || {ChPid, Msgs} <- CMs1],
     State1.
 
-annote_confirms_with_channel(Guids, State) ->
+annotate_confirms_with_channel(Guids, State) ->
     lists:foldl(fun(Guid, {CMs, State0 = #q{guid_to_channel = GTC0}}) ->
                         case dict:find(Guid, GTC0) of
                             {ok, {ChPid, MsgSeqNo}} ->
