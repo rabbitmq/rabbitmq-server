@@ -12,5 +12,5 @@
   ]},
   {registered, []},
   {mod, {rabbit_amqp1_0, []}},
-  {env, [{tcp_listeners, [{"0.0.0.0", 5673}]}]},
+  {env, [{tcp_listeners, [5673]}]},
   {applications, [kernel, stdlib, rabbit]}]}.
