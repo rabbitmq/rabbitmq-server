@@ -1,0 +1,14 @@
+Authenticates the user taking the Common Name of the client's SSL
+certificate as the username. The user's password is not checked.
+
+In order to use this mechanism the client must connect over SSL, and
+present a client certificate.
+
+For safety the server must be configured with the SSL options
+fail_if_no_peer_cert set to true and verify set to verify_peer, to
+force all SSL clients to have a verifiable client certificate.
+
+Note that the authenticated user will then be looked up in the
+configured authentication / authorisation backend(s) - this will be
+the mnesia-based user database by default, but could include other
+backends if so configured.
