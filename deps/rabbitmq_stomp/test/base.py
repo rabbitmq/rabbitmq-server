@@ -6,8 +6,9 @@ import threading
 
 class BaseTest(unittest.TestCase):
 
-   def create_connection(self):
-       conn = stomp.Connection(user="guest", passcode="guest")
+   def create_connection(self, version=None, heartbeat=None):
+       conn = stomp.Connection(user="guest", passcode="guest",
+                               version=version, heartbeat=heartbeat)
        conn.start()
        conn.connect()
        return conn
@@ -96,8 +97,11 @@ class Latch(object):
    def await(self, timeout=None):
       try:
          self.cond.acquire()
-         self.cond.wait(timeout)
-         return self.count == 0
+         if self.count == 0:
+            return True
+         else:
+            self.cond.wait(timeout)
+            return self.count == 0
       finally:
          self.cond.release()
 

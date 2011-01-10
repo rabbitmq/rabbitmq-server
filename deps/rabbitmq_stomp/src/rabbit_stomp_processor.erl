@@ -31,20 +31,27 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server).
 
--export([start_link/1, process_frame/2]).
+-export([start_link/2, process_frame/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
--record(state, {socket, session_id, channel, connection, subscriptions}).
+-record(state, {socket, session_id, channel,
+                connection, subscriptions, version,
+                start_heartbeat_fun}).
+
+-record(subscription, {dest_hdr, channel, ack_mode, multi_ack}).
+
+-define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
+-define(DEFAULT_QUEUE_PREFETCH, 1).
 
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(Sock) ->
-    gen_server:start_link(?MODULE, [Sock], []).
+start_link(Sock, StartHeartbeatFun) ->
+    gen_server:start_link(?MODULE, [Sock,StartHeartbeatFun], []).
 
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server:cast(Pid, {Command, Frame}).
@@ -53,32 +60,46 @@ process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
 %% Basic gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Sock]) ->
+init([Sock, StartHeartbeatFun]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
-       socket        = Sock,
-       session_id    = none,
-       channel       = none,
-       connection    = none,
-       subscriptions = dict:new()}
+       socket              = Sock,
+       session_id          = none,
+       channel             = none,
+       connection          = none,
+       subscriptions       = dict:new(),
+       version             = none,
+       start_heartbeat_fun = StartHeartbeatFun}
     }.
 
 terminate(_Reason, State) ->
     shutdown_channel_and_connection(State).
 
 handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
-    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
-    process_request(
-      fun(StateN) ->
-              do_login(rabbit_stomp_frame:header(Frame, "login"),
-                       rabbit_stomp_frame:header(Frame, "passcode"),
-                       rabbit_stomp_frame:header(Frame, "virtual-host",
-                                                 binary_to_list(DefaultVHost)),
-                       StateN)
-      end,
-      fun(StateM) -> StateM end,
-      State);
+    case negotiate_version(Frame) of
+        {ok, Version} ->
+            {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
+            process_request(
+              fun(StateN) ->
+                      do_login(rabbit_stomp_frame:header(Frame, "login"),
+                               rabbit_stomp_frame:header(Frame, "passcode"),
+                               rabbit_stomp_frame:header(Frame, "host",
+                                                         binary_to_list(
+                                                           DefaultVHost)),
+                               rabbit_stomp_frame:header(Frame, "heartbeat",
+                                                         "0,0"),
+                               Version,
+                               StateN)
+              end,
+              fun(StateM) -> StateM end,
+              State);
+        {error, no_common_version} ->
+            error("Version mismatch",
+                  "Supported versions are ~s\n",
+                  [string:join(?SUPPORTED_VERSIONS, ",")],
+                  State)
+    end;
 
 handle_cast(_Request, State = #state{channel = none}) ->
     error("Illegal command", "You must log in using CONNECT first\n", State);
@@ -91,7 +112,10 @@ handle_cast({Command, Frame}, State) ->
       fun(StateM) ->
               ensure_receipt(Frame, StateM)
       end,
-      State).
+      State);
+
+handle_cast(client_timeout, State) ->
+    {stop, client_timeout, State}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
@@ -168,10 +192,12 @@ handle_frame("ACK", Frame, State = #state{session_id    = SessionId,
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, SessionId, DeliveryTag}} ->
-                    {_DestHdr, SubChannel} = dict:fetch(ConsumerTag, Subs),
+                    #subscription{channel   = SubChannel,
+                                  multi_ack = IsMulti} =
+                        dict:fetch(ConsumerTag, Subs),
 
                     Method = #'basic.ack'{delivery_tag = DeliveryTag,
-                                          multiple = false},
+                                          multiple     = IsMulti},
 
                     case transactional(Frame) of
                         {yes, Transaction} ->
@@ -237,7 +263,7 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
+do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
     {ok, Connection} = amqp_connection:start(
                          direct, #amqp_params{
                            username     = list_to_binary(Login),
@@ -245,11 +271,18 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, State) ->
                            virtual_host = list_to_binary(VirtualHost)}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
-    ok("CONNECTED",[{"session", SessionId}], "",
-       State#state{session_id = SessionId,
+
+    {{SX, SY}, State1} = ensure_heartbeats(Heartbeat, State),
+    ok("CONNECTED",
+       [{"session", SessionId},
+        {"heartbeat", io_lib:format("~B,~B", [SX, SY])},
+        {"version", Version}],
+       "",
+       State1#state{session_id = SessionId,
                    channel    = Channel,
                    connection = Connection});
-do_login(_, _, _, State) ->
+
+do_login(_, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State).
 
 do_subscribe(Destination, DestHdr, Frame,
@@ -257,19 +290,22 @@ do_subscribe(Destination, DestHdr, Frame,
                             connection    = Connection,
                             channel       = MainChannel}) ->
 
-    Channel = case Destination of
-                  {queue, _} ->
+    Prefetch = rabbit_stomp_frame:integer_header(Frame, "prefetch-count",
+                                                 default_prefetch(Destination)),
+
+    Channel = case Prefetch of
+                  undefined ->
+                      MainChannel;
+                  _ ->
                       {ok, Channel1} = amqp_connection:open_channel(Connection),
                       amqp_channel:call(Channel1,
                                         #'basic.qos'{prefetch_size  = 0,
-                                                     prefetch_count = 1,
+                                                     prefetch_count = Prefetch,
                                                      global         = false}),
-                      Channel1;
-                  _ ->
-                      MainChannel
+                      Channel1
               end,
 
-    AckMode = rabbit_stomp_util:ack_mode(Frame),
+    {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
@@ -288,7 +324,12 @@ do_subscribe(Destination, DestHdr, Frame,
     ok = ensure_queue_binding(Queue, ExchangeAndKey, Channel),
 
     ok(State#state{subscriptions =
-                       dict:store(ConsumerTag, {DestHdr, Channel}, Subs)}).
+                       dict:store(ConsumerTag,
+                                  #subscription{dest_hdr  = DestHdr,
+                                                channel   = Channel,
+                                                ack_mode  = AckMode,
+                                                multi_ack = IsMulti},
+                                  Subs)}).
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
@@ -315,6 +356,13 @@ do_send(Destination, _DestHdr,
             ok(send_method(Method, Props, BodyFragments, State))
     end.
 
+negotiate_version(Frame) ->
+    ClientVers = re:split(
+                   rabbit_stomp_frame:header(Frame, "accept-version", "1.0"),
+                   ",",
+                   [{return, list}]),
+    rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
+
 ensure_receipt(Frame, State) ->
     case rabbit_stomp_frame:header(Frame, "receipt") of
         {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
@@ -325,7 +373,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
-   {Destination, _SubChannel} = dict:fetch(ConsumerTag, Subs),
+   #subscription{dest_hdr = Destination} = dict:fetch(ConsumerTag, Subs),
 
    send_frame(
      "MESSAGE",
@@ -349,7 +397,7 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
                                                connection    = Connection,
                                                subscriptions = Subs}) ->
     dict:fold(
-      fun(_ConsumerTag, {_DestHdr, SubChannel}, Acc) ->
+      fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
               case SubChannel of
                   Channel -> Acc;
                   _ ->
@@ -362,6 +410,10 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
     amqp_connection:close(Connection),
     State#state{channel = none, connection = none}.
 
+default_prefetch({queue, _}) ->
+    ?DEFAULT_QUEUE_PREFETCH;
+default_prefetch(_) ->
+    undefined.
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
@@ -416,7 +468,7 @@ commit_transaction(Transaction, State0) ->
                                        State,
                                        Actions),
               erase({transaction, Transaction}),
-              ok(State)
+              ok(FinalState)
       end).
 
 abort_transaction(Transaction, State0) ->
@@ -434,6 +486,39 @@ perform_transaction_action({Channel, Method}, State) ->
     State;
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
+
+%%--------------------------------------------------------------------
+%% Heartbeat Management
+%%--------------------------------------------------------------------
+
+ensure_heartbeats(Heartbeats,
+                  State = #state{socket = Sock, start_heartbeat_fun = SHF}) ->
+    [CX, CY] = [list_to_integer(X) ||
+                   X <- re:split(Heartbeats, ",", [{return, list}])],
+
+    SendFun = fun() ->
+                      catch gen_tcp:send(Sock, <<0>>)
+              end,
+
+    Pid = self(),
+    ReceiveFun = fun() ->
+                         gen_server:cast(Pid, client_timeout)
+                 end,
+
+    {SendTimeout, ReceiveTimeout} =
+        {millis_to_seconds(CY), millis_to_seconds(CX)},
+
+    SHF(Sock, SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
+
+    {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
+
+millis_to_seconds(M) when M =< 0 ->
+    0;
+millis_to_seconds(M) ->
+    case M < 1000 of
+        true  -> 1;
+        false -> M div 1000
+    end.
 
 %%----------------------------------------------------------------------------
 %% Queue and Binding Setup
@@ -542,7 +627,9 @@ send_frame(Frame, State = #state{socket = Sock}) ->
 
 send_error(Message, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
-                         {"content-type", "text/plain"}], Detail, State).
+                         {"content-type", "text/plain"},
+                         {"version", string:join(?SUPPORTED_VERSIONS, ",")}],
+                         Detail, State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks
