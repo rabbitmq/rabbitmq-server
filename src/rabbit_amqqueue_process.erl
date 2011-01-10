@@ -436,7 +436,7 @@ confirm_message_by_guid(Guid, State = #q{guid_to_channel = GTC}) ->
     State#q{guid_to_channel = dict:erase(Guid, GTC)}.
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
-    {'no_confirm', State};
+    {no_confirm, State};
 record_confirm_message(#delivery{sender     = ChPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
@@ -445,9 +445,9 @@ record_confirm_message(#delivery{sender     = ChPid,
                        State =
                            #q{guid_to_channel = GTC,
                               q               = #amqqueue{durable = true}}) ->
-    {'confirm', State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)}};
+    {confirm, State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)}};
 record_confirm_message(_Delivery, State) ->
-    {'no_confirm', State}.
+    {no_confirm, State}.
 
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -465,8 +465,8 @@ attempt_delivery(#delivery{txn        = none,
                  {NeedsConfirming, State = #q{backing_queue = BQ}}) ->
     case {NeedsConfirming, MsgSeqNo} of
         {_, undefined}    -> ok;
-        {'no_confirm', _} -> rabbit_channel:confirm(ChPid, MsgSeqNo);
-        {'confirm', _}    -> ok
+        {no_confirm, _} -> rabbit_channel:confirm(ChPid, MsgSeqNo);
+        {confirm, _}    -> ok
     end,
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
@@ -478,7 +478,7 @@ attempt_delivery(#delivery{txn        = none,
                     BQ:publish_delivered(
                       AckRequired, Message,
                       (?BASE_MESSAGE_PROPERTIES)#message_properties{
-                        needs_confirming = (NeedsConfirming =:= 'confirm')},
+                        needs_confirming = (NeedsConfirming =:= confirm)},
                       BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
@@ -502,12 +502,13 @@ deliver_or_enqueue(Delivery, State) ->
     case attempt_delivery(Delivery, record_confirm_message(Delivery, State)) of
         {true, _, State1} ->
             {true, State1};
-        {false, NC, State1 = #q{backing_queue = BQ,
-                                backing_queue_state = BQS}} ->
+        {false, NeedsConfirming, State1 = #q{backing_queue = BQ,
+                                             backing_queue_state = BQS}} ->
             #delivery{message = Message} = Delivery,
             BQS1 = BQ:publish(Message,
                               (message_properties(State)) #message_properties{
-                                needs_confirming = (NC =:= 'confirm')},
+                                needs_confirming =
+                                    (NeedsConfirming =:= confirm)},
                               BQS),
             {false, ensure_ttl_timer(State1#q{backing_queue_state = BQS1})}
     end.
