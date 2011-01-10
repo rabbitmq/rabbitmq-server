@@ -425,27 +425,26 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
-confirm_messages(Guids, State) ->
-    {CMs, State1} =
-        lists:foldl(fun(Guid, {CMs, State0 = #q{guid_to_channel = GTC0}}) ->
-                            case dict:find(Guid, GTC0) of
-                                {ok, {ChPid, MsgSeqNo}} ->
-                                    {[{ChPid, MsgSeqNo} | CMs],
-                                     State0#q{guid_to_channel =
-                                                  dict:erase(Guid, GTC0)}};
-                                _ ->
-                                    {CMs, State0}
-                            end
-                    end, {[], State}, Guids),
+confirm_messages(Guids, State = #q{guid_to_channel = GTC}) ->
+    {CMs, GTC1} =
+        lists:foldl(
+          fun(Guid, {CMs, GTC0}) ->
+                  case dict:find(Guid, GTC0) of
+                      {ok, {ChPid, MsgSeqNo}} ->
+                          {[{ChPid, MsgSeqNo} | CMs], dict:erase(Guid, GTC0)};
+                      _ ->
+                          {CMs, GTC0}
+                  end
+          end, {[], GTC}, Guids),
     case lists:usort(CMs) of
         [{Ch, MsgSeqNo} | CMs1] ->
-            CMs2 = group_confirms_by_channel(CMs1, [{Ch, [MsgSeqNo]}]),
-            [rabbit_channel:confirm(ChPid, MsgSeqNos)
-             || {ChPid, MsgSeqNos} <- CMs2];
+            [rabbit_channel:confirm(ChPid, MsgSeqNos) ||
+                {ChPid, MsgSeqNos} <- group_confirms_by_channel(
+                                        CMs1, [{Ch, [MsgSeqNo]}])];
         [] ->
             ok
     end,
-    State1.
+    State#q{guid_to_channel = GTC1}.
 
 group_confirms_by_channel([], Acc) ->
     Acc;
