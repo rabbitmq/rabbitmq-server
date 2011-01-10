@@ -89,7 +89,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 -pa "!TDP0!..\ebin" ^
 -noinput -hidden ^
 !RABBITMQ_MULTI_ERL_ARGS! ^
--sname rabbitmq_multi ^
+-sname rabbitmq_multi!RANDOM! ^
 !RABBITMQ_CONFIG_ARG! ^
 -s rabbit_multi ^
 !RABBITMQ_MULTI_START_ARGS! ^
