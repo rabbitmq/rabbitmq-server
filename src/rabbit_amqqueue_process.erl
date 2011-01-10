@@ -445,7 +445,8 @@ record_confirm_message(#delivery{sender     = ChPid,
                        State =
                            #q{guid_to_channel = GTC,
                               q               = #amqqueue{durable = true}}) ->
-    {confirm, State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)}};
+    {confirm,
+     State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)}};
 record_confirm_message(_Delivery, State) ->
     {no_confirm, State}.
 
@@ -463,8 +464,9 @@ attempt_delivery(#delivery{txn        = none,
                            message    = Message,
                            msg_seq_no = MsgSeqNo},
                  {NeedsConfirming, State = #q{backing_queue = BQ}}) ->
+    %% must confirm immediately if it has a MsgSeqNo and not NeedsConfirming
     case {NeedsConfirming, MsgSeqNo} of
-        {_, undefined}    -> ok;
+        {_, undefined}  -> ok;
         {no_confirm, _} -> rabbit_channel:confirm(ChPid, MsgSeqNo);
         {confirm, _}    -> ok
     end,
