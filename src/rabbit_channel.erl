@@ -1235,8 +1235,12 @@ internal_flush_confirms(State, []) ->
     State;
 internal_flush_confirms(State = #ch{writer_pid  = WriterPid,
                                     unconfirmed = UC}, Cs) ->
-    CutOff = find_cutoff(UC, gb_sets:from_list(Cs)),
-    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, lists:usort(Cs)),
+    SCs = lists:usort(Cs),
+    CutOff = case gb_sets:is_empty(UC) of
+                 true  -> lists:last(SCs) + 1;
+                 false -> gb_sets:smallest(UC)
+             end,
+    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SCs),
     case Ms of
         [] -> ok;
         _  -> ok = rabbit_writer:send_command(
@@ -1250,23 +1254,6 @@ internal_flush_confirms(State = #ch{writer_pid  = WriterPid,
                            #'basic.ack'{delivery_tag = T})
            end, ok, Ss),
     State.
-
-%% Find the smallest element in SetA, not in SetB.
-find_cutoff(SetA, SetB) ->
-    ItA = gb_sets:iterator(SetA),
-    case gb_sets:next(ItA) of
-        none            -> -1;
-        {Element, ItA1} -> find_cutoff(Element, ItA, SetB)
-    end.
-
-find_cutoff(Element, ItA, SetB) ->
-    case gb_sets:is_element(Element, SetB) of
-        false -> Element;
-        true  -> case gb_sets:next(ItA) of
-                     {Element1, ItA1} -> find_cutoff(Element1, ItA1, SetB);
-                     none             -> Element + 1
-                 end
-    end.
 
 terminate(_State) ->
     pg_local:leave(rabbit_channels, self()),
