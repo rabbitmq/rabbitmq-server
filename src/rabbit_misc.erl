@@ -70,6 +70,7 @@
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([lock_file/1]).
+-export([const_ok/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -205,6 +206,7 @@
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
+-spec(const_ok/1 :: (any()) -> 'ok').
 
 -endif.
 
@@ -853,3 +855,5 @@ lock_file(Path) ->
         false -> {ok, Lock} = file:open(Path, [write]),
                  ok = file:close(Lock)
     end.
+
+const_ok(_) -> ok.
