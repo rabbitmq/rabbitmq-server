@@ -120,9 +120,8 @@ exists(Binding) ->
     binding_action(
       Binding,
       fun (_Src, _Dst, B) ->
-          fun (_Tx) ->
-              mnesia:read({rabbit_route, B}) /= []
-          end
+          Result = mnesia:read({rabbit_route, B}) /= [],
+          fun (_Tx) -> Result end
       end).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
