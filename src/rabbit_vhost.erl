@@ -59,7 +59,7 @@ add(VHostPath) ->
                       [_] -> mnesia:abort({vhost_already_exists, VHostPath})
                   end
           end,
-          fun (ok) -> ok end,
+          fun rabbit_misc:const_ok/1,
           fun (ok) ->
                   [rabbit_exchange:declare(
                       rabbit_misc:r(VHostPath, exchange, Name),
