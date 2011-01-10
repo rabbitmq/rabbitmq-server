@@ -81,7 +81,7 @@
           file_summary_ets,       %% tid of the file summary table
           dedup_cache_ets,        %% tid of dedup cache table
           cur_file_cache_ets,     %% tid of current file cache table
-          dying_clients_ets,      %% tid of the dying clients table
+          dying_clients,          %% set of dying clients
           client_refs,            %% set of references of all registered clients
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
@@ -582,8 +582,6 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                               [ordered_set, public]),
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
 
-    DyingClientsEts = ets:new(rabbit_msg_store_terminal, [set]),
-
     {ok, FileSizeLimit} = application:get_env(msg_store_file_size_limit),
 
     State = #msstate { dir                    = Dir,
@@ -602,7 +600,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        file_summary_ets       = FileSummaryEts,
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
-                       dying_clients_ets      = DyingClientsEts,
+                       dying_clients          = sets:new(),
                        client_refs            = ClientRefs1,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
@@ -688,23 +686,25 @@ handle_call({contains, Guid}, From, State) ->
     noreply(State1).
 
 handle_cast({client_dying, CRef},
-            State = #msstate { dying_clients_ets = DyingClientsEts }) ->
+            State = #msstate { dying_clients = DyingClients }) ->
     %% Note that we use a separate set for the dying clients in order
     %% to keep that set, which is inspected on every write and remove,
     %% as small as possible - inspecting the set of all clients would
     %% degrade performance with many healthy clients and few dying
     %% clients.
-    true = ets:insert_new(DyingClientsEts, {CRef, const}),
-    write_message(CRef, <<>>, State);
+    State1 =
+        State #msstate { dying_clients = sets:add_element(CRef, DyingClients) },
+    write_message(CRef, <<>>, State1);
 
 handle_cast({client_delete, CRef},
             State = #msstate { client_refs = ClientRefs,
-                               dying_clients_ets = DyingClientsEts }) ->
-    true = ets:delete(DyingClientsEts, CRef),
+                               dying_clients = DyingClients }) ->
     State1 = clear_client_callback(CRef, State),
+    DyingClients1 = sets:del_element(CRef, DyingClients),
     ClientRefs1 = sets:del_element(CRef, ClientRefs),
     noreply(remove_message(CRef, CRef,
-                           State1 #msstate { client_refs = ClientRefs1 }));
+                           State1 #msstate { client_refs   = ClientRefs1,
+                                             dying_clients = DyingClients1 }));
 
 handle_cast({write, CRef, Guid},
             State = #msstate { sum_valid_data         = SumValid,
@@ -831,7 +831,6 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       file_summary_ets    = FileSummaryEts,
                                       dedup_cache_ets     = DedupCacheEts,
                                       cur_file_cache_ets  = CurFileCacheEts,
-                                      dying_clients_ets   = DyingClientsEts,
                                       client_refs         = ClientRefs,
                                       dir                 = Dir }) ->
     %% stop the gc first, otherwise it could be working and we pull
@@ -845,8 +844,8 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
              end,
     State3 = close_all_handles(State1),
     store_file_summary(FileSummaryEts, Dir),
-    [ets:delete(T) || T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts,
-                            CurFileCacheEts, DyingClientsEts]],
+    [ets:delete(T) ||
+        T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts, CurFileCacheEts]],
     IndexModule:terminate(IndexState),
     store_recovery_terms([{client_refs, sets:to_list(ClientRefs)},
                           {index_module, IndexModule}], Dir),
@@ -1127,14 +1126,14 @@ client_confirm(CRef, Guids, ActionTaken,
 %% (correctly) return false when testing to remove the death msg
 %% itself.
 should_mask_action(CRef, Guid,
-                   State = #msstate { dying_clients_ets = DyingClientsEts }) ->
-    case {ets:lookup(DyingClientsEts, CRef), index_lookup(Guid, State)} of
-        {[], Location} ->
+                   State = #msstate { dying_clients = DyingClients }) ->
+    case {sets:is_element(CRef, DyingClients), index_lookup(Guid, State)} of
+        {false, Location} ->
             {false, Location};
-        {[{_CRef, const}], not_found} ->
+        {true, not_found} ->
             {true, not_found};
-        {[{_CRef, const}], #msg_location { file = File, offset = Offset,
-                                           ref_count = RefCount } = Location} ->
+        {true, #msg_location { file = File, offset = Offset,
+                               ref_count = RefCount } = Location} ->
             #msg_location { file = DeathFile, offset = DeathOffset } =
                 index_lookup(CRef, State),
             {case {{DeathFile, DeathOffset} < {File, Offset}, RefCount} of
