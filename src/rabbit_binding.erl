@@ -297,13 +297,17 @@ sync_binding(Binding, Durable, Fun) ->
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
+    ErrFun = fun (Err) ->
+                 fun (_Tx) -> Err end
+             end,
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> case {mnesia:read({SrcTable, SrcName}),
                       mnesia:read({DstTable, DstName})} of
                     {[Src], [Dst]} -> Fun(Src, Dst);
-                    {[],    [_]  } -> {error, source_not_found};
-                    {[_],   []   } -> {error, destination_not_found};
-                    {[],    []   } -> {error, source_and_destination_not_found}
+                    {[],    [_]  } -> ErrFun({error, source_not_found});
+                    {[_],   []   } -> ErrFun({error, destination_not_found});
+                    {[],    []   } ->
+                        ErrFun({error, source_and_destination_not_found})
                 end
       end).
 
