@@ -1398,9 +1398,7 @@ msgs_confirmed(GuidSet, State) ->
 
 blind_confirm(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (State) ->
-                    msgs_confirmed(GuidSet, State)
-            end).
+      QPid, fun (State) -> msgs_confirmed(GuidSet, State) end).
 
 msgs_written_to_disk(QPid, GuidSet, removed) ->
     blind_confirm(QPid, GuidSet);

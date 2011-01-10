@@ -735,12 +735,10 @@ handle_cast({write, CRef, Guid},
     end;
 
 handle_cast({remove, CRef, Guids}, State) ->
-    State1 = lists:foldl(
-               fun (Guid, State2) -> remove_message(Guid, State2) end,
-               State, Guids),
-    State2 = client_confirm(CRef, gb_sets:from_list(Guids),
-                            removed, State1),
-    noreply(maybe_compact(State2));
+    State1 = lists:foldl(fun (Guid, State2) -> remove_message(Guid, State2) end,
+                         State, Guids),
+    State3 = client_confirm(CRef, gb_sets:from_list(Guids), removed, State1),
+    noreply(maybe_compact(State3));
 
 handle_cast({release, Guids}, State =
                 #msstate { dedup_cache_ets = DedupCacheEts }) ->
