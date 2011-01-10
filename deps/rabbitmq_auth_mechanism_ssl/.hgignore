@@ -1,0 +1,8 @@
+syntax: regexp
+
+^build/
+^dist/
+.*\.beam
+^ebin/rabbit_auth_mechanism_ssl.app$
+^cover/
+^tmp/
