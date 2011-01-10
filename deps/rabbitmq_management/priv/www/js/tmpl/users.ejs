@@ -28,7 +28,10 @@
       <table class="form">
         <tr>
           <th><label>Username:</label></th>
-          <td><input type="text" name="username"/></td>
+          <td>
+            <input type="text" name="username"/>
+            <span class="mand">*</span>
+          </td>
         </tr>
         <tr>
           <th>
@@ -42,6 +45,7 @@
           <td>
             <div id="password">
               <input type="text" name="password" />
+              <span class="mand">*</span>
             </div>
             <div id="no-password">
               User cannot log in using password.
@@ -62,3 +66,5 @@
     </form>
   </div>
 </div>
+
+<p><sub>Only users within the internal RabbitMQ database are managed here. Other users (e.g. those authenticated over LDAP) will not appear.</sub></p>

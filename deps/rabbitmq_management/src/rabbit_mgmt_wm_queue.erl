@@ -47,19 +47,10 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(Q, ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    Name = rabbit_mgmt_util:id(queue, ReqData),
-    rabbit_mgmt_util:with_decode_vhost(
-      [durable, auto_delete, arguments], ReqData, Context,
-      fun(VHost, [Durable, AutoDelete, Args]) ->
-              Durable1    = rabbit_mgmt_util:parse_bool(Durable),
-              AutoDelete1 = rabbit_mgmt_util:parse_bool(AutoDelete),
-              rabbit_mgmt_util:amqp_request(
-                VHost, ReqData, Context,
-                #'queue.declare'{ queue       = Name,
-                                  durable     = Durable1,
-                                  auto_delete = AutoDelete1,
-                                  arguments   = rabbit_mgmt_util:args(Args) })
-      end).
+   rabbit_mgmt_util:http_to_amqp(
+      'queue.declare', ReqData, Context,
+      [{fun rabbit_mgmt_util:parse_bool/1, [durable, auto_delete]}],
+      [{queue, rabbit_mgmt_util:id(queue, ReqData)}]).
 
 delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:amqp_request(

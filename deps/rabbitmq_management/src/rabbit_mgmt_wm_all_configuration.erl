@@ -22,8 +22,6 @@
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(FRAMING, rabbit_framing_amqp_0_9_1).
-
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
 
@@ -186,11 +184,11 @@ add_vhost(VHost) ->
     rabbit_mgmt_wm_vhost:put_vhost(VHostName).
 
 add_permission(Permission) ->
-    rabbit_access_control:set_permissions(pget(user,      Permission),
-                                          pget(vhost,     Permission),
-                                          pget(configure, Permission),
-                                          pget(write,     Permission),
-                                          pget(read,      Permission)).
+    rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
+                                                 pget(vhost,     Permission),
+                                                 pget(configure, Permission),
+                                                 pget(write,     Permission),
+                                                 pget(read,      Permission)).
 
 add_queue(Queue) ->
     rabbit_amqqueue:declare(r(queue,                              Queue),
@@ -221,21 +219,6 @@ add_binding(Binding) ->
 
 pget(Key, List) ->
     proplists:get_value(Key, List).
-
-%% TODO use this elsewhere
-%% props_to_method(Method, Props) ->
-%%     Props1 = add_args_types(Props),
-%%     FieldNames = ?FRAMING:method_fieldnames(Method),
-%%     {Res, _Idx} = lists:foldl(
-%%                     fun (K, {R, Idx}) ->
-%%                             NewR = case proplists:get_value(K, Props1) of
-%%                                        undefined -> R;
-%%                                        V         -> setelement(Idx, R, V)
-%%                                    end,
-%%                             {NewR, Idx + 1}
-%%                     end, {?FRAMING:method_record(Method), 2},
-%%                     FieldNames),
-%%     Res.
 
 r(Type, Props) ->
     r(Type, name, Props).

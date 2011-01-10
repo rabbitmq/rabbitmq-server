@@ -85,6 +85,7 @@ form.inline-form { float: left; margin-right: 100px; }
 input, select { padding: 0.2em; }
 input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; }
 input[type=text].wide { width: 300px; }
+.mand { color: #f88; padding: 0 5px;}
 
 table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; vertical-align: top; }

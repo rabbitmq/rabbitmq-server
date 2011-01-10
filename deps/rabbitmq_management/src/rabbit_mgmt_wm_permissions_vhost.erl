@@ -29,7 +29,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    Perms = rabbit_access_control:list_vhost_permissions(VHost),
+    Perms = rabbit_auth_backend_internal:list_vhost_permissions(VHost),
     rabbit_mgmt_util:reply_list(
       [rabbit_mgmt_format:permissions({User, VHost,
                                        Conf, Write, Read}) ||

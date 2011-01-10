@@ -109,7 +109,7 @@ where cmd is one of:
 
 def fmt_usage_stanza(root, verb):
     def fmt_args(args):
-        res = " ".join(["<{0}>".format(a) for a in args['mandatory']])
+        res = " ".join(["{0}=...".format(a) for a in args['mandatory']])
         opts = " ".join("{0}=...".format(o) for o in args['optional'].keys())
         if opts != "":
             res += " [{0}]".format(opts)
