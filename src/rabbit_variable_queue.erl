@@ -535,20 +535,20 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                      in_counter       = InCount,
                                      persistent_count = PCount,
                                      durable          = IsDurable,
-                                     unconfirmed      = Unconfirmed }) ->
+                                     unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
         #msg_status { is_delivered = true },
     {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     PCount1 = PCount + one_if(IsPersistent1),
-    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, Guid, UC),
     {SeqId, a(reduce_memory_use(
                 State2 #vqstate { next_seq_id      = SeqId    + 1,
                                   out_counter      = OutCount + 1,
                                   in_counter       = InCount  + 1,
                                   persistent_count = PCount1,
-                                  unconfirmed      = Unconfirmed1 }))}.
+                                  unconfirmed      = UC1 }))}.
 
 dropwhile(Pred, State) ->
     {_OkOrEmpty, State1} = dropwhile1(Pred, State),
@@ -809,8 +809,8 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_idle_timeout(State = #vqstate { on_sync = OS, unconfirmed = UC }) ->
-    case {OS, gb_sets:size(UC)} of
+needs_idle_timeout(State = #vqstate { on_sync = OnSync, unconfirmed = UC }) ->
+    case {OnSync, gb_sets:is_empty(UC)} of
         {?BLANK_SYNC, 0} ->
             {Res, _State} = reduce_memory_use(
                               fun (_Quota, State1) -> {0, State1} end,
@@ -1237,7 +1237,7 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
                            persistent_count = PCount,
                            durable          = IsDurable,
                            ram_msg_count    = RamMsgCount,
-                           unconfirmed      = Unconfirmed }) ->
+                           unconfirmed      = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
         #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
@@ -1247,13 +1247,13 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
                  true  -> State1 #vqstate { q4 = queue:in(m(MsgStatus1), Q4) }
              end,
     PCount1 = PCount + one_if(IsPersistent1),
-    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, Guid, UC),
     {SeqId, State2 #vqstate { next_seq_id      = SeqId   + 1,
                               len              = Len     + 1,
                               in_counter       = InCount + 1,
                               persistent_count = PCount1,
                               ram_msg_count    = RamMsgCount + 1,
-                              unconfirmed      = Unconfirmed1 }}.
+                              unconfirmed      = UC1 }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, _MSCState) ->
@@ -1393,8 +1393,8 @@ find_persistent_count(LensByStore) ->
 
 confirm_commit_index(State = #vqstate { unconfirmed = [] }) ->
     State;
-confirm_commit_index(State = #vqstate { index_state = IS }) ->
-    State #vqstate { index_state = rabbit_queue_index:sync(IS) }.
+confirm_commit_index(State = #vqstate { index_state = IndexState }) ->
+    State #vqstate { index_state = rabbit_queue_index:sync(IndexState) }.
 
 remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
