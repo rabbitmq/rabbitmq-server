@@ -58,7 +58,7 @@
         (fun ((rabbit_types:message_properties()) -> boolean()), state())
         -> state()).
 -spec(fetch/2 :: (ack_required(), state()) -> {fetch_result(), state()}).
--spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+-spec(ack/2 :: ([ack()], state()) -> state()).
 -spec(tx_publish/4 :: (rabbit_types:txn(), rabbit_types:basic_message(),
                        rabbit_types:message_properties(), state()) -> state()).
 -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).

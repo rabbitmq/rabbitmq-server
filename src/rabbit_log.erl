@@ -41,9 +41,6 @@
 -export([debug/1, debug/2, message/4, info/1, info/2,
          warning/1, warning/2, error/1, error/2]).
 
--import(io).
--import(error_logger).
-
 -define(SERVER, ?MODULE).
 
 %%----------------------------------------------------------------------------

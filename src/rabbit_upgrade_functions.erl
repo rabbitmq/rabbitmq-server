@@ -27,6 +27,8 @@
 -rabbit_upgrade({remove_user_scope,  []}).
 -rabbit_upgrade({hash_passwords,     []}).
 -rabbit_upgrade({add_ip_to_listener, []}).
+-rabbit_upgrade({internal_exchanges, []}).
+-rabbit_upgrade({user_to_internal_user, [hash_passwords]}).
 
 %% -------------------------------------------------------------------
 
@@ -35,6 +37,8 @@
 -spec(remove_user_scope/0  :: () -> 'ok').
 -spec(hash_passwords/0     :: () -> 'ok').
 -spec(add_ip_to_listener/0 :: () -> 'ok').
+-spec(internal_exchanges/0 :: () -> 'ok').
+-spec(user_to_internal_user/0 :: () -> 'ok').
 
 -endif.
 
@@ -58,7 +62,7 @@ hash_passwords() ->
     mnesia(
       rabbit_user,
       fun ({user, Username, Password, IsAdmin}) ->
-              Hash = rabbit_access_control:hash_password(Password),
+              Hash = rabbit_auth_backend_internal:hash_password(Password),
               {user, Username, Hash, IsAdmin}
       end,
       [username, password_hash, is_admin]).
@@ -71,8 +75,33 @@ add_ip_to_listener() ->
       end,
       [node, protocol, host, ip_address, port]).
 
+internal_exchanges() ->
+    Tables = [rabbit_exchange, rabbit_durable_exchange],
+    AddInternalFun =
+        fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
+                {exchange, Name, Type, Durable, AutoDelete, false, Args}
+        end,
+    [ ok = mnesia(T,
+                  AddInternalFun,
+                  [name, type, durable, auto_delete, internal, arguments])
+      || T <- Tables ],
+    ok.
+
+user_to_internal_user() ->
+    mnesia(
+      rabbit_user,
+      fun({user, Username, PasswordHash, IsAdmin}) ->
+              {internal_user, Username, PasswordHash, IsAdmin}
+      end,
+      [username, password_hash, is_admin], internal_user).
+
 %%--------------------------------------------------------------------
 
 mnesia(TableName, Fun, FieldList) ->
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList),
+    ok.
+
+mnesia(TableName, Fun, FieldList, NewRecordName) ->
+    {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList,
+                                          NewRecordName),
     ok.

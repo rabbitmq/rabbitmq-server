@@ -49,11 +49,6 @@
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 
--import(mnesia).
--import(gen_server2).
--import(lists).
--import(queue).
-
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -157,9 +152,9 @@
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
 -spec(maybe_run_queue_via_backing_queue/2 ::
-        (pid(), (fun ((A) -> A | {any(), A}))) -> 'ok').
+        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(maybe_run_queue_via_backing_queue_async/2 ::
-        (pid(), (fun ((A) -> A | {any(), A}))) -> 'ok').
+        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -508,19 +503,17 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_delegate_call_ok(F, Pids) ->
-    {_, Bad} = delegate:invoke(Pids,
-                               fun (Pid) ->
+    case delegate:invoke(Pids, fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
                                          fun () -> ok end,
                                          fun () -> F(Pid) end)
-                               end),
-    case Bad of
-        [] -> ok;
-        _  -> {error, Bad}
+                               end) of
+        {_,  []} -> ok;
+        {_, Bad} -> {error, Bad}
     end.
 
 delegate_call(Pid, Msg, Timeout) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, Timeout) end).
 
 delegate_cast(Pid, Msg) ->
-    delegate:invoke(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
+    delegate:invoke_no_result(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
