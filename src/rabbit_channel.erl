@@ -464,33 +464,35 @@ confirm([], _QPid, State) ->
     State;
 confirm(_MsgSeqNos, _QPid, State = #ch{confirm_enabled = false}) ->
     State;
-confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
-    do_if_unconfirmed([MSN || MSN <- MsgSeqNos, gb_sets:is_element(MSN, UC)],
-                      QPid, State).
-
-do_if_unconfirmed(MsgSeqNos, undefined, State = #ch{unconfirmed    = UC,
-                                                    queues_for_msg = QFM}) ->
+confirm(MsgSeqNos, undefined, State = #ch{unconfirmed = UC,
+                                          queues_for_msg = QFM}) ->
+    MsgSeqNos1 = [MSN || MSN <- MsgSeqNos, gb_sets:is_element(MSN, UC)],
     MS = gb_sets:from_list(MsgSeqNos),
     QFM1 = dict:filter(fun(M, _Q) -> not(gb_sets:is_element(M, MS)) end, QFM),
-    flush_confirms(State#ch{unconfirmed = gb_sets:difference(UC, MS),
-                            queues_for_msg = QFM1}, MsgSeqNos);
-do_if_unconfirmed(MsgSeqNos, QPid, State) ->
+    send_confirms(MsgSeqNos1, State#ch{unconfirmed = gb_sets:difference(UC, MS),
+                                       queues_for_msg = QFM1});
+confirm(MsgSeqNos, QPid, State) ->
     {DoneMessages, State1} =
         lists:foldl(
           fun(MsgSeqNo, {DMs, State0 = #ch{unconfirmed = UC0,
                                            queues_for_msg = QFM0}}) ->
-                  {ok, Qs} = dict:find(MsgSeqNo, QFM0),
-                  Qs1 = sets:del_element(QPid, Qs),
-                  case sets:size(Qs1) of
-                      0 -> {[MsgSeqNo | DMs],
-                            State0#ch{
-                              queues_for_msg = dict:erase(MsgSeqNo, QFM0),
-                              unconfirmed = gb_sets:delete(MsgSeqNo, UC0)}};
-                      _ -> QFM1 = dict:store(MsgSeqNo, Qs1, QFM0),
-                           {DMs, State0#ch{queues_for_msg = QFM1}}
+                  case gb_sets:is_element(MsgSeqNo, UC0) of
+                      false -> {DMs, State0};
+                      true  -> {ok, Qs} = dict:find(MsgSeqNo, QFM0),
+                               Qs1 = sets:del_element(QPid, Qs),
+                               case sets:size(Qs1) of
+                                   0 -> {[MsgSeqNo | DMs],
+                                         State0#ch{
+                                           queues_for_msg =
+                                               dict:erase(MsgSeqNo, QFM0),
+                                           unconfirmed =
+                                               gb_sets:delete(MsgSeqNo, UC0)}};
+                                   _ -> QFM1 = dict:store(MsgSeqNo, Qs1, QFM0),
+                                        {DMs, State0#ch{queues_for_msg = QFM1}}
+                               end
                   end
           end, {[], State}, MsgSeqNos),
-    flush_confirms(State1, DoneMessages).
+    send_confirms(DoneMessages, State1).
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     {reply, #'channel.open_ok'{}, State#ch{state = running}};
@@ -1223,9 +1225,9 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
-flush_confirms(State, []) ->
+send_confirms([], State) ->
     State;
-flush_confirms(State = #ch{writer_pid  = WriterPid, unconfirmed = UC}, Cs) ->
+send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     SCs = lists:usort(Cs),
     CutOff = case gb_sets:is_empty(UC) of
                  true  -> lists:last(SCs) + 1;
