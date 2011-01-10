@@ -209,10 +209,14 @@ srcdist: distclean
 	mkdir -p $(TARGET_SRC_DIR)/codegen
 	cp -r ebin src include LICENSE LICENSE-MPL-RabbitMQ $(TARGET_SRC_DIR)
 	cp INSTALL.in $(TARGET_SRC_DIR)/INSTALL
-	elinks -dump -no-references -no-numbering $(WEB_URL)install.html \
-		>> $(TARGET_SRC_DIR)/INSTALL
+	elinks -source  $(WEB_URL)install.html \
+	    | xmlstarlet ed -N "x=http://www.w3.org/1999/xhtml" -d "//x:img" -d "//x:form" \
+	    | elinks -dump -no-references -no-numbering \
+	    >> $(TARGET_SRC_DIR)/INSTALL
 	cp README.in $(TARGET_SRC_DIR)/README
-	elinks -dump -no-references -no-numbering $(WEB_URL)build-server.html \
+	elinks -source  $(WEB_URL)build-server.html \
+	    | xmlstarlet ed -N "x=http://www.w3.org/1999/xhtml" -d "//x:img" -d "//x:form" \
+	    | elinks -dump -no-references -no-numbering \
 		>> $(TARGET_SRC_DIR)/README
 	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
 
