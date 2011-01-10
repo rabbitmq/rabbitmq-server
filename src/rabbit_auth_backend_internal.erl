@@ -97,7 +97,7 @@ description() ->
      {description, <<"Internal user / password database">>}].
 
 check_user_login(Username, []) ->
-    internal_check_user_login(Username, fun() -> true end);
+    internal_check_user_login(Username, fun(_) -> true end);
 check_user_login(Username, [{password, Password}]) ->
     internal_check_user_login(
       Username,
