@@ -21,7 +21,8 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade/3, read_version/0, write_version/0, desired_version/0]).
+-export([maybe_upgrade/1, upgrade_required/1]).
+-export([read_version/0, write_version/0, desired_version/0]).
 
 -include("rabbit.hrl").
 
@@ -36,8 +37,8 @@
 -type(scope() :: 'mnesia' | 'local').
 -type(version() :: [step()]).
 
--spec(maybe_upgrade/3 :: ([scope()], fun (() -> 'ok'), fun (() -> 'ok'))
-         -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade/1 :: ([scope()]) -> 'ok' | 'version_not_available').
+-spec(upgrade_required/1 :: ([scope()]) -> boolean()).
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
@@ -49,25 +50,18 @@
 %% Try to upgrade the schema. If no information on the existing schema
 %% could be found, do nothing. rabbit_mnesia:check_schema_integrity()
 %% will catch the problem.
-maybe_upgrade(Scopes, GuardFun, UpgradeFun) ->
-    case read_version() of
-        {ok, CurrentHeads} ->
-            with_upgrade_graph(
-              fun (G) -> maybe_upgrade_graph(CurrentHeads, Scopes,
-                                             GuardFun, UpgradeFun, G) end);
-        {error, enoent} ->
-            version_not_available
+maybe_upgrade(Scopes) ->
+    case upgrades_required(Scopes) of
+        version_not_available -> version_not_available;
+        []                    -> ok;
+        Upgrades              -> apply_upgrades(Upgrades)
     end.
 
-maybe_upgrade_graph(CurrentHeads, Scopes, GuardFun, UpgradeFun, G) ->
-    case unknown_heads(CurrentHeads, G) of
-        [] ->
-            case upgrades_to_apply(CurrentHeads, Scopes, G) of
-                []       -> ok;
-                Upgrades -> apply_upgrades(Upgrades, GuardFun, UpgradeFun)
-            end;
-        Unknown ->
-            throw({error, {future_upgrades_found, Unknown}})
+upgrade_required(Scopes) ->
+    case upgrades_required(Scopes) of
+        version_not_available -> false;
+        []                    -> false;
+        _                     -> true
     end.
 
 read_version() ->
@@ -84,6 +78,21 @@ desired_version() ->
     with_upgrade_graph(fun (G) -> heads(G) end).
 
 %% -------------------------------------------------------------------
+
+upgrades_required(Scopes) ->
+    case read_version() of
+        {ok, CurrentHeads} ->
+            with_upgrade_graph(
+              fun (G) ->
+                      case unknown_heads(CurrentHeads, G) of
+                          []      -> upgrades_to_apply(CurrentHeads, Scopes, G);
+                          Unknown -> throw({error,
+                                            {future_upgrades_found, Unknown}})
+                      end
+              end);
+        {error, enoent} ->
+            version_not_available
+    end.
 
 with_upgrade_graph(Fun) ->
     case rabbit_misc:build_acyclic_graph(
@@ -133,8 +142,7 @@ heads(G) ->
 
 %% -------------------------------------------------------------------
 
-apply_upgrades(Upgrades, GuardFun, UpgradeFun) ->
-    ok = GuardFun(),
+apply_upgrades(Upgrades) ->
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
         ok ->
@@ -149,7 +157,6 @@ apply_upgrades(Upgrades, GuardFun, UpgradeFun) ->
                     %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
                     info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
-                    ok = UpgradeFun(),
                     [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
                     info("Upgrades: All upgrades applied successfully~n", []),
                     ok = write_version(),

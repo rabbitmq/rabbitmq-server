@@ -94,6 +94,7 @@ status() ->
      {running_nodes, running_clustered_nodes()}].
 
 init() ->
+    ok = maybe_reset_for_upgrades(),
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
@@ -140,11 +141,6 @@ all_clustered_nodes() ->
 
 running_clustered_nodes() ->
     mnesia:system_info(running_db_nodes).
-
-forget_other_nodes() ->
-    Nodes = all_clustered_nodes() -- [node()],
-    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Nodes],
-    ok.
 
 empty_ram_only_tables() ->
     Node = node(),
@@ -404,17 +400,17 @@ init_db(ClusterNodes, Force) ->
 
 setup_existing_node(ClusterNodes, Nodes) ->
     DiscNodes = mnesia:table_info(schema, disc_copies),
-    case are_we_upgrader(DiscNodes) of
-        true ->
-            %% True single disc node, or last disc node in cluster to
-            %% shut down, attempt upgrade if necessary
+    Node = node(),
+    case upgrader(DiscNodes) of
+        Node ->
+            %% True single disc node, or upgrader node - attempt
+            %% upgrade if necessary
             ok = wait_for_tables(),
-            case rabbit_upgrade:maybe_upgrade([mnesia, local], fun () -> ok end,
-                                              fun forget_other_nodes/0) of
+            case rabbit_upgrade:maybe_upgrade([mnesia, local]) of
                 ok                    -> ensure_schema_ok();
                 version_not_available -> schema_ok_or_move()
             end;
-        false ->
+        _ ->
             %% Subsequent node in cluster, catch up
             case Nodes of
                 [AnotherNode|_] ->
@@ -423,12 +419,8 @@ setup_existing_node(ClusterNodes, Nodes) ->
                 [] ->
                     ok
             end,
-            IsDiskNode = ClusterNodes == [] orelse
-                lists:member(node(), ClusterNodes),
-            case rabbit_upgrade:maybe_upgrade(
-                   [local],
-                   ensure_nodes_running_fun(DiscNodes),
-                   reset_fun(DiscNodes -- [node()])) of
+            ok = wait_for_tables(),
+            case rabbit_upgrade:maybe_upgrade([local]) of
                 ok ->
                     ok;
                 %% If we're just starting up a new node we won't have
@@ -436,13 +428,21 @@ setup_existing_node(ClusterNodes, Nodes) ->
                 version_not_available ->
                     ok = rabbit_upgrade:write_version()
             end,
+            IsDiskNode = ClusterNodes == [] orelse
+                lists:member(node(), ClusterNodes),
             ok = wait_for_replicated_tables(),
             ok = create_local_table_copy(schema, disc_copies),
             ok = create_local_table_copies(case IsDiskNode of
                                                true  -> disc;
                                                false -> ram
                                            end),
-            ensure_schema_ok()
+            ensure_schema_ok(),
+            %% If we're just starting up a new node we won't have
+            %% a version
+            case rabbit_upgrade:read_version() of
+                {error, _} -> rabbit_upgrade:write_version();
+                _          -> ok
+            end
     end.
 
 schema_ok_or_move() ->
@@ -475,50 +475,48 @@ ensure_schema_ok() ->
         {error, Reason} -> throw({error, {schema_invalid, Reason}})
     end.
 
-ensure_nodes_running_fun(DiscNodes) ->
-    fun() ->
-            case nodes_running(DiscNodes) of
-                [] ->
-                    exit("Cluster upgrade needed. The first node you start "
-                         "should be the last disc node to be shut down.");
+maybe_reset_for_upgrades() ->
+    case rabbit_upgrade:upgrade_required([mnesia]) of
+        true ->
+            DiscNodes = all_clustered_nodes(),
+            Upgrader = upgrader(DiscNodes),
+            case node() of
+                Upgrader ->
+                    reset_for_primary_upgrade(DiscNodes);
                 _ ->
-                    ok
-            end
+                    reset_for_non_primary_upgrade(Upgrader, DiscNodes)
+            end;
+        false ->
+            ok
     end.
 
-reset_fun(OtherNodes) ->
-    fun() ->
+reset_for_primary_upgrade(DiscNodes) ->
+    Others = DiscNodes -- [node()],
+    ensure_mnesia_running(),
+    force_tables(),
+    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Others],
+    ok.
+
+reset_for_non_primary_upgrade(Upgrader, DiscNodes) ->
+    case node_running(Upgrader) of
+        false ->
+            exit(lists:flatten(
+                   io_lib:format(
+                     "Cluster upgrade needed. Please start node ~s first",
+                     [Upgrader])));
+        true ->
+            OtherNodes = DiscNodes -- [node()],
             mnesia:stop(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                   cannot_delete_schema),
-            rabbit_misc:ensure_ok(mnesia:start(),
-                                  cannot_start_mnesia),
+            mnesia:start(),
             {ok, _} = mnesia:change_config(extra_db_nodes, OtherNodes),
             ok
     end.
 
-%% Were we the last node in the cluster to shut down or is there no cluster?
-%% The answer to this is yes if:
-%% * We are our canonical source for reading a table
-%%    - If the canonical source is "nowhere" or another node, we are out
-%%      of date
-%% and
-%% * No other nodes are running Mnesia and have finished booting Rabbit.
-%%    - Since any node will be its own canonical source once the cluster
-%%      is up, but just having Mnesia running is not enough - that node
-%%      could be halfway through starting (and deciding it is the upgrader
-%%      too)
-
-are_we_upgrader(Nodes) ->
-    Where = mnesia:table_info(?EXAMPLE_RABBIT_TABLE, where_to_read),
-    Node = node(),
-    case {Where, nodes_running(Nodes)} of
-        {Node, []} -> true;
-        {_,    _}  -> false
-    end.
-
-nodes_running(Nodes) ->
-    [N || N <- Nodes, node_running(N)].
+upgrader(Nodes) ->
+    [Upgrader|_] = lists:usort(Nodes),
+    Upgrader.
 
 node_running(Node) ->
     case rpc:call(Node, application, which_applications, []) of
@@ -638,6 +636,9 @@ wait_for_tables(TableNames) ->
         {error, Reason} ->
             throw({error, {failed_waiting_for_tables, Reason}})
     end.
+
+force_tables() ->
+    [mnesia:force_load_table(T) || T <- table_names()].
 
 reset(Force) ->
     ok = ensure_mnesia_not_running(),
