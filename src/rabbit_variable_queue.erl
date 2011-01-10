@@ -809,17 +809,22 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_idle_timeout(State = #vqstate { on_sync = ?BLANK_SYNC }) ->
-    {Res, _State} = reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
-                                      fun (_Quota, State1) -> State1 end,
-                                      fun (State1)         -> State1 end,
-                                      fun (_Quota, State1) -> {0, State1} end,
-                                      State),
-    Res;
-needs_idle_timeout(_State) ->
-    true.
+needs_idle_timeout(State = #vqstate { on_sync = OS, unconfirmed = UC }) ->
+    case {OS, gb_sets:size(UC)} of
+        {?BLANK_SYNC, 0} ->
+            {Res, _State} = reduce_memory_use(
+                              fun (_Quota, State1) -> {0, State1} end,
+                              fun (_Quota, State1) -> State1 end,
+                              fun (State1)         -> State1 end,
+                              fun (_Quota, State1) -> {0, State1} end,
+                              State),
+            Res;
+        _ ->
+            true
+    end.
 
-idle_timeout(State) -> a(reduce_memory_use(tx_commit_index(State))).
+idle_timeout(State) ->
+    a(reduce_memory_use(confirm_commit_index(tx_commit_index(State)))).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
@@ -1385,6 +1390,11 @@ find_persistent_count(LensByStore) ->
 %%----------------------------------------------------------------------------
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
+
+confirm_commit_index(State = #vqstate { unconfirmed = [] }) ->
+    State;
+confirm_commit_index(State = #vqstate { index_state = IS }) ->
+    State #vqstate { index_state = rabbit_queue_index:sync(IS) }.
 
 remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
