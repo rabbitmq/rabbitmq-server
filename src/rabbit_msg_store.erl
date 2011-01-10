@@ -727,7 +727,8 @@ handle_cast({write, CRef, Guid},
             ok = index_update_ref_count(Guid, RefCount + 1, State1),
             CTG2 = case {dict:find(CRef, CODC), File} of
                        {{ok, _},   CurFile} -> CTG1;
-                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid)),
+                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid),
+                                                   written),
                                                CTG;
                        _                    -> CTG1
                    end,
@@ -735,12 +736,10 @@ handle_cast({write, CRef, Guid},
     end;
 
 handle_cast({remove, CRef, Guids}, State) ->
-    State1 = lists:foldl(
-               fun (Guid, State2) -> remove_message(Guid, State2) end,
-               State, Guids),
-    State2 = client_confirm(CRef, gb_sets:from_list(Guids),
-                            false, State1),
-    noreply(maybe_compact(State2));
+    State1 = lists:foldl(fun (Guid, State2) -> remove_message(Guid, State2) end,
+                         State, Guids),
+    State3 = client_confirm(CRef, gb_sets:from_list(Guids), removed, State1),
+    noreply(maybe_compact(State3));
 
 handle_cast({release, Guids}, State =
                 #msstate { dedup_cache_ets = DedupCacheEts }) ->
@@ -876,7 +875,7 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
        true                            -> file_handle_cache:sync(CurHdl)
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    [client_confirm(CRef, Guids, true, State1)
+    [client_confirm(CRef, Guids, written, State1)
      || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
@@ -1057,11 +1056,11 @@ orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
     orddict:store(Key, Val, Dict).
 
-client_confirm(CRef, Guids, WaitForIndex,
+client_confirm(CRef, Guids, ActionTaken,
                State = #msstate { client_ondisk_callback = CODC,
                                   cref_to_guids          = CTG }) ->
     case dict:find(CRef, CODC) of
-        {ok, Fun} -> Fun(Guids, WaitForIndex),
+        {ok, Fun} -> Fun(Guids, ActionTaken),
                      CTG1 = case dict:find(CRef, CTG) of
                                 {ok, Gs} ->
                                     Guids1 = gb_sets:difference(Gs, Guids),
