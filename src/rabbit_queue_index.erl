@@ -33,7 +33,7 @@
 
 -export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/2, flush/1, read/3,
+         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
          next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
@@ -297,11 +297,12 @@ deliver(SeqIds, State) ->
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
 
-sync([], State) ->
-    State;
-sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
-    State;
-sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
+%% This is only called when there are outstanding confirms and the
+%% queue is idle.
+sync(State = #qistate { unsynced_guids = Guids }) ->
+    sync_if([] =/= Guids, State).
+
+sync(SeqIds, State) ->
     %% The SeqIds here contains the SeqId of every publish and ack in
     %% the transaction. Ideally we should go through these seqids and
     %% only sync the journal if the pubs or acks appear in the
@@ -309,9 +310,8 @@ sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
     %% the variable queue publishes and acks to the qi, and then
     %% syncs, all in one operation, there is no possibility of the
     %% seqids not being in the journal, provided the transaction isn't
-    %% emptied (handled above anyway).
-    ok = file_handle_cache:sync(JournalHdl),
-    notify_sync(State).
+    %% emptied (handled by sync_if anyway).
+    sync_if([] =/= SeqIds, State).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
@@ -722,6 +722,14 @@ deliver_or_ack(Kind, SeqIds, State) ->
     maybe_flush_journal(lists:foldl(fun (SeqId, StateN) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
+
+sync_if(false, State) ->
+    State;
+sync_if(_Bool, State = #qistate { journal_handle = undefined }) ->
+    State;
+sync_if(true, State = #qistate { journal_handle = JournalHdl }) ->
+    ok = file_handle_cache:sync(JournalHdl),
+    notify_sync(State).
 
 notify_sync(State = #qistate { unsynced_guids = UG, on_sync = OnSyncFun }) ->
     OnSyncFun(gb_sets:from_list(UG)),
