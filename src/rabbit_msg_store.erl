@@ -689,6 +689,11 @@ handle_call({contains, Guid}, From, State) ->
 
 handle_cast({client_dying, CRef},
             State = #msstate { dying_clients_ets = DyingClientsEts }) ->
+    %% Note that we use a separate set for the dying clients in order
+    %% to keep that set, which is inspected on every write and remove,
+    %% as small as possible - inspecting the set of all clients would
+    %% degrade performance with many healthy clients and few dying
+    %% clients.
     true = ets:insert_new(DyingClientsEts, {CRef, const}),
     write_message(CRef, <<>>, State);
 
@@ -1115,7 +1120,7 @@ client_confirm(CRef, Guids, ActionTaken,
 
 %% Detect whether the Guid is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death
-%% msg, and it has a 0 ref_count we must only alter the ref_count it,
+%% msg, and it has a 0 ref_count we must only alter the ref_count,
 %% not rewrite the msg - rewriting it would make it younger than the
 %% death msg and thus should be ignored. Note that this will
 %% (correctly) return false when testing to remove the death msg
