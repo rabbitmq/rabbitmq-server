@@ -33,7 +33,7 @@
 
 -export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/2, flush/1, read/3,
+         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
          next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
@@ -296,6 +296,14 @@ deliver(SeqIds, State) ->
 
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
+
+%% This is only called when there are outstanding confirms and the
+%% queue is idle.
+sync(State = #qistate { unsynced_guids = [] }) ->
+    State;
+sync(State = #qistate { journal_handle = JournalHdl }) ->
+    ok = file_handle_cache:sync(JournalHdl),
+    notify_sync(State).
 
 sync([], State) ->
     State;
