@@ -76,6 +76,9 @@ init([Sock, StartHeartbeatFun]) ->
 terminate(_Reason, State) ->
     shutdown_channel_and_connection(State).
 
+handle_cast({"STOMP", Frame}, State) ->
+    handle_cast({"CONNECT", Frame}, State);
+
 handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
     process_request(
       fun(StateN) ->
