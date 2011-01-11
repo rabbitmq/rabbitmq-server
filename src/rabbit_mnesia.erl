@@ -387,45 +387,40 @@ init_db(ClusterNodes, Force) ->
                 {[], false} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
-                {_, _} ->
-                    ok = setup_existing_node(ClusterNodes, Nodes)
+                {[], _} ->
+                    %% We're the first node up
+                    ok = wait_for_tables(),
+                    case rabbit_upgrade:maybe_upgrade(local) of
+                        ok                    -> ensure_schema_ok();
+                        version_not_available -> schema_ok_or_move()
+                    end;
+                {[AnotherNode|_], _} ->
+                    %% Subsequent node in cluster, catch up
+                    ensure_version_ok(
+                      rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
+                    ok = wait_for_tables(),
+                    IsDiskNode = ClusterNodes == [] orelse
+                        lists:member(node(), ClusterNodes),
+                    ok = wait_for_replicated_tables(),
+                    ok = create_local_table_copy(schema, disc_copies),
+                    ok = create_local_table_copies(case IsDiskNode of
+                                                       true  -> disc;
+                                                       false -> ram
+                                                   end),
+                    case rabbit_upgrade:maybe_upgrade(local) of
+                        ok ->                    ok;
+                        %% If we're just starting up a new node we won't have
+                        %% a version
+                        version_not_available ->
+                            ok = rabbit_upgrade:write_version()
+                    end,
+                    ensure_schema_ok()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
-    end.
-
-setup_existing_node(ClusterNodes, Nodes) ->
-    case Nodes of
-        [] ->
-            %% We're the first node up
-            ok = wait_for_tables(),
-            case rabbit_upgrade:maybe_upgrade(local) of
-                ok                    -> ensure_schema_ok();
-                version_not_available -> schema_ok_or_move()
-            end;
-        [AnotherNode|_] ->
-            %% Subsequent node in cluster, catch up
-            ensure_version_ok(
-              rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
-            ok = wait_for_tables(),
-            IsDiskNode = ClusterNodes == [] orelse
-                lists:member(node(), ClusterNodes),
-            ok = wait_for_replicated_tables(),
-            ok = create_local_table_copy(schema, disc_copies),
-            ok = create_local_table_copies(case IsDiskNode of
-                                               true  -> disc;
-                                               false -> ram
-                                           end),
-            case rabbit_upgrade:maybe_upgrade(local) of
-                ok ->                    ok;
-                %% If we're just starting up a new node we won't have
-                %% a version
-                version_not_available -> ok = rabbit_upgrade:write_version()
-            end,
-            ensure_schema_ok()
     end.
 
 schema_ok_or_move() ->
