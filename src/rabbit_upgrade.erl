@@ -211,8 +211,8 @@ edges(_Module, Steps, Scope0) ->
                             Require <- Requires,
                             Scope0 == Scope1].
 
-unknown_heads(Heads, Known) ->
-    lists:filter(fun(H) -> not lists:member(H, Known) end, Heads).
+unknown_heads(Heads, G) ->
+    [H || H <- Heads, digraph:vertex(G, H) =:= false].
 
 upgrades_to_apply(Heads, G) ->
     %% Take all the vertices which can reach the known heads. That's
