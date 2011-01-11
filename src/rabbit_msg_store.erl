@@ -687,24 +687,23 @@ handle_call({contains, Guid}, From, State) ->
 
 handle_cast({client_dying, CRef},
             State = #msstate { dying_clients = DyingClients }) ->
-    %% Note that we use a separate set for the dying clients in order
-    %% to keep that set, which is inspected on every write and remove,
-    %% as small as possible - inspecting the set of all clients would
-    %% degrade performance with many healthy clients and few dying
-    %% clients.
-    State1 =
-        State #msstate { dying_clients = sets:add_element(CRef, DyingClients) },
-    write_message(CRef, <<>>, State1);
+    %% We use a separate set for the dying clients in order to keep
+    %% that set, which is inspected on every write and remove, as
+    %% small as possible. Inspecting client_refs - the set of all
+    %% clients - would degrade performance with many healthy clients
+    %% and few dying clients, which is the typical case.
+    DyingClients1 = sets:add_element(CRef, DyingClients),
+    write_message(CRef, <<>>, State #msstate { dying_clients = DyingClients1 });
 
 handle_cast({client_delete, CRef},
             State = #msstate { client_refs = ClientRefs,
                                dying_clients = DyingClients }) ->
-    State1 = clear_client_callback(CRef, State),
-    DyingClients1 = sets:del_element(CRef, DyingClients),
-    ClientRefs1 = sets:del_element(CRef, ClientRefs),
-    noreply(remove_message(CRef, CRef,
-                           State1 #msstate { client_refs   = ClientRefs1,
-                                             dying_clients = DyingClients1 }));
+    noreply(remove_message(
+              CRef, CRef,
+              clear_client_callback(
+                State #msstate {
+                  client_refs   = sets:del_element(CRef, ClientRefs),
+                  dying_clients = sets:del_element(CRef, DyingClients) })));
 
 handle_cast({write, CRef, Guid},
             State = #msstate { sum_valid_data         = SumValid,
@@ -736,11 +735,10 @@ handle_cast({write, CRef, Guid},
                     ok = index_delete(Guid, State1),
                     write_message(Guid, Msg, State1);
                 {false_if_increment, [#file_summary { locked = true }]} ->
-                    %% The msg for Guid is older then the client death
-                    %% message, but seeing as it's being GC'd
-                    %% currently, we'll have to write a new copy,
-                    %% which will then be younger, so ignore this
-                    %% write.
+                    %% The msg for Guid is older than the client death
+                    %% message, butas it is being GC'd currently,
+                    %% we'll have to write a new copy, which will then
+                    %% be younger, so ignore this write.
                     noreply(State1);
                 {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
@@ -768,8 +766,8 @@ handle_cast({remove, CRef, Guids}, State) ->
     State1 = lists:foldl(
                fun (Guid, State2) -> remove_message(Guid, CRef, State2) end,
                State, Guids),
-    State3 = client_confirm(CRef, gb_sets:from_list(Guids), removed, State1),
-    noreply(maybe_compact(State3));
+    noreply(maybe_compact(
+              client_confirm(CRef, gb_sets:from_list(Guids), removed, State1)));
 
 handle_cast({release, Guids}, State =
                 #msstate { dedup_cache_ets = DedupCacheEts }) ->
@@ -1120,11 +1118,10 @@ client_confirm(CRef, Guids, ActionTaken,
 
 %% Detect whether the Guid is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death
-%% msg, and it has a 0 ref_count we must only alter the ref_count,
-%% not rewrite the msg - rewriting it would make it younger than the
-%% death msg and thus should be ignored. Note that this will
-%% (correctly) return false when testing to remove the death msg
-%% itself.
+%% msg, and it has a 0 ref_count we must only alter the ref_count, not
+%% rewrite the msg - rewriting it would make it younger than the death
+%% msg and thus should be ignored. Note that this (correctly) returns
+%% false when testing to remove the death msg itself.
 should_mask_action(CRef, Guid,
                    State = #msstate { dying_clients = DyingClients }) ->
     case {sets:is_element(CRef, DyingClients), index_lookup(Guid, State)} of
