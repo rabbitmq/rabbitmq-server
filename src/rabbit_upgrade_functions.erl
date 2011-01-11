@@ -110,16 +110,16 @@ one() ->
       [username, password_hash, is_admin, extra]).
 
 two() ->
-    ok = rabbit_misc:write_term_file(filename:join(rabbit_mnesia:dir(), "test"),
-                                     [test]).
-
-three() ->
     mnesia(
       rabbit_user,
       fun ({internal_user, Username, Hash, IsAdmin, _}) ->
               {internal_user, Username, Hash, IsAdmin}
       end,
       [username, password_hash, is_admin]).
+
+three() ->
+    ok = rabbit_misc:write_term_file(filename:join(rabbit_mnesia:dir(), "test"),
+                                     [test]).
 
 %%--------------------------------------------------------------------
 

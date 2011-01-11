@@ -72,11 +72,15 @@ upgrader(Nodes) ->
 
 primary_upgrade(Upgrades, DiscNodes) ->
     Others = DiscNodes -- [node()],
-    %% TODO this should happen after backing up!
-    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    force_tables(),
-    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Others],
-    apply_upgrades(Upgrades),
+    apply_upgrades(
+      Upgrades,
+      fun () ->
+              info("Upgrades: Breaking cluster~n", []),
+              rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+              force_tables(),
+              [{atomic, ok} = mnesia:del_table_copy(schema, Node)
+               || Node <- Others]
+      end),
     ok.
 
 force_tables() ->
@@ -114,7 +118,7 @@ maybe_upgrade(Scope) ->
     case upgrades_required(Scope) of
         version_not_available -> version_not_available;
         []                    -> ok;
-        Upgrades              -> apply_upgrades(Upgrades)
+        Upgrades              -> apply_upgrades(Upgrades, fun() -> ok end)
     end.
 
 read_version() ->
@@ -201,7 +205,7 @@ heads(G) ->
 
 %% -------------------------------------------------------------------
 
-apply_upgrades(Upgrades) ->
+apply_upgrades(Upgrades, Fun) ->
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
         ok ->
@@ -216,6 +220,7 @@ apply_upgrades(Upgrades) ->
                     %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
                     info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
+                    Fun(),
                     [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
                     info("Upgrades: All upgrades applied successfully~n", []),
                     ok = write_version(),

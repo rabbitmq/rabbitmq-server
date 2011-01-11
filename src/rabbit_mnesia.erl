@@ -492,14 +492,7 @@ move_db() ->
     ok.
 
 copy_db(Destination) ->
-    mnesia:stop(),
-    case rabbit_misc:recursive_copy(dir(), Destination) of
-        ok ->
-            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-            ok = wait_for_tables();
-        {error, E} ->
-            {error, E}
-    end.
+    rabbit_misc:recursive_copy(dir(), Destination).
 
 create_tables() ->
     lists:foreach(fun ({Tab, TabDef}) ->
