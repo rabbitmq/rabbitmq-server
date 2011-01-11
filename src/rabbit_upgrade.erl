@@ -35,7 +35,7 @@
 -ifdef(use_specs).
 
 -type(step() :: atom()).
--type(version() :: [step()]).
+-type(version() :: [{scope(), [step()]}]).
 -type(scope() :: 'mnesia' | 'local').
 
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
@@ -73,9 +73,10 @@ upgrader(Nodes) ->
 primary_upgrade(Upgrades, DiscNodes) ->
     Others = DiscNodes -- [node()],
     apply_upgrades(
+      mnesia,
       Upgrades,
       fun () ->
-              info("Upgrades: Breaking cluster~n", []),
+              info("mnesia upgrades: Breaking cluster~n", []),
               rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
               force_tables(),
               [{atomic, ok} = mnesia:del_table_copy(schema, Node)
@@ -118,55 +119,80 @@ maybe_upgrade(Scope) ->
     case upgrades_required(Scope) of
         version_not_available -> version_not_available;
         []                    -> ok;
-        Upgrades              -> apply_upgrades(Upgrades, fun() -> ok end)
+        Upgrades              -> apply_upgrades(Scope, Upgrades,
+                                                fun() -> ok end)
     end.
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [Heads]}    -> {ok, Heads};
+        {ok, [V]}        -> case orddict:find(mnesia, V) of
+                                error -> {ok, convert_old_version(V)};
+                                _     -> {ok, V}
+                            end;
         {error, _} = Err -> Err
+    end.
+
+read_version(Scope) ->
+    case read_version() of
+        {error, _} = E -> E;
+        {ok, V}        -> {ok, orddict:fetch(Scope, V)}
     end.
 
 write_version() ->
     ok = rabbit_misc:write_term_file(schema_filename(), [desired_version()]),
     ok.
 
+write_version(Scope) ->
+    {ok, V0} = read_version(),
+    V = orddict:store(Scope, desired_version(Scope), V0),
+    ok = rabbit_misc:write_term_file(schema_filename(), [V]),
+    ok.
+
 desired_version() ->
-    lists:append(
-      [with_upgrade_graph(fun (_, G) -> heads(G) end, Scope, [])
-       || Scope <- ?SCOPES]).
+    lists:foldl(
+      fun (Scope, Acc) ->
+              orddict:store(Scope, desired_version(Scope), Acc)
+      end,
+      orddict:new(), ?SCOPES).
+
+desired_version(Scope) ->
+    with_upgrade_graph(fun (G) -> heads(G) end, Scope).
+
+convert_old_version(Heads) ->
+    Locals = [add_queue_ttl],
+    V0 = orddict:new(),
+    V1 = orddict:store(mnesia, Heads -- Locals, V0),
+    orddict:store(local,
+                  lists:filter(fun(H) -> lists:member(H, Locals) end, Heads),
+                  V1).
 
 %% -------------------------------------------------------------------
 
 upgrades_required(Scope) ->
-    case read_version() of
+    case read_version(Scope) of
         {ok, CurrentHeads} ->
-            with_upgrade_graph(fun upgrades_to_apply/2, Scope, CurrentHeads);
+            with_upgrade_graph(
+              fun (G) ->
+                      case unknown_heads(CurrentHeads, G) of
+                          []      -> upgrades_to_apply(CurrentHeads, G);
+                          Unknown -> throw({error,
+                                            {future_upgrades_found, Unknown}})
+                      end
+              end, Scope);
         {error, enoent} ->
             version_not_available
     end.
 
-with_upgrade_graph(Fun, Scope, CurrentHeads) ->
-    G0 = make_graph(Scope),
-    Gs = [G0|[make_graph(S) || S <- ?SCOPES -- [Scope]]],
-    try
-        Known = lists:append([digraph:vertices(G) || G <- Gs]),
-        case unknown_heads(CurrentHeads, Known) of
-            []      -> ok;
-            Unknown -> throw({error, {future_upgrades_found, Unknown}})
-        end,
-        Fun(CurrentHeads, G0)
-    after
-        [true = digraph:delete(G) || G <- Gs]
-    end.
-
-make_graph(Scope) ->
+with_upgrade_graph(Fun, Scope) ->
     case rabbit_misc:build_acyclic_graph(
            fun (Module, Steps) -> vertices(Module, Steps, Scope) end,
            fun (Module, Steps) -> edges(Module, Steps, Scope) end,
            rabbit_misc:all_module_attributes(rabbit_upgrade)) of
-        {ok, G} ->
-            G;
+        {ok, G} -> try
+                       Fun(G)
+                   after
+                       true = digraph:delete(G)
+                   end;
         {error, {vertex, duplicate, StepName}} ->
             throw({error, {duplicate_upgrade_step, StepName}});
         {error, {edge, {bad_vertex, StepName}, _From, _To}} ->
@@ -205,12 +231,12 @@ heads(G) ->
 
 %% -------------------------------------------------------------------
 
-apply_upgrades(Upgrades, Fun) ->
+apply_upgrades(Scope, Upgrades, Fun) ->
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
         ok ->
             BackupDir = dir() ++ "-upgrade-backup",
-            info("Upgrades: ~w to apply~n", [length(Upgrades)]),
+            info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
             case rabbit_mnesia:copy_db(BackupDir) of
                 ok ->
                     %% We need to make the backup after creating the
@@ -219,13 +245,15 @@ apply_upgrades(Upgrades, Fun) ->
                     %% the lock file exists in the backup too, which
                     %% is not intuitive. Remove it.
                     ok = file:delete(lock_filename(BackupDir)),
-                    info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
+                    info("~s upgrades: Mnesia dir backed up to ~p~n",
+                         [Scope, BackupDir]),
                     Fun(),
-                    [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
-                    info("Upgrades: All upgrades applied successfully~n", []),
-                    ok = write_version(),
+                    [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
+                    info("~s upgrades: All upgrades applied successfully~n",
+                         [Scope]),
+                    ok = write_version(Scope),
                     ok = rabbit_misc:recursive_delete([BackupDir]),
-                    info("Upgrades: Mnesia backup removed~n", []),
+                    info("~s upgrades: Mnesia backup removed~n", [Scope]),
                     ok = file:delete(LockFile);
                 {error, E} ->
                     %% If we can't backup, the upgrade hasn't started
@@ -238,8 +266,8 @@ apply_upgrades(Upgrades, Fun) ->
             throw({error, previous_upgrade_failed})
     end.
 
-apply_upgrade({M, F}) ->
-    info("Upgrades: Applying ~w:~w~n", [M, F]),
+apply_upgrade(Scope, {M, F}) ->
+    info("~s upgrades: Applying ~w:~w~n", [Scope, M, F]),
     ok = apply(M, F, []).
 
 %% -------------------------------------------------------------------
