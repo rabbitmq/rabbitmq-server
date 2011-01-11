@@ -735,7 +735,7 @@ handle_cast({write, CRef, Guid},
                     write_message(Guid, Msg, State1);
                 {false_if_increment, [#file_summary { locked = true }]} ->
                     %% The msg for Guid is older than the client death
-                    %% message, butas it is being GC'd currently,
+                    %% message, but as it is being GC'd currently,
                     %% we'll have to write a new copy, which will then
                     %% be younger, so ignore this write.
                     noreply(State1);
