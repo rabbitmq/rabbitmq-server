@@ -250,8 +250,8 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
-    [{apply,{rabbit,prepare,[]}}, Entry];
+process_entry(Entry = {apply,{application,start_boot,[mnesia,permanent]}}) ->
+    [{apply,{rabbit_upgrade,maybe_upgrade_mnesia,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
 

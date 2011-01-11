@@ -21,7 +21,7 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade/1, upgrade_required/1]).
+-export([maybe_upgrade_mnesia/0, maybe_upgrade/1]).
 -export([read_version/0, write_version/0, desired_version/0]).
 
 -include("rabbit.hrl").
@@ -37,8 +37,8 @@
 -type(scope() :: 'mnesia' | 'local').
 -type(version() :: [step()]).
 
+-spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
 -spec(maybe_upgrade/1 :: ([scope()]) -> 'ok' | 'version_not_available').
--spec(upgrade_required/1 :: ([scope()]) -> boolean()).
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
@@ -47,21 +47,74 @@
 
 %% -------------------------------------------------------------------
 
-%% Try to upgrade the schema. If no information on the existing schema
-%% could be found, do nothing. rabbit_mnesia:check_schema_integrity()
-%% will catch the problem.
+maybe_upgrade_mnesia() ->
+    rabbit:prepare(),
+    case upgrades_required([mnesia]) of
+        Upgrades = [_|_] ->
+            DiscNodes = rabbit_mnesia:all_clustered_nodes(),
+            Upgrader = upgrader(DiscNodes),
+            case node() of
+                Upgrader ->
+                    primary_upgrade(Upgrades, DiscNodes);
+                _ ->
+                    non_primary_upgrade(Upgrader, DiscNodes)
+            end;
+        [] ->
+            ok;
+        version_not_available ->
+            ok
+    end.
+
+upgrader(Nodes) ->
+    [Upgrader|_] = lists:usort(Nodes),
+    Upgrader.
+
+primary_upgrade(Upgrades, DiscNodes) ->
+    Others = DiscNodes -- [node()],
+    %% TODO this should happen after backing up!
+    rabbit_misc:ensure_ok(mnesia:start(),
+                          cannot_start_mnesia),
+    force_tables(),
+    [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Others],
+    apply_upgrades(Upgrades),
+    ok.
+
+force_tables() ->
+    [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
+
+non_primary_upgrade(Upgrader, DiscNodes) ->
+    case node_running(Upgrader) of
+        false ->
+            Msg = "~n~n * Cluster upgrade needed. Please start node ~s "
+                "first. * ~n~n~n",
+            Args = [Upgrader],
+            %% We don't throw or exit here since that gets thrown
+            %% straight out into do_boot, generating an erl_crash.dump
+            %% and displaying any error message in a confusing way.
+            error_logger:error_msg(Msg, Args),
+            io:format(Msg, Args),
+            error_logger:logfile(close),
+            halt(1);
+        true ->
+            rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                                  cannot_delete_schema),
+            ok = rabbit_mnesia:create_cluster_nodes_config(DiscNodes),
+            ok
+    end.
+
+node_running(Node) ->
+    case rpc:call(Node, application, which_applications, []) of
+        {badrpc, _} -> false;
+        Apps        -> lists:keysearch(rabbit, 1, Apps) =/= false
+    end.
+
+%% -------------------------------------------------------------------
+
 maybe_upgrade(Scopes) ->
     case upgrades_required(Scopes) of
         version_not_available -> version_not_available;
         []                    -> ok;
         Upgrades              -> apply_upgrades(Upgrades)
-    end.
-
-upgrade_required(Scopes) ->
-    case upgrades_required(Scopes) of
-        version_not_available -> false;
-        []                    -> false;
-        _                     -> true
     end.
 
 read_version() ->
