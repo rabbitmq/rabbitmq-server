@@ -104,6 +104,7 @@ non_primary_upgrade(Upgrader, DiscNodes) ->
             rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                   cannot_delete_schema),
             ok = rabbit_mnesia:create_cluster_nodes_config(DiscNodes),
+            write_version(mnesia),
             ok
     end.
 
