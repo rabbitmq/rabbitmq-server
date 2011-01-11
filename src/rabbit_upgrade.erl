@@ -28,17 +28,18 @@
 
 -define(VERSION_FILENAME, "schema_version").
 -define(LOCK_FILENAME, "schema_upgrade_lock").
+-define(SCOPES, [mnesia, local]).
 
 %% -------------------------------------------------------------------
 
 -ifdef(use_specs).
 
 -type(step() :: atom()).
--type(scope() :: 'mnesia' | 'local').
 -type(version() :: [step()]).
+-type(scope() :: 'mnesia' | 'local').
 
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
--spec(maybe_upgrade/1 :: ([scope()]) -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade/1 :: (scope()) -> 'ok' | 'version_not_available').
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
@@ -49,8 +50,8 @@
 
 maybe_upgrade_mnesia() ->
     rabbit:prepare(),
-    case upgrades_required([mnesia]) of
-        Upgrades = [_|_] ->
+    case upgrades_required(mnesia) of
+        [_|_] = Upgrades ->
             DiscNodes = rabbit_mnesia:all_clustered_nodes(),
             Upgrader = upgrader(DiscNodes),
             case node() of
@@ -72,8 +73,7 @@ upgrader(Nodes) ->
 primary_upgrade(Upgrades, DiscNodes) ->
     Others = DiscNodes -- [node()],
     %% TODO this should happen after backing up!
-    rabbit_misc:ensure_ok(mnesia:start(),
-                          cannot_start_mnesia),
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     force_tables(),
     [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Others],
     apply_upgrades(Upgrades),
@@ -110,8 +110,8 @@ node_running(Node) ->
 
 %% -------------------------------------------------------------------
 
-maybe_upgrade(Scopes) ->
-    case upgrades_required(Scopes) of
+maybe_upgrade(Scope) ->
+    case upgrades_required(Scope) of
         version_not_available -> version_not_available;
         []                    -> ok;
         Upgrades              -> apply_upgrades(Upgrades)
@@ -128,34 +128,41 @@ write_version() ->
     ok.
 
 desired_version() ->
-    with_upgrade_graph(fun (G) -> heads(G) end).
+    lists:append(
+      [with_upgrade_graph(fun (_, G) -> heads(G) end, Scope, [])
+       || Scope <- ?SCOPES]).
 
 %% -------------------------------------------------------------------
 
-upgrades_required(Scopes) ->
+upgrades_required(Scope) ->
     case read_version() of
         {ok, CurrentHeads} ->
-            with_upgrade_graph(
-              fun (G) ->
-                      case unknown_heads(CurrentHeads, G) of
-                          []      -> upgrades_to_apply(CurrentHeads, Scopes, G);
-                          Unknown -> throw({error,
-                                            {future_upgrades_found, Unknown}})
-                      end
-              end);
+            with_upgrade_graph(fun upgrades_to_apply/2, Scope, CurrentHeads);
         {error, enoent} ->
             version_not_available
     end.
 
-with_upgrade_graph(Fun) ->
+with_upgrade_graph(Fun, Scope, CurrentHeads) ->
+    G0 = make_graph(Scope),
+    Gs = [G0|[make_graph(S) || S <- ?SCOPES -- [Scope]]],
+    try
+        Known = lists:append([digraph:vertices(G) || G <- Gs]),
+        case unknown_heads(CurrentHeads, Known) of
+            []      -> ok;
+            Unknown -> throw({error, {future_upgrades_found, Unknown}})
+        end,
+        Fun(CurrentHeads, G0)
+    after
+        [true = digraph:delete(G) || G <- Gs]
+    end.
+
+make_graph(Scope) ->
     case rabbit_misc:build_acyclic_graph(
-           fun vertices/2, fun edges/2,
+           fun (Module, Steps) -> vertices(Module, Steps, Scope) end,
+           fun (Module, Steps) -> edges(Module, Steps, Scope) end,
            rabbit_misc:all_module_attributes(rabbit_upgrade)) of
-        {ok, G} -> try
-                       Fun(G)
-                   after
-                       true = digraph:delete(G)
-                   end;
+        {ok, G} ->
+            G;
         {error, {vertex, duplicate, StepName}} ->
             throw({error, {duplicate_upgrade_step, StepName}});
         {error, {edge, {bad_vertex, StepName}, _From, _To}} ->
@@ -164,18 +171,19 @@ with_upgrade_graph(Fun) ->
             throw({error, {cycle_in_upgrade_steps, StepNames}})
     end.
 
-vertices(Module, Steps) ->
-    [{StepName, {Scope, {Module, StepName}}} ||
-        {StepName, Scope, _Reqs} <- Steps].
+vertices(Module, Steps, Scope0) ->
+    [{StepName, {Module, StepName}} || {StepName, Scope1, _Reqs} <- Steps,
+                                       Scope0 == Scope1].
 
-edges(_Module, Steps) ->
-    [{Require, StepName} || {StepName, _Scope, Requires} <- Steps,
-                            Require <- Requires].
+edges(_Module, Steps, Scope0) ->
+    [{Require, StepName} || {StepName, Scope1, Requires} <- Steps,
+                            Require <- Requires,
+                            Scope0 == Scope1].
 
-unknown_heads(Heads, G) ->
-    [H || H <- Heads, digraph:vertex(G, H) =:= false].
+unknown_heads(Heads, Known) ->
+    lists:filter(fun(H) -> not lists:member(H, Known) end, Heads).
 
-upgrades_to_apply(Heads, Scopes, G) ->
+upgrades_to_apply(Heads, G) ->
     %% Take all the vertices which can reach the known heads. That's
     %% everything we've already applied. Subtract that from all
     %% vertices: that's what we have to apply.
@@ -185,10 +193,8 @@ upgrades_to_apply(Heads, Scopes, G) ->
                   sets:from_list(digraph_utils:reaching(Heads, G)))),
     %% Form a subgraph from that list and find a topological ordering
     %% so we can invoke them in order.
-    Sorted = [element(2, digraph:vertex(G, StepName)) ||
-        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))],
-    %% Only return the upgrades for the appropriate scopes
-    [Upgrade || {Scope, Upgrade} <- Sorted, lists:member(Scope, Scopes)].
+    [element(2, digraph:vertex(G, StepName)) ||
+        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
 
 heads(G) ->
     lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).

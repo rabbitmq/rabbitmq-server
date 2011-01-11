@@ -31,8 +31,8 @@
 -rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
 
 -rabbit_upgrade({one,   mnesia, [user_to_internal_user]}).
--rabbit_upgrade({two,   local,  [one]}).
--rabbit_upgrade({three, mnesia, [two]}).
+-rabbit_upgrade({two,   mnesia, [one]}).
+-rabbit_upgrade({three, local,  []}).
 
 %% -------------------------------------------------------------------
 

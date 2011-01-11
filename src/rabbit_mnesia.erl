@@ -402,7 +402,7 @@ setup_existing_node(ClusterNodes, Nodes) ->
         [] ->
             %% We're the first node up
             ok = wait_for_tables(),
-            case rabbit_upgrade:maybe_upgrade([local]) of
+            case rabbit_upgrade:maybe_upgrade(local) of
                 ok                    -> ensure_schema_ok();
                 version_not_available -> schema_ok_or_move()
             end;
@@ -419,7 +419,7 @@ setup_existing_node(ClusterNodes, Nodes) ->
                                                true  -> disc;
                                                false -> ram
                                            end),
-            case rabbit_upgrade:maybe_upgrade([local]) of
+            case rabbit_upgrade:maybe_upgrade(local) of
                 ok ->                    ok;
                 %% If we're just starting up a new node we won't have
                 %% a version
