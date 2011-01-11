@@ -69,19 +69,19 @@ connect(AmqpParams, SIF, _ChMgr, State) ->
     catch _:Reason -> {error, Reason}
     end.
 
-do_connect(#amqp_params{username = User, password = Pass, virtual_host = VHost},
+do_connect(#amqp_params{username = Username, password = Pass,
+                        virtual_host = VHost},
            SIF, State) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  -> ok;
         false -> exit(broker_not_found_in_vm)
     end,
-    try rabbit_access_control:user_pass_login(User, Pass) of
+    User = try rabbit_access_control:user_pass_login(Username, Pass) of
+               User1 -> User1
+           catch exit:#amqp_error{name = access_refused} -> exit(auth_failure)
+           end,
+    try rabbit_access_control:check_vhost_access(User, VHost) of
         _ -> ok
-    catch exit:#amqp_error{name = access_refused} -> exit(auth_failure)
-    end,
-    try rabbit_access_control:check_vhost_access(
-            #user{username = User}, VHost) of
-            _ -> ok
     catch exit:#amqp_error{name = access_refused} -> exit(access_refused)
     end,
     {ok, Collector} = SIF(),
