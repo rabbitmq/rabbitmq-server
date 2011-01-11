@@ -189,10 +189,10 @@ handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
 
 handle_frame("ACK", Frame, State) ->
-    with_id_and_subscription("ACK", Frame, State, fun do_ack/4);
+    ack_action("ACK", Frame, State, fun create_ack_method/2);
 
 handle_frame("NACK", Frame, State) ->
-    ok;
+    ack_action("NACK", Frame, State, fun create_nack_method/2);
 
 handle_frame("BEGIN", Frame, State) ->
     transactional_action(Frame, "BEGIN", fun begin_transaction/2, State);
@@ -212,14 +212,24 @@ handle_frame(Command, _Frame, State) ->
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-with_id_and_subscription(Command, Frame,
-                         State = #state{subscriptions = Subs}, Fun) ->
+ack_action(Command, Frame,
+           State = #state{subscriptions = Subs}, MethodFun) ->
     case rabbit_stomp_frame:header(Frame, "message-id") of
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
-                {ok, MessageId = {ConsumerTag, _SessionId, _DeliveryTag}} ->
-                    Subscription = dict:fetch(ConsumerTag, Subs),
-                    Fun(MessageId, Subscription, Frame, State);
+                {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
+                    Subscription = #subscription{channel = SubChannel}
+                        = dict:fetch(ConsumerTag, Subs),
+                    Method = MethodFun(DeliveryTag, Subscription),
+                    case transactional(Frame) of
+                        {yes, Transaction} ->
+                            extend_transaction(Transaction,
+                                               {SubChannel, Method},
+                                               State);
+                        no ->
+                            amqp_channel:call(SubChannel, Method),
+                            ok(State)
+                    end;
                 _ ->
                    error("Invalid message-id",
                          "~p must include a valid 'message-id' header\n",
@@ -352,21 +362,12 @@ do_send(Destination, _DestHdr,
             ok(send_method(Method, Props, BodyFragments, State))
     end.
 
-do_ack({_ConsumerTag, _SessionId, DeliveryTag},
-       #subscription{channel = SubChannel, multi_ack = IsMulti},
-       Frame, State) ->
-    Method = #'basic.ack'{delivery_tag = DeliveryTag,
-                          multiple     = IsMulti},
+create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+    #'basic.ack'{delivery_tag = DeliveryTag,
+                 multiple     = IsMulti}.
 
-    case transactional(Frame) of
-        {yes, Transaction} ->
-            extend_transaction(Transaction,
-                               {SubChannel, Method},
-                               State);
-        no ->
-            amqp_channel:call(SubChannel, Method),
-            ok(State)
-    end.
+create_nack_method(DeliveryTag, _Subscription) ->
+    #'basic.reject'{delivery_tag = DeliveryTag}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(

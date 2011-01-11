@@ -150,3 +150,19 @@ class TestAck(base.BaseTest):
         self.assertFalse(self.listener.await(5),
                          "Should not have been able to see 6 messages")
         self.assertEquals(5, len(self.listener.messages))
+
+    def test_nack(self):
+        d = "/queue/nack-test"
+
+        #subscribe and send
+        self.conn.subscribe(destination=d, ack='client')
+        self.conn.send("nack-test", destination=d)
+
+        self.assertTrue(self.listener.await(), "Not received message")
+        message_id = self.listener.messages[0]['headers']['message-id']
+        self.listener.reset()
+
+        self.conn.send_frame("NACK", {"message-id" : message_id})
+        self.assertTrue(self.listener.await(), "Not received message again")
+        message_id = self.listener.messages[0]['headers']['message-id']
+        self.conn.ack({'message-id' : message_id})
