@@ -141,8 +141,8 @@ if_enabled(_State, Fun) ->
     Fun(),
     ok.
 
-notify_if(false, _Type, _Props)  -> ok;
-notify_if(true, Type, Props) -> notify(Type, Props).
+notify_if(true,   Type,  Props) -> notify(Type, Props);
+notify_if(false, _Type, _Props) -> ok.
 
 notify(Type, Props) ->
     try

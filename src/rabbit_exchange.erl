@@ -145,7 +145,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
            fun ({new, Exchange}, Tx) ->
                    callback(Exchange, create, [Tx, Exchange]),
                    rabbit_event:notify_if(
-                       not(Tx), exchange_created, info(Exchange)),
+                       not Tx, exchange_created, info(Exchange)),
                    Exchange;
                ({existing, Exchange}, _Tx) ->
                    Exchange;
@@ -299,7 +299,8 @@ delete(XName, IfUnused) ->
                 ok = rabbit_binding:process_deletions(
                        rabbit_binding:add_deletion(
                          XName, {X, deleted, Bs}, Deletions), Tx);
-            (Error = {error, _InUseOrNotFound}, _Tx) -> Error
+            (Error = {error, _InUseOrNotFound}, _Tx) ->
+                Error
         end).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->

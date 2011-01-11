@@ -70,7 +70,7 @@
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([lock_file/1]).
--export([const_ok/1]).
+-export([const_ok/1, const/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -207,6 +207,7 @@
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/1 :: (any()) -> 'ok').
+-spec(const/1 :: (A) -> fun ((_) -> A)).
 
 -endif.
 
@@ -857,3 +858,4 @@ lock_file(Path) ->
     end.
 
 const_ok(_) -> ok.
+const(X) -> fun (_) -> X end.

@@ -460,8 +460,9 @@ internal_delete(QueueName) ->
                        [_] -> internal_delete1(QueueName)
                    end
            end,
-           fun ({error, _} = Err, _Tx) -> Err;
-               (Deletions, Tx)         ->
+           fun ({error, _} = Err, _Tx) ->
+                   Err;
+               (Deletions, Tx) ->
                    ok = rabbit_binding:process_deletions(Deletions, Tx)
            end).
 

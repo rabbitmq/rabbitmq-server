@@ -120,8 +120,7 @@ exists(Binding) ->
     binding_action(
       Binding,
       fun (_Src, _Dst, B) ->
-          Result = mnesia:read({rabbit_route, B}) /= [],
-          fun (_Tx) -> Result end
+          rabbit_misc:const(mnesia:read({rabbit_route, B}) /= [])
       end).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
@@ -146,13 +145,13 @@ add(Binding, InnerFun) ->
                                                    Src, add_binding,
                                                    [Tx, Src, B]),
                                           rabbit_event:notify_if(
-                                                   not(Tx),
+                                                   not Tx,
                                                    binding_created, info(B))
                                       end;
                                [_] -> fun (_Tx) -> ok end
                            end;
                        {error, _} = Err ->
-                           fun (_Tx) -> Err end
+                           rabbit_misc:const(Err)
                    end
            end).
 
@@ -179,10 +178,10 @@ remove(Binding, InnerFun) ->
                            end
                    end,
                    fun (Tx) ->
-                           case {Result, Tx} of
-                               {{ok, Deletions}, _} ->
+                           case Result of
+                               {ok, Deletions} ->
                                    ok = process_deletions(Deletions, Tx);
-                               {{error, _} = Err, _} ->
+                               {error, _} = Err ->
                                   Err
                            end
                    end
@@ -296,18 +295,17 @@ sync_binding(Binding, Durable, Fun) ->
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    ErrFun = fun (Err) ->
-                 fun (_Tx) -> Err end
-             end,
+    ErrFun = fun (Err) -> rabbit_misc:const(Err) end,
     rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> case {mnesia:read({SrcTable, SrcName}),
-                      mnesia:read({DstTable, DstName})} of
-                    {[Src], [Dst]} -> Fun(Src, Dst);
-                    {[],    [_]  } -> ErrFun({error, source_not_found});
-                    {[_],   []   } -> ErrFun({error, destination_not_found});
-                    {[],    []   } ->
-                        ErrFun({error, source_and_destination_not_found})
-                end
+      fun () ->
+              case {mnesia:read({SrcTable, SrcName}),
+                    mnesia:read({DstTable, DstName})} of
+                  {[Src], [Dst]} -> Fun(Src, Dst);
+                  {[],    [_]  } -> ErrFun({error, source_not_found});
+                  {[_],   []   } -> ErrFun({error, destination_not_found});
+                  {[],    []   } -> ErrFun({error,
+                                            source_and_destination_not_found})
+              end
       end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
@@ -432,12 +430,12 @@ process_deletions(Deletions, Tx) ->
     dict:fold(
       fun (_XName, {X, Deleted, Bindings}, ok) ->
           FlatBindings = lists:flatten(Bindings),
-          [rabbit_event:notify_if(not(Tx), binding_deleted, info(B)) ||
+          [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
               B <- FlatBindings],
           case Deleted of
               not_deleted -> rabbit_exchange:callback(X, remove_bindings,
                                                       [Tx, X, FlatBindings]);
-              deleted     -> rabbit_event:notify_if(not(Tx), exchange_deleted,
+              deleted     -> rabbit_event:notify_if(not Tx, exchange_deleted,
                                                     [{name, X#exchange.name}]),
                              rabbit_exchange:callback(X, delete,
                                                       [Tx, X, FlatBindings])
