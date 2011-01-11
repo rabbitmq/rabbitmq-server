@@ -938,9 +938,9 @@ stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
     State #msstate { sync_timer_ref = undefined }.
 
-internal_sync(State = #msstate { current_file_handle    = CurHdl,
-                                 on_sync                = Syncs,
-                                 cref_to_guids          = CTG }) ->
+internal_sync(State = #msstate { current_file_handle = CurHdl,
+                                 on_sync             = Syncs,
+                                 cref_to_guids       = CTG }) ->
     State1 = stop_sync_timer(State),
     CGs = dict:fold(fun (CRef, Guids, NS) ->
                             case gb_sets:is_empty(Guids) of
@@ -955,7 +955,6 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
     [K() || K <- lists:reverse(Syncs)],
     [client_confirm(CRef, Guids, written, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
-
 
 write_message(Guid, Msg,
               State = #msstate { current_file_handle = CurHdl,
