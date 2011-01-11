@@ -698,12 +698,11 @@ handle_cast({client_dying, CRef},
 handle_cast({client_delete, CRef},
             State = #msstate { client_refs = ClientRefs,
                                dying_clients = DyingClients }) ->
-    State1 = clear_client_callback(CRef, State),
-    noreply(remove_message(
-              CRef, CRef,
-              State1 #msstate {
-                client_refs   = sets:del_element(CRef, ClientRefs),
-                dying_clients = sets:del_element(CRef, DyingClients) }));
+    State1 = clear_client_callback(
+               CRef, State #msstate {
+                       client_refs   = sets:del_element(CRef, ClientRefs),
+                       dying_clients = sets:del_element(CRef, DyingClients) }),
+    noreply(remove_message(CRef, CRef, State1));
 
 handle_cast({write, CRef, Guid},
             State = #msstate { sum_valid_data         = SumValid,
