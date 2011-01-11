@@ -30,10 +30,6 @@
 -rabbit_upgrade({internal_exchanges,    mnesia, []}).
 -rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
 
--rabbit_upgrade({one,   mnesia, [user_to_internal_user]}).
--rabbit_upgrade({two,   mnesia, [one]}).
--rabbit_upgrade({three, local,  []}).
-
 %% -------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -98,28 +94,6 @@ user_to_internal_user() ->
               {internal_user, Username, PasswordHash, IsAdmin}
       end,
       [username, password_hash, is_admin], internal_user).
-
-
-
-one() ->
-    mnesia(
-      rabbit_user,
-      fun ({internal_user, Username, Hash, IsAdmin}) ->
-              {internal_user, Username, Hash, IsAdmin, foo}
-      end,
-      [username, password_hash, is_admin, extra]).
-
-two() ->
-    mnesia(
-      rabbit_user,
-      fun ({internal_user, Username, Hash, IsAdmin, _}) ->
-              {internal_user, Username, Hash, IsAdmin}
-      end,
-      [username, password_hash, is_admin]).
-
-three() ->
-    ok = rabbit_misc:write_term_file(filename:join(rabbit_mnesia:dir(), "test"),
-                                     [test]).
 
 %%--------------------------------------------------------------------
 
