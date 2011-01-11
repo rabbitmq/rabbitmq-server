@@ -1391,10 +1391,13 @@ find_persistent_count(LensByStore) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-confirm_commit_index(State = #vqstate { unconfirmed = [] }) ->
-    State;
-confirm_commit_index(State = #vqstate { index_state = IndexState }) ->
-    State #vqstate { index_state = rabbit_queue_index:sync(IndexState) }.
+confirm_commit_index(State = #vqstate { unconfirmed = UC,
+                                        index_state = IndexState }) ->
+    case gb_sets:is_empty(UC) of
+        true  -> State;
+        false -> State #vqstate {
+                   index_state = rabbit_queue_index:sync(IndexState) }
+    end.
 
 remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
                                             msg_indices_on_disk = MIOD,
