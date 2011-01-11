@@ -81,6 +81,7 @@
           file_summary_ets,       %% tid of the file summary table
           dedup_cache_ets,        %% tid of dedup cache table
           cur_file_cache_ets,     %% tid of current file cache table
+          dying_clients,          %% set of dying clients
           client_refs,            %% set of references of all registered clients
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
@@ -306,6 +307,17 @@
 %% sure that reads are not attempted from files which are in the
 %% process of being garbage collected.
 %%
+%% When a message is removed, its reference count is decremented. Even
+%% if the reference count becomes 0, its entry is not removed. This is
+%% because in the event of the same message being sent to several
+%% different queues, there is the possibility of one queue writing and
+%% removing the message before other queues write it at all. Thus
+%% accomodating 0-reference counts allows us to avoid unnecessary
+%% writes here. Of course, there are complications: the file to which
+%% the message has already been written could be locked pending
+%% deletion or GC, which means we have to rewrite the message as the
+%% original copy will now be lost.
+%%
 %% The server automatically defers reads, removes and contains calls
 %% that occur which refer to files which are currently being
 %% GC'd. Contains calls are only deferred in order to ensure they do
@@ -322,6 +334,55 @@
 %% itself. The effect of this is that even if the msg_store process is
 %% heavily overloaded, clients can still write and read messages with
 %% very low latency and not block at all.
+%%
+%% Clients of the msg_store are required to register before using the
+%% msg_store. This provides them with the necessary client-side state
+%% to allow them to directly access the various caches and files. When
+%% they terminate, they should deregister. They can do this by calling
+%% either client_terminate/1 or client_delete_and_terminate/1. The
+%% differences are: (a) client_terminate is synchronous. As a result,
+%% if the msg_store is badly overloaded and has lots of in-flight
+%% writes and removes to process, this will take some time to
+%% return. However, once it does return, you can be sure that all the
+%% actions you've issued to the msg_store have been processed. (b) Not
+%% only is client_delete_and_terminate/1 asynchronous, but it also
+%% permits writes and subsequent removes from the current
+%% (terminating) client which are still in flight to be safely
+%% ignored. Thus from the point of view of the msg_store itself, and
+%% all from the same client:
+%%
+%% (T) = termination; (WN) = write of msg N; (RN) = remove of msg N
+%% --> W1, W2, W1, R1, T, W3, R2, W2, R1, R2, R3, W4 -->
+%%
+%% The client obviously sent T after all the other messages (up to
+%% W4), but because the msg_store prioritises messages, the T can be
+%% promoted and thus received early.
+%%
+%% Thus at the point of the msg_store receiving T, we have messages 1
+%% and 2 with a refcount of 1. After T, W3 will be ignored because
+%% it's an unknown message, as will R3, and W4. W2, R1 and R2 won't be
+%% ignored because the messages that they refer to were already known
+%% to the msg_store prior to T. However, it can be a little more
+%% complex: after the first R2, the refcount of msg 2 is 0. At that
+%% point, if a GC occurs or file deletion, msg 2 could vanish, which
+%% would then mean that the subsequent W2 and R2 are then ignored.
+%%
+%% The use case then for client_delete_and_terminate/1 is if the
+%% client wishes to remove everything it's written to the msg_store:
+%% it issues removes for all messages it's written and not removed,
+%% and then calls client_delete_and_terminate/1. At that point, any
+%% in-flight writes (and subsequent removes) can be ignored, but
+%% removes and writes for messages the msg_store already knows about
+%% will continue to be processed normally (which will normally just
+%% involve modifying the reference count, which is fast). Thus we save
+%% disk bandwidth for writes which are going to be immediately removed
+%% again by the the terminating client.
+%%
+%% We use a separate set to keep track of the dying clients in order
+%% to keep that set, which is inspected on every write and remove, as
+%% small as possible. Inspecting client_refs - the set of all clients
+%% - would degrade performance with many healthy clients and few, if
+%% any, dying clients, which is the typical case.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
 %% variable_queue.
@@ -361,6 +422,7 @@ client_terminate(CState = #client_msstate { client_ref = Ref }) ->
 
 client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
     close_all_handles(CState),
+    ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}).
 
 client_ref(#client_msstate { client_ref = Ref }) -> Ref.
@@ -598,6 +660,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        file_summary_ets       = FileSummaryEts,
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
+                       dying_clients          = sets:new(),
                        client_refs            = ClientRefs1,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
@@ -643,6 +706,7 @@ prioritise_cast(Msg, _State) ->
         {combine_files, _Source, _Destination, _Reclaimed} -> 8;
         {delete_file, _File, _Reclaimed}                   -> 8;
         {set_maximum_since_use, _Age}                      -> 8;
+        {client_dying, _Pid}                               -> 7;
         _                                                  -> 0
     end.
 
@@ -681,15 +745,22 @@ handle_call({contains, Guid}, From, State) ->
     State1 = contains_message(Guid, From, State),
     noreply(State1).
 
+handle_cast({client_dying, CRef},
+            State = #msstate { dying_clients = DyingClients }) ->
+    DyingClients1 = sets:add_element(CRef, DyingClients),
+    write_message(CRef, <<>>, State #msstate { dying_clients = DyingClients1 });
+
 handle_cast({client_delete, CRef},
-            State = #msstate { client_refs = ClientRefs }) ->
-    State1 = clear_client_callback(CRef, State),
-    noreply(State1 #msstate {
-              client_refs = sets:del_element(CRef, ClientRefs) });
+            State = #msstate { client_refs = ClientRefs,
+                               dying_clients = DyingClients }) ->
+    State1 = clear_client_callback(
+               CRef, State #msstate {
+                       client_refs   = sets:del_element(CRef, ClientRefs),
+                       dying_clients = sets:del_element(CRef, DyingClients) }),
+    noreply(remove_message(CRef, CRef, State1));
 
 handle_cast({write, CRef, Guid},
-            State = #msstate { sum_valid_data         = SumValid,
-                               file_summary_ets       = FileSummaryEts,
+            State = #msstate { file_summary_ets       = FileSummaryEts,
                                current_file           = CurFile,
                                cur_file_cache_ets     = CurFileCacheEts,
                                client_ondisk_callback = CODC,
@@ -705,41 +776,47 @@ handle_cast({write, CRef, Guid},
                error   -> CTG
            end,
     State1 = State #msstate { cref_to_guids = CTG1 },
-    case index_lookup(Guid, State1) of
-        not_found ->
+    case should_mask_action(CRef, Guid, State1) of
+        {true, _Location} ->
+            noreply(State1);
+        {false, not_found} ->
             write_message(Guid, Msg, State1);
-        #msg_location { ref_count = 0, file = File, total_size = TotalSize } ->
-            case ets:lookup(FileSummaryEts, File) of
-                [#file_summary { locked = true }] ->
+        {Mask, #msg_location { ref_count = 0, file = File,
+                               total_size = TotalSize }} ->
+            case {Mask, ets:lookup(FileSummaryEts, File)} of
+                {false, [#file_summary { locked = true }]} ->
                     ok = index_delete(Guid, State1),
                     write_message(Guid, Msg, State1);
-                [#file_summary {}] ->
-                    ok = index_update_ref_count(Guid, 1, State1),
-                    [_] = ets:update_counter(
-                            FileSummaryEts, File,
-                            [{#file_summary.valid_total_size, TotalSize}]),
-                    noreply(State1 #msstate {
-                              sum_valid_data = SumValid + TotalSize })
+                {false_if_increment, [#file_summary { locked = true }]} ->
+                    %% The msg for Guid is older than the client death
+                    %% message, but as it is being GC'd currently,
+                    %% we'll have to write a new copy, which will then
+                    %% be younger, so ignore this write.
+                    noreply(State1);
+                {_Mask, [#file_summary {}]} ->
+                    ok = index_update_ref_count(Guid, 1, State),
+                    noreply(adjust_valid_total_size(File, TotalSize, State))
             end;
-        #msg_location { ref_count = RefCount, file = File } ->
+        {_Mask, #msg_location { ref_count = RefCount, file = File }} ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
             ok = index_update_ref_count(Guid, RefCount + 1, State1),
             CTG2 = case {dict:find(CRef, CODC), File} of
                        {{ok, _},   CurFile} -> CTG1;
-                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid)),
+                       {{ok, Fun}, _}       -> Fun(gb_sets:singleton(Guid),
+                                                   written),
                                                CTG;
                        _                    -> CTG1
                    end,
-            noreply(State #msstate { cref_to_guids = CTG2 })
+            noreply(State1 #msstate { cref_to_guids = CTG2 })
     end;
 
 handle_cast({remove, CRef, Guids}, State) ->
     State1 = lists:foldl(
-               fun (Guid, State2) -> remove_message(Guid, State2) end,
+               fun (Guid, State2) -> remove_message(Guid, CRef, State2) end,
                State, Guids),
-    State2 = client_confirm(CRef, gb_sets:from_list(Guids), State1),
-    noreply(maybe_compact(State2));
+    noreply(maybe_compact(
+              client_confirm(CRef, gb_sets:from_list(Guids), removed, State1)));
 
 handle_cast({release, Guids}, State =
                 #msstate { dedup_cache_ets = DedupCacheEts }) ->
@@ -875,7 +952,8 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
        true                            -> file_handle_cache:sync(CurHdl)
     end,
     lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    [client_confirm(CRef, Guids, State1) || {CRef, Guids} <- CGs],
+    [client_confirm(CRef, Guids, written, State1)
+     || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
 
@@ -990,34 +1068,43 @@ contains_message(Guid, From,
             end
     end.
 
-remove_message(Guid, State = #msstate { sum_valid_data   = SumValid,
-                                        file_summary_ets = FileSummaryEts,
-                                        dedup_cache_ets  = DedupCacheEts }) ->
-    #msg_location { ref_count = RefCount, file = File,
-                    total_size = TotalSize } =
-        index_lookup_positive_ref_count(Guid, State),
-    %% only update field, otherwise bad interaction with concurrent GC
-    Dec = fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
-    case RefCount of
-        %% don't remove from CUR_FILE_CACHE_ETS_NAME here because
-        %% there may be further writes in the mailbox for the same
-        %% msg.
-        1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
-             case ets:lookup(FileSummaryEts, File) of
-                 [#file_summary { locked = true } ] ->
-                     add_to_pending_gc_completion({remove, Guid}, File, State);
-                 [#file_summary {}] ->
+remove_message(Guid, CRef,
+               State = #msstate { file_summary_ets = FileSummaryEts,
+                                  dedup_cache_ets  = DedupCacheEts }) ->
+    case should_mask_action(CRef, Guid, State) of
+        {true, _Location} ->
+            State;
+        {false_if_increment, #msg_location { ref_count = 0 }} ->
+            %% CRef has tried to both write and remove this msg
+            %% whilst it's being GC'd. ASSERTION:
+            %% [#file_summary { locked = true }] =
+            %%    ets:lookup(FileSummaryEts, File),
+            State;
+        {_Mask, #msg_location { ref_count = RefCount, file = File,
+                                total_size = TotalSize }} when RefCount > 0 ->
+            %% only update field, otherwise bad interaction with
+            %% concurrent GC
+            Dec =
+                fun () -> index_update_ref_count(Guid, RefCount - 1, State) end,
+            case RefCount of
+                %% don't remove from CUR_FILE_CACHE_ETS_NAME here
+                %% because there may be further writes in the mailbox
+                %% for the same msg.
+                1 -> ok = remove_cache_entry(DedupCacheEts, Guid),
+                     case ets:lookup(FileSummaryEts, File) of
+                         [#file_summary { locked = true }] ->
+                             add_to_pending_gc_completion(
+                               {remove, Guid, CRef}, File, State);
+                         [#file_summary {}] ->
+                             ok = Dec(),
+                             delete_file_if_empty(
+                               File, adjust_valid_total_size(File, -TotalSize,
+                                                             State))
+                     end;
+                _ -> ok = decrement_cache(DedupCacheEts, Guid),
                      ok = Dec(),
-                     [_] = ets:update_counter(
-                             FileSummaryEts, File,
-                             [{#file_summary.valid_total_size, -TotalSize}]),
-                     delete_file_if_empty(
-                       File, State #msstate {
-                               sum_valid_data = SumValid - TotalSize })
-             end;
-        _ -> ok = decrement_cache(DedupCacheEts, Guid),
-             ok = Dec(),
-             State
+                     State
+            end
     end.
 
 add_to_pending_gc_completion(
@@ -1039,8 +1126,8 @@ run_pending_action({read, Guid, From}, State) ->
     read_message(Guid, From, State);
 run_pending_action({contains, Guid, From}, State) ->
     contains_message(Guid, From, State);
-run_pending_action({remove, Guid}, State) ->
-    remove_message(Guid, State).
+run_pending_action({remove, Guid, CRef}, State) ->
+    remove_message(Guid, CRef, State).
 
 safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
     try
@@ -1051,15 +1138,22 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
 
+adjust_valid_total_size(File, Delta, State = #msstate {
+                                       sum_valid_data   = SumValid,
+                                       file_summary_ets = FileSummaryEts }) ->
+    [_] = ets:update_counter(FileSummaryEts, File,
+                             [{#file_summary.valid_total_size, Delta}]),
+    State #msstate { sum_valid_data = SumValid + Delta }.
+
 orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
     orddict:store(Key, Val, Dict).
 
-client_confirm(CRef, Guids,
+client_confirm(CRef, Guids, ActionTaken,
                State = #msstate { client_ondisk_callback = CODC,
                                   cref_to_guids          = CTG }) ->
     case dict:find(CRef, CODC) of
-        {ok, Fun} -> Fun(Guids),
+        {ok, Fun} -> Fun(Guids, ActionTaken),
                      CTG1 = case dict:find(CRef, CTG) of
                                 {ok, Gs} ->
                                     Guids1 = gb_sets:difference(Gs, Guids),
@@ -1073,6 +1167,29 @@ client_confirm(CRef, Guids,
         error -> State
     end.
 
+%% Detect whether the Guid is older or younger than the client's death
+%% msg (if there is one). If the msg is older than the client death
+%% msg, and it has a 0 ref_count we must only alter the ref_count, not
+%% rewrite the msg - rewriting it would make it younger than the death
+%% msg and thus should be ignored. Note that this (correctly) returns
+%% false when testing to remove the death msg itself.
+should_mask_action(CRef, Guid,
+                   State = #msstate { dying_clients = DyingClients }) ->
+    case {sets:is_element(CRef, DyingClients), index_lookup(Guid, State)} of
+        {false, Location} ->
+            {false, Location};
+        {true, not_found} ->
+            {true, not_found};
+        {true, #msg_location { file = File, offset = Offset,
+                               ref_count = RefCount } = Location} ->
+            #msg_location { file = DeathFile, offset = DeathOffset } =
+                index_lookup(CRef, State),
+            {case {{DeathFile, DeathOffset} < {File, Offset}, RefCount} of
+                 {true,  _} -> true;
+                 {false, 0} -> false_if_increment;
+                 {false, _} -> false
+             end, Location}
+    end.
 
 %%----------------------------------------------------------------------------
 %% file helper functions
