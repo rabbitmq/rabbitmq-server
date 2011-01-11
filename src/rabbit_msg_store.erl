@@ -705,8 +705,7 @@ handle_cast({client_delete, CRef},
     noreply(remove_message(CRef, CRef, State1));
 
 handle_cast({write, CRef, Guid},
-            State = #msstate { sum_valid_data         = SumValid,
-                               file_summary_ets       = FileSummaryEts,
+            State = #msstate { file_summary_ets       = FileSummaryEts,
                                current_file           = CurFile,
                                cur_file_cache_ets     = CurFileCacheEts,
                                client_ondisk_callback = CODC,
@@ -741,11 +740,7 @@ handle_cast({write, CRef, Guid},
                     noreply(State1);
                 {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
-                    [_] = ets:update_counter(
-                            FileSummaryEts, File,
-                            [{#file_summary.valid_total_size, TotalSize}]),
-                    noreply(State1 #msstate {
-                              sum_valid_data = SumValid + TotalSize })
+                    noreply(adjust_valid_total_size(File, TotalSize, State))
             end;
         {_Mask, #msg_location { ref_count = RefCount, file = File }} ->
             %% We already know about it, just update counter. Only
@@ -1019,8 +1014,7 @@ contains_message(Guid, From,
     end.
 
 remove_message(Guid, CRef,
-               State = #msstate { sum_valid_data   = SumValid,
-                                  file_summary_ets = FileSummaryEts,
+               State = #msstate { file_summary_ets = FileSummaryEts,
                                   dedup_cache_ets  = DedupCacheEts }) ->
     case should_mask_action(CRef, Guid, State) of
         {true, _Location} ->
@@ -1048,13 +1042,9 @@ remove_message(Guid, CRef,
                                {remove, Guid, CRef}, File, State);
                          [#file_summary {}] ->
                              ok = Dec(),
-                             [_] = ets:update_counter(
-                                     FileSummaryEts, File,
-                                     [{#file_summary.valid_total_size,
-                                       -TotalSize}]),
                              delete_file_if_empty(
-                               File, State #msstate {
-                                       sum_valid_data = SumValid - TotalSize })
+                               File, adjust_valid_total_size(File, -TotalSize,
+                                                             State))
                      end;
                 _ -> ok = decrement_cache(DedupCacheEts, Guid),
                      ok = Dec(),
@@ -1092,6 +1082,13 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+adjust_valid_total_size(File, Delta, State = #msstate {
+                                       sum_valid_data   = SumValid,
+                                       file_summary_ets = FileSummaryEts }) ->
+    [_] = ets:update_counter(FileSummaryEts, File,
+                             [{#file_summary.valid_total_size, Delta}]),
+    State #msstate { sum_valid_data = SumValid + Delta }.
 
 orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
