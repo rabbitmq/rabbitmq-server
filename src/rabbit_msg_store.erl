@@ -948,12 +948,12 @@ internal_sync(State = #msstate { current_file_handle    = CurHdl,
                                 false -> [{CRef, Guids} | NS]
                             end
                     end, [], CTG),
-    if Syncs =:= [] andalso CGs =:= [] -> ok;
-       true                            -> file_handle_cache:sync(CurHdl)
+    case {Syncs, CGs} of
+        {[], []} -> ok;
+        _        -> file_handle_cache:sync(CurHdl)
     end,
-    lists:foreach(fun (K) -> K() end, lists:reverse(Syncs)),
-    [client_confirm(CRef, Guids, written, State1)
-     || {CRef, Guids} <- CGs],
+    [K() || K <- lists:reverse(Syncs)],
+    [client_confirm(CRef, Guids, written, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
 
