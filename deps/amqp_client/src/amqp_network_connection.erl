@@ -186,9 +186,8 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                            heartbeat   = Heartbeat}, ChannelMax, NewState}.
 
 start_heartbeat(SHF, #state{sock = Sock, heartbeat = Heartbeat}) ->
-    SendFun = fun () -> Frame = rabbit_binary_generator:build_heartbeat_frame(),
-                        catch rabbit_net:send(Sock, Frame)
-              end,
+    Frame = rabbit_binary_generator:build_heartbeat_frame(),
+    SendFun = fun () -> catch rabbit_net:send(Sock, Frame) end,
     Connection = self(),
     ReceiveFun = fun () -> Connection ! heartbeat_timeout end,
     SHF(Sock, Heartbeat, SendFun, Heartbeat, ReceiveFun).
@@ -228,7 +227,7 @@ client_properties(UserProperties) ->
                {<<"version">>,   longstr, list_to_binary(Vsn)},
                {<<"platform">>,  longstr, <<"Erlang">>},
                {<<"copyright">>, longstr,
-                <<"Copyright (c) 2007-2010 VMware, Inc.">>},
+                <<"Copyright (c) 2007-2011 VMware, Inc.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
                   "See http://www.rabbitmq.com/">>}],

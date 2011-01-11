@@ -192,9 +192,9 @@ handle_call(info_keys, _From, State = #state{module = Mod}) ->
 
 after_connect({ServerProperties, ChannelMax, NewMState},
                State = #state{channels_manager = ChMgr}) ->
-    case ChannelMax of 0 -> ok;
-                       _ -> amqp_channels_manager:set_channel_max(ChMgr,
-                                                                  ChannelMax)
+    case ChannelMax of
+        0 -> ok;
+        _ -> amqp_channels_manager:set_channel_max(ChMgr, ChannelMax)
     end,
     State#state{server_properties = ServerProperties,
                 channel_max       = ChannelMax,
