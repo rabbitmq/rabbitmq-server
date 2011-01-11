@@ -307,6 +307,17 @@
 %% sure that reads are not attempted from files which are in the
 %% process of being garbage collected.
 %%
+%% When a message is removed, its reference count is decremented. Even
+%% if the reference count becomes 0, its entry is not removed. This is
+%% because in the event of the same message being sent to several
+%% different queues, there is the possibility of one queue writing and
+%% removing the message before other queues write it at all. Thus
+%% accomodating 0-reference counts allows us to avoid unnecessary
+%% writes here. Of course, there are complications: the file to which
+%% the message has already been written could be locked pending
+%% deletion or GC, which means we have to rewrite the message as the
+%% original copy will now be lost.
+%%
 %% The server automatically defers reads, removes and contains calls
 %% that occur which refer to files which are currently being
 %% GC'd. Contains calls are only deferred in order to ensure they do
@@ -323,6 +334,55 @@
 %% itself. The effect of this is that even if the msg_store process is
 %% heavily overloaded, clients can still write and read messages with
 %% very low latency and not block at all.
+%%
+%% Clients of the msg_store are required to register before using the
+%% msg_store. This provides them with the necessary client-side state
+%% to allow them to directly access the various caches and files. When
+%% they terminate, they should deregister. They can do this by calling
+%% either client_terminate/1 or client_delete_and_terminate/1. The
+%% differences are: (a) client_terminate is synchronous. As a result,
+%% if the msg_store is badly overloaded and has lots of in-flight
+%% writes and removes to process, this will take some time to
+%% return. However, once it does return, you can be sure that all the
+%% actions you've issued to the msg_store have been processed. (b) Not
+%% only is client_delete_and_terminate/1 asynchronous, but it also
+%% permits writes and subsequent removes from the current
+%% (terminating) client which are still in flight can be safely
+%% ignored. Thus from the point of view of the msg_store itself, and
+%% all from the same client:
+%%
+%% (T) = termination; (WN) = write of msg N; (RN) = read of msg N
+%% -->  W1, W2, W1, R1, T, W3, R2, W2, R1, R2, R3, W4 -->
+%%
+%% The client obviously sent T after all the other messages (up to
+%% W4), but because the msg_store prioritises messages, the T can be
+%% promoted and thus received early.
+%%
+%% Thus at the point of the msg_store receiving T, we have messages 1
+%% and 2 with a refcount of 1. After T, W3 will be ignored because
+%% it's an unknown message, as will R3, and W4. W2, R1 and R2 won't be
+%% ignored because the messages that they refer to were already known
+%% to the msg_store prior to T. However, it can be a little more
+%% complex: after the first R2, the refcount of msg 2 is 0. At that
+%% point, if a GC occurs or file deletion, msg 2 could vanish, which
+%% would then mean that the subsequent W2 and R2 are then ignored.
+%%
+%% The use case then for client_delete_and_terminate/1 is if the
+%% client wishes to remove everything it's sent to the msg_store: it
+%% issues removes for all messages it's written, and then calls
+%% client_delete_and_terminate/1. At that point, any in-flight writes
+%% (and subsequent removes) can be ignored, but removes and writes for
+%% messages the msg_store already knows about will continue to be
+%% processed normally (which will normally just involve modifying the
+%% reference count, which is fast). Thus we save disk bandwidth for
+%% writes which are going to be immediately removed again by the the
+%% terminating client.
+%%
+%% We use a separate set to keep track of the dying clients in order
+%% to keep that set, which is inspected on every write and remove, as
+%% small as possible. Inspecting client_refs - the set of all clients
+%% - would degrade performance with many healthy clients and few, if
+%% any, dying clients, which is the typical case.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
 %% variable_queue.
@@ -687,11 +747,6 @@ handle_call({contains, Guid}, From, State) ->
 
 handle_cast({client_dying, CRef},
             State = #msstate { dying_clients = DyingClients }) ->
-    %% We use a separate set for the dying clients in order to keep
-    %% that set, which is inspected on every write and remove, as
-    %% small as possible. Inspecting client_refs - the set of all
-    %% clients - would degrade performance with many healthy clients
-    %% and few dying clients, which is the typical case.
     DyingClients1 = sets:add_element(CRef, DyingClients),
     write_message(CRef, <<>>, State #msstate { dying_clients = DyingClients1 });
 
