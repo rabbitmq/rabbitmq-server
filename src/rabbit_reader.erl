@@ -960,11 +960,10 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
                        self(), User, VHost, Collector}),
     erlang:monitor(process, ChPid),
-    put({channel, Channel}, {ChPid, AState}),
-    put({ch_pid, ChPid}, Channel),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
     put({channel, Channel}, {ChPid, NewAState}),
+    put({ch_pid, ChPid}, Channel),
     State.
 
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
@@ -975,9 +974,9 @@ process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
         {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid,
                                                               Method, Content),
                                             NewAState;
-        {error, Reason}                   -> ErrPid ! {channel_exit, Channel,
-                                                       Reason},
-                                             AState
+        {error, Reason}                  -> ErrPid ! {channel_exit, Channel,
+                                                      Reason},
+                                            AState
     end.
 
 log_channel_error(ConnectionState, Channel, Reason) ->
