@@ -569,9 +569,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
               end};
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
-                            multiple     = Multiple},
+                            multiple     = Multiple,
+                            requeue      = Requeue},
               _, State) ->
-    reject(DeliveryTag, true, Multiple, State);
+    reject(DeliveryTag, Requeue, Multiple, State);
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
