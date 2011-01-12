@@ -579,8 +579,8 @@ handle_method_from_server1(
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{ack_handler_pid = none} = State) ->
-    ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
-              "ack handler registered~n", [self(), BasicAck, AmqpMsg]),
+    ?LOG_WARN("Channel (~p): received ~p but there is no "
+              "ack handler registered~n", [self(), BasicAck]),
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{ack_handler_pid = AckHandler} = State) ->
