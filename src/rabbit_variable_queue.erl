@@ -710,22 +710,22 @@ tx_commit(Txn, Fun, MsgPropsFun,
        end)}.
 
 requeue(AckTags, MsgPropsFun, State) ->
-   a(reduce_memory_use(
-       ack(fun msg_store_release/3,
-           fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
-                   {_SeqId, State2} = publish(Msg, MsgPropsFun(MsgProps),
-                                              true, false, State1),
-                   State2;
-               ({IsPersistent, Guid, MsgProps}, State1) ->
-                   #vqstate { msg_store_clients = MSCState } = State1,
-                   {{ok, Msg = #basic_message{}}, MSCState1} =
-                       msg_store_read(MSCState, IsPersistent, Guid),
-                   State2 = State1 #vqstate { msg_store_clients = MSCState1 },
-                   {_SeqId, State3} = publish(Msg, MsgPropsFun(MsgProps),
-                                              true, true, State2),
-                   State3
-           end,
-           AckTags, State))).
+    a(reduce_memory_use(
+        ack(fun msg_store_release/3,
+            fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
+                    {_SeqId, State2} = publish(Msg, MsgPropsFun(MsgProps),
+                                               true, false, State1),
+                    State2;
+                ({IsPersistent, Guid, MsgProps}, State1) ->
+                    #vqstate { msg_store_clients = MSCState } = State1,
+                    {{ok, Msg = #basic_message{}}, MSCState1} =
+                        msg_store_read(MSCState, IsPersistent, Guid),
+                    State2 = State1 #vqstate { msg_store_clients = MSCState1 },
+                    {_SeqId, State3} = publish(Msg, MsgPropsFun(MsgProps),
+                                               true, true, State2),
+                    State3
+            end,
+            AckTags, State))).
 
 len(#vqstate { len = Len }) -> Len.
 
