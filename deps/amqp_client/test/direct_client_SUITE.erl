@@ -24,7 +24,7 @@
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-basic_get_test() -> 
+basic_get_test() ->
     test_util:basic_get_test(new_connection()).
 
 basic_return_test() ->
@@ -38,6 +38,9 @@ basic_recover_test() ->
 
 basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
+
+basic_nack_single_test() ->
+    test_util:basic_nack_single_test(new_connection()).
 
 large_content_test() ->
     test_util:large_content_test(new_connection()).
@@ -91,7 +94,7 @@ rpc_test() ->
 %% Negative Tests
 %%---------------------------------------------------------------------------
 
-non_existent_exchange_test() -> 
+non_existent_exchange_test() ->
     negative_test_util:non_existent_exchange_test(new_connection()).
 
 hard_error_test() ->

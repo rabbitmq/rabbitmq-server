@@ -265,7 +265,7 @@ basic_return_test(Connection) ->
     amqp_channel:register_return_handler(Channel, self()),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
-    Publish = #'basic.publish'{exchange = X, routing_key = Key, 
+    Publish = #'basic.publish'{exchange = X, routing_key = Key,
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     receive
@@ -315,7 +315,7 @@ channel_multi_open_close_test(Connection) ->
 basic_ack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    {#'basic.get_ok'{delivery_tag = Tag}, _} 
+    {#'basic.get_ok'{delivery_tag = Tag}, _}
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
     teardown(Connection, Channel).
@@ -468,6 +468,16 @@ producer_loop(Channel, RoutingKey, N) ->
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<>>}),
     producer_loop(Channel, RoutingKey, N - 1).
 
+basic_nack_single_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{}),
+
+    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
+    amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<"m1">>}),
+
+    teardown(Connection, Channel).
+
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->
     amqp_connection:close(Connection).
@@ -505,8 +515,8 @@ pub_and_close_test(Connection1, Connection2) ->
     amqp_connection:close(Connection1),
     %% Get sent messages back and count them
     {ok, Channel2} = amqp_connection:open_channel(Connection2),
-    amqp_channel:subscribe(Channel2, 
-                           #'basic.consume'{queue = Q, no_ack = true}, 
+    amqp_channel:subscribe(Channel2,
+                           #'basic.consume'{queue = Q, no_ack = true},
                            self()),
     ?assert(pc_consumer_loop(Channel2, Payload, 0) == NMessages),
     %% Make sure queue is empty
@@ -565,7 +575,7 @@ channel_flow_test(Connection) ->
                       end,
                       Publish = #'basic.publish'{exchange = X,
                                                  routing_key = K},
-                      blocked = 
+                      blocked =
                         amqp_channel:call(Channel, Publish,
                                           #amqp_msg{payload = Payload}),
                       memsup:set_sysmem_high_watermark(0.99),
