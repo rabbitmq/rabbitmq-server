@@ -34,7 +34,7 @@
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
 -export([register_ack_handler/2]).
--export([get_published_message_count/1]).
+-export([next_publish_seqno/1]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -50,7 +50,7 @@
                 writer,
                 return_handler_pid  = none,
                 ack_handler_pid     = none,
-                pub_msg_count       = undefined,
+                next_pub_seqno      = 0,
                 flow_active         = true,
                 flow_handler_pid    = none,
                 consumers           = dict:new(),
@@ -157,10 +157,10 @@ close(Channel, Code, Text) ->
 %% @spec (Channel) -> integer()
 %% where
 %%      Channel = pid()
-%% @doc Returns the number of published messages since the channel was put
-%% in confirm mode
-get_published_message_count(Channel) ->
-    gen_server:call(Channel, get_published_message_count).
+%% @doc When in confirm mode, returns the sequence number of the next
+%% message to be published.
+next_publish_seqno(Channel) ->
+    gen_server:call(Channel, next_publish_seqno).
 
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
@@ -278,9 +278,9 @@ handle_call({send_command_sync, Method}, From, State) ->
 %% Get the number of published messages since the channel was put in
 %% confirm mode.
 %% @private
-handle_call(get_published_message_count, _From,
-            State = #state {pub_msg_count = PMC}) ->
-    {reply, PMC, State}.
+handle_call(next_publish_seqno, _From,
+            State = #state{next_pub_seqno = SeqNo}) ->
+    {reply, SeqNo, State}.
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
@@ -404,17 +404,14 @@ handle_method_to_server(Method, AmqpMsg, From, State) ->
         {#'basic.consume'{}, _, _} ->
             {reply, {error, use_subscribe}, State};
         {_, _, ok} ->
-            State1 = case {Method, State} of
+            State1 = case {Method, State#state.next_pub_seqno} of
                          {#'confirm.select'{}, _} ->
-                             State #state{pub_msg_count = 0};
-                         {#'basic.publish'{},
-                          #state{pub_msg_count = undefined}} ->
+                             State#state{next_pub_seqno = 1};
+                         {#'basic.publish'{}, 0} ->
                              State;
-                         {#'basic.publish'{},
-                          #state{pub_msg_count = PMC}} ->
-                             State #state{pub_msg_count = PMC + 1};
-                         _ ->
-                             State
+                         {#'basic.publish'{}, SeqNo} ->
+                             State#state{next_pub_seqno = SeqNo + 1};
+                         _ -> State
                      end,
             {noreply,
              rpc_top_half(Method, build_content(AmqpMsg), From, State1)};
@@ -581,13 +578,13 @@ handle_method_from_server1(
     end,
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, AmqpMsg,
+                           #state{ack_handler_pid = none} = State) ->
+    ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
+              "ack handler registered~n", [self(), BasicAck, AmqpMsg]),
+    {noreply, State};
+handle_method_from_server1(#'basic.ack'{} = BasicAck, AmqpMsg,
                            #state{ack_handler_pid = AckHandler} = State) ->
-    case AckHandler of
-        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
-                          "ack handler registered~n",
-                          [self(), BasicAck, AmqpMsg]);
-        _    -> AckHandler ! {BasicAck, AmqpMsg}
-    end,
+    AckHandler ! {BasicAck, AmqpMsg},
     {noreply, State};
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
