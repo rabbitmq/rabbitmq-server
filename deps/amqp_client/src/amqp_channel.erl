@@ -309,7 +309,7 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
 handle_cast({register_default_consumer, Consumer}, State) ->
     erlang:monitor(process, Consumer),
     {noreply, State#state{default_consumer = Consumer}};
-%% Received from framing channel
+%% Received from channels manager
 %% @private
 handle_cast({method, Method, Content}, State) ->
     handle_method_from_server(Method, Content, State);
@@ -340,7 +340,7 @@ handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method_from_server(Method, Content, State),
     rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
-%% This comes from framing channel, the writer or rabbit_channel
+%% This comes from the writer or rabbit_channel
 %% @private
 handle_info({channel_exit, _FrPidOrChNumber, Reason}, State) ->
     handle_channel_exit(Reason, State);
