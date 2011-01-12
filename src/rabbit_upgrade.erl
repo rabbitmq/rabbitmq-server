@@ -159,7 +159,7 @@ maybe_upgrade(Scope) ->
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [V]}        -> case is_orddict(V) of
+        {ok, [V]}        -> case is_new_version(V) of
                                 false -> {ok, convert_old_version(V)};
                                 true  -> {ok, V}
                             end;
@@ -316,8 +316,8 @@ lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 %% started yet
 info(Msg, Args) -> error_logger:info_msg(Msg, Args).
 
-%% This doesn't check it's ordered but that's not needed for our purposes
-is_orddict(Thing) ->
-    is_list(Thing) andalso
+is_new_version(Version) ->
+    is_list(Version) andalso
+        length(Version) > 0 andalso
         lists:all(fun(Item) -> is_tuple(Item) andalso size(Item) == 2 end,
-                  Thing).
+                  Version).
