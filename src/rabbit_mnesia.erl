@@ -44,8 +44,6 @@
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
 
--define(EXAMPLE_RABBIT_TABLE, rabbit_durable_exchange).
-
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -164,7 +162,7 @@ nodes_of_type(Type) ->
     %% Specifically, we check whether a certain table, which we know
     %% will be written to disk on a disc node, is stored on disk or in
     %% RAM.
-    mnesia:table_info(?EXAMPLE_RABBIT_TABLE, Type).
+    mnesia:table_info(rabbit_durable_exchange, Type).
 
 table_definitions() ->
     [{rabbit_user,
@@ -401,7 +399,6 @@ init_db(ClusterNodes, Force) ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_upgrade, read_version, [])),
-                    ok = wait_for_tables(),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
