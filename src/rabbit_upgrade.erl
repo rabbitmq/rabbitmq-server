@@ -120,11 +120,16 @@ primary_upgrade(Upgrades, Nodes) ->
       mnesia,
       Upgrades,
       fun () ->
-              info("mnesia upgrades: Breaking cluster~n", []),
               rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
               force_tables(),
-              [{atomic, ok} = mnesia:del_table_copy(schema, Node)
-               || Node <- Others]
+              case Others of
+                  [] ->
+                      ok;
+                  _  ->
+                      info("mnesia upgrades: Breaking cluster~n", []),
+                      [{atomic, ok} = mnesia:del_table_copy(schema, Node)
+                       || Node <- Others]
+              end
       end),
     ok.
 
