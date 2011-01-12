@@ -48,6 +48,15 @@ pack_binding_test() ->
         rabbit_mgmt_format:unpack_binding_props(<<"bad_routing">>),
     ok.
 
+relativise_test() ->
+    "baz"        = rabbit_mgmt_util:relativise("/foo/bar/bash", "/foo/bar/baz"),
+    "../bax/baz" = rabbit_mgmt_util:relativise("/foo/bar/bash", "/foo/bax/baz"),
+    "../bax/baz" = rabbit_mgmt_util:relativise("/bar/bash",     "/bax/baz"),
+    ".."         = rabbit_mgmt_util:relativise("/foo/bar/bash", "/foo/bar"),
+    "../.."      = rabbit_mgmt_util:relativise("/foo/bar/bash", "/foo"),
+    "bar/baz"    = rabbit_mgmt_util:relativise("/foo/bar",      "/foo/bar/baz"),
+    ok.
+
 %%--------------------------------------------------------------------
 
 assert_binding(Packed, Routing, Args) ->

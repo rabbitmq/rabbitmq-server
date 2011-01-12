@@ -308,7 +308,7 @@ bindings_post_test() ->
     http_post("/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/myexchange/q/myqueue", [{a, "b"}], ?BAD_REQUEST),
     Headers = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
-    "/api/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar" =
+    "../../../../%2F/e/myexchange/q/myqueue/routing_foo_bar" =
         pget("location", Headers),
     [{source,<<"myexchange">>},
      {vhost,<<"/">>},
@@ -328,7 +328,7 @@ bindings_e2e_test() ->
     http_post("/bindings/%2f/e/amq.direct/e/badexchange", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/badexchange/e/amq.fanout", BArgs, ?NOT_FOUND),
     Headers = http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
-    "/api/bindings/%2F/e/amq.direct/e/amq.fanout/routing" =
+    "../../../../%2F/e/amq.direct/e/amq.fanout/routing" =
         pget("location", Headers),
     [{source,<<"amq.direct">>},
      {vhost,<<"/">>},
