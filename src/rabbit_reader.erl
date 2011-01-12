@@ -41,7 +41,7 @@
 
 -export([conserve_memory/2, server_properties/0]).
 
--export([process_channel_frame/5]). %% used be erlang-client
+-export([process_channel_frame/5]). %% used by erlang-client
 
 -export([emit_stats/1]).
 
