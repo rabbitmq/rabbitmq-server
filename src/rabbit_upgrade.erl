@@ -159,9 +159,9 @@ maybe_upgrade(Scope) ->
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [V]}        -> case orddict:find(mnesia, V) of
-                                error -> {ok, convert_old_version(V)};
-                                _     -> {ok, V}
+        {ok, [V]}        -> case is_orddict(V) of
+                                false -> {ok, convert_old_version(V)};
+                                true  -> {ok, V}
                             end;
         {error, _} = Err -> Err
     end.
@@ -315,3 +315,9 @@ lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet
 info(Msg, Args) -> error_logger:info_msg(Msg, Args).
+
+%% This doesn't check it's ordered but that's not needed for our purposes
+is_orddict(Thing) ->
+    is_list(Thing) andalso
+        lists:all(fun(Item) -> is_tuple(Item) andalso size(Item) == 2 end,
+                  Thing).
