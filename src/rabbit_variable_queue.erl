@@ -1418,10 +1418,7 @@ needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
     %% on a qi sync. Thus the negation of this is sufficient. Because
     %% is_subset is short circuiting, this is more efficient than the
     %% subtraction.
-    case gb_sets:is_empty(UC) of
-        true  -> false;
-        false -> not gb_sets:is_subset(UC, MIOD)
-    end.
+    not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
 msgs_confirmed(GuidSet, State) ->
     {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
