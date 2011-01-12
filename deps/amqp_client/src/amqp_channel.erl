@@ -275,8 +275,8 @@ handle_call({send_command_sync, Method}, From, State) ->
     Ret = handle_method_from_server(Method, none, State),
     gen_server:reply(From, ok),
     Ret;
-%% Get the number of published messages since the channel was put in
-%% confirm mode.
+%% When in confirm mode, returns the sequence number of the next
+%% message to be published.
 %% @private
 handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
