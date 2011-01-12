@@ -362,7 +362,7 @@ relativise0([H], [H|_] = To) ->
 relativise0([H|From], [H|To]) ->
     relativise0(From, To);
 relativise0(From, []) ->
-    relativise0(From, [], 0);
+    relativise(From, [], 0);
 relativise0(From, To) ->
     relativise(From, To, 1).
 
