@@ -398,7 +398,12 @@
 
     <refsect2>
       <title>User management</title>
-
+      <para>
+        Note that <command>rabbitmqctl</command> manages the RabbitMQ
+        internal user database. Users from any alternative
+        authentication backend will not be visible
+        to <command>rabbitmqctl</command>.
+      </para>
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
@@ -544,7 +549,12 @@
 
     <refsect2>
       <title>Access control</title>
-
+      <para>
+        Note that <command>rabbitmqctl</command> manages the RabbitMQ
+        internal user database. Permissions for users from any
+        alternative authorisation backend will not be visible
+        to <command>rabbitmqctl</command>.
+      </para>
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
@@ -998,6 +1008,26 @@
                 <term>ssl</term>
                 <listitem><para>Boolean indicating whether the
                 connection is secured with SSL.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_protocol</term>
+                <listitem><para>SSL protocol
+                (e.g. tlsv1)</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_key_exchange</term>
+                <listitem><para>SSL key exchange algorithm
+                (e.g. rsa)</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_cipher</term>
+                <listitem><para>SSL cipher algorithm
+                (e.g. aes_256_cbc)</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_hash</term>
+                <listitem><para>SSL hash function
+                (e.g. sha)</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>peer_cert_subject</term>
