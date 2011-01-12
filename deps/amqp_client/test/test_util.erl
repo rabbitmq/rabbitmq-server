@@ -309,10 +309,9 @@ basic_consume_test(Connection) ->
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     RoutingKey = uuid(),
     Parent = self(),
-    [spawn(
-        fun() ->
-            consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>)
-        end) || Tag <- lists:seq(1, ?Latch)],
+    [spawn_link(fun () ->
+                        consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>)
+                end) || Tag <- lists:seq(1, ?Latch)],
     timer:sleep(?Latch * 20),
     Publish = #'basic.publish'{exchange = X, routing_key = RoutingKey},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
@@ -320,25 +319,21 @@ basic_consume_test(Connection) ->
     teardown(Connection, Channel).
 
 consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
-    Route = #'queue.bind'{queue = Q,
-                          exchange = X,
-                          routing_key = RoutingKey},
-    amqp_channel:call(Channel, Route),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
-                                                     consumer_tag = Tag},
-                           self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = Tag} -> ok
-    end,
-    receive
-        {#'basic.deliver'{}, _} -> ok
-    end,
-    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-    receive
-        #'basic.cancel_ok'{consumer_tag = Tag} -> ok
-    end,
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Channel, #'queue.declare'{}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Channel, #'queue.bind'{queue = Q,
+                                                 exchange = X,
+                                                 routing_key = RoutingKey}),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Channel,
+                               #'basic.consume'{queue = Q, consumer_tag = Tag},
+                               self()),
+    receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
+    receive {#'basic.deliver'{}, _} -> ok end,
+    #'basic.cancel_ok'{} =
+        amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
+    receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     Parent ! finished.
 
 basic_recover_test(Connection) ->
