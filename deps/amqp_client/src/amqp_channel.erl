@@ -577,14 +577,14 @@ handle_method_from_server1(
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
     {noreply, State};
-handle_method_from_server1(#'basic.ack'{} = BasicAck, AmqpMsg,
+handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{ack_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
               "ack handler registered~n", [self(), BasicAck, AmqpMsg]),
     {noreply, State};
-handle_method_from_server1(#'basic.ack'{} = BasicAck, AmqpMsg,
+handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{ack_handler_pid = AckHandler} = State) ->
-    AckHandler ! {BasicAck, AmqpMsg},
+    AckHandler ! BasicAck,
     {noreply, State};
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
