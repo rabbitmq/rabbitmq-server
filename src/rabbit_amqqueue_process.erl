@@ -785,18 +785,19 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
-        delete_immediately                   -> 8;
-        {set_ram_duration_target, _Duration} -> 8;
-        {set_maximum_since_use, _Age}        -> 8;
-        maybe_expire                         -> 8;
-        drop_expired                         -> 8;
-        emit_stats                           -> 7;
-        {ack, _Txn, _MsgIds, _ChPid}         -> 7;
-        {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
-        {notify_sent, _ChPid}                -> 7;
-        {unblock, _ChPid}                    -> 7;
-        _                                    -> 0
+        update_ram_duration                       -> 8;
+        delete_immediately                        -> 8;
+        {set_ram_duration_target, _Duration}      -> 8;
+        {set_maximum_since_use, _Age}             -> 8;
+        maybe_expire                              -> 8;
+        drop_expired                              -> 8;
+        emit_stats                                -> 7;
+        {ack, _Txn, _MsgIds, _ChPid}              -> 7;
+        {reject, _MsgIds, _Requeue, _ChPid}       -> 7;
+        {notify_sent, _ChPid}                     -> 7;
+        {unblock, _ChPid}                         -> 7;
+        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
+        _                                         -> 0
     end.
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
