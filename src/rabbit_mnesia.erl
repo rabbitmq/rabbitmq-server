@@ -35,7 +35,8 @@
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
          is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
-         empty_ram_only_tables/0, copy_db/1, create_cluster_nodes_config/1]).
+         empty_ram_only_tables/0, copy_db/1,
+         create_cluster_nodes_config/1, read_cluster_nodes_config/0]).
 
 -export([table_names/0]).
 
@@ -71,6 +72,8 @@
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
+-spec(create_cluster_nodes_config/1 :: ([node()]) ->  'ok').
+-spec(read_cluster_nodes_config/0 :: () ->  [node()]).
 
 -endif.
 

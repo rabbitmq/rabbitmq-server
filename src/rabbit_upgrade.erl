@@ -22,7 +22,8 @@
 -module(rabbit_upgrade).
 
 -export([maybe_upgrade_mnesia/0, maybe_upgrade/1]).
--export([read_version/0, write_version/0, desired_version/0]).
+-export([read_version/0, write_version/0, desired_version/0,
+         desired_version/1]).
 
 -include("rabbit.hrl").
 
@@ -43,6 +44,7 @@
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
+-spec(desired_version/1 :: (scope()) -> [step()]).
 
 -endif.
 
@@ -52,13 +54,10 @@ maybe_upgrade_mnesia() ->
     rabbit:prepare(),
     case upgrades_required(mnesia) of
         [_|_] = Upgrades ->
-            DiscNodes = rabbit_mnesia:all_clustered_nodes(),
-            Upgrader = upgrader(DiscNodes),
-            case node() of
-                Upgrader ->
-                    primary_upgrade(Upgrades, DiscNodes);
-                _ ->
-                    non_primary_upgrade(Upgrader, DiscNodes)
+            Nodes = rabbit_mnesia:all_clustered_nodes(),
+            case am_i_upgrader(Nodes) of
+                true  -> primary_upgrade(Upgrades, Nodes);
+                false -> non_primary_upgrade(Nodes)
             end;
         [] ->
             ok;
@@ -66,12 +65,57 @@ maybe_upgrade_mnesia() ->
             ok
     end.
 
-upgrader(Nodes) ->
-    [Upgrader|_] = lists:usort(Nodes),
-    Upgrader.
+am_i_upgrader(Nodes) ->
+    Running = nodes_running(Nodes),
+    case Running of
+        [] ->
+            case am_i_disc_node() of
+                true ->
+                    true;
+                false ->
+                    die("Cluster upgrade needed but this is a ram node.~n   "
+                        "Please start any of the disc nodes first.", [])
+            end;
+        [Another|_] ->
+            ClusterVersion =
+                case rpc:call(Another,
+                              rabbit_upgrade, desired_version, [mnesia]) of
+                    {badrpc, {'EXIT', {undef, _}}} -> unknown_old_version;
+                    {badrpc, Reason}               -> {unknown, Reason};
+                    V                              -> V
+                end,
+            case desired_version(mnesia) of
+                ClusterVersion ->
+                    %% The other node(s) have upgraded already, I am not the
+                    %% upgrader
+                    false;
+                MyVersion ->
+                    %% The other node(s) are running an unexpected version.
+                    die("Cluster upgrade needed but other nodes are "
+                        "running ~p~n"
+                        "and I want ~p", [ClusterVersion, MyVersion])
+            end
+    end.
 
-primary_upgrade(Upgrades, DiscNodes) ->
-    Others = DiscNodes -- [node()],
+am_i_disc_node() ->
+    %% The cluster config does not list all disc nodes, but it will list us
+    %% if we're one.
+    case rabbit_mnesia:read_cluster_nodes_config() of
+        []        -> true;
+        DiscNodes -> lists:member(node(), DiscNodes)
+    end.
+
+die(Msg, Args) ->
+    %% We don't throw or exit here since that gets thrown
+    %% straight out into do_boot, generating an erl_crash.dump
+    %% and displaying any error message in a confusing way.
+    error_logger:error_msg(Msg, Args),
+    io:format("~n~n** " ++ Msg ++ " **~n~n~n", Args),
+    error_logger:logfile(close),
+    halt(1).
+
+primary_upgrade(Upgrades, Nodes) ->
+    Others = Nodes -- [node()],
     apply_upgrades(
       mnesia,
       Upgrades,
@@ -87,26 +131,15 @@ primary_upgrade(Upgrades, DiscNodes) ->
 force_tables() ->
     [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
 
-non_primary_upgrade(Upgrader, DiscNodes) ->
-    case node_running(Upgrader) of
-        false ->
-            Msg = "~n~n * Cluster upgrade needed. Please start node ~s "
-                "first. * ~n~n~n",
-            Args = [Upgrader],
-            %% We don't throw or exit here since that gets thrown
-            %% straight out into do_boot, generating an erl_crash.dump
-            %% and displaying any error message in a confusing way.
-            error_logger:error_msg(Msg, Args),
-            io:format(Msg, Args),
-            error_logger:logfile(close),
-            halt(1);
-        true ->
-            rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
-                                  cannot_delete_schema),
-            ok = rabbit_mnesia:create_cluster_nodes_config(DiscNodes),
-            write_version(mnesia),
-            ok
-    end.
+non_primary_upgrade(Nodes) ->
+    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                          cannot_delete_schema),
+    ok = rabbit_mnesia:create_cluster_nodes_config(Nodes),
+    write_version(mnesia),
+    ok.
+
+nodes_running(Nodes) ->
+    [N || N <- Nodes, node_running(N)].
 
 node_running(Node) ->
     case rpc:call(Node, application, which_applications, []) of
