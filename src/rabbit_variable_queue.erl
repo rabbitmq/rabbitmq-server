@@ -809,9 +809,9 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_idle_timeout(State = #vqstate { on_sync = OnSync, unconfirmed = UC }) ->
-    case {OnSync, gb_sets:is_empty(UC)} of
-        {?BLANK_SYNC, true} ->
+needs_idle_timeout(State = #vqstate { on_sync = OnSync }) ->
+    case {OnSync, needs_index_sync(State)} of
+        {?BLANK_SYNC, false} ->
             {Res, _State} = reduce_memory_use(
                               fun (_Quota, State1) -> {0, State1} end,
                               fun (_Quota, State1) -> State1 end,
@@ -1391,12 +1391,11 @@ find_persistent_count(LensByStore) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-confirm_commit_index(State = #vqstate { unconfirmed = UC,
-                                        index_state = IndexState }) ->
-    case gb_sets:is_empty(UC) of
-        true  -> State;
-        false -> State #vqstate {
-                   index_state = rabbit_queue_index:sync(IndexState) }
+confirm_commit_index(State = #vqstate { index_state = IndexState }) ->
+    case needs_index_sync(State) of
+        true  -> State #vqstate {
+                   index_state = rabbit_queue_index:sync(IndexState) };
+        false -> State
     end.
 
 remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
@@ -1405,6 +1404,24 @@ remove_confirms(GuidSet, State = #vqstate { msgs_on_disk        = MOD,
     State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  GuidSet),
                      msg_indices_on_disk = gb_sets:difference(MIOD, GuidSet),
                      unconfirmed         = gb_sets:difference(UC,   GuidSet) }.
+
+needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
+                            unconfirmed = UC }) ->
+    %% If UC is empty then by definition, MIOD and MOD are also empty
+    %% and there's nothing that can be pending a sync.
+
+    %% If UC is not empty, then we want to find is_empty(UC - MIOD),
+    %% but the subtraction can be expensive. Thus instead, we test to
+    %% see if UC is a subset of MIOD. This can only be the case if
+    %% MIOD == UC, which would indicate that every message in UC is
+    %% also in MIOD and is thus _all_ pending on a msg_store sync, not
+    %% on a qi sync. Thus the negation of this is sufficient. Because
+    %% is_subset is short circuiting, this is more efficient than the
+    %% subtraction.
+    case gb_sets:is_empty(UC) of
+        true  -> false;
+        false -> not gb_sets:is_subset(UC, MIOD)
+    end.
 
 msgs_confirmed(GuidSet, State) ->
     {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, State)}.
