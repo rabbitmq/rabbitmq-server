@@ -63,13 +63,10 @@ maybe_upgrade_mnesia() ->
             ok;
         version_not_available ->
             case Nodes of
-                [_] ->
-                    ok;
-                _ ->
-                    die("Cluster upgrade needed but upgrading from < 2.1.1.~n"
-                        "   Unfortunately you will need to rebuild the "
-                        "cluster.",
-                        [])
+                [_] -> ok;
+                _   -> die("Cluster upgrade needed but upgrading from "
+                           "< 2.1.1.~n   Unfortunately you will need to "
+                           "rebuild the cluster.", [])
             end
     end.
 
@@ -78,11 +75,10 @@ am_i_upgrader(Nodes) ->
     case Running of
         [] ->
             case am_i_disc_node() of
-                true ->
-                    true;
-                false ->
-                    die("Cluster upgrade needed but this is a ram node.~n   "
-                        "Please start any of the disc nodes first.", [])
+                true  -> true;
+                false -> die("Cluster upgrade needed but this is a ram "
+                             "node.~n   Please start any of the disc nodes "
+                             "first.", [])
             end;
         [Another|_] ->
             ClusterVersion =
@@ -100,8 +96,8 @@ am_i_upgrader(Nodes) ->
                 MyVersion ->
                     %% The other node(s) are running an unexpected version.
                     die("Cluster upgrade needed but other nodes are "
-                        "running ~p~n"
-                        "and I want ~p", [ClusterVersion, MyVersion])
+                        "running ~p~nand I want ~p",
+                        [ClusterVersion, MyVersion])
             end
     end.
 
@@ -131,12 +127,10 @@ primary_upgrade(Upgrades, Nodes) ->
               rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
               force_tables(),
               case Others of
-                  [] ->
-                      ok;
-                  _  ->
-                      info("mnesia upgrades: Breaking cluster~n", []),
-                      [{atomic, ok} = mnesia:del_table_copy(schema, Node)
-                       || Node <- Others]
+                  [] -> ok;
+                  _  -> info("mnesia upgrades: Breaking cluster~n", []),
+                        [{atomic, ok} = mnesia:del_table_copy(schema, Node)
+                         || Node <- Others]
               end
       end),
     ok.

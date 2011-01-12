@@ -408,7 +408,8 @@ init_db(ClusterNodes, Force) ->
                                                        false -> ram
                                                    end),
                     case rabbit_upgrade:maybe_upgrade(local) of
-                        ok ->                    ok;
+                        ok ->
+                            ok;
                         %% If we're just starting up a new node we won't have
                         %% a version
                         version_not_available ->
