@@ -857,10 +857,11 @@ handle_call({deliver_immediately, Delivery},
         attempt_delivery(Delivery, record_confirm_message(Delivery, State)),
     reply(Delivered, State1);
 
-handle_call({deliver, Delivery}, _From, State) ->
-    %% Synchronous, "mandatory" delivery mode
-    {Delivered, NewState} = deliver_or_enqueue(Delivery, State),
-    reply(Delivered, NewState);
+handle_call({deliver, Delivery}, From, State) ->
+    %% Synchronous, "mandatory" delivery mode. Reply asap.
+    gen_server2:reply(From, true),
+    {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
+    noreply(NewState);
 
 handle_call({commit, Txn, ChPid}, From, State) ->
     NewState = commit_transaction(Txn, From, ChPid, State),
