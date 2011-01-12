@@ -33,6 +33,8 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
+-export([register_ack_handler/2]).
+-export([next_publish_seqno/1]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -47,7 +49,9 @@
                 closing             = false,
                 writer,
                 return_handler_pid  = none,
-                flow_control        = false,
+                ack_handler_pid     = none,
+                next_pub_seqno      = 0,
+                flow_active         = true,
                 flow_handler_pid    = none,
                 consumers           = dict:new(),
                 default_consumer    = none,
@@ -151,6 +155,14 @@ close(Channel, Code, Text) ->
         Error                 -> Error
     end.
 
+%% @spec (Channel) -> integer()
+%% where
+%%      Channel = pid()
+%% @doc When in confirm mode, returns the sequence number of the next
+%% message to be published.
+next_publish_seqno(Channel) ->
+    gen_server:call(Channel, next_publish_seqno).
+
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
 %%---------------------------------------------------------------------------
@@ -161,7 +173,7 @@ close(Channel, Code, Text) ->
 %% where
 %%      Channel = pid()
 %%      Consumer = pid()
-%% @doc Creates a subscription to a queue. This subscribes a consumer pid to 
+%% @doc Creates a subscription to a queue. This subscribes a consumer pid to
 %% the queue defined in the #'basic.consume'{} method record. Note that
 %% both the process invoking this method and the supplied consumer process
 %% receive an acknowledgement of the subscription. The calling process will
@@ -178,6 +190,15 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
 %% registered process will receive #basic.return{} records.
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+
+%% @spec (Channel, AckHandler) -> ok
+%% where
+%%      Channel = pid()
+%%      AckHandler = pid()
+%% @doc This registers a handler to deal with ack'd messages. The
+%% registered process will receive #basic.ack{} commands.
+register_ack_handler(Channel, AckHandler) ->
+    gen_server:cast(Channel, {register_ack_handler, AckHandler} ).
 
 %% @spec (Channel, FlowHandler) -> ok
 %% where
@@ -227,8 +248,17 @@ handle_method_call(Method, AmqpMsg, From, State) ->
         {#'basic.consume'{}, _, _} ->
             {reply, {error, use_subscribe}, State};
         {_, _, ok} ->
+            State1 = case {Method, State #state.next_pub_seqno} of
+                         {#'confirm.select'{}, _} ->
+                             State #state { next_pub_seqno = 1 };
+                         {#'basic.publish'{}, 0} ->
+                             State;
+                         {#'basic.publish'{}, SeqNo} ->
+                             State #state { next_pub_seqno = SeqNo + 1 };
+                         _ -> State
+                     end,
             {noreply,
-             rpc_top_half(Method, build_content(AmqpMsg), From, State)};
+             rpc_top_half(Method, build_content(AmqpMsg), From, State1)};
         {_, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
                       "Reason: ~p~n", [self(), Method, BlockReply]),
@@ -344,7 +374,7 @@ check_block(_Method, _AmqpMsg, #state{closing = connection}) ->
     closing;
 check_block(_Method, none, #state{}) ->
     ok;
-check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
+check_block(_Method, #amqp_msg{}, #state{flow_active = false}) ->
     blocked;
 check_block(_Method, _AmqpMsg, #state{}) ->
     ok.
@@ -423,9 +453,11 @@ handle_method1(#'channel.flow'{active = Active} = Flow, none,
     case FlowHandler of none -> ok;
                         _    -> FlowHandler ! Flow
     end,
-    do(#'channel.flow_ok'{active = Active}, none, State),
-    %% TODO: change flow_control so that we don't have to invert meaning
-    {noreply, State#state{flow_control = not(Active)}};
+    %% Putting the flow_ok in the queue so that the RPC queue can be
+    %% flushed beforehand. Methods that made it to the queue are not
+    %% blocked in any circumstance.
+    {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
+                           State#state{flow_active = Active})};
 handle_method1(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
                State) ->
     Consumer = resolve_consumer(ConsumerTag, State),
@@ -439,6 +471,15 @@ handle_method1(#'basic.return'{} = BasicReturn, AmqpMsg,
                           [self(), BasicReturn, AmqpMsg]);
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
+    {noreply, State};
+handle_method1(#'basic.ack'{} = BasicAck, none,
+               #state{ack_handler_pid = none} = State) ->
+    ?LOG_WARN("Channel (~p): received ~p but there is no ack handler "
+              "registered~n", [self(), BasicAck]),
+    {noreply, State};
+handle_method1(#'basic.ack'{} = BasicAck, none,
+               #state{ack_handler_pid = AckHandler} = State) ->
+    AckHandler ! BasicAck,
     {noreply, State};
 handle_method1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
@@ -507,7 +548,14 @@ handle_call({send_command_sync, Method, Content}, From, State) ->
 handle_call({send_command_sync, Method}, From, State) ->
     Ret = handle_method(Method, none, State),
     gen_server:reply(From, ok),
-    Ret.
+    Ret;
+
+%% Get the number of published messages since the channel was put in
+%% confirm mode.
+%% @private
+handle_call(next_publish_seqno, _From,
+            State = #state { next_pub_seqno = SeqNo }) ->
+    {reply, SeqNo, State}.
 
 %% Standard implementation of the cast/{2,3} command
 %% @private
@@ -519,6 +567,12 @@ handle_cast({cast, Method, AmqpMsg}, State) ->
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
+
+%% Registers a handler to process ack messages
+%% @private
+handle_cast({register_ack_handler, AckHandler}, State) ->
+    link(AckHandler),
+    {noreply, State#state{ack_handler_pid = AckHandler}};
 
 %% Registers a handler to process flow control messages
 %% @private

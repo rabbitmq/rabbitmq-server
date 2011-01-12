@@ -38,6 +38,12 @@ basic_recover_test() ->
 basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
 
+basic_nack_single_test() ->
+    test_util:basic_nack_single_test(new_connection()).
+
+basic_nack_multi_test() ->
+    test_util:basic_nack_multi_test(new_connection()).
+
 large_content_test() ->
     test_util:large_content_test(new_connection()).
 
@@ -65,26 +71,23 @@ channel_lifecycle_test() ->
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
 
-sync_method_serialization_test() ->
+sync_method_serialization_test_() ->
     {timeout, 60,
         fun () ->
                 test_util:sync_method_serialization_test(new_connection())
         end}.
 
-async_sync_method_serialization_test() ->
+async_sync_method_serialization_test_() ->
     {timeout, 60,
         fun () ->
                 test_util:async_sync_method_serialization_test(new_connection())
         end}.
 
-sync_async_method_serialization_test() ->
+sync_async_method_serialization_test_() ->
     {timeout, 60,
         fun () ->
                 test_util:sync_async_method_serialization_test(new_connection())
         end}.
-
-recover_after_cancel_test() ->
-    test_util:recover_after_cancel_test(new_connection()).
 
 teardown_test() ->
     repeat(fun test_util:teardown_test/1, ?ITERATIONS).

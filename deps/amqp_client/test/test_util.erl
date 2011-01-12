@@ -193,31 +193,6 @@ sync_async_method_serialization_test(Connection) ->
                     end, lists:flatten(MultiOpRet))
         end).
 
-recover_after_cancel_test(Connection) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Q} = setup_publish(Channel),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
-    amqp_channel:register_default_consumer(Channel, self()),
-    Tag = receive
-              #'basic.consume_ok'{consumer_tag = T} -> T
-          after 2000 ->
-                  exit(did_not_receive_subscription_message)
-          end,
-    Expect = fun() ->
-                     receive
-                         {#'basic.deliver'{}, _} ->
-                             %% don't send ack
-                             ok
-                     after 2000 ->
-                             exit(did_not_receive_first_message)
-                     end
-             end,
-    Expect(),
-    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-    amqp_channel:call(Channel, #'basic.recover'{requeue = false}),
-    Expect(),
-    teardown(Connection, Channel).
-
 queue_unbind_test(Connection) ->
     X = <<"eggs">>, Q = <<"foobar">>, Key = <<"quay">>,
     Payload = <<"foobar">>,
@@ -244,10 +219,21 @@ get_and_assert_empty(Channel, Q) ->
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}).
 
 get_and_assert_equals(Channel, Q, Payload) ->
-    {#'basic.get_ok'{}, Content}
-        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}),
+    get_and_assert_equals(Channel, Q, Payload, true).
+
+get_and_assert_equals(Channel, Q, Payload, NoAck) ->
+    {GetOk = #'basic.get_ok'{}, Content}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = NoAck}),
     #amqp_msg{payload = Payload2} = Content,
-    ?assertMatch(Payload, Payload2).
+    ?assertMatch(Payload, Payload2),
+    GetOk.
+
+send_get_and_assert_equals(Channel, Q, Payload) ->
+    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
+    amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
+    #'basic.get_ok'{delivery_tag = Tag} =
+        get_and_assert_equals(Channel, Q, Payload, false),
+    Tag.
 
 basic_get_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -473,10 +459,64 @@ basic_nack_single_test(Connection) ->
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{}),
 
-    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
-    amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<"m1">>}),
+    [Tag1, Tag2] = [send_get_and_assert_equals(Channel, Q, P)
+                    || P <- [<<"m1">>, <<"m2">>]],
 
+    {ok, SecondaryChannel} = amqp_connection:open_channel(Connection),
+
+    amqp_channel:call(Channel, #'basic.nack'{delivery_tag = Tag2,
+                                             multiple     = false,
+                                             requeue      = true}),
+
+    #'basic.get_ok'{delivery_tag = Tag3} =
+        get_and_assert_equals(SecondaryChannel, Q, <<"m2">>, false),
+
+    amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag1}),
+
+    amqp_channel:call(SecondaryChannel, #'basic.nack'{delivery_tag = Tag3,
+                                                      multiple     = false,
+                                                      requeue      = false}),
+    get_and_assert_empty(Channel, Q),
+
+    amqp_channel:close(SecondaryChannel),
+    wait_for_death(SecondaryChannel),
     teardown(Connection, Channel).
+
+basic_nack_multi_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{}),
+
+    [_, Tag1, _, Tag2] =
+        [send_get_and_assert_equals(Channel, Q, P) ||
+            P <- [<<"m1">>, <<"m2">>, <<"m3">>, <<"m4">>]],
+
+    {ok, SecondaryChannel} = amqp_connection:open_channel(Connection),
+
+    amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag1}),
+
+    amqp_channel:call(Channel, #'basic.nack'{delivery_tag = Tag2,
+                                             multiple     = true,
+                                             requeue      = true}),
+
+    [_, _, Tag3] = [Tag || #'basic.get_ok'{delivery_tag = Tag} <-
+                               [get_and_assert_equals(SecondaryChannel,
+                                                      Q, P, false) ||
+                                   P <- [<<"m4">>, <<"m3">>, <<"m1">>]]],
+
+    get_and_assert_empty(SecondaryChannel, Q),
+
+    amqp_channel:call(SecondaryChannel, #'basic.nack'{delivery_tag = Tag3,
+                                                      multiple     = true,
+                                                      requeue      = false}),
+
+    get_and_assert_empty(Channel, Q),
+
+    amqp_channel:close(SecondaryChannel),
+    wait_for_death(SecondaryChannel),
+    teardown(Connection, Channel).
+
 
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->
