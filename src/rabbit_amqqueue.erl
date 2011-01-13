@@ -452,17 +452,17 @@ internal_delete1(QueueName) ->
 
 internal_delete(QueueName) ->
     rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   case mnesia:wread({rabbit_queue, QueueName}) of
-                       []  -> {error, not_found};
-                       [_] -> internal_delete1(QueueName)
-                   end
-           end,
-           fun ({error, _} = Err, _Tx) ->
-                   Err;
-               (Deletions, Tx) ->
-                   ok = rabbit_binding:process_deletions(Deletions, Tx)
-           end).
+      fun () ->
+              case mnesia:wread({rabbit_queue, QueueName}) of
+                  []  -> {error, not_found};
+                  [_] -> internal_delete1(QueueName)
+              end
+      end,
+      fun ({error, _} = Err, _Tx) ->
+              Err;
+          (Deletions, Tx) ->
+              ok = rabbit_binding:process_deletions(Deletions, Tx)
+      end).
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
     gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
@@ -493,12 +493,12 @@ on_node_down(Node) ->
                                 node(Pid) == Node]))
       end,
       fun (Deletions, Tx) ->
-          rabbit_binding:process_deletions(
-            lists:foldl(
-              fun rabbit_binding:combine_deletions/2,
-              rabbit_binding:new_deletions(),
-              Deletions),
-            Tx)
+              rabbit_binding:process_deletions(
+                lists:foldl(
+                  fun rabbit_binding:combine_deletions/2,
+                  rabbit_binding:new_deletions(),
+                  Deletions),
+                Tx)
       end).
 
 delete_queue(QueueName) ->

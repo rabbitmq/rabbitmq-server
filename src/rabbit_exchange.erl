@@ -126,32 +126,29 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     %% We want to upset things if it isn't ok
     ok = (type_to_module(Type)):validate(X),
     rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   case mnesia:wread({rabbit_exchange, XName}) of
-                       [] ->
-                           ok = mnesia:write(rabbit_exchange, X, write),
-                           ok = case Durable of
-                                    true ->
-                                        mnesia:write(rabbit_durable_exchange,
+      fun () ->
+              case mnesia:wread({rabbit_exchange, XName}) of
+                  [] ->
+                      ok = mnesia:write(rabbit_exchange, X, write),
+                      ok = case Durable of
+                               true  -> mnesia:write(rabbit_durable_exchange,
                                                      X, write);
-                                    false ->
-                                        ok
+                               false -> ok
                            end,
-                           {new, X};
-                       [ExistingX] ->
-                           {existing, ExistingX}
-                   end
-           end,
-           fun ({new, Exchange}, Tx) ->
-                   callback(Exchange, create, [Tx, Exchange]),
-                   rabbit_event:notify_if(
-                       not Tx, exchange_created, info(Exchange)),
-                   Exchange;
-               ({existing, Exchange}, _Tx) ->
-                   Exchange;
-               (Err, _Tx) ->
-                   Err
-           end).
+                      {new, X};
+                  [ExistingX] ->
+                      {existing, ExistingX}
+              end
+      end,
+      fun ({new, Exchange}, Tx) ->
+              callback(Exchange, create, [Tx, Exchange]),
+              rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
+              Exchange;
+          ({existing, Exchange}, _Tx) ->
+              Exchange;
+          (Err, _Tx) ->
+              Err
+      end).
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
@@ -290,18 +287,19 @@ call_with_exchange(XName, Fun, PrePostCommitFun) ->
       end, PrePostCommitFun).
 
 delete(XName, IfUnused) ->
-    call_with_exchange(XName,
-        case IfUnused of
-            true  -> fun conditional_delete/1;
-            false -> fun unconditional_delete/1
-        end,
-        fun ({deleted, X, Bs, Deletions}, Tx) ->
-                ok = rabbit_binding:process_deletions(
-                       rabbit_binding:add_deletion(
-                         XName, {X, deleted, Bs}, Deletions), Tx);
-            (Error = {error, _InUseOrNotFound}, _Tx) ->
-                Error
-        end).
+    call_with_exchange(
+      XName,
+      case IfUnused of
+          true  -> fun conditional_delete/1;
+          false -> fun unconditional_delete/1
+      end,
+      fun ({deleted, X, Bs, Deletions}, Tx) ->
+              ok = rabbit_binding:process_deletions(
+                     rabbit_binding:add_deletion(
+                       XName, {X, deleted, Bs}, Deletions), Tx);
+          (Error = {error, _InUseOrNotFound}, _Tx) ->
+              Error
+      end).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;

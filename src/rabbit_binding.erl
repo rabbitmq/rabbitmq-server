@@ -118,10 +118,9 @@ recover() ->
 
 exists(Binding) ->
     binding_action(
-      Binding,
-      fun (_Src, _Dst, B) ->
-          rabbit_misc:const(mnesia:read({rabbit_route, B}) /= [])
-      end).
+      Binding, fun (_Src, _Dst, B) ->
+                       rabbit_misc:const(mnesia:read({rabbit_route, B}) /= [])
+               end).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
@@ -129,61 +128,56 @@ remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 
 add(Binding, InnerFun) ->
     binding_action(
-           Binding,
-           fun (Src, Dst, B) ->
-                   %% this argument is used to check queue exclusivity;
-                   %% in general, we want to fail on that in preference to
-                   %% anything else
-                   case InnerFun(Src, Dst) of
-                       ok ->
-                           case mnesia:read({rabbit_route, B}) of
-                               []  -> ok = sync_binding(
-                                             B, all_durable([Src, Dst]),
-                                             fun mnesia:write/3),
-                                      fun (Tx) ->
-                                          ok = rabbit_exchange:callback(
-                                                   Src, add_binding,
-                                                   [Tx, Src, B]),
-                                          rabbit_event:notify_if(
-                                                   not Tx,
-                                                   binding_created, info(B))
-                                      end;
-                               [_] -> fun rabbit_misc:const_ok/1
-                           end;
-                       {error, _} = Err ->
-                           rabbit_misc:const(Err)
-                   end
-           end).
+      Binding,
+      fun (Src, Dst, B) ->
+              %% this argument is used to check queue exclusivity;
+              %% in general, we want to fail on that in preference to
+              %% anything else
+              case InnerFun(Src, Dst) of
+                  ok ->
+                      case mnesia:read({rabbit_route, B}) of
+                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
+                                                   fun mnesia:write/3),
+                                 fun (Tx) ->
+                                         ok = rabbit_exchange:callback(
+                                                Src, add_binding, [Tx, Src, B]),
+                                         rabbit_event:notify_if(
+                                           not Tx, binding_created, info(B))
+                                 end;
+                          [_] -> fun rabbit_misc:const_ok/1
+                      end;
+                  {error, _} = Err ->
+                      rabbit_misc:const(Err)
+              end
+      end).
 
 remove(Binding, InnerFun) ->
     binding_action(
-           Binding,
-           fun (Src, Dst, B) ->
-               Result =
-                   case mnesia:match_object(rabbit_route, #route{binding = B},
-                                            write) of
-                       [] ->
-                           {error, binding_not_found};
-                       [_] ->
-                           case InnerFun(Src, Dst) of
-                               ok ->
-                                   ok = sync_binding(
-                                          B, all_durable([Src, Dst]),
-                                          fun mnesia:delete_object/3),
-                                   {ok,
-                                    maybe_auto_delete(B#binding.source,
-                                                      [B], new_deletions())};
-                               {error, _} = E ->
-                                   E
-                           end
-                   end,
-                   case Result of
-                       {error, _} = Err ->
-                           rabbit_misc:const(Err);
-                       {ok, Deletions} ->
-                           fun (Tx) -> ok = process_deletions(Deletions, Tx) end
-                   end
-           end).
+      Binding,
+      fun (Src, Dst, B) ->
+              Result =
+                  case mnesia:match_object(rabbit_route, #route{binding = B},
+                                           write) of
+                      [] ->
+                          {error, binding_not_found};
+                      [_] ->
+                          case InnerFun(Src, Dst) of
+                              ok ->
+                                  ok = sync_binding(B, all_durable([Src, Dst]),
+                                                    fun mnesia:delete_object/3),
+                                  {ok, maybe_auto_delete(B#binding.source,
+                                                         [B], new_deletions())};
+                              {error, _} = E ->
+                                  E
+                          end
+                  end,
+              case Result of
+                  {error, _} = Err ->
+                      rabbit_misc:const(Err);
+                  {ok, Deletions} ->
+                      fun (Tx) -> ok = process_deletions(Deletions, Tx) end
+              end
+      end).
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
@@ -427,15 +421,16 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
 process_deletions(Deletions, Tx) ->
     dict:fold(
       fun (_XName, {X, Deleted, Bindings}, ok) ->
-          FlatBindings = lists:flatten(Bindings),
-          [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
-              B <- FlatBindings],
-          case Deleted of
-              not_deleted -> rabbit_exchange:callback(X, remove_bindings,
-                                                      [Tx, X, FlatBindings]);
-              deleted     -> rabbit_event:notify_if(not Tx, exchange_deleted,
-                                                    [{name, X#exchange.name}]),
-                             rabbit_exchange:callback(X, delete,
-                                                      [Tx, X, FlatBindings])
-          end
+              FlatBindings = lists:flatten(Bindings),
+              [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
+                  B <- FlatBindings],
+              case Deleted of
+                  not_deleted ->
+                      rabbit_exchange:callback(X, remove_bindings,
+                                               [Tx, X, FlatBindings]);
+                  deleted ->
+                      rabbit_event:notify_if(not Tx, exchange_deleted,
+                                             [{name, X#exchange.name}]),
+                      rabbit_exchange:callback(X, delete, [Tx, X, FlatBindings])
+              end
       end, ok, Deletions).
