@@ -493,8 +493,10 @@ ok(Command, Headers, BodyFragments, State) ->
 
 explain_amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
-    error(atom_to_list(ErrorName), "~s\n",
-               [Explanation], State).
+    {stop, amqp_death,
+     send_error(atom_to_list(ErrorName),
+                format_message("~s~n", [Explanation]),
+                State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
@@ -511,9 +513,11 @@ priv_error(Message, Detail, ServerPrivateDetail, State) ->
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, lists:flatten(io_lib:format(Format, Args)),
-                    ServerPrivateDetail, State).
+    priv_error(Message, format_message(Format, Args),
+               ServerPrivateDetail, State).
 
+format_message(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
 
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
