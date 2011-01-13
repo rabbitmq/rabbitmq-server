@@ -480,8 +480,8 @@ confirm(MsgSeqNos, QPid, State) ->
                                            queues_for_msg = QFM0}}) ->
                   case gb_sets:is_element(MsgSeqNo, UC0) of
                       false -> {DMs, State0};
-                      true  -> {ok, Qs} = dict:find(MsgSeqNo, QFM0),
-                               Qs1 = sets:del_element(QPid, Qs),
+                      true  -> Qs1 = sets:del_element(
+                                       QPid, dict:fetch(MsgSeqNo, QFM0)),
                                case sets:size(Qs1) of
                                    0 -> {[MsgSeqNo | DMs],
                                          State0#ch{
