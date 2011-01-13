@@ -50,7 +50,6 @@
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
--define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
 %---------------------------------------------------------------------------
 
@@ -733,14 +732,15 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                            connection = Connection,
                            sock = Sock,
                            start_heartbeat_fun = SHF}) ->
-    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+    ServerFrameMax = server_frame_max(),
+    if FrameMax /= 0 andalso FrameMax < ?FRAME_MIN_SIZE ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w < ~w min size",
               [FrameMax, ?FRAME_MIN_SIZE]);
-       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+       ServerFrameMax /= 0 andalso FrameMax > ServerFrameMax ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w > ~w max size",
-              [FrameMax, ?FRAME_MAX]);
+              [FrameMax, ServerFrameMax]);
        true ->
             Frame = rabbit_binary_generator:build_heartbeat_frame(),
             SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
@@ -798,6 +798,12 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
+%% Compute frame_max for this instance. Could simply use 0, but breaks
+%% QPid Java client.
+server_frame_max() ->
+    {ok, FrameMax} = application:get_env(rabbit, frame_max),
+    FrameMax.
+
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
@@ -849,7 +855,7 @@ auth_phase(Response,
             State#v1{auth_state = AuthState1};
         {ok, User} ->
             Tune = #'connection.tune'{channel_max = 0,
-                                      frame_max = ?FRAME_MAX,
+                                      frame_max = server_frame_max(),
                                       heartbeat = 0},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,
