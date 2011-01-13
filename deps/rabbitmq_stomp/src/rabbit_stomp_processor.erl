@@ -325,14 +325,20 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
-   {Destination, _SubChannel} = dict:fetch(ConsumerTag, Subs),
-
-   send_frame(
-     "MESSAGE",
-     rabbit_stomp_util:message_headers(Destination, SessionId,
-                                       Delivery, Properties),
-     Body,
-     State).
+    case dict:find(ConsumerTag, Subs) of
+        {ok, {Destination, _SubChannel}} ->
+            send_frame(
+              "MESSAGE",
+              rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+              Body,
+              State);
+        error ->
+            send_error("Subscription not found",
+                       "There is no current subscription '~s'.",
+                       [ConsumerTag],
+                       State)
+    end.
 
 send_method(Method, State = #state{channel = Channel}) ->
     amqp_channel:call(Channel, Method),
@@ -543,6 +549,10 @@ send_frame(Frame, State = #state{socket = Sock}) ->
 send_error(Message, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
                          {"content-type", "text/plain"}], Detail, State).
+
+send_error(Message, Format, Args, State) ->
+    send_error(Message, lists:flatten(io_lib:format(Format, Args)),
+                    State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks

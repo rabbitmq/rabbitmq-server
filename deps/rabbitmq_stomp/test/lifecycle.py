@@ -14,6 +14,7 @@ class TestLifecycle(base.BaseTest):
         self.conn.send("test", destination=d)
         self.assertTrue(self.listener.await())
         self.assertEquals(1, len(self.listener.messages))
+        self.assertEquals(0, len(self.listener.errors))
 
         # unsubscribe and send now
         self.listener.reset()
@@ -32,6 +33,7 @@ class TestLifecycle(base.BaseTest):
         self.conn.send("test", destination=d)
         self.assertTrue(self.listener.await())
         self.assertEquals(1, len(self.listener.messages))
+        self.assertEquals(0, len(self.listener.errors))
 
         # unsubscribe and send now
         self.listener.reset()

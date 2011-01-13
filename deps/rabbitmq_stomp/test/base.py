@@ -57,7 +57,6 @@ class WaitableListener(object):
         self.receipts = []
         self.latch = Latch(1)
 
-
     def on_receipt(self, headers, message):
         self.receipts.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
@@ -73,6 +72,7 @@ class WaitableListener(object):
     def reset(self,count=1):
         self.messages = []
         self.errors = []
+        self.receipts = []
         self.latch = Latch(count)
 
     def await(self, timeout=10):
@@ -96,8 +96,11 @@ class Latch(object):
    def await(self, timeout=None):
       try:
          self.cond.acquire()
-         self.cond.wait(timeout)
-         return self.count == 0
+         if self.count == 0:
+            return True
+         else:
+            self.cond.wait(timeout)
+            return self.count == 0
       finally:
          self.cond.release()
 
