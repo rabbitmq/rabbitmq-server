@@ -473,8 +473,6 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
 
 confirm([], _QPid, State) ->
     State;
-confirm(_MsgSeqNos, _QPid, State = #ch{confirm_enabled = false}) ->
-    State;
 confirm(MsgSeqNos, QPid, State) ->
     {DoneMessages, State1} =
         lists:foldl(
