@@ -287,12 +287,12 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{unconfirmed = UC}) ->
-    %% TODO: this does a complete scan and rebuild of the tree, which
-    %% is quite efficient. To do better we'd need to maintain a
-    %% secondary mapping, from QPids to MsgSeqNos.
+    %% TODO: this does a complete scan and partial rebuild of the
+    %% tree, which is quite efficient. To do better we'd need to
+    %% maintain a secondary mapping, from QPids to MsgSeqNos.
     {MsgSeqNos, UC1} = remove_queue_unconfirmed(
                          gb_trees:next(gb_trees:iterator(UC)), QPid,
-                         {[], gb_trees:empty()}),
+                         {[], UC}),
     State1 = send_confirms(MsgSeqNos, State#ch{unconfirmed = UC1}),
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State1), hibernate}.
@@ -468,36 +468,31 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-remove_queue_unconfirmed(none, _QPid, Res) ->
-    Res;
-remove_queue_unconfirmed({MsgSeqNo, Qs, Next}, QPid, {MsgSeqNos, UC}) ->
-    Qs1 = sets:del_element(QPid, Qs),
-    remove_queue_unconfirmed(
-      gb_trees:next(Next), QPid,
-      case sets:size(Qs1) of
-          0 -> {[MsgSeqNo | MsgSeqNos], UC};
-          _ -> {MsgSeqNos, gb_trees:insert(MsgSeqNo, Qs1, UC)}
-      end).
+remove_queue_unconfirmed(none, _QPid, Acc) ->
+    Acc;
+remove_queue_unconfirmed({MsgSeqNo, Qs, Next}, QPid, Acc) ->
+    remove_queue_unconfirmed(gb_trees:next(Next), QPid,
+                             remove_qmsg(MsgSeqNo, QPid, Qs, Acc)).
 
 confirm([], _QPid, State) ->
     State;
 confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
     {DoneMessages, UC2} =
         lists:foldl(
-          fun(MsgSeqNo, {DMs, UC0}) ->
+          fun(MsgSeqNo, {_DMs, UC0} = Acc) ->
                   case gb_trees:lookup(MsgSeqNo, UC0) of
-                      none ->
-                          {DMs, UC0};
-                      {value, Qs} ->
-                          Qs1 = sets:del_element(QPid, Qs),
-                          case sets:size(Qs1) of
-                              0 -> {[MsgSeqNo | DMs],
-                                    gb_trees:delete(MsgSeqNo, UC0)};
-                              _ -> {DMs, gb_trees:update(MsgSeqNo, Qs1, UC0)}
-                          end
+                      none        -> Acc;
+                      {value, Qs} -> remove_qmsg(MsgSeqNo, QPid, Qs, Acc)
                   end
           end, {[], UC}, MsgSeqNos),
     send_confirms(DoneMessages, State#ch{unconfirmed = UC2}).
+
+remove_qmsg(MsgSeqNo, QPid, Qs, {MsgSeqNos, UC}) ->
+    Qs1 = sets:del_element(QPid, Qs),
+    case sets:size(Qs1) of
+        0 -> {[MsgSeqNo | MsgSeqNos], gb_trees:delete(MsgSeqNo, UC)};
+        _ -> {MsgSeqNos, gb_trees:update(MsgSeqNo, Qs1, UC)}
+    end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     {reply, #'channel.open_ok'{}, State#ch{state = running}};
