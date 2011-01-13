@@ -473,8 +473,6 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
 
 confirm([], _QPid, State) ->
     State;
-confirm(_MsgSeqNos, _QPid, State = #ch{confirm_enabled = false}) ->
-    State;
 confirm(MsgSeqNos, undefined, State = #ch{unconfirmed = UC,
                                           queues_for_msg = QFM}) ->
     MsgSeqNos1 = [MSN || MSN <- MsgSeqNos, gb_sets:is_element(MSN, UC)],
