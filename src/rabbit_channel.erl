@@ -532,13 +532,12 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(DecodedContent#content.properties, State),
     IsPersistent = is_message_persistent(DecodedContent),
-    {MsgSeqNo, State1}
-        = case ConfirmEnabled of
-              false -> {undefined, State};
-              true  -> SeqNo = State#ch.publish_seqno,
-                       {SeqNo,
-                        State#ch{publish_seqno = SeqNo + 1}}
-          end,
+    {MsgSeqNo, State1} =
+        case ConfirmEnabled of
+            false -> {undefined, State};
+            true  -> SeqNo = State#ch.publish_seqno,
+                     {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
+        end,
     Message = #basic_message{exchange_name = ExchangeName,
                              routing_key   = RoutingKey,
                              content       = DecodedContent,
@@ -1217,13 +1216,11 @@ process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
     send_confirms([MsgSeqNo], State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
-process_routing_result(routed,    QPids, MsgSeqNo,       _,
-                       State = #ch{queues_for_msg = QFM,
-                                   unconfirmed    = UC}) ->
-    QFM1 = dict:store(MsgSeqNo, sets:from_list(QPids), QFM),
+process_routing_result(routed,    QPids, MsgSeqNo,       _, State) ->
+    #ch{queues_for_msg = QFM, unconfirmed = UC} = State,
     [maybe_monitor(QPid) || QPid <- QPids],
-    State#ch{queues_for_msg = QFM1,
-             unconfirmed = gb_sets:add(MsgSeqNo, UC)}.
+    State#ch{queues_for_msg = dict:store(MsgSeqNo, sets:from_list(QPids), QFM),
+             unconfirmed    = gb_sets:add(MsgSeqNo, UC)}.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
