@@ -1208,15 +1208,12 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
-    ok = send_confirm(MsgSeqNo, State#ch.writer_pid),
-    State;
+    send_confirms([MsgSeqNo], State);
 process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
-    ok = send_confirm(MsgSeqNo, State#ch.writer_pid),
-    State;
+    send_confirms([MsgSeqNo], State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
-    ok = send_confirm(MsgSeqNo, State#ch.writer_pid),
-    State;
+    send_confirms([MsgSeqNo], State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
 process_routing_result(routed,    QPids, MsgSeqNo,       _, State) ->
@@ -1231,6 +1228,9 @@ lock_message(false, _MsgStruct, State) ->
     State.
 
 send_confirms([], State) ->
+    State;
+send_confirms([MsgSeqNo], State = #ch{writer_pid = WriterPid}) ->
+    send_confirm(MsgSeqNo, WriterPid),
     State;
 send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     SCs = lists:usort(Cs),
