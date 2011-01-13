@@ -344,8 +344,7 @@ lookup_amqp_exception(#amqp_error{name        = Name,
     {ShouldClose, Code, ExplBin, Method};
 lookup_amqp_exception(Other, Protocol) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} =
-        Protocol:lookup_amqp_exception(internal_error, Protocol),
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->
