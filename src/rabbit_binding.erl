@@ -148,7 +148,7 @@ add(Binding, InnerFun) ->
                                                    not Tx,
                                                    binding_created, info(B))
                                       end;
-                               [_] -> fun (_Tx) -> ok end
+                               [_] -> fun rabbit_misc:const_ok/1
                            end;
                        {error, _} = Err ->
                            rabbit_misc:const(Err)
@@ -177,13 +177,11 @@ remove(Binding, InnerFun) ->
                                    E
                            end
                    end,
-                   fun (Tx) ->
-                           case Result of
-                               {ok, Deletions} ->
-                                   ok = process_deletions(Deletions, Tx);
-                               {error, _} = Err ->
-                                  Err
-                           end
+                   case Result of
+                       {error, _} = Err ->
+                           rabbit_misc:const(Err);
+                       {ok, Deletions} ->
+                           fun (Tx) -> ok = process_deletions(Deletions, Tx) end
                    end
            end).
 

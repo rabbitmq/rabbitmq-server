@@ -215,11 +215,10 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
 internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
-          {ReturnArg, TailFun} =
               case Recover of
                   true ->
                       ok = store_queue(Q),
-                      {Q, fun rabbit_misc:const_ok/1};
+                      rabbit_misc:const(Q);
                   false ->
                       case mnesia:wread({rabbit_queue, QueueName}) of
                           [] ->
@@ -227,17 +226,16 @@ internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
                                                 QueueName}) of
                                   []  -> ok = store_queue(Q),
                                          B = add_default_binding(Q),
-                                         {Q, B};
-                                         %% Q exists on stopped node
-                                  [_] -> {not_found, fun rabbit_misc:const_ok/1}
+                                         fun (Tx) ->
+                                                 B(Tx),
+                                                 Q
+                                         end;
+                                  [_] -> %% Q exists on stopped node
+                                         rabbit_misc:const(not_found)
                               end;
                           [ExistingQ] ->
-                              {ExistingQ, fun rabbit_misc:const_ok/1}
+                              rabbit_misc:const(ExistingQ)
                       end
-              end,
-              fun (Tx) ->
-                  TailFun(Tx),
-                  ReturnArg
               end
       end).
 
