@@ -50,7 +50,7 @@
          rabbit_channel:channel_number(), non_neg_integer(), pid(),
          rabbit_types:user(), rabbit_types:vhost(), pid()}).
 
--spec(start_link/1 :: (start_link_args()) -> {'ok', pid(), pid()}).
+-spec(start_link/1 :: (start_link_args()) -> {'ok', pid(), {pid(), any()}}).
 
 -endif.
 
@@ -72,13 +72,8 @@ start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, User, VHost,
                      [Channel, ReaderPid, WriterPid, User, VHost,
                       Collector, start_limiter_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
-    {ok, FramingChannelPid} =
-        supervisor2:start_child(
-          SupPid,
-          {framing_channel, {rabbit_framing_channel, start_link,
-                             [ReaderPid, ChannelPid, Protocol]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
-    {ok, SupPid, FramingChannelPid}.
+    {ok, AState} = rabbit_command_assembler:init(Protocol),
+    {ok, SupPid, {ChannelPid, AState}}.
 
 %%----------------------------------------------------------------------------
 
