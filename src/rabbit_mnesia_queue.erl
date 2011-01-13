@@ -48,19 +48,19 @@
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
-%% In the queue we keep track of both messages that are pending
-%% delivery and messages that are pending acks. This ensures that
-%% purging (deleting the former) and deletion (deleting the former and
-%% the latter) are both cheap and do require any scanning through q
-%% segments.
+%% In the queue we store both messages that are pending delivery and
+%% messages that are pending acks. This ensures that purging (deleting
+%% the former) and deletion (deleting the former and the latter) are
+%% both cheap and do not require any scanning through lists of messages.
 %%
-%% Pending acks are recorded in memory as the message itself.
+%% Pending acks are recorded in memory as "m" records, containing the
+%% messages themselves.
 %%
 %% All queues are durable in this version, no matter how they are
-%% requested. (We may need to remember the requested type in the
+%% requested. (We will need to remember the requested type in the
 %% future, to catch accidental redeclares.) All messages are transient
-%% (non-persistent) in this interim version, in order to rip aout all
-%% of the old backing code before insetring the new backing
+%% (non-persistent) in this interim version, in order to rip out all
+%% of the old backing code before inserting the new backing
 %% code. (This breaks some tests, since all messages are temporarily
 %% dropped on restart.)
 %%
@@ -71,36 +71,44 @@
 
 %% BUG: I've temporarily ripped out most of the calls to Mnesia while
 %% debugging problems with the Mnesia documentation. (Ask me sometimes
-%% over drinks to explain how bad it is.) I've figuerd things out now
-%% and will soon put them back in.
+%% over drinks to explain how just plain wrong it is.) I've figured
+%% out the real type signatures now and will soon put everything back
+%% in.
 
 -behaviour(rabbit_backing_queue).
 
--record(state,
-        { mnesiaNameAtom,
-          q,
-          next_seq_id,
+-record(state,                    % The in-RAM queue state
+        { mnesiaTableName,        % An atom naming the associated Mnesia table
+          q,                      % A temporary in-RAM queue of "m" records
+          len,                    % The number of msgs in the queue
+          next_seq_id,            % The next seq_id used to build the next "m"
+          in_counter,             % The count of msgs in, so far.
+          out_counter,            % The count of msgs out, so far.
+
+          %% redo the following?
           pending_ack,
           ack_index,
-          on_sync,
-          len,
-          out_counter,
-          in_counter,
+
           unconfirmed,
-          ack_out_counter,
-          ack_in_counter
+
+          on_sync
         }).
 
--record(msg_status,
-        { seq_id,
-          msg,
-          is_delivered,
-          msg_props
+-record(m,                        % A wrapper aroung a msg
+        { msg,                    % The msg itself
+          seq_id,                 % The seq_id for the msg
+          msg_props,              % The message properties, as passed in
+          is_delivered            % Whether the msg has been delivered
         }).
 
--record(tx, { pending_messages, pending_acks }).
+-record(tx,
+        { pending_messages,
+          pending_acks }).
 
--record(sync, { acks, pubs, funs }).
+-record(sync,
+        { acks,
+          pubs,
+          funs }).
 
 -include("rabbit.hrl").
 
@@ -118,26 +126,22 @@
                                   [rabbit_types:basic_message()]}],
                         funs :: [fun (() -> any())] }).
 
--type(state() :: #state { mnesiaNameAtom :: atom(),
+-type(state() :: #state { mnesiaTableName :: atom(),
                           q :: queue(),
+                          len :: non_neg_integer(),
                           next_seq_id :: seq_id(),
+                          in_counter :: non_neg_integer(),
+                          out_counter :: non_neg_integer(),
                           pending_ack :: dict(),
                           ack_index :: gb_tree(),
-                          on_sync :: sync(),
-                          len :: non_neg_integer(),
-                          out_counter :: non_neg_integer(),
-                          in_counter :: non_neg_integer(),
                           unconfirmed :: gb_set(),
-                          ack_out_counter :: non_neg_integer(),
-                          ack_in_counter :: non_neg_integer() }).
+                          on_sync :: sync() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
 %% -endif.
 
--define(BLANK_SYNC, #sync { acks = [],
-                            pubs = [],
-                            funs = [] }).
+-define(BLANK_SYNC, #sync { acks = [], pubs = [], funs = [] }).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -150,7 +154,9 @@
 %% allows the backing queue to perform any checking necessary for the
 %% consistency of those queues, or initialise any other shared
 %% resources.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 
 %%----------------------------------------------------------------------------
@@ -164,17 +170,21 @@ start(_DurableQueues) -> ok.
 %% Implementations should not depend on this function being called on
 %% shutdown and instead should hook into the rabbit supervision
 %% hierarchy.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(stop/0 :: () -> 'ok').
 
 stop() -> ok.
 
 %%----------------------------------------------------------------------------
 %% init/3 initializes one backing queue and its state.
-
+%%
 %% -spec(init/3 ::
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
 %%         -> state()).
+%%
+%% This function should be called only from outside this module.
 
 %% BUG: Should do quite a bit more upon recovery....
 
@@ -184,30 +194,30 @@ stop() -> ok.
 %% BUG: Need to provide back-pressure when queue is filling up.
 
 init(QueueName, _IsDurable, _Recover) ->
-    QueueNameAtom = queueNameAtom(QueueName),
-    _ = (catch mnesia:delete_table(QueueNameAtom)),
+    MnesiaTableName = mnesiaTableName(QueueName),
+    _ = (catch mnesia:delete_table(MnesiaTableName)),
     {atomic, ok} =
-	(catch mnesia:create_table(
-		 QueueNameAtom,
-		 [{record_name, state},
-		  {attributes, record_info(fields, state)}])),
-    persist(#state { mnesiaNameAtom = QueueNameAtom,
+        (catch mnesia:create_table(
+                 MnesiaTableName,
+                 [{record_name, state},
+                  {attributes, record_info(fields, state)}])),
+    persist(#state { mnesiaTableName = MnesiaTableName,
                      q = queue:new(),
+                     len = 0,
                      next_seq_id = 0,
+                     in_counter = 0,
+                     out_counter = 0,
                      pending_ack = dict:new(),
                      ack_index = gb_trees:empty(),
-                     on_sync = ?BLANK_SYNC,
-                     len = 0,
-                     out_counter = 0,
-                     in_counter = 0,
                      unconfirmed = gb_sets:new(),
-                     ack_out_counter = 0,
-                     ack_in_counter = 0 }).
+                     on_sync = ?BLANK_SYNC }).
 
 %%----------------------------------------------------------------------------
 %% terminate/1 is called on queue shutdown when the queue isn't being
 %% deleted.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(State) -> persist(remove_pending_ack(tx_commit_index(State))).
@@ -217,7 +227,9 @@ terminate(State) -> persist(remove_pending_ack(tx_commit_index(State))).
 %% needs to delete all its content. The only difference between purge
 %% and delete is that delete also needs to delete everything that's
 %% been delivered and not ack'd.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
 %% the only difference between purge and delete is that delete also
@@ -230,15 +242,25 @@ delete_and_terminate(State) ->
 %%----------------------------------------------------------------------------
 %% purge/1 removes all messages in the queue, but not messages which
 %% have been fetched and are pending acks.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
-purge(State = #state { len = Len }) ->
-    {Len, persist(State #state { q = queue:new(), len = 0 })}.
+purge(State) ->
+    {Len, State1} = internal_purge(State),
+    {Len, persist(State1)}.
+
+-spec(internal_purge/1 :: (state()) -> {purged_msg_count(), state()}).
+
+internal_purge(State = #state { len = Len }) ->
+    {Len, checkA(State #state { q = queue:new(), len = 0 })}.
 
 %%----------------------------------------------------------------------------
 %% publish/3 publishes a message.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(publish/3 ::
 %%         (rabbit_types:basic_message(),
 %%          rabbit_types:message_properties(),
@@ -253,7 +275,9 @@ publish(Msg, MsgProps, State) ->
 %% publish_delivered/4 is called for messages which have already been
 %% passed straight out to a client. The queue will be empty for these
 %% calls (i.e. saves the round trip through the backing queue).
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(publish_delivered/4 ::
 %%         (ack_required(),
 %%          rabbit_types:basic_message(),
@@ -269,22 +293,23 @@ publish_delivered(true,
                     needs_confirming = NeedsConfirming },
                   State = #state { len = 0,
                                    next_seq_id = SeqId,
-                                   out_counter = OutCount,
                                    in_counter = InCount,
+                                   out_counter = OutCount,
                                    unconfirmed = Unconfirmed }) ->
-    MsgStatus =
-	(msg_status(SeqId, Msg, MsgProps)) #msg_status { is_delivered = true },
-    State1 = record_pending_ack(m(MsgStatus), State),
+    M = (m(Msg, SeqId, MsgProps)) #m { is_delivered = true },
+    State1 = record_pending_ack(checkM(M), State),
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
     {SeqId, persist(State1 #state { next_seq_id = SeqId + 1,
-                                    out_counter = OutCount + 1,
                                     in_counter = InCount + 1,
+                                    out_counter = OutCount + 1,
                                     unconfirmed = Unconfirmed1 })}.
 
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops messages from the head of the queue while the
 %% supplied predicate returns true.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
 %%         -> state()).
@@ -299,82 +324,93 @@ dropwhile(Pred, State) ->
 
 dropwhile1(Pred, State) ->
     internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
+      fun (M = #m { msg_props = MsgProps }, State1) ->
               case Pred(MsgProps) of
                   true ->
-                      {_, State2} = internal_fetch(false, MsgStatus, State1),
+                      {_, State2} = internal_fetch(false, M, State1),
                       dropwhile1(Pred, State2);
                   false ->
                       %% message needs to go back into Q
                       #state { q = Q } = State1,
-                      {ok, State1 #state {q = queue:in_r(MsgStatus, Q) }}
+                      {ok, State1 #state {q = queue:in_r(M, Q) }}
               end
       end,
       State).
 
 %%----------------------------------------------------------------------------
 %% fetch/2 produces the next message.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(fetch/2 :: (ack_required(), state()) ->
 %%                       {ok | fetch_result(), state()}).
 
 fetch(AckRequired, State) ->
     internal_queue_out(
-      fun(MsgStatus, State1) ->
-	      internal_fetch(AckRequired, MsgStatus, State1)
+      fun (M, State1) ->
+              internal_fetch(AckRequired, M, State1)
       end,
       persist(State)).
 
--spec internal_queue_out(fun((#msg_status{}, state()) -> T), state()) ->
-				{empty, state()} | T.
+-spec internal_queue_out(fun ((#m{}, state()) -> T), state()) ->
+                                {empty, state()} | T.
 
 internal_queue_out(Fun, State = #state { q = Q }) ->
     case queue:out(Q) of
-        {empty, _Q} -> {empty, a(State)};
-        {{value, MsgStatus}, Qa} -> Fun(MsgStatus, State #state { q = Qa })
+        {empty, _Q} -> {empty, checkA(State)};
+        {{value, M}, Qa} -> Fun(M, State #state { q = Qa })
     end.
 
--spec internal_fetch/3 :: (ack_required(), #msg_status{}, state()) ->
-                            {fetch_result(), state()}.
+-spec internal_fetch/3 :: (ack_required(), #m{}, state()) ->
+                                  {fetch_result(), state()}.
 
 internal_fetch(AckRequired,
-               MsgStatus = #msg_status { seq_id = SeqId,
-                                         msg = Msg,
-                                         is_delivered = IsDelivered },
-               State = #state {out_counter = OutCount, len = Len }) ->
+               M = #m { msg = Msg,
+                        seq_id = SeqId,
+                        is_delivered = IsDelivered },
+               State = #state {len = Len, out_counter = OutCount }) ->
     {AckTag, State1} =
         case AckRequired of
             true ->
                 StateN =
-                    record_pending_ack(
-                      MsgStatus #msg_status { is_delivered = true },
-                      State),
+                    record_pending_ack(M #m { is_delivered = true }, State),
                 {SeqId, StateN};
             false -> {blank_ack, State}
         end,
     Len1 = Len - 1,
     {{Msg, IsDelivered, AckTag, Len1},
-     a(State1 #state { out_counter = OutCount + 1, len = Len1 })}.
+     checkA(State1 #state { len = Len1, out_counter = OutCount + 1 })}.
 
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges messages. Acktags supplied are for messages
 %% which can now be forgotten about. Must return 1 guid per Ack, in
 %% the same order as Acks.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 ack(AckTags, State) ->
-    {Guids, State1} =
-        ack(fun (#msg_status { msg = #basic_message { guid = Guid } },
-                 State1) ->
-                    remove_confirms(gb_sets:singleton(Guid), State1)
-            end,
-            AckTags, State),
+    {Guids, State1} = internal_ack(AckTags, State),
     {Guids, persist(State1)}.
+
+-spec(internal_ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+
+internal_ack(AckTags, State) ->
+    {Guids, State1} =
+        internal_ack(
+          fun (#m { msg = #basic_message { guid = Guid }}, State1) ->
+                  remove_confirms(gb_sets:singleton(Guid), State1)
+          end,
+          AckTags,
+          State),
+    {Guids, checkA(State1)}.
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(tx_publish/4 ::
 %%         (rabbit_types:txn(),
 %%          rabbit_types:basic_message(),
@@ -389,7 +425,9 @@ tx_publish(Txn, Msg, MsgProps, State) ->
 
 %%----------------------------------------------------------------------------
 %% tx_ack/3 acks, but in the context of a transaction.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
 tx_ack(Txn, AckTags, State) ->
@@ -400,7 +438,9 @@ tx_ack(Txn, AckTags, State) ->
 %%----------------------------------------------------------------------------
 %% tx_rollback/2 undoes anything which has been done in the context of
 %% the specified transaction.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
 tx_rollback(Txn, State) ->
@@ -412,7 +452,9 @@ tx_rollback(Txn, State) ->
 %% tx_commit/4 commits a transaction. The Fun passed in must be called
 %% once the messages have really been commited. This CPS permits the
 %% possibility of commit coalescing.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(tx_commit/4 ::
 %%         (rabbit_types:txn(),
 %%          fun (() -> any()),
@@ -431,23 +473,27 @@ tx_commit(Txn, Fun, MsgPropsFun, State) ->
 %%----------------------------------------------------------------------------
 %% requeue/3 reinserts messages into the queue which have already been
 %% delivered and were pending acknowledgement.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(requeue/3 ::
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
 requeue(AckTags, MsgPropsFun, State) ->
     {_Guids, State1} =
-        ack(fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
-                    {_SeqId, State2} =
-                        publish(Msg, MsgPropsFun(MsgProps), true, State1),
-                    State2
-            end,
-            AckTags, State),
+        internal_ack(
+          fun (#m { msg = Msg, msg_props = MsgProps }, State1) ->
+                  {_SeqId, State2} =
+                      publish(Msg, MsgPropsFun(MsgProps), true, State1),
+                  State2
+          end,
+          AckTags,
+          State),
     persist(State1).
 
 %%----------------------------------------------------------------------------
 %% len/1 returns the queue length.
-
+%%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
 len(State = #state { len = Len }) -> _State = persist(State), Len.
@@ -455,7 +501,7 @@ len(State = #state { len = Len }) -> _State = persist(State), Len.
 %%----------------------------------------------------------------------------
 %% is_empty/1 returns 'true' if the queue is empty, and 'false'
 %% otherwise.
-
+%%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
 is_empty(State) -> 0 == len(State).
@@ -471,7 +517,9 @@ is_empty(State) -> 0 == len(State).
 %% set_ram_duration_target states that the target is to have no more
 %% messages in RAM than indicated by the duration and the current
 %% queue rates.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(set_ram_duration_target/2 ::
 %%         (('undefined' | 'infinity' | number()), state())
 %%         -> state()).
@@ -483,7 +531,9 @@ set_ram_duration_target(_DurationTarget, State) -> persist(State).
 %% (likely to be just update your internal rates), and report how many
 %% seconds the messages in RAM represent given the current rates of
 %% the queue.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 
 ram_duration(State) -> {0, persist(State)}.
@@ -492,7 +542,9 @@ ram_duration(State) -> {0, persist(State)}.
 %% needs_idle_timeout/1 returns 'true' if 'idle_timeout' should be
 %% called as soon as the queue process can manage (either on an empty
 %% mailbox, or when a timer fires), and 'false' otherwise.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
 needs_idle_timeout(State = #state { on_sync = ?BLANK_SYNC }) ->
@@ -503,7 +555,9 @@ needs_idle_timeout(State) -> _State = persist(State), true.
 %% needs_idle_timeout/1 returns 'true' if 'idle_timeout' should be
 %% called as soon as the queue process can manage (either on an empty
 %% mailbox, or when a timer fires), and 'false' otherwise.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
 idle_timeout(State) -> persist(tx_commit_index(State)).
@@ -511,7 +565,9 @@ idle_timeout(State) -> persist(tx_commit_index(State)).
 %%----------------------------------------------------------------------------
 %% handle_pre_hibernate/1 is called immediately before the queue
 %% hibernates.
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 
 handle_pre_hibernate(State) -> persist(State).
@@ -519,45 +575,47 @@ handle_pre_hibernate(State) -> persist(State).
 %%----------------------------------------------------------------------------
 %% status/1 exists for debugging purposes, to be able to expose state
 %% via rabbitmqctl list_queues backing_queue_status
-
+%%
+%% This function should be called only from outside this module.
+%%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(State = #state { mnesiaNameAtom = QueueNameAtom,
+status(State = #state { mnesiaTableName = MnesiaTableName,
                         q = Q,
                         len = Len,
+                        next_seq_id = NextSeqId,
                         pending_ack = PA,
                         ack_index = AI,
-                        on_sync = #sync { funs = From },
-                        next_seq_id = NextSeqId }) ->
+                        on_sync = #sync { funs = Funs }}) ->
     _State = persist(State),
-    [{name, QueueNameAtom},
+    [{mnesiaTableName, MnesiaTableName},
      {q, queue:len(Q)},
      {len, Len},
+     {next_seq_id, NextSeqId},
      {pending_acks, dict:size(PA)},
-     {outstanding_txns, length(From)},
      {ack_count, gb_trees:size(AI)},
-     {next_seq_id, NextSeqId}].
+     {outstanding_txns, length(Funs)}].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-%% a(State) checks a queue state.
+%% checkA(State) checks a state, but otherwise acts as the identity function.
 
--spec a/1 :: (state()) -> state().
+-spec checkA/1 :: (state()) -> state().
 
-a(State = #state { q = Q, len = Len }) ->
+checkA(State = #state { q = Q, len = Len }) ->
     E4 = queue:is_empty(Q),
     LZ = Len == 0,
     true = LZ == E4,
     true = Len >= 0,
     State.
 
-%% m(MsgStatus) checks a message status.
+%% checkM(M) checks an m, but otherwise acts as the identity function.
 
--spec m/1 :: (#msg_status{}) -> #msg_status{}.
+-spec checkM/1 :: (#m{}) -> #m{}.
 
-m(MsgStatus) -> MsgStatus.
+checkM(M) -> M.
 
 %% retrieve(State) retrieve the queue state from Mnesia.
 %%
@@ -566,8 +624,8 @@ m(MsgStatus) -> MsgStatus.
 
 -spec(retrieve/1 :: (state()) -> state()).
 
-retrieve(State = #state { mnesiaNameAtom = QueueNameAtom}) ->
-    case (catch mnesia:dirty_read(QueueNameAtom, state)) of
+retrieve(State = #state { mnesiaTableName = MnesiaTableName}) ->
+    case (catch mnesia:dirty_read(MnesiaTableName, state)) of
         {atomic, [State1]} -> State1;
         Other ->
             rabbit_log:error("*** retrieve failed: ~p", [Other]),
@@ -582,9 +640,9 @@ retrieve(State = #state { mnesiaNameAtom = QueueNameAtom}) ->
 
 -spec(persist/1 :: (state()) -> state()).
 
-persist(State = #state { mnesiaNameAtom = QueueNameAtom }) ->
-    _State = a(State),
-    case (catch mnesia:dirty_write(QueueNameAtom, State)) of
+persist(State = #state { mnesiaTableName = MnesiaTableName }) ->
+    _State = checkA(State),
+    case (catch mnesia:dirty_write(MnesiaTableName, State)) of
         ok -> ok;
         Other ->
             rabbit_log:error("*** persist failed: ~p", [Other])
@@ -592,20 +650,23 @@ persist(State = #state { mnesiaNameAtom = QueueNameAtom }) ->
     State.
 
 -spec gb_sets_maybe_insert(boolean(), rabbit_guid:guid(), gb_set()) ->
-				  gb_set().
+                                  gb_set().
+
+%% When requeueing, we re-add a guid to the unconfirmed set.
 
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
-%% when requeueing, we re-add a guid to the unconfirmed set
 gb_sets_maybe_insert(true, Val, Set) -> gb_sets:add(Val, Set).
 
--spec msg_status(seq_id(),
-                 rabbit_types:basic_message(),
-                 rabbit_types:message_properties()) ->
-                        #msg_status{}.
+-spec m(rabbit_types:basic_message(),
+        seq_id(),
+        rabbit_types:message_properties()) ->
+               #m{}.
 
-msg_status(SeqId, Msg, MsgProps) ->
-    #msg_status { seq_id = SeqId, msg = Msg, is_delivered = false,
-                  msg_props = MsgProps }.
+m(Msg, SeqId, MsgProps) ->
+    #m { msg = Msg,
+         seq_id = SeqId,
+         msg_props = MsgProps,
+         is_delivered = false }.
 
 -spec lookup_tx(_) -> #tx{}.
 
@@ -617,23 +678,19 @@ lookup_tx(Txn) ->
 
 -spec store_tx(rabbit_types:txn(), #tx{}) -> ok.
 
-store_tx(Txn, Tx) ->
-    put({txn, Txn}, Tx),
-    ok.
+store_tx(Txn, Tx) -> put({txn, Txn}, Tx), ok.
 
 -spec erase_tx(rabbit_types:txn()) -> ok.
 
-erase_tx(Txn) ->
-    erase({txn, Txn}),
-    ok.
+erase_tx(Txn) -> erase({txn, Txn}), ok.
 
-%% Convert a queue name (a record) into an atom, for use with Mnesia.
+%% Convert a queue name (a record) into an Mnesia table name (an atom).
 
 %% TODO: Import correct type.
 
--spec queueNameAtom(_) -> atom().
+-spec mnesiaTableName(_) -> atom().
 
-queueNameAtom(QueueName) ->
+mnesiaTableName(QueueName) ->
     list_to_atom(lists:flatten(io_lib:format("~p", [QueueName]))).
 
 %%----------------------------------------------------------------------------
@@ -641,11 +698,11 @@ queueNameAtom(QueueName) ->
 %%----------------------------------------------------------------------------
 
 -spec tx_commit_post_msg_store([rabbit_types:basic_message()],
-			       [seq_id()],
-			       fun (() -> any()),
-			       message_properties_transformer(),
-			       state()) ->
-				      state().
+                               [seq_id()],
+                               fun (() -> any()),
+                               message_properties_transformer(),
+                               state()) ->
+                                      state().
 
 tx_commit_post_msg_store(Pubs,
                          AckTags,
@@ -656,7 +713,7 @@ tx_commit_post_msg_store(Pubs,
         tx_commit_index(
           State #state { on_sync = #sync { acks = [AckTags],
                                            pubs = [{MsgPropsFun, Pubs}],
-                                           funs = [Fun] } }),
+                                           funs = [Fun] }}),
     State1 #state { on_sync = OnSync }.
 
 -spec tx_commit_index(state()) -> state().
@@ -665,9 +722,9 @@ tx_commit_index(State = #state { on_sync = ?BLANK_SYNC }) -> State;
 tx_commit_index(State = #state {
                   on_sync = #sync { acks = SAcks,
                                     pubs = SPubs,
-                                    funs = SFuns } }) ->
+                                    funs = SFuns }}) ->
     Acks = lists:append(SAcks),
-    {_Guids, NewState} = ack(Acks, State),
+    {_Guids, NewState} = internal_ack(Acks, State),
     Pubs = [{Msg, Fun(MsgProps)} ||
                {Fun, PubsN} <- lists:reverse(SPubs),
                {Msg, MsgProps} <- lists:reverse(PubsN)],
@@ -687,26 +744,24 @@ tx_commit_index(State = #state {
 %%----------------------------------------------------------------------------
 
 -spec publish(rabbit_types:basic_message(),
-	      rabbit_types:message_properties(),
-	      boolean(),
-	      state()) ->
-		     {seq_id(), state()}.
+              rabbit_types:message_properties(),
+              boolean(),
+              state()) ->
+                     {seq_id(), state()}.
 
 publish(Msg = #basic_message { guid = Guid },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
         IsDelivered,
         State = #state { q = Q,
-                         next_seq_id = SeqId,
                          len = Len,
+                         next_seq_id = SeqId,
                          in_counter = InCount,
                          unconfirmed = Unconfirmed }) ->
-    MsgStatus =
-	(msg_status(SeqId, Msg, MsgProps))
-	#msg_status { is_delivered = IsDelivered },
-    State1 = State #state { q = queue:in(m(MsgStatus), Q) },
+    M = (m(Msg, SeqId, MsgProps)) #m { is_delivered = IsDelivered },
+    State1 = State #state { q = queue:in(checkM(M), Q) },
     Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
-    {SeqId, State1 #state { next_seq_id = SeqId + 1,
-                            len = Len + 1,
+    {SeqId, State1 #state { len = Len + 1,
+                            next_seq_id = SeqId + 1,
                             in_counter = InCount + 1,
                             unconfirmed = Unconfirmed1 }}.
 
@@ -714,60 +769,52 @@ publish(Msg = #basic_message { guid = Guid },
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
--spec record_pending_ack(#msg_status{}, state()) -> state().
+-spec record_pending_ack(#m{}, state()) -> state().
 
-record_pending_ack(MsgStatus =
-                       #msg_status { seq_id = SeqId,
-                                     msg = #basic_message { guid = Guid }},
-                   State =
-                       #state { pending_ack = PA,
-                                ack_index = AI,
-                                ack_in_counter = AckInCount}) ->
-    {AckEntry, AI1} = {MsgStatus, gb_trees:insert(SeqId, Guid, AI)},
-    PA1 = dict:store(SeqId, AckEntry, PA),
-    State #state { pending_ack = PA1,
-                   ack_index = AI1,
-                   ack_in_counter = AckInCount + 1}.
+record_pending_ack(M = #m { msg = #basic_message { guid = Guid },
+                            seq_id = SeqId },
+                   State = #state { pending_ack = PA, ack_index = AI }) ->
+    AI1 = gb_trees:insert(SeqId, Guid, AI),
+    PA1 = dict:store(SeqId, M, PA),
+    State #state { pending_ack = PA1, ack_index = AI1 }.
 
 -spec remove_pending_ack(state()) -> state().
 
 remove_pending_ack(State = #state { pending_ack = PA }) ->
     _ = dict:fold(fun accumulate_ack/3, accumulate_ack_init(), PA),
-    a(State #state { pending_ack = dict:new(),
-                     ack_index = gb_trees:empty() }).
+    checkA(State #state { pending_ack = dict:new(),
+                          ack_index = gb_trees:empty() }).
 
--spec ack(fun((_, state()) -> state()), [any()], state()) ->
-		 {[rabbit_guid:guid()], state()}.
+-spec internal_ack(fun ((_, state()) -> state()), [any()], state()) ->
+                          {[rabbit_guid:guid()], state()}.
 
-ack(_Fun, [], State) -> {[], State};
-ack(Fun, AckTags, State) ->
-    {{_PersistentSeqIds, _GuidsByStore, AllGuids},
-     State1 = #state { ack_out_counter = AckOutCount }} =
-	lists:foldl(
-	  fun (SeqId,
-	       {Acc,
-		State2 = #state { pending_ack = PA, ack_index = AI }}) ->
-		  AckEntry = dict:fetch(SeqId, PA),
-		  {accumulate_ack(SeqId, AckEntry, Acc),
-		   Fun(AckEntry,
-		       State2 #state {
-			 pending_ack = dict:erase(SeqId, PA),
-			 ack_index = gb_trees:delete_any(SeqId, AI)})}
-	  end,
-	  {accumulate_ack_init(), State},
-	  AckTags),
-    {lists:reverse(AllGuids),
-     State1 #state { ack_out_counter = AckOutCount + length(AckTags) }}.
+internal_ack(_Fun, [], State) -> {[], State};
+internal_ack(Fun, AckTags, State) ->
+    {{_PersistentSeqIds, _GuidsByStore, AllGuids}, State1} =
+        lists:foldl(
+          fun (SeqId,
+               {Acc,
+                State2 = #state { pending_ack = PA, ack_index = AI }}) ->
+                  AckEntry = dict:fetch(SeqId, PA),
+                  {accumulate_ack(SeqId, AckEntry, Acc),
+                   Fun(AckEntry,
+                       State2 #state {
+                         pending_ack = dict:erase(SeqId, PA),
+                         ack_index = gb_trees:delete_any(SeqId, AI)})}
+          end,
+          {accumulate_ack_init(), State},
+          AckTags),
+    {lists:reverse(AllGuids), State1}.
 
 -spec accumulate_ack_init() -> {[], [], []}.
 
 accumulate_ack_init() -> {[], orddict:new(), []}.
 
--spec accumulate_ack(seq_id(), #msg_status{}, {_, _, _}) ->
+-spec accumulate_ack(seq_id(), #m{}, {_, _, _}) ->
                             {_, _, [rabbit_guid:guid()]}.
 
 accumulate_ack(_SeqId,
-	       #msg_status { msg = #basic_message { guid = Guid }},
+               #m { msg = #basic_message { guid = Guid }},
                {PersistentSeqIdsAcc, GuidsByStore, AllGuids}) ->
     {PersistentSeqIdsAcc, GuidsByStore, [Guid | AllGuids]}.
 
