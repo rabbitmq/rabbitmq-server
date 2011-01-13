@@ -475,14 +475,6 @@ confirm([], _QPid, State) ->
     State;
 confirm(_MsgSeqNos, _QPid, State = #ch{confirm_enabled = false}) ->
     State;
-confirm(MsgSeqNos, undefined, State) ->
-    %% This case is for confirms originating in the channel: it is
-    %% only triggered by unroutable messages marked mandatory or
-    %% immediate or messages routed to zero queues.  In this case, 1)
-    %% the unconfirmed set does not contain the message, and 2) the
-    %% message was not delivered to any queues, so queues_for_msg will
-    %% not have any relevant entries.
-    send_confirms(MsgSeqNos, State);
 confirm(MsgSeqNos, QPid, State) ->
     {DoneMessages, State1} =
         lists:foldl(
@@ -1217,12 +1209,12 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
-    confirm([MsgSeqNo], undefined, State);
+    send_confirms([MsgSeqNo], State);
 process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
-    confirm([MsgSeqNo], undefined, State);
+    send_confirms([MsgSeqNo], State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
-    confirm([MsgSeqNo], undefined, State);
+    send_confirms([MsgSeqNo], State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
 process_routing_result(routed,    QPids, MsgSeqNo,       _,
