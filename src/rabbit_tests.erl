@@ -1502,12 +1502,13 @@ msg_store_remove(MsgStore, Ref, Guids) ->
 
 with_msg_store_client(MsgStore, Ref, Fun) ->
     rabbit_msg_store:client_terminate(
-      Fun(rabbit_msg_store:client_init(MsgStore, Ref, undefined))).
+      Fun(rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined))).
 
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
-      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref, undefined), L)).
+      lists:foldl(
+        fun (Guid, MSCState) -> Fun(Guid, MSCState) end,
+        rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined), L)).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1516,7 +1517,7 @@ test_msg_store() ->
     {Guids1stHalf, Guids2ndHalf} = lists:split(50, Guids),
     Ref = rabbit_guid:guid(),
     MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                            undefined),
+                                            undefined, undefined),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, Guids, MSCState),
     %% publish the first half
@@ -1583,7 +1584,7 @@ test_msg_store() ->
                         {Guid, 0, GuidsTail}
                 end, Guids2ndHalf}),
     MSCState5 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                             undefined),
+                                             undefined, undefined),
     %% check we have the right msgs left
     lists:foldl(
       fun (Guid, Bool) ->
@@ -1593,7 +1594,7 @@ test_msg_store() ->
     %% restart empty
     restart_msg_store_empty(),
     MSCState6 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                             undefined),
+                                             undefined, undefined),
     %% check we don't contain any of the msgs
     false = msg_store_contains(false, Guids, MSCState6),
     %% publish the first half again
@@ -1602,7 +1603,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:client_terminate(
            msg_store_read(Guids1stHalf, MSCState6)),
     MSCState7 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                             undefined),
+                                             undefined, undefined),
     ok = rabbit_msg_store:remove(Guids1stHalf, MSCState7),
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
@@ -1661,7 +1662,7 @@ init_test_queue() ->
     Terms = rabbit_queue_index:shutdown_terms(TestQueue),
     PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:guid()),
     PersistentClient = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE,
-                                                    PRef, undefined),
+                                                    PRef, undefined, undefined),
     Res = rabbit_queue_index:recover(
             TestQueue, Terms, false,
             fun (Guid) ->
@@ -1695,7 +1696,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
                end,
-    MSCState = rabbit_msg_store:client_init(MsgStore, Ref, undefined),
+    MSCState =
+        rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined),
     {A, B = [{_SeqId, LastGuidWritten} | _]} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsGuidsAcc}) ->

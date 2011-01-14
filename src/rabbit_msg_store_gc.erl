@@ -42,6 +42,7 @@
 
 -record(state,
         { pending_no_readers,
+          on_action,
           msg_store_state
         }).
 
@@ -89,6 +90,7 @@ init([MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
     {ok, #state { pending_no_readers = dict:new(),
+                  on_action          = [],
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -131,16 +133,30 @@ code_change(_OldVsn, State, _Extra) ->
 
 attempt_action(Action, Files,
                State = #state { pending_no_readers = Pending,
+                                on_action          = Thunks,
                                 msg_store_state    = MsgStoreState }) ->
+    Thunks1 = run_thunks(Thunks),
     case [File || File <- Files,
                   rabbit_msg_store:has_readers(File, MsgStoreState)] of
-        []         -> do_action(Action, Files, MsgStoreState),
-                      State;
+        []         -> Thunks2 = case do_action(Action, Files, MsgStoreState) of
+                                    ok    -> Thunks1;
+                                    Thunk -> [Thunk | Thunks1]
+                                end,
+                      State #state { on_action = Thunks2 };
         [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
-                      State #state { pending_no_readers = Pending1 }
+                      State #state { pending_no_readers = Pending1,
+                                     on_action          = Thunks1 }
     end.
 
 do_action(combine, [Source, Destination], MsgStoreState) ->
     rabbit_msg_store:combine_files(Source, Destination, MsgStoreState);
 do_action(delete, [File], MsgStoreState) ->
     rabbit_msg_store:delete_file(File, MsgStoreState).
+
+run_thunks(Thunks) ->
+    lists:foldl(fun (Thunk, Thunks1) ->
+                        case Thunk() of
+                            ok     -> Thunks1;
+                            Thunk1 -> [Thunk1 | Thunks1]
+                        end
+                end, [], Thunks).
