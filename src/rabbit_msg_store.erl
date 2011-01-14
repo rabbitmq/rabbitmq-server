@@ -1248,10 +1248,10 @@ mark_handle_to_close(ClientRefs, FileHandlesEts, File, Invoke) ->
             ets:match_object(FileHandlesEts, {{'_', File}, open}) ],
     true.
 
-safe_file_delete_fun(FileHandlesEts, File, Dir) ->
-    fun () -> safe_file_delete(FileHandlesEts, File, Dir) end.
+safe_file_delete_fun(File, Dir, FileHandlesEts) ->
+    fun () -> safe_file_delete(File, Dir, FileHandlesEts) end.
 
-safe_file_delete(FileHandlesEts, File, Dir) ->
+safe_file_delete(File, Dir, FileHandlesEts) ->
     %% do not match on any value - it's the absence of the row that
     %% indicates the client has really closed the file.
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
@@ -1887,7 +1887,7 @@ combine_files(Source, Destination,
 
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
-    safe_file_delete_fun(FileHandlesEts, Source, Dir).
+    safe_file_delete_fun(Source, Dir, FileHandlesEts).
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       file_handles_ets = FileHandlesEts,
@@ -1899,7 +1899,7 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                      readers          = 0 }] = ets:lookup(FileSummaryEts, File),
     {[], 0} = load_and_vacuum_message_file(File, State),
     gen_server2:cast(Server, {delete_file, File, FileSize}),
-    safe_file_delete_fun(FileHandlesEts, File, Dir).
+    safe_file_delete_fun(File, Dir, FileHandlesEts).
 
 load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
                                                index_module = Index,
