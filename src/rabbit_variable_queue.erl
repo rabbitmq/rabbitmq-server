@@ -967,7 +967,7 @@ msg_store_sync(MSCState, IsPersistent, Guids, Callback) ->
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> {ok, rabbit_msg_store:close_all_indicated(MSCState1)} end).
+      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
 
 msg_store_close_fds_fun(IsPersistent) ->
     Self = self(),

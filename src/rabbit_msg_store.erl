@@ -576,7 +576,7 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
             case index_lookup(Guid, CState) of
                 #msg_location { file = File } = MsgLocation ->
                     %% Still the same file.
-                    CState1 = close_all_indicated(CState),
+                    {ok, CState1} = close_all_indicated(CState),
                     %% We are now guaranteed that the mark_handle_open
                     %% call will either insert_new correctly, or will
                     %% fail, but find the value is open, not close.
@@ -1266,10 +1266,10 @@ close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
                                       client_ref       = Ref } =
                     CState) ->
     Objs = ets:match_object(FileHandlesEts, {{Ref, '_'}, close}),
-    lists:foldl(fun ({Key = {_Ref, File}, close}, CStateM) ->
-                        true = ets:delete(FileHandlesEts, Key),
-                        close_handle(File, CStateM)
-                end, CState, Objs).
+    {ok, lists:foldl(fun ({Key = {_Ref, File}, close}, CStateM) ->
+                             true = ets:delete(FileHandlesEts, Key),
+                             close_handle(File, CStateM)
+                     end, CState, Objs)}.
 
 close_all_handles(CState = #client_msstate { file_handles_ets  = FileHandlesEts,
                                              file_handle_cache = FHC,
