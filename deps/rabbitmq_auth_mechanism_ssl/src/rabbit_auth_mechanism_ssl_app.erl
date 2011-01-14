@@ -34,8 +34,6 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
-
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
 
