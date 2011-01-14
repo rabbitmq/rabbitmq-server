@@ -32,7 +32,7 @@
 from __future__ import nested_scopes
 import re
 import sys
-from os import remove
+import os
 from optparse import OptionParser
 
 try:
@@ -172,7 +172,7 @@ class AmqpSpec:
 
         self.classes = []
         for element in self.spec['classes']:
-            self.classes.append(AmqpClass(self.spec, element))
+            self.classes.append(AmqpClass(self, element))
         
     def allClasses(self):
         return self.classes
@@ -271,16 +271,16 @@ def do_main_dict(funcDict):
     def execute(fn, amqp_specs, out_file):
         stdout = sys.stdout
         f = open(out_file, 'w')
+        success = False
         try:
-            try:
-                sys.stdout = f
-                fn(amqp_specs)
-            except:
-                remove(out_file)
-                raise
+            sys.stdout = f
+            fn(amqp_specs)
+            success = True
         finally:
             sys.stdout = stdout
             f.close()
+            if not success:
+                os.remove(out_file)
 
     parser = OptionParser()
     parser.add_option("--ignore-conflicts", action="store_true", dest="ignore_conflicts", default=False)
