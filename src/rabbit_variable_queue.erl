@@ -436,12 +436,10 @@ init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
                    Terms};
             _  -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
         end,
-    PersistentClient = rabbit_msg_store:client_init(
-                         ?PERSISTENT_MSG_STORE, PRef, MsgOnDiskFun,
-                         msg_store_close_fds_fun(true)),
-    TransientClient  = rabbit_msg_store:client_init(
-                         ?TRANSIENT_MSG_STORE, TRef, undefined,
-                         msg_store_close_fds_fun(false)),
+    PersistentClient = msg_store_client_init(
+                         ?PERSISTENT_MSG_STORE, PRef, MsgOnDiskFun),
+    TransientClient  = msg_store_client_init(
+                         ?TRANSIENT_MSG_STORE, TRef, undefined),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
           QueueName, Terms1,
@@ -935,8 +933,11 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
     Res.
 
 msg_store_client_init(MsgStore, MsgOnDiskFun) ->
+    msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
+
+msg_store_client_init(MsgStore, Ref, MsgOnDiskFun) ->
     rabbit_msg_store:client_init(
-      MsgStore, rabbit_guid:guid(), MsgOnDiskFun,
+      MsgStore, Ref, MsgOnDiskFun,
       msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE)).
 
 msg_store_write(MSCState, IsPersistent, Guid, Msg) ->
