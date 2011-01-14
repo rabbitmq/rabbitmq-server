@@ -1244,17 +1244,17 @@ is_message_persistent(Content) ->
             IsPersistent
     end.
 
-process_routing_result(unroutable, _, XName, MsgSeqNo, Msg, State) ->
+process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State#ch.writer_pid, no_route),
     send_confirms([MsgSeqNo], XName, State);
-process_routing_result(not_delivered, _, XName, MsgSeqNo, Msg, State) ->
+process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State#ch.writer_pid, no_consumers),
     send_confirms([MsgSeqNo], XName, State);
-process_routing_result(routed, [], XName, MsgSeqNo,  _, State) ->
+process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
     send_confirms([MsgSeqNo], XName, State);
-process_routing_result(routed, _, _, undefined, _, State) ->
+process_routing_result(routed,        _,     _, undefined,   _, State) ->
     State;
-process_routing_result(routed, QPids, XName, MsgSeqNo,       _, State) ->
+process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
     #ch{queues_for_msg = QFM, unconfirmed = UC,
         exchange_for_msg = EFM} = State,
     [maybe_monitor(QPid) || QPid <- QPids],
