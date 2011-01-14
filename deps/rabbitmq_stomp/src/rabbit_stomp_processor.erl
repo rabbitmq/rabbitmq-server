@@ -147,7 +147,7 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
                                   missing
                           end
                   end,
-    cancel_subscription_channel(ConsumerTag, State);
+    cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
@@ -201,12 +201,12 @@ handle_frame(Command, _Frame, State) ->
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-cancel_subscription_channel(missing, State) ->
+cancel_subscription(missing, State) ->
     error("Missing destination or id",
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription_channel(ConsumerTag, State = #state{subscriptions = Subs}) ->
+cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error -> 
             error("No subscription found",
