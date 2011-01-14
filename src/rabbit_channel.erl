@@ -504,27 +504,29 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
 confirm([], _, _, State) ->
     State;
 confirm(MsgSeqNos, QPid, XName, State) ->
-    {DoneMessages, State1} =
+    {DoneMessages, UniqueSeqNos, State1} =
         lists:foldl(
-          fun(MsgSeqNo, {DMs, State0 = #ch{unconfirmed = UC0,
-                                           queues_for_msg = QFM0}}) ->
+          fun(MsgSeqNo, {DMs, USN, State0 = #ch{unconfirmed = UC0,
+                                                queues_for_msg = QFM0}}) ->
                   case gb_sets:is_element(MsgSeqNo, UC0) of
-                      false -> {DMs, State0};
+                      false -> {DMs, USN, State0};
                       true  -> Qs1 = sets:del_element(
                                        QPid, dict:fetch(MsgSeqNo, QFM0)),
                                case sets:size(Qs1) of
                                    0 -> {[MsgSeqNo | DMs],
+                                         USN + 1,
                                          State0#ch{
                                            queues_for_msg =
                                                dict:erase(MsgSeqNo, QFM0),
                                            unconfirmed =
                                                gb_sets:delete(MsgSeqNo, UC0)}};
                                    _ -> QFM1 = dict:store(MsgSeqNo, Qs1, QFM0),
-                                        {DMs, State0#ch{queues_for_msg = QFM1}}
+                                        {DMs, USN + 1,
+                                         State0#ch{queues_for_msg = QFM1}}
                                end
                   end
-          end, {[], State}, MsgSeqNos),
-    maybe_incr_stats([{{QPid, XName}, length(MsgSeqNos)}], confirm, State),
+          end, {[], 0, State}, MsgSeqNos),
+    maybe_incr_stats([{{QPid, XName}, UniqueSeqNos}], confirm, State),
     send_confirms(DoneMessages, XName, State1).
 
 group_confirms_by_exchange([], Acc) ->
