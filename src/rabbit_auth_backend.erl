@@ -29,34 +29,48 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(delegate_sup).
+-module(rabbit_auth_backend).
 
--behaviour(supervisor).
+-export([behaviour_info/1]).
 
--export([start_link/0]).
+behaviour_info(callbacks) ->
+    [
+     %% A description proplist as with auth mechanisms,
+     %% exchanges. Currently unused.
+     {description, 0},
 
--export([init/1]).
+     %% Check a user can log in, given a username and a proplist of
+     %% authentication information (e.g. [{password, Password}]).
+     %%
+     %% Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {error, Error}
+     %%     Something went wrong. Log and die.
+     %% {refused, Msg, Args}
+     %%     Client failed authentication. Log and die.
+     {check_user_login, 2},
 
--define(SERVER, ?MODULE).
+     %% Given #user, vhost path and permission, can a user access a vhost?
+     %% Permission is read  - learn of the existence of (only relevant for
+     %%                       management plugin)
+     %%            or write - log in
+     %%
+     %% Possible responses:
+     %% true
+     %% false
+     %% {error, Error}
+     %%     Something went wrong. Log and die.
+     {check_vhost_access, 3},
 
-%%----------------------------------------------------------------------------
-
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
-
--endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    DCount = delegate:delegate_count(),
-    {ok, {{one_for_one, 10, 10},
-          [{Num, {delegate, start_link, [Num]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Num <- lists:seq(0, DCount - 1)]}}.
+     %% Given #user, resource and permission, can a user access a resource?
+     %%
+     %% Possible responses:
+     %% true
+     %% false
+     %% {error, Error}
+     %%     Something went wrong. Log and die.
+     {check_resource_access, 3}
+    ];
+behaviour_info(_Other) ->
+    undefined.

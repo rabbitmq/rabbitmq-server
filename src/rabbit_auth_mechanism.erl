@@ -29,34 +29,29 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(delegate_sup).
+-module(rabbit_auth_mechanism).
 
--behaviour(supervisor).
+-export([behaviour_info/1]).
 
--export([start_link/0]).
+behaviour_info(callbacks) ->
+    [
+     %% A description.
+     {description, 0},
 
--export([init/1]).
+     %% Called before authentication starts. Should create a state
+     %% object to be passed through all the stages of authentication.
+     {init, 1},
 
--define(SERVER, ?MODULE).
-
-%%----------------------------------------------------------------------------
-
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
-
--endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%----------------------------------------------------------------------------
-
-init(_Args) ->
-    DCount = delegate:delegate_count(),
-    {ok, {{one_for_one, 10, 10},
-          [{Num, {delegate, start_link, [Num]},
-            transient, 16#ffffffff, worker, [delegate]} ||
-              Num <- lists:seq(0, DCount - 1)]}}.
+     %% Handle a stage of authentication. Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {challenge, Challenge, NextState}
+     %%     Another round is needed. Here's the state I want next time.
+     %% {protocol_error, Msg, Args}
+     %%     Client got the protocol wrong. Log and die.
+     %% {refused, Msg, Args}
+     %%     Client failed authentication. Log and die.
+     {handle_response, 2}
+    ];
+behaviour_info(_Other) ->
+    undefined.

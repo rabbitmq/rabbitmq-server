@@ -41,7 +41,7 @@
 
 -export([conserve_memory/2, server_properties/0]).
 
--export([analyze_frame/3]).
+-export([process_channel_frame/5]). %% used by erlang-client
 
 -export([emit_stats/1]).
 
@@ -56,14 +56,17 @@
 
 -record(v1, {parent, sock, connection, callback, recv_length, recv_ref,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun}).
+             channel_sup_sup_pid, start_heartbeat_fun, auth_mechanism,
+             auth_state}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
-                              peer_cert_validity,
+                              peer_cert_validity, auth_mechanism,
+                              ssl_protocol, ssl_key_exchange,
+                              ssl_cipher, ssl_hash,
                               protocol, user, vhost, timeout, frame_max,
                               client_properties]).
 
@@ -294,7 +297,9 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                             stats_timer         =
                                 rabbit_event:init_stats_timer(),
                             channel_sup_sup_pid = ChannelSupSupPid,
-                            start_heartbeat_fun = StartHeartbeatFun
+                            start_heartbeat_fun = StartHeartbeatFun,
+                            auth_mechanism      = none,
+                            auth_state          = none
                            },
                         handshake, 8))
     catch
@@ -344,12 +349,12 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             %% since this termination is initiated by our parent it is
             %% probably more important to exit quickly.
             exit(Reason);
-        {channel_exit, _Chan, E = {writer, send_failed, _Error}} ->
+        {channel_exit, _Channel, E = {writer, send_failed, _Error}} ->
             throw(E);
-        {channel_exit, ChannelOrFrPid, Reason} ->
-            mainloop(Deb, handle_channel_exit(ChannelOrFrPid, Reason, State));
-        {'DOWN', _MRef, process, ChSupPid, Reason} ->
-            mainloop(Deb, handle_dependent_exit(ChSupPid, Reason, State));
+        {channel_exit, Channel, Reason} ->
+            mainloop(Deb, handle_exception(State, Channel, Reason));
+        {'DOWN', _MRef, process, ChPid, Reason} ->
+            mainloop(Deb, handle_dependent_exit(ChPid, Reason, State));
         terminate_connection ->
             State;
         handshake_timeout ->
@@ -440,45 +445,32 @@ close_channel(Channel, State) ->
     put({channel, Channel}, closing),
     State.
 
-handle_channel_exit(ChFrPid, Reason, State) when is_pid(ChFrPid) ->
-    {channel, Channel} = get({ch_fr_pid, ChFrPid}),
-    handle_exception(State, Channel, Reason);
-handle_channel_exit(Channel, Reason, State) ->
-    handle_exception(State, Channel, Reason).
-
-handle_dependent_exit(ChSupPid, Reason, State) ->
+handle_dependent_exit(ChPid, Reason, State) ->
     case termination_kind(Reason) of
         controlled ->
-            case erase({ch_sup_pid, ChSupPid}) of
-                undefined                                -> ok;
-                {_Channel, {ch_fr_pid, _ChFrPid} = ChFr} -> erase(ChFr)
-            end,
+            erase({ch_pid, ChPid}),
             maybe_close(State);
         uncontrolled ->
-            case channel_cleanup(ChSupPid) of
-                undefined ->
-                    exit({abnormal_dependent_exit, ChSupPid, Reason});
-                Channel ->
-                    maybe_close(handle_exception(State, Channel, Reason))
+            case channel_cleanup(ChPid) of
+                undefined -> exit({abnormal_dependent_exit, ChPid, Reason});
+                Channel   -> maybe_close(
+                               handle_exception(State, Channel, Reason))
             end
     end.
 
-channel_cleanup(ChSupPid) ->
-    case get({ch_sup_pid, ChSupPid}) of
-        undefined                  -> undefined;
-        {{channel, Channel}, ChFr} -> erase({channel, Channel}),
-                                      erase(ChFr),
-                                      erase({ch_sup_pid, ChSupPid}),
-                                      Channel
+channel_cleanup(ChPid) ->
+    case get({ch_pid, ChPid}) of
+        undefined -> undefined;
+        Channel   -> erase({channel, Channel}),
+                     erase({ch_pid, ChPid}),
+                     Channel
     end.
 
-all_channels() -> [ChFrPid || {{ch_sup_pid, _ChSupPid},
-                               {_Channel, {ch_fr_pid, ChFrPid}}} <- get()].
+all_channels() -> [ChPid || {{ch_pid, ChPid}, _Channel} <- get()].
 
 terminate_channels() ->
     NChannels =
-        length([rabbit_framing_channel:shutdown(ChFrPid)
-                || ChFrPid <- all_channels()]),
+        length([rabbit_channel:shutdown(ChPid) || ChPid <- all_channels()]),
     if NChannels > 0 ->
             Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * NChannels,
             TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
@@ -496,10 +488,10 @@ wait_for_channel_termination(0, TimerRef) ->
 
 wait_for_channel_termination(N, TimerRef) ->
     receive
-        {'DOWN', _MRef, process, ChSupPid, Reason} ->
-            case channel_cleanup(ChSupPid) of
+        {'DOWN', _MRef, process, ChPid, Reason} ->
+            case channel_cleanup(ChPid) of
                 undefined ->
-                    exit({abnormal_dependent_exit, ChSupPid, Reason});
+                    exit({abnormal_dependent_exit, ChPid, Reason});
                 Channel ->
                     case termination_kind(Reason) of
                         controlled ->
@@ -538,7 +530,7 @@ handle_frame(Type, 0, Payload,
              State = #v1{connection_state = CS,
                          connection = #connection{protocol = Protocol}})
   when CS =:= closing; CS =:= closed ->
-    case analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
@@ -548,7 +540,7 @@ handle_frame(_Type, _Channel, _Payload, State = #v1{connection_state = CS})
     State;
 handle_frame(Type, 0, Payload,
              State = #v1{connection = #connection{protocol = Protocol}}) ->
-    case analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         error     -> throw({unknown_frame, 0, Type, Payload});
         heartbeat -> State;
         {method, MethodName, FieldsBin} ->
@@ -557,19 +549,23 @@ handle_frame(Type, 0, Payload,
     end;
 handle_frame(Type, Channel, Payload,
              State = #v1{connection = #connection{protocol = Protocol}}) ->
-    case analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
             case get({channel, Channel}) of
-                {ch_fr_pid, ChFrPid} ->
-                    ok = rabbit_framing_channel:process(ChFrPid, AnalyzedFrame),
+                {ChPid, FramingState} ->
+                    NewAState = process_channel_frame(
+                                  AnalyzedFrame, self(),
+                                  Channel, ChPid, FramingState),
+                    put({channel, Channel}, {ChPid, NewAState}),
                     case AnalyzedFrame of
                         {method, 'channel.close', _} ->
                             erase({channel, Channel}),
                             State;
                         {method, MethodName, _} ->
-                            case (State#v1.connection_state =:= blocking andalso
+                            case (State#v1.connection_state =:= blocking
+                                  andalso
                                   Protocol:method_has_content(MethodName)) of
                                 true  -> State#v1{connection_state = blocked};
                                 false -> State
@@ -598,31 +594,14 @@ handle_frame(Type, Channel, Payload,
                     State;
                 undefined ->
                     case ?IS_RUNNING(State) of
-                        true  -> ok = send_to_new_channel(
-                                        Channel, AnalyzedFrame, State),
-                                 State;
+                        true  -> send_to_new_channel(
+                                   Channel, AnalyzedFrame, State);
                         false -> throw({channel_frame_while_starting,
                                         Channel, State#v1.connection_state,
                                         AnalyzedFrame})
                     end
             end
     end.
-
-analyze_frame(?FRAME_METHOD,
-              <<ClassId:16, MethodId:16, MethodFields/binary>>,
-              Protocol) ->
-    MethodName = Protocol:lookup_method_name({ClassId, MethodId}),
-    {method, MethodName, MethodFields};
-analyze_frame(?FRAME_HEADER,
-              <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>,
-              _Protocol) ->
-    {content_header, ClassId, Weight, BodySize, Properties};
-analyze_frame(?FRAME_BODY, Body, _Protocol) ->
-    {content_body, Body};
-analyze_frame(?FRAME_HEARTBEAT, <<>>, _Protocol) ->
-    heartbeat;
-analyze_frame(_Type, _Body, _Protocol) ->
-    error.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
@@ -681,11 +660,12 @@ handle_input(Callback, Data, _State) ->
 start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                  Protocol,
                  State = #v1{sock = Sock, connection = Connection}) ->
-    Start = #'connection.start'{ version_major = ProtocolMajor,
-                                 version_minor = ProtocolMinor,
-                                 server_properties = server_properties(),
-                                 mechanisms = <<"PLAIN AMQPLAIN">>,
-                                 locales = <<"en_US">> },
+    Start = #'connection.start'{
+      version_major = ProtocolMajor,
+      version_minor = ProtocolMinor,
+      server_properties = server_properties(),
+      mechanisms = auth_mechanisms_binary(),
+      locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
     switch_callback(State#v1{connection = Connection#connection{
                                             timeout_sec = ?NORMAL_TIMEOUT,
@@ -710,42 +690,45 @@ ensure_stats_timer(State) ->
 
 handle_method0(MethodName, FieldsBin,
                State = #v1{connection = #connection{protocol = Protocol}}) ->
-    try
-        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
-                       State)
-    catch exit:Reason ->
-            CompleteReason = case Reason of
-                                 #amqp_error{method = none} ->
-                                     Reason#amqp_error{method = MethodName};
-                                 OtherReason -> OtherReason
-                             end,
+    HandleException =
+        fun(R) ->
             case ?IS_RUNNING(State) of
-                true  -> send_exception(State, 0, CompleteReason);
+                true  -> send_exception(State, 0, R);
                 %% We don't trust the client at this point - force
                 %% them to wait for a bit so they can't DOS us with
                 %% repeated failed logins etc.
                 false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-                         throw({channel0_error, State#v1.connection_state,
-                                CompleteReason})
+                         throw({channel0_error, State#v1.connection_state, R})
             end
+        end,
+    try
+        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
+                       State)
+    catch exit:#amqp_error{method = none} = Reason ->
+            HandleException(Reason#amqp_error{method = MethodName});
+          Type:Reason ->
+            HandleException({Type, Reason, MethodName, erlang:get_stacktrace()})
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response,
                                       client_properties = ClientProperties},
-               State = #v1{connection_state = starting,
-                           connection = Connection =
-                               #connection{protocol = Protocol},
-                           sock = Sock}) ->
-    User = rabbit_access_control:check_login(Mechanism, Response),
-    Tune = #'connection.tune'{channel_max = 0,
-                              frame_max = ?FRAME_MAX,
-                              heartbeat = 0},
-    ok = send_on_channel0(Sock, Tune, Protocol),
-    State#v1{connection_state = tuning,
-             connection = Connection#connection{
-                            user = User,
-                            client_properties = ClientProperties}};
+               State0 = #v1{connection_state = starting,
+                            connection       = Connection,
+                            sock             = Sock}) ->
+    AuthMechanism = auth_mechanism_to_module(Mechanism),
+    State = State0#v1{auth_mechanism   = AuthMechanism,
+                      auth_state       = AuthMechanism:init(Sock),
+                      connection_state = securing,
+                      connection       =
+                          Connection#connection{
+                            client_properties = ClientProperties}},
+    auth_phase(Response, State);
+
+handle_method0(#'connection.secure_ok'{response = Response},
+               State = #v1{connection_state = securing}) ->
+    auth_phase(Response, State);
+
 handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                                      heartbeat = ClientHeartbeat},
                State = #v1{connection_state = tuning,
@@ -761,17 +744,10 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
               not_allowed, "frame_max=~w > ~w max size",
               [FrameMax, ?FRAME_MAX]);
        true ->
-            SendFun =
-                fun() ->
-                        Frame = rabbit_binary_generator:build_heartbeat_frame(),
-                        catch rabbit_net:send(Sock, Frame)
-                end,
-
+            Frame = rabbit_binary_generator:build_heartbeat_frame(),
+            SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
             Parent = self(),
-            ReceiveFun =
-                fun() ->
-                        Parent ! timeout
-                end,
+            ReceiveFun = fun() -> Parent ! timeout end,
             Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
                               ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
@@ -802,7 +778,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                             fun() -> internal_emit_stats(State1) end),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
-    lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
+    lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
 handle_method0(#'connection.close'{},
                State = #v1{connection_state = CS,
@@ -827,6 +803,61 @@ handle_method0(_Method, #v1{connection_state = S}) ->
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
+auth_mechanism_to_module(TypeBin) ->
+    case rabbit_registry:binary_to_type(TypeBin) of
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "unknown authentication mechanism '~s'",
+              [TypeBin]);
+        T ->
+            case {lists:member(T, auth_mechanisms()),
+                  rabbit_registry:lookup_module(auth_mechanism, T)} of
+                {true, {ok, Module}} ->
+                    Module;
+                _ ->
+                    rabbit_misc:protocol_error(
+                      command_invalid,
+                      "invalid authentication mechanism '~s'", [T])
+            end
+    end.
+
+auth_mechanisms() ->
+    {ok, Configured} = application:get_env(auth_mechanisms),
+    [Name || {Name, _Module} <- rabbit_registry:lookup_all(auth_mechanism),
+             lists:member(Name, Configured)].
+
+auth_mechanisms_binary() ->
+    list_to_binary(
+            string:join(
+              [atom_to_list(A) || A <- auth_mechanisms()], " ")).
+
+auth_phase(Response,
+           State = #v1{auth_mechanism = AuthMechanism,
+                       auth_state = AuthState,
+                       connection = Connection =
+                           #connection{protocol = Protocol},
+                       sock = Sock}) ->
+    case AuthMechanism:handle_response(Response, AuthState) of
+        {refused, Msg, Args} ->
+            rabbit_misc:protocol_error(
+              access_refused, "~s login refused: ~s",
+              [proplists:get_value(name, AuthMechanism:description()),
+               io_lib:format(Msg, Args)]);
+        {protocol_error, Msg, Args} ->
+            rabbit_misc:protocol_error(syntax_error, Msg, Args);
+        {challenge, Challenge, AuthState1} ->
+            Secure = #'connection.secure'{challenge = Challenge},
+            ok = send_on_channel0(Sock, Secure, Protocol),
+            State#v1{auth_state = AuthState1};
+        {ok, User} ->
+            Tune = #'connection.tune'{channel_max = 0,
+                                      frame_max = ?FRAME_MAX,
+                                      heartbeat = 0},
+            ok = send_on_channel0(Sock, Tune, Protocol),
+            State#v1{connection_state = tuning,
+                     connection = Connection#connection{user = User}}
+    end.
+
 %%--------------------------------------------------------------------------
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
@@ -843,6 +874,14 @@ i(peer_port, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:peername/1, fun ({_, P}) -> P end, Sock);
 i(ssl, #v1{sock = Sock}) ->
     rabbit_net:is_ssl(Sock);
+i(ssl_protocol, #v1{sock = Sock}) ->
+    ssl_info(fun ({P, _}) -> P end, Sock);
+i(ssl_key_exchange, #v1{sock = Sock}) ->
+    ssl_info(fun ({_, {K, _, _}}) -> K end, Sock);
+i(ssl_cipher, #v1{sock = Sock}) ->
+    ssl_info(fun ({_, {_, C, _}}) -> C end, Sock);
+i(ssl_hash, #v1{sock = Sock}) ->
+    ssl_info(fun ({_, {_, _, H}}) -> H end, Sock);
 i(peer_cert_issuer, #v1{sock = Sock}) ->
     cert_info(fun rabbit_ssl:peer_cert_issuer/1, Sock);
 i(peer_cert_subject, #v1{sock = Sock}) ->
@@ -864,6 +903,10 @@ i(protocol, #v1{connection = #connection{protocol = none}}) ->
     none;
 i(protocol, #v1{connection = #connection{protocol = Protocol}}) ->
     Protocol:version();
+i(auth_mechanism, #v1{auth_mechanism = none}) ->
+    none;
+i(auth_mechanism, #v1{auth_mechanism = Mechanism}) ->
+    proplists:get_value(name, Mechanism:description());
 i(user, #v1{connection = #connection{user = #user{username = Username}}}) ->
     Username;
 i(user, #v1{connection = #connection{user = none}}) ->
@@ -889,6 +932,13 @@ socket_info(Get, Select) ->
         {error, _} -> ''
     end.
 
+ssl_info(F, Sock) ->
+    case rabbit_net:ssl_info(Sock) of
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Info}  -> F(Info)
+    end.
+
 cert_info(F, Sock) ->
     case rabbit_net:peercert(Sock) of
         nossl                -> '';
@@ -903,17 +953,31 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{protocol  = Protocol,
                                  frame_max = FrameMax,
-                                 user      = #user{username = Username},
+                                 user      = User,
                                  vhost     = VHost}} = State,
-    {ok, ChSupPid, ChFrPid} =
+    {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {Protocol, Sock, Channel, FrameMax,
-                       self(), Username, VHost, Collector}),
-    erlang:monitor(process, ChSupPid),
-    put({channel, Channel}, {ch_fr_pid, ChFrPid}),
-    put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
-    put({ch_fr_pid, ChFrPid}, {channel, Channel}),
-    ok = rabbit_framing_channel:process(ChFrPid, AnalyzedFrame).
+                       self(), User, VHost, Collector}),
+    erlang:monitor(process, ChPid),
+    NewAState = process_channel_frame(AnalyzedFrame, self(),
+                                      Channel, ChPid, AState),
+    put({channel, Channel}, {ChPid, NewAState}),
+    put({ch_pid, ChPid}, Channel),
+    State.
+
+process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
+    case rabbit_command_assembler:process(Frame, AState) of
+        {ok, NewAState}                  -> NewAState;
+        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
+                                            NewAState;
+        {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid,
+                                                              Method, Content),
+                                            NewAState;
+        {error, Reason}                  -> ErrPid ! {channel_exit, Channel,
+                                                      Reason},
+                                            AState
+    end.
 
 log_channel_error(ConnectionState, Channel, Reason) ->
     rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",
