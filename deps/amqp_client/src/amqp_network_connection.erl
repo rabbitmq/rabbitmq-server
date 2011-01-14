@@ -143,7 +143,7 @@ handshake(AmqpParams, SIF, ChMgr, State0 = #state{sock = Sock}) ->
     {ok, ServerProperties, ChannelMax, State2}.
 
 start_infrastructure(SIF, ChMgr, State = #state{sock = Sock}) ->
-    {ok, {_MainReader, _Framing, Writer, SHF}} = SIF(Sock, ChMgr),
+    {ok, {_MainReader, _AState, Writer, SHF}} = SIF(Sock, ChMgr),
     {SHF, State#state{writer0 = Writer}}.
 
 network_handshake(AmqpParams, State) ->
