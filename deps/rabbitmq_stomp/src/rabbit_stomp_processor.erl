@@ -95,6 +95,8 @@ handle_cast({Command, Frame}, State) ->
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State)}.
@@ -354,11 +356,18 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                        State)
     end.
 
+send_method(Method, Channel, State) ->
+    amqp_channel:call(Channel, Method),
+    State.
+
 send_method(Method, State = #state{channel = Channel}) ->
     send_method(Method, Channel, State).
 
 send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
+    send_method(Method, Channel, Properties, BodyFragments, State).
+
+send_method(Method, Channel, Properties, BodyFragments, State) ->
     amqp_channel:call(Channel, Method, #amqp_msg{
                                 props = Properties,
                                 payload = lists:reverse(BodyFragments)}),
@@ -449,8 +458,7 @@ abort_transaction(Transaction, State0) ->
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
-    amqp_channel:call(Channel, Method),
-    State;
+    send_method(Method, Channel, State);
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
