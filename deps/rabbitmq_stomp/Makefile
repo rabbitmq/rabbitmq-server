@@ -5,7 +5,7 @@ DEPS=rabbitmq-server rabbitmq-erlang-client
 START_RABBIT_IN_TESTS=true
 TEST_APPS=rabbit_stomp
 TEST_SCRIPTS=./test/test.py
-UNIT_TEST_COMMANDS=eunit:test(rabbit_stomp_test_util,[verbose])
+UNIT_TEST_COMMANDS=eunit:test([rabbit_stomp_test_util,rabbit_stomp_test_frame],[verbose])
 
 TEST_ARGS=-rabbit_stomp listeners "[{\"0.0.0.0\",61613}]"
 
@@ -13,6 +13,11 @@ include ../include.mk
 
 testdeps:
 	make -C deps/stomppy
+
+perf: $(TARGETS) $(TEST_TARGETS)
+	ERL_LIBS=$(LIBS_PATH) $(ERL) $(TEST_LOAD_PATH) \
+		-eval 'rabbit_stomp_perf_frame:run_all()' \
+		-eval 'init:stop()'
 
 test: unittest testdeps
 

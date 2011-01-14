@@ -1,0 +1,77 @@
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ Management Console.
+%%
+%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
+%%
+%%   Copyright (C) 2010 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+-module(rabbit_stomp_test_frame).
+
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_stomp_frame.hrl").
+
+parse_simple_frame_test() ->
+    Headers = [{"header1", "value1"}, {"header2", "value2"}],
+    Content = frame_string("COMMAND",
+                           Headers,
+                           "Body Content"),
+    {"COMMAND", Frame, _State} = parse_complete(Content),
+    [?assertEqual({ok, Value}, rabbit_stomp_frame:header(Frame, Key)) ||
+        {Key, Value} <- Headers],
+    #stomp_frame{body_iolist = Body} = Frame,
+    ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
+
+parse_command_only_test() ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
+
+parse_resume_mid_command_test() ->
+    First = "COMM",
+    Second = "AND\n\n\0",
+    Resume = {resume, _Fun} = parse(First),
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse(Second, Resume).
+
+parse_resume_mid_header_key_test() ->
+    First = "COMMAND\nheade",
+    Second = "r1:value1\n\n\0",
+    Resume = {resume, _Fun} = parse(First),
+    {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
+        parse(Second, Resume),
+    ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
+
+parse_resume_mid_header_val_test() ->
+    First = "COMMAND\nheader1:val",
+    Second = "ue1\n\n\0",
+    Resume = {resume, _Fun} = parse(First),
+    {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
+        parse(Second, Resume),
+    ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
+
+parse(Content) ->
+    IS = none,
+    parse(Content, IS).
+parse(Content, State) ->
+    rabbit_stomp_frame:parse(Content, State).
+
+parse_complete(Content) ->
+    {ok, Frame = #stomp_frame{command = Command}, State} = parse(Content),
+    {Command, Frame, State}.
+
+frame_string(Command, Headers, BodyContent) ->
+    HeaderString =
+        lists:flatten([Key ++ ":" ++ Value ++ "\n" || {Key, Value} <- Headers]),
+    Command ++ "\n" ++ HeaderString ++ "\n" ++ BodyContent ++ "\0".
+
