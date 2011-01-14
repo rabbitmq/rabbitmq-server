@@ -1262,7 +1262,9 @@ safe_file_delete_fun(FileHandlesEts, File, Dir) ->
     fun () -> safe_file_delete(FileHandlesEts, File, Dir) end.
 
 safe_file_delete(FileHandlesEts, File, Dir) ->
-    case ets:match_object(FileHandlesEts, {{'_', File}, open}, 1) of
+    %% do not match on any value - it's the absence of the row that
+    %% indicates the client has really closed the file.
+    case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} ->
             false;
         _ ->

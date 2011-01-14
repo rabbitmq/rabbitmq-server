@@ -967,7 +967,7 @@ msg_store_sync(MSCState, IsPersistent, Guids, Callback) ->
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
+      fun (MSCState1) -> {ok, rabbit_msg_store:close_all_indicated(MSCState1)} end).
 
 msg_store_close_fds_fun(IsPersistent) ->
     Self = self(),
@@ -975,9 +975,9 @@ msg_store_close_fds_fun(IsPersistent) ->
             rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
               Self,
               fun (State = #vqstate { msg_store_clients = MSCState }) ->
-                      {[], State #vqstate { msg_store_clients =
-                                                msg_store_close_fds(
-                                                  MSCState, IsPersistent) }}
+                      {ok, MSCState1} =
+                          msg_store_close_fds(MSCState, IsPersistent),
+                      {[], State #vqstate { msg_store_clients = MSCState1 }}
               end)
     end.
 
