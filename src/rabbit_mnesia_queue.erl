@@ -31,12 +31,12 @@
 
 -module(rabbit_mnesia_queue).
 
--export([start/1, stop/0, init/3, terminate/1, delete_and_terminate/1,
-         purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
-         tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4, requeue/3, len/1,
-         is_empty/1, dropwhile/2, set_ram_duration_target/2, ram_duration/1,
-         needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1]).
+-export(
+   [start/1, stop/0, init/3, terminate/1, delete_and_terminate/1, purge/1,
+    publish/3, publish_delivered/4, fetch/2, ack/2, tx_publish/4, tx_ack/3,
+    tx_rollback/2, tx_commit/4, requeue/3, len/1, is_empty/1, dropwhile/2,
+    set_ram_duration_target/2, ram_duration/1, needs_idle_timeout/1,
+    idle_timeout/1, handle_pre_hibernate/1, status/1]).
 
 %%----------------------------------------------------------------------------
 %% This is Take Three of a simple initial Mnesia implementation of the
@@ -48,13 +48,15 @@
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
-%% In the queue we store both messages that are pending delivery and
+%% In the queue we separate messages that are pending delivery and
 %% messages that are pending acks. This ensures that purging (deleting
-%% the former) and deletion (deleting the former and the latter) are
-%% both cheap and do not require any scanning through lists of messages.
+%% the former) and deletion (deleting both) are both cheap and do not
+%% require any scanning through lists of messages.
 %%
-%% Pending acks are recorded in memory as "m" records, containing the
-%% messages themselves.
+%% This module usually wraps messages into M records, containing the
+%% messages themselves and additional information.
+%%
+%% Pending acks are recorded in memory as M records.
 %%
 %% All queues are durable in this version, no matter how they are
 %% requested. (We will need to remember the requested type in the
@@ -125,9 +127,14 @@
                           unconfirmed :: gb_set(),
                           on_sync :: sync() }).
 
+-type(m() :: #m { msg :: rabbit_types:basic_message(),
+                  seq_id :: seq_id(),
+                  props :: rabbit_types:message_properties(),
+                  is_delivered :: boolean() }).
+
 -type(tx() :: #tx { pending_messages :: [{rabbit_types:basic_message(),
-					  rabbit_types:message_properties()}],
-		    pending_acks :: [[ack()]] }).
+                                          rabbit_types:message_properties()}],
+                    pending_acks :: [[ack()]] }).
 
 -type(sync() :: #sync { acks :: [[seq_id()]],
                         pubs :: [{message_properties_transformer(),
@@ -242,13 +249,11 @@ delete_and_terminate(State) ->
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
-purge(State = #state { len = Len }) ->
-    {Len, persist(internal_purge_state(State))}.
+purge(State = #state { len = Len }) -> {Len, persist(purge_state(State))}.
 
--spec(internal_purge_state/1 :: (state()) -> state()).
+-spec(purge_state/1 :: (state()) -> state()).
 
-internal_purge_state(State) ->
-    checkState(State #state { q = queue:new(), len = 0 }).
+purge_state(State) -> checkState(State #state { q = queue:new(), len = 0 }).
 
 %%----------------------------------------------------------------------------
 %% publish/3 publishes a message.
@@ -261,8 +266,7 @@ internal_purge_state(State) ->
 %%          state())
 %%         -> state()).
 
-publish(Msg, Props, State) ->
-    persist(internal_publish_state(Msg, Props, false, State)).
+publish(Msg, Props, State) -> persist(publish_state(Msg, Props, false, State)).
 
 %%----------------------------------------------------------------------------
 %% publish_delivered/4 is called for messages which have already been
@@ -287,14 +291,14 @@ publish_delivered(true,
                   State = #state { len = 0,
                                    next_seq_id = SeqId,
                                    unconfirmed = Unconfirmed }) ->
-    M = (m(Msg, SeqId, Props)) #m { is_delivered = true },
     {SeqId,
      persist(
-       (record_pending_ack_state(checkM(M), State))
+       (record_pending_ack_state(
+          checkM((m(Msg, SeqId, Props)) #m { is_delivered = true }), State))
        #state {
-	 next_seq_id = SeqId + 1,
-	 unconfirmed =
-	     gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed) })}.
+         next_seq_id = SeqId + 1,
+         unconfirmed =
+             gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed) })}.
 
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops messages from the head of the queue while the
@@ -306,22 +310,23 @@ publish_delivered(true,
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
 %%         -> state()).
 
-dropwhile(Pred, State) -> persist(internal_dropwhile_state(Pred, State)).
+dropwhile(Pred, State) -> persist(dropwhile_state(Pred, State)).
 
--spec(internal_dropwhile_state/2 ::
+-spec(dropwhile_state/2 ::
         (fun ((rabbit_types:message_properties()) -> boolean()), state())
         -> state()).
 
-internal_dropwhile_state(Pred, State) ->
+%% BUG: The function should really be tail-recursive.
+
+dropwhile_state(Pred, State) ->
     {_, State1} =
         internal_queue_out(
           fun (M = #m { props = Props }, S) ->
                   case Pred(Props) of
                       true ->
                           {_, S1} = internal_fetch(false, M, S),
-                          internal_dropwhile_state(Pred, S1);
+                          {ok, dropwhile_state(Pred, S1)};
                       false ->
-                          %% message needs to go back into Q
                           #state { q = Q } = S,
                           {ok, S #state {q = queue:in_r(M, Q) }}
                   end
@@ -343,7 +348,7 @@ fetch(AckRequired, State) ->
           fun (M, S) -> internal_fetch(AckRequired, M, S) end, State),
     {Result, persist(State1)}.
 
--spec internal_queue_out(fun ((#m{}, state()) -> T), state()) ->
+-spec internal_queue_out(fun ((m(), state()) -> T), state()) ->
                                 {empty, state()} | T.
 
 internal_queue_out(Fun, State = #state { q = Q }) ->
@@ -352,7 +357,7 @@ internal_queue_out(Fun, State = #state { q = Q }) ->
         {{value, M}, Qa} -> Fun(M, State #state { q = Qa })
     end.
 
--spec internal_fetch/3 :: (ack_required(), #m{}, state()) ->
+-spec internal_fetch/3 :: (ack_required(), m(), state()) ->
                                   {fetch_result(), state()}.
 
 internal_fetch(AckRequired,
@@ -364,13 +369,12 @@ internal_fetch(AckRequired,
         case AckRequired of
             true ->
                 {SeqId,
-		 record_pending_ack_state(
-		   M #m { is_delivered = true }, State)};
+                 record_pending_ack_state(
+                   M #m { is_delivered = true }, State)};
             false -> {blank_ack, State}
         end,
-    Len1 = Len - 1,
-    {{Msg, IsDelivered, AckTag, Len1},
-     checkState(State1 #state { len = Len1 })}.
+    {{Msg, IsDelivered, AckTag, Len - 1},
+     checkState(State1 #state { len = Len - 1 })}.
 
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges messages. Acktags supplied are for messages
@@ -474,7 +478,7 @@ requeue(AckTags, PropsFun, State) ->
     {_, State1} =
         internal_ack(
           fun (#m { msg = Msg, props = Props }, S) ->
-                  internal_publish_state(Msg, PropsFun(Props), true, S)
+                  publish_state(Msg, PropsFun(Props), true, S)
           end,
           AckTags,
           State),
@@ -601,7 +605,7 @@ checkState(State = #state { q = Q, len = Len }) ->
 
 %% checkM(M) checks an m, but otherwise acts as the identity function.
 
--spec checkM/1 :: (#m{}) -> #m{}.
+-spec checkM/1 :: (m()) -> m().
 
 checkM(M) -> M.
 
@@ -648,7 +652,7 @@ gb_sets_maybe_insert(true, Val, Set) -> gb_sets:add(Val, Set).
 -spec m(rabbit_types:basic_message(),
         seq_id(),
         rabbit_types:message_properties()) ->
-               #m{}.
+               m().
 
 m(Msg, SeqId, Props) ->
     #m { msg = Msg, seq_id = SeqId, props = Props, is_delivered = false }.
@@ -683,44 +687,42 @@ mnesiaTableName(QueueName) ->
 %%----------------------------------------------------------------------------
 
 -spec internal_tx_commit_store_state([rabbit_types:basic_message()],
-				     [seq_id()],
-				     fun (() -> any()),
-				     message_properties_transformer(),
-				     state()) ->
-					    state().
+                                     [seq_id()],
+                                     fun (() -> any()),
+                                     message_properties_transformer(),
+                                     state()) ->
+                                            state().
 
 internal_tx_commit_store_state(Pubs,
-			       AckTags,
-			       Fun,
-			       PropsFun,
-			       State = #state { on_sync = OnSync }) ->
+                               AckTags,
+                               Fun,
+                               PropsFun,
+                               State = #state { on_sync = OnSync }) ->
     (tx_commit_index_state(
        State #state {
-	 on_sync =
-	     #sync { acks = [AckTags],
-		     pubs = [{PropsFun, Pubs}],
-		     funs = [Fun] }}))
-	#state { on_sync = OnSync }.
+         on_sync =
+             #sync { acks = [AckTags],
+                     pubs = [{PropsFun, Pubs}],
+                     funs = [Fun] }}))
+        #state { on_sync = OnSync }.
 
 -spec tx_commit_index_state(state()) -> state().
 
 tx_commit_index_state(State = #state { on_sync = ?BLANK_SYNC }) -> State;
 tx_commit_index_state(State = #state {
-			on_sync = #sync { acks = SAcks,
-					  pubs = SPubs,
-					  funs = SFuns }}) ->
-    Acks = lists:append(SAcks),
-    {_, State1} = internal_ack(Acks, State),
-    Pubs = [{Msg, Fun(Props)} ||
-               {Fun, PubsN} <- lists:reverse(SPubs),
-               {Msg, Props} <- lists:reverse(PubsN)],
+                        on_sync = #sync { acks = SAcks,
+                                          pubs = SPubs,
+                                          funs = SFuns }}) ->
+    {_, State1} = internal_ack(lists:append(SAcks), State),
     {_, State2} =
         lists:foldl(
           fun ({Msg, Props}, {SeqIds, S}) ->
-                  {SeqIds, internal_publish_state(Msg, Props, false, S)}
+                  {SeqIds, publish_state(Msg, Props, false, S)}
           end,
           {[], State1},
-          Pubs),
+          [{Msg, Fun(Props)} ||
+              {Fun, PubsN} <- lists:reverse(SPubs),
+              {Msg, Props} <- lists:reverse(PubsN)]),
     _ = [ Fun() || Fun <- lists:reverse(SFuns) ],
     State2 #state { on_sync = ?BLANK_SYNC }.
 
@@ -728,31 +730,32 @@ tx_commit_index_state(State = #state {
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
--spec internal_publish_state(rabbit_types:basic_message(),
-                             rabbit_types:message_properties(),
-                             boolean(),
-                             state()) ->
-                                    state().
+-spec publish_state(rabbit_types:basic_message(),
+                    rabbit_types:message_properties(),
+                    boolean(),
+                    state()) ->
+                           state().
 
-internal_publish_state(Msg = #basic_message { guid = Guid },
+publish_state(Msg = #basic_message { guid = Guid },
         Props = #message_properties { needs_confirming = NeedsConfirming },
         IsDelivered,
         State = #state { q = Q,
                          len = Len,
                          next_seq_id = SeqId,
                          unconfirmed = Unconfirmed }) ->
-    M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
-    Unconfirmed1 = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed),
-    State #state { q = queue:in(checkM(M), Q),
-                   len = Len + 1,
-                   next_seq_id = SeqId + 1,
-                   unconfirmed = Unconfirmed1 }.
+    State #state {
+      q = queue:in(
+            checkM((m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }),
+            Q),
+      len = Len + 1,
+      next_seq_id = SeqId + 1,
+      unconfirmed = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed) }.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
--spec record_pending_ack_state(#m{}, state()) -> state().
+-spec record_pending_ack_state(m(), state()) -> state().
 
 record_pending_ack_state(M = #m { seq_id = SeqId },
                    State = #state { pending_ack_dict = PAD }) ->
@@ -784,7 +787,7 @@ internal_ack(Fun, AckTags, State) ->
 
 accumulate_ack_init() -> {[], orddict:new(), []}.
 
--spec accumulate_ack(#m{}, {_, _, [rabbit_guid:guid()]}) ->
+-spec accumulate_ack(m(), {_, _, [rabbit_guid:guid()]}) ->
                             {_, _, [rabbit_guid:guid()]}.
 
 accumulate_ack(#m { msg = #basic_message { guid = Guid }},
