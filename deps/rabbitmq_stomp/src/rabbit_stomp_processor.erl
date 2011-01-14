@@ -147,7 +147,7 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
                                   missing
                           end
                   end,
-    cancel_subscription_channel(ConsumerTag, State);
+    cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
@@ -201,12 +201,12 @@ handle_frame(Command, _Frame, State) ->
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-cancel_subscription_channel(missing, State) ->
+cancel_subscription(missing, State) ->
     error("Missing destination or id",
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription_channel(ConsumerTag, State = #state{subscriptions = Subs}) ->
+cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error -> 
             error("No subscription found",
@@ -339,18 +339,23 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
-   {Destination, _SubChannel} = dict:fetch(ConsumerTag, Subs),
-
-   send_frame(
-     "MESSAGE",
-     rabbit_stomp_util:message_headers(Destination, SessionId,
-                                       Delivery, Properties),
-     Body,
-     State).
+    case dict:find(ConsumerTag, Subs) of
+        {ok, {Destination, _SubChannel}} ->
+            send_frame(
+              "MESSAGE",
+              rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+              Body,
+              State);
+        error ->
+            send_error("Subscription not found",
+                       "There is no current subscription '~s'.",
+                       [ConsumerTag],
+                       State)
+    end.
 
 send_method(Method, State = #state{channel = Channel}) ->
-    amqp_channel:call(Channel, Method),
-    State.
+    send_method(Method, Channel, State).
 
 send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
@@ -557,6 +562,10 @@ send_frame(Frame, State = #state{socket = Sock}) ->
 send_error(Message, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
                          {"content-type", "text/plain"}], Detail, State).
+
+send_error(Message, Format, Args, State) ->
+    send_error(Message, lists:flatten(io_lib:format(Format, Args)),
+                    State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks

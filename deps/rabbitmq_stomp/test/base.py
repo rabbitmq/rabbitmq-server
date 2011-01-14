@@ -52,27 +52,40 @@ class BaseTest(unittest.TestCase):
 class WaitableListener(object):
 
     def __init__(self):
+        self.debug = False
+        if self.debug:
+            print '(listener) init'
         self.messages = []
         self.errors = []
         self.receipts = []
         self.latch = Latch(1)
 
-
     def on_receipt(self, headers, message):
+        if self.debug:
+            print '(on_message) message:', message, 'headers:', headers
         self.receipts.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def on_error(self, headers, message):
+        if self.debug:
+            print '(on_message) message:', message, 'headers:', headers
         self.errors.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def on_message(self, headers, message):
+        if self.debug:
+            print '(on_message) message:', message, 'headers:', headers
         self.messages.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def reset(self,count=1):
+        if self.debug:
+            print '(reset listener) #messages:', len(self.messages),
+            print '#errors', len(self.errors),
+            print '#receipts', len(self.receipts), 'Now expecting:', count
         self.messages = []
         self.errors = []
+        self.receipts = []
         self.latch = Latch(count)
 
     def await(self, timeout=10):
@@ -96,8 +109,11 @@ class Latch(object):
    def await(self, timeout=None):
       try:
          self.cond.acquire()
-         self.cond.wait(timeout)
-         return self.count == 0
+         if self.count == 0:
+            return True
+         else:
+            self.cond.wait(timeout)
+            return self.count == 0
       finally:
          self.cond.release()
 
