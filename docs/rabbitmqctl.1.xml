@@ -1191,6 +1191,18 @@
                     messages to the channel's consumers.
                     </para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>confirm</term>
+                <listitem><para>Confirm mode for the channel.  Either
+                <command>none</command>, <command>single</command> or
+                <command>multiple</command>.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>unconfirmed</term>
+                <listitem><para>Number of published messages not yet
+                confirmed.  On channels not in confirm mode, this
+                remains 0.</para></listitem>
+              </varlistentry>
             </variablelist>
             <para>
               If no <command>channelinfoitem</command>s are specified then pid,
