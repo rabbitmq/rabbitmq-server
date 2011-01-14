@@ -524,7 +524,7 @@ confirm(MsgSeqNos, QPid, XName, State) ->
                                end
                   end
           end, {[], State}, MsgSeqNos),
-    maybe_incr_stats([{{QPid, XName}, length(DoneMessages)}], confirm, State),
+    maybe_incr_stats([{{QPid, XName}, length(MsgSeqNos)}], confirm, State),
     send_confirms(DoneMessages, XName, State1).
 
 group_confirms_by_exchange([], Acc) ->
@@ -1271,7 +1271,7 @@ send_confirms([], _, State) ->
 send_confirms([MsgSeqNo], XName,
               State = #ch{writer_pid = WriterPid}) ->
     send_confirm(MsgSeqNo, WriterPid),
-    maybe_incr_confirm_exchange_stats([MsgSeqNo], XName, State);
+    maybe_incr_confirm_exchange_stats_and_cleanup([MsgSeqNo], XName, State);
 send_confirms(Cs, XName,
               State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     SCs = lists:usort(Cs),
@@ -1287,9 +1287,9 @@ send_confirms(Cs, XName,
                                              multiple = true})
     end,
     [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
-    maybe_incr_confirm_exchange_stats(Cs, XName, State).
+    maybe_incr_confirm_exchange_stats_and_cleanup(Cs, XName, State).
 
-maybe_incr_confirm_exchange_stats(Cs, XName, State) ->
+maybe_incr_confirm_exchange_stats_and_cleanup(Cs, XName, State) ->
     maybe_incr_stats([{XName, length(Cs)}], confirm, State),
     lists:foldl(fun(MsgSeqNo, State0 = #ch{exchange_for_msg = EFM}) ->
                         State0#ch{exchange_for_msg =
