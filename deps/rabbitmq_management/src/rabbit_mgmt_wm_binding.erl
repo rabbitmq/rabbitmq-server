@@ -55,18 +55,18 @@ to_json(ReqData, Context) ->
                  end).
 
 accept_content(ReqData, Context) ->
-    Fun = case rabbit_mgmt_util:destination_type(ReqData) of
-              exchange -> fun binding_to_exchange_bind/1;
-              queue    -> fun binding_to_queue_bind/1
-          end,
-    sync_resource(ReqData, Context, Fun).
+    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                     exchange -> 'exchange.bind';
+                     queue    -> 'queue.bind'
+                 end,
+    sync_resource(MethodName, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
-    Fun = case rabbit_mgmt_util:destination_type(ReqData) of
-              exchange -> fun binding_to_exchange_unbind/1;
-              queue    -> fun binding_to_queue_unbind/1
-          end,
-    sync_resource(ReqData, Context, Fun).
+    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                     exchange -> 'exchange.unbind';
+                     queue    -> 'queue.unbind'
+                 end,
+    sync_resource(MethodName, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -101,49 +101,15 @@ with_binding(ReqData, Context, Fun) ->
             Fun(Binding)
     end.
 
-sync_resource(ReqData, Context, BindingToAMQPMethod) ->
+sync_resource(MethodName, ReqData, Context) ->
     with_binding(
       ReqData, Context,
       fun(Binding) ->
+              Props0 = rabbit_mgmt_format:binding(Binding),
+              Props = Props0 ++
+                  [{exchange, proplists:get_value(source,      Props0)},
+                   {queue,    proplists:get_value(destination, Props0)}],
               rabbit_mgmt_util:amqp_request(
-                rabbit_mgmt_util:vhost(ReqData),
-                ReqData, Context, BindingToAMQPMethod(Binding))
+                rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
+                rabbit_mgmt_util:props_to_method(MethodName, Props))
       end).
-
-%%--------------------------------------------------------------------
-
-binding_to_queue_bind(#binding{destination = Dest,
-                               source      = Source,
-                               key         = RoutingKey,
-                               args        = Arguments}) ->
-    #'queue.bind'{ queue       = Dest#resource.name,
-                   exchange    = Source#resource.name,
-                   routing_key = RoutingKey,
-                   arguments   = Arguments }.
-
-binding_to_queue_unbind(#binding{destination = Dest,
-                                 source      = Source,
-                                 key         = RoutingKey,
-                                 args        = Arguments}) ->
-    #'queue.unbind'{ queue       = Dest#resource.name,
-                     exchange    = Source#resource.name,
-                     routing_key = RoutingKey,
-                     arguments   = Arguments }.
-
-binding_to_exchange_bind(#binding{destination = Dest,
-                                  source      = Source,
-                                  key         = RoutingKey,
-                                  args        = Arguments}) ->
-    #'exchange.bind'{ source      = Source#resource.name,
-                      destination = Dest#resource.name,
-                      routing_key = RoutingKey,
-                      arguments   = Arguments }.
-
-binding_to_exchange_unbind(#binding{destination = Dest,
-                                    source      = Source,
-                                    key         = RoutingKey,
-                                    args        = Arguments}) ->
-    #'exchange.unbind'{ source      = Source#resource.name,
-                        destination = Dest#resource.name,
-                        routing_key = RoutingKey,
-                        arguments   = Arguments }.
