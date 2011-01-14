@@ -1696,7 +1696,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    false -> ?TRANSIENT_MSG_STORE
                end,
     MSCState = rabbit_msg_store:client_init(MsgStore, Ref, undefined),
-    {A, B} =
+    {A, B = [{_SeqId, LastGuidWritten} | _]} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsGuidsAcc}) ->
                   Guid = rabbit_guid:guid(),
@@ -1705,6 +1705,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   ok = rabbit_msg_store:write(Guid, Guid, MSCState),
                   {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc]}
           end, {Qi, []}, SeqIds),
+    %% do this just to force all of the publishes through to the msg_store:
+    true = rabbit_msg_store:contains(LastGuidWritten, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
 
@@ -1888,7 +1890,7 @@ assert_props(List, PropVals) ->
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
     VQ = rabbit_variable_queue:init(test_queue(), true, false,
-                                    fun nop/1, fun nop/1),
+                                    fun nop/2, fun nop/1),
     S0 = rabbit_variable_queue:status(VQ),
     assert_props(S0, [{q1, 0}, {q2, 0},
                       {delta, {delta, undefined, 0, undefined}},
@@ -1990,7 +1992,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
 
     %% drain
     {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    {_, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
+    VQ9 = rabbit_variable_queue:ack(AckTags, VQ8),
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
     VQ10.
@@ -2000,7 +2002,7 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
-    {_, VQ3} = rabbit_variable_queue:ack([AckTag], VQ2),
+    VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
     publish_fetch_and_ack(N-1, Len, VQ3).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
@@ -2034,7 +2036,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
-    {_, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
+    VQ9 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
     %% should be empty now
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
     VQ10.
@@ -2064,7 +2066,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
     VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
-                                     fun nop/1, fun nop/1),
+                                     fun nop/2, fun nop/1),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
     VQ9 = variable_queue_publish(false, 1, VQ8),
@@ -2081,7 +2083,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
     VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
-                                     fun nop/1, fun nop/1),
+                                     fun nop/2, fun nop/1),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
@@ -2112,7 +2114,7 @@ test_queue_recover() ->
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
               VQ1 = rabbit_variable_queue:init(QName, true, true,
-                                               fun nop/1, fun nop/1),
+                                               fun nop/2, fun nop/1),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
@@ -2174,3 +2176,4 @@ test_configurable_server_properties() ->
     passed.
 
 nop(_) -> ok.
+nop(_, _) -> ok.

@@ -28,7 +28,7 @@
 -rabbit_upgrade({hash_passwords,     []}).
 -rabbit_upgrade({add_ip_to_listener, []}).
 -rabbit_upgrade({internal_exchanges, []}).
--rabbit_upgrade({user_to_internal_user, []}).
+-rabbit_upgrade({user_to_internal_user, [hash_passwords]}).
 
 %% -------------------------------------------------------------------
 
