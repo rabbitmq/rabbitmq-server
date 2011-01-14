@@ -453,11 +453,12 @@ var last_successful_connect;
 function update_status(status) {
     var text;
     if (status == 'ok')
-        text = "Last update: " + new Date();
+        text = "Last update: " + fmt_date(new Date());
     else if (status == 'error') {
         var next_try = new Date(new Date().getTime() + timer_interval);
         text = "Error: could not connect to server since " +
-            last_successful_connect + ".<br/>Will retry at " + next_try + ".";
+            fmt_date(last_successful_connect) + ".<br/>Will retry at " +
+            fmt_date(next_try) + ".";
     }
     else
         throw("Unknown status " + status);

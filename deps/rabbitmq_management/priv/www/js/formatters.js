@@ -34,6 +34,16 @@ function fmt_boolean(b) {
     return b ? "&#9679;" : "&#9675;";
 }
 
+function fmt_date(d) {
+    function f(i) {
+        return i < 10 ? "0" + i : i;
+    }
+
+    return d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" + f(d.getDay()) +
+        " " + f(d.getHours()) + ":" + f(d.getMinutes()) + ":" +
+        f(d.getSeconds());
+}
+
 function fmt_parameters(obj) {
     var res = '';
     if (obj.durable) {
