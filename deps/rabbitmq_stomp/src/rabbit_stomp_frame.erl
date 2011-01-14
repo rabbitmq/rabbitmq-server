@@ -51,7 +51,7 @@
 -define(CHUNK_SIZE_LIMIT, 32768).
 
 %% States:
-%%  command . u(H) . key . eatspace . value . (H + 0)
+%%  command . u(H) . key . value . (H + 0)
 
 initial_headers_state() ->
     #hstate{state = command, acc = [], headers = []}.
@@ -61,7 +61,6 @@ parse_headers([], ParseState) ->
 parse_headers([$\r | Rest], ParseState = #hstate{state = State})
   when State == command  orelse
        State == key      orelse
-       State == eatspace orelse
        State == value ->
     parse_headers(Rest, ParseState);
 parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = []}) ->
@@ -79,18 +78,25 @@ parse_headers([$\n | Rest], _ParseState = #hstate{state = key, acc = Acc,
         _  -> {error, {bad_header_key, lists:reverse(Acc)}}
     end;
 parse_headers([$: | Rest], ParseState = #hstate{state = key, acc = Acc}) ->
-    parse_headers(Rest, ParseState#hstate{state = eatspace, acc = [],
+    parse_headers(Rest, ParseState#hstate{state = value, acc = [],
                                           key = lists:reverse(Acc)});
-parse_headers([$  | Rest], ParseState = #hstate{state = eatspace}) ->
-    parse_headers(Rest, ParseState);
-parse_headers(Input, ParseState = #hstate{state = eatspace}) ->
-    parse_headers(Input, ParseState#hstate{state = value});
+parse_headers([$\\, Ch | Rest], ParseState = #hstate{state = value,
+                                                     acc   = Acc}) ->
+    case unescape(Ch) of
+        {ok, EscCh} ->
+            parse_headers(Rest, ParseState#hstate{acc = [EscCh | Acc]});
+        error ->
+            {error, {bad_escape, Ch}}
+    end;
 parse_headers([$\n | Rest], ParseState = #hstate{state = value, acc = Acc,
                                                  key = Key,
                                                  headers = Headers}) ->
+    NewHeaders = case lists:keysearch(Key, 1, Headers) of
+                     {value, _} -> Headers;
+                     false      -> [{Key, lists:reverse(Acc)} | Headers]
+                 end,
     parse_headers(Rest, ParseState#hstate{state = key, acc = [],
-                                          headers = [{Key, lists:reverse(Acc)}
-                                                     | Headers]});
+                                          headers = NewHeaders});
 parse_headers([Ch | Rest], ParseState = #hstate{acc = Acc}) ->
     if
         Ch < 32 -> {error, {bad_character, Ch}};
@@ -231,4 +237,22 @@ serialize(#stomp_frame{command = Command,
 serialize_header({K, V}) when is_integer(V) ->
     [K, $:, integer_to_list(V), $\n];
 serialize_header({K, V}) when is_list(V) ->
-    [K, $:, V, $\n].
+    [K, $:, [escape(C) || C <- V], $\n].
+
+unescape($n) ->
+    {ok, $\n};
+unescape($\\) ->
+    {ok, $\\};
+unescape($c) ->
+    {ok, $:};
+unescape(_) ->
+    error.
+
+escape($:) ->
+    "\\c";
+escape($\\) ->
+    "\\\\";
+escape($\n) ->
+    "\\n";
+escape(C) ->
+    C.
