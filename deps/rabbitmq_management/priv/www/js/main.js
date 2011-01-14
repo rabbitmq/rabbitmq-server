@@ -24,7 +24,10 @@ $(document).ready(function() {
 function setup_constant_events() {
     $('#update-every').change(function() {
             var interval = $(this).val();
-            if (interval == '') interval = null;
+            if (interval == '')
+                interval = null;
+            else
+                interval = parseInt(interval);
             set_timer_interval(interval);
         });
     $('#show-vhost').change(function() {
@@ -445,12 +448,17 @@ function format(template, json) {
     }
 }
 
+var last_successful_connect;
+
 function update_status(status) {
     var text;
     if (status == 'ok')
         text = "Last update: " + new Date();
-    else if (status == 'error')
-        text = "Error: could not connect to server at " + new Date();
+    else if (status == 'error') {
+        var next_try = new Date(new Date().getTime() + timer_interval);
+        text = "Error: could not connect to server since " +
+            last_successful_connect + ".<br/>Will retry at " + next_try + ".";
+    }
     else
         throw("Unknown status " + status);
 
@@ -465,6 +473,7 @@ function with_req(path, fun) {
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (req.status == 200) {
+                last_successful_connect = new Date();
                 fun(req);
             }
             else if (req.status == 408) {
