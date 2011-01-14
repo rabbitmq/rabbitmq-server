@@ -28,7 +28,7 @@
 
 -record(state, {connection,
                 channel_sup_sup,
-                map_num_pf      = gb_trees:empty(), %% Number -> {Pid, Framing}
+                map_num_pa      = gb_trees:empty(), %% Number -> {Pid, AState}
                 map_pid_num     = dict:new(),       %% Pid -> Number
                 channel_max     = ?MAX_CHANNEL_NUMBER,
                 closing         = false}).
@@ -82,8 +82,7 @@ handle_call(num_channels, _, State) ->
 handle_cast({set_channel_max, ChannelMax}, State) ->
     {noreply, State#state{channel_max = ChannelMax}};
 handle_cast({pass_frame, ChNumber, Frame}, State) ->
-    internal_pass_frame(ChNumber, Frame, State),
-    {noreply, State};
+    {noreply, internal_pass_frame(ChNumber, Frame, State)};
 handle_cast({connection_closing, ChannelCloseType}, State) ->
     handle_connection_closing(ChannelCloseType, State).
 
@@ -98,39 +97,39 @@ handle_open_channel(ProposedNumber, InfraArgs,
                     State = #state{channel_sup_sup = ChSupSup}) ->
     case new_number(ProposedNumber, State) of
         {ok, Number} ->
-            {ok, _ChSup, {Ch, Framing}} =
+            {ok, _ChSup, {Ch, AState}} =
                 amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
                                                        Number),
-            NewState = internal_register(Number, Ch, Framing, State),
+            NewState = internal_register(Number, Ch, AState, State),
             erlang:monitor(process, Ch),
             {reply, {ok, Ch}, NewState};
         {error, _} = Error ->
             {reply, Error, State}
     end.
 
-new_number(none, #state{channel_max = ChannelMax, map_num_pf = MapNPF}) ->
-    case gb_trees:is_empty(MapNPF) of
+new_number(none, #state{channel_max = ChannelMax, map_num_pa = MapNPA}) ->
+    case gb_trees:is_empty(MapNPA) of
         true  -> {ok, 1};
-        false -> {Smallest, _} = gb_trees:smallest(MapNPF),
+        false -> {Smallest, _} = gb_trees:smallest(MapNPA),
                  if Smallest > 1 ->
                         {ok, Smallest - 1};
                     true ->
-                        {Largest, _} = gb_trees:largest(MapNPF),
+                        {Largest, _} = gb_trees:largest(MapNPA),
                         if Largest < ChannelMax -> {ok, Largest + 1};
-                           true                 -> find_free(MapNPF)
+                           true                 -> find_free(MapNPA)
                         end
                  end
     end;
 new_number(Proposed, State = #state{channel_max = ChannelMax,
-                                    map_num_pf  = MapNPF}) ->
+                                    map_num_pa  = MapNPA}) ->
     IsValid = Proposed > 0 andalso Proposed =< ChannelMax andalso
-        not gb_trees:is_defined(Proposed, MapNPF),
+        not gb_trees:is_defined(Proposed, MapNPA),
     case IsValid of true  -> {ok, Proposed};
                     false -> new_number(none, State)
     end.
 
-find_free(MapNPF) ->
-    find_free(gb_trees:iterator(MapNPF), 1).
+find_free(MapNPA) ->
+    find_free(gb_trees:iterator(MapNPA), 1).
 
 find_free(It, Candidate) ->
     case gb_trees:next(It) of
@@ -191,34 +190,38 @@ handle_connection_closing(ChannelCloseType,
 %%---------------------------------------------------------------------------
 
 internal_pass_frame(Number, Frame, State) ->
-    case internal_lookup_npf(Number, State) of
-        undefined    -> ?LOG_INFO("Dropping frame ~p for invalid or closed "
-                                  "channel number ~p~n", [Frame, Number]);
-        {_, Framing} -> rabbit_framing_channel:process(Framing, Frame)
+    case internal_lookup_npa(Number, State) of
+        undefined ->
+            ?LOG_INFO("Dropping frame ~p for invalid or closed "
+                      "channel number ~p~n", [Frame, Number]);
+        {ChPid, AState} ->
+            NewAState = rabbit_reader:process_channel_frame(
+                          Frame, ChPid, Number, ChPid, AState),
+            internal_update_npa(Number, ChPid, NewAState, State)
     end.
 
-internal_register(Number, Pid, Framing,
-                  State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
-    MapNPF1 = gb_trees:enter(Number, {Pid, Framing}, MapNPF),
+internal_register(Number, Pid, AState,
+                  State = #state{map_num_pa = MapNPA, map_pid_num = MapPN}) ->
+    MapNPA1 = gb_trees:enter(Number, {Pid, AState}, MapNPA),
     MapPN1 = dict:store(Pid, Number, MapPN),
-    State#state{map_num_pf  = MapNPF1,
+    State#state{map_num_pa  = MapNPA1,
                 map_pid_num = MapPN1}.
 
 internal_unregister(Number, Pid,
-                    State = #state{map_num_pf = MapNPF, map_pid_num = MapPN}) ->
-    MapNPF1 = gb_trees:delete(Number, MapNPF),
+                    State = #state{map_num_pa = MapNPA, map_pid_num = MapPN}) ->
+    MapNPA1 = gb_trees:delete(Number, MapNPA),
     MapPN1 = dict:erase(Pid, MapPN),
-    State#state{map_num_pf  = MapNPF1,
+    State#state{map_num_pa  = MapNPA1,
                 map_pid_num = MapPN1}.
 
-internal_is_empty(#state{map_num_pf = MapNPF}) ->
-    gb_trees:is_empty(MapNPF).
+internal_is_empty(#state{map_num_pa = MapNPA}) ->
+    gb_trees:is_empty(MapNPA).
 
-internal_num_channels(#state{map_num_pf = MapNPF}) ->
-    gb_trees:size(MapNPF).
+internal_num_channels(#state{map_num_pa = MapNPA}) ->
+    gb_trees:size(MapNPA).
 
-internal_lookup_npf(Number, #state{map_num_pf = MapNPF}) ->
-    case gb_trees:lookup(Number, MapNPF) of {value, PF} -> PF;
+internal_lookup_npa(Number, #state{map_num_pa = MapNPA}) ->
+    case gb_trees:lookup(Number, MapNPA) of {value, PA} -> PA;
                                             none        -> undefined
     end.
 
@@ -226,6 +229,9 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
     case dict:find(Pid, MapPN) of {ok, Number} -> Number;
                                   error        -> undefined
     end.
+
+internal_update_npa(Number, Pid, AState, State = #state{map_num_pa = MapNPA}) ->
+    State#state{map_num_pa = gb_trees:update(Number, {Pid, AState}, MapNPA)}.
 
 signal_channels_connection_closing(ChannelCloseType,
                                    #state{map_pid_num = MapPN}) ->
