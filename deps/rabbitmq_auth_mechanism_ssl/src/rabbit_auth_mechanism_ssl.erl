@@ -80,14 +80,7 @@ handle_response(_Response, #state{username = Username}) ->
         {refused, _, _} = E ->
             E;
         _ ->
-            case rabbit_access_control:check_user_login(Username, []) of
-                {ok, User} ->
-                    {ok, User};
-                {error, not_found} ->
-                    %% This is not an information leak as we have to
-                    %% have validated a client cert to get this far.
-                    {refused, "user '~s' not found", [Username]}
-            end
+            rabbit_access_control:check_user_login(Username, [])
     end.
 
 %%--------------------------------------------------------------------------
