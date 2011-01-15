@@ -72,16 +72,12 @@
           ram_index_count,
           out_counter,
           in_counter,
-          rates,
           msgs_on_disk,
           msg_indices_on_disk,
           unconfirmed,
           ack_out_counter,
-          ack_in_counter,
-          ack_rates
+          ack_in_counter
         }).
-
--record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
 
 -record(m,
         { seq_id,
@@ -120,15 +116,8 @@
 
 -ifdef(use_specs).
 
--type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
-
--type(rates() :: #rates { egress :: {timestamp(), non_neg_integer()},
-                          ingress :: {timestamp(), non_neg_integer()},
-                          avg_egress :: float(),
-                          avg_ingress :: float(),
-                          timestamp :: timestamp() }).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count :: non_neg_integer(),
@@ -165,13 +154,11 @@
              ram_index_count :: non_neg_integer(),
              out_counter :: non_neg_integer(),
              in_counter :: non_neg_integer(),
-             rates :: rates(),
              msgs_on_disk :: gb_set(),
              msg_indices_on_disk :: gb_set(),
              unconfirmed :: gb_set(),
              ack_out_counter :: non_neg_integer(),
-             ack_in_counter :: non_neg_integer(),
-             ack_rates :: rates() }).
+             ack_in_counter :: non_neg_integer() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -541,83 +528,9 @@ len(#state { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
 
-set_ram_duration_target(
-  DurationTarget, State = #state {
-                    rates = #rates { avg_egress = AvgEgressRate,
-                                     avg_ingress = AvgIngressRate },
-                    ack_rates = #rates { avg_egress = AvgAckEgressRate,
-                                         avg_ingress = AvgAckIngressRate },
-                    target_ram_count = TargetRamCount }) ->
-    Rate =
-        AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
-    TargetRamCount1 =
-        case DurationTarget of
-            infinity -> infinity;
-            _ -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
-        end,
-    State1 = State #state { target_ram_count = TargetRamCount1 },
-    case TargetRamCount1 == infinity orelse
-	(TargetRamCount =/= infinity andalso
-	 TargetRamCount1 >= TargetRamCount) of
-	true -> State1;
-	false -> State1
-    end.
+set_ram_duration_target(_DurationTarget, State) -> State.
 
-ram_duration(State = #state {
-               rates = #rates { timestamp = Timestamp,
-                                egress = Egress,
-                                ingress = Ingress } = Rates,
-               ack_rates = #rates { timestamp = AckTimestamp,
-                                    egress = AckEgress,
-                                    ingress = AckIngress } = ARates,
-               in_counter = InCount,
-               out_counter = OutCount,
-               ack_in_counter = AckInCount,
-               ack_out_counter = AckOutCount,
-               ram_msg_count = RamMsgCount,
-               ram_msg_count_prev = RamMsgCountPrev,
-               ram_ack_index = RamAckIndex,
-               ram_ack_count_prev = RamAckCountPrev }) ->
-    Now = now(),
-    {AvgEgressRate, Egress1} = update_rate(Now, Timestamp, OutCount, Egress),
-    {AvgIngressRate, Ingress1} = update_rate(Now, Timestamp, InCount, Ingress),
-
-    {AvgAckEgressRate, AckEgress1} =
-        update_rate(Now, AckTimestamp, AckOutCount, AckEgress),
-    {AvgAckIngressRate, AckIngress1} =
-        update_rate(Now, AckTimestamp, AckInCount, AckIngress),
-
-    RamAckCount = gb_trees:size(RamAckIndex),
-
-    Duration = %% msgs+acks / (msgs+acks/sec) == sec
-        case AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
-            AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0 of
-            true -> infinity;
-            false -> (RamMsgCountPrev + RamMsgCount +
-                          RamAckCount + RamAckCountPrev) /
-                         (4 * (AvgEgressRate + AvgIngressRate +
-                                   AvgAckEgressRate + AvgAckIngressRate))
-        end,
-
-    {Duration, State #state {
-                 rates = Rates #rates {
-                           egress = Egress1,
-                           ingress = Ingress1,
-                           avg_egress = AvgEgressRate,
-                           avg_ingress = AvgIngressRate,
-                           timestamp = Now },
-                 ack_rates = ARates #rates {
-                               egress = AckEgress1,
-                               ingress = AckIngress1,
-                               avg_egress = AvgAckEgressRate,
-                               avg_ingress = AvgAckIngressRate,
-                               timestamp = Now },
-                 in_counter = 0,
-                 out_counter = 0,
-                 ack_in_counter = 0,
-                 ack_out_counter = 0,
-                 ram_msg_count_prev = RamMsgCount,
-                 ram_ack_count_prev = RamAckCount }}.
+ram_duration(State) -> {0, State}.
 
 needs_idle_timeout(#state { on_sync = ?BLANK_SYNC }) -> false;
 needs_idle_timeout(_State) -> true.
@@ -637,11 +550,7 @@ status(#state {
           ram_msg_count = RamMsgCount,
           ram_index_count = RamIndexCount,
           next_seq_id = NextSeqId,
-          persistent_count = PersistentCount,
-          rates = #rates { avg_egress = AvgEgressRate,
-                           avg_ingress = AvgIngressRate },
-          ack_rates = #rates { avg_egress = AvgAckEgressRate,
-                               avg_ingress = AvgAckIngressRate } }) ->
+          persistent_count = PersistentCount }) ->
     [ {q1 , queue:len(Q1)},
       {q2 , bpqueue:len(Q2)},
       {delta , Delta},
@@ -655,11 +564,7 @@ status(#state {
       {ram_ack_count , gb_trees:size(RAI)},
       {ram_index_count , RamIndexCount},
       {next_seq_id , NextSeqId},
-      {persistent_count , PersistentCount},
-      {avg_ingress_rate , AvgIngressRate},
-      {avg_egress_rate , AvgEgressRate},
-      {avg_ack_ingress_rate, AvgAckIngressRate},
-      {avg_ack_egress_rate , AvgAckEgressRate} ].
+      {persistent_count , PersistentCount} ].
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -776,10 +681,6 @@ betas_from_index_entries(List, TransientThreshold, IndexState) ->
 beta_fold(Fun, Init, Q) ->
     bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
 
-update_rate(Now, Then, Count, {OThen, OCount}) ->
-    %% avg over the current period and the previous
-    {1000000.0 * (Count + OCount) / timer:now_diff(Now, OThen), {Then, Count}}.
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -795,7 +696,6 @@ init(IsDurable, IndexState, DeltaCount, Terms,
                                   count = DeltaCount1,
                                   end_seq_id = NextSeqId }
             end,
-    Now = now(),
     State = #state {
       q1 = queue:new(),
       q2 = bpqueue:new(),
@@ -821,21 +721,12 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       ram_index_count = 0,
       out_counter = 0,
       in_counter = 0,
-      rates = blank_rate(Now, DeltaCount1),
       msgs_on_disk = gb_sets:new(),
       msg_indices_on_disk = gb_sets:new(),
       unconfirmed = gb_sets:new(),
       ack_out_counter = 0,
-      ack_in_counter = 0,
-      ack_rates = blank_rate(Now, 0) },
+      ack_in_counter = 0 },
     maybe_deltas_to_betas(State).
-
-blank_rate(Timestamp, IngressLength) ->
-    #rates { egress = {Timestamp, 0},
-             ingress = {Timestamp, IngressLength},
-             avg_egress = 0.0,
-             avg_ingress = 0.0,
-             timestamp = Timestamp }.
 
 msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, PropsFun) ->
     Self = self(),
