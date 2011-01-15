@@ -600,10 +600,8 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
     end.
 
 clear_client(CRef, State = #msstate { cref_to_guids = CTG,
-                                      clients       = Clients,
                                       dying_clients = DyingClients }) ->
     State #msstate { cref_to_guids = dict:erase(CRef, CTG),
-                     clients       = dict:erase(CRef, Clients),
                      dying_clients = sets:del_element(CRef, DyingClients) }.
 
 
@@ -756,8 +754,9 @@ handle_cast({client_dying, CRef},
     DyingClients1 = sets:add_element(CRef, DyingClients),
     write_message(CRef, <<>>, State #msstate { dying_clients = DyingClients1 });
 
-handle_cast({client_delete, CRef}, State) ->
-    noreply(remove_message(CRef, CRef, clear_client(CRef, State)));
+handle_cast({client_delete, CRef}, State = #msstate { clients = Clients }) ->
+    State1 = State #msstate { clients = dict:erase(CRef, Clients) },
+    noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
 handle_cast({write, CRef, Guid},
             State = #msstate { file_summary_ets   = FileSummaryEts,
