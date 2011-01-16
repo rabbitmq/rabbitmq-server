@@ -436,10 +436,10 @@ init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
                    Terms};
             _  -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
         end,
-    PersistentClient = msg_store_client_init(
-                         ?PERSISTENT_MSG_STORE, PRef, MsgOnDiskFun),
-    TransientClient  = msg_store_client_init(
-                         ?TRANSIENT_MSG_STORE, TRef, undefined),
+    PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
+                                             MsgOnDiskFun),
+    TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE, TRef,
+                                             undefined),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
           QueueName, Terms1,
