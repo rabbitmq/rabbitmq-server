@@ -1163,22 +1163,20 @@ add_cref_to_guids_if_callback(CRef, Guid, CTG, Clients) ->
                         gb_sets:singleton(Guid), CTG)
     end.
 
-client_confirm_if_on_disk(CRef, Guid, File,
+client_confirm_if_on_disk(CRef, Guid, CurFile,
                           State = #msstate { clients       = Clients,
                                              current_file  = CurFile,
                                              cref_to_guids = CTG }) ->
-    CTG1 =
-        case File of
-            CurFile -> add_cref_to_guids_if_callback(CRef, Guid, CTG, Clients);
-            _       -> case dict:fetch(CRef, Clients) of
-                           {undefined, _CloseFDsFun} ->
-                               ok;
-                           {MsgOnDiskFun, _CloseFDsFun} ->
-                               MsgOnDiskFun(gb_sets:singleton(Guid), written)
-                       end,
-                       CTG
-        end,
-    State #msstate { cref_to_guids = CTG1 }.
+    State #msstate {
+      cref_to_guids = add_cref_to_guids_if_callback(CRef, Guid, CTG, Clients) };
+client_confirm_if_on_disk(CRef, Guid, _File,
+                          State = #msstate { clients = Clients }) ->
+    case dict:fetch(CRef, Clients) of
+        {undefined,    _CloseFDsFun} -> State;
+        {MsgOnDiskFun, _CloseFDsFun} -> MsgOnDiskFun(gb_sets:singleton(Guid),
+                                                     written),
+                                        State
+    end.
 
 %% Detect whether the Guid is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death
