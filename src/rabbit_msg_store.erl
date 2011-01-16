@@ -1227,17 +1227,16 @@ mark_handle_open(FileHandlesEts, File, Ref) ->
 %% See comment in client_read3 - only call this when the file is locked
 mark_handle_to_close(ClientRefs, FileHandlesEts, File, Invoke) ->
     [ begin
-          case ets:update_element(FileHandlesEts, Key, {2, close})
-              andalso Invoke of
+          case (ets:update_element(FileHandlesEts, Key, {2, close})
+                andalso Invoke) of
               true  -> case dict:fetch(Ref, ClientRefs) of
                            {_MsgOnDiskFun, undefined}   -> ok;
                            {_MsgOnDiskFun, CloseFDsFun} -> ok = CloseFDsFun()
                        end;
               false -> ok
           end
-      end ||
-        {{Ref, _File} = Key, open} <-
-            ets:match_object(FileHandlesEts, {{'_', File}, open}) ],
+      end || {{Ref, _File} = Key, open} <-
+                 ets:match_object(FileHandlesEts, {{'_', File}, open}) ],
     true.
 
 safe_file_delete_fun(File, Dir, FileHandlesEts) ->
@@ -1247,11 +1246,10 @@ safe_file_delete(File, Dir, FileHandlesEts) ->
     %% do not match on any value - it's the absence of the row that
     %% indicates the client has really closed the file.
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
-        {[_|_], _Cont} ->
-            false;
-        _ ->
-            ok = file:delete(form_filename(Dir, filenum_to_name(File))),
-            true
+        {[_|_], _Cont} -> false;
+        _              -> ok = file:delete(
+                                 form_filename(Dir, filenum_to_name(File))),
+                          true
     end.
 
 close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
