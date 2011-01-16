@@ -137,14 +137,13 @@ attempt_action(Action, Files,
                                 msg_store_state    = MsgStoreState }) ->
     case [File || File <- Files,
                   rabbit_msg_store:has_readers(File, MsgStoreState)] of
-        [] ->
-            Thunks1 = lists:filter(
-                        fun (Thunk) -> not Thunk() end,
-                        [do_action(Action, Files, MsgStoreState) | Thunks]),
-            State #state { on_action = Thunks1 };
-        [File | _] ->
-            Pending1 = dict:store(File, {Action, Files}, Pending),
-            State #state { pending_no_readers = Pending1 }
+        []         -> State #state {
+                        on_action = lists:filter(
+                                      fun (Thunk) -> not Thunk() end,
+                                      [do_action(Action, Files, MsgStoreState) |
+                                       Thunks]) };
+        [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
+                      State #state { pending_no_readers = Pending1 }
     end.
 
 do_action(combine, [Source, Destination], MsgStoreState) ->
