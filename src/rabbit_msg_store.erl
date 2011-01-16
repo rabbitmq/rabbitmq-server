@@ -763,18 +763,17 @@ handle_cast({write, CRef, Guid},
                                cur_file_cache_ets = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
-    State1 = add_cref_to_guids_if_callback(CRef, Guid, State),
     case should_mask_action(CRef, Guid, State) of
         {true, _Location} ->
             noreply(State);
         {false, not_found} ->
-            write_message(Guid, Msg, State1);
+            write_message(CRef, Guid, Msg, State);
         {Mask, #msg_location { ref_count = 0, file = File,
                                total_size = TotalSize }} ->
             case {Mask, ets:lookup(FileSummaryEts, File)} of
                 {false, [#file_summary { locked = true }]} ->
-                    ok = index_delete(Guid, State1),
-                    write_message(Guid, Msg, State1);
+                    ok = index_delete(Guid, State),
+                    write_message(CRef, Guid, Msg, State);
                 {false_if_increment, [#file_summary { locked = true }]} ->
                     %% The msg for Guid is older than the client death
                     %% message, but as it is being GC'd currently,
@@ -783,8 +782,9 @@ handle_cast({write, CRef, Guid},
                     noreply(State);
                 {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
-                    State2 = client_confirm_if_on_disk(CRef, Guid, File, State),
-                    noreply(adjust_valid_total_size(File, TotalSize, State2))
+                    noreply(client_confirm_if_on_disk(
+                              CRef, Guid, File,
+                              adjust_valid_total_size(File, TotalSize, State)))
             end;
         {_Mask, #msg_location { ref_count = RefCount, file = File }} ->
             %% We already know about it, just update counter. Only
@@ -938,6 +938,9 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
     [K() || K <- lists:reverse(Syncs)],
     [client_confirm(CRef, Guids, written, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
+
+write_message(CRef, Guid, Msg, State) ->
+    write_message(Guid, Msg, record_pending_confirm(CRef, Guid, State)).
 
 write_message(Guid, Msg,
               State = #msstate { current_file_handle = CurHdl,
@@ -1139,6 +1142,23 @@ update_pending_confirms(Fun, CRef, State = #msstate { clients       = Clients,
                                         State #msstate { cref_to_guids = CTG1 }
     end.
 
+record_pending_confirm(CRef, Guid, State) ->
+    update_pending_confirms(
+      fun (_MsgOnDiskFun, CTG) ->
+              dict:update(CRef, fun (Guids) -> gb_sets:add(Guid, Guids) end,
+                          gb_sets:singleton(Guid), CTG)
+      end, CRef, State).
+
+client_confirm_if_on_disk(CRef, Guid, CurFile,
+                          State = #msstate { current_file = CurFile }) ->
+    record_pending_confirm(CRef, Guid, State);
+client_confirm_if_on_disk(CRef, Guid, _File, State) ->
+    update_pending_confirms(
+      fun (MsgOnDiskFun, CTG) ->
+              MsgOnDiskFun(gb_sets:singleton(Guid), written),
+              CTG
+      end, CRef, State).
+
 client_confirm(CRef, Guids, ActionTaken, State) ->
     update_pending_confirms(
       fun (MsgOnDiskFun, CTG) ->
@@ -1151,23 +1171,6 @@ client_confirm(CRef, Guids, ActionTaken, State) ->
                               end;
                   error    -> CTG
               end
-      end, CRef, State).
-
-add_cref_to_guids_if_callback(CRef, Guid, State) ->
-    update_pending_confirms(
-      fun (_MsgOnDiskFun, CTG) ->
-              dict:update(CRef, fun (Guids) -> gb_sets:add(Guid, Guids) end,
-                          gb_sets:singleton(Guid), CTG)
-      end, CRef, State).
-
-client_confirm_if_on_disk(CRef, Guid, CurFile,
-                          State = #msstate { current_file = CurFile }) ->
-    add_cref_to_guids_if_callback(CRef, Guid, State);
-client_confirm_if_on_disk(CRef, Guid, _File, State) ->
-    update_pending_confirms(
-      fun (MsgOnDiskFun, CTG) ->
-              MsgOnDiskFun(gb_sets:singleton(Guid), written),
-              CTG
       end, CRef, State).
 
 %% Detect whether the Guid is older or younger than the client's death
