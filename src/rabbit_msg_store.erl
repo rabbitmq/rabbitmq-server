@@ -635,9 +635,11 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     {FileSummaryRecovered, FileSummaryEts} =
         recover_file_summary(AttemptFileSummaryRecovery, Dir),
 
-    {CleanShutdown, IndexState, Clients1} =
+    {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
                                       ClientRefs, Dir, Server),
+    Clients = dict:from_list(
+                [{CRef, {undefined, undefined}} || CRef <- ClientRefs1]),
     %% CleanShutdown => msg location index and file_summary both
     %% recovered correctly.
     true = case {FileSummaryRecovered, CleanShutdown} of
@@ -671,7 +673,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
                        dying_clients          = sets:new(),
-                       clients                = Clients1,
+                       clients                = Clients,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
                        cref_to_guids          = dict:new()
@@ -1403,16 +1405,16 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %%----------------------------------------------------------------------------
 
 recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Server) ->
-    {false, IndexModule:new(Dir), dict:new()};
+    {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
     rabbit_log:warning("~w: rebuilding indices from scratch~n", [Server]),
-    {false, IndexModule:new(Dir), dict:new()};
+    {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("~w: " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch~n",
                                        [Server | ErrorArgs]),
-                    {false, IndexModule:new(Dir), dict:new()}
+                    {false, IndexModule:new(Dir), []}
             end,
     case read_recovery_terms(Dir) of
         {false, Error} ->
@@ -1424,9 +1426,7 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
                   andalso IndexModule =:= RecIndexModule) of
                 true  -> case IndexModule:recover(Dir) of
                              {ok, IndexState1} ->
-                                 {true, IndexState1,
-                                  dict:from_list([{CRef, {undefined, undefined}}
-                                                  || CRef <- ClientRefs])};
+                                 {true, IndexState1, ClientRefs};
                              {error, Error} ->
                                  Fresh("failed to recover index: ~p", [Error])
                          end;
