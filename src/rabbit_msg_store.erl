@@ -760,14 +760,10 @@ handle_cast({client_delete, CRef}, State = #msstate { clients = Clients }) ->
 
 handle_cast({write, CRef, Guid},
             State = #msstate { file_summary_ets   = FileSummaryEts,
-                               cur_file_cache_ets = CurFileCacheEts,
-                               clients            = Clients,
-                               cref_to_guids      = CTG }) ->
-
+                               cur_file_cache_ets = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
-    CTG1 = add_cref_to_guids_if_callback(CRef, Guid, CTG, Clients),
-    State1 = State #msstate { cref_to_guids = CTG1 },
+    State1 = add_cref_to_guids_if_callback(CRef, Guid, State),
     case should_mask_action(CRef, Guid, State) of
         {true, _Location} ->
             noreply(State);
@@ -1135,48 +1131,44 @@ orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
     orddict:store(Key, Val, Dict).
 
-client_confirm(CRef, Guids, ActionTaken,
-               State = #msstate { clients       = Clients,
-                                  cref_to_guids = CTG }) ->
-    case dict:fetch(CRef, Clients) of
-        {undefined, _CloseFDsFun} ->
-            State;
-        {MsgOnDiskFun, _CloseFDsFun} ->
-            MsgOnDiskFun(Guids, ActionTaken),
-            CTG1 = case dict:find(CRef, CTG) of
-                       {ok, Gs} -> Guids1 = gb_sets:difference(Gs, Guids),
-                                   case gb_sets:is_empty(Guids1) of
-                                       true  -> dict:erase(CRef, CTG);
-                                       false -> dict:store(CRef, Guids1, CTG)
-                                   end;
-                       error    -> CTG
-                   end,
-            State #msstate { cref_to_guids = CTG1 }
-    end.
-
-add_cref_to_guids_if_callback(CRef, Guid, CTG, Clients) ->
-    case dict:fetch(CRef, Clients) of
-        {undefined, _CloseFDsFun} ->
-            CTG;
-        {_MsgOnDiskFun, _CloseFDsFun} ->
-            dict:update(CRef, fun (Guids) -> gb_sets:add(Guid, Guids) end,
-                        gb_sets:singleton(Guid), CTG)
-    end.
-
-client_confirm_if_on_disk(CRef, Guid, CurFile,
-                          State = #msstate { clients       = Clients,
-                                             current_file  = CurFile,
-                                             cref_to_guids = CTG }) ->
-    State #msstate {
-      cref_to_guids = add_cref_to_guids_if_callback(CRef, Guid, CTG, Clients) };
-client_confirm_if_on_disk(CRef, Guid, _File,
-                          State = #msstate { clients = Clients }) ->
+update_pending_confirms(Fun, CRef, State = #msstate { clients       = Clients,
+                                                      cref_to_guids = CTG }) ->
     case dict:fetch(CRef, Clients) of
         {undefined,    _CloseFDsFun} -> State;
-        {MsgOnDiskFun, _CloseFDsFun} -> MsgOnDiskFun(gb_sets:singleton(Guid),
-                                                     written),
-                                        State
+        {MsgOnDiskFun, _CloseFDsFun} -> CTG1 = Fun(MsgOnDiskFun, CTG),
+                                        State #msstate { cref_to_guids = CTG1 }
     end.
+
+client_confirm(CRef, Guids, ActionTaken, State) ->
+    update_pending_confirms(
+      fun (MsgOnDiskFun, CTG) ->
+              MsgOnDiskFun(Guids, ActionTaken),
+              case dict:find(CRef, CTG) of
+                  {ok, Gs} -> Guids1 = gb_sets:difference(Gs, Guids),
+                              case gb_sets:is_empty(Guids1) of
+                                  true  -> dict:erase(CRef, CTG);
+                                  false -> dict:store(CRef, Guids1, CTG)
+                              end;
+                  error    -> CTG
+              end
+      end, CRef, State).
+
+add_cref_to_guids_if_callback(CRef, Guid, State) ->
+    update_pending_confirms(
+      fun (_MsgOnDiskFun, CTG) ->
+              dict:update(CRef, fun (Guids) -> gb_sets:add(Guid, Guids) end,
+                          gb_sets:singleton(Guid), CTG)
+      end, CRef, State).
+
+client_confirm_if_on_disk(CRef, Guid, CurFile,
+                          State = #msstate { current_file = CurFile }) ->
+    add_cref_to_guids_if_callback(CRef, Guid, State);
+client_confirm_if_on_disk(CRef, Guid, _File, State) ->
+    update_pending_confirms(
+      fun (MsgOnDiskFun, CTG) ->
+              MsgOnDiskFun(gb_sets:singleton(Guid), written),
+              CTG
+      end, CRef, State).
 
 %% Detect whether the Guid is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death
