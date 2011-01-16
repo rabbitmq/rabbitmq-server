@@ -119,8 +119,6 @@ exec erl \
     -sname ${RABBITMQ_NODENAME} \
     -boot ${RABBITMQ_BOOT_FILE} \
     ${RABBITMQ_CONFIG_ARG} \
-    -config /tmp/foo.config \
-    -config bar \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
