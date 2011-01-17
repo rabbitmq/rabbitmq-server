@@ -76,13 +76,13 @@ class WaitableListener(object):
 
     def on_receipt(self, headers, message):
         if self.debug:
-            print '(on_message) message:', message, 'headers:', headers
+            print '(on_receipt) message:', message, 'headers:', headers
         self.receipts.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def on_error(self, headers, message):
         if self.debug:
-            print '(on_message) message:', message, 'headers:', headers
+            print '(on_error) message:', message, 'headers:', headers
         self.errors.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
@@ -94,9 +94,10 @@ class WaitableListener(object):
 
     def reset(self,count=1):
         if self.debug:
-            print '(reset listener) #messages:', len(self.messages),
-            print '#errors', len(self.errors),
-            print '#receipts', len(self.receipts), 'Now expecting:', count
+            print '(reset listener)',
+            print '#messages:', len(self.messages),
+            print '#errors:', len(self.errors),
+            print '#receipts:', len(self.receipts), 'Now expecting:', count
         self.messages = []
         self.errors = []
         self.receipts = []
@@ -115,7 +116,8 @@ class Latch(object):
 
    def countdown(self):
       self.cond.acquire()
-      self.count -= 1
+      if self.count > 0:
+         self.count -= 1
       if self.count == 0:
          self.cond.notify_all()
       self.cond.release()

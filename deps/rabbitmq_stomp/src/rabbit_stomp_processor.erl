@@ -95,6 +95,8 @@ handle_cast({Command, Frame}, State) ->
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State)}.
@@ -212,12 +214,17 @@ cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
             error("No subscription found",
                   "UNSUBSCRIBE must refer to an existing subscription\n",
                   State);
-        {ok, {_DestHdr, Channel}} -> 
-            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                           nowait       = true},
-                           Channel,
-                           State#state{subscriptions =
-                                           dict:erase(ConsumerTag, Subs)}))
+        {ok, {_DestHdr, Channel}} ->
+            case amqp_channel:call(Channel,
+                                   #'basic.cancel'{consumer_tag = ConsumerTag}) of
+                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    ok(State#state{subscriptions = dict:erase(ConsumerTag, Subs)});
+                _ ->
+                    error("Failed to cancel subscription",
+                          "UNSUBSCRIBE on channel ~p for subscription ~p failed.\n",
+                          [Channel, ConsumerTag], 
+                          State)
+            end
     end.
 
 with_destination(Command, Frame, State, Fun) ->
@@ -358,6 +365,9 @@ send_method(Method, State = #state{channel = Channel}) ->
 
 send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
+    send_method(Method, Channel, Properties, BodyFragments, State).
+
+send_method(Method, Channel, Properties, BodyFragments, State) ->
     amqp_channel:call(Channel, Method, #amqp_msg{
                                 props = Properties,
                                 payload = lists:reverse(BodyFragments)}),
@@ -448,8 +458,7 @@ abort_transaction(Transaction, State0) ->
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
-    amqp_channel:call(Channel, Method),
-    State;
+    send_method(Method, Channel, State);
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
