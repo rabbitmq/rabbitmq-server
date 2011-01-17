@@ -1443,6 +1443,7 @@ test_backing_queue() ->
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
+            passed = test_variable_queue_delete_msg_store_files_callback(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal, infinity),
@@ -2119,6 +2120,35 @@ test_queue_recover() ->
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
+    passed.
+
+test_variable_queue_delete_msg_store_files_callback() ->
+    ok = restart_msg_store_empty(),
+    {new, #amqqueue { pid = QPid, name = QName } = Q} =
+        rabbit_amqqueue:declare(test_queue(), true, false, [], none),
+    TxID = rabbit_guid:guid(),
+    Payload = <<0:8388608>>, %% 1MB
+    Count = 30,
+    [begin
+         Msg = rabbit_basic:message(
+                 rabbit_misc:r(<<>>, exchange, <<>>),
+                 <<>>, #'P_basic'{delivery_mode = 2}, Payload),
+         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
+                              sender = self(), message = Msg},
+         true = rabbit_amqqueue:deliver(QPid, Delivery)
+     end || _ <- lists:seq(1, Count)],
+    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    rabbit_amqqueue:set_ram_duration_target(QPid, 0),
+
+    CountMinusOne = Count - 1,
+    {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
+        rabbit_amqqueue:basic_get(Q, self(), true),
+    {ok, CountMinusOne} = rabbit_amqqueue:purge(Q),
+
+    %% give the queue a second to receive the close_fds callback msg
+    timer:sleep(1000),
+
+    rabbit_amqqueue:delete(Q, false, false),
     passed.
 
 test_configurable_server_properties() ->
