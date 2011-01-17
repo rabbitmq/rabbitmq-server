@@ -43,7 +43,7 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
-                              {'ok', pid(), pid()}).
+                              {'ok', pid(), {pid(), any()}}).
 
 -endif.
 

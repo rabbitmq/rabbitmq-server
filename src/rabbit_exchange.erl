@@ -35,6 +35,7 @@
 
 -export([recover/0, declare/6, lookup/1, lookup_or_die/1, list/1, info_keys/0,
          info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
+-export([callback/3]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
 -export([assert_equivalence/6, assert_args_equivalence/2, check_type/1]).
@@ -86,6 +87,7 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
+-spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) -> 'ok').
 
 -endif.
 
@@ -121,34 +123,32 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
                   auto_delete = AutoDelete,
                   internal    = Internal,
                   arguments   = Args},
-    %% We want to upset things if it isn't ok; this is different from
-    %% the other hooks invocations, where we tend to ignore the return
-    %% value.
-    TypeModule = type_to_module(Type),
-    ok = TypeModule:validate(X),
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   case mnesia:wread({rabbit_exchange, XName}) of
-                       [] ->
-                           ok = mnesia:write(rabbit_exchange, X, write),
-                           ok = case Durable of
-                                    true ->
-                                        mnesia:write(rabbit_durable_exchange,
+    %% We want to upset things if it isn't ok
+    ok = (type_to_module(Type)):validate(X),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:wread({rabbit_exchange, XName}) of
+                  [] ->
+                      ok = mnesia:write(rabbit_exchange, X, write),
+                      ok = case Durable of
+                               true  -> mnesia:write(rabbit_durable_exchange,
                                                      X, write);
-                                    false ->
-                                        ok
+                               false -> ok
                            end,
-                           {new, X};
-                       [ExistingX] ->
-                           {existing, ExistingX}
-                   end
-           end) of
-        {new, X}      -> TypeModule:create(X),
-                         rabbit_event:notify(exchange_created, info(X)),
-                         X;
-        {existing, X} -> X;
-        Err           -> Err
-    end.
+                      {new, X};
+                  [ExistingX] ->
+                      {existing, ExistingX}
+              end
+      end,
+      fun ({new, Exchange}, Tx) ->
+              callback(Exchange, create, [Tx, Exchange]),
+              rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
+              Exchange;
+          ({existing, Exchange}, _Tx) ->
+              Exchange;
+          (Err, _Tx) ->
+              Err
+      end).
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
@@ -278,27 +278,28 @@ process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->
     {WorkList, SeenXs, [QName | QNames]}.
 
-call_with_exchange(XName, Fun) ->
+call_with_exchange(XName, Fun, PrePostCommitFun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> case mnesia:read({rabbit_exchange, XName}) of
                    []  -> {error, not_found};
                    [X] -> Fun(X)
                end
-      end).
+      end, PrePostCommitFun).
 
 delete(XName, IfUnused) ->
-    Fun = case IfUnused of
-              true  -> fun conditional_delete/1;
-              false -> fun unconditional_delete/1
-          end,
-    case call_with_exchange(XName, Fun) of
-        {deleted, X, Bs, Deletions} ->
-            ok = rabbit_binding:process_deletions(
-                   rabbit_binding:add_deletion(
-                     XName, {X, deleted, Bs}, Deletions));
-        Error = {error, _InUseOrNotFound} ->
-            Error
-    end.
+    call_with_exchange(
+      XName,
+      case IfUnused of
+          true  -> fun conditional_delete/1;
+          false -> fun unconditional_delete/1
+      end,
+      fun ({deleted, X, Bs, Deletions}, Tx) ->
+              ok = rabbit_binding:process_deletions(
+                     rabbit_binding:add_deletion(
+                       XName, {X, deleted, Bs}, Deletions), Tx);
+          (Error = {error, _InUseOrNotFound}, _Tx) ->
+              Error
+      end).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
@@ -307,6 +308,9 @@ maybe_auto_delete(#exchange{auto_delete = true} = X) ->
         {error, in_use}             -> not_deleted;
         {deleted, X, [], Deletions} -> {deleted, Deletions}
     end.
+
+callback(#exchange{type = XType}, Fun, Args) ->
+    apply(type_to_module(XType), Fun, Args).
 
 conditional_delete(X = #exchange{name = XName}) ->
     case rabbit_binding:has_for_source(XName) of

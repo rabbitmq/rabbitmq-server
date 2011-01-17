@@ -31,20 +31,16 @@
 -ifdef(use_specs).
 
 -spec(description/0 :: () -> [{atom(), any()}]).
--spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                 -> rabbit_router:match_result()).
--spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(create/2 :: (boolean(), rabbit_types:exchange()) -> 'ok').
--spec(recover/2 :: (rabbit_types:exchange(),
-                    [rabbit_types:binding()]) -> 'ok').
--spec(delete/3 :: (boolean(), rabbit_types:exchange(),
-                   [rabbit_types:binding()]) -> 'ok').
--spec(add_binding/3 :: (boolean(), rabbit_types:exchange(),
-                        rabbit_types:binding()) -> 'ok').
--spec(remove_bindings/3 :: (boolean(), rabbit_types:exchange(),
-                            [rabbit_types:binding()]) -> 'ok').
--spec(assert_args_equivalence/2 ::
-        (rabbit_types:exchange(), rabbit_framing:amqp_table())
-        -> 'ok' | rabbit_types:connection_exit()).
 
+-spec(check_user_login/2 :: (rabbit_types:username(), [term()]) ->
+                                 {'ok', rabbit_types:user()} |
+                                 {'refused', string(), [any()]} |
+                                 {'error', any()}).
+-spec(check_vhost_access/3 :: (rabbit_types:user(), rabbit_types:vhost(),
+                               rabbit_access_control:vhost_permission_atom()) ->
+                                   boolean() | {'error', any()}).
+-spec(check_resource_access/3 :: (rabbit_types:user(),
+                                  rabbit_types:r(atom()),
+                                  rabbit_access_control:permission_atom()) ->
+                                      boolean() | {'error', any()}).
 -endif.

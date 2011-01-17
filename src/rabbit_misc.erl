@@ -46,8 +46,10 @@
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
--export([with_user/2, with_vhost/2, with_user_and_vhost/3]).
+-export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
+-export([execute_mnesia_transaction/2]).
+-export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
@@ -67,13 +69,14 @@
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([lock_file/1]).
+-export([const_ok/1, const/1]).
 -export([ntoa/1, ntoab/1]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--export_type([resource_name/0]).
+-export_type([resource_name/0, thunk/1]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -138,12 +141,15 @@
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(with_user/2 :: (rabbit_access_control:username(), thunk(A)) -> A).
--spec(with_vhost/2 :: (rabbit_types:vhost(), thunk(A)) -> A).
+-spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
-        (rabbit_access_control:username(), rabbit_types:vhost(), thunk(A))
+        (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
         -> A).
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
+-spec(execute_mnesia_transaction/2 ::
+        (thunk(A), fun ((A, boolean()) -> B)) -> B).
+-spec(execute_mnesia_tx_with_tail/1 ::
+        (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B))).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
 -spec(makenode/1 :: ({string(), string()} | string()) -> node()).
 -spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
@@ -198,6 +204,8 @@
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
+-spec(const_ok/1 :: (any()) -> 'ok').
+-spec(const/1 :: (A) -> fun ((_) -> A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
 
@@ -369,19 +377,8 @@ with_user(Username, Thunk) ->
             end
     end.
 
-with_vhost(VHostPath, Thunk) ->
-    fun () ->
-            case mnesia:read({rabbit_vhost, VHostPath}) of
-                [] ->
-                    mnesia:abort({no_such_vhost, VHostPath});
-                [_V] ->
-                    Thunk()
-            end
-    end.
-
 with_user_and_vhost(Username, VHostPath, Thunk) ->
-    with_user(Username, with_vhost(VHostPath, Thunk)).
-
+    with_user(Username, rabbit_vhost:with(VHostPath, Thunk)).
 
 execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
@@ -390,6 +387,35 @@ execute_mnesia_transaction(TxFun) ->
     case worker_pool:submit({mnesia, sync_transaction, [TxFun]}) of
         {atomic,  Result} -> Result;
         {aborted, Reason} -> throw({error, Reason})
+    end.
+
+
+%% Like execute_mnesia_transaction/1 with additional Pre- and Post-
+%% commit function
+execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
+    case mnesia:is_transaction() of
+        true  -> throw(unexpected_transaction);
+        false -> ok
+    end,
+    PrePostCommitFun(execute_mnesia_transaction(
+                       fun () ->
+                               Result = TxFun(),
+                               PrePostCommitFun(Result, true),
+                               Result
+                       end), false).
+
+%% Like execute_mnesia_transaction/2, but TxFun is expected to return a
+%% TailFun which gets called immediately before and after the tx commit
+execute_mnesia_tx_with_tail(TxFun) ->
+    case mnesia:is_transaction() of
+        true  -> execute_mnesia_transaction(TxFun);
+        false -> TailFun = execute_mnesia_transaction(
+                             fun () ->
+                                     TailFun1 = TxFun(),
+                                     TailFun1(true),
+                                     TailFun1
+                             end),
+                 TailFun(false)
     end.
 
 ensure_ok(ok, _) -> ok;
@@ -820,6 +846,9 @@ lock_file(Path) ->
         false -> {ok, Lock} = file:open(Path, [write]),
                  ok = file:close(Lock)
     end.
+
+const_ok(_) -> ok.
+const(X) -> fun (_) -> X end.
 
 %% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
 %% when IPv6 is enabled but not used (i.e. 99% of the time).

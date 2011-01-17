@@ -28,23 +28,49 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--ifdef(use_specs).
 
--spec(description/0 :: () -> [{atom(), any()}]).
--spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                 -> rabbit_router:match_result()).
--spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(create/2 :: (boolean(), rabbit_types:exchange()) -> 'ok').
--spec(recover/2 :: (rabbit_types:exchange(),
-                    [rabbit_types:binding()]) -> 'ok').
--spec(delete/3 :: (boolean(), rabbit_types:exchange(),
-                   [rabbit_types:binding()]) -> 'ok').
--spec(add_binding/3 :: (boolean(), rabbit_types:exchange(),
-                        rabbit_types:binding()) -> 'ok').
--spec(remove_bindings/3 :: (boolean(), rabbit_types:exchange(),
-                            [rabbit_types:binding()]) -> 'ok').
--spec(assert_args_equivalence/2 ::
-        (rabbit_types:exchange(), rabbit_framing:amqp_table())
-        -> 'ok' | rabbit_types:connection_exit()).
+-module(rabbit_auth_backend).
 
--endif.
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) ->
+    [
+     %% A description proplist as with auth mechanisms,
+     %% exchanges. Currently unused.
+     {description, 0},
+
+     %% Check a user can log in, given a username and a proplist of
+     %% authentication information (e.g. [{password, Password}]).
+     %%
+     %% Possible responses:
+     %% {ok, User}
+     %%     Authentication succeeded, and here's the user record.
+     %% {error, Error}
+     %%     Something went wrong. Log and die.
+     %% {refused, Msg, Args}
+     %%     Client failed authentication. Log and die.
+     {check_user_login, 2},
+
+     %% Given #user, vhost path and permission, can a user access a vhost?
+     %% Permission is read  - learn of the existence of (only relevant for
+     %%                       management plugin)
+     %%            or write - log in
+     %%
+     %% Possible responses:
+     %% true
+     %% false
+     %% {error, Error}
+     %%     Something went wrong. Log and die.
+     {check_vhost_access, 3},
+
+     %% Given #user, resource and permission, can a user access a resource?
+     %%
+     %% Possible responses:
+     %% true
+     %% false
+     %% {error, Error}
+     %%     Something went wrong. Log and die.
+     {check_resource_access, 3}
+    ];
+behaviour_info(_Other) ->
+    undefined.

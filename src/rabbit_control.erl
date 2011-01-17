@@ -201,48 +201,48 @@ action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
 
 action(add_user, Node, Args = [Username, _Password], _Opts, Inform) ->
     Inform("Creating user ~p", [Username]),
-    call(Node, {rabbit_access_control, add_user, Args});
+    call(Node, {rabbit_auth_backend_internal, add_user, Args});
 
 action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Deleting user ~p", Args),
-    call(Node, {rabbit_access_control, delete_user, Args});
+    call(Node, {rabbit_auth_backend_internal, delete_user, Args});
 
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
     Inform("Changing password for user ~p", [Username]),
-    call(Node, {rabbit_access_control, change_password, Args});
+    call(Node, {rabbit_auth_backend_internal, change_password, Args});
 
 action(clear_password, Node, Args = [Username], _Opts, Inform) ->
     Inform("Clearing password for user ~p", [Username]),
-    call(Node, {rabbit_access_control, clear_password, Args});
+    call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
 action(set_admin, Node, [Username], _Opts, Inform) ->
     Inform("Setting administrative status for user ~p", [Username]),
-    call(Node, {rabbit_access_control, set_admin, [Username]});
+    call(Node, {rabbit_auth_backend_internal, set_admin, [Username]});
 
 action(clear_admin, Node, [Username], _Opts, Inform) ->
     Inform("Clearing administrative status for user ~p", [Username]),
-    call(Node, {rabbit_access_control, clear_admin, [Username]});
+    call(Node, {rabbit_auth_backend_internal, clear_admin, [Username]});
 
 action(list_users, Node, [], _Opts, Inform) ->
     Inform("Listing users", []),
-    display_list(call(Node, {rabbit_access_control, list_users, []}));
+    display_list(call(Node, {rabbit_auth_backend_internal, list_users, []}));
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Creating vhost ~p", Args),
-    call(Node, {rabbit_access_control, add_vhost, Args});
+    call(Node, {rabbit_vhost, add, Args});
 
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Deleting vhost ~p", Args),
-    call(Node, {rabbit_access_control, delete_vhost, Args});
+    call(Node, {rabbit_vhost, delete, Args});
 
 action(list_vhosts, Node, [], _Opts, Inform) ->
     Inform("Listing vhosts", []),
-    display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
+    display_list(call(Node, {rabbit_vhost, list, []}));
 
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Listing permissions for user ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_user_permissions,
-                             Args}));
+    display_list(call(Node, {rabbit_auth_backend_internal,
+                             list_user_permissions, Args}));
 
 action(list_queues, Node, Args, Opts, Inform) ->
     Inform("Listing queues", []),
@@ -296,19 +296,20 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, set_permissions,
+    call(Node, {rabbit_auth_backend_internal, set_permissions,
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
+    call(Node, {rabbit_auth_backend_internal, clear_permissions,
+                [Username, VHost]});
 
 action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
-    display_list(call(Node, {rabbit_access_control, list_vhost_permissions,
-                             [VHost]})).
+    display_list(call(Node, {rabbit_auth_backend_internal,
+                             list_vhost_permissions, [VHost]})).
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] ->
