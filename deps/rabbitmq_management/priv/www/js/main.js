@@ -54,6 +54,8 @@ function update_vhosts() {
         if (vhost == current_vhost) index = i + 1;
     }
     select.selectedIndex = index;
+    current_vhost = select.options[index].value;
+    store_pref('vhost', current_vhost);
 }
 
 var app = $.sammy(dispatcher);
