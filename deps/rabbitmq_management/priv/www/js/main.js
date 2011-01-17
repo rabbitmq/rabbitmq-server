@@ -131,7 +131,7 @@ function dispatcher() {
             }
             else if (this.params['mode'] == 'purge') {
                 if (sync_delete(this, '/queues/:vhost/:name/contents')) {
-                    error_popup('info', "Queue purged");
+                    show_popup('info', "Queue purged");
                     update_partial();
                 }
             }
@@ -307,7 +307,7 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function error_popup(type, text) {
+function show_popup(type, text) {
     var cssClass = '.form-popup-' + type;
     function hide() {
         $(cssClass).slideUp(200, function() {
@@ -361,6 +361,9 @@ function postprocess() {
             $('#no-password').slideDown(100);
         }
     });
+    $('.help').die().live('click', function() {
+        help($(this).attr('id'))
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -379,6 +382,7 @@ function postprocess_partial() {
             }
             update();
         });
+    $('.help').html('(?)');
 }
 
 function update_multifields() {
@@ -511,7 +515,7 @@ function sync_req(type, params0, path_template) {
     try {
         path = fill_path_template(path_template, params);
     } catch (e) {
-        error_popup('warn', e);
+        show_popup('warn', e);
         return false;
     }
     var req = xmlHttpRequest();
@@ -534,7 +538,7 @@ function sync_req(type, params0, path_template) {
     if (req.status >= 400 && req.status <= 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
-        error_popup('warn', reason);
+        show_popup('warn', reason);
         return false;
     }
 

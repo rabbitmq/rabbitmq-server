@@ -27,26 +27,20 @@
 <div class="section-hidden">
 <h2>Message Rates</h2>
 <div class="hider updatable">
-<p>
-  The incoming rate is the rate at which messages are published
-  directly to this exchange. The outgoing rate is the rate at which
-  messages enter queues, having been published directly to this
-  exchange.
-</p>
 <table class="two-col-layout">
   <tr>
     <td>
       <%= format('msg-detail-publishes',
                  {'mode':   'exchange-incoming',
                   'object': exchange.incoming,
-                  'label':  'Incoming',
+                  'label':  'Incoming <span class="help" id="exchange-rates-incoming"></span>',
                   'totals': exchange.message_stats_in}) %>
     </td>
     <td>
       <%= format('msg-detail-publishes',
                  {'mode':   'exchange-outgoing',
                   'object': exchange.outgoing,
-                  'label':  'Outgoing',
+                  'label':  'Outgoing <span class="help" id="exchange-rates-outgoing"></span>',
                   'totals': exchange.message_stats_out}) %>
     </td>
   </tr>

@@ -50,7 +50,7 @@
       Version
       <sub>(RabbitMQ / Erlang)</sub>
     </th>
-    <th>Mnesia Storage</th>
+    <th>Mnesia Storage <span class="help" id="mnesia-storage"></span></th>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -152,28 +152,18 @@ for (var i = 0; i < overview.listeners.length; i++) {
     <table class="two-col-layout">
       <tr>
         <td>
-          <h3>Export</h3>
+          <h3>Export <span class="help" id="export-config"></span></h3>
           <p>
             <label for="download-filename">Filename for download:</label><br/>
             <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
           </p>
-	  <sub>
-	    The configuration consists of users, virtual hosts, permissions,
-	    exchanges, queues and bindings. It does not include the contents of
-	    queues. Exclusive queues will not be exported.
-          </sub>
         </td>
         <td>
-          <h3>Import</h3>
+          <h3>Import <span class="help" id="import-config"></span></h3>
           <p>
             <label>Configuration file:</label><br/>
             <input type="file" name="file"/>
           </p>
-          <sub>
-            The configuration that is imported will be merged with
-            the current configuration. If an error occurs during import,
-            any configuration changes made will not be rolled back.
-          </sub>
         </td>
       </tr>
       <tr>
