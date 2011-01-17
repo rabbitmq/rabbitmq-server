@@ -283,7 +283,7 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
      hibernate};
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
-    {noreply, confirm(MsgSeqNos, From, State)}.
+    {noreply, confirm(MsgSeqNos, From, State), hibernate}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{unconfirmed = UC}) ->
