@@ -442,7 +442,7 @@ function setup_visibility() {
             show = $(this).hasClass('section');
         }
         else {
-            show = show == 'true';
+            show = show == 't';
         }
         if (show) {
             $(this).addClass('section-visible');
@@ -460,7 +460,7 @@ function toggle_visibility(item) {
     item.next().slideToggle(100);
     if (all.hasClass('section-visible')) {
         if (all.hasClass('section'))
-            store_pref(pref, false);
+            store_pref(pref, 'f');
         else
             clear_pref(pref);
         all.removeClass('section-visible');
@@ -468,7 +468,7 @@ function toggle_visibility(item) {
     }
     else {
         if (all.hasClass('section-hidden'))
-            store_pref(pref, true);
+            store_pref(pref, 't');
         else
             clear_pref(pref);
         all.removeClass('section-invisible');
