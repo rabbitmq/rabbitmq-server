@@ -219,10 +219,14 @@ get_and_assert_empty(Channel, Q) ->
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}).
 
 get_and_assert_equals(Channel, Q, Payload) ->
-    {#'basic.get_ok'{}, Content}
-        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}),
+    get_and_assert_equals(Channel, Q, Payload, true).
+
+get_and_assert_equals(Channel, Q, Payload, NoAck) ->
+    {GetOk = #'basic.get_ok'{}, Content}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = NoAck}),
     #amqp_msg{payload = Payload2} = Content,
-    ?assertMatch(Payload, Payload2).
+    ?assertMatch(Payload, Payload2),
+    GetOk.
 
 basic_get_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -309,10 +313,9 @@ basic_consume_test(Connection) ->
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     RoutingKey = uuid(),
     Parent = self(),
-    [spawn(
-        fun() ->
-            consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>)
-        end) || Tag <- lists:seq(1, ?Latch)],
+    [spawn_link(fun () ->
+                        consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>)
+                end) || Tag <- lists:seq(1, ?Latch)],
     timer:sleep(?Latch * 20),
     Publish = #'basic.publish'{exchange = X, routing_key = RoutingKey},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
@@ -320,25 +323,21 @@ basic_consume_test(Connection) ->
     teardown(Connection, Channel).
 
 consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
-    Route = #'queue.bind'{queue = Q,
-                          exchange = X,
-                          routing_key = RoutingKey},
-    amqp_channel:call(Channel, Route),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
-                                                     consumer_tag = Tag},
-                           self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = Tag} -> ok
-    end,
-    receive
-        {#'basic.deliver'{}, _} -> ok
-    end,
-    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-    receive
-        #'basic.cancel_ok'{consumer_tag = Tag} -> ok
-    end,
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Channel, #'queue.declare'{}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Channel, #'queue.bind'{queue = Q,
+                                                 exchange = X,
+                                                 routing_key = RoutingKey}),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Channel,
+                               #'basic.consume'{queue = Q, consumer_tag = Tag},
+                               self()),
+    receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
+    receive {#'basic.deliver'{}, _} -> ok end,
+    #'basic.cancel_ok'{} =
+        amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
+    receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     Parent ! finished.
 
 basic_recover_test(Connection) ->
@@ -458,6 +457,27 @@ producer_loop(Channel, RoutingKey, N) ->
     Publish = #'basic.publish'{exchange = <<>>, routing_key = RoutingKey},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<>>}),
     producer_loop(Channel, RoutingKey, N - 1).
+
+basic_nack_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{}),
+
+    Payload = <<"m1">>,
+
+    amqp_channel:call(Channel,
+                      #'basic.publish'{exchange = <<>>, routing_key = Q},
+                      #amqp_msg{payload = Payload}),
+
+    #'basic.get_ok'{delivery_tag = Tag} =
+        get_and_assert_equals(Channel, Q, Payload, false),
+
+    amqp_channel:call(Channel, #'basic.nack'{delivery_tag = Tag,
+                                             multiple     = false,
+                                             requeue      = false}),
+
+    get_and_assert_empty(Channel, Q),
+    teardown(Connection, Channel).
 
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->

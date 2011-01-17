@@ -42,7 +42,7 @@
                 start_infrastructure_fun,
                 start_channels_manager_fun,
                 closing = false %% #closing{} | false
-                }).
+               }).
 
 -record(closing, {reason,
                   close,
@@ -63,13 +63,9 @@ connect(Pid) ->
 open_channel(Pid, ProposedNumber) ->
     case gen_server:call(Pid, {command, {open_channel, ProposedNumber}},
                          infinity) of
-        {ok, ChannelPid} ->
-            case amqp_channel:call(ChannelPid, #'channel.open'{}) of
-                #'channel.open_ok'{} -> {ok, ChannelPid};
-                Error                -> Error
-            end;
-        Error ->
-            Error
+        {ok, ChannelPid} -> ok = amqp_channel:open(ChannelPid),
+                            {ok, ChannelPid};
+        Error            -> Error
     end.
 
 hard_error_in_channel(Pid, ChannelPid, Reason) ->
