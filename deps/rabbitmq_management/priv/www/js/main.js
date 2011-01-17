@@ -15,7 +15,7 @@ $(document).ready(function() {
     current_vhost = get_pref('vhost');
     update_vhosts();
     app.run();
-    set_timer_interval(5000);
+    update_interval();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -25,6 +25,7 @@ $(document).ready(function() {
 function setup_constant_events() {
     $('#update-every').change(function() {
             var interval = $(this).val();
+            store_pref('interval', interval);
             if (interval == '') interval = null;
             set_timer_interval(interval);
         });
@@ -56,6 +57,21 @@ function update_vhosts() {
     select.selectedIndex = index;
     current_vhost = select.options[index].value;
     store_pref('vhost', current_vhost);
+}
+
+function update_interval() {
+    var interval = get_pref('interval');
+    interval = interval == null ? '5000' : interval;
+    set_timer_interval(interval);
+
+    var select = $('#update-every').get(0);
+    var opts = select.options;
+    for (var i = 0; i < opts.length; i++) {
+        if (opts[i].value == interval) {
+            select.selectedIndex = i;
+            break;
+        }
+    }
 }
 
 var app = $.sammy(dispatcher);
