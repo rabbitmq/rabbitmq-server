@@ -103,7 +103,7 @@ process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
               {'EXIT',
                {{server_initiated_close, ReplyCode, Explanation}, _}} ->
-                  explain_amqp_death(ReplyCode, Explanation, State);
+                  amqp_death(ReplyCode, Explanation, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error\n",
                               Reason, State);
@@ -491,7 +491,7 @@ ok(Command, Headers, BodyFragments, State) ->
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
 
-explain_amqp_death(ReplyCode, Explanation, State) ->
+amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
     {stop, amqp_death,
      send_error(atom_to_list(ErrorName),
