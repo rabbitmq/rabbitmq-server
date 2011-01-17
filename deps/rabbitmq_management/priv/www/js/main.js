@@ -12,6 +12,7 @@ $(document).ready(function() {
         JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     setup_constant_events();
+    current_vhost = get_pref('vhost');
     update_vhosts();
     app.run();
     set_timer_interval(5000);
@@ -29,6 +30,7 @@ function setup_constant_events() {
         });
     $('#show-vhost').change(function() {
             current_vhost = $(this).val();
+            store_pref('vhost', current_vhost);
             update();
         });
     if (!vhosts_interesting) {
