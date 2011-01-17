@@ -155,7 +155,7 @@ class TestAck(base.BaseTest):
         d = "/queue/nack-test"
 
         #subscribe and send
-        self.conn.subscribe(destination=d, ack='client')
+        self.conn.subscribe(destination=d, ack='client-individual')
         self.conn.send("nack-test", destination=d)
 
         self.assertTrue(self.listener.await(), "Not received message")
@@ -165,4 +165,23 @@ class TestAck(base.BaseTest):
         self.conn.send_frame("NACK", {"message-id" : message_id})
         self.assertTrue(self.listener.await(), "Not received message again")
         message_id = self.listener.messages[0]['headers']['message-id']
+        self.conn.ack({'message-id' : message_id})
+
+    def test_nack_multi(self):
+        d = "/queue/nack-multi"
+
+        #subscribe and send
+        self.conn.subscribe(destination=d, ack='client',
+                            headers = {'prefetch-count' : '10'})
+        self.conn.send("nack-test1", destination=d)
+        self.conn.send("nack-test2", destination=d)
+
+        self.listener.reset(2)
+        self.assertTrue(self.listener.await(), "Not received messages")
+        message_id = self.listener.messages[1]['headers']['message-id']
+        self.listener.reset(2)
+
+        self.conn.send_frame("NACK", {"message-id" : message_id})
+        self.assertTrue(self.listener.await(), "Not received message again")
+        message_id = self.listener.messages[1]['headers']['message-id']
         self.conn.ack({'message-id' : message_id})

@@ -368,8 +368,9 @@ create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
                  multiple     = IsMulti}.
 
-create_nack_method(DeliveryTag, _Subscription) ->
-    #'basic.reject'{delivery_tag = DeliveryTag}.
+create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+    #'basic.nack'{delivery_tag = DeliveryTag,
+                  multiple     = IsMulti}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(
