@@ -5,7 +5,6 @@ function store_pref(k, v) {
     date.setFullYear(date.getFullYear() + 1);
     document.cookie = short_key(k) + '=' + escape(v) +
         '; expires=' + date.toUTCString();
-    debug(document.cookie);
 }
 
 var epoch = 'Thu, 01-Jan-1970 00:00:01 GMT';
