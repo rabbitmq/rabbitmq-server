@@ -203,8 +203,9 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats -> 7;
-        _          -> 0
+        emit_stats                   -> 7;
+        {confirm, _MsgSeqNos, _QPid} -> 5;
+        _                            -> 0
     end.
 
 handle_call(flush, _From, State) ->
@@ -284,11 +285,11 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
      hibernate};
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
-    noreply(confirm(MsgSeqNos, From, State)).
+    State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
+    {noreply, State1, case C of [] -> hibernate; _ -> 0 end}.
 
-handle_info(timeout, State = #ch{confirmed = C}) ->
-    {noreply, send_confirms(lists:append(C), State #ch{confirmed = []}),
-     hibernate};
+handle_info(timeout, State) ->
+    noreply(State);
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{unconfirmed = UC}) ->
@@ -330,15 +331,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState = #ch{confirmed = []}) ->
-    {reply, Reply, ensure_stats_timer(NewState), hibernate};
 reply(Reply, NewState) ->
-    {reply, Reply, ensure_stats_timer(NewState), 0}.
+    {reply, Reply, ensure_stats_timer(send_confirms(NewState)), hibernate}.
 
-noreply(NewState = #ch{confirmed = []}) ->
-    {noreply, ensure_stats_timer(NewState), hibernate};
 noreply(NewState) ->
-    {noreply, ensure_stats_timer(NewState), 0}.
+    {noreply, ensure_stats_timer(send_confirms(NewState)), hibernate}.
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
@@ -1245,6 +1242,9 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
+
+send_confirms(State = #ch{confirmed = C}) ->
+    send_confirms(lists:append(C), State #ch{confirmed = []}).
 
 send_confirms([], State) ->
     State;
