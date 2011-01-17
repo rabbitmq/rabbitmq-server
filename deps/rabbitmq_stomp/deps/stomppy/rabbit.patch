@@ -11,42 +11,34 @@ diff -r 16a4000624a7 stomp/connect.py
 +                 heartbeat = None):
          """
          Initialize and start this connection.
- 
+
 @@ -204,6 +206,12 @@
          if user is not None and passcode is not None:
              self.__connect_headers['login'] = user
              self.__connect_headers['passcode'] = passcode
-+        
++
 +        if version is not None:
 +            self.__connect_headers['accept-version'] = version
-+            
++
 +        if heartbeat is not None:
 +            self.__connect_headers['heartbeat'] = heartbeat
- 
+
          self.__socket = None
          self.__socket_semaphore = threading.BoundedSemaphore(1)
-@@ -449,6 +457,16 @@
+@@ -449,2 +457,2 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
- 
+
 +    def send_frame(self, command, headers={}, payload=''):
 +        self.__send_frame(command, headers, payload)
-+        
++
 +    def send_heartbeat(self):
 +        self.__socket_semaphore.acquire()
 +        try:
 +            self.__socket.sendall('\x00')
 +        finally:
 +            self.__socket_semaphore.release()
-+            
++
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
-@@ -532,7 +550,6 @@
-                             
-                             while self.__running:
-                                 frames = self.__read()
--                                
-                                 for frame in frames:
-                                     (frame_type, headers, body) = utils.parse_frame(frame)
-                                     log.debug("Received frame: result=%r, headers=%r, body=%r" % (frame_type, headers, body))
