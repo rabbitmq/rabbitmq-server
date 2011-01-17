@@ -501,7 +501,7 @@ amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
     {stop, amqp_death,
      send_error(atom_to_list(ErrorName),
-                format_message("~s~n", [Explanation]),
+                format_detail("~s~n", [Explanation]),
                 State)}.
 
 error(Message, Detail, State) ->
