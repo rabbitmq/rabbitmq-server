@@ -517,10 +517,11 @@ priv_error(Message, Detail, ServerPrivateDetail, State) ->
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, lists:flatten(io_lib:format(Format, Args)),
+    priv_error(Message, format_detail(Format, Args),
                     ServerPrivateDetail, State).
 
-
+format_detail(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
 %%----------------------------------------------------------------------------
@@ -551,8 +552,7 @@ send_error(Message, Detail, State) ->
                          {"content-type", "text/plain"}], Detail, State).
 
 send_error(Message, Format, Args, State) ->
-    send_error(Message, lists:flatten(io_lib:format(Format, Args)),
-                    State).
+    send_error(Message, format_detail(Format, Args), State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks
