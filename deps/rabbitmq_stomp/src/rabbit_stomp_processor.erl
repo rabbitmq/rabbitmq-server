@@ -42,7 +42,7 @@
                 connection, subscriptions, version,
                 start_heartbeat_fun}).
 
--record(subscription, {dest_hdr, channel, ack_mode, multi_ack}).
+-record(subscription, {dest_hdr, channel, multi_ack}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
@@ -336,7 +336,6 @@ do_subscribe(Destination, DestHdr, Frame,
                        dict:store(ConsumerTag,
                                   #subscription{dest_hdr  = DestHdr,
                                                 channel   = Channel,
-                                                ack_mode  = AckMode,
                                                 multi_ack = IsMulti},
                                   Subs)}).
 
