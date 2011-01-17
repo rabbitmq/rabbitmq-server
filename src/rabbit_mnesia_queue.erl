@@ -84,10 +84,6 @@
           q,                      % A temporary in-RAM queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % Map from seq_id to M, pending ack
-
-          %% redo the following?
-          unconfirmed,
-
           on_sync
         }).
 
@@ -122,7 +118,6 @@
                           q :: queue(),
                           next_seq_id :: seq_id(),
                           pending_ack_dict :: dict(),
-                          unconfirmed :: gb_set(),
                           on_sync :: sync() }).
 
 -type(m() :: #m { msg :: rabbit_types:basic_message(),
@@ -132,9 +127,9 @@
 
 -type(tx() :: #tx { pending_messages :: [{rabbit_types:basic_message(),
                                           rabbit_types:message_properties()}],
-                    pending_acks :: [[ack()]] }).
+                    pending_acks :: [ack()] }).
 
--type(sync() :: #sync { acks :: [[seq_id()]],
+-type(sync() :: #sync { acks :: [seq_id()],
                         pubs :: [{message_properties_transformer(),
                                   [rabbit_types:basic_message()]}],
                         funs :: [fun (() -> any())] }).
@@ -208,7 +203,6 @@ init(QueueName, _IsDurable, _Recover) ->
                       q = queue:new(),
                       next_seq_id = 0,
                       pending_ack_dict = dict:new(),
-                      unconfirmed = gb_sets:new(),
                       on_sync = ?BLANK_SYNC },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -301,12 +295,7 @@ publish_delivered(false, _, _, State) ->
     Result = {blank_ack, State},
     rabbit_log:info(" -> ~p", [Result]),
     Result;
-publish_delivered(true,
-                  Msg = #basic_message { guid = Guid },
-                  Props = #message_properties {
-                    needs_confirming = NeedsConfirming },
-                  State = #state { next_seq_id = SeqId,
-                                   unconfirmed = Unconfirmed }) ->
+publish_delivered(true, Msg, Props, State = #state { next_seq_id = SeqId }) ->
     rabbit_log:info("publish_delivered(true, "),
     rabbit_log:info(" ~p,", [Msg]),
     rabbit_log:info(" ~p,", [Props]),
@@ -315,10 +304,7 @@ publish_delivered(true,
         {SeqId,
          (record_pending_ack_state(
           ((m(Msg, SeqId, Props)) #m { is_delivered = true }), State))
-         #state {
-           next_seq_id = SeqId + 1,
-           unconfirmed =
-               gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed) }},
+         #state { next_seq_id = SeqId + 1 }},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -409,7 +395,7 @@ internal_fetch(AckRequired,
 %% -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 ack(AckTags, State) ->
-    rabbit_log:info("ack(",),
+    rabbit_log:info("ack("),
     rabbit_log:info("~p,", [AckTags]),
     rabbit_log:info(" ~p) ->", [State]),
     {Guids, State1} = internal_ack(AckTags, State),
@@ -420,14 +406,7 @@ ack(AckTags, State) ->
 -spec(internal_ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 internal_ack(AckTags, State) ->
-    {Guids, State1} =
-        internal_ack(
-          fun (#m { msg = #basic_message { guid = Guid }}, S) ->
-                  remove_confirms_state(gb_sets:singleton(Guid), S)
-          end,
-          AckTags,
-          State),
-    {Guids, State1}.
+    internal_ack(fun (_, S) -> S end, AckTags, State).
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction.
@@ -459,7 +438,7 @@ tx_publish(Txn, Msg, Props, State) ->
 tx_ack(Txn, AckTags, State) ->
     rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, AckTags, State]),
     Tx = #tx { pending_acks = Acks } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_acks = [AckTags | Acks] }),
+    store_tx(Txn, Tx #tx { pending_acks = lists:append(AckTags, Acks) }),
     Result = State,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -476,7 +455,7 @@ tx_rollback(Txn, State) ->
     rabbit_log:info("tx_rollback(~p, ~p) ->", [Txn, State]),
     #tx { pending_acks = AckTags } = lookup_tx(Txn),
     erase_tx(Txn),
-    Result = {lists:append(AckTags), State},
+    Result = {AckTags, State},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -499,10 +478,9 @@ tx_commit(Txn, Fun, PropsFun, State) ->
       "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, Fun, PropsFun, State]),
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
-    AckTags1 = lists:append(AckTags),
     Result =
-        {AckTags1,
-         internal_tx_commit_store_state(Pubs, AckTags1, Fun, PropsFun, State)},
+        {AckTags,
+         internal_tx_commit_store_state(Pubs, AckTags, Fun, PropsFun, State)},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -666,11 +644,6 @@ status(#state { mnesiaTableName = MnesiaTableName,
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-%% When requeueing, we re-add a guid to the unconfirmed set.
-
-gb_sets_maybe_insert(false, _, Set) -> Set;
-gb_sets_maybe_insert(true, Val, Set) -> gb_sets:add(Val, Set).
-
 -spec m(rabbit_types:basic_message(),
         seq_id(),
         rabbit_types:message_properties()) ->
@@ -723,7 +696,7 @@ internal_tx_commit_store_state(Pubs,
     (tx_commit_index_state(
        State #state {
          on_sync =
-             #sync { acks = [AckTags],
+             #sync { acks = AckTags,
                      pubs = [{PropsFun, Pubs}],
                      funs = [Fun] }}))
         #state { on_sync = OnSync }.
@@ -735,7 +708,7 @@ tx_commit_index_state(State = #state {
                         on_sync = #sync { acks = SAcks,
                                           pubs = SPubs,
                                           funs = SFuns }}) ->
-    {_, State1} = internal_ack(lists:append(SAcks), State),
+    {_, State1} = internal_ack(SAcks, State),
     {_, State2} =
         lists:foldl(
           fun ({Msg, Props}, {SeqIds, S}) ->
@@ -758,17 +731,14 @@ tx_commit_index_state(State = #state {
                     state()) ->
                            state().
 
-publish_state(Msg = #basic_message { guid = Guid },
-              Props =
-                  #message_properties { needs_confirming = NeedsConfirming },
+publish_state(Msg,
+              Props,
               IsDelivered,
-              State = #state {
-                q = Q, next_seq_id = SeqId, unconfirmed = Unconfirmed }) ->
+              State = #state { q = Q, next_seq_id = SeqId }) ->
     State #state {
       q = queue:in(
             (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q),
-      next_seq_id = SeqId + 1,
-      unconfirmed = gb_sets_maybe_insert(NeedsConfirming, Guid, Unconfirmed) }.
+      next_seq_id = SeqId + 1 }.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
@@ -809,13 +779,3 @@ internal_ack(Fun, AckTags, State) ->
 
 accumulate_ack(#m { msg = #basic_message { guid = Guid }}, AllGuids) ->
     [Guid | AllGuids].
-
-%%----------------------------------------------------------------------------
-%% Internal plumbing for confirms (aka publisher acks)
-%%----------------------------------------------------------------------------
-
--spec remove_confirms_state(gb_set(), state()) -> state().
-
-remove_confirms_state(GuidSet, State = #state { unconfirmed = UC }) ->
-    State #state { unconfirmed = gb_sets:difference(UC, GuidSet) }.
-
