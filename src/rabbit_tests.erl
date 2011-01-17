@@ -2090,12 +2090,13 @@ test_queue_recover() ->
     TxID = rabbit_guid:guid(),
     {new, #amqqueue { pid = QPid, name = QName }} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                               <<>>, #'P_basic'{delivery_mode = 2}, <<>>),
-    Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
-                         sender = self(), message = Msg},
-    [true = rabbit_amqqueue:deliver(QPid, Delivery) ||
-        _ <- lists:seq(1, Count)],
+    [begin
+         Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+                                    <<>>, #'P_basic'{delivery_mode = 2}, <<>>),
+         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
+                              sender = self(), message = Msg},
+         true = rabbit_amqqueue:deliver(QPid, Delivery)
+     end || _ <- lists:seq(1, Count)],
     rabbit_amqqueue:commit_all([QPid], TxID, self()),
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
