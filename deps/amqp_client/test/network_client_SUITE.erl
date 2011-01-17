@@ -117,16 +117,16 @@ hard_error_test() ->
     repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS).
 
 non_existent_user_test() ->
-    negative_test_util:non_existent_user_test().
+    negative_test_util:non_existent_user_test(fun new_connection/1).
 
 invalid_password_test() ->
-    negative_test_util:invalid_password_test().
+    negative_test_util:invalid_password_test(fun new_connection/1).
 
 non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test().
+    negative_test_util:non_existent_vhost_test(fun new_connection/1).
 
 no_permission_test() ->
-    negative_test_util:no_permission_test().
+    negative_test_util:no_permission_test(fun new_connection/1).
 
 channel_writer_death_test() ->
     negative_test_util:channel_writer_death_test(new_connection()).
@@ -156,9 +156,8 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(network, AmqpParams) of
-        {ok, Conn}            -> Conn;
-        {error, _Err} = Error -> Error
+    case amqp_connection:start(network, AmqpParams) of {ok, Conn}     -> Conn;
+                                                       {error, _} = E -> E
     end.
 
 test_coverage() ->

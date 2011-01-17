@@ -106,6 +106,18 @@ bogus_rpc_test() ->
 channel_death_test() ->
     negative_test_util:channel_death_test(new_connection()).
 
+non_existent_user_test() ->
+    negative_test_util:non_existent_user_test(fun new_connection/1).
+
+invalid_password_test() ->
+    negative_test_util:invalid_password_test(fun new_connection/1).
+
+non_existent_vhost_test() ->
+    negative_test_util:non_existent_vhost_test(fun new_connection/1).
+
+no_permission_test() ->
+    negative_test_util:no_permission_test(fun new_connection/1).
+
 command_invalid_over_channel_test() ->
     negative_test_util:command_invalid_over_channel_test(new_connection()).
 
@@ -114,9 +126,11 @@ command_invalid_over_channel_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    case amqp_connection:start(direct) of
-        {ok, Conn}         -> Conn;
-        {error, _} = Error -> Error
+    new_connection(#amqp_params{}).
+
+new_connection(AmqpParams) ->
+    case amqp_connection:start(direct, AmqpParams) of {ok, Conn}     -> Conn;
+                                                      {error, _} = E -> E
     end.
 
 test_coverage() ->
