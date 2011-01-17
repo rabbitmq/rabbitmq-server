@@ -329,8 +329,7 @@ function postprocess() {
                            "after deletion.");
         });
     $('div.section h2, div.section-hidden h2').click(function() {
-            $(this).next().slideToggle(100);
-            $(this).toggleClass("toggled");
+            toggle_visibility($(this));
         });
     $('label').map(function() {
             if ($(this).attr('for') == '') {
@@ -361,6 +360,7 @@ function postprocess() {
             $('#no-password').slideDown(100);
         }
     });
+    setup_visibility();
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -411,6 +411,49 @@ function update_multifields() {
                                '_mfvalue" value=""/></p>');
             }
         });
+}
+
+function setup_visibility() {
+    $('div.section,div.section-hidden').each(function(_index) {
+        var pref = section_pref(current_template,
+                                $(this).children('h2').text());
+        var show = get_pref(pref);
+        if (show == null) {
+            show = $(this).hasClass('section');
+        }
+        else {
+            show = show == 'true';
+        }
+        if (show) {
+            $(this).addClass('section-visible');
+        }
+        else {
+            $(this).addClass('section-invisible');
+        }
+    });
+}
+
+function toggle_visibility(item) {
+    var hider = item.next();
+    var all = item.parent();
+    var pref = section_pref(current_template, item.text());
+    item.next().slideToggle(100);
+    if (all.hasClass('section-visible')) {
+        if (all.hasClass('section'))
+            store_pref(pref, false);
+        else
+            clear_pref(pref);
+        all.removeClass('section-visible');
+        all.addClass('section-invisible');
+    }
+    else {
+        if (all.hasClass('section-hidden'))
+            store_pref(pref, true);
+        else
+            clear_pref(pref);
+        all.removeClass('section-invisible');
+        all.addClass('section-visible');
+    }
 }
 
 function with_reqs(reqs, acc, fun) {
