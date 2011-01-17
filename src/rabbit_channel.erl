@@ -480,6 +480,9 @@ remove_queue_unconfirmed({MsgSeqNo, Qs, Next}, QPid, Acc) ->
     remove_queue_unconfirmed(gb_trees:next(Next), QPid,
                              remove_qmsg(MsgSeqNo, QPid, Qs, Acc)).
 
+record_confirm(undefined, State) -> State;
+record_confirm(MsgSeqNo,  State) -> record_confirms([MsgSeqNo], State).
+
 record_confirms([], State) ->
     State;
 record_confirms(MsgSeqNos, State = #ch{confirmed = C}) ->
@@ -1224,12 +1227,12 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
-    send_confirms([MsgSeqNo], State);
+    record_confirm(MsgSeqNo, State);
 process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
-    send_confirms([MsgSeqNo], State);
+    record_confirm(MsgSeqNo, State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
-    send_confirms([MsgSeqNo], State);
+    record_confirm(MsgSeqNo, State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
 process_routing_result(routed,    QPids, MsgSeqNo,       _, State) ->
@@ -1267,8 +1270,6 @@ send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
     State.
 
-send_confirm(undefined, _WriterPid) ->
-    ok;
 send_confirm(SeqNo, WriterPid) ->
     ok = rabbit_writer:send_command(WriterPid,
                                     #'basic.ack'{delivery_tag = SeqNo}).
