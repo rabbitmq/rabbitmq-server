@@ -226,10 +226,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
                                                 QueueName}) of
                                   []  -> ok = store_queue(Q),
                                          B = add_default_binding(Q),
-                                         fun (Tx) ->
-                                                 B(Tx),
-                                                 Q
-                                         end;
+                                         fun (Tx) -> B(Tx), Q end;
                                   [_] -> %% Q exists on stopped node
                                          rabbit_misc:const(not_found)
                               end;
