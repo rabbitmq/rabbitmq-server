@@ -151,10 +151,8 @@ getaddr(Host, Family) ->
 gethostaddr(Host, auto) ->
     Lookups = [{Family, inet:getaddr(Host, Family)} || Family <- [inet, inet6]],
     case [{IP, Family} || {Family, {ok, IP}} <- Lookups] of
-        [] ->
-            host_lookup_error(Host, Lookups);
-        IPs ->
-            IPs
+        []  -> host_lookup_error(Host, Lookups);
+        IPs -> IPs
     end;
 
 gethostaddr(Host, Family) ->
@@ -194,15 +192,8 @@ check_tcp_listener_address(NamePrefix, {Host, Port, Family0}) ->
         {IPAddress, Family} <- getaddr(Host, Family0)].
 
 check_tcp_listener_address_auto(NamePrefix, Port) ->
-    case ipv6_status(Port) of
-        ipv4_only ->
-            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet});
-        ipv6_single_stack ->
-            check_tcp_listener_address(NamePrefix, {"::", Port, inet6});
-        ipv6_dual_stack ->
-            check_tcp_listener_address(NamePrefix, {"0.0.0.0", Port, inet})
-                ++ check_tcp_listener_address(NamePrefix, {"::", Port, inet6})
-    end.
+    lists:append([check_tcp_listener_address(NamePrefix, Listener) ||
+                     Listener <- port_to_listeners(Port)]).
 
 start_tcp_listener(Listener) ->
     start_listener(Listener, amqp, "TCP Listener",
@@ -339,7 +330,18 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 
 %%--------------------------------------------------------------------
 
-%% How to test on Linux:
+%% There are three kinds of machine (for our purposes).
+
+%% * Those which treat IPv4 addresses as a special kind of IPv6 address
+%%   ("Single stack")
+%%   - Linux by default, Windows Vista and later
+%% * Those which consider IPv6 and IPv4 to be completely separate things
+%%   ("Dual stack")
+%%   - OpenBSD, Windows XP / 2003, Linux if so configured
+%% * Those which do not support IPv6.
+%%   - Ancient/weird OSes, Linux if so configured
+
+%% How to reconfigure Linux to test this:
 %% Single stack (default):
 %% echo 0 > /proc/sys/net/ipv6/bindv6only
 %% Dual stack:
@@ -348,19 +350,32 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 %% add ipv6.disable=1 to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub then
 %% sudo update-grub && sudo reboot
 
-ipv6_status(Port) ->
-    %% Unfortunately it seems there is no way to detect single vs dual stack
-    %% apart from attempting to bind to the socket.
+%% This matters in (and only in) the case where the sysadmin (or the
+%% app descriptor) has only supplied a port and we wish to bind to
+%% "all addresses". This means different things depending on whether
+%% we're single or dual stack. On single stack binding to "::"
+%% implicitly includes all IPv4 addresses, and subsequently attempting
+%% to bind to "0.0.0.0" will fail. On dual stack, binding to "::" will
+%% only bind to IPv6 addresses, and we need another listener bound to
+%% "0.0.0.0" for IPv4. Finally, on IPv4-only systems we of course only
+%% want to bind to "0.0.0.0".
+
+%% Unfortunately it seems there is no way to detect single vs dual stack
+%% apart from attempting to bind to the socket.
+
+port_to_listeners(Port) ->
     IPv4 = [inet,  {ip, {0,0,0,0}}],
     IPv6 = [inet6, {ip, {0,0,0,0,0,0,0,0}}],
+    IPv4Listener = {"0.0.0.0", Port, inet},
+    IPv6Listener = {"::",      Port, inet6},
     case gen_tcp:listen(Port, IPv6) of
         {ok, LSock6} ->
             Status = case gen_tcp:listen(Port, IPv4) of
                          {ok, LSock4} ->
                              gen_tcp:close(LSock4),
-                             ipv6_dual_stack;
+                             [IPv4Listener, IPv6Listener];
                          {error, _} ->
-                             ipv6_single_stack
+                             [IPv6Listener]
                      end,
             gen_tcp:close(LSock6),
             Status;
@@ -368,5 +383,5 @@ ipv6_status(Port) ->
             %% It could be that there's a general problem binding to
             %% the port, but plow on; the error will get picked up
             %% later when we bind for real.
-            ipv4_only
+            [IPv4Listener]
     end.
