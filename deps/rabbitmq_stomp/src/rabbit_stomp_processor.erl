@@ -203,7 +203,7 @@ handle_frame(Command, _Frame, State) ->
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-cancel_subscription(missing, State) ->
+cancel_subscription(ConsumerTag, State) when ConsumerTag == missing ->
     error("Missing destination or id",
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
