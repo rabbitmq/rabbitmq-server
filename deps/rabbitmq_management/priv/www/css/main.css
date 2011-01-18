@@ -66,7 +66,10 @@ p.status-error { background: #f44; border: 2px solid #800; color: white; margin-
 p.warning, div.form-popup-warn { background: #ff8; border: 2px solid #880; }
 div.form-popup-info { background: #8f8; border: 2px solid #080; }
 div.form-popup-help { text-align: left !important; background: #f8f8f8; border: 2px solid #888; }
-p.status-error, p.warning, div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; }
+div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; max-width: 600px; }
+
+p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
+
 p#update-form { float: right; margin: 0; padding: 0; }
 
 .highlight, .highlight-right { width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
