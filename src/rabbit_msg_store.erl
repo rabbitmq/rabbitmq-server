@@ -173,9 +173,8 @@
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
-                              'ok' | deletion_thunk()).
--spec(delete_file/2 :: (non_neg_integer(), gc_state()) ->
-                            'ok' | deletion_thunk()).
+                              deletion_thunk()).
+-spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
 
 -endif.
 
