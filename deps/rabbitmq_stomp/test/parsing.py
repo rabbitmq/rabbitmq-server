@@ -78,7 +78,7 @@ class TestParsing(unittest.TestCase):
 
 
     @connect(['cd'])
-    def xtest_newline_after_nul_and_leading_nul(self):
+    def test_newline_after_nul_and_leading_nul(self):
         self.cd.sendall('\n'
                         '\x00SUBSCRIBE\n'
                         'destination:/exchange/amq.fanout\n'
@@ -96,7 +96,7 @@ class TestParsing(unittest.TestCase):
         self.match(resp, self.cd.recv(4096))
 
     @connect(['cd'])
-    def xtest_bad_command(self):
+    def test_bad_command(self):
         ''' Trigger an error message. '''
         self.cd.sendall('WRONGCOMMAND\n'
                         'destination:a\n'
@@ -113,7 +113,7 @@ class TestParsing(unittest.TestCase):
         self.match(resp, self.cd.recv(4096))
 
     @connect(['sd', 'cd1', 'cd2'])
-    def xtest_broadcast(self):
+    def test_broadcast(self):
         ''' Single message should be delivered to two consumers:
             amq.topic --routing_key--> first_queue --> first_connection
                      \--routing_key--> second_queue--> second_connection
@@ -147,7 +147,7 @@ class TestParsing(unittest.TestCase):
 
 
     @connect(['cd'])
-    def xtest_huge_message(self):
+    def test_huge_message(self):
         ''' Test sending/receiving huge (16MB) message. '''
         subscribe=( 'SUBSCRIBE\n'
                     'id: xxx\n'

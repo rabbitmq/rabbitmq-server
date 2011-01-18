@@ -45,6 +45,9 @@
 
 -define(CHUNK_SIZE_LIMIT, 32768).
 
+initial_state() ->
+    none.
+
 parse(Content, State) ->
     case State of
         {resume, Fun} ->
@@ -62,10 +65,10 @@ parse_command([$\n | Rest], Acc) ->
 parse_command([Ch | Rest], Acc) ->
     parse_command(Rest, [Ch | Acc]);
 parse_command([], Acc) ->
-    {resume, fun(Rest) -> parse_command(Rest, Acc) end}.
+    more(fun(Rest) -> parse_command(Rest, Acc) end).
 
 parse_headers([], Frame, HeaderAcc, KeyAcc) ->
-    {resume, fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end};
+    more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
 parse_headers([$\n | Rest], Frame, HeaderAcc, _KeyAcc) ->
     Remaining = case internal_integer_header(HeaderAcc, "content-length") of
                     {ok, ByteCount} -> ByteCount;
@@ -79,9 +82,9 @@ parse_headers([Ch | Rest], Frame, HeaderAcc, KeyAcc) ->
     parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
 
 parse_header_value([], Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    {resume, fun(Rest) ->
+    more(fun(Rest) ->
                      parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
-             end};
+             end);
 parse_header_value([$\n | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
     NewKey = lists:reverse(KeyAcc),
     NewHeaders = case lists:keysearch(NewKey, 1, HeaderAcc) of
@@ -101,10 +104,10 @@ parse_header_value([Ch | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
 
 parse_body([], Frame, Chunk, Chunks, ChunkSize, Remaining) ->
-    {resume,
+    more(
      fun(Rest) ->
              parse_body(Rest, Frame, Chunk, Chunks, ChunkSize, Remaining)
-     end};
+     end);
 parse_body([0 | Rest], Frame, Chunk, Chunks, _ChunkSize, 0) ->
     {ok, Frame#stomp_frame{body_iolist = finalize_body(Chunk, Chunks)}, Rest};
 parse_body([0 | Rest], Frame, Chunk, Chunks, _ChunkSize, unknown) ->
@@ -120,10 +123,22 @@ parse_body([Ch | Rest], Frame, Chunk, Chunks, ChunkSize, Remaining) ->
         accumulate_byte(Ch, Chunk, Chunks, ChunkSize),
     parse_body(Rest, Frame, NewChunk, NewChunks, NewChunkSize, NewRemaining).
 
+finalize_body(Chunk, Chunks) ->
+    lists:reverse(case Chunk of
+                      [] -> Chunks;
+                      _ -> [finalize_chunk(Chunk) | Chunks]
+                  end).
+
+finalize_chunk(Chunk) ->
+    list_to_binary(lists:reverse(Chunk)).
+
 accumulate_byte(Ch, Chunk, Chunks, ?CHUNK_SIZE_LIMIT) ->
     {[Ch], [finalize_chunk(Chunk) | Chunks], 0};
 accumulate_byte(Ch, Chunk, Chunks, ChunkSize) ->
     {[Ch | Chunk], Chunks, ChunkSize + 1}.
+
+more(Continuation) ->
+    {more, {resume, Continuation}}.
 
 default_value({ok, Value}, _DefaultValue) ->
     Value;
@@ -169,18 +184,6 @@ binary_header(F, K) ->
 
 binary_header(F, K, V) ->
     default_value(binary_header(F, K), V).
-
-finalize_body(Chunk, Chunks) ->
-    lists:reverse(case Chunk of
-                      [] -> Chunks;
-                      _ -> [finalize_chunk(Chunk) | Chunks]
-                  end).
-
-finalize_chunk(Chunk) ->
-    list_to_binary(lists:reverse(Chunk)).
-
-initial_state() ->
-    none.
 
 serialize(#stomp_frame{command = Command,
                        headers = Headers,

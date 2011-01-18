@@ -41,13 +41,13 @@ parse_command_only_test() ->
 parse_resume_mid_command_test() ->
     First = "COMM",
     Second = "AND\n\n\0",
-    Resume = {resume, _Fun} = parse(First),
+    {more, Resume} = parse(First),
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse(Second, Resume).
 
 parse_resume_mid_header_key_test() ->
     First = "COMMAND\nheade",
     Second = "r1:value1\n\n\0",
-    Resume = {resume, _Fun} = parse(First),
+    {more, Resume} = parse(First),
     {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
         parse(Second, Resume),
     ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
@@ -55,7 +55,7 @@ parse_resume_mid_header_key_test() ->
 parse_resume_mid_header_val_test() ->
     First = "COMMAND\nheader1:val",
     Second = "ue1\n\n\0",
-    Resume = {resume, _Fun} = parse(First),
+    {more, Resume} = parse(First),
     {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
         parse(Second, Resume),
     ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
