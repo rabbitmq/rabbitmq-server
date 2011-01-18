@@ -59,17 +59,18 @@
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
+-type(add_res() :: bind_res() | rabbit_misc:const(bind_res())).
+-type(bind_or_error() :: bind_res() | rabbit_types:error('binding_not_found')).
+-type(remove_res() :: bind_or_error() | rabbit_misc:const(bind_or_error())).
 
 -opaque(deletions() :: dict()).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
--spec(add/1 :: (rabbit_types:binding()) -> bind_res()).
--spec(remove/1 :: (rabbit_types:binding()) ->
-                       bind_res() | rabbit_types:error('binding_not_found')).
--spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
--spec(remove/2 :: (rabbit_types:binding(), inner_fun()) ->
-                       bind_res() | rabbit_types:error('binding_not_found')).
+-spec(add/1 :: (rabbit_types:binding()) -> add_res()).
+-spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
+-spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> add_res()).
+-spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> remove_res()).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
 -spec(list_for_source/1 ::
         (rabbit_types:binding_source()) -> bindings()).
