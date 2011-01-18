@@ -208,24 +208,34 @@ cancel_subscription(ConsumerTag, State) when ConsumerTag == missing ->
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
+cancel_subscription(ConsumerTag, State = #state{channel       = MainChannel,
+                                                subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error -> 
             error("No subscription found",
                   "UNSUBSCRIBE must refer to an existing subscription\n",
                   State);
-        {ok, {_DestHdr, Channel}} ->
-            case amqp_channel:call(Channel,
+        {ok, {_DestHdr, SubChannel}} ->
+            case amqp_channel:call(SubChannel,
                                    #'basic.cancel'{consumer_tag = ConsumerTag}) of
                 #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
-                    ok(State#state{subscriptions = dict:erase(ConsumerTag, Subs)});
+                    ensure_subchannel_closed(SubChannel, 
+                                             MainChannel, 
+                                             State#state{subscriptions = dict:erase(ConsumerTag, Subs)});
                 _ ->
                     error("Failed to cancel subscription",
                           "UNSUBSCRIBE on channel ~p for subscription ~p failed.\n",
-                          [Channel, ConsumerTag], 
+                          [SubChannel, ConsumerTag], 
                           State)
             end
     end.
+
+ensure_subchannel_closed(SubChannel, MainChannel, NewState) when SubChannel == MainChannel ->
+    ok(NewState);
+
+ensure_subchannel_closed(SubChannel, _MainChannel, NewState) ->
+    amqp_channel:close(SubChannel),
+    ok(NewState).
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
