@@ -208,11 +208,11 @@ cancel_subscription(missing, State) ->
 
 cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
-        error -> 
+        error ->
             error("No subscription found",
                   "UNSUBSCRIBE must refer to an existing subscription\n",
                   State);
-        {ok, {_DestHdr, Channel}} -> 
+        {ok, {_DestHdr, Channel}} ->
             ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                                            nowait       = true},
                            Channel,
@@ -513,7 +513,7 @@ amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
     {stop, amqp_death,
      send_error(atom_to_list(ErrorName),
-                format_message("~s~n", [Explanation]),
+                format_detail("~s~n", [Explanation]),
                 State)}.
 
 error(Message, Detail, State) ->
@@ -531,10 +531,10 @@ priv_error(Message, Detail, ServerPrivateDetail, State) ->
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, format_message(Format, Args),
+    priv_error(Message, format_detail(Format, Args),
                     ServerPrivateDetail, State).
 
-format_message(Format, Args) ->
+format_detail(Format, Args) ->
     lists:flatten(io_lib:format(Format, Args)).
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
@@ -566,7 +566,7 @@ send_error(Message, Detail, State) ->
                          {"content-type", "text/plain"}], Detail, State).
 
 send_error(Message, Format, Args, State) ->
-    send_error(Message, format_message(Format, Args), State).
+    send_error(Message, format_detail(Format, Args), State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks
