@@ -226,7 +226,7 @@ next_state(State) ->
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timer, [self()]),
+                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
     State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
     State.
@@ -795,7 +795,7 @@ prioritise_cast(Msg, _State) ->
         {notify_sent, _ChPid}                     -> 7;
         {unblock, _ChPid}                         -> 7;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
-        sync_timer                                -> 6;
+        sync_timeout                              -> 6;
         _                                         -> 0
     end.
 
@@ -1016,8 +1016,8 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
     noreply(maybe_run_queue_via_backing_queue(Fun, State));
 
-handle_cast(sync_timer, State = #q{backing_queue = BQ,
-                                   backing_queue_state = BQS}) ->
+handle_cast(sync_timeout, State = #q{backing_queue = BQ,
+                                     backing_queue_state = BQS}) ->
     noreply(State#q{backing_queue_state = BQ:idle_timeout(BQS),
                     sync_timer_ref = undefined});
 
