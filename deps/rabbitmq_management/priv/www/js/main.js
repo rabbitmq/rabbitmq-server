@@ -51,11 +51,11 @@ function update_vhosts() {
     var index = 0;
     for (var i = 0; i < vhosts.length; i++) {
         var vhost = vhosts[i].name;
-        select.options[i + 1] = new Option(vhost);
+        select.options[i + 1] = new Option(vhost, vhost);
         if (vhost == current_vhost) index = i + 1;
     }
     select.selectedIndex = index;
-    current_vhost = select.options[index].text;
+    current_vhost = select.options[index].value;
     store_pref('vhost', current_vhost);
 }
 
