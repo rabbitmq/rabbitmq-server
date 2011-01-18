@@ -373,6 +373,14 @@ home_dir() ->
         Other          -> Other
     end.
 
+config_files() ->
+    case init:get_argument(config) of
+        {ok, Files} -> [filename:absname(
+                          filename:rootname(File, ".config") ++ ".config") ||
+                           File <- Files];
+        error       -> []
+    end.
+
 %---------------------------------------------------------------------------
 
 print_banner() ->
@@ -398,14 +406,24 @@ print_banner() ->
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
+                {"config file(s)", config_files()},
                 {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},
                 {"erlang version", erlang:system_info(version)}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
-    Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
-    lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
+    Format = fun (K, V) ->
+                     io:format("~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
+                               [K, V])
+             end,
+    lists:foreach(fun ({"config file(s)" = K, []}) ->
+                          Format(K, "(none)");
+                      ({"config file(s)" = K, [V0 | Vs]}) ->
+                          Format(K, V0), [Format("", V) || V <- Vs];
+                      ({K, V}) ->
+                          Format(K, V)
+                  end, Settings),
     io:nl().
 
 ensure_working_log_handlers() ->
