@@ -294,10 +294,11 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
 
-    {{SX, SY}, State1} = ensure_heartbeats(Heartbeat, State),
+    {{SendTimeout, ReceiveTimeout}, State1} =
+        ensure_heartbeats(Heartbeat, State),
     ok("CONNECTED",
        [{"session", SessionId},
-        {"heartbeat", io_lib:format("~B,~B", [SX, SY])},
+        {"heartbeat", io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
         {"version", Version}],
        "",
        State1#state{session_id = SessionId,
