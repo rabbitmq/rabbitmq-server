@@ -1441,8 +1441,8 @@ msgs_written_to_disk(QPid, GuidSet, written) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
                                    State #vqstate {
                                      msgs_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MOD, GuidSet), UC) })
+                                         gb_sets:union(
+                                           MOD, gb_sets:intersection(UC, GuidSet)) })
             end).
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
@@ -1453,8 +1453,8 @@ msg_indices_written_to_disk(QPid, GuidSet) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
                                    State #vqstate {
                                      msg_indices_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MIOD, GuidSet), UC) })
+                                         gb_sets:union(
+                                           MIOD, gb_sets:intersection(UC, GuidSet)) })
             end).
 
 %%----------------------------------------------------------------------------
