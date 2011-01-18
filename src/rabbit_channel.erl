@@ -71,8 +71,6 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
--define(NEXT_STATE_DEFAULT_FLAGS, [ensure_stats_timer, send_confirms]).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -282,13 +280,12 @@ handle_cast({deliver, ConsumerTag, AckRequired,
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    noreply(?NEXT_STATE_DEFAULT_FLAGS -- [ensure_stats_timer],
+    noreply([ensure_stats_timer],
             State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
-    noreply(?NEXT_STATE_DEFAULT_FLAGS -- [send_confirms], State1,
-            case C of [] -> hibernate; _ -> 0 end).
+    noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
 
 handle_info(timeout, State) ->
     noreply(State);
@@ -333,30 +330,26 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) ->
-    reply(Reply, ?NEXT_STATE_DEFAULT_FLAGS, NewState).
+reply(Reply, NewState) -> reply(Reply, [], NewState).
 
-reply(Reply, Flags, NewState) ->
-    reply(Reply, Flags, NewState, hibernate).
+reply(Reply, Mask, NewState) -> reply(Reply, Mask, NewState, hibernate).
 
-reply(Reply, Flags, NewState, Timeout) ->
-    {reply, Reply, next_state(Flags, NewState), Timeout}.
+reply(Reply, Mask, NewState, Timeout) ->
+    {reply, Reply, next_state(Mask, NewState), Timeout}.
 
-noreply(NewState) ->
-    noreply(?NEXT_STATE_DEFAULT_FLAGS, NewState).
+noreply(NewState) -> noreply([], NewState).
 
-noreply(Flags, NewState) ->
-    noreply(Flags, NewState, hibernate).
+noreply(Mask, NewState) -> noreply(Mask, NewState, hibernate).
 
-noreply(Flags, NewState, Timeout) ->
-    {noreply, next_state(Flags, NewState), Timeout}.
+noreply(Mask, NewState, Timeout) ->
+    {noreply, next_state(Mask, NewState), Timeout}.
 
-next_state([], State) ->
-    State;
-next_state([ensure_stats_timer | Flags], State) ->
-    next_state(Flags, ensure_stats_timer(State));
-next_state([send_confirms | Flags], State) ->
-    next_state(Flags, send_confirms(State)).
+next_state(Mask, State) ->
+    lists:foldl(fun next_state1/2, State,
+                [ensure_stats_timer, send_confirms] -- Mask).
+
+next_state1(ensure_stats_timer, State) -> ensure_stats_timer(State);
+next_state1(send_confirms,      State) -> send_confirms(State).
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
