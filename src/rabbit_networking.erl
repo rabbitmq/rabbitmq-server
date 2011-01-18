@@ -144,25 +144,22 @@ start() ->
 
 getaddr(Host, Family) ->
     case inet_parse:address(Host) of
-        {ok, IPAddress} -> {IPAddress, resolve_family(IPAddress, Family)};
+        {ok, IPAddress} -> [{IPAddress, resolve_family(IPAddress, Family)}];
         {error, _}      -> gethostaddr(Host, Family)
     end.
 
 gethostaddr(Host, auto) ->
-    case inet:getaddr(Host, inet6) of
-        {ok, IPAddress6} ->
-            {IPAddress6, inet6};
-        {error, Reason6} ->
-            case inet:getaddr(Host, inet) of
-                {ok, IPAddress4} -> {IPAddress4, inet};
-                {error, Reason4} -> host_lookup_error(
-                                      Host, {{ipv6, Reason6}, {ipv4, Reason4}})
-            end
+    Lookups = [{Family, inet:getaddr(Host, Family)} || Family <- [inet, inet6]],
+    case [{IP, Family} || {Family, {ok, IP}} <- Lookups] of
+        [] ->
+            host_lookup_error(Host, Lookups);
+        IPs ->
+            IPs
     end;
 
 gethostaddr(Host, Family) ->
     case inet:getaddr(Host, Family) of
-        {ok, IPAddress} -> {IPAddress, Family};
+        {ok, IPAddress} -> [{IPAddress, Family}];
         {error, Reason} -> host_lookup_error(Host, Reason)
     end.
 
@@ -187,14 +184,14 @@ check_tcp_listener_address(NamePrefix, {Host, Port}) ->
     check_tcp_listener_address(NamePrefix, {Host, Port, auto});
 
 check_tcp_listener_address(NamePrefix, {Host, Port, Family0}) ->
-    {IPAddress, Family} = getaddr(Host, Family0),
     if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
        true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
                                       [Port]),
                throw({error, {invalid_port, Port}})
     end,
-    Name = rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-    [{IPAddress, Port, Family, Name}].
+    [{IPAddress, Port, Family,
+      rabbit_misc:tcp_name(NamePrefix, IPAddress, Port)} ||
+        {IPAddress, Family} <- getaddr(Host, Family0)].
 
 check_tcp_listener_address_auto(NamePrefix, Port) ->
     case ipv6_status(Port) of
