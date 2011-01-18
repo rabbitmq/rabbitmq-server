@@ -100,9 +100,9 @@
 -type(ack() :: seq_id() | 'blank_ack').
 
 -type(s() :: #s { q :: queue(),
-		  next_seq_id :: seq_id(),
-		  pending_ack_dict :: dict(),
-		  on_sync :: sync() }).
+                  next_seq_id :: seq_id(),
+                  pending_ack_dict :: dict(),
+                  on_sync :: sync() }).
 -type(state() :: s()).
 
 -type(m() :: #m { msg :: rabbit_types:basic_message(),
@@ -112,7 +112,7 @@
 
 -type(tx() :: #tx { pending_messages :: [{rabbit_types:basic_message(),
                                           rabbit_types:message_properties()}],
-                    pending_acks :: [ack()] }).
+                    pending_acks :: [seq_id()] }).
 
 -type(sync() :: #sync { acks :: [seq_id()],
                         pubs :: [{message_properties_transformer(),
@@ -175,9 +175,9 @@ stop() ->
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~p, _, _) ->", [QueueName]),
     Result = #s { q = queue:new(),
-		  next_seq_id = 0,
-		  pending_ack_dict = dict:new(),
-		  on_sync = #sync { acks = [], pubs = [], funs = [] } },
+                  next_seq_id = 0,
+                  pending_ack_dict = dict:new(),
+                  on_sync = #sync { acks = [], pubs = [], funs = [] } },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -348,7 +348,7 @@ internal_fetch(AckRequired,
                  msg = Msg,
                  is_delivered = IsDelivered },
                S = #s { q = Q }) ->
-    {AckTag, S1} =
+    {Ack, S1} =
         case AckRequired of
             true ->
                 {SeqId,
@@ -356,30 +356,31 @@ internal_fetch(AckRequired,
                    M #m { is_delivered = true }, S)};
             false -> {blank_ack, S}
         end,
-    {{Msg, IsDelivered, AckTag, queue:len(Q)}, S1}.
+    {{Msg, IsDelivered, Ack, queue:len(Q)}, S1}.
 
 %%----------------------------------------------------------------------------
-%% ack/2 acknowledges messages. Acktags supplied are for messages
-%% which can now be forgotten about. Must return 1 guid per Ack, in
-%% the same order as Acks.
+%% ack/2 acknowledges messages names by SeqIds. Maps SeqIds to guids
+%% upon return.
 %%
 %% This function should be called only from outside this module.
 %%
+%% The following spec is wrong, as a blank_ack cannot be passed back in.
+%%
 %% -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
-ack(AckTags, S) ->
+ack(SeqIds, S) ->
     rabbit_log:info("ack("),
-    rabbit_log:info("~p,", [AckTags]),
+    rabbit_log:info("~p,", [SeqIds]),
     rabbit_log:info(" ~p) ->", [S]),
-    {Guids, S1} = internal_ack(AckTags, S),
+    {Guids, S1} = internal_ack(SeqIds, S),
     Result = {Guids, S1},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
--spec(internal_ack/2 :: ([ack()], s()) -> {[rabbit_guid:guid()], s()}).
+-spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
 
-internal_ack(AckTags, S) ->
-    internal_ack(fun (_, Si) -> Si end, AckTags, S).
+internal_ack(SeqIds, S) ->
+    internal_ack(fun (_, Si) -> Si end, SeqIds, S).
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction.
@@ -406,12 +407,14 @@ tx_publish(Txn, Msg, Props, S) ->
 %%
 %% This function should be called only from outside this module.
 %%
+%% The following spec is wrong, as a blank_ack cannot be passed back in.
+%%
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
-tx_ack(Txn, AckTags, S) ->
-    rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, AckTags, S]),
-    Tx = #tx { pending_acks = Acks } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_acks = lists:append(AckTags, Acks) }),
+tx_ack(Txn, SeqIds, S) ->
+    rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, SeqIds, S]),
+    Tx = #tx { pending_acks = SeqIds0 } = lookup_tx(Txn),
+    store_tx(Txn, Tx #tx { pending_acks = lists:append(SeqIds, SeqIds0) }),
     Result = S,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -422,13 +425,15 @@ tx_ack(Txn, AckTags, S) ->
 %%
 %% This function should be called only from outside this module.
 %%
+%% The following spec is wrong, as a blank_ack cannot be passed back in.
+%%
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
 tx_rollback(Txn, S) ->
     rabbit_log:info("tx_rollback(~p, ~p) ->", [Txn, S]),
-    #tx { pending_acks = AckTags } = lookup_tx(Txn),
+    #tx { pending_acks = SeqIds } = lookup_tx(Txn),
     erase_tx(Txn),
-    Result = {AckTags, S},
+    Result = {SeqIds, S},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -438,6 +443,8 @@ tx_rollback(Txn, S) ->
 %% possibility of commit coalescing.
 %%
 %% This function should be called only from outside this module.
+%%
+%% The following spec is wrong, blank_acks cannot be returned.
 %%
 %% -spec(tx_commit/4 ::
 %%         (rabbit_types:txn(),
@@ -449,11 +456,9 @@ tx_rollback(Txn, S) ->
 tx_commit(Txn, F, PropsF, S) ->
     rabbit_log:info(
       "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, S]),
-    #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
+    #tx { pending_acks = SeqIds, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
-    Result =
-        {AckTags,
-         internal_tx_commit_store_state(Pubs, AckTags, F, PropsF, S)},
+    Result = {SeqIds, internal_tx_commit_state(Pubs, SeqIds, F, PropsF, S)},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -463,17 +468,19 @@ tx_commit(Txn, F, PropsF, S) ->
 %%
 %% This function should be called only from outside this module.
 %%
+%% The following spec is wrong, as blank_acks cannot be passed back in.
+%%
 %% -spec(requeue/3 ::
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
-requeue(AckTags, PropsF, S) ->
-    rabbit_log:info("requeue(~p, ~p, ~p) ->", [AckTags, PropsF, S]),
+requeue(SeqIds, PropsF, S) ->
+    rabbit_log:info("requeue(~p, ~p, ~p) ->", [SeqIds, PropsF, S]),
     {_, S1} =
         internal_ack(
           fun (#m { msg = Msg, props = Props }, Si) ->
                   publish_state(Msg, PropsF(Props), true, Si)
           end,
-          AckTags,
+          SeqIds,
           S),
     Result = S1,
     rabbit_log:info(" -> ~p", [Result]),
@@ -552,7 +559,7 @@ ram_duration(S) ->
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
 needs_idle_timeout(#s { on_sync =
-			    #sync { acks = [], pubs = [], funs = [] } }) ->
+                            #sync { acks = [], pubs = [], funs = [] } }) ->
     rabbit_log:info("needs_idle_timeout(_) ->"),
     Result = false,
     rabbit_log:info(" -> ~p", [Result]),
@@ -644,31 +651,30 @@ erase_tx(Txn) -> erase({txn, Txn}), ok.
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
--spec internal_tx_commit_store_state([rabbit_types:basic_message()],
-                                     [seq_id()],
-                                     fun (() -> any()),
-                                     message_properties_transformer(),
-                                     s()) ->
-                                            s().
+-spec internal_tx_commit_state([rabbit_types:basic_message()],
+                               [seq_id()],
+                               fun (() -> any()),
+                               message_properties_transformer(),
+                               s()) ->
+                                      s().
 
-internal_tx_commit_store_state(Pubs,
-                               AckTags,
-                               F,
-                               PropsF,
-                               S = #s { on_sync = OnSync }) ->
-    (tx_commit_state(
-       S #s { on_sync = #sync { acks = AckTags,
-				pubs = [{PropsF, Pubs}],
-				funs = [F] }}))
+internal_tx_commit_state(Pubs,
+                         SeqIds,
+                         F,
+                         PropsF,
+                         S = #s { on_sync = OnSync }) ->
+    (tx_commit_state(S #s { on_sync = #sync { acks = SeqIds,
+                                              pubs = [{PropsF, Pubs}],
+                                              funs = [F] }}))
         #s { on_sync = OnSync }.
 
 -spec tx_commit_state(s()) -> s().
 
 tx_commit_state(S = #s { on_sync = #sync { acks = [], pubs = [], funs = [] } }) -> S;
 tx_commit_state(S = #s {
-		  on_sync = #sync { acks = SAcks,
-				    pubs = SPubs,
-				    funs = SFs }}) ->
+                  on_sync = #sync { acks = SAcks,
+                                    pubs = SPubs,
+                                    funs = SFs }}) ->
     {_, S1} = internal_ack(SAcks, S),
     {_, S2} =
         lists:foldl(
@@ -723,7 +729,7 @@ remove_pending_acks_state(S = #s { pending_ack_dict = PAD }) ->
                           {[rabbit_guid:guid()], s()}.
 
 internal_ack(_, [], S) -> {[], S};
-internal_ack(F, AckTags, S) ->
+internal_ack(F, SeqIds, S) ->
     {AllGuids, S1} =
         lists:foldl(
           fun (SeqId, {Acc, Si = #s { pending_ack_dict = PAD }}) ->
@@ -732,10 +738,9 @@ internal_ack(F, AckTags, S) ->
                    F(M, Si #s { pending_ack_dict = dict:erase(SeqId, PAD)})}
           end,
           {[], S},
-          AckTags),
+          SeqIds),
     {lists:reverse(AllGuids), S1}.
 
 -spec m_guid(m()) -> rabbit_guid:guid().
 
 m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
-
