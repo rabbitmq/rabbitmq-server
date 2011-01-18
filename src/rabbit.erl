@@ -418,7 +418,7 @@ print_banner() ->
                                [K, V])
              end,
     lists:foreach(fun ({"config file(s)" = K, []}) ->
-                          Format(K, "");
+                          Format(K, "(none)");
                       ({"config file(s)" = K, [V0 | Vs]}) ->
                           Format(K, V0), [Format("", V) || V <- Vs];
                       ({K, V}) ->
