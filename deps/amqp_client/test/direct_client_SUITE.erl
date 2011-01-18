@@ -101,7 +101,7 @@ hard_error_test() ->
     negative_test_util:hard_error_test(new_connection()).
 
 bogus_rpc_test() ->
-  negative_test_util:bogus_rpc_test(new_connection()).
+    negative_test_util:bogus_rpc_test(new_connection()).
 
 channel_death_test() ->
     negative_test_util:channel_death_test(new_connection()).
@@ -137,3 +137,4 @@ test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
+
