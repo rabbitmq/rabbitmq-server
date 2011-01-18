@@ -6,8 +6,9 @@ import threading
 
 class BaseTest(unittest.TestCase):
 
-   def create_connection(self):
-       conn = stomp.Connection(user="guest", passcode="guest")
+   def create_connection(self, version=None, heartbeat=None):
+       conn = stomp.Connection(user="guest", passcode="guest",
+                               version=version, heartbeat=heartbeat)
        conn.start()
        conn.connect()
        return conn
@@ -48,31 +49,58 @@ class BaseTest(unittest.TestCase):
         self.assertEquals("foo", msg['message'])
         self.assertEquals(dest, msg['headers']['destination'])
 
+   def assertListener(self, errMsg, numMsgs=0, numErrs=0, numRcts=0, timeout=3):
+        if numMsgs + numErrs + numRcts > 0:
+            self.assertTrue(self.listener.await(timeout), errMsg + " (#awaiting)")
+        else:
+            self.assertFalse(self.listener.await(timeout), errMsg + " (#awaiting)")
+        self.assertEquals(numMsgs, len(self.listener.messages), errMsg + " (#messages)")
+        self.assertEquals(numErrs, len(self.listener.errors), errMsg + " (#errors)")
+        self.assertEquals(numRcts, len(self.listener.receipts), errMsg + " (#receipts)")
+
+   def assertListenerAfter(self, verb, errMsg="", numMsgs=0, numErrs=0, numRcts=0, timeout=3):
+        num = numMsgs + numErrs + numRcts
+        self.listener.reset(num if num>0 else 1)
+        verb()
+        self.assertListener(errMsg=errMsg, numMsgs=numMsgs, numErrs=numErrs, numRcts=numRcts, timeout=timeout)
 
 class WaitableListener(object):
 
     def __init__(self):
+        self.debug = False
+        if self.debug:
+            print '(listener) init'
         self.messages = []
         self.errors = []
         self.receipts = []
         self.latch = Latch(1)
 
-
     def on_receipt(self, headers, message):
+        if self.debug:
+            print '(on_message) message:', message, 'headers:', headers
         self.receipts.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def on_error(self, headers, message):
+        if self.debug:
+            print '(on_message) message:', message, 'headers:', headers
         self.errors.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def on_message(self, headers, message):
+        if self.debug:
+            print '(on_message) message:', message, 'headers:', headers
         self.messages.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
     def reset(self,count=1):
+        if self.debug:
+            print '(reset listener) #messages:', len(self.messages),
+            print '#errors', len(self.errors),
+            print '#receipts', len(self.receipts), 'Now expecting:', count
         self.messages = []
         self.errors = []
+        self.receipts = []
         self.latch = Latch(count)
 
     def await(self, timeout=10):
@@ -96,8 +124,11 @@ class Latch(object):
    def await(self, timeout=None):
       try:
          self.cond.acquire()
-         self.cond.wait(timeout)
-         return self.count == 0
+         if self.count == 0:
+            return True
+         else:
+            self.cond.wait(timeout)
+            return self.count == 0
       finally:
          self.cond.release()
 

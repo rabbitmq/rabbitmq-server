@@ -18,6 +18,8 @@ def connect(cnames):
         '\n\0')
     resp = ('CONNECTED\n'
             'session:(.*)\n'
+            'heartbeat:0,0\n'
+            'version:1.0\n'
             '\n\x00')
     def w(m):
         @functools.wraps(m)
@@ -103,6 +105,7 @@ class TestParsing(unittest.TestCase):
         resp = ('ERROR\n'
                 'message:Bad command\n'
                 'content-type:text/plain\n'
+                'version:1.0,1.1\n'
                 'content-length:41\n'
                 '\n'
                 'Could not interpret command WRONGCOMMAND\n'
