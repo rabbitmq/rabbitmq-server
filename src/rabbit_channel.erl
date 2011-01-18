@@ -71,6 +71,8 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
+-define(NEXT_STATE_DEFAULT_FLAGS, [ensure_stats_timer, send_confirms]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -280,13 +282,13 @@ handle_cast({deliver, ConsumerTag, AckRequired,
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-     hibernate};
+    noreply(?NEXT_STATE_DEFAULT_FLAGS -- [ensure_stats_timer],
+            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
-    {noreply, State1, case C of [] -> hibernate; _ -> 0 end}.
+    noreply(?NEXT_STATE_DEFAULT_FLAGS -- [send_confirms], State1,
+            case C of [] -> hibernate; _ -> 0 end).
 
 handle_info(timeout, State) ->
     noreply(State);
@@ -332,10 +334,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------------------------------------------------------
 
 reply(Reply, NewState) ->
-    {reply, Reply, ensure_stats_timer(send_confirms(NewState)), hibernate}.
+    reply(Reply, ?NEXT_STATE_DEFAULT_FLAGS, NewState).
+
+reply(Reply, Flags, NewState) ->
+    reply(Reply, Flags, NewState, hibernate).
+
+reply(Reply, Flags, NewState, Timeout) ->
+    {reply, Reply, next_state(Flags, NewState), Timeout}.
 
 noreply(NewState) ->
-    {noreply, ensure_stats_timer(send_confirms(NewState)), hibernate}.
+    noreply(?NEXT_STATE_DEFAULT_FLAGS, NewState).
+
+noreply(Flags, NewState) ->
+    noreply(Flags, NewState, hibernate).
+
+noreply(Flags, NewState, Timeout) ->
+    {noreply, next_state(Flags, NewState), Timeout}.
+
+next_state([], State) ->
+    State;
+next_state([ensure_stats_timer | Flags], State) ->
+    next_state(Flags, ensure_stats_timer(State));
+next_state([send_confirms | Flags], State) ->
+    next_state(Flags, send_confirms(State)).
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
