@@ -491,10 +491,9 @@ on_node_down(Node) ->
       end,
       fun (Deletions, Tx) ->
               rabbit_binding:process_deletions(
-                lists:foldl(
-                  fun rabbit_binding:combine_deletions/2,
-                  rabbit_binding:new_deletions(),
-                  Deletions),
+                lists:foldl(fun rabbit_binding:combine_deletions/2,
+                            rabbit_binding:new_deletions(),
+                            Deletions),
                 Tx)
       end).
 
