@@ -331,7 +331,7 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 %%--------------------------------------------------------------------
 
 %% There are three kinds of machine (for our purposes).
-
+%%
 %% * Those which treat IPv4 addresses as a special kind of IPv6 address
 %%   ("Single stack")
 %%   - Linux by default, Windows Vista and later
@@ -340,7 +340,7 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 %%   - OpenBSD, Windows XP / 2003, Linux if so configured
 %% * Those which do not support IPv6.
 %%   - Ancient/weird OSes, Linux if so configured
-
+%%
 %% How to reconfigure Linux to test this:
 %% Single stack (default):
 %% echo 0 > /proc/sys/net/ipv6/bindv6only
@@ -349,7 +349,7 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 %% IPv4 only:
 %% add ipv6.disable=1 to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub then
 %% sudo update-grub && sudo reboot
-
+%%
 %% This matters in (and only in) the case where the sysadmin (or the
 %% app descriptor) has only supplied a port and we wish to bind to
 %% "all addresses". This means different things depending on whether
@@ -359,10 +359,9 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 %% only bind to IPv6 addresses, and we need another listener bound to
 %% "0.0.0.0" for IPv4. Finally, on IPv4-only systems we of course only
 %% want to bind to "0.0.0.0".
-
+%%
 %% Unfortunately it seems there is no way to detect single vs dual stack
 %% apart from attempting to bind to the socket.
-
 port_to_listeners(Port) ->
     IPv4 = [inet,  {ip, {0,0,0,0}}],
     IPv6 = [inet6, {ip, {0,0,0,0,0,0,0,0}}],
@@ -371,11 +370,9 @@ port_to_listeners(Port) ->
     case gen_tcp:listen(Port, IPv6) of
         {ok, LSock6} ->
             Status = case gen_tcp:listen(Port, IPv4) of
-                         {ok, LSock4} ->
-                             gen_tcp:close(LSock4),
-                             [IPv4Listener, IPv6Listener];
-                         {error, _} ->
-                             [IPv6Listener]
+                         {ok, LSock4} -> gen_tcp:close(LSock4),
+                                         [IPv4Listener, IPv6Listener];
+                         {error, _}   -> [IPv6Listener]
                      end,
             gen_tcp:close(LSock6),
             Status;
