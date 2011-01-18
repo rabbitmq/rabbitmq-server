@@ -25,7 +25,7 @@ diff -r 16a4000624a7 stomp/connect.py
 
          self.__socket = None
          self.__socket_semaphore = threading.BoundedSemaphore(1)
-@@ -449,2 +457,2 @@
+@@ -449,6 +457,16 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
 

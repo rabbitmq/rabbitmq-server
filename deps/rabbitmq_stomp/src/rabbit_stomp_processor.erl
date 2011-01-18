@@ -132,7 +132,7 @@ process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
               {'EXIT',
                {{server_initiated_close, ReplyCode, Explanation}, _}} ->
-                  explain_amqp_death(ReplyCode, Explanation, State);
+                  amqp_death(ReplyCode, Explanation, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error\n",
                               Reason, State);
@@ -163,7 +163,7 @@ handle_frame("DISCONNECT", _Frame, State) ->
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
 
-handle_frame("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
+handle_frame("UNSUBSCRIBE", Frame, State) ->
     ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
                       {ok, IdStr} ->
                           list_to_binary("T_" ++ IdStr);
@@ -176,17 +176,7 @@ handle_frame("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
                                   missing
                           end
                   end,
-    if
-        ConsumerTag == missing ->
-            error("Missing destination or id",
-                  "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
-                  State);
-        true ->
-            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                           nowait       = true},
-                           State#state{subscriptions =
-                                           dict:erase(ConsumerTag, Subs)}))
-    end;
+    cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
@@ -244,6 +234,29 @@ ack_action(Command, Frame,
                   "~p must include a 'message-id' header\n",
                   [Command],
                   State)
+    end.
+
+%%----------------------------------------------------------------------------
+%% Internal helpers for processing frames callbacks
+%%----------------------------------------------------------------------------
+
+cancel_subscription(missing, State) ->
+    error("Missing destination or id",
+          "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
+          State);
+
+cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
+    case dict:find(ConsumerTag, Subs) of
+        error ->
+            error("No subscription found",
+                  "UNSUBSCRIBE must refer to an existing subscription\n",
+                  State);
+        {ok, #subscription{channel = Channel}} ->
+            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
+                                           nowait       = true},
+                           Channel,
+                           State#state{subscriptions =
+                                           dict:erase(ConsumerTag, Subs)}))
     end.
 
 with_destination(Command, Frame, State, Fun) ->
@@ -388,18 +401,27 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
-   #subscription{dest_hdr = Destination} = dict:fetch(ConsumerTag, Subs),
+    case dict:find(ConsumerTag, Subs) of
+        {ok, #subscription{dest_hdr = Destination}} ->
+            send_frame(
+              "MESSAGE",
+              rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+              Body,
+              State);
+        error ->
+            send_error("Subscription not found",
+                       "There is no current subscription '~s'.",
+                       [ConsumerTag],
+                       State)
+    end.
 
-   send_frame(
-     "MESSAGE",
-     rabbit_stomp_util:message_headers(Destination, SessionId,
-                                       Delivery, Properties),
-     Body,
-     State).
-
-send_method(Method, State = #state{channel = Channel}) ->
+send_method(Method, Channel, State) ->
     amqp_channel:call(Channel, Method),
     State.
+
+send_method(Method, State = #state{channel = Channel}) ->
+    send_method(Method, Channel, State).
 
 send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
@@ -591,10 +613,12 @@ ok(Command, Headers, BodyFragments, State) ->
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
 
-explain_amqp_death(ReplyCode, Explanation, State) ->
+amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
-    error(atom_to_list(ErrorName), "~s\n",
-               [Explanation], State).
+    {stop, amqp_death,
+     send_error(atom_to_list(ErrorName),
+                format_detail("~s~n", [Explanation]),
+                State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
@@ -611,10 +635,11 @@ priv_error(Message, Detail, ServerPrivateDetail, State) ->
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, lists:flatten(io_lib:format(Format, Args)),
+    priv_error(Message, format_detail(Format, Args),
                     ServerPrivateDetail, State).
 
-
+format_detail(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
 %%----------------------------------------------------------------------------
@@ -645,6 +670,9 @@ send_error(Message, Detail, State) ->
                          {"content-type", "text/plain"},
                          {"version", string:join(?SUPPORTED_VERSIONS, ",")}],
                          Detail, State).
+
+send_error(Message, Format, Args, State) ->
+    send_error(Message, format_detail(Format, Args), State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks

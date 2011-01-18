@@ -33,6 +33,8 @@ class TestExchange(base.BaseTest):
         self.assertEquals("no exchange 'does.not.exist' in vhost '/'\n",
                           err['message'])
 
+        self.assertFalse(self.conn.is_connected())
+
     def __test_exchange_send_rec(self, exchange, route = None):
         dest = "/exchange/" + exchange
         if route != None:
