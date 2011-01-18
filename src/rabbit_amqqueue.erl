@@ -69,6 +69,8 @@
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
+-type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
+
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
@@ -147,7 +149,7 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found').
+        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).

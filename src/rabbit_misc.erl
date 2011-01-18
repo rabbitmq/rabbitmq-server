@@ -75,10 +75,11 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1]).
+-export_type([resource_name/0, thunk/1, const/1]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
+-type(const(T) :: fun((any()) -> T)).
 -type(resource_name() :: binary()).
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
@@ -204,7 +205,7 @@
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/1 :: (any()) -> 'ok').
--spec(const/1 :: (A) -> fun ((_) -> A)).
+-spec(const/1 :: (A) -> const(A)).
 
 -endif.
 
