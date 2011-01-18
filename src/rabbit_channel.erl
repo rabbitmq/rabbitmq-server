@@ -287,8 +287,10 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
 handle_cast({confirm, MsgSeqNos, From},
             State= #ch{stats_timer = StatsTimer}) ->
     case rabbit_event:stats_level(StatsTimer) of
-        fine -> {noreply, group_and_confirm(MsgSeqNos, From, State)};
-        _    -> {noreply, nogroup_confirm(MsgSeqNos, From, State)}
+        fine ->
+            {noreply, group_and_confirm(MsgSeqNos, From, State), hibernate};
+        _    ->
+            {noreply, nogroup_confirm(MsgSeqNos, From, State), hibernate}
     end.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
@@ -483,8 +485,7 @@ remove_queue_unconfirmed({MsgSeqNo, QX, Next}, QPid, Acc) ->
 group_and_confirm([], _QPid, State) ->
     State;
 group_and_confirm(MsgSeqNos, QPid, State) ->
-    {EMs, UC1} =
-        take_from_unconfirmed(MsgSeqNos, QPid, State),
+    {EMs, UC1} = take_from_unconfirmed(MsgSeqNos, QPid, State),
     confirm_grouped(EMs, State#ch{unconfirmed=UC1}).
 
 confirm_grouped(EMs, State) ->
@@ -591,6 +592,12 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                   none -> State2;
                   _    -> add_tx_participants(DeliveredQPids, State2)
               end};
+
+handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
+                            multiple     = Multiple,
+                            requeue      = Requeue},
+              _, State) ->
+    reject(DeliveryTag, Requeue, Multiple, State);
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
@@ -777,14 +784,8 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
-              _, State = #ch{unacked_message_q = UAMQ}) ->
-    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
-    ok = fold_per_queue(
-           fun (QPid, MsgIds, ok) ->
-                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
-           end, ok, Acked),
-    ok = notify_limiter(State#ch.limiter_pid, Acked),
-    {noreply, State#ch{unacked_message_q = Remaining}};
+              _, State) ->
+    reject(DeliveryTag, Requeue, false, State);
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
@@ -1101,6 +1102,15 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                            exchange    = ExchangeName#resource.name,
                            routing_key = RoutingKey},
            Content).
+
+reject(DeliveryTag, Requeue, Multiple, State = #ch{unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
+    ok = fold_per_queue(
+           fun (QPid, MsgIds, ok) ->
+                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+           end, ok, Acked),
+    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    {noreply, State#ch{unacked_message_q = Remaining}}.
 
 ack_record(DeliveryTag, ConsumerTag,
            _MsgStruct = {_QName, QPid, MsgId, _Redelivered, _Msg}) ->
