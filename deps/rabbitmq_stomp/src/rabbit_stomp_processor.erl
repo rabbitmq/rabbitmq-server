@@ -51,7 +51,7 @@
 %% Public API
 %%----------------------------------------------------------------------------
 start_link(Sock, StartHeartbeatFun) ->
-    gen_server:start_link(?MODULE, [Sock,StartHeartbeatFun], []).
+    gen_server:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
 
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server:cast(Pid, {Command, Frame}).
