@@ -306,12 +306,12 @@ dropwhile(Pred, State) ->
 
 dropwhile_state(Pred, State) ->
     internal_queue_out(
-      fun (M = #m { props = Props }, S = #state { q = Q }) ->
+      fun (M = #m { props = Props }, Si = #state { q = Q }) ->
               case Pred(Props) of
                   true ->
-                      {_, S1} = internal_fetch(false, M, S),
-                      dropwhile_state(Pred, S1);
-                  false -> {ok, S #state {q = queue:in_r(M, Q) }}
+                      {_, Si1} = internal_fetch(false, M, Si),
+                      dropwhile_state(Pred, Si1);
+                  false -> {ok, Si #state {q = queue:in_r(M, Q) }}
               end
       end,
       State).
@@ -328,7 +328,7 @@ fetch(AckRequired, State) ->
     rabbit_log:info("fetch(~p, ~p) ->", [AckRequired, State]),
     Result =
         internal_queue_out(
-          fun (M, S) -> internal_fetch(AckRequired, M, S) end, State),
+          fun (M, Si) -> internal_fetch(AckRequired, M, Si) end, State),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -381,7 +381,7 @@ ack(AckTags, State) ->
 -spec(internal_ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 internal_ack(AckTags, State) ->
-    internal_ack(fun (_, S) -> S end, AckTags, State).
+    internal_ack(fun (_, Si) -> Si end, AckTags, State).
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction.
@@ -472,8 +472,8 @@ requeue(AckTags, PropsF, State) ->
     rabbit_log:info("requeue(~p, ~p, ~p) ->", [AckTags, PropsF, State]),
     {_, State1} =
         internal_ack(
-          fun (#m { msg = Msg, props = Props }, S) ->
-                  publish_state(Msg, PropsF(Props), true, S)
+          fun (#m { msg = Msg, props = Props }, Si) ->
+                  publish_state(Msg, PropsF(Props), true, Si)
           end,
           AckTags,
           State),
@@ -675,8 +675,8 @@ tx_commit_index_state(State = #state {
     {_, State1} = internal_ack(SAcks, State),
     {_, State2} =
         lists:foldl(
-          fun ({Msg, Props}, {SeqIds, S}) ->
-                  {SeqIds, publish_state(Msg, Props, false, S)}
+          fun ({Msg, Props}, {SeqIds, Si}) ->
+                  {SeqIds, publish_state(Msg, Props, false, Si)}
           end,
           {[], State1},
           [{Msg, F(Props)} ||
@@ -729,10 +729,11 @@ internal_ack(_, [], State) -> {[], State};
 internal_ack(F, AckTags, State) ->
     {AllGuids, State1} =
         lists:foldl(
-          fun (SeqId, {Acc, S = #state { pending_ack_dict = PAD }}) ->
+          fun (SeqId, {Acc, Si = #state { pending_ack_dict = PAD }}) ->
                   M = dict:fetch(SeqId, PAD),
                   {[m_guid(M) | Acc],
-                   F(M, S #state { pending_ack_dict = dict:erase(SeqId, PAD)})}
+                   F(M, 
+		     Si #state { pending_ack_dict = dict:erase(SeqId, PAD)})}
           end,
           {[], State},
           AckTags),
