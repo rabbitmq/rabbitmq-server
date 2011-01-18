@@ -345,11 +345,9 @@ noreply(Mask, NewState, Timeout) ->
     {noreply, next_state(Mask, NewState), Timeout}.
 
 next_state(Mask, State) ->
-    lists:foldl(fun next_state1/2, State,
-                [ensure_stats_timer, send_confirms] -- Mask).
-
-next_state1(ensure_stats_timer, State) -> ensure_stats_timer(State);
-next_state1(send_confirms,      State) -> send_confirms(State).
+    lists:foldl(fun (ensure_stats_timer, State1) -> ensure_stats_timer(State1);
+                    (send_confirms,      State1) -> send_confirms(State1)
+                end, State, [ensure_stats_timer, send_confirms] -- Mask).
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
