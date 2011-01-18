@@ -69,6 +69,8 @@
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
+-type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
+
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
@@ -147,7 +149,7 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found').
+        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
@@ -212,30 +214,23 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
         Q1        -> Q1
     end.
 
-internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
+internal_declare(Q, true) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () -> ok = store_queue(Q), rabbit_misc:const(Q) end);
+internal_declare(Q = #amqqueue{name = QueueName}, false) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
-              case Recover of
-                  true ->
-                      ok = store_queue(Q),
-                      rabbit_misc:const(Q);
-                  false ->
-                      case mnesia:wread({rabbit_queue, QueueName}) of
-                          [] ->
-                              case mnesia:read({rabbit_durable_queue,
-                                                QueueName}) of
-                                  []  -> ok = store_queue(Q),
-                                         B = add_default_binding(Q),
-                                         fun (Tx) ->
-                                                 B(Tx),
-                                                 Q
-                                         end;
-                                  [_] -> %% Q exists on stopped node
-                                         rabbit_misc:const(not_found)
-                              end;
-                          [ExistingQ] ->
-                              rabbit_misc:const(ExistingQ)
-                      end
+              case mnesia:wread({rabbit_queue, QueueName}) of
+                  [] ->
+                      case mnesia:read({rabbit_durable_queue, QueueName}) of
+                          []  -> ok = store_queue(Q),
+                                 B = add_default_binding(Q),
+                                 fun (Tx) -> B(Tx), Q end;
+                          [_] -> %% Q exists on stopped node
+                                 rabbit_misc:const(not_found)
+                      end;
+                  [ExistingQ] ->
+                      rabbit_misc:const(ExistingQ)
               end
       end).
 
@@ -494,10 +489,9 @@ on_node_down(Node) ->
       end,
       fun (Deletions, Tx) ->
               rabbit_binding:process_deletions(
-                lists:foldl(
-                  fun rabbit_binding:combine_deletions/2,
-                  rabbit_binding:new_deletions(),
-                  Deletions),
+                lists:foldl(fun rabbit_binding:combine_deletions/2,
+                            rabbit_binding:new_deletions(),
+                            Deletions),
                 Tx)
       end).
 

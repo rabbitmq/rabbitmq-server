@@ -21,7 +21,7 @@
 
     <refsynopsisdiv>
         <cmdsynopsis>
-          <command>rabbitmq-multi</command>
+          <command>rabbitmq-server</command>
           <arg choice="opt">-detached</arg>
         </cmdsynopsis>
     </refsynopsisdiv>

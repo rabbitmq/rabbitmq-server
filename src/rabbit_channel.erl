@@ -49,7 +49,7 @@
              uncommitted_ack_q, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, publish_seqno, unconfirmed}).
+             confirm_enabled, publish_seqno, unconfirmed, confirmed}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -186,7 +186,8 @@ init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
                 stats_timer             = StatsTimer,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
-                unconfirmed             = gb_trees:empty()},
+                unconfirmed             = gb_trees:empty(),
+                confirmed               = []},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -202,8 +203,9 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats -> 7;
-        _          -> 0
+        emit_stats                   -> 7;
+        {confirm, _MsgSeqNos, _QPid} -> 5;
+        _                            -> 0
     end.
 
 handle_call(flush, _From, State) ->
@@ -278,12 +280,15 @@ handle_cast({deliver, ConsumerTag, AckRequired,
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-     hibernate};
+    noreply([ensure_stats_timer],
+            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
-    {noreply, confirm(MsgSeqNos, From, State), hibernate}.
+    State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
+    noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
+
+handle_info(timeout, State) ->
+    noreply(State);
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{unconfirmed = UC}) ->
@@ -293,9 +298,9 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
     {MsgSeqNos, UC1} = remove_queue_unconfirmed(
                          gb_trees:next(gb_trees:iterator(UC)), QPid,
                          {[], UC}),
-    State1 = send_confirms(MsgSeqNos, State#ch{unconfirmed = UC1}),
     erase_queue_stats(QPid),
-    {noreply, queue_blocked(QPid, State1), hibernate}.
+    noreply(queue_blocked(QPid, record_confirms(MsgSeqNos,
+                                                State#ch{unconfirmed = UC1}))).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -325,11 +330,24 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) ->
-    {reply, Reply, ensure_stats_timer(NewState), hibernate}.
+reply(Reply, NewState) -> reply(Reply, [], NewState).
 
-noreply(NewState) ->
-    {noreply, ensure_stats_timer(NewState), hibernate}.
+reply(Reply, Mask, NewState) -> reply(Reply, Mask, NewState, hibernate).
+
+reply(Reply, Mask, NewState, Timeout) ->
+    {reply, Reply, next_state(Mask, NewState), Timeout}.
+
+noreply(NewState) -> noreply([], NewState).
+
+noreply(Mask, NewState) -> noreply(Mask, NewState, hibernate).
+
+noreply(Mask, NewState, Timeout) ->
+    {noreply, next_state(Mask, NewState), Timeout}.
+
+next_state(Mask, State) ->
+    lists:foldl(fun (ensure_stats_timer, State1) -> ensure_stats_timer(State1);
+                    (send_confirms,      State1) -> send_confirms(State1)
+                end, State, [ensure_stats_timer, send_confirms] -- Mask).
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
@@ -474,6 +492,14 @@ remove_queue_unconfirmed({MsgSeqNo, Qs, Next}, QPid, Acc) ->
     remove_queue_unconfirmed(gb_trees:next(Next), QPid,
                              remove_qmsg(MsgSeqNo, QPid, Qs, Acc)).
 
+record_confirm(undefined, State) -> State;
+record_confirm(MsgSeqNo,  State) -> record_confirms([MsgSeqNo], State).
+
+record_confirms([], State) ->
+    State;
+record_confirms(MsgSeqNos, State = #ch{confirmed = C}) ->
+    State#ch{confirmed = [MsgSeqNos | C]}.
+
 confirm([], _QPid, State) ->
     State;
 confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
@@ -485,7 +511,7 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
                       {value, Qs} -> remove_qmsg(MsgSeqNo, QPid, Qs, Acc)
                   end
           end, {[], UC}, MsgSeqNos),
-    send_confirms(DoneMessages, State#ch{unconfirmed = UC2}).
+    record_confirms(DoneMessages, State#ch{unconfirmed = UC2}).
 
 remove_qmsg(MsgSeqNo, QPid, Qs, {MsgSeqNos, UC}) ->
     Qs1 = sets:del_element(QPid, Qs),
@@ -1213,12 +1239,12 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
-    send_confirms([MsgSeqNo], State);
+    record_confirm(MsgSeqNo, State);
 process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
-    send_confirms([MsgSeqNo], State);
+    record_confirm(MsgSeqNo, State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
-    send_confirms([MsgSeqNo], State);
+    record_confirm(MsgSeqNo, State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
 process_routing_result(routed,    QPids, MsgSeqNo,       _, State) ->
@@ -1231,6 +1257,9 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
+
+send_confirms(State = #ch{confirmed = C}) ->
+    send_confirms(lists:append(C), State #ch{confirmed = []}).
 
 send_confirms([], State) ->
     State;
@@ -1253,8 +1282,6 @@ send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
     State.
 
-send_confirm(undefined, _WriterPid) ->
-    ok;
 send_confirm(SeqNo, WriterPid) ->
     ok = rabbit_writer:send_command(WriterPid,
                                     #'basic.ack'{delivery_tag = SeqNo}).
