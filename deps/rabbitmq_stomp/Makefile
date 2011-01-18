@@ -14,6 +14,11 @@ include ../include.mk
 testdeps:
 	make -C deps/stomppy
 
+perf: $(TARGETS) $(TEST_TARGETS)
+	ERL_LIBS=$(LIBS_PATH) $(ERL) $(TEST_LOAD_PATH) \
+		-eval 'rabbit_stomp_perf_frame:run_all()' \
+		-eval 'init:stop()'
+
 test: unittest testdeps
 
 unittest: $(TARGETS) $(TEST_TARGETS)

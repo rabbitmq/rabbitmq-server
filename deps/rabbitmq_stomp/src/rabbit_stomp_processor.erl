@@ -311,7 +311,6 @@ do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
                             connection    = Connection,
                             channel       = MainChannel}) ->
-
     Prefetch = rabbit_stomp_frame:integer_header(Frame, "prefetch-count",
                                                  default_prefetch(Destination)),
 

@@ -24,6 +24,42 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
+parse_simple_frame_test() ->
+    Headers = [{"header1", "value1"}, {"header2", "value2"}],
+    Content = frame_string("COMMAND",
+                           Headers,
+                           "Body Content"),
+    {"COMMAND", Frame, _State} = parse_complete(Content),
+    [?assertEqual({ok, Value}, rabbit_stomp_frame:header(Frame, Key)) ||
+        {Key, Value} <- Headers],
+    #stomp_frame{body_iolist = Body} = Frame,
+    ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
+
+parse_command_only_test() ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
+
+parse_resume_mid_command_test() ->
+    First = "COMM",
+    Second = "AND\n\n\0",
+    Resume = {resume, _Fun} = parse(First),
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse(Second, Resume).
+
+parse_resume_mid_header_key_test() ->
+    First = "COMMAND\nheade",
+    Second = "r1:value1\n\n\0",
+    Resume = {resume, _Fun} = parse(First),
+    {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
+        parse(Second, Resume),
+    ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
+
+parse_resume_mid_header_val_test() ->
+    First = "COMMAND\nheader1:val",
+    Second = "ue1\n\n\0",
+    Resume = {resume, _Fun} = parse(First),
+    {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
+        parse(Second, Resume),
+    ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
+
 parse_no_header_stripping_test() ->
     Content = "COMMAND\nheader: foo \n\n\0",
     {ok, Frame, _} = parse(Content),
@@ -45,5 +81,16 @@ headers_escaping_roundtrip_test() ->
     ?assertEqual(Content, Serialized).
 
 parse(Content) ->
-    rabbit_stomp_frame:parse(Content, rabbit_stomp_frame:initial_state()).
+    parse(Content, rabbit_stomp_frame:initial_state()).
+parse(Content, State) ->
+    rabbit_stomp_frame:parse(Content, State).
+
+parse_complete(Content) ->
+    {ok, Frame = #stomp_frame{command = Command}, State} = parse(Content),
+    {Command, Frame, State}.
+
+frame_string(Command, Headers, BodyContent) ->
+    HeaderString =
+        lists:flatten([Key ++ ":" ++ Value ++ "\n" || {Key, Value} <- Headers]),
+    Command ++ "\n" ++ HeaderString ++ "\n" ++ BodyContent ++ "\0".
 

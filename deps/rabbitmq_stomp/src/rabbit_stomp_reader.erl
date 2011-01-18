@@ -76,7 +76,7 @@ process_received_bytes(Bytes,
                          processor   = Processor,
                          parse_state = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
-        {more, ParseState1} ->
+        {resume, ParseState1} ->
             ?MODULE:mainloop(State#reader_state{parse_state = ParseState1});
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
