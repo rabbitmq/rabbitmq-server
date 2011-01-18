@@ -39,56 +39,41 @@
     idle_timeout/1, handle_pre_hibernate/1, status/1]).
 
 %%----------------------------------------------------------------------------
-%% This is Take Three of a simple initial Mnesia implementation of the
-%% rabbit_backing_queue behavior. This version was created by starting
-%% with rabbit_variable_queue.erl, and removing everything unneeded.
+%% This is a simple implementation of the rabbit_backing_queue
+%% behavior, completely in RAM.
 %%
 %% This will eventually be structured as a plug-in instead of an extra
 %% module in the middle of the server tree....
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
-%% In the queue we separate messages that are pending delivery and
-%% messages that are pending acks. This ensures that purging (deleting
-%% the former) and deletion (deleting both) are both cheap and do not
-%% require any scanning through lists of messages.
+%% We separate messages pending delivery from messages pending
+%% acks. This ensures that purging (deleting the former) and deletion
+%% (deleting both) are both cheap and do not require scanning through
+%% lists of messages.
 %%
-%% This module usually wraps messages into M records, containing the
-%% messages themselves and additional information.
+%% This module wraps messages into M records for internal use,
+%% containing the messages themselves and additional information.
 %%
-%% Pending acks are recorded in memory as M records.
+%% Pending acks are also recorded in memory as M records.
 %%
-%% All queues are durable in this version, no matter how they are
-%% requested. (We will need to remember the requested type in the
-%% future, to catch accidental redeclares.) All messages are transient
-%% (non-persistent) in this interim version, in order to rip out all
-%% of the old backing code before inserting the new backing
-%% code. (This breaks some tests, since all messages are temporarily
-%% dropped on restart.)
-%%
-%% May need to add code to throw away transient messages upon
-%% initialization, depending on storage strategy.
+%% All queues are non-durable in this version, and all messages are
+%% transient (non-persistent). (This breaks some Java tests for
+%% durable queues.)
 %%
 %%----------------------------------------------------------------------------
-
-%% BUG: I've temporarily ripped out most of the calls to Mnesia while
-%% debugging problems with the Mnesia documentation. (Ask me sometimes
-%% over drinks to explain how just plain wrong it is.) I've figured
-%% out the real type signatures now and will soon put everything back
-%% in.
 
 -behaviour(rabbit_backing_queue).
 
 -record(state,                    % The in-RAM queue state
-        { mnesiaTableName,        % An atom naming the associated Mnesia table
-          q,                      % A temporary in-RAM queue of Ms
+        { q,                      % A temporary in-RAM queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % Map from seq_id to M, pending ack
           on_sync
         }).
 
 -record(m,                        % A wrapper aroung a msg
-        { seq_id,                 % The seq_id for the msg (the Mnesia index)
+        { seq_id,                 % The seq_id for the msg
           msg,                    % The msg itself
           props,                  % The message properties
           is_delivered            % Has the msg been delivered? (for reporting)
@@ -114,8 +99,7 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(state() :: #state { mnesiaTableName :: atom(),
-                          q :: queue(),
+-type(state() :: #state { q :: queue(),
                           next_seq_id :: seq_id(),
                           pending_ack_dict :: dict(),
                           on_sync :: sync() }).
@@ -146,11 +130,10 @@
 %% Specs are in rabbit_backing_queue_spec.hrl but are repeated here.
 
 %%----------------------------------------------------------------------------
-%% start/1 is called on startup with a list of (durable) queue
-%% names. The queues aren't being started at this point, but this call
-%% allows the backing queue to perform any checking necessary for the
-%% consistency of those queues, or initialise any other shared
-%% resources.
+%% start/1 promises that a list of (durable) queue names will be
+%% started in the near future. This lets us perform early checking
+%% necessary for the consistency of those queues or initialise other
+%% shared resources.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -166,10 +149,8 @@ start(_DurableQueues) ->
     ok.
 
 %%----------------------------------------------------------------------------
-%% stop/0 is called to tear down any state/resources. NB:
-%% Implementations should not depend on this function being called on
-%% shutdown and instead should hook into the rabbit supervision
-%% hierarchy.
+%% stop/0 tears down all state/resources upon shutdown. It might not
+%% be called.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -181,7 +162,8 @@ stop() ->
     ok.
 
 %%----------------------------------------------------------------------------
-%% init/3 initializes one backing queue and its state.
+%% init/3 creates one backing queue, returning its state. Names are
+%% local to the vhost, and must be unique.
 %%
 %% -spec(init/3 ::
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
@@ -189,18 +171,11 @@ stop() ->
 %%
 %% This function should be called only from outside this module.
 
-%% BUG: Should do quite a bit more upon recovery....
-
-%% BUG: Each queue name becomes an atom (to name a table), and atoms
-%% are never GC'd
-
 %% BUG: Need to provide back-pressure when queue is filling up.
 
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~p, _, _) ->", [QueueName]),
-    MnesiaTableName = mnesiaTableName(QueueName),
-    Result = #state { mnesiaTableName = MnesiaTableName,
-                      q = queue:new(),
+    Result = #state { q = queue:new(),
                       next_seq_id = 0,
                       pending_ack_dict = dict:new(),
                       on_sync = ?BLANK_SYNC },
@@ -360,10 +335,10 @@ fetch(AckRequired, State) ->
 -spec internal_queue_out(fun ((m(), state()) -> T), state()) ->
                                 {empty, state()} | T.
 
-internal_queue_out(Fun, State = #state { q = Q }) ->
+internal_queue_out(F, State = #state { q = Q }) ->
     case queue:out(Q) of
         {empty, _} -> {empty, State};
-        {{value, M}, Qa} -> Fun(M, State #state { q = Qa })
+        {{value, M}, Qa} -> F(M, State #state { q = Qa })
     end.
 
 -spec internal_fetch/3 :: (ack_required(), m(), state()) ->
@@ -383,7 +358,7 @@ internal_fetch(AckRequired,
                    M #m { is_delivered = true }, State)};
             false -> {blank_ack, State}
         end,
-    {{Msg, IsDelivered, AckTag, queue:len(Q) - 1}, State1}.
+    {{Msg, IsDelivered, AckTag, queue:len(Q)}, State1}.
 
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges messages. Acktags supplied are for messages
@@ -460,7 +435,7 @@ tx_rollback(Txn, State) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_commit/4 commits a transaction. The Fun passed in must be called
+%% tx_commit/4 commits a transaction. The F passed in must be called
 %% once the messages have really been commited. This CPS permits the
 %% possibility of commit coalescing.
 %%
@@ -473,14 +448,14 @@ tx_rollback(Txn, State) ->
 %%          state())
 %%         -> {[ack()], state()}).
 
-tx_commit(Txn, Fun, PropsFun, State) ->
+tx_commit(Txn, F, PropsF, State) ->
     rabbit_log:info(
-      "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, Fun, PropsFun, State]),
+      "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, State]),
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     Result =
         {AckTags,
-         internal_tx_commit_store_state(Pubs, AckTags, Fun, PropsFun, State)},
+         internal_tx_commit_store_state(Pubs, AckTags, F, PropsF, State)},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -493,12 +468,12 @@ tx_commit(Txn, Fun, PropsFun, State) ->
 %% -spec(requeue/3 ::
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
-requeue(AckTags, PropsFun, State) ->
-    rabbit_log:info("requeue(~p, ~p, ~p) ->", [AckTags, PropsFun, State]),
+requeue(AckTags, PropsF, State) ->
+    rabbit_log:info("requeue(~p, ~p, ~p) ->", [AckTags, PropsF, State]),
     {_, State1} =
         internal_ack(
           fun (#m { msg = Msg, props = Props }, S) ->
-                  publish_state(Msg, PropsFun(Props), true, S)
+                  publish_state(Msg, PropsF(Props), true, S)
           end,
           AckTags,
           State),
@@ -626,17 +601,15 @@ handle_pre_hibernate(State) ->
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(#state { mnesiaTableName = MnesiaTableName,
-                q = Q,
+status(#state { q = Q,
                 next_seq_id = NextSeqId,
                 pending_ack_dict = PAD,
-                on_sync = #sync { funs = Funs }}) ->
+                on_sync = #sync { funs = Fs }}) ->
     rabbit_log:info("status(_) ->"),
-    Result = [{mnesiaTableName, MnesiaTableName},
-              {len, queue:len(Q)},
+    Result = [{len, queue:len(Q)},
               {next_seq_id, NextSeqId},
               {pending_acks, dict:size(PAD)},
-              {outstanding_txns, length(Funs)}],
+              {outstanding_txns, length(Fs)}],
     rabbit_log:info(" ~p", [Result]),
     Result.
 
@@ -668,15 +641,6 @@ store_tx(Txn, Tx) -> put({txn, Txn}, Tx), ok.
 
 erase_tx(Txn) -> erase({txn, Txn}), ok.
 
-%% Convert a queue name (a record) into an Mnesia table name (an atom).
-
-%% TODO: Import correct type.
-
--spec mnesiaTableName(_) -> atom().
-
-mnesiaTableName(QueueName) ->
-    list_to_atom(lists:flatten(io_lib:format("~p", [QueueName]))).
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -690,15 +654,15 @@ mnesiaTableName(QueueName) ->
 
 internal_tx_commit_store_state(Pubs,
                                AckTags,
-                               Fun,
-                               PropsFun,
+                               F,
+                               PropsF,
                                State = #state { on_sync = OnSync }) ->
     (tx_commit_index_state(
        State #state {
          on_sync =
              #sync { acks = AckTags,
-                     pubs = [{PropsFun, Pubs}],
-                     funs = [Fun] }}))
+                     pubs = [{PropsF, Pubs}],
+                     funs = [F] }}))
         #state { on_sync = OnSync }.
 
 -spec tx_commit_index_state(state()) -> state().
@@ -707,7 +671,7 @@ tx_commit_index_state(State = #state { on_sync = ?BLANK_SYNC }) -> State;
 tx_commit_index_state(State = #state {
                         on_sync = #sync { acks = SAcks,
                                           pubs = SPubs,
-                                          funs = SFuns }}) ->
+                                          funs = SFs }}) ->
     {_, State1} = internal_ack(SAcks, State),
     {_, State2} =
         lists:foldl(
@@ -715,10 +679,10 @@ tx_commit_index_state(State = #state {
                   {SeqIds, publish_state(Msg, Props, false, S)}
           end,
           {[], State1},
-          [{Msg, Fun(Props)} ||
-              {Fun, PubsN} <- lists:reverse(SPubs),
+          [{Msg, F(Props)} ||
+              {F, PubsN} <- lists:reverse(SPubs),
               {Msg, Props} <- lists:reverse(PubsN)]),
-    _ = [ Fun() || Fun <- lists:reverse(SFuns) ],
+    _ = [ F() || F <- lists:reverse(SFs) ],
     State2 #state { on_sync = ?BLANK_SYNC }.
 
 %%----------------------------------------------------------------------------
@@ -753,7 +717,7 @@ record_pending_ack_state(M = #m { seq_id = SeqId },
 % -spec remove_pending_acks_state(state()) -> state().
 
 remove_pending_acks_state(State = #state { pending_ack_dict = PAD }) ->
-    _ = dict:fold(fun (_, V, Acc) -> accumulate_ack(V, Acc) end, [], PAD),
+    _ = dict:fold(fun (_, M, Acc) -> [m_guid(M) | Acc] end, [], PAD),
     State #state { pending_ack_dict = dict:new() }.
 
 -spec internal_ack(fun (([rabbit_guid:guid()], state()) -> state()),
@@ -762,20 +726,19 @@ remove_pending_acks_state(State = #state { pending_ack_dict = PAD }) ->
                           {[rabbit_guid:guid()], state()}.
 
 internal_ack(_, [], State) -> {[], State};
-internal_ack(Fun, AckTags, State) ->
+internal_ack(F, AckTags, State) ->
     {AllGuids, State1} =
         lists:foldl(
           fun (SeqId, {Acc, S = #state { pending_ack_dict = PAD }}) ->
-                  AckEntry = dict:fetch(SeqId, PAD),
-                  {accumulate_ack(AckEntry, Acc),
-                   Fun(AckEntry,
-                       S #state { pending_ack_dict = dict:erase(SeqId, PAD)})}
+                  M = dict:fetch(SeqId, PAD),
+                  {[m_guid(M) | Acc],
+                   F(M, S #state { pending_ack_dict = dict:erase(SeqId, PAD)})}
           end,
           {[], State},
           AckTags),
     {lists:reverse(AllGuids), State1}.
 
--spec accumulate_ack(m(), [rabbit_guid:guid()]) -> [rabbit_guid:guid()].
+-spec m_guid(m()) -> rabbit_guid:guid().
 
-accumulate_ack(#m { msg = #basic_message { guid = Guid }}, AllGuids) ->
-    [Guid | AllGuids].
+m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
+
