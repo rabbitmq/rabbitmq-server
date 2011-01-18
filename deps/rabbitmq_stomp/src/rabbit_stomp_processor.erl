@@ -42,7 +42,7 @@
                 connection, subscriptions, version,
                 start_heartbeat_fun}).
 
--record(subscription, {dest_hdr, channel, multi_ack}).
+-record(subscription, {dest_hdr, channel, multi_ack, description}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
@@ -236,12 +236,14 @@ cancel_subscription({error, _}, State) ->
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription({ok, ConsumerTag}, State = #state{channel       = MainChannel,
-                                                      subscriptions = Subs}) ->
+cancel_subscription({ok, ConsumerTag, Description}, State = #state{channel       = MainChannel,
+                                                                   subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
-                  "UNSUBSCRIBE must refer to an existing subscription\n",
+                  "UNSUBSCRIBE must refer to an existing subscription.\n"
+                  "Subscription to ~p not found.\n",
+                  [Description],
                   State);
         {ok, #subscription{channel = SubChannel}} ->
             case amqp_channel:call(SubChannel,
@@ -252,8 +254,8 @@ cancel_subscription({ok, ConsumerTag}, State = #state{channel       = MainChanne
                                              State#state{subscriptions = dict:erase(ConsumerTag, Subs)});
                 _ ->
                     error("Failed to cancel subscription",
-                          "UNSUBSCRIBE on channel ~p for subscription ~p failed.\n",
-                          [SubChannel, ConsumerTag], 
+                          "UNSUBSCRIBE to ~p failed.\n",
+                          [Description], 
                           State)
             end
     end.
@@ -338,7 +340,7 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
-    {ok, ConsumerTag} = rabbit_stomp_util:consumer_tag(Frame),
+    {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
 
     amqp_channel:subscribe(Channel,
                            #'basic.consume'{
@@ -354,9 +356,10 @@ do_subscribe(Destination, DestHdr, Frame,
 
     ok(State#state{subscriptions =
                        dict:store(ConsumerTag,
-                                  #subscription{dest_hdr  = DestHdr,
-                                                channel   = Channel,
-                                                multi_ack = IsMulti},
+                                  #subscription{dest_hdr    = DestHdr,
+                                                channel     = Channel,
+                                                multi_ack   = IsMulti,
+                                                description = Description},
                                   Subs)}).
 
 do_send(Destination, _DestHdr,
@@ -418,7 +421,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               State);
         error ->
             send_error("Subscription not found",
-                       "There is no current subscription '~s'.",
+                       "There is no current subscription with tag '~s'.",
                        [ConsumerTag],
                        State)
     end.
