@@ -783,9 +783,8 @@ handle_cast({write, CRef, Guid},
                     noreply(State);
                 {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
-                    noreply(client_confirm_if_on_disk(
-                              CRef, Guid, File,
-                              adjust_valid_total_size(File, TotalSize, State)))
+                    State1 = client_confirm_if_on_disk(CRef, Guid, File, State),
+                    noreply(adjust_valid_total_size(File, TotalSize, State1))
             end;
         {_Mask, #msg_location { ref_count = RefCount, file = File }} ->
             %% We already know about it, just update counter. Only
