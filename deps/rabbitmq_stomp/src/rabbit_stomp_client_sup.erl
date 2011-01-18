@@ -39,7 +39,8 @@ start_link(Sock) ->
     {ok, ProcessorPid} =
         supervisor2:start_child(SupPid,
                                {rabbit_stomp_processor,
-                                {rabbit_stomp_processor, start_link, [Sock]},
+                                {rabbit_stomp_processor, start_link,
+                                 [Sock, rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
                                 intrinsic, ?MAX_WAIT, worker,
                                 [rabbit_stomp_processor]}),
     {ok, ReaderPid} =

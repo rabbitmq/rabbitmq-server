@@ -2,7 +2,7 @@ UPSTREAM_HG=https://stomppy.googlecode.com/hg/
 REVISION=16a4000624a7
 
 LIB_DIR=stomppy
-CHECKOUT_DIR=stomppy-git
+CHECKOUT_DIR=stomppy-hg
 
 TARGETS=$(LIB_DIR)
 
