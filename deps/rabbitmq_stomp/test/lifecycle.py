@@ -45,8 +45,49 @@ class TestLifecycle(base.BaseTest):
         d = "/queue/unsub04"
         self.unsub_test(d, self.sub_and_send(d, subid="queid", receipt="unsub.rct"), numRcts=1)
 
+    def test_connect_version_1_1(self):
+        ''' Test CONNECT with version 1.1'''
+        self.conn.disconnect()
+        new_conn = self.create_connection(version="1.1,1.0")
+        try:
+            self.assertTrue(new_conn.is_connected())
+        finally:
+            new_conn.disconnect()
+
+    def test_heartbeat_disconnects_client(self):
+        ''' Test heartbeat disconnection'''
+        self.conn.disconnect()
+        new_conn = self.create_connection(heartbeat="1500,0")
+        try:
+            self.assertTrue(new_conn.is_connected())
+            time.sleep(1)
+            self.assertTrue(new_conn.is_connected())
+            time.sleep(3)
+            self.assertFalse(new_conn.is_connected())
+        finally:
+            if new_conn.is_connected():
+                new_conn.disconnect()
+
+    def test_unsupported_version(self):
+        ''' Test unsupported version on CONNECT command'''
+        self.conn.disconnect()
+        new_conn = stomp.Connection(user="guest",
+                                    passcode="guest",
+                                    version="100.1")
+        listener = base.WaitableListener()
+        new_conn.set_listener('', listener)
+        try:
+            new_conn.start()
+            new_conn.connect()
+            self.assertTrue(listener.await())
+            self.assertEquals("Supported versions are 1.0,1.1\n",
+                              listener.errors[0]['message'])
+        finally:
+            if new_conn.is_connected():
+                new_conn.disconnect()
+
     def test_disconnect(self):
-        ''' Run DISCONNECT command '''
+        ''' Test DISCONNECT command'''
         self.conn.disconnect()
         self.assertFalse(self.conn.is_connected())
 

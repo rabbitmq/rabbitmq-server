@@ -6,8 +6,9 @@ import threading
 
 class BaseTest(unittest.TestCase):
 
-   def create_connection(self):
-       conn = stomp.Connection(user="guest", passcode="guest")
+   def create_connection(self, version=None, heartbeat=None):
+       conn = stomp.Connection(user="guest", passcode="guest",
+                               version=version, heartbeat=heartbeat)
        conn.start()
        conn.connect()
        return conn
@@ -92,7 +93,7 @@ class WaitableListener(object):
         self.messages.append({'message' : message, 'headers' : headers})
         self.latch.countdown()
 
-    def reset(self,count=1):
+    def reset(self, count=1):
         if self.debug:
             print '(reset listener)',
             print '#messages:', len(self.messages),
