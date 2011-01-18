@@ -55,7 +55,7 @@ function update_vhosts() {
         if (vhost == current_vhost) index = i + 1;
     }
     select.selectedIndex = index;
-    current_vhost = select.options[index].value;
+    current_vhost = select.options[index].text;
     store_pref('vhost', current_vhost);
 }
 
