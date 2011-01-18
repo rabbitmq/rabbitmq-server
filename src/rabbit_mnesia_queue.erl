@@ -65,7 +65,7 @@
 
 -behaviour(rabbit_backing_queue).
 
--record(state,                    % The in-RAM queue state
+-record(s,                        % The in-RAM queue state
         { q,                      % A temporary in-RAM queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % Map from seq_id to M, pending ack
@@ -99,10 +99,11 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(state() :: #state { q :: queue(),
-                          next_seq_id :: seq_id(),
-                          pending_ack_dict :: dict(),
-                          on_sync :: sync() }).
+-type(s() :: #s { q :: queue(),
+		  next_seq_id :: seq_id(),
+		  pending_ack_dict :: dict(),
+		  on_sync :: sync() }).
+-type(state() :: s()).
 
 -type(m() :: #m { msg :: rabbit_types:basic_message(),
                   seq_id :: seq_id(),
@@ -121,8 +122,6 @@
 -include("rabbit_backing_queue_spec.hrl").
 
 %% -endif.
-
--define(BLANK_SYNC, #sync { acks = [], pubs = [], funs = [] }).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -175,10 +174,10 @@ stop() ->
 
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~p, _, _) ->", [QueueName]),
-    Result = #state { q = queue:new(),
-                      next_seq_id = 0,
-                      pending_ack_dict = dict:new(),
-                      on_sync = ?BLANK_SYNC },
+    Result = #s { q = queue:new(),
+		  next_seq_id = 0,
+		  pending_ack_dict = dict:new(),
+		  on_sync = #sync { acks = [], pubs = [], funs = [] } },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -190,9 +189,9 @@ init(QueueName, _IsDurable, _Recover) ->
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
-terminate(State) ->
-    Result = remove_pending_acks_state(tx_commit_index_state(State)),
-    rabbit_log:info("terminate(~p) ->", [State]),
+terminate(S) ->
+    Result = remove_pending_acks_state(tx_commit_state(S)),
+    rabbit_log:info("terminate(~p) ->", [S]),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -209,10 +208,10 @@ terminate(State) ->
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
 
-delete_and_terminate(State) ->
-    rabbit_log:info("delete_and_terminate(~p) ->", [State]),
-    {_, State1} = purge(State),
-    Result = remove_pending_acks_state(State1),
+delete_and_terminate(S) ->
+    rabbit_log:info("delete_and_terminate(~p) ->", [S]),
+    {_, S1} = purge(S),
+    Result = remove_pending_acks_state(S1),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -224,9 +223,9 @@ delete_and_terminate(State) ->
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
-purge(State = #state { q = Q }) ->
-    rabbit_log:info("purge(~p) ->", [State]),
-    Result = {queue:len(Q), State #state { q = queue:new() }},
+purge(S = #s { q = Q }) ->
+    rabbit_log:info("purge(~p) ->", [S]),
+    Result = {queue:len(Q), S #s { q = queue:new() }},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -241,12 +240,12 @@ purge(State = #state { q = Q }) ->
 %%          state())
 %%         -> state()).
 
-publish(Msg, Props, State) ->
+publish(Msg, Props, S) ->
     rabbit_log:info("publish("),
     rabbit_log:info(" ~p,", [Msg]),
     rabbit_log:info(" ~p,", [Props]),
-    rabbit_log:info(" ~p) ->", [State]),
-    Result = publish_state(Msg, Props, false, State),
+    rabbit_log:info(" ~p) ->", [S]),
+    Result = publish_state(Msg, Props, false, S),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -264,22 +263,22 @@ publish(Msg, Props, State) ->
 %%          state())
 %%         -> {ack(), state()}).
 
-publish_delivered(false, _, _, State) ->
+publish_delivered(false, _, _, S) ->
     rabbit_log:info("publish_delivered(false, _, _,"),
-    rabbit_log:info(" ~p) ->", [State]),
-    Result = {blank_ack, State},
+    rabbit_log:info(" ~p) ->", [S]),
+    Result = {blank_ack, S},
     rabbit_log:info(" -> ~p", [Result]),
     Result;
-publish_delivered(true, Msg, Props, State = #state { next_seq_id = SeqId }) ->
+publish_delivered(true, Msg, Props, S = #s { next_seq_id = SeqId }) ->
     rabbit_log:info("publish_delivered(true, "),
     rabbit_log:info(" ~p,", [Msg]),
     rabbit_log:info(" ~p,", [Props]),
-    rabbit_log:info(" ~p) ->", [State]),
+    rabbit_log:info(" ~p) ->", [S]),
     Result =
         {SeqId,
          (record_pending_ack_state(
-          ((m(Msg, SeqId, Props)) #m { is_delivered = true }), State))
-         #state { next_seq_id = SeqId + 1 }},
+          ((m(Msg, SeqId, Props)) #m { is_delivered = true }), S))
+         #s { next_seq_id = SeqId + 1 }},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -293,28 +292,28 @@ publish_delivered(true, Msg, Props, State = #state { next_seq_id = SeqId }) ->
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
 %%         -> state()).
 
-dropwhile(Pred, State) ->
-    rabbit_log:info("dropwhile(~p, ~p) ->", [Pred, State]),
-    {ok, State1} = dropwhile_state(Pred, State),
-    Result = State1,
+dropwhile(Pred, S) ->
+    rabbit_log:info("dropwhile(~p, ~p) ->", [Pred, S]),
+    {ok, S1} = dropwhile_state(Pred, S),
+    Result = S1,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 -spec(dropwhile_state/2 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()), state())
-        -> {ok, state()}).
+        (fun ((rabbit_types:message_properties()) -> boolean()), s())
+        -> {ok, s()}).
 
-dropwhile_state(Pred, State) ->
+dropwhile_state(Pred, S) ->
     internal_queue_out(
-      fun (M = #m { props = Props }, Si = #state { q = Q }) ->
+      fun (M = #m { props = Props }, Si = #s { q = Q }) ->
               case Pred(Props) of
                   true ->
                       {_, Si1} = internal_fetch(false, M, Si),
                       dropwhile_state(Pred, Si1);
-                  false -> {ok, Si #state {q = queue:in_r(M, Q) }}
+                  false -> {ok, Si #s {q = queue:in_r(M, Q) }}
               end
       end,
-      State).
+      S).
 
 %%----------------------------------------------------------------------------
 %% fetch/2 produces the next message.
@@ -324,41 +323,40 @@ dropwhile_state(Pred, State) ->
 %% -spec(fetch/2 :: (ack_required(), state()) ->
 %%                       {ok | fetch_result(), state()}).
 
-fetch(AckRequired, State) ->
-    rabbit_log:info("fetch(~p, ~p) ->", [AckRequired, State]),
+fetch(AckRequired, S) ->
+    rabbit_log:info("fetch(~p, ~p) ->", [AckRequired, S]),
     Result =
         internal_queue_out(
-          fun (M, Si) -> internal_fetch(AckRequired, M, Si) end, State),
+          fun (M, Si) -> internal_fetch(AckRequired, M, Si) end, S),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 -spec internal_queue_out(fun ((m(), state()) -> T), state()) ->
                                 {empty, state()} | T.
 
-internal_queue_out(F, State = #state { q = Q }) ->
+internal_queue_out(F, S = #s { q = Q }) ->
     case queue:out(Q) of
-        {empty, _} -> {empty, State};
-        {{value, M}, Qa} -> F(M, State #state { q = Qa })
+        {empty, _} -> {empty, S};
+        {{value, M}, Qa} -> F(M, S #s { q = Qa })
     end.
 
--spec internal_fetch/3 :: (ack_required(), m(), state()) ->
-                                  {fetch_result(), state()}.
+-spec internal_fetch/3 :: (ack_required(), m(), s()) -> {fetch_result(), s()}.
 
 internal_fetch(AckRequired,
                M = #m {
                  seq_id = SeqId,
                  msg = Msg,
                  is_delivered = IsDelivered },
-               State = #state { q = Q }) ->
-    {AckTag, State1} =
+               S = #s { q = Q }) ->
+    {AckTag, S1} =
         case AckRequired of
             true ->
                 {SeqId,
                  record_pending_ack_state(
-                   M #m { is_delivered = true }, State)};
-            false -> {blank_ack, State}
+                   M #m { is_delivered = true }, S)};
+            false -> {blank_ack, S}
         end,
-    {{Msg, IsDelivered, AckTag, queue:len(Q)}, State1}.
+    {{Msg, IsDelivered, AckTag, queue:len(Q)}, S1}.
 
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges messages. Acktags supplied are for messages
@@ -369,19 +367,19 @@ internal_fetch(AckRequired,
 %%
 %% -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
-ack(AckTags, State) ->
+ack(AckTags, S) ->
     rabbit_log:info("ack("),
     rabbit_log:info("~p,", [AckTags]),
-    rabbit_log:info(" ~p) ->", [State]),
-    {Guids, State1} = internal_ack(AckTags, State),
-    Result = {Guids, State1},
+    rabbit_log:info(" ~p) ->", [S]),
+    {Guids, S1} = internal_ack(AckTags, S),
+    Result = {Guids, S1},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
--spec(internal_ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+-spec(internal_ack/2 :: ([ack()], s()) -> {[rabbit_guid:guid()], s()}).
 
-internal_ack(AckTags, State) ->
-    internal_ack(fun (_, Si) -> Si end, AckTags, State).
+internal_ack(AckTags, S) ->
+    internal_ack(fun (_, Si) -> Si end, AckTags, S).
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction.
@@ -395,11 +393,11 @@ internal_ack(AckTags, State) ->
 %%          state())
 %%         -> state()).
 
-tx_publish(Txn, Msg, Props, State) ->
-    rabbit_log:info("tx_publish(~p, ~p, ~p, ~p) ->", [Txn, Msg, Props, State]),
+tx_publish(Txn, Msg, Props, S) ->
+    rabbit_log:info("tx_publish(~p, ~p, ~p, ~p) ->", [Txn, Msg, Props, S]),
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, Props} | Pubs] }),
-    Result = State,
+    Result = S,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -410,11 +408,11 @@ tx_publish(Txn, Msg, Props, State) ->
 %%
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
-tx_ack(Txn, AckTags, State) ->
-    rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, AckTags, State]),
+tx_ack(Txn, AckTags, S) ->
+    rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, AckTags, S]),
     Tx = #tx { pending_acks = Acks } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_acks = lists:append(AckTags, Acks) }),
-    Result = State,
+    Result = S,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -426,11 +424,11 @@ tx_ack(Txn, AckTags, State) ->
 %%
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
-tx_rollback(Txn, State) ->
-    rabbit_log:info("tx_rollback(~p, ~p) ->", [Txn, State]),
+tx_rollback(Txn, S) ->
+    rabbit_log:info("tx_rollback(~p, ~p) ->", [Txn, S]),
     #tx { pending_acks = AckTags } = lookup_tx(Txn),
     erase_tx(Txn),
-    Result = {AckTags, State},
+    Result = {AckTags, S},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -448,14 +446,14 @@ tx_rollback(Txn, State) ->
 %%          state())
 %%         -> {[ack()], state()}).
 
-tx_commit(Txn, F, PropsF, State) ->
+tx_commit(Txn, F, PropsF, S) ->
     rabbit_log:info(
-      "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, State]),
+      "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, S]),
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     Result =
         {AckTags,
-         internal_tx_commit_store_state(Pubs, AckTags, F, PropsF, State)},
+         internal_tx_commit_store_state(Pubs, AckTags, F, PropsF, S)},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -468,16 +466,16 @@ tx_commit(Txn, F, PropsF, State) ->
 %% -spec(requeue/3 ::
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
-requeue(AckTags, PropsF, State) ->
-    rabbit_log:info("requeue(~p, ~p, ~p) ->", [AckTags, PropsF, State]),
-    {_, State1} =
+requeue(AckTags, PropsF, S) ->
+    rabbit_log:info("requeue(~p, ~p, ~p) ->", [AckTags, PropsF, S]),
+    {_, S1} =
         internal_ack(
           fun (#m { msg = Msg, props = Props }, Si) ->
                   publish_state(Msg, PropsF(Props), true, Si)
           end,
           AckTags,
-          State),
-    Result = State1,
+          S),
+    Result = S1,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -486,7 +484,7 @@ requeue(AckTags, PropsF, State) ->
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
-len(#state { q = Q }) ->
+len(#s { q = Q }) ->
 %   rabbit_log:info("len(~p) ->", [Q]),
     Result = queue:len(Q),
 %   rabbit_log:info(" -> ~p", [Result]),
@@ -498,7 +496,7 @@ len(#state { q = Q }) ->
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
-is_empty(#state { q = Q }) ->
+is_empty(#s { q = Q }) ->
 %   rabbit_log:info("is_empty(~p)", [Q]),
     Result = queue:is_empty(Q),
 %   rabbit_log:info(" -> ~p", [Result]),
@@ -522,9 +520,9 @@ is_empty(#state { q = Q }) ->
 %%         (('undefined' | 'infinity' | number()), state())
 %%         -> state()).
 
-set_ram_duration_target(_, State) ->
-    rabbit_log:info("set_ram_duration_target(_~p) ->", [State]),
-    Result = State,
+set_ram_duration_target(_, S) ->
+    rabbit_log:info("set_ram_duration_target(_~p) ->", [S]),
+    Result = S,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -538,9 +536,9 @@ set_ram_duration_target(_, State) ->
 %%
 %% -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 
-ram_duration(State) ->
-    rabbit_log:info("ram_duration(~p) ->", [State]),
-    Result = {0, State},
+ram_duration(S) ->
+    rabbit_log:info("ram_duration(~p) ->", [S]),
+    Result = {0, S},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -553,7 +551,8 @@ ram_duration(State) ->
 %%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
-needs_idle_timeout(#state { on_sync = ?BLANK_SYNC }) ->
+needs_idle_timeout(#s { on_sync =
+			    #sync { acks = [], pubs = [], funs = [] } }) ->
     rabbit_log:info("needs_idle_timeout(_) ->"),
     Result = false,
     rabbit_log:info(" -> ~p", [Result]),
@@ -573,9 +572,9 @@ needs_idle_timeout(_) ->
 %%
 %% -spec(idle_timeout/1 :: (state()) -> state()).
 
-idle_timeout(State) ->
-    rabbit_log:info("idle_timeout(~p) ->", [State]),
-    Result = tx_commit_index_state(State),
+idle_timeout(S) ->
+    rabbit_log:info("idle_timeout(~p) ->", [S]),
+    Result = tx_commit_state(S),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -587,9 +586,9 @@ idle_timeout(State) ->
 %%
 %% -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 
-handle_pre_hibernate(State) ->
-    Result = State,
-    rabbit_log:info("handle_pre_hibernate(~p) ->", [State]),
+handle_pre_hibernate(S) ->
+    Result = S,
+    rabbit_log:info("handle_pre_hibernate(~p) ->", [S]),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -601,7 +600,7 @@ handle_pre_hibernate(State) ->
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(#state { q = Q,
+status(#s { q = Q,
                 next_seq_id = NextSeqId,
                 pending_ack_dict = PAD,
                 on_sync = #sync { funs = Fs }}) ->
@@ -649,41 +648,39 @@ erase_tx(Txn) -> erase({txn, Txn}), ok.
                                      [seq_id()],
                                      fun (() -> any()),
                                      message_properties_transformer(),
-                                     state()) ->
-                                            state().
+                                     s()) ->
+                                            s().
 
 internal_tx_commit_store_state(Pubs,
                                AckTags,
                                F,
                                PropsF,
-                               State = #state { on_sync = OnSync }) ->
-    (tx_commit_index_state(
-       State #state {
-         on_sync =
-             #sync { acks = AckTags,
-                     pubs = [{PropsF, Pubs}],
-                     funs = [F] }}))
-        #state { on_sync = OnSync }.
+                               S = #s { on_sync = OnSync }) ->
+    (tx_commit_state(
+       S #s { on_sync = #sync { acks = AckTags,
+				pubs = [{PropsF, Pubs}],
+				funs = [F] }}))
+        #s { on_sync = OnSync }.
 
--spec tx_commit_index_state(state()) -> state().
+-spec tx_commit_state(s()) -> s().
 
-tx_commit_index_state(State = #state { on_sync = ?BLANK_SYNC }) -> State;
-tx_commit_index_state(State = #state {
-                        on_sync = #sync { acks = SAcks,
-                                          pubs = SPubs,
-                                          funs = SFs }}) ->
-    {_, State1} = internal_ack(SAcks, State),
-    {_, State2} =
+tx_commit_state(S = #s { on_sync = #sync { acks = [], pubs = [], funs = [] } }) -> S;
+tx_commit_state(S = #s {
+		  on_sync = #sync { acks = SAcks,
+				    pubs = SPubs,
+				    funs = SFs }}) ->
+    {_, S1} = internal_ack(SAcks, S),
+    {_, S2} =
         lists:foldl(
           fun ({Msg, Props}, {SeqIds, Si}) ->
                   {SeqIds, publish_state(Msg, Props, false, Si)}
           end,
-          {[], State1},
+          {[], S1},
           [{Msg, F(Props)} ||
               {F, PubsN} <- lists:reverse(SPubs),
               {Msg, Props} <- lists:reverse(PubsN)]),
     _ = [ F() || F <- lists:reverse(SFs) ],
-    State2 #state { on_sync = ?BLANK_SYNC }.
+    S2 #s { on_sync = #sync { acks = [], pubs = [], funs = [] } }.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
@@ -692,14 +689,14 @@ tx_commit_index_state(State = #state {
 -spec publish_state(rabbit_types:basic_message(),
                     rabbit_types:message_properties(),
                     boolean(),
-                    state()) ->
-                           state().
+                    s()) ->
+                           s().
 
 publish_state(Msg,
               Props,
               IsDelivered,
-              State = #state { q = Q, next_seq_id = SeqId }) ->
-    State #state {
+              S = #s { q = Q, next_seq_id = SeqId }) ->
+    S #s {
       q = queue:in(
             (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q),
       next_seq_id = SeqId + 1 }.
@@ -708,36 +705,35 @@ publish_state(Msg,
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
--spec record_pending_ack_state(m(), state()) -> state().
+-spec record_pending_ack_state(m(), s()) -> s().
 
 record_pending_ack_state(M = #m { seq_id = SeqId },
-                         State = #state { pending_ack_dict = PAD }) ->
-    State #state { pending_ack_dict = dict:store(SeqId, M, PAD) }.
+                         S = #s { pending_ack_dict = PAD }) ->
+    S #s { pending_ack_dict = dict:store(SeqId, M, PAD) }.
 
-% -spec remove_pending_acks_state(state()) -> state().
+% -spec remove_pending_acks_state(s()) -> s().
 
-remove_pending_acks_state(State = #state { pending_ack_dict = PAD }) ->
+remove_pending_acks_state(S = #s { pending_ack_dict = PAD }) ->
     _ = dict:fold(fun (_, M, Acc) -> [m_guid(M) | Acc] end, [], PAD),
-    State #state { pending_ack_dict = dict:new() }.
+    S #s { pending_ack_dict = dict:new() }.
 
--spec internal_ack(fun (([rabbit_guid:guid()], state()) -> state()),
+-spec internal_ack(fun (([rabbit_guid:guid()], s()) -> s()),
                    [rabbit_guid:guid()],
-                   state()) ->
-                          {[rabbit_guid:guid()], state()}.
+                   s()) ->
+                          {[rabbit_guid:guid()], s()}.
 
-internal_ack(_, [], State) -> {[], State};
-internal_ack(F, AckTags, State) ->
-    {AllGuids, State1} =
+internal_ack(_, [], S) -> {[], S};
+internal_ack(F, AckTags, S) ->
+    {AllGuids, S1} =
         lists:foldl(
-          fun (SeqId, {Acc, Si = #state { pending_ack_dict = PAD }}) ->
+          fun (SeqId, {Acc, Si = #s { pending_ack_dict = PAD }}) ->
                   M = dict:fetch(SeqId, PAD),
                   {[m_guid(M) | Acc],
-                   F(M, 
-		     Si #state { pending_ack_dict = dict:erase(SeqId, PAD)})}
+                   F(M, Si #s { pending_ack_dict = dict:erase(SeqId, PAD)})}
           end,
-          {[], State},
+          {[], S},
           AckTags),
-    {lists:reverse(AllGuids), State1}.
+    {lists:reverse(AllGuids), S1}.
 
 -spec m_guid(m()) -> rabbit_guid:guid().
 
