@@ -164,18 +164,7 @@ handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
 
 handle_frame("UNSUBSCRIBE", Frame, State) ->
-    ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
-                      {ok, IdStr} ->
-                          list_to_binary("T_" ++ IdStr);
-                      not_found ->
-                          case rabbit_stomp_frame:header(Frame,
-                                                         "destination") of
-                              {ok, QueueStr} ->
-                                  list_to_binary("Q_" ++ QueueStr);
-                              not_found ->
-                                  missing
-                          end
-                  end,
+    ConsumerTag = rabbit_stomp_util:consumer_tag(Frame),
     cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
@@ -240,12 +229,12 @@ ack_action(Command, Frame,
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-cancel_subscription(missing, State) ->
+cancel_subscription({error, _}, State) ->
     error("Missing destination or id",
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription(ConsumerTag, State = #state{subscriptions = Subs}) ->
+cancel_subscription({ok, ConsumerTag}, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
