@@ -34,8 +34,8 @@
 -behaviour(gen_server2).
 
 -export([start_link/4, successfully_recovered_state/1,
-         client_init/3, client_terminate/1, client_delete_and_terminate/1,
-         client_ref/1,
+         client_init/4, client_terminate/1, client_delete_and_terminate/1,
+         client_ref/1, close_all_indicated/1,
          write/3, read/2, contains/2, remove/2, release/2, sync/3]).
 
 -export([sync/1, set_maximum_since_use/2,
@@ -82,10 +82,10 @@
           dedup_cache_ets,        %% tid of dedup cache table
           cur_file_cache_ets,     %% tid of current file cache table
           dying_clients,          %% set of dying clients
-          client_refs,            %% set of references of all registered clients
+          clients,                %% map of references of all registered clients
+                                  %% to callbacks
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
-          client_ondisk_callback, %% client ref to callback function mapping
           cref_to_guids           %% client ref to synced messages mapping
          }).
 
@@ -111,6 +111,7 @@
           index_module,
           index_state,
           file_summary_ets,
+          file_handles_ets,
           msg_store
         }).
 
@@ -124,6 +125,7 @@
                                 index_module     :: atom(),
                                 index_state      :: any(),
                                 file_summary_ets :: ets:tid(),
+                                file_handles_ets :: ets:tid(),
                                 msg_store        :: server()
                               }).
 
@@ -146,13 +148,15 @@
         {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
          A}).
 -type(maybe_guid_fun() :: 'undefined' | fun ((gb_set()) -> any())).
+-type(maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok')).
+-type(deletion_thunk() :: fun (() -> boolean())).
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
          startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
--spec(client_init/3 :: (server(), client_ref(), maybe_guid_fun()) ->
-             client_msstate()).
+-spec(client_init/4 :: (server(), client_ref(), maybe_guid_fun(),
+                        maybe_close_fds_fun()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_ref/1 :: (client_msstate()) -> client_ref()).
@@ -169,8 +173,8 @@
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
-                              'ok').
--spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> 'ok').
+                              deletion_thunk()).
+-spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
 
 -endif.
 
@@ -380,9 +384,9 @@
 %%
 %% We use a separate set to keep track of the dying clients in order
 %% to keep that set, which is inspected on every write and remove, as
-%% small as possible. Inspecting client_refs - the set of all clients
-%% - would degrade performance with many healthy clients and few, if
-%% any, dying clients, which is the typical case.
+%% small as possible. Inspecting the set of all clients would degrade
+%% performance with many healthy clients and few, if any, dying
+%% clients, which is the typical case.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
 %% variable_queue.
@@ -399,11 +403,11 @@ start_link(Server, Dir, ClientRefs, StartupFunState) ->
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
-client_init(Server, Ref, MsgOnDiskFun) ->
+client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts} =
-        gen_server2:call(Server, {new_client_state, Ref, MsgOnDiskFun},
-                         infinity),
+        gen_server2:call(
+          Server, {new_client_state, Ref, MsgOnDiskFun, CloseFDsFun}, infinity),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
                       file_handle_cache  = dict:new(),
@@ -523,7 +527,8 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
              CState = #client_msstate { file_handles_ets = FileHandlesEts,
                                         file_summary_ets = FileSummaryEts,
                                         dedup_cache_ets  = DedupCacheEts,
-                                        gc_pid           = GCPid }) ->
+                                        gc_pid           = GCPid,
+                                        client_ref       = Ref }) ->
     Release =
         fun() -> ok = case ets:update_counter(FileSummaryEts, File,
                                               {#file_summary.readers, -1}) of
@@ -570,9 +575,14 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
             case index_lookup(Guid, CState) of
                 #msg_location { file = File } = MsgLocation ->
                     %% Still the same file.
-                    mark_handle_open(FileHandlesEts, File),
-
-                    CState1 = close_all_indicated(CState),
+                    {ok, CState1} = close_all_indicated(CState),
+                    %% We are now guaranteed that the mark_handle_open
+                    %% call will either insert_new correctly, or will
+                    %% fail, but find the value is open, not close.
+                    mark_handle_open(FileHandlesEts, File, Ref),
+                    %% Could the msg_store now mark the file to be
+                    %% closed? No: marks for closing are issued only
+                    %% when the msg_store has locked the file.
                     {Msg, CState2} = %% This will never be the current file
                         read_from_disk(MsgLocation, CState1, DedupCacheEts),
                     Release(), %% this MUST NOT fail with badarg
@@ -588,11 +598,10 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
             end
     end.
 
-clear_client_callback(CRef,
-                      State = #msstate { client_ondisk_callback = CODC,
-                                         cref_to_guids          = CTG }) ->
-    State #msstate { client_ondisk_callback = dict:erase(CRef, CODC),
-                     cref_to_guids          = dict:erase(CRef, CTG)}.
+clear_client(CRef, State = #msstate { cref_to_guids = CTG,
+                                      dying_clients = DyingClients }) ->
+    State #msstate { cref_to_guids = dict:erase(CRef, CTG),
+                     dying_clients = sets:del_element(CRef, DyingClients) }.
 
 
 %%----------------------------------------------------------------------------
@@ -628,6 +637,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
                                       ClientRefs, Dir, Server),
+    Clients = dict:from_list(
+                [{CRef, {undefined, undefined}} || CRef <- ClientRefs1]),
     %% CleanShutdown => msg location index and file_summary both
     %% recovered correctly.
     true = case {FileSummaryRecovered, CleanShutdown} of
@@ -661,10 +672,9 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        dedup_cache_ets        = DedupCacheEts,
                        cur_file_cache_ets     = CurFileCacheEts,
                        dying_clients          = sets:new(),
-                       client_refs            = ClientRefs1,
+                       clients                = Clients,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
-                       client_ondisk_callback = dict:new(),
                        cref_to_guids          = dict:new()
                       },
 
@@ -684,6 +694,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                                 index_module     = IndexModule,
                                 index_state      = IndexState,
                                 file_summary_ets = FileSummaryEts,
+                                file_handles_ets = FileHandlesEts,
                                 msg_store        = self()
                               }),
 
@@ -694,10 +705,10 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        successfully_recovered_state    -> 7;
-        {new_client_state, _Ref, _MODC} -> 7;
-        {read, _Guid}                   -> 2;
-        _                               -> 0
+        successfully_recovered_state                  -> 7;
+        {new_client_state, _Ref, _MODC, _CloseFDsFun} -> 7;
+        {read, _Guid}                                 -> 2;
+        _                                             -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
@@ -713,7 +724,7 @@ prioritise_cast(Msg, _State) ->
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({new_client_state, CRef, Callback}, _From,
+handle_call({new_client_state, CRef, MsgOnDiskFun, CloseFDsFun}, _From,
             State = #msstate { dir                    = Dir,
                                index_state            = IndexState,
                                index_module           = IndexModule,
@@ -721,21 +732,15 @@ handle_call({new_client_state, CRef, Callback}, _From,
                                file_summary_ets       = FileSummaryEts,
                                dedup_cache_ets        = DedupCacheEts,
                                cur_file_cache_ets     = CurFileCacheEts,
-                               client_refs            = ClientRefs,
-                               client_ondisk_callback = CODC,
+                               clients                = Clients,
                                gc_pid                 = GCPid }) ->
-    CODC1 = case Callback of
-                undefined -> CODC;
-                _         -> dict:store(CRef, Callback, CODC)
-            end,
+    Clients1 = dict:store(CRef, {MsgOnDiskFun, CloseFDsFun}, Clients),
     reply({IndexState, IndexModule, Dir, GCPid,
            FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts},
-          State #msstate { client_refs = sets:add_element(CRef, ClientRefs),
-                           client_ondisk_callback = CODC1 });
+          State #msstate { clients = Clients1 });
 
-handle_call({client_terminate, CRef}, _From,
-            State) ->
-    reply(ok, clear_client_callback(CRef, State));
+handle_call({client_terminate, CRef}, _From, State) ->
+    reply(ok, clear_client(CRef, State));
 
 handle_call({read, Guid}, From, State) ->
     State1 = read_message(Guid, From, State),
@@ -750,36 +755,26 @@ handle_cast({client_dying, CRef},
     DyingClients1 = sets:add_element(CRef, DyingClients),
     write_message(CRef, <<>>, State #msstate { dying_clients = DyingClients1 });
 
-handle_cast({client_delete, CRef},
-            State = #msstate { client_refs = ClientRefs,
-                               dying_clients = DyingClients }) ->
-    State1 = clear_client_callback(
-               CRef, State #msstate {
-                       client_refs   = sets:del_element(CRef, ClientRefs),
-                       dying_clients = sets:del_element(CRef, DyingClients) }),
-    noreply(remove_message(CRef, CRef, State1));
+handle_cast({client_delete, CRef}, State = #msstate { clients = Clients }) ->
+    State1 = State #msstate { clients = dict:erase(CRef, Clients) },
+    noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
 handle_cast({write, CRef, Guid},
-            State = #msstate { file_summary_ets       = FileSummaryEts,
-                               cur_file_cache_ets     = CurFileCacheEts,
-                               client_ondisk_callback = CODC,
-                               cref_to_guids          = CTG }) ->
-
+            State = #msstate { file_summary_ets   = FileSummaryEts,
+                               cur_file_cache_ets = CurFileCacheEts }) ->
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
-    CTG1 = add_cref_to_guids_if_callback(CRef, Guid, CTG, CODC),
-    State1 = State #msstate { cref_to_guids = CTG1 },
     case should_mask_action(CRef, Guid, State) of
         {true, _Location} ->
             noreply(State);
         {false, not_found} ->
-            write_message(Guid, Msg, State1);
+            write_message(CRef, Guid, Msg, State);
         {Mask, #msg_location { ref_count = 0, file = File,
                                total_size = TotalSize }} ->
             case {Mask, ets:lookup(FileSummaryEts, File)} of
                 {false, [#file_summary { locked = true }]} ->
-                    ok = index_delete(Guid, State1),
-                    write_message(Guid, Msg, State1);
+                    ok = index_delete(Guid, State),
+                    write_message(CRef, Guid, Msg, State);
                 {false_if_increment, [#file_summary { locked = true }]} ->
                     %% The msg for Guid is older than the client death
                     %% message, but as it is being GC'd currently,
@@ -788,8 +783,8 @@ handle_cast({write, CRef, Guid},
                     noreply(State);
                 {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
-                    State2 = client_confirm_if_on_disk(CRef, Guid, File, State),
-                    noreply(adjust_valid_total_size(File, TotalSize, State2))
+                    State1 = client_confirm_if_on_disk(CRef, Guid, File, State),
+                    noreply(adjust_valid_total_size(File, TotalSize, State1))
             end;
         {_Mask, #msg_location { ref_count = RefCount, file = File }} ->
             %% We already know about it, just update counter. Only
@@ -832,10 +827,11 @@ handle_cast(sync, State) ->
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
                                file_handles_ets = FileHandlesEts,
-                               file_summary_ets = FileSummaryEts }) ->
+                               file_summary_ets = FileSummaryEts,
+                               clients          = Clients }) ->
     ok = cleanup_after_file_deletion(Source, State),
-    %% see comment in cleanup_after_file_deletion
-    true = mark_handle_to_close(FileHandlesEts, Destination),
+    %% see comment in cleanup_after_file_deletion, and client_read3
+    true = mark_handle_to_close(Clients, FileHandlesEts, Destination, false),
     true = ets:update_element(FileSummaryEts, Destination,
                               {#file_summary.locked, false}),
     State1 = State #msstate { sum_file_size = SumFileSize - Reclaimed },
@@ -865,7 +861,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       file_summary_ets    = FileSummaryEts,
                                       dedup_cache_ets     = DedupCacheEts,
                                       cur_file_cache_ets  = CurFileCacheEts,
-                                      client_refs         = ClientRefs,
+                                      clients             = Clients,
                                       dir                 = Dir }) ->
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
@@ -881,7 +877,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     [ets:delete(T) ||
         T <- [FileSummaryEts, DedupCacheEts, FileHandlesEts, CurFileCacheEts]],
     IndexModule:terminate(IndexState),
-    store_recovery_terms([{client_refs, sets:to_list(ClientRefs)},
+    store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
                           {index_module, IndexModule}], Dir),
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
@@ -942,6 +938,9 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
     [K() || K <- lists:reverse(Syncs)],
     [client_confirm(CRef, Guids, written, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
+
+write_message(CRef, Guid, Msg, State) ->
+    write_message(Guid, Msg, record_pending_confirm(CRef, Guid, State)).
 
 write_message(Guid, Msg,
               State = #msstate { current_file_handle = CurHdl,
@@ -1135,46 +1134,44 @@ orddict_store(Key, Val, Dict) ->
     false = orddict:is_key(Key, Dict),
     orddict:store(Key, Val, Dict).
 
-client_confirm(CRef, Guids, ActionTaken,
-               State = #msstate { client_ondisk_callback = CODC,
-                                  cref_to_guids          = CTG }) ->
-    case dict:find(CRef, CODC) of
-        {ok, Fun} -> Fun(Guids, ActionTaken),
-                     CTG1 = case dict:find(CRef, CTG) of
-                                {ok, Gs} ->
-                                    Guids1 = gb_sets:difference(Gs, Guids),
-                                    case gb_sets:is_empty(Guids1) of
-                                        true  -> dict:erase(CRef, CTG);
-                                        false -> dict:store(CRef, Guids1, CTG)
-                                    end;
-                                error    -> CTG
-                            end,
-                     State #msstate { cref_to_guids = CTG1 };
-        error -> State
+update_pending_confirms(Fun, CRef, State = #msstate { clients       = Clients,
+                                                      cref_to_guids = CTG }) ->
+    case dict:fetch(CRef, Clients) of
+        {undefined,    _CloseFDsFun} -> State;
+        {MsgOnDiskFun, _CloseFDsFun} -> CTG1 = Fun(MsgOnDiskFun, CTG),
+                                        State #msstate { cref_to_guids = CTG1 }
     end.
 
-add_cref_to_guids_if_callback(CRef, Guid, CTG, CODC) ->
-    case dict:find(CRef, CODC) of
-        {ok, _} -> dict:update(CRef,
-                               fun (Guids) -> gb_sets:add(Guid, Guids) end,
-                               gb_sets:singleton(Guid), CTG);
-        error   -> CTG
-    end.
+record_pending_confirm(CRef, Guid, State) ->
+    update_pending_confirms(
+      fun (_MsgOnDiskFun, CTG) ->
+              dict:update(CRef, fun (Guids) -> gb_sets:add(Guid, Guids) end,
+                          gb_sets:singleton(Guid), CTG)
+      end, CRef, State).
 
-client_confirm_if_on_disk(CRef, Guid, File,
-                          State = #msstate { client_ondisk_callback = CODC,
-                                             current_file  = CurFile,
-                                             cref_to_guids = CTG }) ->
-    CTG1 =
-        case File of
-            CurFile -> add_cref_to_guids_if_callback(CRef, Guid, CTG, CODC);
-            _       -> case dict:find(CRef, CODC) of
-                           {ok, Fun} -> Fun(gb_sets:singleton(Guid), written);
-                           _         -> ok
-                       end,
-                       CTG
-        end,
-    State #msstate { cref_to_guids = CTG1 }.
+client_confirm_if_on_disk(CRef, Guid, CurFile,
+                          State = #msstate { current_file = CurFile }) ->
+    record_pending_confirm(CRef, Guid, State);
+client_confirm_if_on_disk(CRef, Guid, _File, State) ->
+    update_pending_confirms(
+      fun (MsgOnDiskFun, CTG) ->
+              MsgOnDiskFun(gb_sets:singleton(Guid), written),
+              CTG
+      end, CRef, State).
+
+client_confirm(CRef, Guids, ActionTaken, State) ->
+    update_pending_confirms(
+      fun (MsgOnDiskFun, CTG) ->
+              MsgOnDiskFun(Guids, ActionTaken),
+              case dict:find(CRef, CTG) of
+                  {ok, Gs} -> Guids1 = gb_sets:difference(Gs, Guids),
+                              case gb_sets:is_empty(Guids1) of
+                                  true  -> dict:erase(CRef, CTG);
+                                  false -> dict:store(CRef, Guids1, CTG)
+                              end;
+                  error    -> CTG
+              end
+      end, CRef, State).
 
 %% Detect whether the Guid is older or younger than the client's death
 %% msg (if there is one). If the msg is older than the client death
@@ -1221,29 +1218,54 @@ close_handle(Key, FHC) ->
         error     -> FHC
     end.
 
-mark_handle_open(FileHandlesEts, File) ->
-    %% This is fine to fail (already exists)
-    ets:insert_new(FileHandlesEts, {{self(), File}, open}),
+mark_handle_open(FileHandlesEts, File, Ref) ->
+    %% This is fine to fail (already exists). Note it could fail with
+    %% the value being close, and not have it updated to open.
+    ets:insert_new(FileHandlesEts, {{Ref, File}, open}),
     true.
 
-mark_handle_to_close(FileHandlesEts, File) ->
-    [ ets:update_element(FileHandlesEts, Key, {2, close})
-      || {Key, open} <- ets:match_object(FileHandlesEts, {{'_', File}, open}) ],
+%% See comment in client_read3 - only call this when the file is locked
+mark_handle_to_close(ClientRefs, FileHandlesEts, File, Invoke) ->
+    [ begin
+          case (ets:update_element(FileHandlesEts, Key, {2, close})
+                andalso Invoke) of
+              true  -> case dict:fetch(Ref, ClientRefs) of
+                           {_MsgOnDiskFun, undefined}   -> ok;
+                           {_MsgOnDiskFun, CloseFDsFun} -> ok = CloseFDsFun()
+                       end;
+              false -> ok
+          end
+      end || {{Ref, _File} = Key, open} <-
+                 ets:match_object(FileHandlesEts, {{'_', File}, open}) ],
     true.
 
-close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts } =
+safe_file_delete_fun(File, Dir, FileHandlesEts) ->
+    fun () -> safe_file_delete(File, Dir, FileHandlesEts) end.
+
+safe_file_delete(File, Dir, FileHandlesEts) ->
+    %% do not match on any value - it's the absence of the row that
+    %% indicates the client has really closed the file.
+    case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
+        {[_|_], _Cont} -> false;
+        _              -> ok = file:delete(
+                                 form_filename(Dir, filenum_to_name(File))),
+                          true
+    end.
+
+close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
+                                      client_ref       = Ref } =
                     CState) ->
-    Objs = ets:match_object(FileHandlesEts, {{self(), '_'}, close}),
-    lists:foldl(fun ({Key = {_Self, File}, close}, CStateM) ->
-                        true = ets:delete(FileHandlesEts, Key),
-                        close_handle(File, CStateM)
-                end, CState, Objs).
+    Objs = ets:match_object(FileHandlesEts, {{Ref, '_'}, close}),
+    {ok, lists:foldl(fun ({Key = {_Ref, File}, close}, CStateM) ->
+                             true = ets:delete(FileHandlesEts, Key),
+                             close_handle(File, CStateM)
+                     end, CState, Objs)}.
 
-close_all_handles(CState = #client_msstate { file_handles_ets = FileHandlesEts,
-                                             file_handle_cache = FHC }) ->
-    Self = self(),
+close_all_handles(CState = #client_msstate { file_handles_ets  = FileHandlesEts,
+                                             file_handle_cache = FHC,
+                                             client_ref        = Ref }) ->
     ok = dict:fold(fun (File, Hdl, ok) ->
-                           true = ets:delete(FileHandlesEts, {Self, File}),
+                           true = ets:delete(FileHandlesEts, {Ref, File}),
                            file_handle_cache:close(Hdl)
                    end, ok, FHC),
     CState #client_msstate { file_handle_cache = dict:new() };
@@ -1381,16 +1403,16 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %%----------------------------------------------------------------------------
 
 recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Server) ->
-    {false, IndexModule:new(Dir), sets:new()};
+    {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
     rabbit_log:warning("~w: rebuilding indices from scratch~n", [Server]),
-    {false, IndexModule:new(Dir), sets:new()};
+    {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("~w: " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch~n",
                                        [Server | ErrorArgs]),
-                    {false, IndexModule:new(Dir), sets:new()}
+                    {false, IndexModule:new(Dir), []}
             end,
     case read_recovery_terms(Dir) of
         {false, Error} ->
@@ -1402,8 +1424,7 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
                   andalso IndexModule =:= RecIndexModule) of
                 true  -> case IndexModule:recover(Dir) of
                              {ok, IndexState1} ->
-                                 {true, IndexState1,
-                                  sets:from_list(ClientRefs)};
+                                 {true, IndexState1, ClientRefs};
                              {error, Error} ->
                                  Fresh("failed to recover index: ~p", [Error])
                          end;
@@ -1744,7 +1765,8 @@ delete_file_if_empty(File, State = #msstate {
 
 cleanup_after_file_deletion(File,
                             #msstate { file_handles_ets = FileHandlesEts,
-                                       file_summary_ets = FileSummaryEts }) ->
+                                       file_summary_ets = FileSummaryEts,
+                                       clients          = Clients }) ->
     %% Ensure that any clients that have open fhs to the file close
     %% them before using them again. This has to be done here (given
     %% it's done in the msg_store, and not the gc), and not when
@@ -1752,7 +1774,7 @@ cleanup_after_file_deletion(File,
     %% the client could find the close, and close and reopen the fh,
     %% whilst the GC is waiting for readers to disappear, before it's
     %% actually done the GC.
-    true = mark_handle_to_close(FileHandlesEts, File),
+    true = mark_handle_to_close(Clients, FileHandlesEts, File, true),
     [#file_summary { left    = Left,
                      right   = Right,
                      locked  = true,
@@ -1781,6 +1803,7 @@ has_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
 
 combine_files(Source, Destination,
               State = #gc_state { file_summary_ets = FileSummaryEts,
+                                  file_handles_ets = FileHandlesEts,
                                   dir              = Dir,
                                   msg_store        = Server }) ->
     [#file_summary {
@@ -1841,7 +1864,7 @@ combine_files(Source, Destination,
                        SourceHdl, DestinationHdl, Destination, State),
     %% tidy up
     ok = file_handle_cache:close(DestinationHdl),
-    ok = file_handle_cache:delete(SourceHdl),
+    ok = file_handle_cache:close(SourceHdl),
 
     %% don't update dest.right, because it could be changing at the
     %% same time
@@ -1851,9 +1874,11 @@ combine_files(Source, Destination,
               {#file_summary.file_size,        TotalValidData}]),
 
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
-    gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}).
+    gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
+    safe_file_delete_fun(Source, Dir, FileHandlesEts).
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
+                                      file_handles_ets = FileHandlesEts,
                                       dir              = Dir,
                                       msg_store        = Server }) ->
     [#file_summary { valid_total_size = 0,
@@ -1861,8 +1886,8 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                      file_size        = FileSize,
                      readers          = 0 }] = ets:lookup(FileSummaryEts, File),
     {[], 0} = load_and_vacuum_message_file(File, State),
-    ok = file:delete(form_filename(Dir, filenum_to_name(File))),
-    gen_server2:cast(Server, {delete_file, File, FileSize}).
+    gen_server2:cast(Server, {delete_file, File, FileSize}),
+    safe_file_delete_fun(File, Dir, FileHandlesEts).
 
 load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
                                                index_module = Index,

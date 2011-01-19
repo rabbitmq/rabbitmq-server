@@ -49,7 +49,7 @@
              uncommitted_ack_q, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, publish_seqno, unconfirmed}).
+             confirm_enabled, publish_seqno, unconfirmed, confirmed}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -188,7 +188,8 @@ init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
                 stats_timer             = StatsTimer,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
-                unconfirmed             = gb_trees:empty()},
+                unconfirmed             = gb_trees:empty(),
+                confirmed               = []},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -204,8 +205,9 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats -> 7;
-        _          -> 0
+        emit_stats                   -> 7;
+        {confirm, _MsgSeqNos, _QPid} -> 5;
+        _                            -> 0
     end.
 
 handle_call(flush, _From, State) ->
@@ -280,30 +282,27 @@ handle_cast({deliver, ConsumerTag, AckRequired,
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
-    {noreply,
-     State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
-     hibernate};
+    noreply([ensure_stats_timer],
+            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
-handle_cast({confirm, MsgSeqNos, From},
-            State= #ch{stats_timer = StatsTimer}) ->
-    case rabbit_event:stats_level(StatsTimer) of
-        fine ->
-            {noreply, group_and_confirm(MsgSeqNos, From, State), hibernate};
-        _    ->
-            {noreply, nogroup_confirm(MsgSeqNos, From, State), hibernate}
-    end.
+handle_cast({confirm, MsgSeqNos, From}, State) ->
+    State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
+    noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
+
+handle_info(timeout, State) ->
+    noreply(State);
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
             State = #ch{unconfirmed = UC}) ->
     %% TODO: this does a complete scan and partial rebuild of the
     %% tree, which is quite efficient. To do better we'd need to
     %% maintain a secondary mapping, from QPids to MsgSeqNos.
-    {EMs, UC1} = remove_queue_unconfirmed(
+    {MEs, UC1} = remove_queue_unconfirmed(
                    gb_trees:next(gb_trees:iterator(UC)), QPid,
-                   {[], UC}),
-    State1 = confirm_grouped(EMs, State#ch{unconfirmed = UC1}),
+                   {[], UC}, State),
     erase_queue_stats(QPid),
-    {noreply, queue_blocked(QPid, State1), hibernate}.
+    noreply(
+      queue_blocked(QPid, record_confirms(MEs, State#ch{unconfirmed = UC1}))).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -333,11 +332,24 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) ->
-    {reply, Reply, ensure_stats_timer(NewState), hibernate}.
+reply(Reply, NewState) -> reply(Reply, [], NewState).
 
-noreply(NewState) ->
-    {noreply, ensure_stats_timer(NewState), hibernate}.
+reply(Reply, Mask, NewState) -> reply(Reply, Mask, NewState, hibernate).
+
+reply(Reply, Mask, NewState, Timeout) ->
+    {reply, Reply, next_state(Mask, NewState), Timeout}.
+
+noreply(NewState) -> noreply([], NewState).
+
+noreply(Mask, NewState) -> noreply(Mask, NewState, hibernate).
+
+noreply(Mask, NewState, Timeout) ->
+    {noreply, next_state(Mask, NewState), Timeout}.
+
+next_state(Mask, State) ->
+    lists:foldl(fun (ensure_stats_timer, State1) -> ensure_stats_timer(State1);
+                    (send_confirms,      State1) -> send_confirms(State1)
+                end, State, [ensure_stats_timer, send_confirms] -- Mask).
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
@@ -476,61 +488,42 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-remove_queue_unconfirmed(none, _QX, Acc) ->
+remove_queue_unconfirmed(none, _QX, Acc, _State) ->
     Acc;
-remove_queue_unconfirmed({MsgSeqNo, QX, Next}, QPid, Acc) ->
+remove_queue_unconfirmed({MsgSeqNo, QX, Next}, QPid, Acc, State) ->
     remove_queue_unconfirmed(gb_trees:next(Next), QPid,
-                             remove_qmsg(MsgSeqNo, QPid, QX, Acc)).
+                             remove_qmsg(MsgSeqNo, QPid, QX, Acc, State),
+                             State).
 
-group_and_confirm([], _QPid, State) ->
+record_confirm(undefined, _, State) ->
     State;
-group_and_confirm(MsgSeqNos, QPid, State) ->
-    {EMs, UC1} = take_from_unconfirmed(MsgSeqNos, QPid, State),
-    confirm_grouped(EMs, State#ch{unconfirmed=UC1}).
+record_confirm(MsgSeqNo, XName, State) ->
+    record_confirms([{MsgSeqNo, XName}], State).
 
-confirm_grouped(EMs, State) ->
-    case lists:usort(EMs) of
-        [{XName, MsgSeqNo} | EMs1] ->
-            lists:foldl(
-              fun({XName1, MsgSeqNosE}, State0) ->
-                      send_confirms(MsgSeqNosE, XName1, State0)
-              end, State,
-              group_confirms_by_exchange(EMs1, [{XName, [MsgSeqNo]}]));
-        [] ->
-            State
-    end.
-
-group_confirms_by_exchange([], Acc) ->
-    Acc;
-group_confirms_by_exchange([{E, Msg1} | EMs], [{E, Msgs} | Acc]) ->
-    group_confirms_by_exchange(EMs, [{E, [Msg1 | Msgs]} | Acc]);
-group_confirms_by_exchange([{E, Msg1} | EMs], Acc) ->
-    group_confirms_by_exchange(EMs, [{E, [Msg1]} | Acc]).
-
-nogroup_confirm([], _QPid, State) ->
+record_confirms([], State) ->
     State;
-nogroup_confirm(MsgSeqNos, QPid, State) ->
-    {EMs, UC1} = take_from_unconfirmed(MsgSeqNos, QPid, State),
-    DoneMessages = [MsgSeqNo || {_XName, MsgSeqNo} <- EMs],
-    send_confirms(DoneMessages, undefined, State#ch{unconfirmed = UC1}).
+record_confirms(MEs, State = #ch{confirmed = C}) ->
+    State#ch{confirmed = [MEs | C]}.
 
-take_from_unconfirmed(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
-    lists:foldl(
-      fun(MsgSeqNo, {_DMs, UC0} = Acc) ->
-              case gb_trees:lookup(MsgSeqNo, UC0) of
-                  none        -> Acc;
-                  {value, {_, XName} = QX} ->
-                      maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
-                      remove_qmsg(MsgSeqNo, QPid, QX, Acc)
-              end
-      end, {[], UC}, MsgSeqNos).
+confirm([], _QPid, State) ->
+    State;
+confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
+    {MEs, UC1} =
+        lists:foldl(
+          fun(MsgSeqNo, {_DMs, UC0} = Acc) ->
+                  case gb_trees:lookup(MsgSeqNo, UC0) of
+                      none       -> Acc;
+                      {value,QX} -> remove_qmsg(MsgSeqNo, QPid, QX, Acc, State)
+                  end
+          end, {[], UC}, MsgSeqNos),
+    record_confirms(MEs, State#ch{unconfirmed = UC1}).
 
-remove_qmsg(MsgSeqNo, QPid, {Qs, XName}, {XMs, UC}) ->
-    %% remove QPid from MsgSeqNo's mapping
+remove_qmsg(MsgSeqNo, QPid, {Qs, XName}, {MEs, UC}, State) ->
     Qs1 = sets:del_element(QPid, Qs),
+    maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     case sets:size(Qs1) of
-        0 -> {[{XName, MsgSeqNo} | XMs], gb_trees:delete(MsgSeqNo, UC)};
-        _ -> {XMs, gb_trees:update(MsgSeqNo, {Qs1, XName}, UC)}
+        0 -> {[{MsgSeqNo, XName} | MEs], gb_trees:delete(MsgSeqNo, UC)};
+        _ -> {MEs, gb_trees:update(MsgSeqNo, {Qs1, XName}, UC)}
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
@@ -1252,12 +1245,12 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State#ch.writer_pid, no_route),
-    send_confirms([MsgSeqNo], XName, State);
+    record_confirm(MsgSeqNo, XName, State);
 process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State#ch.writer_pid, no_consumers),
-    send_confirms([MsgSeqNo], XName, State);
+    record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
-    send_confirms([MsgSeqNo], XName, State);
+    record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,        _,     _, undefined,   _, State) ->
     State;
 process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
@@ -1271,15 +1264,19 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
-send_confirms([], _, State) ->
+send_confirms(State = #ch{confirmed = C, stats_timer = StatsTimer}) ->
+    MsgSeqNos = case rabbit_event:stats_level(StatsTimer) of
+                    fine -> incr_confirm_exchange_stats(C, State);
+                    _    -> [MsgSeqNo || {MsgSeqNo, _} <- C]
+                end,
+    send_confirms(MsgSeqNos, State #ch{confirmed = []}).
+send_confirms([], State) ->
     State;
-send_confirms([MsgSeqNo], XName,
+send_confirms([MsgSeqNo],
               State = #ch{writer_pid = WriterPid}) ->
     send_confirm(MsgSeqNo, WriterPid),
-    maybe_incr_stats([{XName, 1}], confirm, State),
     State;
-send_confirms(Cs, XName,
-              State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
+send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     SCs = lists:usort(Cs),
     CutOff = case gb_trees:is_empty(UC) of
                  true  -> lists:last(SCs) + 1;
@@ -1293,11 +1290,15 @@ send_confirms(Cs, XName,
                                              multiple = true})
     end,
     [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
-    maybe_incr_stats([{XName, length(Cs)}], confirm, State),
     State.
 
-send_confirm(undefined, _WriterPid) ->
-    ok;
+incr_confirm_exchange_stats(C, State) ->
+    lists:foldl(
+      fun({MsgSeqNo, ExchangeName}, MsgSeqNos0) ->
+              maybe_incr_stats([{ExchangeName, 1}], confirm, State),
+              [MsgSeqNo | MsgSeqNos0]
+      end, [], lists:append(C)).
+
 send_confirm(SeqNo, WriterPid) ->
     ok = rabbit_writer:send_command(WriterPid,
                                     #'basic.ack'{delivery_tag = SeqNo}).

@@ -42,6 +42,7 @@
 
 -record(state,
         { pending_no_readers,
+          on_action,
           msg_store_state
         }).
 
@@ -89,6 +90,7 @@ init([MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
     {ok, #state { pending_no_readers = dict:new(),
+                  on_action          = [],
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -131,11 +133,15 @@ code_change(_OldVsn, State, _Extra) ->
 
 attempt_action(Action, Files,
                State = #state { pending_no_readers = Pending,
+                                on_action          = Thunks,
                                 msg_store_state    = MsgStoreState }) ->
     case [File || File <- Files,
                   rabbit_msg_store:has_readers(File, MsgStoreState)] of
-        []         -> do_action(Action, Files, MsgStoreState),
-                      State;
+        []         -> State #state {
+                        on_action = lists:filter(
+                                      fun (Thunk) -> not Thunk() end,
+                                      [do_action(Action, Files, MsgStoreState) |
+                                       Thunks]) };
         [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
                       State #state { pending_no_readers = Pending1 }
     end.
