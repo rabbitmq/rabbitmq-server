@@ -86,11 +86,13 @@ do_connect(#amqp_params{username = Username,
         true  -> ok;
         false -> exit(broker_not_found_in_vm)
     end,
-    User = try rpc:call(Node, rabbit_access_control, user_pass_login, [Username, Pass]) of
+    User = try rpc:call(Node, rabbit_access_control, user_pass_login,
+                        [Username, Pass]) of
                User1 -> User1
            catch exit:#amqp_error{name = access_refused} -> exit(auth_failure)
            end,
-    try rpc:call(Node, rabbit_access_control, check_vhost_access, [User, VHost]) of
+    try rpc:call(Node, rabbit_access_control, check_vhost_access,
+                 [User, VHost]) of
         _ -> ok
     catch exit:#amqp_error{name = access_refused} -> exit(access_refused)
     end,
