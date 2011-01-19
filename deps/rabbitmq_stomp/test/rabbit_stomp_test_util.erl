@@ -237,3 +237,4 @@ parse_invalid_message_id_test() ->
 %%--------------------------------------------------------------------
 parse_destination(Destination) ->
     rabbit_stomp_util:parse_destination(Destination).
+

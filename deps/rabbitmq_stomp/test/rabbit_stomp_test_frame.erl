@@ -60,6 +60,14 @@ parse_resume_mid_header_val_test() ->
         parse(Second, Resume),
     ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
 
+parse_resume_mid_body_test() ->
+    First = "COMMAND\n\nABC",
+    Second = "DEF\0",
+    {more, Resume} = parse(First),
+    {ok, Frame = #stomp_frame{command = "COMMAND", body_iolist = Body}, _Rest} =
+         parse(Second, Resume),
+    ?assertEqual([<<"ABC">>, <<"DEF">>], Body).
+
 parse_no_header_stripping_test() ->
     Content = "COMMAND\nheader: foo \n\n\0",
     {ok, Frame, _} = parse(Content),

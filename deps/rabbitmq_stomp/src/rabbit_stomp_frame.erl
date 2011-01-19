@@ -74,8 +74,7 @@ parse_headers([$\n | Rest], Frame, HeaderAcc, _KeyAcc) ->
                     {ok, ByteCount} -> ByteCount;
                     not_found       -> unknown
                 end,
-    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc},
-               [], [], 0, Remaining);
+    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc}, [], Remaining);
 parse_headers([$: | Rest], Frame, HeaderAcc, KeyAcc) ->
     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, []);
 parse_headers([Ch | Rest], Frame, HeaderAcc, KeyAcc) ->
@@ -103,39 +102,51 @@ parse_header_value([$\\, Ch | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
 parse_header_value([Ch | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
 
-parse_body([], Frame, Chunk, Chunks, ChunkSize, Remaining) ->
-    more(
-     fun(Rest) ->
-             parse_body(Rest, Frame, Chunk, Chunks, ChunkSize, Remaining)
-     end);
-parse_body([0 | Rest], Frame, Chunk, Chunks, _ChunkSize, 0) ->
-    {ok, Frame#stomp_frame{body_iolist = finalize_body(Chunk, Chunks)}, Rest};
-parse_body([0 | Rest], Frame, Chunk, Chunks, _ChunkSize, unknown) ->
-    {ok, Frame#stomp_frame{body_iolist = finalize_body(Chunk, Chunks)}, Rest};
-parse_body([_Ch | _Rest],_Frame, _Chunk, _Chunks, _ChunkSize, 0) ->
-    {error, missing_body_terminator};
-parse_body([Ch | Rest], Frame, Chunk, Chunks, ChunkSize, Remaining) ->
+parse_body(Content, Frame, Chunks, Remaining) ->
+    case index_of(Content, 0) of
+        not_found ->
+            finalize_chunk(Content, Chunks, Remaining,
+                          fun(NewChunks, NewRemaining) ->
+                                  more(fun(Rest) ->
+                                               parse_body(Rest,
+                                                          Frame,
+                                                          NewChunks,
+                                                          NewRemaining)
+                                       end)
+                          end);
+        Index ->
+            {Chunk, [0 | Rest]} = lists:split(Index, Content),
+            finalize_chunk(Chunk, Chunks, Remaining,
+                           fun(NewChunks, _) ->
+                                   {ok,
+                                    Frame#stomp_frame{
+                                      body_iolist =
+                                          lists:reverse(NewChunks)}, Rest}
+                           end)
+    end.
+
+finalize_chunk(Chunk, Chunks, Remaining, ReturnFun) ->
     NewRemaining = case Remaining of
-                       unknown -> unknown;
-                       _       -> Remaining - 1
+                       unknown -> Remaining;
+                       _       -> Remaining - length(Chunk)
                    end,
-    {NewChunk, NewChunks, NewChunkSize} =
-        accumulate_byte(Ch, Chunk, Chunks, ChunkSize),
-    parse_body(Rest, Frame, NewChunk, NewChunks, NewChunkSize, NewRemaining).
+    case NewRemaining =:= unknown orelse NewRemaining >= 0 of
+        true ->  ReturnFun(case Chunk of
+                               [] -> Chunks;
+                               _  -> [list_to_binary(Chunk) | Chunks]
+                           end, NewRemaining);
+        false -> {error, missing_body_terminator}
+    end.
 
-finalize_body(Chunk, Chunks) ->
-    lists:reverse(case Chunk of
-                      [] -> Chunks;
-                      _ -> [finalize_chunk(Chunk) | Chunks]
-                  end).
+index_of(L, E) ->
+    index_of(L, E, 0).
 
-finalize_chunk(Chunk) ->
-    list_to_binary(lists:reverse(Chunk)).
-
-accumulate_byte(Ch, Chunk, Chunks, ?CHUNK_SIZE_LIMIT) ->
-    {[Ch], [finalize_chunk(Chunk) | Chunks], 0};
-accumulate_byte(Ch, Chunk, Chunks, ChunkSize) ->
-    {[Ch | Chunk], Chunks, ChunkSize + 1}.
+index_of([], _, _) ->
+    not_found;
+index_of([E | Rest], E, I) ->
+    I;
+index_of([_ | Rest], E, I) ->
+    index_of(Rest, E, I + 1).
 
 more(Continuation) ->
     {more, {resume, Continuation}}.
