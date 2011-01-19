@@ -88,19 +88,23 @@ parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     NewKey = binary_to_list(KeyAcc),
     NewHeaders = case lists:keysearch(NewKey, 1, HeaderAcc) of
                      {value, _} -> HeaderAcc;
-                     false      -> [{NewKey, binary_to_list(ValAcc)} | HeaderAcc]
+                     false      -> [{NewKey, binary_to_list(ValAcc)} |
+                                    HeaderAcc]
                  end,
     parse_headers(Rest, Frame, NewHeaders, <<>>);
-parse_header_value(<<$\\, Ch:1/binary,  Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+parse_header_value(<<$\\, Ch:1/binary,  Rest/binary>>, Frame,
+                   HeaderAcc, KeyAcc, ValAcc) ->
     case unescape(Ch) of
         {ok, EscCh} ->
-            parse_header_value(Rest, Frame, HeaderAcc,
-                               KeyAcc, <<ValAcc/binary, EscCh/binary>>);
+            parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
+                               <<ValAcc/binary, EscCh/binary>>);
         error ->
             {error, {bad_escape, Ch}}
     end;
-parse_header_value(<<Ch:1/binary, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, <<ValAcc/binary, Ch/binary>>).
+parse_header_value(<<Ch:1/binary, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
+                   ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
+                       <<ValAcc/binary, Ch/binary>>).
 
 parse_body(Content, Frame, Chunks, Remaining) ->
     case binary:match(Content, <<0>>) of
