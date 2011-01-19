@@ -1265,15 +1265,15 @@ lock_message(false, _MsgStruct, State) ->
     State.
 
 send_confirms(State = #ch{confirmed = C, stats_timer = StatsTimer}) ->
+    C1 = lists:append(C),
     MsgSeqNos = case rabbit_event:stats_level(StatsTimer) of
-                    fine -> incr_confirm_exchange_stats(C, State);
-                    _    -> [MsgSeqNo || {MsgSeqNo, _} <- C]
+                    fine -> incr_confirm_exchange_stats(C1, State);
+                    _    -> [MsgSeqNo || {MsgSeqNo, _} <- C1]
                 end,
     send_confirms(MsgSeqNos, State #ch{confirmed = []}).
 send_confirms([], State) ->
     State;
-send_confirms([MsgSeqNo],
-              State = #ch{writer_pid = WriterPid}) ->
+send_confirms([MsgSeqNo], State = #ch{writer_pid = WriterPid}) ->
     send_confirm(MsgSeqNo, WriterPid),
     State;
 send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
@@ -1297,7 +1297,7 @@ incr_confirm_exchange_stats(C, State) ->
       fun({MsgSeqNo, ExchangeName}, MsgSeqNos0) ->
               maybe_incr_stats([{ExchangeName, 1}], confirm, State),
               [MsgSeqNo | MsgSeqNos0]
-      end, [], lists:append(C)).
+      end, [], C).
 
 send_confirm(SeqNo, WriterPid) ->
     ok = rabbit_writer:send_command(WriterPid,
