@@ -388,8 +388,8 @@ port_to_listeners(Port) ->
                         %% IPv6-only machine. Welcome to the future.
                         {error, eafnosupport}   -> [IPv6Listener];
                         %% Dual stack machine with something already
-                        %% on IPv4, return that to force an error later.
-                        {error, _}              -> [IPv4Listener]
+                        %% on IPv4.
+                        {error, _}              -> [IPv6Listener, IPv4Listener]
                     end
             end;
         {error, eafnosupport} ->
