@@ -70,30 +70,33 @@ info_keys() ->
 connect(AmqpParams, SIF, _ChMgr, State) ->
     try do_connect(AmqpParams, SIF, State) of
         Return -> Return
-    catch
-        exit:#amqp_error{name = access_refused} ->
-            {error, auth_failure};
-        _:Reason ->
-            {error, {Reason, erlang:get_stacktrace()}}
+    catch _:Reason -> {error, Reason}
     end.
 
 do_connect(#amqp_params{username = Username,
                         password = Pass,
                         node = Node,
-                        virtual_host = VHost}, SIF, State) ->
-    case net_adm:ping(Node) of
-        pong ->
-            case lists:keymember(rabbit, 1, rpc:call(Node, application, which_applications, [])) of
-                true  -> User = rpc:call(Node, rabbit_access_control, user_pass_login, [Username, Pass]),
-                         rpc:call(Node, rabbit_access_control, check_vhost_access, [User, VHost]),
-                         {ok, Collector} = SIF(),
-                         {ok, rpc:call(Node, rabbit_reader, server_properties, []), 0,
-                          State#state{node = Node,
-                                      user = User,
-                                      vhost = VHost,
-                                      collector = Collector}};
-                false -> {error, broker_not_found_in_vm}
-            end;
-        pang ->
-            {error, {cannot_connect_to_node, Node}}
-    end.
+                        virtual_host = VHost},
+           SIF, State) ->
+    case net_adm:ping(Node) of pong -> ok;
+                               pang -> exit({nodedown, Node})
+    end,
+    case lists:keymember(rabbit, 1,
+                         rpc:call(Node, application, which_applications, [])) of
+        true  -> ok;
+        false -> exit(broker_not_found_in_vm)
+    end,
+    User = try rpc:call(Node, rabbit_access_control, user_pass_login, [Username, Pass]) of
+               User1 -> User1
+           catch exit:#amqp_error{name = access_refused} -> exit(auth_failure)
+           end,
+    try rpc:call(Node, rabbit_access_control, check_vhost_access, [User, VHost]) of
+        _ -> ok
+    catch exit:#amqp_error{name = access_refused} -> exit(access_refused)
+    end,
+    {ok, Collector} = SIF(),
+    {ok, {rpc:call(Node, rabbit_reader, server_properties, []), 0,
+          State#state{node = Node,
+                      user = User,
+                      vhost = VHost,
+                      collector = Collector}}}.

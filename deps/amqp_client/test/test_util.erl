@@ -135,7 +135,7 @@ sync_method_serialization_test(Connection) ->
 async_sync_method_serialization_test(Connection) ->
     abstract_method_serialization_test(
         Connection,
-        fun (Channel, X) ->
+        fun (Channel, _X) ->
                 #'queue.declare_ok'{queue = Q} =
                     amqp_channel:call(Channel, #'queue.declare'{}),
                 Q
@@ -168,7 +168,7 @@ sync_async_method_serialization_test(Connection) ->
     abstract_method_serialization_test(
         Connection,
         fun (_, _) -> ok end,
-        fun (Channel, X, Payload, _) ->
+        fun (Channel, X, _Payload, _) ->
                 Q = uuid(),
                 %% The sync methods (called with cast to resume immediately;
                 %% the order should still be preserved)
