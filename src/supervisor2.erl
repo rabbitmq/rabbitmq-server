@@ -38,7 +38,7 @@
 %%    child is a supervisor and it exits normally (i.e. with reason of
 %%    'shutdown') then the child's parent also exits normally.
 %%
-%% All modifications are (C) 2010 Rabbit Technologies Ltd.
+%% All modifications are (C) 2010-2011 VMware, Inc.
 %%
 %% %CopyrightBegin%
 %%
