@@ -29,21 +29,24 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(tcp_client_sup).
+-module(rabbit_direct).
 
--behaviour(supervisor2).
+-export([boot/0, start_channel/1]).
 
--export([start_link/1, start_link/2]).
+%%----------------------------------------------------------------------------
 
--export([init/1]).
+boot() ->
+    {ok, _} =
+        supervisor2:start_child(
+            rabbit_sup,
+            {rabbit_direct_client_sup,
+             {rabbit_client_sup, start_link,
+              [{local, rabbit_direct_client_sup},
+               {rabbit_channel_sup, start_link, [direct]}]},
+             transient, infinity, supervisor, [rabbit_client_sup]}),
+    ok.
 
-start_link(Callback) ->
-    supervisor2:start_link(?MODULE, Callback).
-
-start_link(SupName, Callback) ->
-    supervisor2:start_link(SupName, ?MODULE, Callback).
-
-init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
-          [{tcp_client, {M,F,A},
-            temporary, infinity, supervisor, [M]}]}}.
+start_channel(Args) ->
+    {ok, _, {ChannelPid, _}} =
+        supervisor2:start_child(rabbit_direct_client_sup, [Args]),
+    {ok, ChannelPid}.

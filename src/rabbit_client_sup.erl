@@ -29,36 +29,20 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_channel_sup_sup).
+-module(rabbit_client_sup).
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_channel/3]).
+-export([start_link/1, start_link/2]).
 
 -export([init/1]).
 
-%%----------------------------------------------------------------------------
+start_link(Callback) ->
+    supervisor2:start_link(?MODULE, Callback).
 
--ifdef(use_specs).
+start_link(SupName, Callback) ->
+    supervisor2:start_link(SupName, ?MODULE, Callback).
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_channel/3 :: (pid(), atom(),
-                          rabbit_channel_sup:start_link_args()) ->
-                             {'ok', pid(), {pid(), any()}}).
-
--endif.
-
-%%----------------------------------------------------------------------------
-
-start_link() ->
-    supervisor2:start_link(?MODULE, []).
-
-start_channel(Pid, Type, Args) ->
-    supervisor2:start_child(Pid, [Type, Args]).
-
-%%----------------------------------------------------------------------------
-
-init([]) ->
+init({M,F,A}) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
-          [{channel_sup, {rabbit_channel_sup, start_link, []},
-            temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
+          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}}.

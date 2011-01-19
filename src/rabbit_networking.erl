@@ -123,13 +123,13 @@ boot_ssl() ->
     end.
 
 start() ->
-    {ok,_} = supervisor:start_child(
+    {ok,_} = supervisor2:start_child(
                rabbit_sup,
                {rabbit_tcp_client_sup,
-                {tcp_client_sup, start_link,
+                {rabbit_client_sup, start_link,
                  [{local, rabbit_tcp_client_sup},
                   {rabbit_connection_sup,start_link,[]}]},
-                transient, infinity, supervisor, [tcp_client_sup]}),
+                transient, infinity, supervisor, [rabbit_client_sup]}),
     ok.
 
 getaddr(Host) ->
