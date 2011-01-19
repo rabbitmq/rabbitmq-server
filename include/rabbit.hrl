@@ -70,7 +70,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2010 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.").
+-define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2011 VMware, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 -define(PROTOCOL_VERSION, "AMQP 0-9-1 / 0-9 / 0-8").
 -define(ERTS_MINIMUM, "5.6.3").
