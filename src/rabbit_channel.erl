@@ -1268,12 +1268,10 @@ send_confirms(State = #ch{confirmed = C, stats_timer = StatsTimer}) ->
     C1 = lists:append(C),
     MsgSeqNos = case rabbit_event:stats_level(StatsTimer) of
                     fine ->
-                        lists:foldl(
-                          fun({MsgSeqNo, ExchangeName}, MsgSeqNos0) ->
-                                  maybe_incr_stats([{ExchangeName, 1}],
-                                                   confirm, State),
-                                  [MsgSeqNo | MsgSeqNos0]
-                          end, [], C1);
+                        [ begin maybe_incr_stats([{ExchangeName, 1}],
+                                                 confirm, State),
+                                MsgSeqNo
+                          end || {MsgSeqNo, ExchangeName} <- C1];
                     _    ->
                         [MsgSeqNo || {MsgSeqNo, _} <- C1]
                 end,
