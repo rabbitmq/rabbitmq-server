@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 
--module(rabbit_mnesia_queue).
+-module(rabbit_ram_queue).
 
 -export(
    [start/1, stop/0, init/3, terminate/1, delete_and_terminate/1, purge/1,
