@@ -96,6 +96,9 @@
 -define(DESIRED_HIBERNATE,         10000).
 -define(STATS_INTERVAL,             5000).
 
+-define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
+-define(DELETED_HEADER, <<"BCC">>).
+
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
 -define(LOGDEBUG(F,A), rabbit_log:debug(F,A)).

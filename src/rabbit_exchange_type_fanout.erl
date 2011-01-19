@@ -31,6 +31,7 @@
 
 -module(rabbit_exchange_type_fanout).
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -50,8 +51,13 @@ description() ->
     [{name, <<"fanout">>},
      {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = Name}, _Delivery) ->
-    rabbit_router:match_routing_key(Name, '_').
+route(#exchange{name = #resource{virtual_host = VHost} = Name},
+      #delivery{message = #basic_message{content = Content}}) ->
+    BindingRoutes = rabbit_router:match_routing_key(Name, '_'),
+    HeaderRoutes = rabbit_exchange:header_routes(
+                       (Content#content.properties)#'P_basic'.headers, VHost),
+    BindingRoutes ++ HeaderRoutes.
+
 
 validate(_X) -> ok.
 create(_X) -> ok.

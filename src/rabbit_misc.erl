@@ -40,7 +40,7 @@
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
--export([table_lookup/3, table_lookup/2]).
+-export([table_lookup/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -112,8 +112,6 @@
                                         'ok' | rabbit_types:connection_exit()).
 -spec(dirty_read/1 ::
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
--spec(table_lookup/3 ::
-        (rabbit_framing:amqp_table(), binary(), binary()) -> [binary()]).
 -spec(table_lookup/2 ::
         (rabbit_framing:amqp_table(), binary())
          -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
@@ -253,13 +251,6 @@ dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
         [Result] -> {ok, Result};
         []       -> {error, not_found}
-    end.
-
-table_lookup(Table, Key, Separator) ->
-    case table_lookup(Table, Key) of
-        undefined         -> [];
-        {longstr, BinVal} -> binary:split(BinVal, Separator, [global]);
-        _                 -> []
     end.
 
 table_lookup(Table, Key) ->

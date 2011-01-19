@@ -69,7 +69,7 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
     %% is preserved. This scales much better than the non-immediate
     %% case below.
     QPids = lookup_qpids(QNames),
-    ModifiedDelivery = strip_header(Delivery, <<"BCC">>),
+    ModifiedDelivery = strip_header(Delivery, ?DELETED_HEADER),
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, ModifiedDelivery) end),
     {routed, QPids};
@@ -77,7 +77,7 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
 deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
-    ModifiedDelivery = strip_header(Delivery, <<"BCC">>),
+    ModifiedDelivery = strip_header(Delivery, ?DELETED_HEADER),
     {Success, _} =
         delegate:invoke(QPids,
                         fun (Pid) ->
@@ -87,6 +87,7 @@ deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
          lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Mandatory, Immediate, {Routed, Handled}).
 
+%% This breaks the spec rule forbidding message modification
 strip_header(Delivery = #delivery{message = Message = #basic_message{
                  content = Content = #content{
                  properties = Props = #'P_basic'{headers = Headers}}}},

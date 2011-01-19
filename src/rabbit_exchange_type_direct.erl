@@ -55,14 +55,9 @@ route(#exchange{name = #resource{virtual_host = VHost} = Name},
       #delivery{message = #basic_message{routing_key = RoutingKey,
                                          content     = Content}}) ->
     BindingRoutes = rabbit_router:match_routing_key(Name, RoutingKey),
-    HeaderRKeys =
-        case (Content#content.properties)#'P_basic'.headers of
-            undefined -> [];
-            Headers   -> rabbit_misc:table_lookup(Headers, <<"CC">>, <<0>>) ++
-                         rabbit_misc:table_lookup(Headers, <<"BCC">>, <<0>>)
-        end,
-    HeaderRoutes = [rabbit_misc:r(VHost, queue, RKey) || RKey <- HeaderRKeys],
-    lists:usort(BindingRoutes ++ HeaderRoutes).
+    HeaderRoutes = rabbit_exchange:header_routes(
+                       (Content#content.properties)#'P_basic'.headers, VHost),
+    BindingRoutes ++ HeaderRoutes.
 
 validate(_X) -> ok.
 create(_X) -> ok.
