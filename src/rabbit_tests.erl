@@ -588,7 +588,7 @@ test_topic_matching() ->
                   auto_delete = false, arguments = []},
     %% create
     rabbit_exchange_type_topic:validate(X),
-    rabbit_exchange_type_topic:create(X),
+    exchange_op_callback(X, create, []),
 
     %% add some bindings
     Bindings = lists:map(
@@ -624,59 +624,71 @@ test_topic_matching() ->
               {"#.#.#",         "t24"},
               {"*",             "t25"},
               {"#.b.#",         "t26"}]),
-    lists:foreach(fun (B) -> rabbit_exchange_type_topic:add_binding(X, B) end,
+    lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
                   Bindings),
 
     %% test some matches
     test_topic_expect_match(X,
-        [{"a.b.c", ["t1", "t2", "t5", "t6", "t10", "t11", "t12", "t18", "t20",
-                    "t21", "t22", "t23", "t24", "t26"]},
-         {"a.b", ["t3", "t5", "t6", "t7", "t8", "t9", "t11", "t12", "t15",
-                  "t21", "t22", "t23", "t24", "t26"]},
-         {"a.b.b", ["t3", "t5", "t6", "t7", "t11", "t12", "t14", "t18", "t21",
-                    "t22", "t23", "t24", "t26"]},
-         {"", ["t5", "t6", "t17", "t24"]},
-         {"b.c.c", ["t5", "t6", "t18", "t21", "t22", "t23", "t24", "t26"]},
-         {"a.a.a.a.a", ["t5", "t6", "t11", "t12", "t21", "t22", "t23", "t24"]},
-         {"vodka.gin", ["t5", "t6", "t8", "t21", "t22", "t23", "t24"]},
-         {"vodka.martini", ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
-                            "t24"]},
-         {"b.b.c", ["t5", "t6", "t10", "t13", "t18", "t21", "t22", "t23",
-                    "t24", "t26"]},
+        [{"a.b.c",               ["t1", "t2", "t5", "t6", "t10", "t11", "t12",
+                                  "t18", "t20", "t21", "t22", "t23", "t24",
+                                  "t26"]},
+         {"a.b",                 ["t3", "t5", "t6", "t7", "t8", "t9", "t11",
+                                  "t12", "t15", "t21", "t22", "t23", "t24",
+                                  "t26"]},
+         {"a.b.b",               ["t3", "t5", "t6", "t7", "t11", "t12", "t14",
+                                  "t18", "t21", "t22", "t23", "t24", "t26"]},
+         {"",                    ["t5", "t6", "t17", "t24"]},
+         {"b.c.c",               ["t5", "t6", "t18", "t21", "t22", "t23", "t24",
+                                  "t26"]},
+         {"a.a.a.a.a",           ["t5", "t6", "t11", "t12", "t21", "t22", "t23",
+                                 "t24"]},
+         {"vodka.gin",           ["t5", "t6", "t8", "t21", "t22", "t23",
+                                  "t24"]},
+         {"vodka.martini",       ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
+                                  "t24"]},
+         {"b.b.c",               ["t5", "t6", "t10", "t13", "t18", "t21", "t22",
+                                  "t23", "t24", "t26"]},
          {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
-         {"oneword", ["t5", "t6", "t21", "t22", "t23", "t24", "t25"]}]),
+         {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
+                                  "t25"]}]),
 
     %% remove some bindings
     RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
                        lists:nth(11, Bindings), lists:nth(19, Bindings),
                        lists:nth(21, Bindings)],
-    rabbit_exchange_type_topic:remove_bindings(X, RemovedBindings),
+    exchange_op_callback(X, remove_bindings, [RemovedBindings]),
     RemainingBindings = ordsets:to_list(
                           ordsets:subtract(ordsets:from_list(Bindings),
                                            ordsets:from_list(RemovedBindings))),
 
     %% test some matches
     test_topic_expect_match(X,
-        [{"a.b.c", ["t2", "t6", "t10", "t12", "t18", "t20", "t22", "t23",
-                    "t24", "t26"]},
-         {"a.b", ["t3", "t6", "t7", "t8", "t9", "t12", "t15", "t22", "t23",
-                  "t24", "t26"]},
-         {"a.b.b", ["t3", "t6", "t7", "t12", "t14", "t18", "t22", "t23",
-                    "t24", "t26"]},
-         {"", ["t6", "t17", "t24"]},
-         {"b.c.c", ["t6", "t18", "t22", "t23", "t24", "t26"]},
-         {"a.a.a.a.a", ["t6", "t12", "t22", "t23", "t24"]},
-         {"vodka.gin", ["t6", "t8", "t22", "t23", "t24"]},
-         {"vodka.martini", ["t6", "t8", "t22", "t23", "t24"]},
-         {"b.b.c", ["t6", "t10", "t13", "t18", "t22", "t23", "t24", "t26"]},
+        [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
+                                  "t23", "t24", "t26"]},
+         {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
+                                  "t22", "t23", "t24", "t26"]},
+         {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
+                                  "t23", "t24", "t26"]},
+         {"",                    ["t6", "t17", "t24"]},
+         {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
+         {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
+         {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
+         {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
+         {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
+                                  "t24", "t26"]},
          {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
-         {"oneword", ["t6", "t22", "t23", "t24", "t25"]}]),
+         {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
 
     %% remove the entire exchange
-    rabbit_exchange_type_topic:delete(X, RemainingBindings),
+    exchange_op_callback(X, delete, [RemainingBindings]),
     %% none should match now
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
+
+exchange_op_callback(X, Fun, ExtraArgs) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
+    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
