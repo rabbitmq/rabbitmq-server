@@ -87,7 +87,8 @@ sync_async_method_serialization_test_() ->
         end}.
 
 teardown_test() ->
-    repeat(fun test_util:teardown_test/1, ?ITERATIONS).
+    {timeout, 50,
+        fun () -> repeat(fun test_util:teardown_test/1, ?ITERATIONS) end}.
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
@@ -110,23 +111,29 @@ confirm_test() ->
 non_existent_exchange_test() ->
     negative_test_util:non_existent_exchange_test(new_connection()).
 
-bogus_rpc_test() ->
-    repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS).
+bogus_rpc_test_() ->
+    {timeout, 50,
+        fun () ->
+                repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS)
+        end}.
 
-hard_error_test() ->
-    repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS).
+hard_error_test_() ->
+    {timeout, 50,
+        fun () ->
+                repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS)
+        end}.
 
 non_existent_user_test() ->
-    negative_test_util:non_existent_user_test().
+    negative_test_util:non_existent_user_test(fun new_connection/1).
 
 invalid_password_test() ->
-    negative_test_util:invalid_password_test().
+    negative_test_util:invalid_password_test(fun new_connection/1).
 
 non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test().
+    negative_test_util:non_existent_vhost_test(fun new_connection/1).
 
 no_permission_test() ->
-    negative_test_util:no_permission_test().
+    negative_test_util:no_permission_test(fun new_connection/1).
 
 channel_writer_death_test() ->
     negative_test_util:channel_writer_death_test(new_connection()).
@@ -156,12 +163,12 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(network, AmqpParams) of
-        {ok, Conn}            -> Conn;
-        {error, _Err} = Error -> Error
+    case amqp_connection:start(network, AmqpParams) of {ok, Conn}     -> Conn;
+                                                       {error, _} = E -> E
     end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
+
