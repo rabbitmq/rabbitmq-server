@@ -145,7 +145,7 @@ common_clean:
 compile: $(TARGETS)
 
 run: compile $(EBIN_DIR)/$(PACKAGE).app
-	$(LIBS_PATH) erl -pa $(LOAD_PATH)
+	$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
 
 ###############################################################################
 ##  Packaging

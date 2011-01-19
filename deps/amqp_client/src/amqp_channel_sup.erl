@@ -43,39 +43,23 @@ start_link(Type, InfraArgs, ChNumber) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_writer_fun(Sup, direct, [User, VHost, Collector], ChNumber) ->
-    fun() ->
-        ChPid = self(),
-        {ok, _} = supervisor2:start_child(
-                    Sup,
-                    {rabbit_channel, {rabbit_channel, start_link,
-                                      [ChNumber, ChPid, ChPid, User, VHost,
-                                       Collector, start_limiter_fun(Sup)]},
-                     transient, ?MAX_WAIT, worker, [rabbit_channel]})
+start_writer_fun(_Sup, direct, [Node, User, VHost, Collector], ChNumber) ->
+    fun () ->
+            rpc:call(Node, rabbit_direct, start_channel,
+                     [{ChNumber, self(), User, VHost, Collector}])
     end;
 start_writer_fun(Sup, network, [Sock], ChNumber) ->
-    fun() ->
-        ChPid = self(),
-        {ok, _} = supervisor2:start_child(
-                    Sup,
-                    {writer, {rabbit_writer, start_link,
-                              [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
-                               ChPid]},
-                     transient, ?MAX_WAIT, worker, [rabbit_writer]})
+    fun () ->
+            {ok, _} = supervisor2:start_child(
+                        Sup,
+                        {writer, {rabbit_writer, start_link,
+                                  [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
+                                   self()]},
+                         transient, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
 
 init_command_assembler(direct)  -> {ok, none};
 init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
-
-start_limiter_fun(Sup) ->
-    fun (UnackedCount) ->
-            Parent = self(),
-            {ok, _} = supervisor2:start_child(
-                        Sup,
-                        {limiter, {rabbit_limiter, start_link,
-                                   [Parent, UnackedCount]},
-                         transient, ?MAX_WAIT, worker, [rabbit_limiter]})
-    end.
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

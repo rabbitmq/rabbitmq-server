@@ -24,7 +24,8 @@
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
--record(state, {user,
+-record(state, {node,
+                user,
                 vhost,
                 collector,
                 closing_reason %% undefined | Reason
@@ -37,8 +38,11 @@
 init([]) ->
     {ok, #state{}}.
 
-open_channel_args(#state{user = User, vhost = VHost, collector = Collector}) ->
-    [User, VHost, Collector].
+open_channel_args(#state{node = Node,
+                         user = User,
+                         vhost = VHost,
+                         collector = Collector}) ->
+    [Node, User, VHost, Collector].
 
 do(_Method, _State) ->
     ok.
@@ -73,16 +77,23 @@ connect(AmqpParams, SIF, _ChMgr, State) ->
             {error, {Reason, erlang:get_stacktrace()}}
     end.
 
-do_connect(#amqp_params{username = Username, password = Pass,
-                        virtual_host = VHost},
-           SIF, State) ->
-    case lists:keymember(rabbit, 1, application:which_applications()) of
-        true  -> User = rabbit_access_control:user_pass_login(Username, Pass),
-                 rabbit_access_control:check_vhost_access(User, VHost),
-                 {ok, Collector} = SIF(),
-                 {ok, rabbit_reader:server_properties(), 0,
-                  State#state{user = User,
-                              vhost = VHost,
-                              collector = Collector}};
-        false -> {error, broker_not_found_in_vm}
+do_connect(#amqp_params{username = Username,
+                        password = Pass,
+                        node = Node,
+                        virtual_host = VHost}, SIF, State) ->
+    case net_adm:ping(Node) of
+        pong ->
+            case lists:keymember(rabbit, 1, rpc:call(Node, application, which_applications, [])) of
+                true  -> User = rpc:call(Node, rabbit_access_control, user_pass_login, [Username, Pass]),
+                         rpc:call(Node, rabbit_access_control, check_vhost_access, [User, VHost]),
+                         {ok, Collector} = SIF(),
+                         {ok, rpc:call(Node, rabbit_reader, server_properties, []), 0,
+                          State#state{node = Node,
+                                      user = User,
+                                      vhost = VHost,
+                                      collector = Collector}};
+                false -> {error, broker_not_found_in_vm}
+            end;
+        pang ->
+            {error, {cannot_connect_to_node, Node}}
     end.
