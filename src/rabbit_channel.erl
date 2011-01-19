@@ -488,11 +488,11 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-remove_queue_unconfirmed(none, _QX, Acc, _State) ->
+remove_queue_unconfirmed(none, _XQ, Acc, _State) ->
     Acc;
-remove_queue_unconfirmed({MsgSeqNo, QX, Next}, QPid, Acc, State) ->
+remove_queue_unconfirmed({MsgSeqNo, XQ, Next}, QPid, Acc, State) ->
     remove_queue_unconfirmed(gb_trees:next(Next), QPid,
-                             remove_qmsg(MsgSeqNo, QPid, QX, Acc, State),
+                             remove_qmsg(MsgSeqNo, QPid, XQ, Acc, State),
                              State).
 
 record_confirm(undefined, _, State) ->
@@ -512,18 +512,18 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
         lists:foldl(
           fun(MsgSeqNo, {_DMs, UC0} = Acc) ->
                   case gb_trees:lookup(MsgSeqNo, UC0) of
-                      none       -> Acc;
-                      {value,QX} -> remove_qmsg(MsgSeqNo, QPid, QX, Acc, State)
+                      none        -> Acc;
+                      {value, XQ} -> remove_qmsg(MsgSeqNo, QPid, XQ, Acc, State)
                   end
           end, {[], UC}, MsgSeqNos),
     record_confirms(MEs, State#ch{unconfirmed = UC1}).
 
-remove_qmsg(MsgSeqNo, QPid, {Qs, XName}, {MEs, UC}, State) ->
+remove_qmsg(MsgSeqNo, QPid, {XName, Qs}, {MEs, UC}, State) ->
     Qs1 = sets:del_element(QPid, Qs),
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     case sets:size(Qs1) of
         0 -> {[{MsgSeqNo, XName} | MEs], gb_trees:delete(MsgSeqNo, UC)};
-        _ -> {MEs, gb_trees:update(MsgSeqNo, {Qs1, XName}, UC)}
+        _ -> {MEs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UC)}
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
@@ -1256,7 +1256,7 @@ process_routing_result(routed,        _,     _, undefined,   _, State) ->
 process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
     #ch{unconfirmed = UC} = State,
     [maybe_monitor(QPid) || QPid <- QPids],
-    UC1 = gb_trees:insert(MsgSeqNo, {sets:from_list(QPids), XName}, UC),
+    UC1 = gb_trees:insert(MsgSeqNo, {XName, sets:from_list(QPids)}, UC),
     State#ch{unconfirmed = UC1}.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
@@ -1267,8 +1267,15 @@ lock_message(false, _MsgStruct, State) ->
 send_confirms(State = #ch{confirmed = C, stats_timer = StatsTimer}) ->
     C1 = lists:append(C),
     MsgSeqNos = case rabbit_event:stats_level(StatsTimer) of
-                    fine -> incr_confirm_exchange_stats(C1, State);
-                    _    -> [MsgSeqNo || {MsgSeqNo, _} <- C1]
+                    fine ->
+                        lists:foldl(
+                          fun({MsgSeqNo, ExchangeName}, MsgSeqNos0) ->
+                                  maybe_incr_stats([{ExchangeName, 1}],
+                                                   confirm, State),
+                                  [MsgSeqNo | MsgSeqNos0]
+                          end, [], C1);
+                    _    ->
+                        [MsgSeqNo || {MsgSeqNo, _} <- C1]
                 end,
     send_confirms(MsgSeqNos, State #ch{confirmed = []}).
 send_confirms([], State) ->
@@ -1280,7 +1287,7 @@ send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     SCs = lists:usort(Cs),
     CutOff = case gb_trees:is_empty(UC) of
                  true  -> lists:last(SCs) + 1;
-                 false -> {SeqNo, _Qs} = gb_trees:smallest(UC), SeqNo
+                 false -> {SeqNo, _XQ} = gb_trees:smallest(UC), SeqNo
              end,
     {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SCs),
     case Ms of
@@ -1291,13 +1298,6 @@ send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
     end,
     [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
     State.
-
-incr_confirm_exchange_stats(C, State) ->
-    lists:foldl(
-      fun({MsgSeqNo, ExchangeName}, MsgSeqNos0) ->
-              maybe_incr_stats([{ExchangeName, 1}], confirm, State),
-              [MsgSeqNo | MsgSeqNos0]
-      end, [], C).
 
 send_confirm(SeqNo, WriterPid) ->
     ok = rabbit_writer:send_command(WriterPid,
