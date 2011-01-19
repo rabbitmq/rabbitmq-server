@@ -36,7 +36,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/7, do/2, do/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2, confirm/2, flush_confirms/1]).
+-export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([emit_stats/1]).
 
@@ -49,8 +49,7 @@
              uncommitted_ack_q, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, publish_seqno, confirm_multiple, confirm_tref,
-             held_confirms, unconfirmed, queues_for_msg}).
+             confirm_enabled, publish_seqno, unconfirmed}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -71,8 +70,6 @@
          vhost]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
-
--define(FLUSH_CONFIRMS_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -97,8 +94,7 @@
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
--spec(confirm/2 ::(pid(), non_neg_integer()) -> 'ok').
--spec(flush_confirms/1 :: (pid()) -> 'ok').
+-spec(confirm/2 ::(pid(), [non_neg_integer()]) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
@@ -137,11 +133,8 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
 
-confirm(Pid, MsgSeqNo) ->
-    gen_server2:cast(Pid, {confirm, MsgSeqNo, self()}).
-
-flush_confirms(Pid) ->
-    gen_server2:cast(Pid, flush_confirms).
+confirm(Pid, MsgSeqNos) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 list() ->
     pg_local:get_members(rabbit_channels).
@@ -192,11 +185,8 @@ init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
                 queue_collector_pid     = CollectorPid,
                 stats_timer             = StatsTimer,
                 confirm_enabled         = false,
-                publish_seqno           = 0,
-                confirm_multiple        = false,
-                held_confirms           = gb_sets:new(),
-                unconfirmed             = gb_sets:new(),
-                queues_for_msg          = dict:new()},
+                publish_seqno           = 1,
+                unconfirmed             = gb_trees:empty()},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -292,36 +282,30 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
      State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
      hibernate};
 
-handle_cast(flush_confirms, State) ->
-    {noreply, internal_flush_confirms(State)};
-
-handle_cast({confirm, MsgSeqNo, From}, State) ->
-    {noreply, confirm(MsgSeqNo, From, State)}.
+handle_cast({confirm, MsgSeqNos, From}, State) ->
+    {noreply, confirm(MsgSeqNos, From, State), hibernate}.
 
 handle_info({'DOWN', _MRef, process, QPid, _Reason},
-            State = #ch{queues_for_msg = QFM}) ->
-    State1 = dict:fold(
-               fun(Msg, QPids, State0 = #ch{queues_for_msg = QFM0}) ->
-                       Qs = sets:del_element(QPid, QPids),
-                       case sets:size(Qs) of
-                           0 -> confirm(Msg, QPid, State0);
-                           _ -> State0#ch{queues_for_msg =
-                                              dict:store(Msg, Qs, QFM0)}
-                       end
-               end, State, QFM),
+            State = #ch{unconfirmed = UC}) ->
+    %% TODO: this does a complete scan and partial rebuild of the
+    %% tree, which is quite efficient. To do better we'd need to
+    %% maintain a secondary mapping, from QPids to MsgSeqNos.
+    {MsgSeqNos, UC1} = remove_queue_unconfirmed(
+                         gb_trees:next(gb_trees:iterator(UC)), QPid,
+                         {[], UC}),
+    State1 = send_confirms(MsgSeqNos, State#ch{unconfirmed = UC1}),
     erase_queue_stats(QPid),
     {noreply, queue_blocked(QPid, State1), hibernate}.
 
-handle_pre_hibernate(State = #ch{stats_timer   = StatsTimer}) ->
+handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    State1 = internal_flush_confirms(State),
     rabbit_event:if_enabled(StatsTimer,
                             fun () ->
                                     internal_emit_stats(
                                       State, [{idle_since, now()}])
                             end),
     StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
-    {hibernate, State1#ch{stats_timer = StatsTimer1}}.
+    {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
 terminate(_Reason, State = #ch{state = terminating}) ->
     terminate(State);
@@ -484,50 +468,30 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-confirm(undefined, _QPid, State) ->
-    State;
-confirm(_MsgSeqNo, _QPid, State = #ch{confirm_enabled = false}) ->
-    State;
-confirm(MsgSeqNo, QPid, State = #ch{confirm_multiple = false}) ->
-    do_if_unconfirmed(MsgSeqNo, QPid,
-                      fun(MSN, State1 = #ch{writer_pid = WriterPid}) ->
-                              ok = rabbit_writer:send_command(
-                                     WriterPid, #'basic.ack'{
-                                       delivery_tag = MSN}),
-                              State1
-                      end, State);
-confirm(MsgSeqNo, QPid, State = #ch{confirm_multiple = true}) ->
-    do_if_unconfirmed(MsgSeqNo, QPid,
-                      fun(MSN, State1 = #ch{held_confirms = As}) ->
-                              start_confirm_timer(
-                                State1#ch{held_confirms = gb_sets:add(MSN, As)})
-                      end, State).
+remove_queue_unconfirmed(none, _QPid, Acc) ->
+    Acc;
+remove_queue_unconfirmed({MsgSeqNo, Qs, Next}, QPid, Acc) ->
+    remove_queue_unconfirmed(gb_trees:next(Next), QPid,
+                             remove_qmsg(MsgSeqNo, QPid, Qs, Acc)).
 
-do_if_unconfirmed(MsgSeqNo, QPid, ConfirmFun,
-                  State = #ch{unconfirmed    = UC,
-                              queues_for_msg = QFM}) ->
-    %% clears references to MsgSeqNo and does ConfirmFun
-    case gb_sets:is_element(MsgSeqNo, UC) of
-        true  ->
-            Unconfirmed1 = gb_sets:delete(MsgSeqNo, UC),
-            case QPid of
-                undefined ->
-                    ConfirmFun(MsgSeqNo, State#ch{unconfirmed = Unconfirmed1});
-                _  ->
-                    {ok, Qs} = dict:find(MsgSeqNo, QFM),
-                    Qs1 = sets:del_element(QPid, Qs),
-                    case sets:size(Qs1) of
-                        0 -> ConfirmFun(MsgSeqNo,
-                                        State#ch{
-                                          queues_for_msg =
-                                              dict:erase(MsgSeqNo, QFM),
-                                          unconfirmed = Unconfirmed1});
-                        _ -> State#ch{queues_for_msg =
-                                          dict:store(MsgSeqNo, Qs1, QFM)}
-                    end
-            end;
-        false ->
-            State
+confirm([], _QPid, State) ->
+    State;
+confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
+    {DoneMessages, UC2} =
+        lists:foldl(
+          fun(MsgSeqNo, {_DMs, UC0} = Acc) ->
+                  case gb_trees:lookup(MsgSeqNo, UC0) of
+                      none        -> Acc;
+                      {value, Qs} -> remove_qmsg(MsgSeqNo, QPid, Qs, Acc)
+                  end
+          end, {[], UC}, MsgSeqNos),
+    send_confirms(DoneMessages, State#ch{unconfirmed = UC2}).
+
+remove_qmsg(MsgSeqNo, QPid, Qs, {MsgSeqNos, UC}) ->
+    Qs1 = sets:del_element(QPid, Qs),
+    case sets:size(Qs1) of
+        0 -> {[MsgSeqNo | MsgSeqNos], gb_trees:delete(MsgSeqNo, UC)};
+        _ -> {MsgSeqNos, gb_trees:update(MsgSeqNo, Qs1, UC)}
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
@@ -564,15 +528,12 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(DecodedContent#content.properties, State),
     IsPersistent = is_message_persistent(DecodedContent),
-    {MsgSeqNo, State1}
-        = case ConfirmEnabled of
-              false -> {undefined, State};
-              true  -> SeqNo = State#ch.publish_seqno,
-                       {SeqNo,
-                        State#ch{publish_seqno = SeqNo + 1,
-                                 unconfirmed =
-                                     gb_sets:add(SeqNo, State#ch.unconfirmed)}}
-          end,
+    {MsgSeqNo, State1} =
+        case ConfirmEnabled of
+            false -> {undefined, State};
+            true  -> SeqNo = State#ch.publish_seqno,
+                     {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
+        end,
     Message = #basic_message{exchange_name = ExchangeName,
                              routing_key   = RoutingKey,
                              content       = DecodedContent,
@@ -592,6 +553,12 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                   none -> State2;
                   _    -> add_tx_participants(DeliveredQPids, State2)
               end};
+
+handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
+                            multiple     = Multiple,
+                            requeue      = Requeue},
+              _, State) ->
+    reject(DeliveryTag, Requeue, Multiple, State);
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
@@ -778,14 +745,8 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
-              _, State = #ch{unacked_message_q = UAMQ}) ->
-    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, false),
-    ok = fold_per_queue(
-           fun (QPid, MsgIds, ok) ->
-                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
-           end, ok, Acked),
-    ok = notify_limiter(State#ch.limiter_pid, Acked),
-    {noreply, State#ch{unacked_message_q = Remaining}};
+              _, State) ->
+    reject(DeliveryTag, Requeue, false, State);
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
@@ -1010,19 +971,9 @@ handle_method(#'confirm.select'{}, _, #ch{transaction_id = TxId})
     rabbit_misc:protocol_error(
       precondition_failed, "cannot switch from tx to confirm mode", []);
 
-handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
-              _, State = #ch{confirm_enabled = false}) ->
-    return_ok(State#ch{confirm_enabled = true, confirm_multiple = Multiple},
+handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
+    return_ok(State#ch{confirm_enabled = true},
               NoWait, #'confirm.select_ok'{});
-
-handle_method(#'confirm.select'{multiple = Multiple, nowait = NoWait},
-              _, State = #ch{confirm_enabled = true,
-                             confirm_multiple = Multiple}) ->
-    return_ok(State, NoWait, #'confirm.select_ok'{});
-
-handle_method(#'confirm.select'{}, _, #ch{confirm_enabled = true}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "cannot change confirm_multiple setting", []);
 
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter_pid = LimiterPid}) ->
@@ -1112,6 +1063,15 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                            exchange    = ExchangeName#resource.name,
                            routing_key = RoutingKey},
            Content).
+
+reject(DeliveryTag, Requeue, Multiple, State = #ch{unacked_message_q = UAMQ}) ->
+    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
+    ok = fold_per_queue(
+           fun (QPid, MsgIds, ok) ->
+                   rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
+           end, ok, Acked),
+    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    {noreply, State#ch{unacked_message_q = Remaining}}.
 
 ack_record(DeliveryTag, ConsumerTag,
            _MsgStruct = {_QName, QPid, MsgId, _Redelivered, _Msg}) ->
@@ -1253,66 +1213,53 @@ is_message_persistent(Content) ->
 
 process_routing_result(unroutable,    _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_route),
-    confirm(MsgSeqNo, undefined, State);
+    send_confirms([MsgSeqNo], State);
 process_routing_result(not_delivered, _, MsgSeqNo, Message, State) ->
     ok = basic_return(Message, State#ch.writer_pid, no_consumers),
-    confirm(MsgSeqNo, undefined, State);
+    send_confirms([MsgSeqNo], State);
 process_routing_result(routed,       [], MsgSeqNo,       _, State) ->
-    confirm(MsgSeqNo, undefined, State);
+    send_confirms([MsgSeqNo], State);
 process_routing_result(routed,        _, undefined,      _, State) ->
     State;
-process_routing_result(routed,    QPids, MsgSeqNo,       _,
-                       State = #ch{queues_for_msg = QFM}) ->
-    QFM1 = dict:store(MsgSeqNo, sets:from_list(QPids), QFM),
+process_routing_result(routed,    QPids, MsgSeqNo,       _, State) ->
+    #ch{unconfirmed = UC} = State,
     [maybe_monitor(QPid) || QPid <- QPids],
-    State#ch{queues_for_msg = QFM1}.
+    UC1 = gb_trees:insert(MsgSeqNo, sets:from_list(QPids), UC),
+    State#ch{unconfirmed = UC1}.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
 
-start_confirm_timer(State = #ch{confirm_tref = undefined}) ->
-    {ok, TRef} = timer:apply_after(?FLUSH_CONFIRMS_INTERVAL,
-                                   ?MODULE, flush_confirms, [self()]),
-    State#ch{confirm_tref = TRef};
-start_confirm_timer(State) ->
+send_confirms([], State) ->
+    State;
+send_confirms([MsgSeqNo], State = #ch{writer_pid = WriterPid}) ->
+    send_confirm(MsgSeqNo, WriterPid),
+    State;
+send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
+    SCs = lists:usort(Cs),
+    CutOff = case gb_trees:is_empty(UC) of
+                 true  -> lists:last(SCs) + 1;
+                 false -> {SeqNo, _Qs} = gb_trees:smallest(UC), SeqNo
+             end,
+    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SCs),
+    case Ms of
+        [] -> ok;
+        _  -> ok = rabbit_writer:send_command(
+                     WriterPid, #'basic.ack'{delivery_tag = lists:last(Ms),
+                                             multiple = true})
+    end,
+    [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
     State.
 
-stop_confirm_timer(State = #ch{confirm_tref = undefined}) ->
-    State;
-stop_confirm_timer(State = #ch{confirm_tref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State#ch{confirm_tref = undefined}.
+send_confirm(undefined, _WriterPid) ->
+    ok;
+send_confirm(SeqNo, WriterPid) ->
+    ok = rabbit_writer:send_command(WriterPid,
+                                    #'basic.ack'{delivery_tag = SeqNo}).
 
-internal_flush_confirms(State = #ch{writer_pid    = WriterPid,
-                                    held_confirms = Cs}) ->
-    case gb_sets:is_empty(Cs) of
-        true  -> State#ch{confirm_tref = undefined};
-        false -> [First | Rest] = gb_sets:to_list(Cs),
-                 {Mult, Inds} = find_consecutive_sequence(First, Rest),
-                 ok = rabbit_writer:send_command(
-                        WriterPid,
-                        #'basic.ack'{delivery_tag = Mult, multiple = true}),
-                 ok = lists:foldl(
-                        fun(T, ok) -> rabbit_writer:send_command(
-                                        WriterPid,
-                                        #'basic.ack'{delivery_tag = T})
-                        end, ok, Inds),
-                 State#ch{held_confirms = gb_sets:new(),
-                          confirm_tref  = undefined}
-    end.
-
-%% Find longest sequence of consecutive numbers at the beginning.
-find_consecutive_sequence(Last, []) ->
-    {Last, []};
-find_consecutive_sequence(Last, [N | Ns]) when N == (Last + 1) ->
-    find_consecutive_sequence(N, Ns);
-find_consecutive_sequence(Last, Ns) ->
-    {Last, Ns}.
-
-terminate(State) ->
-    stop_confirm_timer(State),
+terminate(_State) ->
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 

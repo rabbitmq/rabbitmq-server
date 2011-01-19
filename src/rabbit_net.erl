@@ -32,7 +32,7 @@
 -module(rabbit_net).
 -include("rabbit.hrl").
 
--export([is_ssl/1, controlling_process/2, getstat/2,
+-export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          async_recv/3, port_command/2, send/2, close/1,
          sockname/1, peername/1, peercert/1]).
 
@@ -50,6 +50,9 @@
 -type(socket() :: port() | #ssl_socket{}).
 
 -spec(is_ssl/1 :: (socket()) -> boolean()).
+-spec(ssl_info/1 :: (socket())
+                    -> 'nossl' | ok_val_or_error(
+                                   {atom(), {atom(), atom(), atom()}})).
 -spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
@@ -76,6 +79,11 @@
 -define(IS_SSL(Sock), is_record(Sock, ssl_socket)).
 
 is_ssl(Sock) -> ?IS_SSL(Sock).
+
+ssl_info(Sock) when ?IS_SSL(Sock) ->
+    ssl:connection_info(Sock#ssl_socket.ssl);
+ssl_info(_Sock) ->
+    nossl.
 
 controlling_process(Sock, Pid) when ?IS_SSL(Sock) ->
     ssl:controlling_process(Sock#ssl_socket.ssl, Pid);
