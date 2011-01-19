@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_exchange_type_topic).
+
 -include("rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).
@@ -31,58 +32,215 @@
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
--export([topic_matches/2]).
-
--ifdef(use_specs).
-
--spec(topic_matches/2 :: (binary(), binary()) -> boolean()).
-
--endif.
+%%----------------------------------------------------------------------------
 
 description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = Name},
-        #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_bindings(Name,
-                                 fun (#binding{key = BindingKey}) ->
-                                         topic_matches(BindingKey, RoutingKey)
-                                 end).
-
-split_topic_key(Key) ->
-    string:tokens(binary_to_list(Key), ".").
-
-topic_matches(PatternKey, RoutingKey) ->
-    P = split_topic_key(PatternKey),
-    R = split_topic_key(RoutingKey),
-    topic_matches1(P, R).
-
-topic_matches1(["#"], _R) ->
-    true;
-topic_matches1(["#" | PTail], R) ->
-    last_topic_match(PTail, [], lists:reverse(R));
-topic_matches1([], []) ->
-    true;
-topic_matches1(["*" | PatRest], [_ | ValRest]) ->
-    topic_matches1(PatRest, ValRest);
-topic_matches1([PatElement | PatRest], [ValElement | ValRest])
-  when PatElement == ValElement ->
-    topic_matches1(PatRest, ValRest);
-topic_matches1(_, _) ->
-    false.
-
-last_topic_match(P, R, []) ->
-    topic_matches1(P, R);
-last_topic_match(P, R, [BacktrackNext | BacktrackList]) ->
-    topic_matches1(P, R) or
-        last_topic_match(P, [BacktrackNext | R], BacktrackList).
+%% NB: This may return duplicate results in some situations (that's ok)
+route(#exchange{name = X},
+      #delivery{message = #basic_message{routing_key = Key}}) ->
+    Words = split_topic_key(Key),
+    mnesia:async_dirty(fun trie_match/2, [X, Words]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 recover(_X, _Bs) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
+
+delete(_Tx, #exchange{name = X}, _Bs) ->
+    rabbit_misc:execute_mnesia_transaction(fun () -> trie_remove_all_edges(X),
+                                                     trie_remove_all_bindings(X)
+                                           end),
+    ok.
+
+add_binding(_Tx, _Exchange, #binding{source = X, key = K, destination = D}) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun () -> FinalNode = follow_down_create(X, split_topic_key(K)),
+                  trie_add_binding(X, FinalNode, D)
+        end),
+    ok.
+
+remove_bindings(_Tx, _X, Bs) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun () -> lists:foreach(fun remove_binding/1, Bs) end),
+    ok.
+
+remove_binding(#binding{source = X, key = K, destination = D}) ->
+    Path = follow_down_get_path(X, split_topic_key(K)),
+    {FinalNode, _} = hd(Path),
+    trie_remove_binding(X, FinalNode, D),
+    remove_path_if_empty(X, Path),
+    ok.
+
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
+
+%%----------------------------------------------------------------------------
+
+trie_match(X, Words) ->
+    trie_match(X, root, Words).
+
+trie_match(X, Node, []) ->
+    FinalRes = trie_bindings(X, Node),
+    HashRes = case trie_child(X, Node, "#") of
+                  {ok, HashNode} -> trie_match(X, HashNode, []);
+                  error          -> []
+              end,
+    FinalRes ++ HashRes;
+trie_match(X, Node, [W | RestW] = Words) ->
+    ExactRes = case trie_child(X, Node, W) of
+                   {ok, NextNode} -> trie_match(X, NextNode, RestW);
+                   error          -> []
+               end,
+    StarRes = case trie_child(X, Node, "*") of
+                  {ok, StarNode} -> trie_match(X, StarNode, RestW);
+                  error          -> []
+              end,
+    HashRes = case trie_child(X, Node, "#") of
+                  {ok, HashNode} -> trie_match_skip_any(X, HashNode, Words);
+                  error          -> []
+              end,
+    ExactRes ++ StarRes ++ HashRes.
+
+trie_match_skip_any(X, Node, []) ->
+    trie_match(X, Node, []);
+trie_match_skip_any(X, Node, [_ | RestW] = Words) ->
+    trie_match(X, Node, Words) ++ trie_match_skip_any(X, Node, RestW).
+
+follow_down(X, Words) ->
+    follow_down(X, root, Words).
+
+follow_down(_X, CurNode, []) ->
+    {ok, CurNode};
+follow_down(X, CurNode, [W | RestW]) ->
+    case trie_child(X, CurNode, W) of
+        {ok, NextNode} -> follow_down(X, NextNode, RestW);
+        error          -> {error, CurNode, [W | RestW]}
+    end.
+
+follow_down_create(X, Words) ->
+    case follow_down(X, Words) of
+        {ok, FinalNode}      -> FinalNode;
+        {error, Node, RestW} -> lists:foldl(
+                                  fun (W, CurNode) ->
+                                          NewNode = new_node_id(),
+                                          trie_add_edge(X, CurNode, NewNode, W),
+                                          NewNode
+                                  end, Node, RestW)
+    end.
+
+follow_down_get_path(X, Words) ->
+    follow_down_get_path(X, root, Words, [{root, none}]).
+
+follow_down_get_path(_, _, [], PathAcc) ->
+    PathAcc;
+follow_down_get_path(X, CurNode, [W | RestW], PathAcc) ->
+    {ok, NextNode} = trie_child(X, CurNode, W),
+    follow_down_get_path(X, NextNode, RestW, [{NextNode, W} | PathAcc]).
+
+remove_path_if_empty(_, [{root, none}]) ->
+    ok;
+remove_path_if_empty(X, [{Node, W} | [{Parent, _} | _] = RestPath]) ->
+    case trie_has_any_bindings(X, Node) orelse trie_has_any_children(X, Node) of
+        true  -> ok;
+        false -> trie_remove_edge(X, Parent, Node, W),
+                 remove_path_if_empty(X, RestPath)
+    end.
+
+trie_child(X, Node, Word) ->
+    case mnesia:read(rabbit_topic_trie_edge, #trie_edge{exchange_name = X,
+                                                        node_id = Node,
+                                                        word = Word}) of
+        [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
+        []                                     -> error
+    end.
+
+trie_bindings(X, Node) ->
+    MatchHead = #topic_trie_binding{
+                    trie_binding = #trie_binding{exchange_name = X,
+                                                 node_id = Node,
+                                                 destination = '$1'}},
+    mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$1']}]).
+
+trie_add_edge(X, FromNode, ToNode, W) ->
+    trie_edge_op(X, FromNode, ToNode, W, fun mnesia:write/3).
+
+trie_remove_edge(X, FromNode, ToNode, W) ->
+    trie_edge_op(X, FromNode, ToNode, W, fun mnesia:delete_object/3).
+
+trie_edge_op(X, FromNode, ToNode, W, Op) ->
+    ok = Op(rabbit_topic_trie_edge,
+            #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
+                                                    node_id = FromNode,
+                                                    word = W},
+                             node_id = ToNode},
+            write).
+
+trie_add_binding(X, Node, D) ->
+    trie_binding_op(X, Node, D, fun mnesia:write/3).
+
+trie_remove_binding(X, Node, D) ->
+    trie_binding_op(X, Node, D, fun mnesia:delete_object/3).
+
+trie_binding_op(X, Node, D, Op) ->
+    ok = Op(rabbit_topic_trie_binding,
+            #topic_trie_binding{trie_binding = #trie_binding{exchange_name = X,
+                                                             node_id = Node,
+                                                             destination = D}},
+            write).
+
+trie_has_any_children(X, Node) ->
+    MatchHead = #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
+                                                        node_id = Node,
+                                                        _='_'},
+                                 _='_'},
+    Select = mnesia:select(rabbit_topic_trie_edge,
+                           [{MatchHead, [], ['$_']}], 1, read),
+    select_while_no_result(Select) /= '$end_of_table'.
+
+trie_has_any_bindings(X, Node) ->
+    MatchHead = #topic_trie_binding{
+                    trie_binding = #trie_binding{exchange_name = X,
+                                                 node_id = Node,
+                                                 _='_'},
+                    _='_'},
+    Select = mnesia:select(rabbit_topic_trie_binding,
+                           [{MatchHead, [], ['$_']}], 1, read),
+    select_while_no_result(Select) /= '$end_of_table'.
+
+select_while_no_result({[], Cont}) ->
+    select_while_no_result(mnesia:select(Cont));
+select_while_no_result(Other) ->
+    Other.
+
+trie_remove_all_edges(X) ->
+    Pattern = #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
+                                                      _='_'},
+                               _='_'},
+    lists:foreach(
+        fun (R) -> mnesia:delete_object(rabbit_topic_trie_edge, R, write) end,
+        mnesia:match_object(rabbit_topic_trie_edge, Pattern, write)).
+    
+trie_remove_all_bindings(X) ->
+    Pattern = #topic_trie_binding{trie_binding = #trie_binding{exchange_name =X,
+                                                               _='_'},
+                                  _='_'},
+    lists:foreach(
+        fun (R) -> mnesia:delete_object(rabbit_topic_trie_binding, R, write) end,
+        mnesia:match_object(rabbit_topic_trie_binding, Pattern, write)).
+
+new_node_id() ->
+    rabbit_guid:guid().
+
+split_topic_key(Key) ->
+    split_topic_key(Key, [], []).
+
+split_topic_key(<<>>, [], []) ->
+    [];
+split_topic_key(<<>>, RevWordAcc, RevResAcc) ->
+    lists:reverse([lists:reverse(RevWordAcc) | RevResAcc]);
+split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
+    split_topic_key(Rest, [], [lists:reverse(RevWordAcc) | RevResAcc]);
+split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
+    split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
