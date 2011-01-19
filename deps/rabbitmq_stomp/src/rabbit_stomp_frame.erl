@@ -53,58 +53,58 @@ parse(Content, State) ->
         {resume, Fun} ->
             Fun(Content);
         none  ->
-            parse_command(Content, [])
+            parse_command(Content, <<>>)
     end.
 
-parse_command([$\n | Rest], []) ->
-    parse_command(Rest, []);
-parse_command([0 | Rest], []) ->
-    parse_command(Rest, []);
-parse_command([$\n | Rest], Acc) ->
-    parse_headers(Rest, #stomp_frame{command = lists:reverse(Acc)}, [], []);
-parse_command([Ch | Rest], Acc) ->
-    parse_command(Rest, [Ch | Acc]);
-parse_command([], Acc) ->
+parse_command(<<$\n,  Rest/binary>>, <<>>) ->
+    parse_command(Rest, <<>>);
+parse_command(<<0,  Rest/binary>>, <<>>) ->
+    parse_command(Rest, <<>>);
+parse_command(<<$\n, Rest/binary>>, Acc) ->
+    parse_headers(Rest, #stomp_frame{command = binary_to_list(Acc)}, [], <<>>);
+parse_command(<<Ch:1/binary, Rest/binary>>, Acc) ->
+    parse_command(Rest, <<Acc/binary, Ch/binary>>);
+parse_command(<<>>, Acc) ->
     more(fun(Rest) -> parse_command(Rest, Acc) end).
 
-parse_headers([], Frame, HeaderAcc, KeyAcc) ->
+parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
     more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_headers([$\n | Rest], Frame, HeaderAcc, _KeyAcc) ->
+parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) ->
     Remaining = case internal_integer_header(HeaderAcc, "content-length") of
                     {ok, ByteCount} -> ByteCount;
                     not_found       -> unknown
                 end,
     parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc}, [], Remaining);
-parse_headers([$: | Rest], Frame, HeaderAcc, KeyAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, []);
-parse_headers([Ch | Rest], Frame, HeaderAcc, KeyAcc) ->
-    parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, <<>>);
+parse_headers(<<Ch:1/binary, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+    parse_headers(Rest, Frame, HeaderAcc, <<KeyAcc/binary, Ch/binary>>).
 
-parse_header_value([], Frame, HeaderAcc, KeyAcc, ValAcc) ->
+parse_header_value(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     more(fun(Rest) ->
                      parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
              end);
-parse_header_value([$\n | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    NewKey = lists:reverse(KeyAcc),
+parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    NewKey = binary_to_list(KeyAcc),
     NewHeaders = case lists:keysearch(NewKey, 1, HeaderAcc) of
                      {value, _} -> HeaderAcc;
-                     false      -> [{NewKey, lists:reverse(ValAcc)} | HeaderAcc]
+                     false      -> [{NewKey, binary_to_list(ValAcc)} | HeaderAcc]
                  end,
-    parse_headers(Rest, Frame, NewHeaders, []);
-parse_header_value([$\\, Ch | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    parse_headers(Rest, Frame, NewHeaders, <<>>);
+parse_header_value(<<$\\, Ch:1/binary,  Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     case unescape(Ch) of
         {ok, EscCh} ->
             parse_header_value(Rest, Frame, HeaderAcc,
-                               KeyAcc, [EscCh | ValAcc]);
+                               KeyAcc, <<ValAcc/binary, EscCh/binary>>);
         error ->
             {error, {bad_escape, Ch}}
     end;
-parse_header_value([Ch | Rest], Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+parse_header_value(<<Ch:1/binary, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, <<ValAcc/binary, Ch/binary>>).
 
 parse_body(Content, Frame, Chunks, Remaining) ->
-    case index_of(Content, 0) of
-        not_found ->
+    case binary:match(Content, <<0>>) of
+        nomatch ->
             finalize_chunk(Content, Chunks, Remaining,
                           fun(NewChunks, NewRemaining) ->
                                   more(fun(Rest) ->
@@ -114,8 +114,9 @@ parse_body(Content, Frame, Chunks, Remaining) ->
                                                           NewRemaining)
                                        end)
                           end);
-        Index ->
-            {Chunk, [0 | Rest]} = lists:split(Index, Content),
+        {Index, 1} ->
+            <<Chunk:Index/binary, 0, Rest/binary>> = Content,
+
             finalize_chunk(Chunk, Chunks, Remaining,
                            fun(NewChunks, _) ->
                                    {ok,
@@ -128,25 +129,15 @@ parse_body(Content, Frame, Chunks, Remaining) ->
 finalize_chunk(Chunk, Chunks, Remaining, ReturnFun) ->
     NewRemaining = case Remaining of
                        unknown -> Remaining;
-                       _       -> Remaining - length(Chunk)
+                       _       -> Remaining - erlang:byte_size(Chunk)
                    end,
     case NewRemaining =:= unknown orelse NewRemaining >= 0 of
         true ->  ReturnFun(case Chunk of
                                [] -> Chunks;
-                               _  -> [list_to_binary(Chunk) | Chunks]
+                               _  -> [Chunk | Chunks]
                            end, NewRemaining);
         false -> {error, missing_body_terminator}
     end.
-
-index_of(L, E) ->
-    index_of(L, E, 0).
-
-index_of([], _, _) ->
-    not_found;
-index_of([E | Rest], E, I) ->
-    I;
-index_of([_ | Rest], E, I) ->
-    index_of(Rest, E, I + 1).
 
 more(Continuation) ->
     {more, {resume, Continuation}}.
@@ -213,15 +204,17 @@ serialize(#stomp_frame{command = Command,
 
 serialize_header({K, V}) when is_integer(V) ->
     [K, $:, integer_to_list(V), $\n];
+serialize_header({K, V}) when is_binary(V) ->
+    serialize_header({K, binary_to_list(V)});
 serialize_header({K, V}) when is_list(V) ->
     [K, $:, [escape(C) || C <- V], $\n].
 
-unescape($n) ->
-    {ok, $\n};
-unescape($\\) ->
-    {ok, $\\};
-unescape($c) ->
-    {ok, $:};
+unescape(<<$n>>) ->
+    {ok, <<$\n>>};
+unescape(<<$\\>>) ->
+    {ok, <<$\\>>};
+unescape(<<$c>>) ->
+    {ok, <<$:>>};
 unescape(_) ->
     error.
 

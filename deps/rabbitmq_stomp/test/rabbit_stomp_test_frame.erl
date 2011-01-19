@@ -30,7 +30,8 @@ parse_simple_frame_test() ->
                            Headers,
                            "Body Content"),
     {"COMMAND", Frame, _State} = parse_complete(Content),
-    [?assertEqual({ok, Value}, rabbit_stomp_frame:header(Frame, Key)) ||
+    [?assertEqual({ok, Value},
+                  rabbit_stomp_frame:header(Frame, Key)) ||
         {Key, Value} <- Headers],
     #stomp_frame{body_iolist = Body} = Frame,
     ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
@@ -50,7 +51,8 @@ parse_resume_mid_header_key_test() ->
     {more, Resume} = parse(First),
     {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
         parse(Second, Resume),
-    ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
+    ?assertEqual({ok, "value1"},
+                 rabbit_stomp_frame:header(Frame, "header1")).
 
 parse_resume_mid_header_val_test() ->
     First = "COMMAND\nheader1:val",
@@ -58,7 +60,8 @@ parse_resume_mid_header_val_test() ->
     {more, Resume} = parse(First),
     {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
         parse(Second, Resume),
-    ?assertEqual({ok, "value1"}, rabbit_stomp_frame:header(Frame, "header1")).
+    ?assertEqual({ok, "value1"},
+                 rabbit_stomp_frame:header(Frame, "header1")).
 
 parse_resume_mid_body_test() ->
     First = "COMMAND\n\nABC",
@@ -86,12 +89,12 @@ headers_escaping_roundtrip_test() ->
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual(":\n\\", Val),
     Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
-    ?assertEqual(Content, Serialized).
+    ?assertEqual(Content, lists:flatten(io_lib:format("~s", [Serialized]))).
 
 parse(Content) ->
     parse(Content, rabbit_stomp_frame:initial_state()).
 parse(Content, State) ->
-    rabbit_stomp_frame:parse(Content, State).
+    rabbit_stomp_frame:parse(list_to_binary(Content), State).
 
 parse_complete(Content) ->
     {ok, Frame = #stomp_frame{command = Command}, State} = parse(Content),

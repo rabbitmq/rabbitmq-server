@@ -73,7 +73,8 @@ init([Sock, StartHeartbeatFun]) ->
        start_heartbeat_fun = StartHeartbeatFun}
     }.
 
-terminate(_Reason, State) ->
+terminate(Reason, State) ->
+    io:format("Reason~p~n", [Reason]),
     shutdown_channel_and_connection(State).
 
 handle_cast({"STOMP", Frame}, State) ->
