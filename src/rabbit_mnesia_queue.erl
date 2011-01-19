@@ -61,6 +61,10 @@
 %% transient (non-persistent). (This breaks some Java tests for
 %% durable queues.)
 %%
+%% I believe that only one AMQP transaction can be in progress at
+%% once, although parts of this code (as in rabbit_variable_queue) are
+%% written assuming more.
+%%
 %%----------------------------------------------------------------------------
 
 -behaviour(rabbit_backing_queue).
@@ -69,6 +73,7 @@
         { q,                      % A temporary in-RAM queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % Map from seq_id to M, pending ack
+          txn_dict,               % Map from txn to tx, in progress
           on_sync
         }).
 
@@ -80,8 +85,8 @@
         }).
 
 -record(tx,
-        { pending_messages,
-          pending_acks }).
+        { to_pub,
+          to_ack }).
 
 -record(sync,
         { acks,
@@ -102,6 +107,7 @@
 -type(s() :: #s { q :: queue(),
                   next_seq_id :: seq_id(),
                   pending_ack_dict :: dict(),
+                  txn_dict :: dict(),
                   on_sync :: sync() }).
 -type(state() :: s()).
 
@@ -110,9 +116,9 @@
                   props :: rabbit_types:message_properties(),
                   is_delivered :: boolean() }).
 
--type(tx() :: #tx { pending_messages :: [{rabbit_types:basic_message(),
-                                          rabbit_types:message_properties()}],
-                    pending_acks :: [seq_id()] }).
+-type(tx() :: #tx { to_pub :: [{rabbit_types:basic_message(),
+                                rabbit_types:message_properties()}],
+                    to_ack :: [seq_id()] }).
 
 -type(sync() :: #sync { acks :: [seq_id()],
                         pubs :: [{message_properties_transformer(),
@@ -177,6 +183,7 @@ init(QueueName, _IsDurable, _Recover) ->
     Result = #s { q = queue:new(),
                   next_seq_id = 0,
                   pending_ack_dict = dict:new(),
+                  txn_dict = dict:new(),
                   on_sync = #sync { acks = [], pubs = [], funs = [] } },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -190,7 +197,7 @@ init(QueueName, _IsDurable, _Recover) ->
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S) ->
-    Result = remove_pending_acks_state(tx_commit_state(S)),
+    Result = remove_acks_state(tx_commit_state(S)),
     rabbit_log:info("terminate(~p) ->", [S]),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -211,7 +218,7 @@ terminate(S) ->
 delete_and_terminate(S) ->
     rabbit_log:info("delete_and_terminate(~p) ->", [S]),
     {_, S1} = purge(S),
-    Result = remove_pending_acks_state(S1),
+    Result = remove_acks_state(S1),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -383,7 +390,9 @@ internal_ack(SeqIds, S) ->
     internal_ack(fun (_, Si) -> Si end, SeqIds, S).
 
 %%----------------------------------------------------------------------------
-%% tx_publish/4 is a publish, but in the context of a transaction.
+%% tx_publish/4 is a publish, but in the context of a transaction. It
+%% stores the message and its properties in the to_pub field of the txn,
+%% waiting to be committed.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -396,14 +405,14 @@ internal_ack(SeqIds, S) ->
 
 tx_publish(Txn, Msg, Props, S) ->
     rabbit_log:info("tx_publish(~p, ~p, ~p, ~p) ->", [Txn, Msg, Props, S]),
-    Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [{Msg, Props} | Pubs] }),
-    Result = S,
+    Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, S),
+    Result = store_tx(Txn, Tx #tx { to_pub = [{Msg, Props} | Pubs] }, S),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_ack/3 acks, but in the context of a transaction.
+%% tx_ack/3 acks, but in the context of a transaction. It stores the
+%% seq_id in the acks field of the txn, waiting to be committed.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -413,15 +422,15 @@ tx_publish(Txn, Msg, Props, S) ->
 
 tx_ack(Txn, SeqIds, S) ->
     rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, SeqIds, S]),
-    Tx = #tx { pending_acks = SeqIds0 } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_acks = lists:append(SeqIds, SeqIds0) }),
-    Result = S,
+    Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S),
+    Result =
+        store_tx(Txn, Tx #tx { to_ack = lists:append(SeqIds, SeqIds0) }, S),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
 %% tx_rollback/2 undoes anything which has been done in the context of
-%% the specified transaction.
+%% the specified transaction. It returns the 
 %%
 %% This function should be called only from outside this module.
 %%
@@ -431,9 +440,8 @@ tx_ack(Txn, SeqIds, S) ->
 
 tx_rollback(Txn, S) ->
     rabbit_log:info("tx_rollback(~p, ~p) ->", [Txn, S]),
-    #tx { pending_acks = SeqIds } = lookup_tx(Txn),
-    erase_tx(Txn),
-    Result = {SeqIds, S},
+    #tx { to_ack = SeqIds } = lookup_tx(Txn, S),
+    Result = {SeqIds, erase_tx(Txn, S)},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -456,9 +464,10 @@ tx_rollback(Txn, S) ->
 tx_commit(Txn, F, PropsF, S) ->
     rabbit_log:info(
       "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, S]),
-    #tx { pending_acks = SeqIds, pending_messages = Pubs } = lookup_tx(Txn),
-    erase_tx(Txn),
-    Result = {SeqIds, internal_tx_commit_state(Pubs, SeqIds, F, PropsF, S)},
+    #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S),
+    Result =
+        {SeqIds,
+         internal_tx_commit_state(Pubs, SeqIds, F, PropsF, erase_tx(Txn, S))},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -608,13 +617,13 @@ handle_pre_hibernate(S) ->
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
 status(#s { q = Q,
-                next_seq_id = NextSeqId,
-                pending_ack_dict = PAD,
-                on_sync = #sync { funs = Fs }}) ->
+            next_seq_id = NextSeqId,
+            pending_ack_dict = PAD,
+            on_sync = #sync { funs = Fs }}) ->
     rabbit_log:info("status(_) ->"),
     Result = [{len, queue:len(Q)},
               {next_seq_id, NextSeqId},
-              {pending_acks, dict:size(PAD)},
+              {acks, dict:size(PAD)},
               {outstanding_txns, length(Fs)}],
     rabbit_log:info(" ~p", [Result]),
     Result.
@@ -631,21 +640,23 @@ status(#s { q = Q,
 m(Msg, SeqId, Props) ->
     #m { seq_id = SeqId, msg = Msg, props = Props, is_delivered = false }.
 
--spec lookup_tx(rabbit_types:txn()) -> tx().
+-spec lookup_tx(rabbit_types:txn(), state()) -> tx().
 
-lookup_tx(Txn) ->
-    case get({txn, Txn}) of
-        undefined -> #tx { pending_messages = [], pending_acks = [] };
-        V -> V
+lookup_tx(Txn, #s { txn_dict = TxnDict }) ->
+    case dict:find(Txn, TxnDict) of
+        error -> #tx { to_pub = [], to_ack = [] };
+        {ok, Tx} -> Tx
     end.
 
--spec store_tx(rabbit_types:txn(), tx()) -> ok.
+-spec store_tx(rabbit_types:txn(), tx(), state()) -> state().
 
-store_tx(Txn, Tx) -> put({txn, Txn}, Tx), ok.
+store_tx(Txn, Tx, S = #s { txn_dict = TxnDict }) ->
+    S #s { txn_dict = dict:store(Txn, Tx, TxnDict) }.
 
--spec erase_tx(rabbit_types:txn()) -> ok.
+-spec erase_tx(rabbit_types:txn(), state()) -> state().
 
-erase_tx(Txn) -> erase({txn, Txn}), ok.
+erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
+    S #s { txn_dict = dict:erase(Txn, TxnDict) }.
 
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
@@ -717,9 +728,9 @@ record_pending_ack_state(M = #m { seq_id = SeqId },
                          S = #s { pending_ack_dict = PAD }) ->
     S #s { pending_ack_dict = dict:store(SeqId, M, PAD) }.
 
-% -spec remove_pending_acks_state(s()) -> s().
+% -spec remove_acks_state(s()) -> s().
 
-remove_pending_acks_state(S = #s { pending_ack_dict = PAD }) ->
+remove_acks_state(S = #s { pending_ack_dict = PAD }) ->
     _ = dict:fold(fun (_, M, Acc) -> [m_guid(M) | Acc] end, [], PAD),
     S #s { pending_ack_dict = dict:new() }.
 
