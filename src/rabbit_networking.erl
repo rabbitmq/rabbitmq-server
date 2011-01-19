@@ -59,6 +59,8 @@
 
 -define(SSL_TIMEOUT, 5). %% seconds
 
+-define(FIRST_TEST_BIND_PORT, 10000).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -364,40 +366,46 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 %% Unfortunately it seems there is no way to detect single vs dual stack
 %% apart from attempting to bind to the port.
 port_to_listeners(Port) ->
+    IPv4 = {"0.0.0.0", Port, inet},
+    IPv6 = {"::",      Port, inet6},
+    case ipv6_status(?FIRST_TEST_BIND_PORT) of
+        single_stack -> [IPv6];
+        ipv6_only    -> [IPv6];
+        dual_stack   -> [IPv6, IPv4];
+        ipv4_only    -> [IPv4]
+    end.
+
+ipv6_status(TestPort) ->
     IPv4 = [inet,  {ip, {0,0,0,0}}],
     IPv6 = [inet6, {ip, {0,0,0,0,0,0,0,0}}],
-    IPv4Listener = {"0.0.0.0", Port, inet},
-    IPv6Listener = {"::",      Port, inet6},
-    case gen_tcp:listen(Port, IPv6) of
+    case gen_tcp:listen(TestPort, IPv6) of
         {ok, LSock6} ->
-            case gen_tcp:listen(Port, IPv4) of
+            case gen_tcp:listen(TestPort, IPv4) of
                 {ok, LSock4} ->
                     %% Dual stack
                     gen_tcp:close(LSock6),
                     gen_tcp:close(LSock4),
-                    [IPv4Listener, IPv6Listener];
+                    dual_stack;
                 %% Checking the error here would only let us
                 %% distinguish single stack IPv6 / IPv4 vs IPv6 only,
                 %% which we figure out below anyway.
                 {error, _} ->
                     gen_tcp:close(LSock6),
-                    case gen_tcp:listen(Port, IPv4) of
+                    case gen_tcp:listen(TestPort, IPv4) of
                         %% Single stack
                         {ok, LSock4}            -> gen_tcp:close(LSock4),
-                                                   [IPv6Listener];
+                                                   single_stack;
                         %% IPv6-only machine. Welcome to the future.
-                        {error, eafnosupport}   -> [IPv6Listener];
+                        {error, eafnosupport}   -> ipv6_only;
                         %% Dual stack machine with something already
                         %% on IPv4.
-                        {error, _}              -> [IPv6Listener, IPv4Listener]
+                        {error, _}              -> ipv6_status(TestPort + 1)
                     end
             end;
         {error, eafnosupport} ->
             %% IPv4-only machine. Welcome to the 90s.
-            [IPv4Listener];
+            ipv4_only;
         {error, _} ->
-            %% There's a general problem binding to the port, but plow
-            %% on; the error will get picked up later when we bind for
-            %% real. Return both listeners to ensure this.
-            [IPv4Listener, IPv6Listener]
+            %% Port in use
+            ipv6_status(TestPort + 1)
     end.
