@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(tcp_client_sup).
+-module(rabbit_client_sup).
 
 -behaviour(supervisor2).
 
@@ -29,6 +29,5 @@ start_link(SupName, Callback) ->
     supervisor2:start_link(SupName, ?MODULE, Callback).
 
 init({M,F,A}) ->
-    {ok, {{simple_one_for_one_terminate, 10, 10},
-          [{tcp_client, {M,F,A},
-            temporary, infinity, supervisor, [M]}]}}.
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}}.

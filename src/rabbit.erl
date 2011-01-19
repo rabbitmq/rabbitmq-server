@@ -145,10 +145,18 @@
                     {requires,    routing_ready},
                     {enables,     networking}]}).
 
+-rabbit_boot_step({direct_client,
+                   [{mfa,        {rabbit_direct, boot, []}},
+                    {requires,   log_relay},
+                    {enables,    direct_listening}]}).
+
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
                     {requires,    log_relay},
                     {enables,     networking_listening}]}).
+
+-rabbit_boot_step({direct_listening,
+                   [{description, "direct connection listeners available"}]}).
 
 -rabbit_boot_step({networking_listening,
                    [{description, "network listeners available"}]}).
