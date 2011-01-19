@@ -6,8 +6,9 @@ import threading
 
 class BaseTest(unittest.TestCase):
 
-   def create_connection(self):
-       conn = stomp.Connection(user="guest", passcode="guest")
+   def create_connection(self, version=None, heartbeat=None):
+       conn = stomp.Connection(user="guest", passcode="guest",
+                               version=version, heartbeat=heartbeat)
        conn.start()
        conn.connect()
        return conn
