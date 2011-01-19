@@ -73,8 +73,7 @@
         { q,                      % A temporary in-RAM queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % Map from seq_id to M, pending ack
-          txn_dict,               % Map from txn to tx, in progress
-          on_sync
+          txn_dict                % Map from txn to tx, in progress
         }).
 
 -record(m,                        % A wrapper aroung a msg
@@ -87,11 +86,6 @@
 -record(tx,
         { to_pub,
           to_ack }).
-
--record(sync,
-        { acks,
-          pubs,
-          funs }).
 
 -include("rabbit.hrl").
 
@@ -106,9 +100,7 @@
 
 -type(s() :: #s { q :: queue(),
                   next_seq_id :: seq_id(),
-                  pending_ack_dict :: dict(),
-                  txn_dict :: dict(),
-                  on_sync :: sync() }).
+                  pending_ack_dict :: dict() }).
 -type(state() :: s()).
 
 -type(m() :: #m { msg :: rabbit_types:basic_message(),
@@ -119,11 +111,6 @@
 -type(tx() :: #tx { to_pub :: [{rabbit_types:basic_message(),
                                 rabbit_types:message_properties()}],
                     to_ack :: [seq_id()] }).
-
--type(sync() :: #sync { acks :: [seq_id()],
-                        pubs :: [{message_properties_transformer(),
-                                  [rabbit_types:basic_message()]}],
-                        funs :: [fun (() -> any())] }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -183,8 +170,7 @@ init(QueueName, _IsDurable, _Recover) ->
     Result = #s { q = queue:new(),
                   next_seq_id = 0,
                   pending_ack_dict = dict:new(),
-                  txn_dict = dict:new(),
-                  on_sync = #sync { acks = [], pubs = [], funs = [] } },
+                  txn_dict = dict:new() },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -197,7 +183,7 @@ init(QueueName, _IsDurable, _Recover) ->
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S) ->
-    Result = remove_acks_state(tx_commit_state(S)),
+    Result = remove_acks_state(S),
     rabbit_log:info("terminate(~p) ->", [S]),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -387,7 +373,7 @@ ack(SeqIds, S) ->
 -spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
 
 internal_ack(SeqIds, S) ->
-    internal_ack(fun (_, Si) -> Si end, SeqIds, S).
+    internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction. It
@@ -465,11 +451,23 @@ tx_commit(Txn, F, PropsF, S) ->
     rabbit_log:info(
       "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, S]),
     #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S),
-    Result =
-        {SeqIds,
-         internal_tx_commit_state(Pubs, SeqIds, F, PropsF, erase_tx(Txn, S))},
+    Result = {SeqIds, tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S))},
+    F(),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
+
+-spec tx_commit_state([rabbit_types:basic_message()],
+                      [seq_id()],
+                      message_properties_transformer(),
+                      s()) ->
+                             s().
+
+tx_commit_state(Pubs, SeqIds, PropsF, S) ->
+    {_, S1} = internal_ack(SeqIds, S),
+    lists:foldl(
+      fun ({Msg, Props}, Si) -> publish_state(Msg, Props, false, Si) end,
+      S1,
+      [{Msg, PropsF(Props)} || {Msg, Props} <- lists:reverse(Pubs)]).
 
 %%----------------------------------------------------------------------------
 %% requeue/3 reinserts messages into the queue which have already been
@@ -485,7 +483,7 @@ tx_commit(Txn, F, PropsF, S) ->
 requeue(SeqIds, PropsF, S) ->
     rabbit_log:info("requeue(~p, ~p, ~p) ->", [SeqIds, PropsF, S]),
     {_, S1} =
-        internal_ack(
+        internal_ack3(
           fun (#m { msg = Msg, props = Props }, Si) ->
                   publish_state(Msg, PropsF(Props), true, Si)
           end,
@@ -567,15 +565,9 @@ ram_duration(S) ->
 %%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
-needs_idle_timeout(#s { on_sync =
-                            #sync { acks = [], pubs = [], funs = [] } }) ->
-    rabbit_log:info("needs_idle_timeout(_) ->"),
-    Result = false,
-    rabbit_log:info(" -> ~p", [Result]),
-    Result;
 needs_idle_timeout(_) ->
     rabbit_log:info("needs_idle_timeout(_) ->"),
-    Result = true,
+    Result = false,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -590,7 +582,7 @@ needs_idle_timeout(_) ->
 
 idle_timeout(S) ->
     rabbit_log:info("idle_timeout(~p) ->", [S]),
-    Result = tx_commit_state(S),
+    Result = S,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -618,18 +610,16 @@ handle_pre_hibernate(S) ->
 
 status(#s { q = Q,
             next_seq_id = NextSeqId,
-            pending_ack_dict = PAD,
-            on_sync = #sync { funs = Fs }}) ->
+            pending_ack_dict = PAD }) ->
     rabbit_log:info("status(_) ->"),
     Result = [{len, queue:len(Q)},
               {next_seq_id, NextSeqId},
-              {acks, dict:size(PAD)},
-              {outstanding_txns, length(Fs)}],
+              {acks, dict:size(PAD)}],
     rabbit_log:info(" ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% Minor helpers
+%% Various helpers
 %%----------------------------------------------------------------------------
 
 -spec m(rabbit_types:basic_message(),
@@ -658,51 +648,6 @@ store_tx(Txn, Tx, S = #s { txn_dict = TxnDict }) ->
 erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
     S #s { txn_dict = dict:erase(Txn, TxnDict) }.
 
-%%----------------------------------------------------------------------------
-%% Internal major helpers for Public API
-%%----------------------------------------------------------------------------
-
--spec internal_tx_commit_state([rabbit_types:basic_message()],
-                               [seq_id()],
-                               fun (() -> any()),
-                               message_properties_transformer(),
-                               s()) ->
-                                      s().
-
-internal_tx_commit_state(Pubs,
-                         SeqIds,
-                         F,
-                         PropsF,
-                         S = #s { on_sync = OnSync }) ->
-    (tx_commit_state(S #s { on_sync = #sync { acks = SeqIds,
-                                              pubs = [{PropsF, Pubs}],
-                                              funs = [F] }}))
-        #s { on_sync = OnSync }.
-
--spec tx_commit_state(s()) -> s().
-
-tx_commit_state(S = #s { on_sync = #sync { acks = [], pubs = [], funs = [] } }) -> S;
-tx_commit_state(S = #s {
-                  on_sync = #sync { acks = SAcks,
-                                    pubs = SPubs,
-                                    funs = SFs }}) ->
-    {_, S1} = internal_ack(SAcks, S),
-    {_, S2} =
-        lists:foldl(
-          fun ({Msg, Props}, {SeqIds, Si}) ->
-                  {SeqIds, publish_state(Msg, Props, false, Si)}
-          end,
-          {[], S1},
-          [{Msg, F(Props)} ||
-              {F, PubsN} <- lists:reverse(SPubs),
-              {Msg, Props} <- lists:reverse(PubsN)]),
-    _ = [ F() || F <- lists:reverse(SFs) ],
-    S2 #s { on_sync = #sync { acks = [], pubs = [], funs = [] } }.
-
-%%----------------------------------------------------------------------------
-%% Internal gubbins for publishing
-%%----------------------------------------------------------------------------
-
 -spec publish_state(rabbit_types:basic_message(),
                     rabbit_types:message_properties(),
                     boolean(),
@@ -718,10 +663,6 @@ publish_state(Msg,
             (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q),
       next_seq_id = SeqId + 1 }.
 
-%%----------------------------------------------------------------------------
-%% Internal gubbins for acks
-%%----------------------------------------------------------------------------
-
 -spec record_pending_ack_state(m(), s()) -> s().
 
 record_pending_ack_state(M = #m { seq_id = SeqId },
@@ -734,13 +675,13 @@ remove_acks_state(S = #s { pending_ack_dict = PAD }) ->
     _ = dict:fold(fun (_, M, Acc) -> [m_guid(M) | Acc] end, [], PAD),
     S #s { pending_ack_dict = dict:new() }.
 
--spec internal_ack(fun (([rabbit_guid:guid()], s()) -> s()),
-                   [rabbit_guid:guid()],
-                   s()) ->
-                          {[rabbit_guid:guid()], s()}.
+-spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
+                    [rabbit_guid:guid()],
+                    s()) ->
+                           {[rabbit_guid:guid()], s()}.
 
-internal_ack(_, [], S) -> {[], S};
-internal_ack(F, SeqIds, S) ->
+internal_ack3(_, [], S) -> {[], S};
+internal_ack3(F, SeqIds, S) ->
     {AllGuids, S1} =
         lists:foldl(
           fun (SeqId, {Acc, Si = #s { pending_ack_dict = PAD }}) ->
