@@ -1853,7 +1853,7 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                                                        true  -> 2;
                                                        false -> 1
                                                    end}, <<>>),
-                #message_properties{}, VQN)
+                #message_properties{}, self(), VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -1871,9 +1871,13 @@ assert_prop(List, Prop, Value) ->
 assert_props(List, PropVals) ->
     [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
 
+test_amqqueue(Durable) ->
+    (rabbit_amqqueue:pseudo_queue(test_queue(), self()))
+        #amqqueue { durable = Durable }.
+
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
-    VQ = rabbit_variable_queue:init(test_queue(), true, false,
+    VQ = rabbit_variable_queue:init(test_amqqueue(true), false,
                                     fun nop/2, fun nop/1),
     S0 = rabbit_variable_queue:status(VQ),
     assert_props(S0, [{q1, 0}, {q2, 0},
@@ -1932,7 +1936,7 @@ test_dropwhile(VQ0) ->
                       rabbit_basic:message(
                         rabbit_misc:r(<<>>, exchange, <<>>),
                         <<>>, #'P_basic'{}, <<>>),
-                      #message_properties{expiry = N}, VQN)
+                      #message_properties{expiry = N}, self(), VQN)
             end, VQ0, lists:seq(1, Count)),
 
     %% drop the first 5 messages
@@ -1976,7 +1980,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
 
     %% drain
     {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags, VQ8),
+    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
     VQ10.
@@ -1986,7 +1990,7 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
-    VQ3 = rabbit_variable_queue:ack([AckTag], VQ2),
+    {_Guids, VQ3} = rabbit_variable_queue:ack([AckTag], VQ2),
     publish_fetch_and_ack(N-1, Len, VQ3).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
@@ -2020,7 +2024,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
-    VQ9 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
+    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
     %% should be empty now
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
     VQ10.
@@ -2049,7 +2053,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
+    VQ7 = rabbit_variable_queue:init(test_amqqueue(true), true,
                                      fun nop/2, fun nop/1),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
@@ -2063,10 +2067,11 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(false, 4, VQ1),
     {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
-    VQ4 = rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
+    {_Guids, VQ4} =
+        rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
     VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
+    VQ7 = rabbit_variable_queue:init(test_amqqueue(true), true,
                                      fun nop/2, fun nop/1),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
@@ -2074,7 +2079,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     TxID = rabbit_guid:guid(),
-    {new, #amqqueue { pid = QPid, name = QName }} =
+    {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     [begin
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
@@ -2098,7 +2103,7 @@ test_queue_recover() ->
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
-              VQ1 = rabbit_variable_queue:init(QName, true, true,
+              VQ1 = rabbit_variable_queue:init(Q, true,
                                                fun nop/2, fun nop/1),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
