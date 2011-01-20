@@ -37,6 +37,10 @@ overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
     true = 0 < length(pget(listeners, http_get("/overview"))),
+    http_put("/users/myuser", [{password,      <<"myuser">>},
+                               {administrator, false}], ?NO_CONTENT),
+    http_get("/overview", "myuser", "myuser", ?OK),
+    http_delete("/users/myuser", ?NO_CONTENT),
     %% TODO uncomment when priv works in test
     %%http_get(""),
     ok.

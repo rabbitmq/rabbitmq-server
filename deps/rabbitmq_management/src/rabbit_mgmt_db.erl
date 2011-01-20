@@ -99,7 +99,7 @@ get_connections()      -> safe_call(get_connections).
 get_connection(Name)   -> safe_call({get_connection, Name}).
 get_channels()         -> safe_call(get_channels).
 get_channel(Name)      -> safe_call({get_channel, Name}).
-get_overview(Username) -> safe_call({get_overview, Username}).
+get_overview(User)     -> safe_call({get_overview, User}).
 get_overview()         -> safe_call({get_overview, all}).
 
 safe_call(Term) -> safe_call(Term, []).
@@ -239,10 +239,10 @@ handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     [Res] = channel_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, Tables),
     {reply, result_or_error(Res), State};
 
-handle_call({get_overview, Username}, _From, State = #state{tables = Tables}) ->
-    VHosts = case Username of
+handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
+    VHosts = case User of
                  all -> rabbit_vhost:list();
-                 _   -> rabbit_mgmt_util:vhosts(Username)
+                 _   -> rabbit_access_control:list_vhosts(User, read)
              end,
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
