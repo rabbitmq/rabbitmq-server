@@ -498,6 +498,21 @@ permissions_connection_channel_test() ->
     http_get("/channels/foo", ?NOT_FOUND),
     ok.
 
+consumers_test() ->
+    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+    {Conn, _ConnPath, _ChPath} = get_conn("guest", "guest"),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:subscribe(
+      Ch, #'basic.consume'{queue        = <<"test">>,
+                           no_ack       = false,
+                           consumer_tag = <<"my-ctag">> }, self()),
+    assert_list([[{exclusive,    false},
+                  {ack_required, true},
+                  {consumer_tag, <<"my-ctag">>}]], http_get("/consumers")),
+    amqp_connection:close(Conn),
+    http_delete("/queues/%2f/test", ?NO_CONTENT),
+    ok.
+
 unicode_test() ->
     QArgs = [],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),

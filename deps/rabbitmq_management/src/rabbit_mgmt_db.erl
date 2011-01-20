@@ -22,7 +22,7 @@
 
 -export([get_queues/1, get_queue/1, get_exchanges/1, get_exchange/1,
          get_connections/0, get_connection/1, get_overview/1,
-         get_overview/0, get_channels/0, get_channel/1]).
+         get_overview/0, get_channels/0, get_channel/1, get_consumers/0]).
 
 %% TODO can these not be exported any more?
 -export([pget/2, add/2, rates/5]).
@@ -99,6 +99,7 @@ get_connections()      -> safe_call(get_connections).
 get_connection(Name)   -> safe_call({get_connection, Name}).
 get_channels()         -> safe_call(get_channels).
 get_channel(Name)      -> safe_call({get_channel, Name}).
+get_consumers()        -> safe_call(get_consumers).
 get_overview(User)     -> safe_call({get_overview, User}).
 get_overview()         -> safe_call({get_overview, all}).
 
@@ -238,6 +239,13 @@ handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Chs = created_event(Name, channel_stats, Tables),
     [Res] = channel_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, Tables),
     {reply, result_or_error(Res), State};
+
+handle_call(get_consumers, _From, State = #state{tables = Tables}) ->
+    Consumers =
+        [augment_msg_stats(Obj, Tables) ||
+            {_, Obj} <- ets:tab2list(orddict:fetch(consumers, Tables))],
+
+    {reply, Consumers, State};
 
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VHosts = case User of
@@ -614,4 +622,8 @@ channel_stats(Objs, FineSpecs, Tables) ->
                        consumer_details_fun(
                          fun (Props) -> {'_', pget(pid, Props)} end, Tables),
                        fine_stats_fun(FineSpecs, Tables),
+                       augment_msg_stats_fun(Tables)]).
+
+consumer_stats(Objs, Tables) ->
+    merge_stats(Objs, [basic_stats_fun(consumers, Tables),
                        augment_msg_stats_fun(Tables)]).

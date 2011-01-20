@@ -24,8 +24,8 @@ import json
 import os
 import socket
 
-LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
-            'users', 'vhosts', 'permissions', 'nodes']
+LISTABLE = ['connections', 'channels', 'consumers', 'exchanges', 'queues',
+            'bindings', 'users', 'vhosts', 'permissions', 'nodes']
 
 SHOWABLE = ['overview']
 
