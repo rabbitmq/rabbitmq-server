@@ -105,39 +105,47 @@ parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
                    ValAcc) ->
     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
 
-parse_body(Content, Frame, Chunks, Remaining) ->
+parse_body(Content, Frame, Chunks, unknown) ->
     case binary:split(Content, <<0>>) of
         [Content] ->
-            finalize_chunk(Content, Chunks, Remaining,
-                          fun(NewChunks, NewRemaining) ->
-                                  more(fun(Rest) ->
-                                               parse_body(Rest,
-                                                          Frame,
-                                                          NewChunks,
-                                                          NewRemaining)
-                                       end)
-                          end);
+            more(fun(Rest) ->
+                         parse_body(Rest,
+                                    Frame,
+                                    finalize_chunk(Content, Chunks),
+                                    unknown)
+                 end);
         [Chunk, Rest] ->
-            finalize_chunk(Chunk, Chunks, Remaining,
-                           fun(NewChunks, _) ->
-                                   {ok,
-                                    Frame#stomp_frame{
-                                      body_iolist =
-                                          lists:reverse(NewChunks)}, Rest}
-                           end)
+            {ok, Frame#stomp_frame{
+                   body_iolist = lists:reverse(
+                                   finalize_chunk(Chunk, Chunks))}, Rest}
+    end;
+parse_body(Content, Frame, Chunks, Remaining) ->
+    Size = byte_size(Content),
+    case Remaining > Size of
+        true ->
+            more(fun(Rest) ->
+                         parse_body(Rest, Frame,
+                                    finalize_chunk(Content, Chunks),
+                                    Remaining - Size)
+                 end);
+        false ->
+            Chunk = binary:part(Content, 0, Remaining),
+            Remainder = binary:part(Content, Remaining,
+                                    byte_size(Content) - Remaining),
+            terminate_body(Remainder, Frame, finalize_chunk(Chunk, Chunks))
     end.
 
-finalize_chunk(Chunk, Chunks, Remaining, ReturnFun) ->
-    NewRemaining = case Remaining of
-                       unknown -> Remaining;
-                       _       -> Remaining - erlang:byte_size(Chunk)
-                   end,
-    case NewRemaining =:= unknown orelse NewRemaining >= 0 of
-        true ->  ReturnFun(case Chunk of
-                               [] -> Chunks;
-                               _  -> [Chunk | Chunks]
-                           end, NewRemaining);
-        false -> {error, missing_body_terminator}
+terminate_body(<<>>, Frame, Chunks) ->
+    more(fun(Rest) -> terminate_body(Rest, Frame, Chunks) end);
+terminate_body(<<0, Rest/binary>>, Frame, Chunks) ->
+    {ok, Frame#stomp_frame{body_iolist = lists:reverse(Chunks)}, Rest};
+terminate_body(_, _, _) ->
+    {error, missing_body_terminator}.
+
+finalize_chunk(Chunk, Chunks) ->
+    case Chunk of
+        <<>> -> Chunks;
+        _    -> [Chunk | Chunks]
     end.
 
 more(Continuation) ->
