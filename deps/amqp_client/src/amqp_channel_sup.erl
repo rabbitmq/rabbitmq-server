@@ -46,7 +46,7 @@ start_link(Type, InfraArgs, ChNumber) ->
 start_writer_fun(_Sup, direct, [Node, User, VHost, Collector], ChNumber) ->
     fun () ->
             rpc:call(Node, rabbit_direct, start_channel,
-                     [{ChNumber, self(), User, VHost, Collector}])
+                     [ChNumber, self(), User, VHost, Collector])
     end;
 start_writer_fun(Sup, network, [Sock], ChNumber) ->
     fun () ->
