@@ -96,6 +96,7 @@ function dispatcher() {
             render({'channel': '/channels/' + esc(this.params['name'])}, 'channel',
                    '#/channels');
         });
+    path('#/consumers', {'consumers': '/consumers'}, 'consumers');
 
     path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
     this.get('#/exchanges/:vhost/:name', function() {

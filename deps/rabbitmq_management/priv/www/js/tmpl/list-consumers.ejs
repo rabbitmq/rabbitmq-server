@@ -1,15 +1,14 @@
-<h1>Consumers</h1>
-<div class="section">
-  <h2>All consumers</h2>
-  <div class="hider updatable">
-<%= maybe_truncate(consumers) %>
 <% if (consumers.length > 0) { %>
     <table class="list">
       <thead>
         <tr>
+<% if (mode == 'queue') { %>
           <th>Channel</th>
           <th>Consumer Tag</th>
+<% } else { %>
+          <th>Consumer Tag</th>
           <th>Queue</th>
+<% } %>
           <th>Ack Required</th>
           <th>Exclusive</th>
         </tr>
@@ -19,9 +18,13 @@
     var consumer = consumers[i];
 %>
       <tr<%= alt_rows(i) %>>
+<% if (mode == 'queue') { %>
         <td><%= link_channel(consumer.channel_details.name) %></td>
         <td><%= consumer.consumer_tag %></td>
+<% } else { %>
+        <td><%= consumer.consumer_tag %></td>
         <td><%= link_queue(consumer.queue_details.vhost, consumer.queue_details.name) %></td>
+<% } %>
         <td class="c"><%= fmt_boolean(consumer.ack_required) %></td>
         <td class="c"><%= fmt_boolean(consumer.exclusive) %></td>
       </tr>
@@ -30,5 +33,3 @@
 <% } else { %>
   <p>... no consumers ...</p>
 <% } %>
-  </div>
-</div>
