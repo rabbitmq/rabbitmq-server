@@ -1364,12 +1364,17 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
         lists:foldl(
           fun (SeqId, {Acc, State2 = #vqstate { pending_ack   = PA,
                                                 ram_ack_index = RAI }}) ->
-                  AckEntry = dict:fetch(SeqId, PA),
-                  {accumulate_ack(SeqId, AckEntry, Acc),
-                   Fun(AckEntry, State2 #vqstate {
-                                   pending_ack   = dict:erase(SeqId, PA),
-                                   ram_ack_index =
-                                       gb_trees:delete_any(SeqId, RAI)})}
+                  case dict:find(SeqId, PA) of
+                      error ->
+                          {Acc, State2};
+                      {ok, AckEntry} ->
+                          {accumulate_ack(SeqId, AckEntry, Acc),
+                           Fun(AckEntry,
+                               State2 #vqstate {
+                                 pending_ack   = dict:erase(SeqId, PA),
+                                 ram_ack_index =
+                                     gb_trees:delete_any(SeqId, RAI)})}
+                  end
           end, {accumulate_ack_init(), State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(PersistentSeqIds, IndexState),
     [ok = MsgStoreFun(MSCState, IsPersistent, Guids)
