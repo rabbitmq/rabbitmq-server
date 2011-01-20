@@ -12,9 +12,10 @@ $(document).ready(function() {
         JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     setup_constant_events();
+    current_vhost = get_pref('vhost');
     update_vhosts();
     app.run();
-    set_timer_interval(5000);
+    update_interval();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -24,6 +25,7 @@ $(document).ready(function() {
 function setup_constant_events() {
     $('#update-every').change(function() {
             var interval = $(this).val();
+            store_pref('interval', interval);
             if (interval == '')
                 interval = null;
             else
@@ -32,6 +34,7 @@ function setup_constant_events() {
         });
     $('#show-vhost').change(function() {
             current_vhost = $(this).val();
+            store_pref('vhost', current_vhost);
             update();
         });
     if (!vhosts_interesting) {
@@ -51,10 +54,27 @@ function update_vhosts() {
     var index = 0;
     for (var i = 0; i < vhosts.length; i++) {
         var vhost = vhosts[i].name;
-        select.options[i + 1] = new Option(vhost);
+        select.options[i + 1] = new Option(vhost, vhost);
         if (vhost == current_vhost) index = i + 1;
     }
     select.selectedIndex = index;
+    current_vhost = select.options[index].value;
+    store_pref('vhost', current_vhost);
+}
+
+function update_interval() {
+    var interval = get_pref('interval');
+    interval = interval == null ? 5000 : parseInt(interval);
+    set_timer_interval(interval);
+
+    var select = $('#update-every').get(0);
+    var opts = select.options;
+    for (var i = 0; i < opts.length; i++) {
+        if (opts[i].value == interval) {
+            select.selectedIndex = i;
+            break;
+        }
+    }
 }
 
 var app = $.sammy(dispatcher);
@@ -332,8 +352,7 @@ function postprocess() {
                            "after deletion.");
         });
     $('div.section h2, div.section-hidden h2').click(function() {
-            $(this).next().slideToggle(100);
-            $(this).toggleClass("toggled");
+            toggle_visibility($(this));
         });
     $('label').map(function() {
             if ($(this).attr('for') == '') {
@@ -364,6 +383,7 @@ function postprocess() {
             $('#no-password').slideDown(100);
         }
     });
+    setup_visibility();
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -414,6 +434,49 @@ function update_multifields() {
                                '_mfvalue" value=""/></p>');
             }
         });
+}
+
+function setup_visibility() {
+    $('div.section,div.section-hidden').each(function(_index) {
+        var pref = section_pref(current_template,
+                                $(this).children('h2').text());
+        var show = get_pref(pref);
+        if (show == null) {
+            show = $(this).hasClass('section');
+        }
+        else {
+            show = show == 't';
+        }
+        if (show) {
+            $(this).addClass('section-visible');
+        }
+        else {
+            $(this).addClass('section-invisible');
+        }
+    });
+}
+
+function toggle_visibility(item) {
+    var hider = item.next();
+    var all = item.parent();
+    var pref = section_pref(current_template, item.text());
+    item.next().slideToggle(100);
+    if (all.hasClass('section-visible')) {
+        if (all.hasClass('section'))
+            store_pref(pref, 'f');
+        else
+            clear_pref(pref);
+        all.removeClass('section-visible');
+        all.addClass('section-invisible');
+    }
+    else {
+        if (all.hasClass('section-hidden'))
+            store_pref(pref, 't');
+        else
+            clear_pref(pref);
+        all.removeClass('section-invisible');
+        all.addClass('section-visible');
+    }
 }
 
 function with_reqs(reqs, acc, fun) {
