@@ -623,7 +623,3 @@ channel_stats(Objs, FineSpecs, Tables) ->
                          fun (Props) -> {'_', pget(pid, Props)} end, Tables),
                        fine_stats_fun(FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
-
-consumer_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(consumers, Tables),
-                       augment_msg_stats_fun(Tables)]).
