@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_channel/3]).
+-export([start_link/0, start_channel/2]).
 
 -export([init/1]).
 
@@ -27,8 +27,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_channel/3 :: (pid(), atom(),
-                          rabbit_channel_sup:start_link_args()) ->
+-spec(start_channel/2 :: (pid(), rabbit_channel_sup:start_link_args()) ->
                              {'ok', pid(), {pid(), any()}}).
 
 -endif.
@@ -38,8 +37,8 @@
 start_link() ->
     supervisor2:start_link(?MODULE, []).
 
-start_channel(Pid, Type, Args) ->
-    supervisor2:start_child(Pid, [Type, Args]).
+start_channel(Pid, Args) ->
+    supervisor2:start_child(Pid, [Args]).
 
 %%----------------------------------------------------------------------------
 

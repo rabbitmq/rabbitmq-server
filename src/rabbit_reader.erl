@@ -940,8 +940,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  vhost     = VHost}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, tcp, {Protocol, Sock, Channel, FrameMax,
-                            self(), User, VHost, Collector}),
+          ChanSupSup, {tcp, Protocol, Sock, Channel, FrameMax, self(), User,
+                       VHost, Collector}),
     erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
