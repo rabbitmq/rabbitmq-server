@@ -236,8 +236,9 @@ cancel_subscription({error, _}, State) ->
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription({ok, ConsumerTag, Description}, State = #state{channel       = MainChannel,
-                                                                   subscriptions = Subs}) ->
+cancel_subscription({ok, ConsumerTag, Description},
+                    State = #state{channel       = MainChannel,
+                                   subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
@@ -247,20 +248,24 @@ cancel_subscription({ok, ConsumerTag, Description}, State = #state{channel      
                   State);
         {ok, #subscription{channel = SubChannel}} ->
             case amqp_channel:call(SubChannel,
-                                   #'basic.cancel'{consumer_tag = ConsumerTag}) of
+                                   #'basic.cancel'{
+                                     consumer_tag = ConsumerTag}) of
                 #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
-                    ensure_subchannel_closed(SubChannel, 
-                                             MainChannel, 
-                                             State#state{subscriptions = dict:erase(ConsumerTag, Subs)});
+                    NewSubs = dict:erase(ConsumerTag, Subs),
+                    ensure_subchannel_closed(SubChannel,
+                                             MainChannel,
+                                             State#state{
+                                               subscriptions = NewSubs});
                 _ ->
                     error("Failed to cancel subscription",
                           "UNSUBSCRIBE to ~p failed.\n",
-                          [Description], 
+                          [Description],
                           State)
             end
     end.
 
-ensure_subchannel_closed(SubChannel, MainChannel, State) when SubChannel == MainChannel ->
+ensure_subchannel_closed(SubChannel, MainChannel, State)
+  when SubChannel == MainChannel ->
     ok(State);
 
 ensure_subchannel_closed(SubChannel, _MainChannel, State) ->
