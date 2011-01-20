@@ -129,9 +129,9 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    RabbitNode = list_to_atom("rabbit@" ++ net_adm:localhost()),
-    case amqp_connection:start(direct,
-                               AmqpParams#amqp_params{node = RabbitNode}) of
+    case amqp_connection:start(
+             direct,
+             AmqpParams#amqp_params{node = rabbit_misc:makenode(rabbit)}) of
         {ok, Conn}     -> Conn;
         {error, _} = E -> E
     end.
