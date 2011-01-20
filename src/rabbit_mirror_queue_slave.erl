@@ -164,8 +164,8 @@ handle_call({gm_deaths, Deaths}, From,
             State = #state { q           = #amqqueue { name = QueueName },
                              gm          = GM,
                              master_node = MNode }) ->
-    rabbit_log:info("Slave ~p saw deaths ~p for queue ~p~n",
-                    [self(), Deaths, QueueName]),
+    rabbit_log:info("Slave ~p saw deaths ~p for ~p~n",
+                    [self(), Deaths, rabbit_misc:rs(QueueName)]),
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
         {ok, Pid} when node(Pid) =:= MNode ->
             reply(ok, State);
@@ -325,8 +325,8 @@ promote_me(From, #state { q                   = Q,
                           sender_queues       = SQ,
                           seen                = Seen,
                           guid_ack            = GA }) ->
-    rabbit_log:info("Promoting slave ~p for queue ~p~n",
-                    [self(), Q #amqqueue.name]),
+    rabbit_log:info("Promoting slave ~p for ~p~n",
+                    [self(), rabbit_misc:rs(Q #amqqueue.name)]),
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, GM),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
