@@ -48,8 +48,7 @@
 
 %%----------------------------------------------------------------------------
 %% This module wraps msgs into M records for internal use, including
-%% additional information. Pending acks are also recorded in memory as
-%% Ms.
+%% additional information. Pending acks are also recorded as Ms.
 %%
 %% All queues are durable in this version, and all msgs are treated as
 %% persistent. (This will no doubt break some tests for non-durable
@@ -61,8 +60,8 @@
 -behaviour(rabbit_backing_queue).
 
 -record(s,                        % The in-RAM queue state
-        { mnesia_table_name,      % An atom holding the Mnesia table name
-          q,                      % The in-Mnesia queue of Ms
+        { mnesia_table,           % An atom holding the Mnesia table name
+          q,                      % The currently-in-RAM queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % The Mnesia seq_id->M map, pending ack
           txn_dict,               % In-progress txn->tx map
@@ -80,6 +79,11 @@
         { to_pub,
           to_ack }).
 
+-record(q_record,                 % Temporary whole-queue record in Mnesia
+        { key,                    % The key: the atom 'q'
+          val                     % The value: the M queue
+          }).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -93,7 +97,10 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(s() :: #s { mnesia_table_name :: atom(),
+-type(q_record() :: #q_record { key :: q,
+                                val :: queue() }).
+
+-type(s() :: #s { mnesia_table :: atom(),
                   q :: maybe(queue()),
                   next_seq_id :: seq_id(),
                   pending_ack_dict :: dict(),
@@ -124,7 +131,7 @@
 %% started in the near future. This lets us perform early checking
 %% necessary for the consistency of those queues or initialise other
 %% shared resources. This function creates an Mnesia transaction to
-%% run in, and must not be called from inside another Mnesia
+%% run in, and therefore may not be called from inside another Mnesia
 %% transaction.
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
@@ -133,28 +140,23 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-start(_DurableQueues) ->
-    rabbit_log:info("start(_) ->"),
-    rabbit_log:info(" -> ok"),
-    ok.
+start(_DurableQueues) -> ok.
 
 %%----------------------------------------------------------------------------
 %% stop/0 tears down all state/resources upon shutdown. It might not
 %% be called. This function creates an Mnesia transaction to run in,
-%% and must not be called from inside another Mnesia transaction.
+%% and therefore may not be called from inside another Mnesia
+%% transaction.
 %%
 %% -spec(stop/0 :: () -> 'ok').
 
-stop() ->
-    rabbit_log:info("stop(_) ->"),
-    rabbit_log:info(" -> ok"),
-    ok.
+stop() -> ok.
 
 %%----------------------------------------------------------------------------
 %% init/3 creates one backing queue, returning its state. Names are
 %% local to the vhost, and must be unique. This function creates
-%% Mnesia transactions to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% Mnesia transactions to run in, and therefore may not be called from
+%% inside another Mnesia transaction.
 %%
 %% -spec(init/3 ::
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
@@ -162,23 +164,23 @@ stop() ->
 
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~p, _, _) ->", [QueueName]),
-    MnesiaTableName = mnesia_table_name(QueueName),
+    MnesiaTable = mnesia_table(QueueName),
     %% It's unfortunate that tables cannot be created or deleted
     %% within an Mnesia transaction!
-    Attributes = record_info(fields, s),
+    Attributes = record_info(fields, q_record),
     case mnesia:create_table(
-           MnesiaTableName, [{record_name, s}, {attributes, Attributes}])
+           MnesiaTable, [{record_name, 'q_record'}, {attributes, Attributes}])
     of
         {atomic, ok} -> ok;
-        {aborted, {already_exists, MnesiaTableName}} ->
-            s = mnesia:table_info(MnesiaTableName, record_name),
-            Attributes = mnesia:table_info(MnesiaTableName, attributes),
+        {aborted, {already_exists, MnesiaTable}} ->
+            'q_record' = mnesia:table_info(MnesiaTable, record_name),
+            Attributes = mnesia:table_info(MnesiaTable, attributes),
             ok
     end,
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  #s { mnesia_table_name = MnesiaTableName,
+                  #s { mnesia_table = MnesiaTable,
                        q = {just, queue:new()},
                        next_seq_id = 0,
                        pending_ack_dict = dict:new(),
@@ -191,7 +193,7 @@ init(QueueName, _IsDurable, _Recover) ->
 %%----------------------------------------------------------------------------
 %% terminate/1 is called on queue shutdown when the queue isn't being
 %% deleted. This function creates an Mnesia transaction to run in, and
-%% must not be called from inside another Mnesia transaction.
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
@@ -202,6 +204,7 @@ terminate(S = #s { busy = false }) ->
         mnesia:transaction(
           fun () ->
                   RS = S1 #s { pending_ack_dict = dict:new() },
+                  _ = transactional_write_state(RS),
                   RS
           end),
     Result = S3 #s { busy = false },
@@ -213,8 +216,8 @@ terminate(S = #s { busy = false }) ->
 %% needs to delete all its content. The only difference between purge
 %% and delete is that delete also needs to delete everything that's
 %% been delivered and not ack'd. This function creates an Mnesia
-%% transaction to run in, and must not be called from inside another
-%% Mnesia transaction.
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
@@ -229,6 +232,7 @@ delete_and_terminate(S) ->
           fun () ->
                   RS = S1 #s { q = {just, queue:new()},
                                pending_ack_dict = dict:new() },
+                  _ = transactional_write_state(RS),
                   RS
           end),
     Result = S3 #s { busy = false },
@@ -238,8 +242,8 @@ delete_and_terminate(S) ->
 %%----------------------------------------------------------------------------
 %% purge/1 removes all msgs in the queue, but not msgs that have been
 %% fetched and are pending acks. This function creates an Mnesia
-%% transaction to run in, and must not be called from inside another
-%% Mnesia transaction.
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction.
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
@@ -250,6 +254,7 @@ purge(S = #s { q = {just, Q}, busy = false }) ->
         mnesia:transaction(
           fun () ->
                   RS = S1 #s { q = {just, queue:new()} },
+                  _ = transactional_write_state(RS),
                   {queue:len(Q), RS}
           end),
     Result = {A, S3 #s { busy = false }},
@@ -258,8 +263,9 @@ purge(S = #s { q = {just, Q}, busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% publish/3 publishes a msg. This function creates an Mnesia
-%% transaction to run in, and must not be called from inside another
-%% Mnesia transaction. All msgs are silently treated as persistent.
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction. All msgs are silently treated as
+%% persistent.
 %%
 %% -spec(publish/3 ::
 %%         (rabbit_types:basic_message(),
@@ -277,6 +283,7 @@ publish(Msg, Props, S = #s { busy = false }) ->
         mnesia:transaction(
           fun () ->
                   RS = publish_state(Msg, Props, false, S1),
+                  _ = transactional_write_state(RS),
                   RS
           end),
     Result = S3 #s { busy = false },
@@ -288,8 +295,8 @@ publish(Msg, Props, S = #s { busy = false }) ->
 %% passed straight out to a client. The queue will be empty for these
 %% calls (saving the round trip through the backing queue). All msgs
 %% are silently treated as non-persistent. This function creates an
-%% Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction. All msgs are silently treated as
+%% Mnesia transaction to run in, and therefore may not be called from
+%% inside another Mnesia transaction. All msgs are silently treated as
 %% persistent.
 %%
 %% -spec(publish_delivered/4 ::
@@ -320,6 +327,7 @@ publish_delivered(true,
                   RS = (record_pending_ack_state(
                        (m(Msg, SeqId, Props)) #m { is_delivered = true }, S1))
                       #s { next_seq_id = SeqId + 1 },
+                  _ = transactional_write_state(RS),
                   {SeqId, RS}
           end),
     Result = {A, B #s { busy = false }},
@@ -329,8 +337,8 @@ publish_delivered(true,
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops msgs from the head of the queue while the
 %% supplied predicate returns true. This function creates an Mnesia
-%% transaction to run in, and must not be called from inside another
-%% Mnesia transaction.
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction.
 %%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
@@ -342,8 +350,10 @@ dropwhile(Pred, S = #s { busy = false }) ->
     {atomic, {_, S3}} =
         mnesia:transaction(
           fun () ->
-                  RS = dropwhile_state(Pred, S1),
-                  RS
+                  {Atom, RS} =
+                      internal_dropwhile(Pred, S1),
+                  _ = transactional_write_state(RS),
+                  {Atom, RS}
           end),
     Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
@@ -351,8 +361,8 @@ dropwhile(Pred, S = #s { busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% fetch/2 produces the next msg. This function creates an Mnesia
-%% transaction to run in, and must not be called from inside another
-%% Mnesia transaction.
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction.
 %%
 %% -spec(fetch/2 :: (ack_required(), state()) ->
 %%                       {ok | fetch_result(), state()}).
@@ -367,6 +377,7 @@ fetch(AckRequired, S = #s { busy = false }) ->
                       internal_queue_out(
                         fun (M, Si) -> internal_fetch(AckRequired, M, Si) end,
                         S1),
+                  _ = transactional_write_state(RS),
                   {DR, RS}
           end),
     Result = {R, S3 #s { busy = false } },
@@ -376,7 +387,7 @@ fetch(AckRequired, S = #s { busy = false }) ->
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges msgs names by SeqIds. Maps SeqIds to guids upon
 %% return. This function creates an Mnesia transaction to run in, and
-%% must not be called from inside another Mnesia transaction.
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -391,6 +402,7 @@ ack(SeqIds, S = #s { busy = false }) ->
         mnesia:transaction(
           fun () ->
                   {Guids, RS} = internal_ack(SeqIds, S1),
+                  _ = transactional_write_state(RS),
                   {Guids, RS}
           end),
     Result = {Guids, S3 # s { busy = false }},
@@ -401,8 +413,8 @@ ack(SeqIds, S = #s { busy = false }) ->
 %% tx_publish/4 is a publish, but in the context of an AMQP
 %% transaction. It stores the msg and its properties in the to_pub
 %% field of the txn, waiting to be committed. This function creates an
-%% Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% Mnesia transaction to run in, and therefore may not be called from
+%% inside another Mnesia transaction.
 %%
 %% -spec(tx_publish/4 ::
 %%         (rabbit_types:txn(),
@@ -421,6 +433,7 @@ tx_publish(Txn, Msg, Props, S = #s { busy = false }) ->
                   RS = store_tx(Txn,
                                 Tx #tx { to_pub = [{Msg, Props} | Pubs] },
                                 S1),
+                  _ = transactional_write_state(RS),
                   RS
           end),
     Result = S3 #s { busy = false },
@@ -431,7 +444,8 @@ tx_publish(Txn, Msg, Props, S = #s { busy = false }) ->
 %% tx_ack/3 acks, but in the context of an AMQP transaction. It stores
 %% the seq_id in the acks field of the txn, waiting to be
 %% committed. This function creates an Mnesia transaction to run in,
-%% and must not be called from inside another Mnesia transaction.
+%% and therefore may not be called from inside another Mnesia
+%% transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -444,11 +458,11 @@ tx_ack(Txn, SeqIds, S = #s { busy = false }) ->
         mnesia:transaction(
           fun () ->
                   Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S1),
-                  RS =
-                      store_tx(Txn,
-                               Tx #tx {
-                                 to_ack = lists:append(SeqIds, SeqIds0) },
-                               S1),
+                  RS = store_tx(Txn,
+                                Tx #tx {
+                                  to_ack = lists:append(SeqIds, SeqIds0) },
+                                S1),
+                  _ = transactional_write_state(RS),
                   RS
           end),
     Result = S3 #s { busy = false },
@@ -459,7 +473,7 @@ tx_ack(Txn, SeqIds, S = #s { busy = false }) ->
 %% tx_rollback/2 undoes anything that has been done in the context of
 %% the specified AMQP transaction. It returns the state with to_pub
 %% and to_ack erased. This function creates an Mnesia transaction to
-%% run in, and must not be called from inside another Mnesia
+%% run in, and therefore may not be called from inside another Mnesia
 %% transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
@@ -474,6 +488,7 @@ tx_rollback(Txn, S = #s { busy = false }) ->
           fun () ->
                   #tx { to_ack = SeqIds } = lookup_tx(Txn, S1),
                   RS = erase_tx(Txn, S),
+                  _ = transactional_write_state(RS),
                   {SeqIds, RS}
           end),
     Result = {A, B #s { busy = false }},
@@ -484,8 +499,8 @@ tx_rollback(Txn, S = #s { busy = false }) ->
 %% tx_commit/4 commits an AMQP transaction. The F passed in must be
 %% called once the msgs have really been commited. This CPS permits
 %% the possibility of commit coalescing. This function creates an
-%% Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% Mnesia transaction to run in, and therefore may not be called from
+%% inside another Mnesia transaction.
 %%
 %% The following spec is wrong, blank_acks cannot be returned.
 %%
@@ -506,6 +521,7 @@ tx_commit(Txn, F, PropsF, S = #s { busy = false }) ->
                   #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S1),
                   RS =
                       tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S1)),
+                  _ = transactional_write_state(RS),
                   {SeqIds, RS}
           end),
     F(),
@@ -516,8 +532,8 @@ tx_commit(Txn, F, PropsF, S = #s { busy = false }) ->
 %%----------------------------------------------------------------------------
 %% requeue/3 reinserts msgs into the queue that have already been
 %% delivered and were pending acknowledgement. This function creates
-%% an Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% an Mnesia transaction to run in, and therefore may not be called
+%% from inside another Mnesia transaction.
 %%
 %% The following spec is wrong, as blank_acks cannot be passed back in.
 %%
@@ -537,6 +553,7 @@ requeue(SeqIds, PropsF, S = #s { busy = false }) ->
                         end,
                         SeqIds,
                         S1),
+                  _ = transactional_write_state(RS),
                   RS
           end),
     Result = S3 #s { busy = false },
@@ -545,7 +562,7 @@ requeue(SeqIds, PropsF, S = #s { busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% len/1 returns the queue length. It should be Mnesia transactional
-%% but it is not.
+%% but it is not yet.
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
@@ -561,7 +578,7 @@ len(#s { q = {just, Q}, busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% is_empty/1 returns true if the queue is empty, and false
-%% otherwise. It should be Mnesia transactional but it is not.
+%% otherwise. It should be Mnesia transactional but it is not yet.
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
@@ -578,9 +595,7 @@ is_empty(#s { q = {just, Q}, busy = false }) ->
 %%----------------------------------------------------------------------------
 %% set_ram_duration_target states that the target is to have no more
 %% msgs in RAM than indicated by the duration and the current queue
-%% rates. It is ignored in this implementation. This function creates
-%% an Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% rates. It is ignored in this implementation.
 %%
 %% -spec(set_ram_duration_target/2 ::
 %%         (('undefined' | 'infinity' | number()), state())
@@ -592,9 +607,7 @@ set_ram_duration_target(_, S = #s { busy = false }) -> S.
 %% ram_duration/1 optionally recalculates the duration internally
 %% (likely to be just update your internal rates), and report how many
 %% seconds the msgs in RAM represent given the current rates of the
-%% queue. It is a dummy in this implementation. This function creates
-%% an Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% queue. It is a dummy in this implementation.
 %%
 %% -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 
@@ -604,9 +617,7 @@ ram_duration(S = #s { busy = false }) -> {0, S}.
 %% needs_idle_timeout/1 returns true if idle_timeout should be called
 %% as soon as the queue process can manage (either on an empty
 %% mailbox, or when a timer fires), and false otherwise. It always
-%% returns false in this implementation. This function creates an
-%% Mnesia transaction to run in, and must not be called from inside
-%% another Mnesia transaction.
+%% returns false in this implementation.
 %%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
@@ -614,9 +625,7 @@ needs_idle_timeout(#s { busy = false }) -> false.
 
 %%----------------------------------------------------------------------------
 %% idle_timeout/1 is called (eventually) after needs_idle_timeout
-%% returns true. It is a dummy in this implementation. This function
-%% creates an Mnesia transaction to run in, and must not be called
-%% from inside another Mnesia transaction.
+%% returns true. It is a dummy in this implementation.
 %%
 %% -spec(idle_timeout/1 :: (state()) -> state()).
 
@@ -624,9 +633,7 @@ idle_timeout(S = #s { busy = false }) -> S.
 
 %%----------------------------------------------------------------------------
 %% handle_pre_hibernate/1 is called immediately before the queue
-%% hibernates. It is a dummy in this implementation. This function
-%% creates an Mnesia transaction to run in, and must not be called
-%% from inside another Mnesia transaction.
+%% hibernates. It is a dummy in this implementation.
 %%
 %% -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 
@@ -646,12 +653,23 @@ status(#s { q = {just, Q},
     [{len, queue:len(Q)}, {next_seq_id, NextSeqId}, {acks, dict:size(PAD)}].
 
 %%----------------------------------------------------------------------------
-%% Various internal helper functions. All functions are pure below
-%% this point, and all Ss are busy and have non-nothing qs.
+%% Internal helper functions for inside transactions. All Ss are busy
+%% and have non-nothing qs.
 %% ----------------------------------------------------------------------------
 
--spec internal_queue_out(fun ((m(), state()) -> T), state()) ->
-                                {empty, state()} | T.
+-spec transactional_write_state(s()) -> s().
+
+transactional_write_state(S = #s {
+                            mnesia_table = MnesiaTable, q = {just, RQ} }) ->
+    ok = mnesia:write(MnesiaTable, #q_record { key = q, val = RQ }, 'write'),
+    S.
+
+%%----------------------------------------------------------------------------
+%% Internal pure helper functions. All Ss are busy and have
+%% non-nothing qs.
+%% ----------------------------------------------------------------------------
+
+-spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
 
 internal_queue_out(F, S = #s { q = {just, Q} }) ->
     case queue:out(Q) of
@@ -677,17 +695,17 @@ internal_fetch(AckRequired,
         end,
     {{Msg, IsDelivered, Ack, queue:len(Q)}, S1}.
 
--spec(dropwhile_state/2 ::
+-spec(internal_dropwhile/2 ::
         (fun ((rabbit_types:message_properties()) -> boolean()), s())
         -> {empty | ok, s()}).
 
-dropwhile_state(Pred, S) ->
+internal_dropwhile(Pred, S) ->
     internal_queue_out(
       fun (M = #m { props = Props }, Si = #s { q = {just, Q} }) ->
               case Pred(Props) of
                   true ->
                       {_, Si1} = internal_fetch(false, M, Si),
-                      dropwhile_state(Pred, Si1);
+                      internal_dropwhile(Pred, Si1);
                   false -> {ok, Si #s {q = {just,queue:in_r(M, Q)} }}
               end
       end,
@@ -785,8 +803,8 @@ m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
 
 %% TODO: Import correct argument type.
 
--spec mnesia_table_name(_) -> atom().
+-spec mnesia_table(_) -> atom().
 
-mnesia_table_name(QueueName) ->
+mnesia_table(QueueName) ->
     list_to_atom(lists:flatten(io_lib:format("~p", [QueueName]))).
 
