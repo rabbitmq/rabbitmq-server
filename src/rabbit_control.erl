@@ -273,10 +273,13 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
-    display_info_list(
-      [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
-      InfoKeys);
+    case rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]) of
+        L when is_list(L) -> display_info_list(
+                               [lists:zip(InfoKeys, tuple_to_list(X)) ||
+                                   X <- L],
+                               InfoKeys);
+        Other             -> Other
+    end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
