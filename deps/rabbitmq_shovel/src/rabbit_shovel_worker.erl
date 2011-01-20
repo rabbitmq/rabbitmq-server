@@ -44,6 +44,7 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config}) ->
+    process_flag(trap_exit, true),
     %% TODO when we move to minimum R13B01:
     %% random:seed(now()),
     {A, B, C} = now(),
@@ -118,11 +119,11 @@ handle_info(#'channel.flow'{active = false},
     ok = channel_flow(InboundChan, false),
     {noreply, State#state{blocked = true}};
 
-handle_info({'DOWN', _, process, InboundConn, Reason},
+handle_info({'EXIT', InboundConn, Reason},
             State = #state{inbound_conn = InboundConn}) ->
     {stop, {inbound_conn_died, Reason}, State};
 
-handle_info({'DOWN', _, process, OutboundConn, Reason},
+handle_info({'EXIT', OutboundConn, Reason},
             State = #state{outbound_conn = OutboundConn}) ->
     {stop, {outbound_conn_died, Reason}, State}.
 
@@ -204,7 +205,7 @@ make_conn_and_chan(AmqpParams) ->
                      case AmqpParam#amqp_params.host of undefined -> direct;
                                                         _         -> network
                      end, AmqpParam),
-    erlang:monitor(process, Conn),
+    link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, AmqpParam}.
 
