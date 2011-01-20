@@ -198,10 +198,13 @@ init(QueueName, _IsDurable, _Recover) ->
 terminate(S = #s { busy = false }) ->
     rabbit_log:info("terminate(~p) ->", [S]),
     S1 = S #s { busy = true },
-    {atomic, S2} =
+    {atomic, S3} =
         mnesia:transaction(
-          fun () -> S1 #s { pending_ack_dict = dict:new() } end),
-    Result = S2 #s { busy = false },
+          fun () ->
+                  RS = S1 #s { pending_ack_dict = dict:new() },
+                  RS
+          end),
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -221,13 +224,14 @@ terminate(S = #s { busy = false }) ->
 delete_and_terminate(S) ->
     rabbit_log:info("delete_and_terminate(~p) ->", [S]),
     S1 = S #s { busy = true },
-    {atomic, S2} =
+    {atomic, S3} =
         mnesia:transaction(
           fun () ->
-                  S1 #s { q = {just, queue:new()},
-                          pending_ack_dict = dict:new() }
+                  RS = S1 #s { q = {just, queue:new()},
+                               pending_ack_dict = dict:new() },
+                  RS
           end),
-    Result = S2 #s { busy = false },
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -242,10 +246,13 @@ delete_and_terminate(S) ->
 purge(S = #s { q = {just, Q}, busy = false }) ->
     rabbit_log:info("purge(~p) ->", [S #s { busy = true }]),
     S1 = S #s { busy = true },
-    {atomic, {A, S2}} =
+    {atomic, {A, S3}} =
         mnesia:transaction(
-          fun() -> {queue:len(Q), S1 #s { q = {just, queue:new()} }} end),
-    Result = {A, S2 #s { busy = false }},
+          fun () ->
+                  RS = S1 #s { q = {just, queue:new()} },
+                  {queue:len(Q), RS}
+          end),
+    Result = {A, S3 #s { busy = false }},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -266,9 +273,13 @@ publish(Msg, Props, S = #s { busy = false }) ->
     rabbit_log:info(" ~p,", [Props]),
     rabbit_log:info(" ~p) ->", [S]),
     S1 = S #s { busy = true },
-    {atomic, S2} =
-        mnesia:transaction(fun () -> publish_state(Msg, Props, false, S1) end),
-    Result = S2 #s { busy = false },
+    {atomic, S3} =
+        mnesia:transaction(
+          fun () ->
+                  RS = publish_state(Msg, Props, false, S1),
+                  RS
+          end),
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -306,10 +317,10 @@ publish_delivered(true,
     {atomic, {A, B}} =
         mnesia:transaction(
           fun () ->
-                  {SeqId,
-                   (record_pending_ack_state(
+                  RS = (record_pending_ack_state(
                        (m(Msg, SeqId, Props)) #m { is_delivered = true }, S1))
-                   #s { next_seq_id = SeqId + 1 }}
+                      #s { next_seq_id = SeqId + 1 },
+                  {SeqId, RS}
           end),
     Result = {A, B #s { busy = false }},
     rabbit_log:info(" -> ~p", [Result]),
@@ -328,9 +339,13 @@ publish_delivered(true,
 dropwhile(Pred, S = #s { busy = false }) ->
     rabbit_log:info("dropwhile(~p, ~p) ->", [Pred, S]),
     S1 = S #s { busy = true },
-    {atomic, {_, S2}} =
-        mnesia:transaction(fun () -> dropwhile_state(Pred, S1) end),
-    Result = S2 #s { busy = false },
+    {atomic, {_, S3}} =
+        mnesia:transaction(
+          fun () ->
+                  RS = dropwhile_state(Pred, S1),
+                  RS
+          end),
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -345,13 +360,16 @@ dropwhile(Pred, S = #s { busy = false }) ->
 fetch(AckRequired, S = #s { busy = false }) ->
     rabbit_log:info("fetch(~p, ~p) ->", [AckRequired, S]),
     S1 = S #s { busy = true },
-    {atomic, {R, S2}} =
+    {atomic, {R, S3}} =
         mnesia:transaction(
           fun () ->
-                  internal_queue_out(
-                    fun (M, Si) -> internal_fetch(AckRequired, M, Si) end, S1)
+                  {DR, RS} =
+                      internal_queue_out(
+                        fun (M, Si) -> internal_fetch(AckRequired, M, Si) end,
+                        S1),
+                  {DR, RS}
           end),
-    Result = {R, S2 #s { busy = false } },
+    Result = {R, S3 #s { busy = false } },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -369,9 +387,13 @@ ack(SeqIds, S = #s { busy = false }) ->
     rabbit_log:info("~p,", [SeqIds]),
     rabbit_log:info(" ~p) ->", [S]),
     S1 = S #s { busy = true },
-    {atomic, {Guids, S2}} =
-        mnesia:transaction(fun () -> internal_ack(SeqIds, S1) end),
-    Result = {Guids, S2 # s { busy = false }},
+    {atomic, {Guids, S3}} =
+        mnesia:transaction(
+          fun () ->
+                  {Guids, RS} = internal_ack(SeqIds, S1),
+                  {Guids, RS}
+          end),
+    Result = {Guids, S3 # s { busy = false }},
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -392,13 +414,16 @@ ack(SeqIds, S = #s { busy = false }) ->
 tx_publish(Txn, Msg, Props, S = #s { busy = false }) ->
     rabbit_log:info("tx_publish(~p, ~p, ~p, ~p) ->", [Txn, Msg, Props, S]),
     S1 = S #s { busy = true },
-    {atomic, S2} =
+    {atomic, S3} =
         mnesia:transaction(
           fun () ->
                   Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, S1),
-                  store_tx(Txn, Tx #tx { to_pub = [{Msg, Props} | Pubs] }, S1)
+                  RS = store_tx(Txn,
+                                Tx #tx { to_pub = [{Msg, Props} | Pubs] },
+                                S1),
+                  RS
           end),
-    Result = S2 #s { busy = false },
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -415,14 +440,18 @@ tx_publish(Txn, Msg, Props, S = #s { busy = false }) ->
 tx_ack(Txn, SeqIds, S = #s { busy = false }) ->
     rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, SeqIds, S]),
     S1 = S #s { busy = true },
-    {atomic, S2} =
+    {atomic, S3} =
         mnesia:transaction(
           fun () ->
                   Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S1),
-                  store_tx(
-                    Txn, Tx #tx { to_ack = lists:append(SeqIds, SeqIds0) }, S1)
+                  RS =
+                      store_tx(Txn,
+                               Tx #tx {
+                                 to_ack = lists:append(SeqIds, SeqIds0) },
+                               S1),
+                  RS
           end),
-    Result = S2 #s { busy = false },
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -444,7 +473,8 @@ tx_rollback(Txn, S = #s { busy = false }) ->
         mnesia:transaction(
           fun () ->
                   #tx { to_ack = SeqIds } = lookup_tx(Txn, S1),
-                  {SeqIds, (erase_tx(Txn, S))}
+                  RS = erase_tx(Txn, S),
+                  {SeqIds, RS}
           end),
     Result = {A, B #s { busy = false }},
     rabbit_log:info(" -> ~p", [Result]),
@@ -474,8 +504,9 @@ tx_commit(Txn, F, PropsF, S = #s { busy = false }) ->
         mnesia:transaction(
           fun () ->
                   #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S1),
-                  {SeqIds,
-                   tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S1))}
+                  RS =
+                      tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S1)),
+                  {SeqIds, RS}
           end),
     F(),
     Result = {A, B #s { busy = false }},
@@ -496,17 +527,19 @@ tx_commit(Txn, F, PropsF, S = #s { busy = false }) ->
 requeue(SeqIds, PropsF, S = #s { busy = false }) ->
     rabbit_log:info("requeue(~p, ~p, ~p) ->", [SeqIds, PropsF, S]),
     S1 = S #s { busy = true },
-    {atomic, {_, S2}} =
+    {atomic, S3} =
         mnesia:transaction(
           fun () ->
-                  internal_ack3(
-                    fun (#m { msg = Msg, props = Props }, Si) ->
-                            publish_state(Msg, PropsF(Props), true, Si)
-                    end,
-                    SeqIds,
-                    S1)
+                  {_, RS} =
+                      internal_ack3(
+                        fun (#m { msg = Msg, props = Props }, Si) ->
+                                publish_state(Msg, PropsF(Props), true, Si)
+                        end,
+                        SeqIds,
+                        S1),
+                  RS
           end),
-    Result = S2 #s { busy = false },
+    Result = S3 #s { busy = false },
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -518,7 +551,11 @@ requeue(SeqIds, PropsF, S = #s { busy = false }) ->
 
 len(#s { q = {just, Q}, busy = false }) ->
     rabbit_log:info("len(~p) ->", [Q]),
-    {atomic, Result} = mnesia:transaction(fun () -> queue:len(Q) end),
+    {atomic, Result} =
+        mnesia:transaction(
+          fun () ->
+                  queue:len(Q)
+          end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -530,7 +567,11 @@ len(#s { q = {just, Q}, busy = false }) ->
 
 is_empty(#s { q = {just, Q}, busy = false }) ->
     rabbit_log:info("is_empty(~p)", [Q]),
-    {atomic, Result} = mnesia:transaction(fun () -> queue:is_empty(Q) end),
+    {atomic, Result} =
+        mnesia:transaction(
+          fun () ->
+                  queue:is_empty(Q)
+          end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
