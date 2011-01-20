@@ -48,19 +48,19 @@
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
-%% This module wraps messages into M records for internal use,
-%% containing the messages themselves and additional
-%% information. Pending acks are also recorded in memory as M records.
+%% This module wraps msgs into M records for internal use, containing
+%% the msgs themselves and additional information. Pending acks are
+%% also recorded in memory as M records.
 %%
-%% All queues are durable in this version, and all messages are
-%% treated as persistent. (This might break some tests for non-durable
-%% queues.)
+%% All queues are durable in this version, and all msgs are treated as
+%% persistent. (This might break some tests for non-durable queues.)
 %% ----------------------------------------------------------------------------
 
 -behaviour(rabbit_backing_queue).
 
 -record(s,                        % The in-RAM queue state
-        { q,                      % The in-Mnesia queue of Ms
+        { mnesia_table_name,      % An atom holding the Mnesia table name
+          q,                      % The in-Mnesia queue of Ms
           next_seq_id,            % The next seq_id to use to build an M
           pending_ack_dict,       % The Mnesia seq_id->M map, pending ack
           txn_dict,               % In-progress txn->tx map
@@ -70,7 +70,7 @@
 -record(m,                        % A wrapper aroung a msg
         { seq_id,                 % The seq_id for the msg
           msg,                    % The msg itself
-          props,                  % The message properties
+          props,                  % The msg properties
           is_delivered            % Has the msg been delivered? (for reporting)
         }).
 
@@ -89,7 +89,8 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(s() :: #s { q :: queue(),
+-type(s() :: #s { mnesia_table_name :: atom(),
+                  q :: queue(),
                   next_seq_id :: seq_id(),
                   pending_ack_dict :: dict(),
                   txn_dict :: dict(),
@@ -118,8 +119,8 @@
 %% start/1 promises that a list of (durable) queue names will be
 %% started in the near future. This lets us perform early checking
 %% necessary for the consistency of those queues or initialise other
-%% shared resources. This function must not be called from inside
-%% another operation.
+%% shared resources. This function creates a transaction and must not
+%% be called from inside another transaction.
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 
@@ -134,8 +135,8 @@ start(_DurableQueues) ->
 
 %%----------------------------------------------------------------------------
 %% stop/0 tears down all state/resources upon shutdown. It might not
-%% be called. This function must not be called from inside another
-%% operation.
+%% be called. This function creates a transaction and must not be
+%% called from inside another transaction.
 %%
 %% -spec(stop/0 :: () -> 'ok').
 
@@ -146,8 +147,9 @@ stop() ->
 
 %%----------------------------------------------------------------------------
 %% init/3 creates one backing queue, returning its state. Names are
-%% local to the vhost, and need not be unique. This function should
-%% not be called from inside another operation.
+%% local to the vhost, and must be unique. This function creates
+%% transactions and must not be called from inside another
+%% transaction.
 %%
 %% -spec(init/3 ::
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
@@ -157,10 +159,19 @@ stop() ->
 
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~p, _, _) ->", [QueueName]),
+    MnesiaTableName = mnesia_table_name(QueueName),
+    %% It's unfortunate that tables cannot be created and deleted
+    %% within an Mnesia transaction.
+    _ = (catch mnesia:delete_table(MnesiaTableName)),
+    {atomic, ok} =
+        (catch mnesia:create_table(
+                 MnesiaTableName,
+                 [{record_name, s}, {attributes, record_info(fields, s)}])),
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  #s { q = queue:new(),
+                  #s { mnesia_table_name = MnesiaTableName,
+                       q = queue:new(),
                        next_seq_id = 0,
                        pending_ack_dict = dict:new(),
                        txn_dict = dict:new(),
@@ -171,8 +182,8 @@ init(QueueName, _IsDurable, _Recover) ->
 
 %%----------------------------------------------------------------------------
 %% terminate/1 is called on queue shutdown when the queue isn't being
-%% deleted. This function should not be called from inside another
-%% operation.
+%% deleted. This function creates a transaction and must not be called
+%% from inside another transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
@@ -188,8 +199,8 @@ terminate(S = #s { busy = false }) ->
 %% delete_and_terminate/1 is called when the queue is terminating and
 %% needs to delete all its content. The only difference between purge
 %% and delete is that delete also needs to delete everything that's
-%% been delivered and not ack'd. This function should not be called
-%% from inside another operation.
+%% been delivered and not ack'd. This function creates a transaction
+%% and must not be called from inside another transaction.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
@@ -207,9 +218,9 @@ delete_and_terminate(S) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% purge/1 removes all messages in the queue, but not messages which
-%% have been fetched and are pending acks. This function should not be
-%% called from inside another operation.
+%% purge/1 removes all msgs in the queue, but not msgs which have been
+%% fetched and are pending acks. This function creates a transaction
+%% and must not be called from inside another transaction.
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
@@ -224,9 +235,9 @@ purge(S = #s { q = Q, busy = false }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% publish/3 publishes a message. This function should not be called
-%% from inside another operation. All msgs are silently treated as
-%% persistent.
+%% publish/3 publishes a msg. This function creates a transaction and
+%% must not be called from inside another transaction. All msgs are
+%% silently treated as persistent.
 %%
 %% -spec(publish/3 ::
 %%         (rabbit_types:basic_message(),
@@ -247,12 +258,12 @@ publish(Msg, Props, S = #s { busy = false }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% publish_delivered/4 is called for messages which have already been
+%% publish_delivered/4 is called for msgs which have already been
 %% passed straight out to a client. The queue will be empty for these
 %% calls (i.e. saves the round trip through the backing queue). All
-%% msgs are silently treated as non-persistent. This function should
-%% not be called from inside another operation. All msgs are silently
-%% treated as persistent.
+%% msgs are silently treated as non-persistent. This function creates
+%% a transaction and must not be called from inside another
+%% transaction. All msgs are silently treated as persistent.
 %%
 %% -spec(publish_delivered/4 ::
 %%         (ack_required(),
@@ -289,9 +300,9 @@ publish_delivered(true,
     Result.
 
 %%----------------------------------------------------------------------------
-%% dropwhile/2 drops messages from the head of the queue while the
-%% supplied predicate returns true. This function should not be called
-%% from inside another operation.
+%% dropwhile/2 drops msgs from the head of the queue while the
+%% supplied predicate returns true. This function creates a
+%% transaction and must not be called from inside another transaction.
 %%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
@@ -307,8 +318,8 @@ dropwhile(Pred, S = #s { busy = false }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% fetch/2 produces the next message. This function should not be
-%% called from inside another operation.
+%% fetch/2 produces the next msg. This function creates a transaction
+%% and must not be called from inside another transaction.
 %%
 %% -spec(fetch/2 :: (ack_required(), state()) ->
 %%                       {ok | fetch_result(), state()}).
@@ -327,9 +338,9 @@ fetch(AckRequired, S = #s { busy = false }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% ack/2 acknowledges messages names by SeqIds. Maps SeqIds to guids
-%% upon return. This function should not be called from inside another
-%% operation.
+%% ack/2 acknowledges msgs names by SeqIds. Maps SeqIds to guids upon
+%% return. This function creates a transaction and must not be called
+%% from inside another transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -348,8 +359,9 @@ ack(SeqIds, S = #s { busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish, but in the context of a transaction. It
-%% stores the message and its properties in the to_pub field of the txn,
-%% waiting to be committed. This function should not be called from inside another operation.
+%% stores the msg and its properties in the to_pub field of the txn,
+%% waiting to be committed. This function creates a transaction and
+%% must not be called from inside another transaction.
 %%
 %% -spec(tx_publish/4 ::
 %%         (rabbit_types:txn(),
@@ -374,7 +386,8 @@ tx_publish(Txn, Msg, Props, S = #s { busy = false }) ->
 %%----------------------------------------------------------------------------
 %% tx_ack/3 acks, but in the context of a transaction. It stores the
 %% seq_id in the acks field of the txn, waiting to be committed. This
-%% function should not be called from inside another operation.
+%% function creates a transaction and must not be called from inside
+%% another transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -397,8 +410,8 @@ tx_ack(Txn, SeqIds, S = #s { busy = false }) ->
 %%----------------------------------------------------------------------------
 %% tx_rollback/2 undoes anything which has been done in the context of
 %% the specified transaction. It returns the state with to_pub and
-%% to_ack erased. This function should not be called from inside
-%% another operation.
+%% to_ack erased. This function creates a transaction and must not be
+%% called from inside another transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -419,9 +432,9 @@ tx_rollback(Txn, S = #s { busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% tx_commit/4 commits a transaction. The F passed in must be called
-%% once the messages have really been commited. This CPS permits the
-%% possibility of commit coalescing. This function should not be
-%% called from inside another operation.
+%% once the msgs have really been commited. This CPS permits the
+%% possibility of commit coalescing. This function creates a
+%% transaction and must not be called from inside another transaction.
 %%
 %% The following spec is wrong, blank_acks cannot be returned.
 %%
@@ -449,9 +462,9 @@ tx_commit(Txn, F, PropsF, S = #s { busy = false }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% requeue/3 reinserts messages into the queue which have already been
-%% delivered and were pending acknowledgement. This function should
-%% not be called from inside another operation.
+%% requeue/3 reinserts msgs into the queue which have already been
+%% delivered and were pending acknowledgement. This function creates a
+%% transaction and must not be called from inside another transaction.
 %%
 %% The following spec is wrong, as blank_acks cannot be passed back in.
 %%
@@ -500,9 +513,10 @@ is_empty(#s { q = Q, busy = false }) ->
 
 %%----------------------------------------------------------------------------
 %% set_ram_duration_target states that the target is to have no more
-%% messages in RAM than indicated by the duration and the current
-%% queue rates. It is ignored in this implementation. This function
-%% should not be called from inside another operation.
+%% msgs in RAM than indicated by the duration and the current queue
+%% rates. It is ignored in this implementation. This function creates
+%% a transaction and must not be called from inside another
+%% transaction.
 %%
 %% -spec(set_ram_duration_target/2 ::
 %%         (('undefined' | 'infinity' | number()), state())
@@ -513,9 +527,10 @@ set_ram_duration_target(_, S = #s { busy = false }) -> S.
 %%----------------------------------------------------------------------------
 %% ram_duration/1 optionally recalculates the duration internally
 %% (likely to be just update your internal rates), and report how many
-%% seconds the messages in RAM represent given the current rates of
-%% the queue. It is a dummy in this implementation. This function
-%% should not be called from inside another operation.
+%% seconds the msgs in RAM represent given the current rates of the
+%% queue. It is a dummy in this implementation. This function creates
+%% a transaction and must not be called from inside another
+%% transaction.
 %%
 %% -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 
@@ -525,8 +540,8 @@ ram_duration(S = #s { busy = false }) -> {0, S}.
 %% needs_idle_timeout/1 returns true if idle_timeout should be called
 %% as soon as the queue process can manage (either on an empty
 %% mailbox, or when a timer fires), and false otherwise. It always
-%% returns false in this implementation. This function should not be
-%% called from inside another operation.
+%% returns false in this implementation. This function creates a
+%% transaction and must not be called from inside another transaction.
 %%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
@@ -535,7 +550,8 @@ needs_idle_timeout(#s { busy = false }) -> false.
 %%----------------------------------------------------------------------------
 %% idle_timeout/1 is called (eventually) after needs_idle_timeout
 %% returns true. It is a dummy in this implementation. This function
-%% should not be called from inside another operation.
+%% creates a transaction and must not be called from inside another
+%% transaction.
 %%
 %% -spec(idle_timeout/1 :: (state()) -> state()).
 
@@ -544,7 +560,8 @@ idle_timeout(S = #s { busy = false }) -> S.
 %%----------------------------------------------------------------------------
 %% handle_pre_hibernate/1 is called immediately before the queue
 %% hibernates. It is a dummy in this implementation. This function
-%% should not be called from inside another operation.
+%% creates a transaction and must not be called from inside another
+%% transaction.
 %%
 %% -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 
@@ -552,8 +569,7 @@ handle_pre_hibernate(S = #s { busy = false }) -> S.
 
 %%----------------------------------------------------------------------------
 %% status/1 exists for debugging and operational purposes, to be able
-%% to expose state via rabbitmqctl. This function should not be called
-%% from inside another operation. This function should be
+%% to expose state via rabbitmqctl. This function should be
 %% transactional but it is not.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
@@ -704,3 +720,13 @@ internal_ack3(F, SeqIds, S) ->
 -spec m_guid(m()) -> rabbit_guid:guid().
 
 m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
+
+%% Convert a queue name (a record) into an Mnesia table name (an atom).
+
+%% TODO: Import correct argument type.
+
+-spec mnesia_table_name(_) -> atom().
+
+mnesia_table_name(QueueName) ->
+    list_to_atom(lists:flatten(io_lib:format("~p", [QueueName]))).
+
