@@ -129,8 +129,11 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(direct, AmqpParams) of {ok, Conn}     -> Conn;
-                                                      {error, _} = E -> E
+    RabbitNode = list_to_atom("rabbit@" ++ net_adm:localhost()),
+    case amqp_connection:start(direct,
+                               AmqpParams#amqp_params{node = RabbitNode}) of
+        {ok, Conn}     -> Conn;
+        {error, _} = E -> E
     end.
 
 test_coverage() ->

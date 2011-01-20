@@ -82,8 +82,7 @@ endif
 
 LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
 
-COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
-COVER_STOP := -s rabbit_misc report_cover ../rabbitmq-erlang-client -s cover stop
+RUN:=$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
 
 MKTEMP=$$(mktemp $(TMPDIR)/tmp.XXXXXXXXXX)
 
@@ -142,10 +141,10 @@ common_clean:
 	rm -f $(DEPS_FILE)
 	$(MAKE) -C $(TEST_DIR) clean
 
-compile: $(TARGETS)
+compile: $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 
-run: compile $(EBIN_DIR)/$(PACKAGE).app
-	$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
+run: compile
+	$(RUN)
 
 ###############################################################################
 ##  Packaging
