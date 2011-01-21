@@ -36,12 +36,16 @@
     <td><%= channel.prefetch_count %></td>
   </tr>
   <tr>
-    <th>Acks uncommitted</th>
-    <td><%= channel.acks_uncommitted %></td>
-  </tr>
-  <tr>
     <th>Messages unacknowledged</th>
     <td><%= channel.messages_unacknowledged %></td>
+  </tr>
+  <tr>
+    <th>Messages unconfirmed</th>
+    <td><%= channel.messages_unconfirmed %></td>
+  </tr>
+  <tr>
+    <th>Acks uncommitted</th>
+    <td><%= channel.acks_uncommitted %></td>
   </tr>
 </table>
 
