@@ -25,8 +25,8 @@
     <td><%= channel.user %></td>
   </tr>
   <tr>
-    <th>Transactional</th>
-    <td><%= fmt_boolean(channel.transactional) %></td>
+    <th>Mode <span class="help" id="channel-mode"></span></th>
+    <td><%= fmt_channel_mode(channel) %></td>
   </tr>
 </table>
 

@@ -37,6 +37,15 @@ HELP = {
     'exchange-rates-outgoing':
       'The outgoing rate is the rate at which messages enter queues, having been published directly to this exchange.',
 
+    'channel-mode':
+      'Channel guarantee mode. Can be one of the following, or neither:<br/> \
+      <dl> \
+        <dt>confirm</dt> \
+        <dd>Channel will send streaming publish confirmations.</dd> \
+        <dt>transactional</dt> \
+        <dd>Channel is transactional.</dd> \
+      <dl>',
+
     'foo': 'foo' // No comma.
 };
 

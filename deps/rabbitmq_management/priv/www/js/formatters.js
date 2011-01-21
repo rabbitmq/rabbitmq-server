@@ -62,6 +62,18 @@ function fmt_parameters(obj) {
     return res;
 }
 
+function fmt_channel_mode(ch) {
+    if (ch.transactional) {
+        return '<acronym title="Transactional">T</acronym>';
+    }
+    else if (ch.confirm) {
+        return '<acronym title="Confirm">C</acronym>';
+    }
+    else {
+        return '';
+    }
+}
+
 function fmt_color(r, thresholds) {
     if (r == undefined) return '';
     if (thresholds == undefined) thresholds = DESCRIPTOR_THRESHOLDS;
