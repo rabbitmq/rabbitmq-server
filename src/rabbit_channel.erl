@@ -488,7 +488,7 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
-remove_queue_unconfirmed(none, _XQ, Acc, _State) ->
+remove_queue_unconfirmed(none, _QPid, Acc, _State) ->
     Acc;
 remove_queue_unconfirmed({MsgSeqNo, XQ, Next}, QPid, Acc, State) ->
     remove_queue_unconfirmed(gb_trees:next(Next), QPid,
