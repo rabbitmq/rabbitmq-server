@@ -44,7 +44,7 @@
          confirm,
          consumer_count,
          messages_unacknowledged,
-         unconfirmed,
+         messages_unconfirmed,
          acks_uncommitted,
          prefetch_count,
          client_flow_blocked]).
@@ -1295,7 +1295,7 @@ i(transactional,  #ch{transaction_id   = TxnKey})    -> TxnKey =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})        -> CE;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
-i(unconfirmed,   #ch{unconfirmed = UC}) ->
+i(messages_unconfirmed, #ch{unconfirmed = UC}) ->
     gb_trees:size(UC);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ,
                                uncommitted_ack_q = UAQ}) ->
