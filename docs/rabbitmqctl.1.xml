@@ -1193,9 +1193,7 @@
               </varlistentry>
               <varlistentry>
                 <term>confirm</term>
-                <listitem><para>Confirm mode for the channel.  Either
-                <command>none</command>, <command>single</command> or
-                <command>multiple</command>.</para></listitem>
+                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>unconfirmed</term>
