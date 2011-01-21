@@ -12,6 +12,7 @@
     <th>Exchange</th>
 <% } %>
     <th>publish</th>
+    <th>confirm</th>
   </tr>
 <%
      for (var i = 0; i < object.length; i++) {
@@ -29,11 +30,13 @@
       <td><%= link_exchange(pub.exchange.vhost, pub.exchange.name) %></td>
 <% } %>
       <td class="r"><%= fmt_rate(pub.stats, 'publish') %></td>
+      <td class="r"><%= fmt_rate(pub.stats, 'confirm') %></td>
     </tr>
 <% } %>
   <tr class="total">
     <th>Total:</th>
     <td><span class="mini-highlight"><%= fmt_rate(totals, 'publish') %></span></td>
+    <td><span class="mini-highlight"><%= fmt_rate(totals, 'confirm') %></span></td>
   </tr>
 </table>
 <% } else { %>
