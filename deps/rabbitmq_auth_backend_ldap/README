@@ -12,12 +12,8 @@ starting.
 Requirements
 ============
 
-Currently this needs bug23455 in rabbitmq-server. If you want to use
-the management plugin, you'll need bug23455 in rabbitmq-erlang-client
-and rabbitmq-management, and bug23467 in rabbitmq-management-agent.
-
-Once you have the right branches, you can build and install it like
-any other plugin (see http://www.rabbitmq.com/plugin-development.html).
+You can build and install it like any other plugin (see
+http://www.rabbitmq.com/plugin-development.html).
 
 Enabling the plugin
 ===================
