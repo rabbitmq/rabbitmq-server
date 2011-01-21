@@ -63,14 +63,21 @@ function update_vhosts() {
 }
 
 function update_interval() {
-    var interval = get_pref('interval');
-    interval = interval == null ? 5000 : parseInt(interval);
+    var intervalStr = get_pref('interval');
+    var interval;
+
+    if (intervalStr == null)    interval = 5000;
+    else if (intervalStr == '') interval = null;
+    else                        interval = parseInt(intervalStr);
+
+    if (isNaN(interval)) interval = null; // Prevent DoS if cookie malformed
+
     set_timer_interval(interval);
 
     var select = $('#update-every').get(0);
     var opts = select.options;
     for (var i = 0; i < opts.length; i++) {
-        if (opts[i].value == interval) {
+        if (opts[i].value == intervalStr) {
             select.selectedIndex = i;
             break;
         }
