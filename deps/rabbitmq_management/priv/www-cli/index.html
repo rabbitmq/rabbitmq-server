@@ -140,7 +140,7 @@ Exported configuration for localhost to "rabbit.config"</pre>
       </li>
       <li>
         Close all connections:
-<pre>rabbitmqadmin -f tsv -q list connections name | while read conn ; do rabbitmqadmin close connection name=${conn} ; done</pre>
+<pre>$ rabbitmqadmin -f tsv -q list connections name | while read conn ; do rabbitmqadmin close connection name=${conn} ; done</pre>
       </li>
     </ul>
   </body>
