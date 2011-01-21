@@ -40,9 +40,9 @@ HELP = {
     'channel-mode':
       'Channel guarantee mode. Can be one of the following, or neither:<br/> \
       <dl> \
-        <dt>confirm</dt> \
+        <dt><acronym title="Confirm">C</acronym> &ndash; confirm</dt> \
         <dd>Channel will send streaming publish confirmations.</dd> \
-        <dt>transactional</dt> \
+        <dt><acronym title="Transactional">T</acronym> &ndash; transactional</dt> \
         <dd>Channel is transactional.</dd> \
       <dl>',
 
