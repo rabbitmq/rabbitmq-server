@@ -180,12 +180,14 @@ init(QueueName, _IsDurable, _Recover) ->
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  #s { mnesia_table = MnesiaTable,
-                       q = {just, queue:new()},
-                       next_seq_id = 0,
-                       pending_ack_dict = dict:new(),
-                       txn_dict = dict:new(),
-                       busy = false}
+                  RS = #s { mnesia_table = MnesiaTable,
+                           q = {just, queue:new()},
+                           next_seq_id = 0,
+                           pending_ack_dict = dict:new(),
+                           txn_dict = dict:new(),
+                           busy = false},
+                  _ = transactional_write_state(RS),
+                  RS
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -658,16 +660,28 @@ handle_pre_hibernate(S = #s { busy = false }) -> S.
 
 %%----------------------------------------------------------------------------
 %% status/1 exists for debugging and operational purposes, to be able
-%% to expose state via rabbitmqctl. This function should be Mnesia
-%% transactional but it is not.
+%% to expose state via rabbitmqctl. This function creates an Mnesia
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(#s { q = {just, Q},
-            next_seq_id = NextSeqId,
-            pending_ack_dict = PAD,
-            busy = false}) ->
-    [{len, queue:len(Q)}, {next_seq_id, NextSeqId}, {acks, dict:size(PAD)}].
+status(S = #s { busy = false }) ->
+    rabbit_log:info("status(~p)", [S]),
+    S0 = S #s { busy = true },
+    {atomic, Result} =
+        mnesia:transaction(
+          fun () ->
+                  #s { q = {just, Q},
+                       next_seq_id = NextSeqId,
+                       pending_ack_dict = PAD} =
+                      transactional_read_state(S0),
+                  [{len, queue:len(Q)},
+                   {next_seq_id, NextSeqId},
+                   {acks, dict:size(PAD)}]
+          end),
+    rabbit_log:info(" -> ~p", [Result]),
+    Result.
 
 %%----------------------------------------------------------------------------
 %% Monadic helper functions for inside transactions. All Ss are busy
@@ -676,15 +690,19 @@ status(#s { q = {just, Q},
 
 -spec transactional_read_state(s()) -> s().
 
-transactional_read_state(S = #s {
-                            mnesia_table = MnesiaTable, q = {just, Q} }) ->
-    S.
+transactional_read_state(S = #s { mnesia_table = MnesiaTable }) ->
+    rabbit_log:info("About to read from Mnesia"),
+    Result = mnesia:read(MnesiaTable, 'q', 'read'),
+    rabbit_log:info("Read from Mnesia:"),
+    rabbit_log:info(" ~p", [Result]),
+    [#q_record { key = 'q', val = Q }] = Result,
+    S #s { q = {just, Q} }.
 
 -spec transactional_write_state(s()) -> s().
 
 transactional_write_state(S = #s {
                             mnesia_table = MnesiaTable, q = {just, RQ} }) ->
-    ok = mnesia:write(MnesiaTable, #q_record { key = q, val = RQ }, 'write'),
+    ok = mnesia:write(MnesiaTable, #q_record { key = 'q', val = RQ }, 'write'),
     S.
 
 %%----------------------------------------------------------------------------
