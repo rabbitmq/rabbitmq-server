@@ -10,7 +10,7 @@
    <th colspan="4">Details</th>
 <% } %>
 <% if (statistics_level == 'fine') { %>
-   <th colspan="3">Message rates</th>
+   <th colspan="4">Message rates</th>
 <% } %>
   </tr>
   <tr>
@@ -29,6 +29,7 @@
     <th><%= fmt_sort('Status',          'idle_since') %></th>
 <% if (statistics_level == 'fine') { %>
     <th><%= fmt_sort('publish',         'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('confirm',         'message_stats.confirm_details.rate') %></th>
     <th><%= fmt_sort('deliver / get',   'message_stats.deliver_get_details.rate') %></th>
     <th><%= fmt_sort('ack',             'message_stats.ack_details.rate') %></th>
 <% } %>
@@ -41,6 +42,7 @@
     <th>Status</th>
 <% if (statistics_level == 'fine') { %>
     <th>publish</th>
+    <th>confirm</th>
     <th>deliver / get</th>
     <th>ack</th>
 <% } %>
@@ -76,6 +78,7 @@
     <td class="c"><%= fmt_idle(channel) %></td>
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
 <% } %>

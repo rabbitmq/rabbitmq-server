@@ -37,7 +37,7 @@
             ?FINE_STATS_TYPES).
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
--define(FINE_STATS, [publish, ack, deliver_get] ++ ?DELIVER_GET).
+-define(FINE_STATS, [publish, ack, deliver_get, confirm] ++ ?DELIVER_GET).
 
 -define(
    FINE_STATS_CHANNEL_LIST,

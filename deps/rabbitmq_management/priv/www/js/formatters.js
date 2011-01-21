@@ -212,9 +212,9 @@ function link_to(name, url) {
 function message_rates(stats) {
     var res = "";
     if (keys(stats).length > 0) {
-        var items = [['Publish', 'publish'], ['Deliver', 'deliver'],
-                     ['Acknowledge', 'ack'], ['Get', 'get'],
-                     ['Deliver (noack)', 'deliver_no_ack'],
+        var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
+                     ['Deliver', 'deliver'], ['Acknowledge', 'ack'],
+                     ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack']];
         for (var i in items) {
             var name = items[i][0];
