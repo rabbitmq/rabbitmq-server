@@ -61,11 +61,10 @@
 
 -record(s,                        % The in-RAM queue state
         { mnesia_table,           % An atom holding the Mnesia table name
-          q,                      % The M queue
-          next_seq_id,            % The next seq_id to use to build an M
-          pending_ack_dict,       % The Mnesia seq_id->M map, pending ack
-          txn_dict,               % In-progress txn->tx map
-          busy                    % Recursive calls not allowed
+          q,                      % The M queue (or nothing)
+          next_seq_id,            % The next M's seq_id (or nothing)
+          pending_ack_dict,       % The seq_id->M map, pending ack (or nothing)
+          txn_dict                % In-progress txn->tx map
         }).
 
 -record(m,                        % A wrapper aroung a msg
@@ -101,10 +100,9 @@
 
 -type(s() :: #s { mnesia_table :: atom(),
                   q :: maybe(queue()),
-                  next_seq_id :: seq_id(),
-                  pending_ack_dict :: dict(),
-                  txn_dict :: dict(),
-                  busy :: boolean() }).
+                  next_seq_id :: maybe(seq_id()),
+                  pending_ack_dict :: maybe(dict()),
+                  txn_dict :: dict() }).
 -type(state() :: s()).
 
 -type(m() :: #m { msg :: rabbit_types:basic_message(),
@@ -186,10 +184,9 @@ init(QueueName, _IsDurable, _Recover) ->
           fun () ->
                   RS = #s { mnesia_table = MnesiaTable,
                             q = {just, queue:new()},
-                            next_seq_id = 0,
-                            pending_ack_dict = dict:new(),
-                            txn_dict = dict:new(),
-                            busy = true },
+                            next_seq_id = {just, 0},
+                            pending_ack_dict = {just, dict:new()},
+                            txn_dict = dict:new() },
                   transactional_write_state(RS)
           end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -207,7 +204,7 @@ terminate(S) ->
         mnesia:transaction(
           fun () ->
                   S1 = transactional_read_state(S),
-                  RS = S1 #s { pending_ack_dict = dict:new() },
+                  RS = S1 #s { pending_ack_dict = {just, dict:new()} },
                   transactional_write_state(RS)
           end),
     Result = S3,
@@ -234,7 +231,7 @@ delete_and_terminate(S) ->
           fun () ->
                   S1 = transactional_read_state(S),
                   RS = S1 #s { q = {just, queue:new()},
-                               pending_ack_dict = dict:new() },
+                               pending_ack_dict = {just, dict:new()} },
                   transactional_write_state(RS)
           end),
     Result = S3,
@@ -320,10 +317,10 @@ publish_delivered(true, Msg, Props, S) ->
     {atomic, {A, B}} =
         mnesia:transaction(
           fun () ->
-                  S1 = #s { next_seq_id = SeqId } = transactional_read_state(S),
+                  S1 = #s { next_seq_id = {just, SeqId} } = transactional_read_state(S),
                   RS = (record_pending_ack_state(
                        (m(Msg, SeqId, Props)) #m { is_delivered = true }, S1))
-                      #s { next_seq_id = SeqId + 1 },
+                      #s { next_seq_id = {just, SeqId + 1} },
                   {SeqId, transactional_write_state(RS)}
           end),
     Result = {A, B},
@@ -334,7 +331,8 @@ publish_delivered(true, Msg, Props, S) ->
 %% dropwhile/2 drops msgs from the head of the queue while the
 %% supplied predicate returns true. This function creates an Mnesia
 %% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% another Mnesia transaction, and Pred may not call another function
+%% that creates an Mnesia transaction.
 %%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
@@ -490,7 +488,8 @@ tx_rollback(Txn, S) ->
 %% called once the msgs have really been commited. This CPS permits
 %% the possibility of commit coalescing. This function creates an
 %% Mnesia transaction to run in, and therefore may not be called from
-%% inside another Mnesia transaction.
+%% inside another Mnesia transaction. However, F is called outside the
+%% transaction.
 %%
 %% The following spec is wrong, blank_acks cannot be returned.
 %%
@@ -646,8 +645,8 @@ status(S) ->
         mnesia:transaction(
           fun () ->
                   #s { q = {just, Q},
-                       next_seq_id = NextSeqId,
-                       pending_ack_dict = PAD} =
+                       next_seq_id = {just, NextSeqId},
+                       pending_ack_dict = {just, PAD} } =
                       transactional_read_state(S),
                   [{len, queue:len(Q)},
                    {next_seq_id, NextSeqId},
@@ -657,49 +656,44 @@ status(S) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% Monadic helper functions for inside transactions. All Ss are busy
-%% and have non-nothing qs.
+%% Monadic helper functions for inside transactions. All Ss have
+%% non-nothing qs and next_seq_ids and pending_ack_dicts.
 %% ----------------------------------------------------------------------------
 
 -spec transactional_read_state(s()) -> s().
 
 transactional_read_state(
-  S = #s { mnesia_table = MnesiaTable, busy = false }) ->
-    rabbit_log:info("About to read from Mnesia"),
-    Result = mnesia:read(MnesiaTable, 's', 'read'),
-    rabbit_log:info("Read from Mnesia:"),
-    rabbit_log:info(" ~p", [Result]),
+  S = #s { mnesia_table = MnesiaTable,
+           q = nothing,
+           next_seq_id = nothing,
+           pending_ack_dict = nothing }) ->
     [#s_record { key = 's',
                  q = Q,
                  next_seq_id = NextSeqId,
                  pending_ack_dict = PAD }] =
-        Result,
+        mnesia:read(MnesiaTable, 's', 'read'),
     S #s { q = {just, Q},
-           next_seq_id = NextSeqId,
-           pending_ack_dict = PAD,
-           busy = true }.
+           next_seq_id = {just, NextSeqId},
+           pending_ack_dict = {just, PAD} }.
 
 -spec transactional_write_state(s()) -> s().
 
 transactional_write_state(S = #s {
                             mnesia_table = MnesiaTable,
                             q = {just, Q},
-                            next_seq_id = NextSeqId,
-                            pending_ack_dict = PAD,
-                            busy = true }) ->
-    Result =
-        mnesia:write(MnesiaTable,
+                            next_seq_id = {just, NextSeqId},
+                            pending_ack_dict = {just, PAD} }) ->
+    ok = mnesia:write(MnesiaTable,
                      #s_record { key = 's',
                                  q = Q,
                                  next_seq_id = NextSeqId,
                                  pending_ack_dict = PAD },
                      'write'),
-    rabbit_log:info("transactional_write_state:"),
-    rabbit_log:info(" ~p", [Result]),
-    S #s { busy = false }.
+    S #s { q = nothing, next_seq_id = nothing, pending_ack_dict = nothing }.
 
 %%----------------------------------------------------------------------------
-%% Pure helper functions. All Ss are busy and have non-nothing qs.
+%% Pure helper functions. All Ss have non-nothing qs and next_seq_ids
+%% and pending_ack_dicts.
 %% ----------------------------------------------------------------------------
 
 -spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
@@ -797,18 +791,18 @@ erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
 publish_state(Msg,
               Props,
               IsDelivered,
-              S = #s { q = {just, Q}, next_seq_id = SeqId }) ->
+              S = #s { q = {just, Q}, next_seq_id = {just, SeqId} }) ->
     S #s {
       q = {just,
            queue:in(
                (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q)},
-      next_seq_id = SeqId + 1 }.
+      next_seq_id = {just, SeqId + 1} }.
 
 -spec record_pending_ack_state(m(), s()) -> s().
 
 record_pending_ack_state(M = #m { seq_id = SeqId },
-                         S = #s { pending_ack_dict = PAD }) ->
-    S #s { pending_ack_dict = dict:store(SeqId, M, PAD) }.
+                         S = #s { pending_ack_dict = {just, PAD} }) ->
+    S #s { pending_ack_dict = {just, dict:store(SeqId, M, PAD)} }.
 
 -spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
                     [rabbit_guid:guid()],
@@ -819,10 +813,12 @@ internal_ack3(_, [], S) -> {[], S};
 internal_ack3(F, SeqIds, S) ->
     {AllGuids, S1} =
         lists:foldl(
-          fun (SeqId, {Acc, Si = #s { pending_ack_dict = PAD }}) ->
+          fun (SeqId, {Acc, Si = #s { pending_ack_dict = {just, PAD} }}) ->
                   M = dict:fetch(SeqId, PAD),
                   {[m_guid(M) | Acc],
-                   F(M, Si #s { pending_ack_dict = dict:erase(SeqId, PAD)})}
+                   F(M,
+                     Si #s { pending_ack_dict =
+                                 {just, dict:erase(SeqId, PAD)} })}
           end,
           {[], S},
           SeqIds),
