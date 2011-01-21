@@ -1,5 +1,5 @@
 UPSTREAM_GIT=http://github.com/mochi/mochiweb.git
-REVISION=9a53dbd7b2c52eb5b9d4
+REVISION=48a2f1cdb4b2a87812dad7a773980275ae81c0df
 
 EBIN_DIR=ebin
 
@@ -23,7 +23,7 @@ distclean: clean
 
 $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 	cp -r $< $@
-	cd $@ && patch -p1 < ../mochiweb-12b3.patch && patch -p1 < ../10-crypto.patch
+	cd $@ && patch -p1 < ../mochiweb-12b3.patch && patch -p1 < ../10-crypto.patch && patch -p1 < ../unrebar.patch
 
 $(CHECKOUT_DIR):
 	git clone $(UPSTREAM_GIT) $@
