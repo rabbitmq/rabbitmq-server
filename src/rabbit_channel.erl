@@ -1249,17 +1249,11 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
-send_confirms(State = #ch{confirmed = C, stats_timer = StatsTimer}) ->
+send_confirms(State = #ch{confirmed = C}) ->
     C1 = lists:append(C),
-    MsgSeqNos = case rabbit_event:stats_level(StatsTimer) of
-                    fine ->
-                        [ begin maybe_incr_stats([{ExchangeName, 1}],
-                                                 confirm, State),
-                                MsgSeqNo
-                          end || {MsgSeqNo, ExchangeName} <- C1];
-                    _    ->
-                        [MsgSeqNo || {MsgSeqNo, _} <- C1]
-                end,
+    MsgSeqNos = [ begin maybe_incr_stats([{ExchangeName, 1}], confirm, State),
+                        MsgSeqNo
+                  end || {MsgSeqNo, ExchangeName} <- C1 ],
     send_confirms(MsgSeqNos, State #ch{confirmed = []}).
 send_confirms([], State) ->
     State;
