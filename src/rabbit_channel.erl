@@ -297,12 +297,12 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
     %% TODO: this does a complete scan and partial rebuild of the
     %% tree, which is quite efficient. To do better we'd need to
     %% maintain a secondary mapping, from QPids to MsgSeqNos.
-    {MEs, UC1} = remove_queue_unconfirmed(
+    {MXs, UC1} = remove_queue_unconfirmed(
                    gb_trees:next(gb_trees:iterator(UC)), QPid,
                    {[], UC}, State),
     erase_queue_stats(QPid),
     noreply(
-      queue_blocked(QPid, record_confirms(MEs, State#ch{unconfirmed = UC1}))).
+      queue_blocked(QPid, record_confirms(MXs, State#ch{unconfirmed = UC1}))).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -502,13 +502,13 @@ record_confirm(MsgSeqNo, XName, State) ->
 
 record_confirms([], State) ->
     State;
-record_confirms(MEs, State = #ch{confirmed = C}) ->
-    State#ch{confirmed = [MEs | C]}.
+record_confirms(MXs, State = #ch{confirmed = C}) ->
+    State#ch{confirmed = [MXs | C]}.
 
 confirm([], _QPid, State) ->
     State;
 confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
-    {MEs, UC1} =
+    {MXs, UC1} =
         lists:foldl(
           fun(MsgSeqNo, {_DMs, UC0} = Acc) ->
                   case gb_trees:lookup(MsgSeqNo, UC0) of
@@ -516,14 +516,14 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
                       {value, XQ} -> remove_qmsg(MsgSeqNo, QPid, XQ, Acc, State)
                   end
           end, {[], UC}, MsgSeqNos),
-    record_confirms(MEs, State#ch{unconfirmed = UC1}).
+    record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
-remove_qmsg(MsgSeqNo, QPid, {XName, Qs}, {MEs, UC}, State) ->
+remove_qmsg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC}, State) ->
     Qs1 = sets:del_element(QPid, Qs),
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     case sets:size(Qs1) of
-        0 -> {[{MsgSeqNo, XName} | MEs], gb_trees:delete(MsgSeqNo, UC)};
-        _ -> {MEs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UC)}
+        0 -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UC)};
+        _ -> {MXs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UC)}
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
