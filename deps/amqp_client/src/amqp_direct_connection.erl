@@ -67,42 +67,19 @@ i(Item, _State) -> throw({bad_argument, Item}).
 info_keys() ->
     ?INFO_KEYS.
 
-connect(AmqpParams, SIF, _ChMgr, State) ->
-    try do_connect(AmqpParams, SIF, State) of
-        Return -> Return
-    catch _:Reason -> {error, Reason}
+connect(#amqp_params{username = Username,
+                     password = Pass,
+                     node = Node,
+                     virtual_host = VHost}, SIF, _ChMgr, State) ->
+    case rpc:call(Node, rabbit_direct, connect, [Username, Pass, VHost]) of
+        {ok, {User, ServerProperties}} ->
+            {ok, Collector} = SIF(),
+            {ok, {ServerProperties, 0, State#state{node = Node,
+                                                   user = User,
+                                                   vhost = VHost,
+                                                   collector = Collector}}};
+        {badrpc, {'EXIT', Exit}} ->
+            {error, Exit};
+        {badrpc, nodedown} ->
+            {error, {nodedown, Node}}
     end.
-
-do_connect(#amqp_params{username = Username,
-                        password = Pass,
-                        node = Node,
-                        virtual_host = VHost},
-           SIF, State) ->
-    case net_adm:ping(Node) of pong -> ok;
-                               pang -> exit({nodedown, Node})
-    end,
-    case lists:keymember(rabbit, 1,
-                         rpc:call(Node, application, which_applications, [])) of
-        true  -> ok;
-        false -> exit(broker_not_found_in_vm)
-    end,
-    User = case rpc:call(Node, rabbit_access_control, user_pass_login,
-                        [Username, Pass]) of
-               #user{} = User1 ->
-                   User1;
-               {badrpc, {'EXIT', #amqp_error{name = access_refused}}} ->
-                   exit(auth_failure)
-           end,
-    case rpc:call(Node, rabbit_access_control, check_vhost_access,
-                  [User, VHost]) of
-        ok ->
-            ok;
-        {badrpc, {'EXIT', #amqp_error{name = access_refused}}} ->
-            exit(access_refused)
-    end,
-    {ok, Collector} = SIF(),
-    {ok, {rpc:call(Node, rabbit_reader, server_properties, []), 0,
-          State#state{node = Node,
-                      user = User,
-                      vhost = VHost,
-                      collector = Collector}}}.

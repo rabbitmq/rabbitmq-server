@@ -338,7 +338,7 @@ handle_info({send_command, Method, Content}, State) ->
 %% @private
 handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
     handle_method_from_server(Method, Content, State),
-    rpc:call(node(ChPid), rabbit_amqqueue, notify_sent, [Q, ChPid]),
+    rabbit_amqqueue:notify_sent(Q, ChPid),
     {noreply, State};
 %% This comes from the writer or rabbit_channel
 %% @private
