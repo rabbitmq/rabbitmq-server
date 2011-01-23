@@ -299,7 +299,7 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id() | 'blank_ack').
+-type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -509,7 +509,7 @@ publish(Msg, MsgProps, State) ->
 publish_delivered(false, #basic_message { guid = Guid },
                   _MsgProps, State = #vqstate { len = 0 }) ->
     blind_confirm(self(), gb_sets:singleton(Guid)),
-    {blank_ack, a(State)};
+    {undefined, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
                   MsgProps = #message_properties {
@@ -628,7 +628,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                                             MsgStatus #msg_status {
                                               is_delivered = true }, State),
                                  {SeqId, StateN};
-                        false -> {blank_ack, State}
+                        false -> {undefined, State}
                     end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
