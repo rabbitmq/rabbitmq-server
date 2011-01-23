@@ -281,12 +281,11 @@
 -record(sync, { acks_persistent, acks_all, pubs, funs }).
 
 %% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
-%% betas that we must be due to write indices for before we do any
-%% work at all. This is both a minimum and a maximum - we don't write
-%% fewer than RAM_INDEX_BATCH_SIZE indices out in one go, and we don't
-%% write more - we can always come back on the next publish to do
-%% more.
+%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
+%% that we must be due to write indices for before we do any work at
+%% all. This is both a minimum and a maximum - we don't write fewer
+%% than IO_BATCH_SIZE indices out in one go, and we don't write more -
+%% we can always come back on the next publish to do more.
 -define(IO_BATCH_SIZE, 64).
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
@@ -897,7 +896,7 @@ cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
-%% when requeueing, we re-add a guid to the unconfimred set
+%% when requeueing, we re-add a guid to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid },
