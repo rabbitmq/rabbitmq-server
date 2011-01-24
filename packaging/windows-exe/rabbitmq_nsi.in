@@ -1,0 +1,84 @@
+; Use the "Modern" UI
+!include MUI2.nsh
+
+;--------------------------------
+
+; The name of the installer
+Name "RabbitMQ"
+
+; The file to write
+OutFile "rabbitmq-server-v%%VERSION%%.exe"
+
+; The default installation directory
+InstallDir $PROGRAMFILES\RabbitMQ
+
+; Registry key to check for directory (so if you install again, it will
+; overwrite the old one automatically)
+InstallDirRegKey HKLM "Software\RabbitMQ" "Install_Dir"
+
+; Request application privileges for Windows Vista
+RequestExecutionLevel admin
+
+; Windows XP
+TargetMinimalOS 5.1
+
+;--------------------------------
+
+; Pages
+
+
+  !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE-MPL-RabbitMQ"
+  !insertmacro MUI_PAGE_COMPONENTS
+  !insertmacro MUI_PAGE_DIRECTORY
+  !insertmacro MUI_PAGE_INSTFILES
+  !insertmacro MUI_PAGE_FINISH
+
+  !insertmacro MUI_UNPAGE_CONFIRM
+  !insertmacro MUI_UNPAGE_INSTFILES
+;  !insertmacro MUI_UNPAGE_FINISH
+
+;--------------------------------
+
+; The stuff to install
+Section "RabbitMQ (required)"
+
+  SectionIn RO
+
+  ; Set output path to the installation directory.
+  SetOutPath $INSTDIR
+
+  ; Put file there
+  File /r "rabbitmq_server-%%VERSION%%"
+
+  ; Write the installation path into the registry
+  WriteRegStr HKLM SOFTWARE\RabbitMQ "Install_Dir" "$INSTDIR"
+
+  ; Write the uninstall keys for Windows
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "DisplayName" "RabbitMQ"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "UninstallString" '"$INSTDIR\uninstall.exe"'
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "NoModify" 1
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "NoRepair" 1
+  WriteUninstaller "uninstall.exe"
+SectionEnd
+
+;--------------------------------
+
+; Uninstaller
+
+Section "Uninstall"
+
+  ; Remove registry keys
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
+  DeleteRegKey HKLM SOFTWARE\RabbitMQ
+
+  ; Remove files and uninstaller
+  RMDir /r $INSTDIR
+
+  ; Remove shortcuts, if any
+  ;Delete "$SMPROGRAMS\RabbitMQ\*.*"
+
+  ; Remove directories used
+  ;RMDir "$SMPROGRAMS\RabbitMQ"
+  ;RMDir "$INSTDIR"
+
+SectionEnd
