@@ -35,7 +35,7 @@
 ##
 
 ## OCF instance parameters
-##   OCF_RESKEY_multi
+##   OCF_RESKEY_server
 ##   OCF_RESKEY_ctl
 ##   OCF_RESKEY_nodename
 ##   OCF_RESKEY_ip
@@ -53,11 +53,11 @@
 
 #######################################################################
 
-OCF_RESKEY_multi_default="/usr/sbin/rabbitmq-multi"
+OCF_RESKEY_server_default="/usr/sbin/rabbitmq-server"
 OCF_RESKEY_ctl_default="/usr/sbin/rabbitmqctl"
 OCF_RESKEY_nodename_default="rabbit@localhost"
 OCF_RESKEY_log_base_default="/var/log/rabbitmq"
-: ${OCF_RESKEY_multi=${OCF_RESKEY_multi_default}}
+: ${OCF_RESKEY_server=${OCF_RESKEY_server_default}}
 : ${OCF_RESKEY_ctl=${OCF_RESKEY_ctl_default}}
 : ${OCF_RESKEY_nodename=${OCF_RESKEY_nodename_default}}
 : ${OCF_RESKEY_log_base=${OCF_RESKEY_log_base_default}}
@@ -76,12 +76,12 @@ Resource agent for RabbitMQ-server
 <shortdesc lang="en">Resource agent for RabbitMQ-server</shortdesc>
 
 <parameters>
-<parameter name="multi" unique="0" required="0">
+<parameter name="server" unique="0" required="0">
 <longdesc lang="en">
-The path to the rabbitmq-multi script
+The path to the rabbitmq-server script
 </longdesc>
-<shortdesc lang="en">Path to rabbitmq-multi</shortdesc>
-<content type="string" default="${OCF_RESKEY_multi_default}" />
+<shortdesc lang="en">Path to rabbitmq-server</shortdesc>
+<content type="string" default="${OCF_RESKEY_server_default}" />
 </parameter>
 
 <parameter name="ctl" unique="0" required="0">
@@ -170,7 +170,7 @@ Expects to have a fully populated OCF RA-compliant environment set.
 END
 }
 
-RABBITMQ_MULTI=$OCF_RESKEY_multi
+RABBITMQ_SERVER=$OCF_RESKEY_server
 RABBITMQ_CTL=$OCF_RESKEY_ctl
 RABBITMQ_NODENAME=$OCF_RESKEY_nodename
 RABBITMQ_NODE_IP_ADDRESS=$OCF_RESKEY_ip
@@ -192,8 +192,8 @@ export_vars() {
 }
 
 rabbit_validate_partial() {
-    if [ ! -x $RABBITMQ_MULTI ]; then
-        ocf_log err "rabbitmq-server multi $RABBITMQ_MULTI does not exist or is not executable";
+    if [ ! -x $RABBITMQ_SERVER ]; then
+        ocf_log err "rabbitmq-server server $RABBITMQ_SERVER does not exist or is not executable";
         exit $OCF_ERR_INSTALLED;
     fi
 
@@ -253,11 +253,11 @@ rabbit_start() {
 
     export_vars
 
-    $RABBITMQ_MULTI start_all 1 > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
+    nohup $RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
     rc=$?
 
     if [ "$rc" != 0 ]; then
-        ocf_log err "rabbitmq-server start command failed: $RABBITMQ_MULTI start_all 1, $rc"
+        ocf_log err "rabbitmq-server start command failed: $RABBITMQ_SERVER, $rc"
         return $rc
     fi
 
@@ -287,11 +287,11 @@ rabbit_stop() {
         return $OCF_SUCCESS
     fi
 
-    $RABBITMQ_MULTI stop_all &
+    $RABBITMQ_CTL stop
     rc=$?
 
     if [ "$rc" != 0 ]; then
-        ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_MULTI stop_all, $rc"
+        ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_CTL stop, $rc"
         return $rc
     fi
 
