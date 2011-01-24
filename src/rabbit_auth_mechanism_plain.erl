@@ -41,11 +41,17 @@ init(_Sock) ->
     [].
 
 handle_response(Response, _State) ->
-    %% The '%%"' at the end of the next line is for Emacs
-    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
-                [{capture, all_but_first, binary}]) of
-        {match, [User, Pass]} ->
-            rabbit_access_control:check_user_pass_login(User, Pass);
-        _ ->
-            {protocol_error, "response ~p invalid", [Response]}
-    end.
+    {User, Response1} = split_on_null(drop_leading_null(Response), []),
+    {Pass, _Response2} = split_on_null(Response1, []),
+    rabbit_access_control:check_user_pass_login(
+      list_to_binary(User), list_to_binary(Pass)).
+
+drop_leading_null(<<0:8, Rest/binary>>) ->
+    Rest.
+
+split_on_null(<<0:8, Rest/binary>>, Acc) ->
+    {lists:reverse(Acc), Rest};
+split_on_null(<<>>, Acc) ->
+    {lists:reverse(Acc), <<>>};
+split_on_null(<<C:8, Rest/binary>>, Acc) ->
+    split_on_null(Rest, [C | Acc]).
