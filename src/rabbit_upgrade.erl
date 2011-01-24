@@ -1,22 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_upgrade).
@@ -126,19 +121,35 @@ heads(G) ->
 %% -------------------------------------------------------------------
 
 apply_upgrades(Upgrades) ->
-    LockFile = lock_filename(),
-    case file:open(LockFile, [write, exclusive]) of
-        {ok, Lock} ->
-            ok = file:close(Lock),
+    LockFile = lock_filename(dir()),
+    case rabbit_misc:lock_file(LockFile) of
+        ok ->
+            BackupDir = dir() ++ "-upgrade-backup",
             info("Upgrades: ~w to apply~n", [length(Upgrades)]),
-            [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
-            info("Upgrades: All applied~n", []),
-            ok = write_version(),
-            ok = file:delete(LockFile);
+            case rabbit_mnesia:copy_db(BackupDir) of
+                ok ->
+                    %% We need to make the backup after creating the
+                    %% lock file so that it protects us from trying to
+                    %% overwrite the backup. Unfortunately this means
+                    %% the lock file exists in the backup too, which
+                    %% is not intuitive. Remove it.
+                    ok = file:delete(lock_filename(BackupDir)),
+                    info("Upgrades: Mnesia dir backed up to ~p~n", [BackupDir]),
+                    [apply_upgrade(Upgrade) || Upgrade <- Upgrades],
+                    info("Upgrades: All upgrades applied successfully~n", []),
+                    ok = write_version(),
+                    ok = rabbit_misc:recursive_delete([BackupDir]),
+                    info("Upgrades: Mnesia backup removed~n", []),
+                    ok = file:delete(LockFile);
+                {error, E} ->
+                    %% If we can't backup, the upgrade hasn't started
+                    %% hence we don't need the lockfile since the real
+                    %% mnesia dir is the good one.
+                    ok = file:delete(LockFile),
+                    throw({could_not_back_up_mnesia_dir, E})
+            end;
         {error, eexist} ->
-            throw({error, previous_upgrade_failed});
-        {error, _} = Error ->
-            throw(Error)
+            throw({error, previous_upgrade_failed})
     end.
 
 apply_upgrade({M, F}) ->
@@ -151,7 +162,7 @@ dir() -> rabbit_mnesia:dir().
 
 schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
 
-lock_filename()   -> filename:join(dir(), ?LOCK_FILENAME).
+lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet

@@ -1,39 +1,24 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_basic).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, properties/1, delivery/4]).
+-export([publish/1, message/4, properties/1, delivery/5]).
 -export([publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
 -export([is_message_persistent/1]).
@@ -50,9 +35,10 @@
 
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/4 ::
+-spec(delivery/5 ::
         (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         rabbit_types:message()) -> rabbit_types:delivery()).
+         rabbit_types:message(), undefined | integer()) ->
+                         rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          properties_input(), binary()) ->
@@ -88,9 +74,9 @@ publish(Delivery = #delivery{
             Other
     end.
 
-delivery(Mandatory, Immediate, Txn, Message) ->
+delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
-              sender = self(), message = Message}.
+              sender = self(), message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) ->
     %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
@@ -157,7 +143,8 @@ publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
         BodyBin) ->
     publish(delivery(Mandatory, Immediate, Txn,
                      message(ExchangeName, RoutingKeyBin,
-                             properties(Properties), BodyBin))).
+                             properties(Properties), BodyBin),
+                     undefined)).
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->

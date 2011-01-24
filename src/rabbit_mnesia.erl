@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 
@@ -34,7 +19,8 @@
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
-         is_clustered/0, empty_ram_only_tables/0]).
+         is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
+         empty_ram_only_tables/0, copy_db/1]).
 
 -export([table_names/0]).
 
@@ -63,8 +49,11 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
+-spec(running_clustered_nodes/0 :: () -> [node()]).
+-spec(all_clustered_nodes/0 :: () -> [node()]).
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
+-spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 
 -endif.
 
@@ -80,12 +69,12 @@ status() ->
                                 Nodes = nodes_of_type(CopyType),
                                 Nodes =/= []
                             end];
-                 no -> case mnesia:system_info(db_nodes) of
+                 no -> case all_clustered_nodes() of
                            [] -> [];
                            Nodes -> [{unknown, Nodes}]
                        end
              end},
-     {running_nodes, mnesia:system_info(running_db_nodes)}].
+     {running_nodes, running_clustered_nodes()}].
 
 init() ->
     ok = ensure_mnesia_running(),
@@ -126,8 +115,14 @@ reset()       -> reset(false).
 force_reset() -> reset(true).
 
 is_clustered() ->
-    RunningNodes = mnesia:system_info(running_db_nodes),
+    RunningNodes = running_clustered_nodes(),
     [node()] /= RunningNodes andalso [] /= RunningNodes.
+
+all_clustered_nodes() ->
+    mnesia:system_info(db_nodes).
+
+running_clustered_nodes() ->
+    mnesia:system_info(running_db_nodes).
 
 empty_ram_only_tables() ->
     Node = node(),
@@ -153,10 +148,10 @@ nodes_of_type(Type) ->
 
 table_definitions() ->
     [{rabbit_user,
-      [{record_name, user},
-       {attributes, record_info(fields, user)},
+      [{record_name, internal_user},
+       {attributes, record_info(fields, internal_user)},
        {disc_copies, [node()]},
-       {match, #user{_='_'}}]},
+       {match, #internal_user{_='_'}}]},
      {rabbit_user_permission,
       [{record_name, user_permission},
        {attributes, record_info(fields, user_permission)},
@@ -371,25 +366,22 @@ init_db(ClusterNodes, Force) ->
                          end;
                 true  -> ok
             end,
-            case {Nodes, mnesia:system_info(use_dir),
-                  mnesia:system_info(db_nodes)} of
+            case {Nodes, mnesia:system_info(use_dir), all_clustered_nodes()} of
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
-                    wait_for_tables(),
+                    ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok ->
-                            ensure_schema_ok();
-                        version_not_available ->
-                            schema_ok_or_move()
+                        ok                    -> ensure_schema_ok();
+                        version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
-                    wait_for_tables(),
+                    ok = wait_for_tables(),
                     ensure_version_ok(rabbit_upgrade:read_version()),
                     ensure_schema_ok();
                 {[], false, _} ->
-                    %% First RAM node in cluster, start from scratch
+                    %% Nothing there at all, start from scratch
                     ok = create_schema();
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
@@ -476,6 +468,16 @@ move_db() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok.
 
+copy_db(Destination) ->
+    mnesia:stop(),
+    case rabbit_misc:recursive_copy(dir(), Destination) of
+        ok ->
+            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+            ok = wait_for_tables();
+        {error, E} ->
+            {error, E}
+    end.
+
 create_tables() ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
@@ -557,8 +559,8 @@ reset(Force) ->
             {Nodes, RunningNodes} =
                 try
                     ok = init(),
-                    {mnesia:system_info(db_nodes) -- [Node],
-                     mnesia:system_info(running_db_nodes) -- [Node]}
+                    {all_clustered_nodes() -- [Node],
+                     running_clustered_nodes() -- [Node]}
                 after
                     mnesia:stop()
                 end,

@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue).
@@ -34,7 +19,8 @@
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
-         update_ram_duration/1, set_ram_duration_target/2,
+         maybe_run_queue_via_backing_queue_async/2,
+         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
@@ -47,11 +33,6 @@
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
-
--import(mnesia).
--import(gen_server2).
--import(lists).
--import(queue).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -72,6 +53,8 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+
+-type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -151,12 +134,15 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found').
+        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
 -spec(maybe_run_queue_via_backing_queue/2 ::
-        (pid(), (fun ((A) -> A))) -> 'ok').
+        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+-spec(maybe_run_queue_via_backing_queue_async/2 ::
+        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+-spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -214,26 +200,23 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
         Q1        -> Q1
     end.
 
-internal_declare(Q = #amqqueue{name = QueueName}, Recover) ->
-    rabbit_misc:execute_mnesia_transaction(
+internal_declare(Q, true) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () -> ok = store_queue(Q), rabbit_misc:const(Q) end);
+internal_declare(Q = #amqqueue{name = QueueName}, false) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
-              case Recover of
-                  true ->
-                      ok = store_queue(Q),
-                      Q;
-                  false ->
-                      case mnesia:wread({rabbit_queue, QueueName}) of
-                          [] ->
-                              case mnesia:read({rabbit_durable_queue,
-                                                QueueName}) of
-                                  []  -> ok = store_queue(Q),
-                                         ok = add_default_binding(Q),
-                                         Q;
-                                  [_] -> not_found %% Q exists on stopped node
-                              end;
-                          [ExistingQ] ->
-                              ExistingQ
-                      end
+              case mnesia:wread({rabbit_queue, QueueName}) of
+                  [] ->
+                      case mnesia:read({rabbit_durable_queue, QueueName}) of
+                          []  -> ok = store_queue(Q),
+                                 B = add_default_binding(Q),
+                                 fun (Tx) -> B(Tx), Q end;
+                          [_] -> %% Q exists on stopped node
+                                 rabbit_misc:const(not_found)
+                      end;
+                  [ExistingQ] ->
+                      rabbit_misc:const(ExistingQ)
               end
       end).
 
@@ -279,7 +262,7 @@ assert_equivalence(#amqqueue{durable     = Durable,
 assert_equivalence(#amqqueue{name = QueueName},
                    _Durable, _AutoDelete, _RequiredArgs, _Owner) ->
     rabbit_misc:protocol_error(
-      not_allowed, "parameters for ~s not equivalent",
+      precondition_failed, "parameters for ~s not equivalent",
       [rabbit_misc:rs(QueueName)]).
 
 check_exclusive_access(Q, Owner) -> check_exclusive_access(Q, Owner, lax).
@@ -380,16 +363,13 @@ delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
 
 purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
 
-deliver(QPid, #delivery{immediate = true,
-                        txn = Txn, sender = ChPid, message = Message}) ->
-    gen_server2:call(QPid, {deliver_immediately, Txn, Message, ChPid},
-                     infinity);
-deliver(QPid, #delivery{mandatory = true,
-                        txn = Txn, sender = ChPid, message = Message}) ->
-    gen_server2:call(QPid, {deliver, Txn, Message, ChPid}, infinity),
+deliver(QPid, Delivery = #delivery{immediate = true}) ->
+    gen_server2:call(QPid, {deliver_immediately, Delivery}, infinity);
+deliver(QPid, Delivery = #delivery{mandatory = true}) ->
+    gen_server2:call(QPid, {deliver, Delivery}, infinity),
     true;
-deliver(QPid, #delivery{txn = Txn, sender = ChPid, message = Message}) ->
-    gen_server2:cast(QPid, {deliver, Txn, Message, ChPid}),
+deliver(QPid, Delivery) ->
+    gen_server2:cast(QPid, {deliver, Delivery}),
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
@@ -452,19 +432,27 @@ internal_delete1(QueueName) ->
     rabbit_binding:remove_for_destination(QueueName).
 
 internal_delete(QueueName) ->
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   case mnesia:wread({rabbit_queue, QueueName}) of
-                       []  -> {error, not_found};
-                       [_] -> internal_delete1(QueueName)
-                   end
-           end) of
-        {error, _} = Err -> Err;
-        Deletions        -> ok = rabbit_binding:process_deletions(Deletions)
-    end.
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:wread({rabbit_queue, QueueName}) of
+                  []  -> {error, not_found};
+                  [_] -> internal_delete1(QueueName)
+              end
+      end,
+      fun ({error, _} = Err, _Tx) ->
+              Err;
+          (Deletions, Tx) ->
+              ok = rabbit_binding:process_deletions(Deletions, Tx)
+      end).
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
     gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
+
+maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
+    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
+
+sync_timeout(QPid) ->
+    gen_server2:cast(QPid, sync_timeout).
 
 update_ram_duration(QPid) ->
     gen_server2:cast(QPid, update_ram_duration).
@@ -482,16 +470,19 @@ drop_expired(QPid) ->
     gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
-    rabbit_binding:process_deletions(
-      lists:foldl(
-        fun rabbit_binding:combine_deletions/2,
-        rabbit_binding:new_deletions(),
-        rabbit_misc:execute_mnesia_transaction(
-          fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
-                                    #amqqueue{name = QueueName, pid = Pid}
-                                        <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node]))
-          end))).
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
+                                #amqqueue{name = QueueName, pid = Pid}
+                                    <- mnesia:table(rabbit_queue),
+                                node(Pid) == Node]))
+      end,
+      fun (Deletions, Tx) ->
+              rabbit_binding:process_deletions(
+                lists:foldl(fun rabbit_binding:combine_deletions/2,
+                            rabbit_binding:new_deletions(),
+                            Deletions),
+                Tx)
+      end).
 
 delete_queue(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
@@ -505,19 +496,17 @@ pseudo_queue(QueueName, Pid) ->
               pid = Pid}.
 
 safe_delegate_call_ok(F, Pids) ->
-    {_, Bad} = delegate:invoke(Pids,
-                               fun (Pid) ->
+    case delegate:invoke(Pids, fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
                                          fun () -> ok end,
                                          fun () -> F(Pid) end)
-                               end),
-    case Bad of
-        [] -> ok;
-        _  -> {error, Bad}
+                               end) of
+        {_,  []} -> ok;
+        {_, Bad} -> {error, Bad}
     end.
 
 delegate_call(Pid, Msg, Timeout) ->
     delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, Timeout) end).
 
 delegate_cast(Pid, Msg) ->
-    delegate:invoke(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
+    delegate:invoke_no_result(Pid, fun (P) -> gen_server2:cast(P, Msg) end).

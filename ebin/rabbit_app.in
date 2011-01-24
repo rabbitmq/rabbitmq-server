@@ -6,7 +6,6 @@
   {registered, [rabbit_amqqueue_sup,
                 rabbit_log,
                 rabbit_node_monitor,
-                rabbit_persister,
                 rabbit_router,
                 rabbit_sup,
                 rabbit_tcp_client_sup]},
@@ -31,4 +30,7 @@
          {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
          {cluster_nodes, []},
          {server_properties, []},
-         {collect_statistics, none}]}]}.
+         {collect_statistics, none},
+         {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+         {auth_backends, [rabbit_auth_backend_internal]},
+         {delegate_count, 16}]}]}.

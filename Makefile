@@ -170,16 +170,13 @@ start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
-		./scripts/rabbitmq-server ; sleep 1
+		./scripts/rabbitmq-server; sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
 
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
-
-force-snapshot: all
-	echo "rabbit_persister:force_snapshot()." | $(ERL_CALL)
 
 set-memory-alarm: all
 	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \

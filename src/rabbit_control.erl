@@ -1,38 +1,23 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5]).
+-export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -50,6 +35,7 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
+-spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -116,24 +102,28 @@ fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    fmt_stderr("diagnostics:", []),
+    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
+
+diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    case net_adm:names(NodeHost) of
-        {error, EpmdReason} ->
-            fmt_stderr("- unable to connect to epmd on ~s: ~w",
-                       [NodeHost, EpmdReason]);
-        {ok, NamePorts} ->
-            fmt_stderr("- nodes and their ports on ~s: ~p",
-                       [NodeHost, [{list_to_atom(Name), Port} ||
-                                      {Name, Port} <- NamePorts]])
-            end,
-    fmt_stderr("- current node: ~w", [node()]),
-    case init:get_argument(home) of
-        {ok, [[Home]]} -> fmt_stderr("- current node home dir: ~s", [Home]);
-        Other          -> fmt_stderr("- no current node home dir: ~p", [Other])
-    end,
-    fmt_stderr("- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]),
-    ok.
+    [
+        {"diagnostics:", []},
+        case net_adm:names(NodeHost) of
+            {error, EpmdReason} ->
+                {"- unable to connect to epmd on ~s: ~w",
+                    [NodeHost, EpmdReason]};
+            {ok, NamePorts} ->
+                {"- nodes and their ports on ~s: ~p",
+                              [NodeHost, [{list_to_atom(Name), Port} ||
+                                          {Name, Port} <- NamePorts]]}
+        end,
+        {"- current node: ~w", [node()]},
+        case init:get_argument(home) of
+            {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+            Other          -> {"- no current node home dir: ~p", [Other]}
+        end,
+        {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}
+    ].
 
 stop() ->
     ok.
@@ -196,44 +186,48 @@ action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
 
 action(add_user, Node, Args = [Username, _Password], _Opts, Inform) ->
     Inform("Creating user ~p", [Username]),
-    call(Node, {rabbit_access_control, add_user, Args});
+    call(Node, {rabbit_auth_backend_internal, add_user, Args});
 
 action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Deleting user ~p", Args),
-    call(Node, {rabbit_access_control, delete_user, Args});
+    call(Node, {rabbit_auth_backend_internal, delete_user, Args});
 
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
     Inform("Changing password for user ~p", [Username]),
-    call(Node, {rabbit_access_control, change_password, Args});
+    call(Node, {rabbit_auth_backend_internal, change_password, Args});
+
+action(clear_password, Node, Args = [Username], _Opts, Inform) ->
+    Inform("Clearing password for user ~p", [Username]),
+    call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
 action(set_admin, Node, [Username], _Opts, Inform) ->
     Inform("Setting administrative status for user ~p", [Username]),
-    call(Node, {rabbit_access_control, set_admin, [Username]});
+    call(Node, {rabbit_auth_backend_internal, set_admin, [Username]});
 
 action(clear_admin, Node, [Username], _Opts, Inform) ->
     Inform("Clearing administrative status for user ~p", [Username]),
-    call(Node, {rabbit_access_control, clear_admin, [Username]});
+    call(Node, {rabbit_auth_backend_internal, clear_admin, [Username]});
 
 action(list_users, Node, [], _Opts, Inform) ->
     Inform("Listing users", []),
-    display_list(call(Node, {rabbit_access_control, list_users, []}));
+    display_list(call(Node, {rabbit_auth_backend_internal, list_users, []}));
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Creating vhost ~p", Args),
-    call(Node, {rabbit_access_control, add_vhost, Args});
+    call(Node, {rabbit_vhost, add, Args});
 
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Deleting vhost ~p", Args),
-    call(Node, {rabbit_access_control, delete_vhost, Args});
+    call(Node, {rabbit_vhost, delete, Args});
 
 action(list_vhosts, Node, [], _Opts, Inform) ->
     Inform("Listing vhosts", []),
-    display_list(call(Node, {rabbit_access_control, list_vhosts, []}));
+    display_list(call(Node, {rabbit_vhost, list, []}));
 
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Listing permissions for user ~p", Args),
-    display_list(call(Node, {rabbit_access_control, list_user_permissions,
-                             Args}));
+    display_list(call(Node, {rabbit_auth_backend_internal,
+                             list_user_permissions, Args}));
 
 action(list_queues, Node, Args, Opts, Inform) ->
     Inform("Listing queues", []),
@@ -279,27 +273,31 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
-    display_info_list(
-      [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
-      InfoKeys);
+    case rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]) of
+        L when is_list(L) -> display_info_list(
+                               [lists:zip(InfoKeys, tuple_to_list(X)) ||
+                                   X <- L],
+                               InfoKeys);
+        Other             -> Other
+    end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, set_permissions,
+    call(Node, {rabbit_auth_backend_internal, set_permissions,
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
-    call(Node, {rabbit_access_control, clear_permissions, [Username, VHost]});
+    call(Node, {rabbit_auth_backend_internal, clear_permissions,
+                [Username, VHost]});
 
 action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
-    display_list(call(Node, {rabbit_access_control, list_vhost_permissions,
-                             [VHost]})).
+    display_list(call(Node, {rabbit_auth_backend_internal,
+                             list_vhost_permissions, [VHost]})).
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] ->
