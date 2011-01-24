@@ -65,4 +65,3 @@ class TestErrors(base.BaseTest):
                               dtype + " destination\n",
                           err['message'])
 
-

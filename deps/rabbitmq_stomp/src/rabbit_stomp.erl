@@ -45,7 +45,7 @@ stop(_State) ->
     ok.
 
 parse_listener_configuration() ->
-    case application:get_env(listeners) of
+    case application:get_env(tcp_listeners) of
         undefined -> throw({error, {stomp_configuration_not_found}});
         {ok, Listeners} -> Listeners
     end.

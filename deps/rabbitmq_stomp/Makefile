@@ -7,8 +7,6 @@ TEST_APPS=rabbit_stomp
 TEST_SCRIPTS=./test/test.py
 UNIT_TEST_COMMANDS=eunit:test([rabbit_stomp_test_util,rabbit_stomp_test_frame],[verbose])
 
-TEST_ARGS=-rabbit_stomp listeners "[{\"0.0.0.0\",61613}]"
-
 include ../include.mk
 
 testdeps:

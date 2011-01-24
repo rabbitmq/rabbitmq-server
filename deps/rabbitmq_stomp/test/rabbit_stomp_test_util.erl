@@ -150,11 +150,11 @@ ack_mode_client_individual_test() ->
 
 consumer_tag_id_test() ->
     Frame = #stomp_frame{headers = [{"id", "foo"}]},
-    {ok, <<"T_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+    {ok, <<"T_foo">>, _} = rabbit_stomp_util:consumer_tag(Frame).
 
 consumer_tag_destination_test() ->
     Frame = #stomp_frame{headers = [{"destination", "foo"}]},
-    {ok, <<"Q_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+    {ok, <<"Q_foo">>, _} = rabbit_stomp_util:consumer_tag(Frame).
 
 consumer_tag_invalid_test() ->
     Frame = #stomp_frame{headers = []},
