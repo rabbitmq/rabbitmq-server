@@ -42,7 +42,7 @@
                 connection, subscriptions, version,
                 start_heartbeat_fun}).
 
--record(subscription, {dest_hdr, channel, multi_ack}).
+-record(subscription, {dest_hdr, channel, multi_ack, description}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
@@ -123,6 +123,8 @@ handle_cast(client_timeout, State) ->
     {stop, client_timeout, State}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
@@ -234,19 +236,41 @@ cancel_subscription({error, _}, State) ->
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription({ok, ConsumerTag}, State = #state{subscriptions = Subs}) ->
+cancel_subscription({ok, ConsumerTag, Description},
+                    State = #state{channel       = MainChannel,
+                                   subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
-                  "UNSUBSCRIBE must refer to an existing subscription\n",
+                  "UNSUBSCRIBE must refer to an existing subscription.\n"
+                  "Subscription to ~p not found.\n",
+                  [Description],
                   State);
-        {ok, #subscription{channel = Channel}} ->
-            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                           nowait       = true},
-                           Channel,
-                           State#state{subscriptions =
-                                           dict:erase(ConsumerTag, Subs)}))
+        {ok, #subscription{channel = SubChannel}} ->
+            case amqp_channel:call(SubChannel,
+                                   #'basic.cancel'{
+                                     consumer_tag = ConsumerTag}) of
+                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    NewSubs = dict:erase(ConsumerTag, Subs),
+                    ensure_subchannel_closed(SubChannel,
+                                             MainChannel,
+                                             State#state{
+                                               subscriptions = NewSubs});
+                _ ->
+                    error("Failed to cancel subscription",
+                          "UNSUBSCRIBE to ~p failed.\n",
+                          [Description],
+                          State)
+            end
     end.
+
+ensure_subchannel_closed(SubChannel, MainChannel, State)
+  when SubChannel == MainChannel ->
+    ok(State);
+
+ensure_subchannel_closed(SubChannel, _MainChannel, State) ->
+    amqp_channel:close(SubChannel),
+    ok(State).
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
@@ -321,7 +345,7 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
-    {ok, ConsumerTag} = rabbit_stomp_util:consumer_tag(Frame),
+    {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
 
     amqp_channel:subscribe(Channel,
                            #'basic.consume'{
@@ -337,9 +361,10 @@ do_subscribe(Destination, DestHdr, Frame,
 
     ok(State#state{subscriptions =
                        dict:store(ConsumerTag,
-                                  #subscription{dest_hdr  = DestHdr,
-                                                channel   = Channel,
-                                                multi_ack = IsMulti},
+                                  #subscription{dest_hdr    = DestHdr,
+                                                channel     = Channel,
+                                                multi_ack   = IsMulti,
+                                                description = Description},
                                   Subs)}).
 
 do_send(Destination, _DestHdr,
@@ -401,7 +426,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               State);
         error ->
             send_error("Subscription not found",
-                       "There is no current subscription '~s'.",
+                       "There is no current subscription with tag '~s'.",
                        [ConsumerTag],
                        State)
     end.
@@ -415,6 +440,9 @@ send_method(Method, State = #state{channel = Channel}) ->
 
 send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
+    send_method(Method, Channel, Properties, BodyFragments, State).
+
+send_method(Method, Channel, Properties, BodyFragments, State) ->
     amqp_channel:call(Channel, Method, #amqp_msg{
                                 props = Properties,
                                 payload = lists:reverse(BodyFragments)}),
@@ -509,8 +537,7 @@ abort_transaction(Transaction, State0) ->
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
-    amqp_channel:call(Channel, Method),
-    State;
+    send_method(Method, Channel, State);
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
