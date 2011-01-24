@@ -51,13 +51,13 @@ description() ->
     [{name, <<"direct">>},
      {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
 
-route(#exchange{name = #resource{virtual_host = VHost} = Name},
+route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_key = RoutingKey,
                                          content     = Content}}) ->
-    BindingRoutes = rabbit_router:match_routing_key(Name, RoutingKey),
-    HeaderRoutes = rabbit_exchange:header_routes(
-                       (Content#content.properties)#'P_basic'.headers, VHost),
-    BindingRoutes ++ HeaderRoutes.
+    HeaderKeys = rabbit_exchange:header_routes(
+                     (Content#content.properties)#'P_basic'.headers),
+    lists:flatten([rabbit_router:match_routing_key(Name, RKey) ||
+                  RKey <- [RoutingKey | HeaderKeys]]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.

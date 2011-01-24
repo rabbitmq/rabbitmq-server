@@ -36,7 +36,7 @@
 -export([recover/0, declare/6, lookup/1, lookup_or_die/1, list/1, info_keys/0,
          info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
 -export([callback/3]).
--export([header_routes/2]).
+-export([header_routes/1]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
 -export([assert_equivalence/6, assert_args_equivalence/2, check_type/1]).
@@ -89,8 +89,7 @@
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
 -spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) -> 'ok').
--spec(header_routes/2 :: (rabbit_framing:amqp_table(), rabbit_types:vhost()) ->
-        [rabbit_types:r('queue')]).
+-spec(header_routes/1 :: (rabbit_framing:amqp_table()) -> [binary()]).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -326,12 +325,10 @@ unconditional_delete(X = #exchange{name = XName}) ->
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 
-header_routes(undefined, _VHost) ->
+header_routes(undefined) ->
     [];
-header_routes(Headers, VHost) ->
-    [rabbit_misc:r(VHost, queue, RKey) ||
-        RKey <- lists:flatten([routing_keys(Headers, Header) ||
-                               Header <- ?ROUTING_HEADERS])].
+header_routes(Headers) ->
+    lists:flatten([routing_keys(Headers, Header) || Header <- ?ROUTING_HEADERS]).
 
 routing_keys(HeadersTable, Key) ->
    case rabbit_misc:table_lookup(HeadersTable, Key) of

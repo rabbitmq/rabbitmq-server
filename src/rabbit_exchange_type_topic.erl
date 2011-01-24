@@ -30,6 +30,7 @@
 %%
 
 -module(rabbit_exchange_type_topic).
+-include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).
@@ -59,11 +60,15 @@ description() ->
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
 route(#exchange{name = Name},
-        #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_bindings(Name,
-                                 fun (#binding{key = BindingKey}) ->
-                                         topic_matches(BindingKey, RoutingKey)
-                                 end).
+        #delivery{message = #basic_message{routing_key = RoutingKey,
+                                           content     = Content}}) ->
+   HeaderKeys = rabbit_exchange:header_routes(
+                    (Content#content.properties)#'P_basic'.headers),
+   lists:flatten([rabbit_router:match_bindings(
+                      Name,
+                      fun (#binding{key = BindingKey}) ->
+                              topic_matches(BindingKey, RKey)
+                      end) || RKey <- [RoutingKey | HeaderKeys]]).
 
 split_topic_key(Key) ->
     string:tokens(binary_to_list(Key), ".").
