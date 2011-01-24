@@ -1,5 +1,6 @@
 ; Use the "Modern" UI
 !include MUI2.nsh
+!include LogicLib.nsh
 
 ;--------------------------------
 
@@ -20,18 +21,18 @@ InstallDirRegKey HKLM "Software\RabbitMQ" "Install_Dir"
 RequestExecutionLevel admin
 
 ; Windows XP
-TargetMinimalOS 5.1
+;TargetMinimalOS 5.1
 
 ;--------------------------------
 
 ; Pages
 
 
-  !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE-MPL-RabbitMQ"
+;  !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE-MPL-RabbitMQ"
   !insertmacro MUI_PAGE_COMPONENTS
   !insertmacro MUI_PAGE_DIRECTORY
   !insertmacro MUI_PAGE_INSTFILES
-  !insertmacro MUI_PAGE_FINISH
+;  !insertmacro MUI_PAGE_FINISH
 
   !insertmacro MUI_UNPAGE_CONFIRM
   !insertmacro MUI_UNPAGE_INSTFILES
@@ -47,7 +48,9 @@ Section "RabbitMQ (required)"
   ; Set output path to the installation directory.
   SetOutPath $INSTDIR
 
-  ; Put file there
+  Call findErlang
+
+  ; Put files there
   File /r "rabbitmq_server-%%VERSION%%"
 
   ; Write the installation path into the registry
@@ -82,3 +85,33 @@ Section "Uninstall"
   ;RMDir "$INSTDIR"
 
 SectionEnd
+
+;--------------------------------
+
+; Functions
+
+Function findErlang
+
+  StrCpy $0 0
+  StrCpy $2 "not-found"
+  ${Do}
+    EnumRegKey $1 HKLM Software\Ericsson\Erlang $0
+    ${If} $1 = ""
+      ${Break}
+    ${EndIf}
+    ${If} $1 <> "ErlSrv"
+      StrCpy $2 $1
+    ${EndIf}
+
+    IntOp $0 $0 + 1
+  ${Loop}
+
+  ${If} $2 = "not-found"
+    MessageBox MB_OK "Erlang could not be detected. Please install it."
+    Abort
+  ${Else}
+    ReadRegStr $0 HKLM "Software\Ericsson\Erlang\$2" ""
+    MessageBox MB_OK "Erlang is installed at: $0"
+  ${EndIf}
+
+FunctionEnd
