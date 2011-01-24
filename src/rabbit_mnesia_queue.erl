@@ -55,34 +55,51 @@
 %% queues.)
 %% ----------------------------------------------------------------------------
 
+%% BUG: The rabbit_backing_queue_spec behaviour needs
+%% improvements. For example, rabbit_amqqueue_process knows too much
+%% about the state of a backing queue, even though this state may now
+%% change without its knowledge. Additionally, there are points in the
+%% protocol where failures can lose messages.
+
 %% BUG: Need to provide better back-pressure when queue is filling up.
+
+%% BUG: Need to store each message or pending ack in a separate row.
 
 -behaviour(rabbit_backing_queue).
 
--record(s,                        % The in-RAM queue state
-        { mnesia_table,           % An atom holding the Mnesia table name
-          q,                      % The M queue (or nothing)
-          next_seq_id,            % The next M's seq_id (or nothing)
-          pending_ack_dict,       % The seq_id->M map, pending ack (or nothing)
-          txn_dict                % In-progress txn->tx map
+-record(s,                  % The in-RAM queue state
+        { mnesia_tables,    % Atoms holding the Mnesia table names
+          q,                % The M queue (or nothing)
+          next_seq_id,      % The next M's seq_id (or nothing)
+          p,                % The seq_id->M map, pending ack dict (or nothing)
+          txn_dict          % In-progress txn->tx map
         }).
 
--record(m,                        % A wrapper aroung a msg
-        { seq_id,                 % The seq_id for the msg
-          msg,                    % The msg itself
-          props,                  % The msg properties
-          is_delivered            % Has the msg been delivered? (for reporting)
+-record(m,                  % A wrapper aroung a msg
+        { seq_id,           % The seq_id for the msg
+          msg,              % The msg itself
+          props,            % The msg properties
+          is_delivered      % Has the msg been delivered? (for reporting)
         }).
 
 -record(tx,
-        { to_pub,
-          to_ack }).
+        { to_pub,           % List of (msg, props) pairs to publish
+          to_ack            % List of seq_ids to ack
+	}).        
 
--record(s_record,                 % Temporary whole-queue record in Mnesia
-        { key,                    % The key: the atom 's'
-          q,                      % The M queue
-          next_seq_id,            % The next seq_id to use to build an M
-          pending_ack_dict        % The Mnesia seq_id->M map, pending ack
+-record(q_record,           % Temporary whole-queue record in Mnesia
+        { key,              % The key: the atom 'q'
+          q                 % The M queue
+          }).
+
+-record(p_record,           % Temporary p record in Mnesia
+        { key,              % The key: the atom 'p'
+          p                 % The Mnesia seq_id->M map, pending ack
+          }).
+
+-record(n_record,           % Temporary next_seq_id record in Mnesia
+        { key,              % The key: the atom 'n'
+          next_seq_id       % The Mnesia next_seq_id
           }).
 
 -include("rabbit.hrl").
@@ -98,10 +115,10 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(s() :: #s { mnesia_table :: atom(),
+-type(s() :: #s { mnesia_tables :: {atom(), atom(), atom()},
                   q :: maybe(queue()),
                   next_seq_id :: maybe(seq_id()),
-                  pending_ack_dict :: maybe(dict()),
+                  p :: maybe(dict()),
                   txn_dict :: dict() }).
 -type(state() :: s()).
 
@@ -114,10 +131,14 @@
                                 rabbit_types:message_properties()}],
                     to_ack :: [seq_id()] }).
 
--type(s_record() :: #s_record { key :: s,
-                                q :: queue(),
-                                next_seq_id :: seq_id(),
-                                pending_ack_dict :: dict() }).
+-type(q_record() :: #q_record { key :: 'q',
+                                q :: queue() }).
+
+-type(p_record() :: #p_record { key :: 'p',
+                                p :: dict() }).
+
+-type(n_record() :: #n_record { key :: 'n',
+                                next_seq_id :: seq_id() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -166,26 +187,50 @@ stop() -> ok.
 
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~p, _, _) ->", [QueueName]),
-    MnesiaTable = mnesia_table(QueueName),
+    {MnesiaQTable, MnesiaPTable, MnesiaNTable} = mnesia_tables(QueueName),
     %% It's unfortunate that tables cannot be created or deleted
     %% within an Mnesia transaction!
-    Attributes = record_info(fields, s_record),
+    QAttributes = record_info(fields, q_record),
     case mnesia:create_table(
-           MnesiaTable, [{record_name, 's_record'}, {attributes, Attributes}])
+           MnesiaQTable,
+	   [{record_name, 'q_record'}, {attributes, QAttributes}])
     of
         {atomic, ok} -> ok;
-        {aborted, {already_exists, MnesiaTable}} ->
-            's_record' = mnesia:table_info(MnesiaTable, record_name),
-            Attributes = mnesia:table_info(MnesiaTable, attributes),
+        {aborted, {already_exists, MnesiaQTable}} ->
+            'q_record' = mnesia:table_info(MnesiaQTable, record_name),
+            QAttributes = mnesia:table_info(MnesiaQTable, attributes),
+            ok
+    end,
+    PAttributes = record_info(fields, p_record),
+    case mnesia:create_table(
+           MnesiaPTable,
+	   [{record_name, 'p_record'}, {attributes, PAttributes}])
+    of
+        {atomic, ok} -> ok;
+        {aborted, {already_exists, MnesiaPTable}} ->
+            'p_record' = mnesia:table_info(MnesiaPTable, record_name),
+            PAttributes = mnesia:table_info(MnesiaPTable, attributes),
+            ok
+    end,
+    NAttributes = record_info(fields, n_record),
+    case mnesia:create_table(
+           MnesiaNTable,
+	   [{record_name, 'n_record'}, {attributes, NAttributes}])
+    of
+        {atomic, ok} -> ok;
+        {aborted, {already_exists, MnesiaNTable}} ->
+            'n_record' = mnesia:table_info(MnesiaNTable, record_name),
+            NAttributes = mnesia:table_info(MnesiaNTable, attributes),
             ok
     end,
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  RS = #s { mnesia_table = MnesiaTable,
+                  RS = #s { mnesia_tables =
+				{MnesiaQTable, MnesiaPTable, MnesiaNTable},
                             q = {just, queue:new()},
                             next_seq_id = {just, 0},
-                            pending_ack_dict = {just, dict:new()},
+                            p = {just, dict:new()},
                             txn_dict = dict:new() },
                   transactional_write_state(RS)
           end),
@@ -204,7 +249,7 @@ terminate(S) ->
         mnesia:transaction(
           fun () ->
                   S1 = transactional_read_state(S),
-                  RS = S1 #s { pending_ack_dict = {just, dict:new()} },
+                  RS = S1 #s { p = {just, dict:new()} },
                   transactional_write_state(RS)
           end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -230,7 +275,7 @@ delete_and_terminate(S) ->
           fun () ->
                   S1 = transactional_read_state(S),
                   RS = S1 #s { q = {just, queue:new()},
-                               pending_ack_dict = {just, dict:new()} },
+			       p = {just, dict:new()} },
                   transactional_write_state(RS)
           end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -633,54 +678,51 @@ status(S) ->
           fun () ->
                   #s { q = {just, Q},
                        next_seq_id = {just, NextSeqId},
-                       pending_ack_dict = {just, PAD} } =
+                       p = {just, P} } =
                       transactional_read_state(S),
                   [{len, queue:len(Q)},
                    {next_seq_id, NextSeqId},
-                   {acks, dict:size(PAD)}]
+                   {acks, dict:size(P)}]
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
 %% Monadic helper functions for inside transactions. All Ss have
-%% non-nothing qs and next_seq_ids and pending_ack_dicts.
+%% non-nothing qs and ps and next_seq_ids.
 %% ----------------------------------------------------------------------------
 
 -spec transactional_read_state(s()) -> s().
 
 transactional_read_state(
-  S = #s { mnesia_table = MnesiaTable,
+  S = #s { mnesia_tables = {MnesiaQTable, MnesiaPTable, MnesiaNTable},
            q = nothing,
            next_seq_id = nothing,
-           pending_ack_dict = nothing }) ->
-    [#s_record { key = 's',
-                 q = Q,
-                 next_seq_id = NextSeqId,
-                 pending_ack_dict = PAD }] =
-        mnesia:read(MnesiaTable, 's', 'read'),
-    S #s { q = {just, Q},
-           next_seq_id = {just, NextSeqId},
-           pending_ack_dict = {just, PAD} }.
+           p = nothing }) ->
+    [#q_record { key = 'q', q = Q }] = mnesia:read(MnesiaQTable, 'q', 'read'),
+    [#p_record { key = 'p', p = P }] = mnesia:read(MnesiaPTable, 'p', 'read'),
+    [#n_record { key = 'n', next_seq_id = NextSeqId }] =
+        mnesia:read(MnesiaNTable, 'n', 'read'),
+    S #s { q = {just, Q}, next_seq_id = {just, NextSeqId}, p = {just, P} }.
 
 -spec transactional_write_state(s()) -> s().
 
 transactional_write_state(S = #s {
-                            mnesia_table = MnesiaTable,
+                            mnesia_tables =
+				{MnesiaQTable, MnesiaPTable, MnesiaNTable},
                             q = {just, Q},
                             next_seq_id = {just, NextSeqId},
-                            pending_ack_dict = {just, PAD} }) ->
-    ok = mnesia:write(MnesiaTable,
-                     #s_record { key = 's',
-                                 q = Q,
-                                 next_seq_id = NextSeqId,
-                                 pending_ack_dict = PAD },
-                     'write'),
-    S #s { q = nothing, next_seq_id = nothing, pending_ack_dict = nothing }.
+                            p = {just, P} }) ->
+    ok = mnesia:write(MnesiaQTable, #q_record { key = 'q', q = Q }, 'write'),
+    ok = mnesia:write(MnesiaPTable, #p_record { key = 'p', p = P }, 'write'),
+    ok = mnesia:write(MnesiaNTable,
+		      #n_record { key = 'n', next_seq_id = NextSeqId },
+		      'write'),
+    S #s { q = nothing, next_seq_id = nothing, p = nothing }.
 
 %%----------------------------------------------------------------------------
-%% Pure helper functions. All Ss have non-nothing qs and next_seq_ids
-%% and pending_ack_dicts.
+%% Pure helper functions. All Ss have non-nothing qs and ps and
+%% next_seq_ids.
 %% ----------------------------------------------------------------------------
 
 -spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
@@ -788,8 +830,8 @@ publish_state(Msg,
 -spec record_pending_ack_state(m(), s()) -> s().
 
 record_pending_ack_state(M = #m { seq_id = SeqId },
-                         S = #s { pending_ack_dict = {just, PAD} }) ->
-    S #s { pending_ack_dict = {just, dict:store(SeqId, M, PAD)} }.
+			 S = #s { p = {just, P} }) ->
+    S #s { p = {just, dict:store(SeqId, M, P)} }.
 
 -spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
                     [rabbit_guid:guid()],
@@ -800,12 +842,10 @@ internal_ack3(_, [], S) -> {[], S};
 internal_ack3(F, SeqIds, S) ->
     {AllGuids, S1} =
         lists:foldl(
-          fun (SeqId, {Acc, Si = #s { pending_ack_dict = {just, PAD} }}) ->
-                  M = dict:fetch(SeqId, PAD),
+          fun (SeqId, {Acc, Si = #s { p = {just, P} }}) ->
+                  M = dict:fetch(SeqId, P),
                   {[m_guid(M) | Acc],
-                   F(M,
-                     Si #s { pending_ack_dict =
-                                 {just, dict:erase(SeqId, PAD)} })}
+		   F(M, Si #s { p = {just, dict:erase(SeqId, P)} })}
           end,
           {[], S},
           SeqIds),
@@ -819,8 +859,10 @@ m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
 
 %% TODO: Import correct argument type.
 
--spec mnesia_table(_) -> atom().
+-spec mnesia_tables(_) -> {atom(), atom(), atom()}.
 
-mnesia_table(QueueName) ->
-    list_to_atom(lists:flatten(io_lib:format("~p", [QueueName]))).
-
+mnesia_tables(QueueName) ->
+    Str = lists:flatten(io_lib:format("~p", [QueueName])),
+    {list_to_atom(lists:append("q: ", Str)),
+     list_to_atom(lists:append("p: ", Str)),
+     list_to_atom(lists:append("n: ", Str))}.
