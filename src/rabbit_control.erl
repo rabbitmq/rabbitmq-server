@@ -77,24 +77,24 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            halt();
+            quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
-            halt(2);
+            quit(2);
         Other ->
             print_error("~p", [Other]),
-            halt(2)
+            quit(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
@@ -130,7 +130,7 @@ stop() ->
 
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
-    halt(1).
+    quit(1).
 
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -273,10 +273,13 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
-    display_info_list(
-      [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
-      InfoKeys);
+    case rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]) of
+        L when is_list(L) -> display_info_list(
+                               [lists:zip(InfoKeys, tuple_to_list(X)) ||
+                                   X <- L],
+                               InfoKeys);
+        Other             -> Other
+    end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -389,4 +392,13 @@ prettify_typed_amqp_value(Type, Value) ->
         table   -> prettify_amqp_table(Value);
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
+    end.
+
+% the slower shutdown on windows required to flush stdout
+quit(Status) ->
+    case os:type() of
+        {unix, _} ->
+            halt(Status);
+        {win32, _} ->
+            init:stop(Status)
     end.
