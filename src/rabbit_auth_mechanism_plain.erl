@@ -33,6 +33,10 @@
 %% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
 %% apparently, by OpenAMQ.
 
+%% TODO: once the minimum erlang becomes R13B03, reimplement this
+%% using the binary module - that makes use of BIFs to do binary
+%% matching and will thus be much faster.
+
 description() ->
     [{name, <<"PLAIN">>},
      {description, <<"SASL PLAIN authentication mechanism">>}].
@@ -41,17 +45,32 @@ init(_Sock) ->
     [].
 
 handle_response(Response, _State) ->
-    {User, Response1} = split_on_null(drop_leading_null(Response), []),
-    {Pass, _Response2} = split_on_null(Response1, []),
-    rabbit_access_control:check_user_pass_login(
-      list_to_binary(User), list_to_binary(Pass)).
+    case extract_user_pass(Response) of
+        {ok, User, Pass} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        error ->
+            {protocol_error, "response ~p invalid", [Response]}
+    end.
 
-drop_leading_null(<<0:8, Rest/binary>>) ->
-    Rest.
+extract_user_pass(Response) ->
+    case extract_elem(Response) of
+        {ok, User, Response1} -> case extract_elem(Response1) of
+                                     {ok, Pass, <<>>} -> {ok, User, Pass};
+                                     _                -> error
+                                 end;
+        error                 -> error
+    end.
 
-split_on_null(<<0:8, Rest/binary>>, Acc) ->
-    {lists:reverse(Acc), Rest};
-split_on_null(<<>>, Acc) ->
-    {lists:reverse(Acc), <<>>};
-split_on_null(<<C:8, Rest/binary>>, Acc) ->
-    split_on_null(Rest, [C | Acc]).
+extract_elem(<<0:8, Rest/binary>>) ->
+    Count = next_null_pos(Rest),
+    <<Elem:Count/binary, Rest1/binary>> = Rest,
+    {ok, Elem, Rest1};
+extract_elem(_) ->
+    error.
+
+next_null_pos(Bin) ->
+    next_null_pos(Bin, 0).
+
+next_null_pos(<<>>, Count)                  -> Count;
+next_null_pos(<<0:8, _Rest/binary>>, Count) -> Count;
+next_null_pos(<<_:8, Rest/binary>>,  Count) -> next_null_pos(Rest, Count + 1).
