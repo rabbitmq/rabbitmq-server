@@ -74,12 +74,22 @@ SectionEnd
 
 ;--------------------------------
 
+Section "RabbitMQ Service" RabbitService
+  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat install"
+  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat start"
+SectionEnd
+
+
+;--------------------------------
+
 ; Section descriptions
 
 LangString DESC_Rabbit ${LANG_ENGLISH} "The RabbitMQ Server."
+LangString DESC_RabbitService ${LANG_ENGLISH} "Set up RabbitMQ as a Windows Service."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${Rabbit} $(DESC_Rabbit)
+  !insertmacro MUI_DESCRIPTION_TEXT ${RabbitService} $(DESC_RabbitService)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ;--------------------------------
@@ -91,6 +101,10 @@ Section "Uninstall"
   ; Remove registry keys
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
   DeleteRegKey HKLM SOFTWARE\RabbitMQ
+
+  ; TODO these will fail if the service is not installed - do we care?
+  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat stop"
+  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat remove"
 
   ; Remove files and uninstaller
   RMDir /r $INSTDIR
