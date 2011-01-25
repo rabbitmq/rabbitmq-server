@@ -81,6 +81,14 @@ Section "RabbitMQ Service" RabbitService
   CopyFiles "$WINDIR\.erlang.cookie" "$APPDATA\.erlang.cookie"
 SectionEnd
 
+;--------------------------------
+
+Section "Start Menu" RabbitStartMenu
+  CreateDirectory "$SMPROGRAMS\RabbitMQ"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Plugins Directory.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\plugins"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Database and Log Directory.lnk" "$APPDATA\RabbitMQ"
+SectionEnd
 
 ;--------------------------------
 
@@ -88,10 +96,12 @@ SectionEnd
 
 LangString DESC_Rabbit ${LANG_ENGLISH} "The RabbitMQ Server."
 LangString DESC_RabbitService ${LANG_ENGLISH} "Set up RabbitMQ as a Windows Service."
+LangString DESC_RabbitStartMenu ${LANG_ENGLISH} "Add some useful links to the start menu."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${Rabbit} $(DESC_Rabbit)
   !insertmacro MUI_DESCRIPTION_TEXT ${RabbitService} $(DESC_RabbitService)
+  !insertmacro MUI_DESCRIPTION_TEXT ${RabbitStartMenu} $(DESC_RabbitStartMenu)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ;--------------------------------
@@ -109,14 +119,13 @@ Section "Uninstall"
   ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat remove"
 
   ; Remove files and uninstaller
-  RMDir /r $INSTDIR
+  RMDir /r "$INSTDIR"
 
-  ; Remove shortcuts, if any
-  ;Delete "$SMPROGRAMS\RabbitMQ\*.*"
+  ; Remove shortcuts
+  Delete "$SMPROGRAMS\RabbitMQ\*.*"
 
   ; Remove directories used
-  ;RMDir "$SMPROGRAMS\RabbitMQ"
-  ;RMDir "$INSTDIR"
+  RMDir "$SMPROGRAMS\RabbitMQ"
 
   ; TODO: unset ERLANG_HOME?
 
