@@ -86,7 +86,6 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
                   {ok, Version} ->
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
-
                       do_login(rabbit_stomp_frame:header(Frame, "login"),
                                rabbit_stomp_frame:header(Frame, "passcode"),
                                rabbit_stomp_frame:header(Frame, "host",

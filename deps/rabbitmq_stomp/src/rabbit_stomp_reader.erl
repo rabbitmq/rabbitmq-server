@@ -31,7 +31,7 @@
 -module(rabbit_stomp_reader).
 
 -export([start_link/1]).
--export([init/1, mainloop/1]).
+-export([init/1, mainloop/2]).
 
 -include("rabbit_stomp_frame.hrl").
 
@@ -43,7 +43,7 @@ start_link(ProcessorPid) ->
 init(ProcessorPid) ->
     receive
         {go, Sock} ->
-            ok = inet:setopts(Sock, [{active, once}]),
+            ok = inet:setopts(Sock, [{active, false}]),
 
             {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
             PeerAddressS = inet_parse:ntoa(PeerAddress),
@@ -53,19 +53,24 @@ init(ProcessorPid) ->
             try
                 ?MODULE:mainloop(#reader_state{socket        = Sock,
                                                parse_state   = ParseState,
-                                               processor     = ProcessorPid})
+                                               processor     = ProcessorPid}, 0)
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
                                       [self(), PeerAddressS, PeerPort])
             end
     end.
 
-mainloop(State) ->
-    receive
-        {tcp, Sock, Bytes} ->
-            inet:setopts(Sock, [{active, once}]),
+mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
+    case gen_tcp:recv(Sock, ByteCount) of
+        {ok, Bytes} ->
             process_received_bytes(Bytes, State);
-        {tcp_closed, _Sock} ->
+        {error, closed} ->
+            error_logger:info_msg("Socket ~p closed by client~n", [Sock]),
+            ok;
+        {error, ErrCode} ->
+            error_logger:error_msg("Socket ~p closed abruptly with "
+                                   "error code ~p~n",
+                                   [Sock, ErrCode]),
             ok
     end.
 
@@ -76,8 +81,9 @@ process_received_bytes(Bytes,
                          processor   = Processor,
                          parse_state = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
-        {more, ParseState1} ->
-            ?MODULE:mainloop(State#reader_state{parse_state = ParseState1});
+        {more, ParseState1, Length} ->
+            ?MODULE:mainloop(State#reader_state{parse_state = ParseState1},
+                             Length);
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),

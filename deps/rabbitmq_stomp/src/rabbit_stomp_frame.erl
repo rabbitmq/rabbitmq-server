@@ -58,6 +58,8 @@ parse(Content, State) ->
 
 parse_command(<<$\n,  Rest/binary>>, []) ->
     parse_command(Rest, []);
+parse_command(<<$\r, Rest/binary>>, Acc) ->
+    parse_command(Rest, Acc);
 parse_command(<<0,  Rest/binary>>, []) ->
     parse_command(Rest, []);
 parse_command(<<$\n, Rest/binary>>, Acc) ->
@@ -69,6 +71,8 @@ parse_command(<<>>, Acc) ->
 
 parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
     more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_headers(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+    parse_headers(Rest, Frame, HeaderAcc, KeyAcc);
 parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) ->
     Remaining = case internal_integer_header(HeaderAcc, "content-length") of
                     {ok, ByteCount} -> ByteCount;
@@ -84,6 +88,8 @@ parse_header_value(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     more(fun(Rest) ->
                      parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
              end);
+parse_header_value(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
 parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     NewKey = lists:reverse(KeyAcc),
     NewHeaders = case lists:keysearch(NewKey, 1, HeaderAcc) of
@@ -123,11 +129,12 @@ parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
     case Remaining >= Size of
         true ->
+            Left = Remaining - Size,
             more(fun(Rest) ->
                          parse_body(Rest, Frame,
                                     finalize_chunk(Content, Chunks),
-                                    Remaining - Size)
-                 end);
+                                    Left)
+                 end, Left);
         false ->
             <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
             {ok,
@@ -143,7 +150,10 @@ finalize_chunk(Chunk, Chunks) ->
     end.
 
 more(Continuation) ->
-    {more, {resume, Continuation}}.
+    more(Continuation, 0).
+
+more(Continuation, Length) ->
+    {more, {resume, Continuation}, Length}.
 
 default_value({ok, Value}, _DefaultValue) ->
     Value;
