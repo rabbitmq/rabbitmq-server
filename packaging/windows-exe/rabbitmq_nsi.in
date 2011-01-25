@@ -115,6 +115,9 @@ Section "Start Menu" RabbitStartMenu
   CreateShortCut "$SMPROGRAMS\RabbitMQ\Database Directory.lnk" "$APPDATA\RabbitMQ\db"
   CreateShortCut "$SMPROGRAMS\RabbitMQ\(Re)Install Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "install" "$INSTDIR\rabbitmq.ico"
   CreateShortCut "$SMPROGRAMS\RabbitMQ\Remove Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "remove" "$INSTDIR\rabbitmq.ico"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Start Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "start" "$INSTDIR\rabbitmq.ico"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Stop Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "stop" "$INSTDIR\rabbitmq.ico"
+
 SectionEnd
 
 ;--------------------------------
