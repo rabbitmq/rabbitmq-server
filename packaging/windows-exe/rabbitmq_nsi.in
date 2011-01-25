@@ -13,6 +13,11 @@ Name "RabbitMQ"
 ; The file to write
 OutFile "rabbitmq-server-v%%VERSION%%.exe"
 
+; Icons
+Icon "rabbitmq.ico"
+UninstallIcon "rabbitmq.ico"
+!define MUI_ICON "rabbitmq.ico"
+
 ; The default installation directory
 InstallDir $PROGRAMFILES\RabbitMQ
 
