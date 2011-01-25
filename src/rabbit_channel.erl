@@ -277,7 +277,7 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 handle_info(timeout, State) ->
     noreply(State);
 
-handle_info({'DOWN', _MRef, process, QPid, _Reason},
+handle_info({'DOWN', _MRef, process, QPid, Reason},
             State = #ch{unconfirmed = UC}) ->
     %% TODO: this does a complete scan and partial rebuild of the
     %% tree, which is quite efficient. To do better we'd need to
@@ -286,8 +286,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
                    gb_trees:next(gb_trees:iterator(UC)), QPid,
                    {[], UC}, State),
     erase_queue_stats(QPid),
-    noreply(
-      queue_blocked(QPid, record_confirms(MXs, State#ch{unconfirmed = UC1}))).
+    State1 = case Reason of
+                 normal -> record_confirms(MXs, State#ch{unconfirmed = UC1});
+                 _      -> send_rejects(MXs, State#ch{unconfirmed = UC1})
+             end,
+    noreply(queue_blocked(QPid, State1)).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -1248,6 +1251,16 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
     State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
 lock_message(false, _MsgStruct, State) ->
     State.
+
+send_rejects(MXs, State = #ch{writer_pid = WriterPid}) ->
+    [ begin maybe_incr_stats([{ExchangeName, 1}], reject, State),
+            send_reject(MsgSeqNo, WriterPid)
+      end || {MsgSeqNo, ExchangeName} <- MXs ],
+    State.
+
+send_reject(SeqNo, WriterPid) ->
+    ok = rabbit_writer:send_command(WriterPid,
+                                    #'basic.reject'{delivery_tag = SeqNo}).
 
 send_confirms(State = #ch{confirmed = C}) ->
     C1 = lists:append(C),
