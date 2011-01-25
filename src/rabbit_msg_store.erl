@@ -750,12 +750,13 @@ handle_cast({write, CRef, Guid},
     true = 0 =< ets:update_counter(CurFileCacheEts, Guid, {3, -1}),
     [{Guid, Msg, _CacheRefCount}] = ets:lookup(CurFileCacheEts, Guid),
     case should_mask_action(CRef, Guid, State) of
-        {true, _Location} ->
+        {true, Loc} ->
+            ok = maybe_remove_from_cache(Guid, Loc, Msg, State),
             noreply(State);
         {false, not_found} ->
             write_message(CRef, Guid, Msg, State);
         {Mask, #msg_location { ref_count = 0, file = File,
-                               total_size = TotalSize }} ->
+                               total_size = TotalSize } = Loc} ->
             case {Mask, ets:lookup(FileSummaryEts, File)} of
                 {false, [#file_summary { locked = true }]} ->
                     ok = index_delete(Guid, State),
@@ -765,15 +766,18 @@ handle_cast({write, CRef, Guid},
                     %% message, but as it is being GC'd currently,
                     %% we'll have to write a new copy, which will then
                     %% be younger, so ignore this write.
+                    ok = maybe_remove_from_cache(Guid, Loc, Msg, State),
                     noreply(State);
                 {_Mask, [#file_summary {}]} ->
                     ok = index_update_ref_count(Guid, 1, State),
+                    ok = maybe_remove_from_cache(Guid, Loc, Msg, State),
                     State1 = client_confirm_if_on_disk(CRef, Guid, File, State),
                     noreply(adjust_valid_total_size(File, TotalSize, State1))
             end;
-        {_Mask, #msg_location { ref_count = RefCount, file = File }} ->
+        {_Mask, #msg_location { ref_count = RefCount, file = File } = Loc} ->
             %% We already know about it, just update counter. Only
             %% update field otherwise bad interaction with concurrent GC
+            ok = maybe_remove_from_cache(Guid, Loc, Msg, State),
             ok = index_update_ref_count(Guid, RefCount + 1, State),
             noreply(client_confirm_if_on_disk(CRef, Guid, File, State))
     end;
@@ -1107,6 +1111,14 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+
+maybe_remove_from_cache(_Guid, #msg_location { file = CurFile }, _Msg,
+                        #msstate { current_file = CurFile }) ->
+    ok;
+maybe_remove_from_cache(Guid, _Location, Msg,
+                        #msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+    true = ets:delete_object(CurFileCacheEts, {Guid, Msg, 0}),
+    ok.
 
 adjust_valid_total_size(File, Delta, State = #msstate {
                                        sum_valid_data   = SumValid,
