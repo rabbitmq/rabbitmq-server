@@ -61,16 +61,17 @@ init(ProcessorPid) ->
     end.
 
 mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
-    case gen_tcp:recv(Sock, ByteCount) of
-        {ok, Bytes} ->
-            process_received_bytes(Bytes, State);
-        {error, closed} ->
+    rabbit_net:async_recv(Sock, ByteCount, infinity),
+    receive
+        {inet_async, Sock, _Ref, {ok, Data}} ->
+            process_received_bytes(Data, State);
+        {inet_async, Sock, _Ref, {error, closed}} ->
             error_logger:info_msg("Socket ~p closed by client~n", [Sock]),
             ok;
-        {error, ErrCode} ->
+        {inet_async, Sock, _Ref, {error, Reason}} ->
             error_logger:error_msg("Socket ~p closed abruptly with "
                                    "error code ~p~n",
-                                   [Sock, ErrCode]),
+                                   [Sock, Reason]),
             ok
     end.
 
