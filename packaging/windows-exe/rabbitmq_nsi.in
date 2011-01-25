@@ -1,6 +1,9 @@
 ; Use the "Modern" UI
 !include MUI2.nsh
 !include LogicLib.nsh
+!include "winmessages.nsh"
+
+!define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
 
 ;--------------------------------
 
@@ -99,6 +102,8 @@ Section "Uninstall"
   ;RMDir "$SMPROGRAMS\RabbitMQ"
   ;RMDir "$INSTDIR"
 
+  ; TODO: unset ERLANG_HOME?
+
 SectionEnd
 
 ;--------------------------------
@@ -126,7 +131,10 @@ Function findErlang
     Abort
   ${Else}
     ReadRegStr $0 HKLM "Software\Ericsson\Erlang\$2" ""
-    MessageBox MB_OK "Erlang is installed at: $0"
+
+    ; See http://nsis.sourceforge.net/Setting_Environment_Variables
+    WriteRegExpandStr ${env_hklm} ERLANG_HOME $0
+    SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
   ${EndIf}
 
 FunctionEnd
