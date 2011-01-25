@@ -2,8 +2,10 @@
 !include MUI2.nsh
 !include LogicLib.nsh
 !include "winmessages.nsh"
+!include "FileFunc.nsh"
 
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
+!define uninstall "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
 
 ;--------------------------------
 
@@ -14,9 +16,8 @@ Name "RabbitMQ"
 OutFile "rabbitmq-server-v%%VERSION%%.exe"
 
 ; Icons
-Icon "rabbitmq.ico"
-UninstallIcon "rabbitmq.ico"
 !define MUI_ICON "rabbitmq.ico"
+!define MUI_UNICON "rabbitmq.ico"
 
 ; The default installation directory
 InstallDir $PROGRAMFILES\RabbitMQ
@@ -77,10 +78,18 @@ Section "RabbitMQ (required)" Rabbit
   WriteRegStr HKLM SOFTWARE\RabbitMQ "Install_Dir" "$INSTDIR"
 
   ; Write the uninstall keys for Windows
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "DisplayName" "RabbitMQ"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "UninstallString" '"$INSTDIR\uninstall.exe"'
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "NoModify" 1
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "NoRepair" 1
+  WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
+  WriteRegStr HKLM ${uninstall} "UninstallString" "$INSTDIR\uninstall.exe"
+  WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\uninstall.exe,0"
+  WriteRegStr HKLM ${uninstall} "Publisher" "VMware, Inc."
+  WriteRegStr HKLM ${uninstall} "DisplayVersion" "%%VERSION%%"
+  WriteRegDWORD HKLM ${uninstall} "NoModify" 1
+  WriteRegDWORD HKLM ${uninstall} "NoRepair" 1
+
+  ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+  IntFmt $0 "0x%08X" $0
+  WriteRegDWORD HKLM "${uninstall}" "EstimatedSize" "$0"
+
   WriteUninstaller "uninstall.exe"
 SectionEnd
 
@@ -123,7 +132,7 @@ LangString DESC_RabbitStartMenu ${LANG_ENGLISH} "Add some useful links to the st
 Section "Uninstall"
 
   ; Remove registry keys
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
+  DeleteRegKey HKLM ${uninstall}
   DeleteRegKey HKLM SOFTWARE\RabbitMQ
 
   ; TODO these will fail if the service is not installed - do we care?
@@ -148,7 +157,7 @@ SectionEnd
 ; Functions
 
 Function .onInit
-  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "UninstallString"
+  ReadRegStr $0 HKLM ${uninstall} "UninstallString"
   ${If} $0 != ""
     MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "RabbitMQ is already installed. $\n$\nClick `OK` to remove the previous version or `Cancel` to cancel this installation." IDOK uninst
 
