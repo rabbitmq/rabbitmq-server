@@ -85,7 +85,7 @@
 -record(tx,
         { to_pub,           % List of (msg, props) pairs to publish
           to_ack            % List of seq_ids to ack
-	}).        
+        }).        
 
 -record(q_record,           % Temporary whole-queue record in Mnesia
         { key,              % The key: the atom 'q'
@@ -193,7 +193,7 @@ init(QueueName, _IsDurable, _Recover) ->
     QAttributes = record_info(fields, q_record),
     case mnesia:create_table(
            MnesiaQTable,
-	   [{record_name, 'q_record'}, {attributes, QAttributes}])
+           [{record_name, 'q_record'}, {attributes, QAttributes}])
     of
         {atomic, ok} -> ok;
         {aborted, {already_exists, MnesiaQTable}} ->
@@ -204,7 +204,7 @@ init(QueueName, _IsDurable, _Recover) ->
     PAttributes = record_info(fields, p_record),
     case mnesia:create_table(
            MnesiaPTable,
-	   [{record_name, 'p_record'}, {attributes, PAttributes}])
+           [{record_name, 'p_record'}, {attributes, PAttributes}])
     of
         {atomic, ok} -> ok;
         {aborted, {already_exists, MnesiaPTable}} ->
@@ -215,7 +215,7 @@ init(QueueName, _IsDurable, _Recover) ->
     NAttributes = record_info(fields, n_record),
     case mnesia:create_table(
            MnesiaNTable,
-	   [{record_name, 'n_record'}, {attributes, NAttributes}])
+           [{record_name, 'n_record'}, {attributes, NAttributes}])
     of
         {atomic, ok} -> ok;
         {aborted, {already_exists, MnesiaNTable}} ->
@@ -227,7 +227,7 @@ init(QueueName, _IsDurable, _Recover) ->
         mnesia:transaction(
           fun () ->
                   RS = #s { mnesia_tables =
-				{MnesiaQTable, MnesiaPTable, MnesiaNTable},
+                                {MnesiaQTable, MnesiaPTable, MnesiaNTable},
                             q = {just, queue:new()},
                             next_seq_id = {just, 0},
                             p = {just, dict:new()},
@@ -275,7 +275,7 @@ delete_and_terminate(S) ->
           fun () ->
                   S1 = transactional_read_state(S),
                   RS = S1 #s { q = {just, queue:new()},
-			       p = {just, dict:new()} },
+                               p = {just, dict:new()} },
                   transactional_write_state(RS)
           end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -709,29 +709,40 @@ transactional_read_state(
 
 transactional_write_state(S = #s {
                             mnesia_tables =
-				{MnesiaQTable, MnesiaPTable, MnesiaNTable},
+                                {MnesiaQTable, MnesiaPTable, MnesiaNTable},
                             q = {just, Q},
                             next_seq_id = {just, NextSeqId},
                             p = {just, P} }) ->
     ok = mnesia:write(MnesiaQTable, #q_record { key = 'q', q = Q }, 'write'),
     ok = mnesia:write(MnesiaPTable, #p_record { key = 'p', p = P }, 'write'),
     ok = mnesia:write(MnesiaNTable,
-		      #n_record { key = 'n', next_seq_id = NextSeqId },
-		      'write'),
+                      #n_record { key = 'n', next_seq_id = NextSeqId },
+                      'write'),
     S #s { q = nothing, next_seq_id = nothing, p = nothing }.
 
-%%----------------------------------------------------------------------------
-%% Pure helper functions. All Ss have non-nothing qs and ps and
-%% next_seq_ids.
-%% ----------------------------------------------------------------------------
+-spec record_pending_ack_state(m(), s()) -> s().
 
--spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
+record_pending_ack_state(M = #m { seq_id = SeqId },
+                         S = #s { p = {just, P} }) ->
+    S #s { p = {just, dict:store(SeqId, M, P)} }.
 
-internal_queue_out(F, S = #s { q = {just, Q} }) ->
-    case queue:out(Q) of
-        {empty, _} -> {empty, S};
-        {{value, M}, Qa} -> F(M, S #s { q = {just, Qa} })
-    end.
+-spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
+                    [rabbit_guid:guid()],
+                    s()) ->
+                           {[rabbit_guid:guid()], s()}.
+
+internal_ack3(_, [], S) -> {[], S};
+internal_ack3(F, SeqIds, S) ->
+    {AllGuids, S1} =
+        lists:foldl(
+          fun (SeqId, {Acc, Si = #s { p = {just, P} }}) ->
+                  M = dict:fetch(SeqId, P),
+                  {[m_guid(M) | Acc],
+                   F(M, Si #s { p = {just, dict:erase(SeqId, P)} })}
+          end,
+          {[], S},
+          SeqIds),
+    {lists:reverse(AllGuids), S1}.
 
 -spec internal_fetch/3 :: (ack_required(), m(), s()) -> {fetch_result(), s()}.
 
@@ -751,6 +762,11 @@ internal_fetch(AckRequired,
         end,
     {{Msg, IsDelivered, Ack, queue:len(Q)}, S1}.
 
+-spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
+
+internal_ack(SeqIds, S) ->
+    internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
+
 -spec(internal_dropwhile/2 ::
         (fun ((rabbit_types:message_properties()) -> boolean()), s())
         -> {empty | ok, s()}).
@@ -767,11 +783,6 @@ internal_dropwhile(Pred, S) ->
       end,
       S).
 
--spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
-
-internal_ack(SeqIds, S) ->
-    internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
-
 -spec tx_commit_state([rabbit_types:basic_message()],
                       [seq_id()],
                       message_properties_transformer(),
@@ -784,6 +795,19 @@ tx_commit_state(Pubs, SeqIds, PropsF, S) ->
       fun ({Msg, Props}, Si) -> publish_state(Msg, Props, false, Si) end,
       S1,
       [{Msg, PropsF(Props)} || {Msg, Props} <- lists:reverse(Pubs)]).
+
+%%----------------------------------------------------------------------------
+%% Pure helper functions. All Ss have non-nothing qs and ps and
+%% next_seq_ids.
+%% ----------------------------------------------------------------------------
+
+-spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
+
+internal_queue_out(F, S = #s { q = {just, Q} }) ->
+    case queue:out(Q) of
+        {empty, _} -> {empty, S};
+        {{value, M}, Qa} -> F(M, S #s { q = {just, Qa} })
+    end.
 
 -spec m(rabbit_types:basic_message(),
         seq_id(),
@@ -826,30 +850,6 @@ publish_state(Msg,
            queue:in(
                (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q)},
       next_seq_id = {just, SeqId + 1} }.
-
--spec record_pending_ack_state(m(), s()) -> s().
-
-record_pending_ack_state(M = #m { seq_id = SeqId },
-			 S = #s { p = {just, P} }) ->
-    S #s { p = {just, dict:store(SeqId, M, P)} }.
-
--spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
-                    [rabbit_guid:guid()],
-                    s()) ->
-                           {[rabbit_guid:guid()], s()}.
-
-internal_ack3(_, [], S) -> {[], S};
-internal_ack3(F, SeqIds, S) ->
-    {AllGuids, S1} =
-        lists:foldl(
-          fun (SeqId, {Acc, Si = #s { p = {just, P} }}) ->
-                  M = dict:fetch(SeqId, P),
-                  {[m_guid(M) | Acc],
-		   F(M, Si #s { p = {just, dict:erase(SeqId, P)} })}
-          end,
-          {[], S},
-          SeqIds),
-    {lists:reverse(AllGuids), S1}.
 
 -spec m_guid(m()) -> rabbit_guid:guid().
 
