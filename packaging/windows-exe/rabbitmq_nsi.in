@@ -110,6 +110,20 @@ SectionEnd
 
 ; Functions
 
+Function .onInit
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "UninstallString"
+  ${If} $0 != ""
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "RabbitMQ is already installed. $\n$\nClick `OK` to remove the previous version or `Cancel` to cancel this installation." IDOK uninst
+
+    Abort
+
+    ;Run the uninstaller
+    uninst:
+      ClearErrors
+      Exec $INSTDIR\uninstall.exe
+  ${EndIf}
+FunctionEnd
+
 Function findErlang
 
   StrCpy $0 0
