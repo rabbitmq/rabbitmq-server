@@ -73,6 +73,7 @@ Section "RabbitMQ (required)" Rabbit
 
   ; Put files there
   File /r "rabbitmq_server-%%VERSION%%"
+  File "rabbitmq.ico"
 
   ; Write the installation path into the registry
   WriteRegStr HKLM SOFTWARE\RabbitMQ "Install_Dir" "$INSTDIR"
@@ -108,7 +109,10 @@ Section "Start Menu" RabbitStartMenu
   CreateDirectory "$SMPROGRAMS\RabbitMQ"
   CreateShortCut "$SMPROGRAMS\RabbitMQ\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
   CreateShortCut "$SMPROGRAMS\RabbitMQ\Plugins Directory.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\plugins"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Database and Log Directory.lnk" "$APPDATA\RabbitMQ"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Log Directory.lnk" "$APPDATA\RabbitMQ\log"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Database Directory.lnk" "$APPDATA\RabbitMQ\db"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\(Re)Install Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "install" "$INSTDIR\rabbitmq.ico"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ\Remove Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "remove" "$INSTDIR\rabbitmq.ico"
 SectionEnd
 
 ;--------------------------------
