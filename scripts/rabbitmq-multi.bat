@@ -37,7 +37,7 @@ if "!RABBITMQ_NODENAME!"=="" (
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    if not "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_NODE_IP_ADDRESS=auto
+      set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
    )
 ) else (
    if "!RABBITMQ_NODE_PORT!"=="" (
