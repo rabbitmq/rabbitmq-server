@@ -3,6 +3,7 @@
 !include LogicLib.nsh
 !include "winmessages.nsh"
 !include "FileFunc.nsh"
+!include "lib\EnvVarUpdate.nsh"
 
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
 !define uninstall "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
@@ -75,6 +76,9 @@ Section "RabbitMQ (required)" Rabbit
   File /r "rabbitmq_server-%%VERSION%%"
   File "rabbitmq.ico"
 
+  ; Add to PATH
+  ${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
+
   ; Write the installation path into the registry
   WriteRegStr HKLM SOFTWARE\RabbitMQ "Install_Dir" "$INSTDIR"
 
@@ -142,6 +146,9 @@ Section "Uninstall"
   ; TODO these will fail if the service is not installed - do we care?
   ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat stop"
   ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat remove"
+
+  ; Remove from PATH
+  ${un.EnvVarUpdate} $0 "PATH" "R" "HKLM" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
 
   ; Remove files and uninstaller
   RMDir /r "$INSTDIR"
