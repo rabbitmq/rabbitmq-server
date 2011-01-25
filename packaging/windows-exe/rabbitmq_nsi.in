@@ -70,8 +70,6 @@ Section "RabbitMQ (required)" Rabbit
   ; Set output path to the installation directory.
   SetOutPath $INSTDIR
 
-  Call findErlang
-
   ; Put files there
   File /r "rabbitmq_server-%%VERSION%%"
   File "rabbitmq.ico"
@@ -168,6 +166,8 @@ SectionEnd
 ; Functions
 
 Function .onInit
+  Call findErlang
+
   ReadRegStr $0 HKLM ${uninstall} "UninstallString"
   ${If} $0 != ""
     MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "RabbitMQ is already installed. $\n$\nClick `OK` to remove the previous version or `Cancel` to cancel this installation." IDOK uninst
@@ -198,7 +198,9 @@ Function findErlang
   ${Loop}
 
   ${If} $2 = "not-found"
-    MessageBox MB_OK "Erlang could not be detected. Please install it."
+    MessageBox MB_YESNO|MB_ICONEXCLAMATION "Erlang could not be detected.$\nYou must install Erlang before installing RabbitMQ. Would you like the installer to open a browser window to the Erlang download site?" IDNO abort
+    ExecShell "open" "http://www.erlang.org/download.html"
+    abort:
     Abort
   ${Else}
     ReadRegStr $0 HKLM "Software\Ericsson\Erlang\$2" ""
