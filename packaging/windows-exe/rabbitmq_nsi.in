@@ -149,13 +149,12 @@ Section "Uninstall"
   ${un.EnvVarUpdate} $0 "PATH" "R" "HKLM" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
 
   ; Remove files and uninstaller
-  RMDir /r "$INSTDIR"
+  RMDir /r "$INSTDIR\rabbitmq_server-%%VERSION%%"
+  Delete "$INSTDIR\rabbitmq.ico"
+  Delete "$INSTDIR\uninstall.exe"
 
-  ; Remove shortcuts
-  Delete "$SMPROGRAMS\RabbitMQ\*.*"
-
-  ; Remove directories used
-  RMDir "$SMPROGRAMS\RabbitMQ"
+  ; Remove start menu items
+  RMDir /r "$SMPROGRAMS\RabbitMQ"
 
   ; TODO: unset ERLANG_HOME?
 
