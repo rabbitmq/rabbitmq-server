@@ -39,9 +39,14 @@ RequestExecutionLevel admin
 ;  !insertmacro MUI_UNPAGE_FINISH
 
 ;--------------------------------
+;Languages
+
+  !insertmacro MUI_LANGUAGE "English"
+
+;--------------------------------
 
 ; The stuff to install
-Section "RabbitMQ (required)"
+Section "RabbitMQ (required)" Rabbit
 
   SectionIn RO
 
@@ -63,6 +68,16 @@ Section "RabbitMQ (required)"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ" "NoRepair" 1
   WriteUninstaller "uninstall.exe"
 SectionEnd
+
+;--------------------------------
+
+; Section descriptions
+
+LangString DESC_Rabbit ${LANG_ENGLISH} "The RabbitMQ Server."
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${Rabbit} $(DESC_Rabbit)
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ;--------------------------------
 
