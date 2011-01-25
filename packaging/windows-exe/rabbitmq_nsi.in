@@ -14,7 +14,7 @@
 Name "RabbitMQ"
 
 ; The file to write
-OutFile "rabbitmq-server-v%%VERSION%%.exe"
+OutFile "rabbitmq-server-%%VERSION%%.exe"
 
 ; Icons
 !define MUI_ICON "rabbitmq.ico"
