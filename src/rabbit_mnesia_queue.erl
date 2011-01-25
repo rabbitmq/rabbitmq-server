@@ -1,4 +1,4 @@
-%%   The contents of this file are subject to the Mozilla Public License
+
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
 %%   http://www.mozilla.org/MPL/
@@ -76,6 +76,7 @@
         { mnesia_tables,    % Atoms holding the Mnesia table names
           q,                % The M queue (or nothing)
           next_seq_id,      % The next M's seq_id (or nothing)
+          next_out_id,      % The next M's out id (or nothing)
           txn_dict          % In-progress txn->tx map
         }).
 
@@ -101,9 +102,10 @@
           m                 % The value: The M
           }).
 
--record(n_record,           % Temporary next_seq_id record in Mnesia
+-record(n_record,           % next_seq_id & next_out_id record in Mnesia
         { key,              % The key: the atom 'n'
-          next_seq_id       % The Mnesia next_seq_id
+          next_seq_id,      % The Mnesia next_seq_id
+          next_out_id       % The Mnesia next_out_id
           }).
 
 -include("rabbit.hrl").
@@ -122,6 +124,7 @@
 -type(s() :: #s { mnesia_tables :: {atom(), atom(), atom()},
                   q :: maybe(queue()),
                   next_seq_id :: maybe(seq_id()),
+                  next_out_id :: maybe(non_neg_integer()),
                   txn_dict :: dict() }).
 -type(state() :: s()).
 
@@ -141,7 +144,8 @@
                                 m :: m() }).
 
 -type(n_record() :: #n_record { key :: 'n',
-                                next_seq_id :: seq_id() }).
+                                next_seq_id :: seq_id(),
+                                next_out_id :: non_neg_integer() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -188,11 +192,14 @@ stop() -> ok.
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
 %%         -> state()).
 
+%% BUG: Should fsck state, and should drop non-persistent msgs.
+
+%% BUG: It's unfortunate that this can't all be done in a single
+%% Mnesia transaction!
+
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~n ~p,~n _, _) ->", [QueueName]),
     {MnesiaQTable, MnesiaPTable, MnesiaNTable} = mnesia_tables(QueueName),
-    %% It's unfortunate that tables cannot be created or deleted
-    %% within an Mnesia transaction!
     QAttributes = record_info(fields, q_record),
     case mnesia:create_table(
            MnesiaQTable,
@@ -216,23 +223,29 @@ init(QueueName, _IsDurable, _Recover) ->
             ok
     end,
     NAttributes = record_info(fields, n_record),
-    case mnesia:create_table(
-           MnesiaNTable,
-           [{record_name, 'n_record'}, {attributes, NAttributes}])
-    of
-        {atomic, ok} -> ok;
-        {aborted, {already_exists, MnesiaNTable}} ->
-            'n_record' = mnesia:table_info(MnesiaNTable, record_name),
-            NAttributes = mnesia:table_info(MnesiaNTable, attributes),
-            ok
-    end,
+    {NextSeqId, NextOutId} =
+	case mnesia:create_table(
+	       MnesiaNTable,
+	       [{record_name, 'n_record'}, {attributes, NAttributes}])
+	of
+	    {atomic, ok} -> {0, 0};
+	    {aborted, {already_exists, MnesiaNTable}} ->
+		'n_record' = mnesia:table_info(MnesiaNTable, record_name),
+		NAttributes = mnesia:table_info(MnesiaNTable, attributes),
+		[#n_record { key = 'n',
+			     next_seq_id = NextSeqId0,
+			     next_out_id = NextOutId0 }] =
+		    mnesia:dirty_read(MnesiaNTable, 'n'),
+		{NextSeqId0, NextOutId0}
+	end,
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
                   RS = #s { mnesia_tables =
                                 {MnesiaQTable, MnesiaPTable, MnesiaNTable},
                             q = {just, queue:new()},
-                            next_seq_id = {just, 0},
+                            next_seq_id = {just, NextSeqId},
+                            next_out_id = {just, NextOutId},
                             txn_dict = dict:new() },
                   transactional_write_state(RS)
           end),
@@ -240,9 +253,10 @@ init(QueueName, _IsDurable, _Recover) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% terminate/1 is called on queue shutdown when the queue isn't being
-%% deleted. This function creates an Mnesia transaction to run in, and
-%% therefore may not be called from inside another Mnesia transaction.
+%% terminate/1 is called when the queue is terminating, to delete all
+%% of its enqueued msgs. This function creates an Mnesia transaction
+%% to run in, and therefore may not be called from inside another
+%% Mnesia transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
@@ -260,17 +274,12 @@ terminate(S = #s { mnesia_tables = {_, MnesiaPTable, _} }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% delete_and_terminate/1 is called when the queue is terminating and
-%% needs to delete all its content. The only difference between purge
-%% and delete is that delete also needs to delete everything that's
-%% been delivered and not ack'd. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% delete_and_terminate/1 is called when the queue is terminating, to
+%% delete all of its enqueued msgs and pending acks. This function
+%% creates an Mnesia transaction to run in, and therefore may not be
+%% called from inside another Mnesia transaction.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
-
-%% the only difference between purge and delete is that delete also
-%% needs to delete everything that's been delivered and not ack'd.
 
 delete_and_terminate(S = #s { mnesia_tables = {_, MnesiaPTable, _} }) ->
     rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
@@ -286,10 +295,10 @@ delete_and_terminate(S = #s { mnesia_tables = {_, MnesiaPTable, _} }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% purge/1 removes all msgs in the queue, but not msgs that have been
-%% fetched and are pending acks. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% purge/1 does the same as terminate/1, but also returns the count of
+%% msgs purged. This function creates an Mnesia transaction to run in,
+%% and therefore may not be called from inside another Mnesia
+%% transaction.
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
@@ -330,13 +339,12 @@ publish(Msg, Props, S) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% publish_delivered/4 is called for msgs that have already been
-%% passed straight out to a client. The queue will be empty for these
-%% calls (saving the round trip through the backing queue). All msgs
-%% are silently treated as non-persistent. This function creates an
-%% Mnesia transaction to run in, and therefore may not be called from
-%% inside another Mnesia transaction. All msgs are silently treated as
-%% persistent.
+%% publish_delivered/4 is called for any msg that has already been
+%% passed straight out to a client because the queue is empty. All
+%% msgs are silently treated as persistent. We update all state (e.g.,
+%% next_seq_id) as if we had in fact handled the msg. This function
+%% creates an Mnesia transaction to run in, and therefore may not be
+%% called from inside another Mnesia transaction.
 %%
 %% -spec(publish_delivered/4 ::
 %%         (ack_required(),
@@ -356,11 +364,13 @@ publish_delivered(true, Msg, Props, S) ->
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  S1 = #s { next_seq_id = {just, SeqId} } =
+                  S1 = #s { next_seq_id = {just, SeqId},
+			    next_out_id = {just, OutId}} =
                       transactional_read_state(S),
                   RS = (record_pending_ack_state(
                        (m(Msg, SeqId, Props)) #m { is_delivered = true }, S1))
-                      #s { next_seq_id = {just, SeqId + 1} },
+                      #s { next_seq_id = {just, SeqId + 1},
+			   next_out_id = {just, OutId + 1}},
                   {SeqId, transactional_write_state(RS)}
           end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -684,7 +694,7 @@ status(S = #s { mnesia_tables = {_, MnesiaPTable, _} }) ->
 
 %%----------------------------------------------------------------------------
 %% Monadic helper functions for inside transactions. All Ss have
-%% non-nothing qs and next_seq_ids.
+%% non-nothing qs and next_seq_ids and next_out_ids.
 %% ----------------------------------------------------------------------------
 
 -spec transactional_read_state(s()) -> s().
@@ -692,23 +702,31 @@ status(S = #s { mnesia_tables = {_, MnesiaPTable, _} }) ->
 transactional_read_state(
   S = #s { mnesia_tables = {MnesiaQTable, _, MnesiaNTable},
            q = nothing,
-           next_seq_id = nothing }) ->
+           next_seq_id = nothing,
+           next_out_id = nothing}) ->
     [#q_record { key = 'q', q = Q }] = mnesia:read(MnesiaQTable, 'q', 'read'),
-    [#n_record { key = 'n', next_seq_id = NextSeqId }] =
+    [#n_record {key = 'n',
+                next_seq_id = NextSeqId,
+                next_out_id = NextOutId }] =
         mnesia:read(MnesiaNTable, 'n', 'read'),
-    S #s { q = {just, Q}, next_seq_id = {just, NextSeqId} }.
+    S #s { q = {just, Q},
+           next_seq_id = {just, NextSeqId},
+           next_out_id = {just, NextOutId} }.
 
 -spec transactional_write_state(s()) -> s().
 
 transactional_write_state(S = #s {
                             mnesia_tables = {MnesiaQTable, _, MnesiaNTable},
                             q = {just, Q},
-                            next_seq_id = {just, NextSeqId} }) ->
+                            next_seq_id = {just, NextSeqId},
+                            next_out_id = {just, NextOutId} }) ->
     ok = mnesia:write(MnesiaQTable, #q_record { key = 'q', q = Q }, 'write'),
     ok = mnesia:write(MnesiaNTable,
-                      #n_record { key = 'n', next_seq_id = NextSeqId },
+                      #n_record { key = 'n',
+                                  next_seq_id = NextSeqId,
+                                  next_out_id = NextOutId },
                       'write'),
-    S #s { q = nothing, next_seq_id = nothing }.
+    S #s { q = nothing, next_seq_id = nothing, next_out_id = nothing }.
 
 -spec record_pending_ack_state(m(), s()) -> s().
 
@@ -769,7 +787,7 @@ internal_dropwhile(Pred, S) ->
                   true ->
                       {_, Si1} = internal_fetch(false, M, Si),
                       internal_dropwhile(Pred, Si1);
-                  false -> {ok, Si #s {q = {just,queue:in_r(M, Q)} }}
+                  false -> {ok, Si #s {q = {just, queue:in_r(M, Q)} }}
               end
       end,
       S).
@@ -801,10 +819,6 @@ internal_clear_table(Table) ->
                internal_clear_table(Table)
         end.
 
-%%----------------------------------------------------------------------------
-%% Pure helper functions. All Ss have non-nothing qs and next_seq_ids.
-%% ----------------------------------------------------------------------------
-
 -spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
 
 internal_queue_out(F, S = #s { q = {just, Q} }) ->
@@ -812,6 +826,11 @@ internal_queue_out(F, S = #s { q = {just, Q} }) ->
         {empty, _} -> {empty, S};
         {{value, M}, Qa} -> F(M, S #s { q = {just, Qa} })
     end.
+
+%%----------------------------------------------------------------------------
+%% Pure helper functions. All Ss have non-nothing qs and next_seq_ids
+%% and next_out_ids.
+%% ----------------------------------------------------------------------------
 
 -spec m(rabbit_types:basic_message(),
         seq_id(),
@@ -848,12 +867,15 @@ erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
 publish_state(Msg,
               Props,
               IsDelivered,
-              S = #s { q = {just, Q}, next_seq_id = {just, SeqId} }) ->
+              S = #s { q = {just, Q},
+                       next_seq_id = {just, SeqId},
+                       next_out_id = {just, OutId} }) ->
     S #s {
       q = {just,
            queue:in(
                (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q)},
-      next_seq_id = {just, SeqId + 1} }.
+      next_seq_id = {just, SeqId + 1},
+      next_out_id = {just, OutId + 1} }.
 
 -spec m_guid(m()) -> rabbit_guid:guid().
 
