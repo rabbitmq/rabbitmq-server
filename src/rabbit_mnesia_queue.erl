@@ -118,6 +118,8 @@
 
 %% -ifdef(use_specs).
 
+-type(maybe(T) :: nothing | {just, T}).
+
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
@@ -412,11 +414,10 @@ fetch(AckRequired, S) ->
         mnesia:transaction(
           fun () ->
                   {DR, RS} =
-                      internal_queue_out(
-                        fun (M, Si) ->
-                                internal_finish_fetch(AckRequired, M, Si)
-                        end,
-                        S),
+                      case mnesia_pop(S) of
+                          nothing -> {empty, S};
+                          {just, M} -> internal_finish_fetch(AckRequired, M, S)
+                      end,
                   mnesia_save(RS),
                   {DR, RS}
           end),
@@ -703,6 +704,17 @@ mnesia_save(#s { n_table = NTable,
                                   next_out_id = NextOutId },
                       'write').
 
+-spec mnesia_pop(s()) -> maybe(m()).
+
+mnesia_pop(#s { q_table = QTable }) ->
+    case mnesia:first(QTable) of
+        '$end_of_table' -> nothing;
+        OutId -> [#q_record { out_id = OutId, m = M }] =
+                     mnesia:read(QTable, OutId, 'read'),
+                 mnesia:delete(QTable, OutId, 'write'),
+                 {just, M}
+    end.
+
 -spec mnesia_add_p(m(), s()) -> ok.
 
 mnesia_add_p(M = #m { seq_id = SeqId }, #s { p_table = PTable }) ->
@@ -754,18 +766,18 @@ internal_ack(SeqIds, S) -> internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
         -> {empty | ok, s()}).
 
 internal_dropwhile(Pred, S = #s { q_table = QTable }) ->
-    internal_queue_out(
-      fun (M = #m { props = Props }, Si) ->
-              case Pred(Props) of
-                  true -> {_, Si1} = internal_finish_fetch(false, M, Si),
-                          internal_dropwhile(Pred, Si1);
-                  false -> mnesia:write(QTable,
-                                        #q_record { out_id = 0, m = M },
-                                        'write'),
-                           {ok, Si}
-              end
-      end,
-      S).
+    case mnesia_pop(S) of
+        nothing -> {empty, S};
+        {just, M = #m { props = Props }} ->
+            case Pred(Props) of
+                true -> {_, S1} = internal_finish_fetch(false, M, S),
+                        internal_dropwhile(Pred, S1);
+                false -> mnesia:write(QTable,
+                                      #q_record { out_id = 0, m = M },
+                                      'write')
+            end,
+            {ok, S}
+    end.
 
 -spec tx_commit_state([rabbit_types:basic_message()],
                       [seq_id()],
@@ -793,17 +805,6 @@ internal_clear_table(Table) ->
         Key -> mnesia:delete(Table, Key, 'write'),
                internal_clear_table(Table)
         end.
-
--spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
-
-internal_queue_out(F, S = #s { q_table = QTable }) ->
-    case mnesia:first(QTable) of
-        '$end_of_table' -> {empty, S};
-        OutId -> [#q_record { out_id = OutId, m = M }] =
-                     mnesia:read(QTable, OutId, 'read'),
-                 mnesia:delete(QTable, OutId, 'write'),
-                 F(M, S)
-    end.
 
 -spec publish_state(rabbit_types:basic_message(),
                     rabbit_types:message_properties(),
