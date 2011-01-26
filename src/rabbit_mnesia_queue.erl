@@ -74,9 +74,9 @@
 -behaviour(rabbit_backing_queue).
 
 -record(s,                  % The in-RAM queue state
-        { mnesia_q_table,   % The Mnesia Q table name
-          mnesia_p_table,   % The Mnesia P table name
-          mnesia_n_table,   % The Mnesia N table name
+        { q_table,          % The Mnesia queue table name
+          p_table,          % The Mnesia pending-ack table name
+          n_table,          % The Mnesia next_(seq_id, out_id) table name
           next_seq_id,      % The next M's seq_id
           next_out_id,      % The next M's out id
           txn_dict          % In-progress txn->tx map
@@ -121,9 +121,9 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id() | 'blank_ack').
 
--type(s() :: #s { mnesia_q_table :: atom(),
-                  mnesia_p_table :: atom(),
-                  mnesia_n_table :: atom(),
+-type(s() :: #s { q_table :: atom(),
+                  p_table :: atom(),
+                  n_table :: atom(),
                   next_seq_id :: seq_id(),
                   next_out_id :: non_neg_integer(),
                   txn_dict :: dict() }).
@@ -200,56 +200,56 @@ stop() -> ok.
 
 init(QueueName, _IsDurable, _Recover) ->
     rabbit_log:info("init(~n ~p,~n _, _) ->", [QueueName]),
-    {MnesiaQTable, MnesiaPTable, MnesiaNTable} = mnesia_tables(QueueName),
+    {QTable, PTable, NTable} = mnesia_tables(QueueName),
     QAttributes = record_info(fields, q_record),
-    case mnesia:create_table(
-           MnesiaQTable,
-           [{record_name, 'q_record'},
-            {attributes, QAttributes},
-            {type, ordered_set}])
+    case mnesia:create_table(QTable,
+                             [{record_name, 'q_record'},
+                              {attributes, QAttributes},
+                              {type, ordered_set}])
     of
         {atomic, ok} -> ok;
-        {aborted, {already_exists, MnesiaQTable}} ->
-            'q_record' = mnesia:table_info(MnesiaQTable, record_name),
-            QAttributes = mnesia:table_info(MnesiaQTable, attributes),
+        {aborted, {already_exists, QTable}} ->
+            'q_record' = mnesia:table_info(QTable, record_name),
+            QAttributes = mnesia:table_info(QTable, attributes),
             ok
     end,
     PAttributes = record_info(fields, p_record),
     case mnesia:create_table(
-           MnesiaPTable,
+           PTable,
            [{record_name, 'p_record'}, {attributes, PAttributes}])
     of
         {atomic, ok} -> ok;
-        {aborted, {already_exists, MnesiaPTable}} ->
-            'p_record' = mnesia:table_info(MnesiaPTable, record_name),
-            PAttributes = mnesia:table_info(MnesiaPTable, attributes),
+        {aborted, {already_exists, PTable}} ->
+            'p_record' = mnesia:table_info(PTable, record_name),
+            PAttributes = mnesia:table_info(PTable, attributes),
             ok
     end,
     NAttributes = record_info(fields, n_record),
     {NextSeqId, NextOutId} =
         case mnesia:create_table(
-               MnesiaNTable,
+               NTable,
                [{record_name, 'n_record'}, {attributes, NAttributes}])
         of
             {atomic, ok} -> {0, 0};
-            {aborted, {already_exists, MnesiaNTable}} ->
-                'n_record' = mnesia:table_info(MnesiaNTable, record_name),
-                NAttributes = mnesia:table_info(MnesiaNTable, attributes),
+            {aborted, {already_exists, NTable}} ->
+                'n_record' = mnesia:table_info(NTable, record_name),
+                NAttributes = mnesia:table_info(NTable, attributes),
                 [#n_record { key = 'n',
                              next_seq_id = NextSeqId0,
                              next_out_id = NextOutId0 }] =
-                    mnesia:dirty_read(MnesiaNTable, 'n'),
+                    mnesia:dirty_read(NTable, 'n'),
                 {NextSeqId0, NextOutId0}
         end,
     {atomic, Result} =
         mnesia:transaction(fun () ->
-                                   RS = #s { mnesia_q_table = MnesiaQTable,
-                                             mnesia_p_table = MnesiaPTable,
-                                             mnesia_n_table = MnesiaNTable,
+                                   RS = #s { q_table = QTable,
+                                             p_table = PTable,
+                                             n_table = NTable,
                                              next_seq_id = NextSeqId,
                                              next_out_id = NextOutId,
                                              txn_dict = dict:new() },
-                                   transactional_save_state(RS)
+                                   mnesia_save(RS),
+                                   RS
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -262,13 +262,14 @@ init(QueueName, _IsDurable, _Recover) ->
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
-terminate(S = #s { mnesia_p_table = MnesiaPTable }) ->
+terminate(S = #s { p_table = PTable }) ->
     rabbit_log:info("terminate(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () ->
-                                   internal_clear_table(MnesiaPTable),
+                                   internal_clear_table(PTable),
                                    RS = S,
-                                   transactional_save_state(RS)
+                                   mnesia_save(RS),
+                                   RS
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -281,15 +282,15 @@ terminate(S = #s { mnesia_p_table = MnesiaPTable }) ->
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
-delete_and_terminate(S = #s { mnesia_q_table = MnesiaQTable,
-                              mnesia_p_table = MnesiaPTable }) ->
+delete_and_terminate(S = #s { q_table = QTable, p_table = PTable }) ->
     rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () ->
-                                   internal_clear_table(MnesiaPTable),
-                                   internal_clear_table(MnesiaQTable),
+                                   internal_clear_table(PTable),
+                                   internal_clear_table(QTable),
                                    RS = S,
-                                   transactional_save_state(RS)
+                                   mnesia_save(RS),
+                                   RS
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -302,14 +303,15 @@ delete_and_terminate(S = #s { mnesia_q_table = MnesiaQTable,
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
-purge(S = #s { mnesia_q_table = MnesiaQTable }) ->
+purge(S = #s { q_table = QTable }) ->
     rabbit_log:info("purge(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () ->
-                                   LQ = length(mnesia:all_keys(MnesiaQTable)),
-                                   internal_clear_table(MnesiaQTable),
+                                   LQ = length(mnesia:all_keys(QTable)),
+                                   internal_clear_table(QTable),
                                    RS = S,
-                                   {LQ, transactional_save_state(RS)}
+                                   mnesia_save(RS),
+                                   {LQ, RS}
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -330,7 +332,8 @@ publish(Msg, Props, S) ->
     {atomic, Result} =
         mnesia:transaction(fun () ->
                                    RS = publish_state(Msg, Props, false, S),
-                                   transactional_save_state(RS)
+                                   mnesia_save(RS),
+                                   RS
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -363,10 +366,12 @@ publish_delivered(true,
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  RS = (record_pending_ack_state(
-                       (m(Msg, SeqId, Props)) #m { is_delivered = true }, S))
-                      #s { next_seq_id = SeqId + 1, next_out_id = OutId + 1 },
-                  {SeqId, transactional_save_state(RS)}
+                  mnesia_add_p(
+                       (m(Msg, SeqId, Props)) #m { is_delivered = true }, S),
+                  RS = S #s { next_seq_id = SeqId + 1,
+                              next_out_id = OutId + 1 },
+                  mnesia_save(RS),
+                  {SeqId, RS}
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -387,7 +392,8 @@ dropwhile(Pred, S) ->
     {atomic, {_, Result}} =
         mnesia:transaction(fun () ->
                                    {Atom, RS} = internal_dropwhile(Pred, S),
-                                   {Atom, transactional_save_state(RS)}
+                                   mnesia_save(RS),
+                                   {Atom, RS}
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -407,9 +413,12 @@ fetch(AckRequired, S) ->
           fun () ->
                   {DR, RS} =
                       internal_queue_out(
-                        fun (M, Si) -> internal_fetch(AckRequired, M, Si) end,
+                        fun (M, Si) ->
+                                internal_finish_fetch(AckRequired, M, Si)
+                        end,
                         S),
-                  {DR, transactional_save_state(RS)}
+                  mnesia_save(RS),
+                  {DR, RS}
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -428,7 +437,8 @@ ack(SeqIds, S) ->
     {atomic, Result} =
         mnesia:transaction(fun () ->
                                    {Guids, RS} = internal_ack(SeqIds, S),
-                                   {Guids, transactional_save_state(RS)}
+                                   mnesia_save(RS),
+                                   {Guids, RS}
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -457,7 +467,8 @@ tx_publish(Txn, Msg, Props, S) ->
                   RS = store_tx(Txn,
                                 Tx #tx { to_pub = [{Msg, Props} | Pubs] },
                                 S),
-                  transactional_save_state(RS)
+                  mnesia_save(RS),
+                  RS
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -483,7 +494,8 @@ tx_ack(Txn, SeqIds, S) ->
                                 Tx #tx {
                                   to_ack = lists:append(SeqIds, SeqIds0) },
                                 S),
-                  transactional_save_state(RS)
+                  mnesia_save(RS),
+                  RS
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -505,7 +517,8 @@ tx_rollback(Txn, S) ->
         mnesia:transaction(fun () ->
                                    #tx { to_ack = SeqIds } = lookup_tx(Txn, S),
                                    RS = erase_tx(Txn, S),
-                                   {SeqIds, transactional_save_state(RS)}
+                                   mnesia_save(RS),
+                                   {SeqIds, RS}
                            end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -536,7 +549,8 @@ tx_commit(Txn, F, PropsF, S) ->
                   #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S),
                   RS =
                       tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S)),
-                  {SeqIds, transactional_save_state(RS)}
+                  mnesia_save(RS),
+                  {SeqIds, RS}
           end),
     F(),
     rabbit_log:info(" -> ~p", [Result]),
@@ -565,7 +579,8 @@ requeue(SeqIds, PropsF, S) ->
                         end,
                         SeqIds,
                         S),
-                  transactional_save_state(RS)
+                  mnesia_save(RS),
+                  RS
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
@@ -577,11 +592,11 @@ requeue(SeqIds, PropsF, S) ->
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
-len(S = #s { mnesia_q_table = MnesiaQTable }) ->
+len(S = #s { q_table = QTable }) ->
     rabbit_log:info("len(~n ~p) ->", [S]),
     {atomic, Result} = mnesia:transaction(
                          fun () ->
-                                 LQ = length(mnesia:all_keys(MnesiaQTable)),
+                                 LQ = length(mnesia:all_keys(QTable)),
                                  LQ
                          end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -595,11 +610,11 @@ len(S = #s { mnesia_q_table = MnesiaQTable }) ->
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
-is_empty(S = #s { mnesia_q_table = MnesiaQTable }) ->
+is_empty(S = #s { q_table = QTable }) ->
     rabbit_log:info("is_empty(~n ~p)", [S]),
     {atomic, Result} = mnesia:transaction(
                          fun () ->
-                                 LQ = length(mnesia:all_keys(MnesiaQTable)),
+                                 LQ = length(mnesia:all_keys(QTable)),
                                  LQ == 0
                          end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -660,15 +675,14 @@ handle_pre_hibernate(S) -> S.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(S = #s { mnesia_q_table = MnesiaQTable,
-                mnesia_p_table = MnesiaPTable,
+status(S = #s { q_table = QTable, p_table = PTable,
                 next_seq_id = NextSeqId }) ->
     rabbit_log:info("status(~n ~p)", [S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  LQ = length(mnesia:all_keys(MnesiaQTable)),
-                  LP = length(mnesia:all_keys(MnesiaPTable)),
+                  LQ = length(mnesia:all_keys(QTable)),
+                  LP = length(mnesia:all_keys(PTable)),
                   [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}]
           end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -678,56 +692,55 @@ status(S = #s { mnesia_q_table = MnesiaQTable,
 %% Monadic helper functions for inside transactions.
 %% ----------------------------------------------------------------------------
 
--spec transactional_save_state(s()) -> s().
+-spec mnesia_save(s()) -> ok.
 
-transactional_save_state(S = #s { mnesia_n_table = MnesiaNTable,
-                                  next_seq_id = NextSeqId,
-                                  next_out_id = NextOutId }) ->
-    ok = mnesia:write(MnesiaNTable,
+mnesia_save(#s { n_table = NTable,
+                 next_seq_id = NextSeqId,
+                 next_out_id = NextOutId }) ->
+    ok = mnesia:write(NTable,
                       #n_record { key = 'n',
                                   next_seq_id = NextSeqId,
                                   next_out_id = NextOutId },
-                      'write'),
-    S.
+                      'write').
 
--spec record_pending_ack_state(m(), s()) -> s().
+-spec mnesia_add_p(m(), s()) -> ok.
 
-record_pending_ack_state(M = #m { seq_id = SeqId },
-                         S = #s { mnesia_p_table = MnesiaPTable }) ->
-    mnesia:write(MnesiaPTable, #p_record { seq_id = SeqId, m = M }, 'write'),
-    S.
+mnesia_add_p(M = #m { seq_id = SeqId }, #s { p_table = PTable }) ->
+    mnesia:write(PTable, #p_record { seq_id = SeqId, m = M }, 'write'),
+    ok.
 
 -spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
                     [rabbit_guid:guid()],
                     s()) ->
                            {[rabbit_guid:guid()], s()}.
 
-internal_ack3(F, SeqIds, S = #s { mnesia_p_table = MnesiaPTable }) ->
+internal_ack3(F, SeqIds, S = #s { p_table = PTable }) ->
     {AllGuids, S1} =
         lists:foldl(fun (SeqId, {Acc, Si}) ->
                             [#p_record { m = M }] =
-                                mnesia:read(MnesiaPTable, SeqId, 'read'),
-                            mnesia:delete(MnesiaPTable, SeqId, 'write'),
+                                mnesia:read(PTable, SeqId, 'read'),
+                            mnesia:delete(PTable, SeqId, 'write'),
                             {[m_guid(M) | Acc], F(M, Si)}
                     end,
                     {[], S},
                     SeqIds),
     {lists:reverse(AllGuids), S1}.
 
--spec internal_fetch/3 :: (ack_required(), m(), s()) -> {fetch_result(), s()}.
+-spec internal_finish_fetch/3 :: (ack_required(), m(), s()) ->
+                                         {fetch_result(), s()}.
 
-internal_fetch(AckRequired,
-               M = #m {
-                 seq_id = SeqId,
-                 msg = Msg,
-                 is_delivered = IsDelivered },
-               S = #s { mnesia_q_table = MnesiaQTable }) ->
-    LQ = length(mnesia:all_keys(MnesiaQTable)),
+internal_finish_fetch(AckRequired,
+                      M = #m {
+                        seq_id = SeqId,
+                        msg = Msg,
+                        is_delivered = IsDelivered },
+                      S = #s { q_table = QTable }) ->
+    LQ = length(mnesia:all_keys(QTable)),
     {Ack, S1} =
         case AckRequired of
             true ->
-                {SeqId,
-                 record_pending_ack_state(M #m { is_delivered = true }, S)};
+                mnesia_add_p(M #m { is_delivered = true }, S),
+                {SeqId, S};
             false -> {blank_ack, S}
         end,
     {{Msg, IsDelivered, Ack, LQ}, S1}.
@@ -740,13 +753,13 @@ internal_ack(SeqIds, S) -> internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
         (fun ((rabbit_types:message_properties()) -> boolean()), s())
         -> {empty | ok, s()}).
 
-internal_dropwhile(Pred, S = #s { mnesia_q_table = MnesiaQTable }) ->
+internal_dropwhile(Pred, S = #s { q_table = QTable }) ->
     internal_queue_out(
       fun (M = #m { props = Props }, Si) ->
               case Pred(Props) of
-                  true -> {_, Si1} = internal_fetch(false, M, Si),
+                  true -> {_, Si1} = internal_finish_fetch(false, M, Si),
                           internal_dropwhile(Pred, Si1);
-                  false -> mnesia:write(MnesiaQTable,
+                  false -> mnesia:write(QTable,
                                         #q_record { out_id = 0, m = M },
                                         'write'),
                            {ok, Si}
@@ -783,12 +796,12 @@ internal_clear_table(Table) ->
 
 -spec internal_queue_out(fun ((m(), s()) -> T), s()) -> {empty, s()} | T.
 
-internal_queue_out(F, S = #s { mnesia_q_table = MnesiaQTable }) ->
-    case mnesia:first(MnesiaQTable) of
+internal_queue_out(F, S = #s { q_table = QTable }) ->
+    case mnesia:first(QTable) of
         '$end_of_table' -> {empty, S};
         OutId -> [#q_record { out_id = OutId, m = M }] =
-                     mnesia:read(MnesiaQTable, OutId, 'read'),
-                 mnesia:delete(MnesiaQTable, OutId, 'write'),
+                     mnesia:read(QTable, OutId, 'read'),
+                 mnesia:delete(QTable, OutId, 'write'),
                  F(M, S)
     end.
 
@@ -801,11 +814,11 @@ internal_queue_out(F, S = #s { mnesia_q_table = MnesiaQTable }) ->
 publish_state(Msg,
               Props,
               IsDelivered,
-              S = #s { mnesia_q_table = MnesiaQTable,
+              S = #s { q_table = QTable,
                        next_seq_id = SeqId,
                        next_out_id = OutId }) ->
     M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
-    mnesia:write(MnesiaQTable, #q_record { out_id = OutId, m = M }, 'write'),
+    mnesia:write(QTable, #q_record { out_id = OutId, m = M }, 'write'),
     S #s { next_seq_id = SeqId + 1, next_out_id = OutId + 1 }.
 
 %%----------------------------------------------------------------------------
