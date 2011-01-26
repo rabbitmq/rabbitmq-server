@@ -414,7 +414,7 @@ fetch(AckRequired, S) ->
         mnesia:transaction(
           fun () ->
                   {DR, RS} =
-                      case mnesia_pop(S) of
+                      case mnesia_q_pop(S) of
                           nothing -> {empty, S};
                           {just, M} -> internal_finish_fetch(AckRequired, M, S)
                       end,
@@ -704,14 +704,24 @@ mnesia_save(#s { n_table = NTable,
                                   next_out_id = NextOutId },
                       'write').
 
--spec mnesia_pop(s()) -> maybe(m()).
+-spec mnesia_q_pop(s()) -> maybe(m()).
 
-mnesia_pop(#s { q_table = QTable }) ->
+mnesia_q_pop(#s { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
         OutId -> [#q_record { out_id = OutId, m = M }] =
                      mnesia:read(QTable, OutId, 'read'),
                  mnesia:delete(QTable, OutId, 'write'),
+                 {just, M}
+    end.
+
+-spec mnesia_q_peek(s()) -> maybe(m()).
+
+mnesia_q_peek(#s { q_table = QTable }) ->
+    case mnesia:first(QTable) of
+        '$end_of_table' -> nothing;
+        OutId -> [#q_record { out_id = OutId, m = M }] =
+                     mnesia:read(QTable, OutId, 'read'),
                  {just, M}
     end.
 
@@ -765,18 +775,16 @@ internal_ack(SeqIds, S) -> internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
         (fun ((rabbit_types:message_properties()) -> boolean()), s())
         -> {empty | ok, s()}).
 
-internal_dropwhile(Pred, S = #s { q_table = QTable }) ->
-    case mnesia_pop(S) of
+internal_dropwhile(Pred, S) ->
+    case mnesia_q_peek(S) of
         nothing -> {empty, S};
         {just, M = #m { props = Props }} ->
             case Pred(Props) of
-                true -> {_, S1} = internal_finish_fetch(false, M, S),
+                true -> _ = mnesia_q_pop(S),
+                        {_, S1} = internal_finish_fetch(false, M, S),
                         internal_dropwhile(Pred, S1);
-                false -> mnesia:write(QTable,
-                                      #q_record { out_id = 0, m = M },
-                                      'write')
-            end,
-            {ok, S}
+                false -> {ok, S}
+            end
     end.
 
 -spec tx_commit_state([rabbit_types:basic_message()],
