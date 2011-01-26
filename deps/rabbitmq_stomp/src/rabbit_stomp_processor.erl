@@ -127,7 +127,14 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
-    {noreply, send_delivery(Delivery, Props, Payload, State)}.
+    {noreply, send_delivery(Delivery, Props, Payload, State)};
+handle_info({inet_reply, _, ok}, State) ->
+    {noreply, State};
+handle_info({inet_reply, _, Status}, State) ->
+    {stop, Status, State};
+handle_info(Other, State) ->
+    {stop, because, State}.
+
 
 process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
@@ -353,7 +360,6 @@ do_subscribe(Destination, DestHdr, Frame,
                              no_ack       = (AckMode == auto),
                              exclusive    = false},
                            self()),
-
     ExchangeAndKey = rabbit_stomp_util:parse_routing_information(Destination),
     ok = ensure_queue_binding(Queue, ExchangeAndKey, Channel),
 
@@ -668,17 +674,8 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     %% We ignore certain errors here, as we will be receiving an
     %% asynchronous notification of the same (or a related) fault
     %% shortly anyway. See bug 21365.
-    %% io:format("Sending ~p~n", [Frame]),
-    case gen_tcp:send(Sock, rabbit_stomp_frame:serialize(Frame)) of
-        ok -> State;
-        {error, closed} -> State;
-        {error, enotconn} -> State;
-        {error, Code} ->
-            error_logger:error_msg("Error sending STOMP frame ~p: ~p~n",
-                                   [Frame#stomp_frame.command,
-                                    Code]),
-            State
-    end.
+    rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)),
+    State.
 
 send_error(Message, Detail, State) ->
     send_frame("ERROR", [{"message", Message},

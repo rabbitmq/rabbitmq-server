@@ -73,7 +73,8 @@ class TestQueue(base.BaseTest):
         d = '/queue/test3'
 
         # send
-        self.conn.send("hello thar", destination=d)
+        self.conn.send("hello thar", destination=d, receipt="foo")
+        self.listener.await(3)
         self.conn.stop()
 
         # now receive
@@ -83,7 +84,7 @@ class TestQueue(base.BaseTest):
             conn2.set_listener('', listener2)
 
             conn2.subscribe(destination=d)
-            self.assertTrue(listener2.await(5), "no receive")
+            self.assertTrue(listener2.await(10), "no receive")
         finally:
             conn2.stop()
 
