@@ -111,13 +111,13 @@ message_headers(Destination, SessionId,
               <<"T_", Id/binary>> ->
                   [{"subscription", binary_to_list(Id)} | Basic]
           end,
-          [{?HEADER_CONTENT_TYPE, #'P_basic'.content_type},
+          [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
            {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
-           {?HEADER_DELIVERY_MODE, #'P_basic'.delivery_mode},
-           {?HEADER_PRIORITY, #'P_basic'.priority},
-           {?HEADER_CORRELATION_ID, #'P_basic'.correlation_id},
-           {?HEADER_REPLY_TO, #'P_basic'.reply_to},
-           {?HEADER_AMQP_MESSAGE_ID, #'P_basic'.message_id}]),
+           {?HEADER_DELIVERY_MODE,    #'P_basic'.delivery_mode},
+           {?HEADER_PRIORITY,         #'P_basic'.priority},
+           {?HEADER_CORRELATION_ID,   #'P_basic'.correlation_id},
+           {?HEADER_REPLY_TO,         #'P_basic'.reply_to},
+           {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id}]),
 
     adhoc_convert_headers(Headers, Standard).
 
