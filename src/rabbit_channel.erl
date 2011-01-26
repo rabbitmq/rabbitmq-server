@@ -735,7 +735,8 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
 handle_method(#'basic.recover_async'{requeue = true},
-              _, State = #ch{unacked_message_q = UAMQ}) ->
+              _, State = #ch{unacked_message_q = UAMQ,
+                             limiter_pid = LimiterPid}) ->
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    %% The Qpid python test suite incorrectly assumes
@@ -745,6 +746,7 @@ handle_method(#'basic.recover_async'{requeue = true},
                    rabbit_amqqueue:requeue(
                      QPid, lists:reverse(MsgIds), self())
            end, ok, UAMQ),
+    ok = notify_limiter(LimiterPid, UAMQ),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
