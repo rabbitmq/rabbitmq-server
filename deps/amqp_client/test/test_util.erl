@@ -412,13 +412,14 @@ basic_qos_test(Connection, Prefetch) ->
 confirm_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
-    amqp_channel:register_ack_handler(Channel, self()),
+    amqp_channel:register_confirm_handler(Channel, self()),
     io:format("Registered ~p~n", [self()]),
     {ok, Q} = setup_publish(Channel),
     {#'basic.get_ok'{}, _}
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
     ok = receive
-             #'basic.ack'{} -> ok
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
          after 2000 ->
                  exit(did_not_receive_pub_ack)
          end,

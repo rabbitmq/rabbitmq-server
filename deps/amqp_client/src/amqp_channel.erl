@@ -33,7 +33,7 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2]).
 -export([register_flow_handler/2]).
--export([register_ack_handler/2]).
+-export([register_confirm_handler/2]).
 -export([next_publish_seqno/1]).
 -export([register_default_consumer/2]).
 
@@ -49,7 +49,7 @@
                 closing             = false,
                 writer,
                 return_handler_pid  = none,
-                ack_handler_pid     = none,
+                confirm_handler_pid = none,
                 next_pub_seqno      = 0,
                 flow_active         = true,
                 flow_handler_pid    = none,
@@ -184,14 +184,16 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
 
-%% @spec (Channel, AckHandler) -> ok
+%% @spec (Channel, ConfirmHandler) -> ok
 %% where
 %%      Channel = pid()
-%%      AckHandler = pid()
-%% @doc This registers a handler to deal with ack'd messages. The
-%% registered process will receive #basic.ack{} commands.
-register_ack_handler(Channel, AckHandler) ->
-    gen_server:cast(Channel, {register_ack_handler, AckHandler} ).
+%%      ConfirmHandler = pid()
+
+%% @doc This registers a handler to deal with confirm-related
+%% messages. The registered process will receive #basic.ack{} and
+%% #basic.nack{} commands.
+register_confirm_handler(Channel, ConfirmHandler) ->
+    gen_server:cast(Channel, {register_confirm_handler, ConfirmHandler} ).
 
 %% @spec (Channel, FlowHandler) -> ok
 %% where
@@ -294,11 +296,11 @@ handle_cast({cast, Method, AmqpMsg}, State) ->
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
-%% Registers a handler to process ack messages
+%% Registers a handler to process ack and nack messages
 %% @private
-handle_cast({register_ack_handler, AckHandler}, State) ->
-    erlang:monitor(process, AckHandler),
-    {noreply, State#state{ack_handler_pid = AckHandler}};
+handle_cast({register_confirm_handler, ConfirmHandler}, State) ->
+    erlang:monitor(process, ConfirmHandler),
+    {noreply, State#state{confirm_handler_pid = ConfirmHandler}};
 %% Registers a handler to process flow control messages
 %% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
@@ -361,11 +363,11 @@ handle_info({'DOWN', _, process, ReturnHandler, Reason},
               "Reason: ~p~n", [self(), ReturnHandler, Reason]),
     {noreply, State#state{return_handler_pid = none}};
 %% @private
-handle_info({'DOWN', _, process, AckHandler, Reason},
-            State = #state{ack_handler_pid = AckHandler}) ->
-    ?LOG_WARN("Channel (~p): Unregistering ack handler ~p because it died. "
-              "Reason: ~p~n", [self(), AckHandler, Reason]),
-    {noreply, State#state{ack_handler_pid = none}};
+handle_info({'DOWN', _, process, ConfirmHandler, Reason},
+            State = #state{confirm_handler_pid = ConfirmHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering confirm handler ~p because it died. "
+              "Reason: ~p~n", [self(), ConfirmHandler, Reason]),
+    {noreply, State#state{confirm_handler_pid = none}};
 %% @private
 handle_info({'DOWN', _, process, FlowHandler, Reason},
             State = #state{flow_handler_pid = FlowHandler}) ->
@@ -596,14 +598,24 @@ handle_method_from_server1(
     end,
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
-                           #state{ack_handler_pid = none} = State) ->
+                           #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
-              "ack handler registered~n", [self(), BasicAck]),
+              "confirm handler registered~n", [self(), BasicAck]),
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
-                           #state{ack_handler_pid = AckHandler} = State) ->
-    AckHandler ! BasicAck,
+                           #state{confirm_handler_pid = ConfirmHandler} = State) ->
+    ConfirmHandler ! BasicAck,
     {noreply, State};
+handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
+                           #state{confirm_handler_pid = none} = State) ->
+    ?LOG_WARN("Channel (~p): received ~p but there is no "
+              "confirm handler registered~n", [self(), BasicNack]),
+    {noreply, State};
+handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
+                           #state{confirm_handler_pid = ConfirmHandler} = State) ->
+    ConfirmHandler ! BasicNack,
+    {noreply, State};
+
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
 handle_method_from_server1(Method, Content, State) ->
