@@ -753,12 +753,20 @@ handle_cast({write, CRef, Guid},
       case write_action(should_mask_action(CRef, Guid, State), Guid, State) of
           {write, State1} ->
               write_message(CRef, Guid, Msg, State1);
-          {ignore, Loc, State1} ->
-              ok = maybe_remove_from_cache(Guid, Loc, Msg, State1),
-              State;
-          {confirm, Loc = #msg_location { file = File }, State1} ->
-              ok = maybe_remove_from_cache(Guid, Loc, Msg, State1),
-              client_confirm_if_on_disk(CRef, Guid, File, State1)
+          {ignore, CurFile, State1 = #msstate { current_file = CurFile }} ->
+              State1;
+          {ignore, _File, State1} ->
+              true = ets:delete_object(CurFileCacheEts, {Guid, Msg, 0}),
+              State1;
+          {confirm, CurFile, State1 = #msstate { current_file = CurFile }}->
+              record_pending_confirm(CRef, Guid, State1);
+          {confirm, _File, State1} ->
+              true = ets:delete_object(CurFileCacheEts, {Guid, Msg, 0}),
+              update_pending_confirms(
+                fun (MsgOnDiskFun, CTG) ->
+                        MsgOnDiskFun(gb_sets:singleton(Guid), written),
+                        CTG
+                end, CRef, State1)
       end);
 
 handle_cast({remove, CRef, Guids}, State) ->
@@ -907,12 +915,14 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
     [client_confirm(CRef, Guids, written, State1) || {CRef, Guids} <- CGs],
     State1 #msstate { cref_to_guids = dict:new(), on_sync = [] }.
 
-write_action({true, Loc}, _Guid, State) ->
-    {ignore, Loc, State};
+write_action({true, not_found}, _Guid, State) ->
+    {ignore, undefined, State};
+write_action({true, #msg_location { file = File }}, _Guid, State) ->
+    {ignore, File, State};
 write_action({false, not_found}, _Guid, State) ->
     {write, State};
 write_action({Mask, #msg_location { ref_count = 0, file = File,
-                                    total_size = TotalSize } = Loc},
+                                    total_size = TotalSize }},
              Guid, State = #msstate { file_summary_ets = FileSummaryEts }) ->
     case {Mask, ets:lookup(FileSummaryEts, File)} of
         {false, [#file_summary { locked = true }]} ->
@@ -923,18 +933,18 @@ write_action({Mask, #msg_location { ref_count = 0, file = File,
             %% message, but as it is being GC'd currently we'll have
             %% to write a new copy, which will then be younger, so
             %% ignore this write.
-            {ignore, Loc, State};
+            {ignore, File, State};
         {_Mask, [#file_summary {}]} ->
             ok = index_update_ref_count(Guid, 1, State),
             State1 = adjust_valid_total_size(File, TotalSize, State),
-            {confirm, Loc, State1}
+            {confirm, File, State1}
     end;
-write_action({_Mask, #msg_location { ref_count = RefCount } = Loc},
+write_action({_Mask, #msg_location { ref_count = RefCount, file = File }},
              Guid, State) ->
     ok = index_update_ref_count(Guid, RefCount + 1, State),
     %% We already know about it, just update counter. Only update
     %% field otherwise bad interaction with concurrent GC
-    {confirm, Loc, State}.
+    {confirm, File, State}.
 
 write_message(CRef, Guid, Msg, State) ->
     write_message(Guid, Msg, record_pending_confirm(CRef, Guid, State)).
@@ -1119,14 +1129,6 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
 safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
     safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
 
-maybe_remove_from_cache(_Guid, #msg_location { file = CurFile }, _Msg,
-                        #msstate { current_file = CurFile }) ->
-    ok;
-maybe_remove_from_cache(Guid, _Location, Msg,
-                        #msstate { cur_file_cache_ets = CurFileCacheEts }) ->
-    true = ets:delete_object(CurFileCacheEts, {Guid, Msg, 0}),
-    ok.
-
 adjust_valid_total_size(File, Delta, State = #msstate {
                                        sum_valid_data   = SumValid,
                                        file_summary_ets = FileSummaryEts }) ->
@@ -1151,16 +1153,6 @@ record_pending_confirm(CRef, Guid, State) ->
       fun (_MsgOnDiskFun, CTG) ->
               dict:update(CRef, fun (Guids) -> gb_sets:add(Guid, Guids) end,
                           gb_sets:singleton(Guid), CTG)
-      end, CRef, State).
-
-client_confirm_if_on_disk(CRef, Guid, CurFile,
-                          State = #msstate { current_file = CurFile }) ->
-    record_pending_confirm(CRef, Guid, State);
-client_confirm_if_on_disk(CRef, Guid, _File, State) ->
-    update_pending_confirms(
-      fun (MsgOnDiskFun, CTG) ->
-              MsgOnDiskFun(gb_sets:singleton(Guid), written),
-              CTG
       end, CRef, State).
 
 client_confirm(CRef, Guids, ActionTaken, State) ->
