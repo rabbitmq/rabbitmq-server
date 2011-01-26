@@ -508,6 +508,8 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
 
 remove_qmsg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC}, State) ->
     Qs1 = sets:del_element(QPid, Qs),
+    %% these confirms will be emitted even when a queue dies, but that
+    %% should be fine, since the queue stats get erased immediately
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     case sets:size(Qs1) of
         0 -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UC)};
@@ -1252,10 +1254,10 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
+send_nacks([], State) ->
+    State;
 send_nacks(MXs, State) ->
-    MsgSeqNos = [ begin maybe_incr_stats([{ExchangeName, 1}], reject, State),
-                        MsgSeqNo
-      end || {MsgSeqNo, ExchangeName} <- MXs ],
+    MsgSeqNos = [ MsgSeqNo || {MsgSeqNo, _} <- MXs ],
     coalesce_and_send(MsgSeqNos,
                       fun(MsgSeqNo, Multiple) ->
                               #'basic.nack'{delivery_tag = MsgSeqNo,
