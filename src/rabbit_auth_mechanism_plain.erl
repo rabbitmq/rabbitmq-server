@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism_plain).
@@ -48,6 +33,10 @@
 %% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
 %% apparently, by OpenAMQ.
 
+%% TODO: once the minimum erlang becomes R13B03, reimplement this
+%% using the binary module - that makes use of BIFs to do binary
+%% matching and will thus be much faster.
+
 description() ->
     [{name, <<"PLAIN">>},
      {description, <<"SASL PLAIN authentication mechanism">>}].
@@ -56,11 +45,32 @@ init(_Sock) ->
     [].
 
 handle_response(Response, _State) ->
-    %% The '%%"' at the end of the next line is for Emacs
-    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
-                [{capture, all_but_first, binary}]) of
-        {match, [User, Pass]} ->
+    case extract_user_pass(Response) of
+        {ok, User, Pass} ->
             rabbit_access_control:check_user_pass_login(User, Pass);
-        _ ->
+        error ->
             {protocol_error, "response ~p invalid", [Response]}
     end.
+
+extract_user_pass(Response) ->
+    case extract_elem(Response) of
+        {ok, User, Response1} -> case extract_elem(Response1) of
+                                     {ok, Pass, <<>>} -> {ok, User, Pass};
+                                     _                -> error
+                                 end;
+        error                 -> error
+    end.
+
+extract_elem(<<0:8, Rest/binary>>) ->
+    Count = next_null_pos(Rest),
+    <<Elem:Count/binary, Rest1/binary>> = Rest,
+    {ok, Elem, Rest1};
+extract_elem(_) ->
+    error.
+
+next_null_pos(Bin) ->
+    next_null_pos(Bin, 0).
+
+next_null_pos(<<>>, Count)                  -> Count;
+next_null_pos(<<0:8, _Rest/binary>>, Count) -> Count;
+next_null_pos(<<_:8, Rest/binary>>,  Count) -> next_null_pos(Rest, Count + 1).

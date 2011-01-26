@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -70,15 +55,17 @@
 -export([now_ms/0]).
 -export([lock_file/1]).
 -export([const_ok/1, const/1]).
+-export([ntoa/1, ntoab/1]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1]).
+-export_type([resource_name/0, thunk/1, const/1]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
+-type(const(T) :: fun((any()) -> T)).
 -type(resource_name() :: binary()).
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
@@ -204,7 +191,9 @@
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/1 :: (any()) -> 'ok').
--spec(const/1 :: (A) -> fun ((_) -> A)).
+-spec(const/1 :: (A) -> const(A)).
+-spec(ntoa/1 :: (inet:ip_address()) -> string()).
+-spec(ntoab/1 :: (inet:ip_address()) -> string()).
 
 -endif.
 
@@ -846,3 +835,17 @@ lock_file(Path) ->
 
 const_ok(_) -> ok.
 const(X) -> fun (_) -> X end.
+
+%% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
+%% when IPv6 is enabled but not used (i.e. 99% of the time).
+ntoa({0,0,0,0,0,16#ffff,AB,CD}) ->
+    inet_parse:ntoa({AB bsr 8, AB rem 256, CD bsr 8, CD rem 256});
+ntoa(IP) ->
+    inet_parse:ntoa(IP).
+
+ntoab(IP) ->
+    Str = ntoa(IP),
+    case string:str(Str, ":") of
+        0 -> Str;
+        _ -> "[" ++ Str ++ "]"
+    end.

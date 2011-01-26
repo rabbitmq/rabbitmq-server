@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
@@ -296,12 +281,11 @@
 -record(sync, { acks_persistent, acks_all, pubs, funs }).
 
 %% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
-%% betas that we must be due to write indices for before we do any
-%% work at all. This is both a minimum and a maximum - we don't write
-%% fewer than RAM_INDEX_BATCH_SIZE indices out in one go, and we don't
-%% write more - we can always come back on the next publish to do
-%% more.
+%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
+%% that we must be due to write indices for before we do any work at
+%% all. This is both a minimum and a maximum - we don't write fewer
+%% than IO_BATCH_SIZE indices out in one go, and we don't write more -
+%% we can always come back on the next publish to do more.
 -define(IO_BATCH_SIZE, 64).
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
@@ -314,7 +298,7 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id() | 'blank_ack').
+-type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -436,10 +420,10 @@ init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
                    Terms};
             _  -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
         end,
-    PersistentClient = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE,
-                                                    PRef, MsgOnDiskFun),
-    TransientClient  = rabbit_msg_store:client_init(?TRANSIENT_MSG_STORE,
-                                                    TRef, undefined),
+    PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
+                                             MsgOnDiskFun),
+    TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE, TRef,
+                                             undefined),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
           QueueName, Terms1,
@@ -524,7 +508,7 @@ publish(Msg, MsgProps, State) ->
 publish_delivered(false, #basic_message { guid = Guid },
                   _MsgProps, State = #vqstate { len = 0 }) ->
     blind_confirm(self(), gb_sets:singleton(Guid)),
-    {blank_ack, a(State)};
+    {undefined, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
                   MsgProps = #message_properties {
@@ -643,7 +627,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                                             MsgStatus #msg_status {
                                               is_delivered = true }, State),
                                  {SeqId, StateN};
-                        false -> {blank_ack, State}
+                        false -> {undefined, State}
                     end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
@@ -912,7 +896,7 @@ cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
-%% when requeueing, we re-add a guid to the unconfimred set
+%% when requeueing, we re-add a guid to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid },
@@ -937,7 +921,12 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
     Res.
 
 msg_store_client_init(MsgStore, MsgOnDiskFun) ->
-    rabbit_msg_store:client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
+    msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
+
+msg_store_client_init(MsgStore, Ref, MsgOnDiskFun) ->
+    rabbit_msg_store:client_init(
+      MsgStore, Ref, MsgOnDiskFun,
+      msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE)).
 
 msg_store_write(MSCState, IsPersistent, Guid, Msg) ->
     with_immutable_msg_store_state(
@@ -963,6 +952,23 @@ msg_store_sync(MSCState, IsPersistent, Guids, Callback) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MSCState1) -> rabbit_msg_store:sync(Guids, Callback, MSCState1) end).
+
+msg_store_close_fds(MSCState, IsPersistent) ->
+    with_msg_store_state(
+      MSCState, IsPersistent,
+      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
+
+msg_store_close_fds_fun(IsPersistent) ->
+    Self = self(),
+    fun () ->
+            rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+              Self,
+              fun (State = #vqstate { msg_store_clients = MSCState }) ->
+                      {ok, MSCState1} =
+                          msg_store_close_fds(MSCState, IsPersistent),
+                      {[], State #vqstate { msg_store_clients = MSCState1 }}
+              end)
+    end.
 
 maybe_write_delivered(false, _SeqId, IndexState) ->
     IndexState;

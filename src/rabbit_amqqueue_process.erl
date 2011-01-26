@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_process).
@@ -224,11 +209,9 @@ next_state(State) ->
         false -> {stop_sync_timer(State2), hibernate}
     end.
 
-ensure_sync_timer(State = #q{sync_timer_ref = undefined, backing_queue = BQ}) ->
+ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL,
-                   rabbit_amqqueue, maybe_run_queue_via_backing_queue,
-                   [self(), fun (BQS) -> {[], BQ:idle_timeout(BQS)} end]),
+                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
     State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
     State.
@@ -348,11 +331,6 @@ ch_record_state_transition(OldCR, NewCR) ->
        BlockedNew andalso not(BlockedOld) -> block;
        true                               -> ok
     end.
-
-record_current_channel_tx(ChPid, Txn) ->
-    %% as a side effect this also starts monitoring the channel (if
-    %% that wasn't happening already)
-    store_ch_record((ch_record(ChPid))#cr{txn = Txn}).
 
 deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                           State = #q{q = #amqqueue{name = QName},
@@ -512,7 +490,7 @@ attempt_delivery(#delivery{txn = Txn,
                  {NeedsConfirming,
                   State = #q{backing_queue = BQ,
                             backing_queue_state = BQS}}) ->
-    record_current_channel_tx(ChPid, Txn),
+    store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
     {true,
      NeedsConfirming,
      State#q{backing_queue_state =
@@ -608,7 +586,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                 true  -> {stop, State1};
                 false -> State2 = case Txn of
                                       none -> State1;
-                                      _    -> rollback_transaction(Txn, ChPid,
+                                      _    -> rollback_transaction(Txn, C,
                                                                    State1)
                                   end,
                          {ok, requeue_and_run(sets:to_list(ChAckTags),
@@ -644,26 +622,23 @@ maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
     run_message_queue(
       confirm_messages(Guids, State#q{backing_queue_state = BQS1})).
 
-commit_transaction(Txn, From, ChPid, State = #q{backing_queue       = BQ,
-                                                backing_queue_state = BQS,
-                                                ttl                 = TTL}) ->
-    {AckTags, BQS1} = BQ:tx_commit(Txn,
-                                   fun () -> gen_server2:reply(From, ok) end,
-                                   reset_msg_expiry_fun(TTL),
-                                   BQS),
-    %% ChPid must be known here because of the participant management
-    %% by the channel.
-    C = #cr{acktags = ChAckTags} = lookup_ch(ChPid),
+commit_transaction(Txn, From, C = #cr{acktags = ChAckTags},
+                   State = #q{backing_queue       = BQ,
+                              backing_queue_state = BQS,
+                              ttl                 = TTL}) ->
+    {AckTags, BQS1} = BQ:tx_commit(
+                        Txn, fun () -> gen_server2:reply(From, ok) end,
+                        reset_msg_expiry_fun(TTL), BQS),
     ChAckTags1 = subtract_acks(ChAckTags, AckTags),
     maybe_store_ch_record(C#cr{acktags = ChAckTags1, txn = none}),
     State#q{backing_queue_state = BQS1}.
 
-rollback_transaction(Txn, ChPid, State = #q{backing_queue = BQ,
-                                            backing_queue_state = BQS}) ->
+rollback_transaction(Txn, C, State = #q{backing_queue = BQ,
+                                        backing_queue_state = BQS}) ->
     {_AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
     %% Iff we removed acktags from the channel record on ack+txn then
-    %% we would add them back in here (would also require ChPid)
-    record_current_channel_tx(ChPid, none),
+    %% we would add them back in here.
+    maybe_store_ch_record(C#cr{txn = none}),
     State#q{backing_queue_state = BQS1}.
 
 subtract_acks(A, B) when is_list(B) ->
@@ -797,6 +772,7 @@ prioritise_cast(Msg, _State) ->
         {notify_sent, _ChPid}                     -> 7;
         {unblock, _ChPid}                         -> 7;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
+        sync_timeout                              -> 6;
         _                                         -> 0
     end.
 
@@ -864,8 +840,11 @@ handle_call({deliver, Delivery}, From, State) ->
     noreply(NewState);
 
 handle_call({commit, Txn, ChPid}, From, State) ->
-    NewState = commit_transaction(Txn, From, ChPid, State),
-    noreply(run_message_queue(NewState));
+    case lookup_ch(ChPid) of
+        not_found -> reply(ok, State);
+        C         -> noreply(run_message_queue(
+                               commit_transaction(Txn, From, C, State)))
+    end;
 
 handle_call({notify_down, ChPid}, _From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -1017,6 +996,11 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
     noreply(maybe_run_queue_via_backing_queue(Fun, State));
 
+handle_cast(sync_timeout, State = #q{backing_queue = BQ,
+                                     backing_queue_state = BQS}) ->
+    noreply(State#q{backing_queue_state = BQ:idle_timeout(BQS),
+                    sync_timer_ref = undefined});
+
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
@@ -1059,7 +1043,10 @@ handle_cast({reject, AckTags, Requeue, ChPid},
     end;
 
 handle_cast({rollback, Txn, ChPid}, State) ->
-    noreply(rollback_transaction(Txn, ChPid, State));
+    noreply(case lookup_ch(ChPid) of
+                not_found -> State;
+                C         -> rollback_transaction(Txn, C, State)
+            end);
 
 handle_cast(delete_immediately, State) ->
     {stop, normal, State};
@@ -1162,15 +1149,15 @@ handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS,
                                 stats_timer = StatsTimer}) ->
-    BQS1 = BQ:handle_pre_hibernate(BQS),
-    %% no activity for a while == 0 egress and ingress rates
+    {RamDuration, BQS1} = BQ:ram_duration(BQS),
     DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), infinity),
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    BQS3 = BQ:handle_pre_hibernate(BQS2),
     rabbit_event:if_enabled(StatsTimer,
                             fun () ->
                                     emit_stats(State, [{idle_since, now()}])
                             end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
-                     backing_queue_state = BQS2},
+                     backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.

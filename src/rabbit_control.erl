@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control).
@@ -92,24 +77,24 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            halt();
+            quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
-            halt(2);
+            quit(2);
         Other ->
             print_error("~p", [Other]),
-            halt(2)
+            quit(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
@@ -145,7 +130,7 @@ stop() ->
 
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
-    halt(1).
+    quit(1).
 
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -288,10 +273,13 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
-    display_info_list(
-      [lists:zip(InfoKeys, tuple_to_list(X)) ||
-          X <- rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg])],
-      InfoKeys);
+    case rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]) of
+        L when is_list(L) -> display_info_list(
+                               [lists:zip(InfoKeys, tuple_to_list(X)) ||
+                                   X <- L],
+                               InfoKeys);
+        Other             -> Other
+    end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -339,11 +327,11 @@ format_info_item(#resource{name = Name}) ->
     escape(Name);
 format_info_item({N1, N2, N3, N4} = Value) when
       ?IS_U8(N1), ?IS_U8(N2), ?IS_U8(N3), ?IS_U8(N4) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value) when
       ?IS_U16(K1), ?IS_U16(K2), ?IS_U16(K3), ?IS_U16(K4),
       ?IS_U16(K5), ?IS_U16(K6), ?IS_U16(K7), ?IS_U16(K8) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item(Value) when is_pid(Value) ->
     rabbit_misc:pid_to_string(Value);
 format_info_item(Value) when is_binary(Value) ->
@@ -404,4 +392,13 @@ prettify_typed_amqp_value(Type, Value) ->
         table   -> prettify_amqp_table(Value);
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
+    end.
+
+% the slower shutdown on windows required to flush stdout
+quit(Status) ->
+    case os:type() of
+        {unix, _} ->
+            halt(Status);
+        {win32, _} ->
+            init:stop(Status)
     end.

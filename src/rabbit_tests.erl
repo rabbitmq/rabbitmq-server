@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_tests).
@@ -1443,6 +1428,7 @@ test_backing_queue() ->
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
+            passed = test_variable_queue_delete_msg_store_files_callback(),
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal, infinity),
@@ -1458,6 +1444,9 @@ restart_msg_store_empty() ->
 
 guid_bin(X) ->
     erlang:md5(term_to_binary(X)).
+
+msg_store_client_init(MsgStore, Ref) ->
+    rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
 msg_store_contains(Atom, Guids, MSCState) ->
     Atom = lists:foldl(
@@ -1502,12 +1491,12 @@ msg_store_remove(MsgStore, Ref, Guids) ->
 
 with_msg_store_client(MsgStore, Ref, Fun) ->
     rabbit_msg_store:client_terminate(
-      Fun(rabbit_msg_store:client_init(MsgStore, Ref, undefined))).
+      Fun(msg_store_client_init(MsgStore, Ref))).
 
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
       lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MSCState) end,
-                  rabbit_msg_store:client_init(MsgStore, Ref, undefined), L)).
+                  msg_store_client_init(MsgStore, Ref), L)).
 
 test_msg_store() ->
     restart_msg_store_empty(),
@@ -1515,8 +1504,7 @@ test_msg_store() ->
     Guids = [guid_bin(M) || M <- lists:seq(1,100)],
     {Guids1stHalf, Guids2ndHalf} = lists:split(50, Guids),
     Ref = rabbit_guid:guid(),
-    MSCState = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                            undefined),
+    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, Guids, MSCState),
     %% publish the first half
@@ -1582,8 +1570,7 @@ test_msg_store() ->
                     ([Guid|GuidsTail]) ->
                         {Guid, 0, GuidsTail}
                 end, Guids2ndHalf}),
-    MSCState5 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                             undefined),
+    MSCState5 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we have the right msgs left
     lists:foldl(
       fun (Guid, Bool) ->
@@ -1592,8 +1579,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:client_terminate(MSCState5),
     %% restart empty
     restart_msg_store_empty(),
-    MSCState6 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                             undefined),
+    MSCState6 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs
     false = msg_store_contains(false, Guids, MSCState6),
     %% publish the first half again
@@ -1601,8 +1587,7 @@ test_msg_store() ->
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
            msg_store_read(Guids1stHalf, MSCState6)),
-    MSCState7 = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE, Ref,
-                                             undefined),
+    MSCState7 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     ok = rabbit_msg_store:remove(Guids1stHalf, MSCState7),
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
@@ -1660,8 +1645,7 @@ init_test_queue() ->
     TestQueue = test_queue(),
     Terms = rabbit_queue_index:shutdown_terms(TestQueue),
     PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:guid()),
-    PersistentClient = rabbit_msg_store:client_init(?PERSISTENT_MSG_STORE,
-                                                    PRef, undefined),
+    PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
             TestQueue, Terms, false,
             fun (Guid) ->
@@ -1695,7 +1679,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
                end,
-    MSCState = rabbit_msg_store:client_init(MsgStore, Ref, undefined),
+    MSCState = msg_store_client_init(MsgStore, Ref),
     {A, B = [{_SeqId, LastGuidWritten} | _]} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsGuidsAcc}) ->
@@ -2121,6 +2105,35 @@ test_queue_recover() ->
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
+    passed.
+
+test_variable_queue_delete_msg_store_files_callback() ->
+    ok = restart_msg_store_empty(),
+    {new, #amqqueue { pid = QPid, name = QName } = Q} =
+        rabbit_amqqueue:declare(test_queue(), true, false, [], none),
+    TxID = rabbit_guid:guid(),
+    Payload = <<0:8388608>>, %% 1MB
+    Count = 30,
+    [begin
+         Msg = rabbit_basic:message(
+                 rabbit_misc:r(<<>>, exchange, <<>>),
+                 <<>>, #'P_basic'{delivery_mode = 2}, Payload),
+         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
+                              sender = self(), message = Msg},
+         true = rabbit_amqqueue:deliver(QPid, Delivery)
+     end || _ <- lists:seq(1, Count)],
+    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    rabbit_amqqueue:set_ram_duration_target(QPid, 0),
+
+    CountMinusOne = Count - 1,
+    {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
+        rabbit_amqqueue:basic_get(Q, self(), true),
+    {ok, CountMinusOne} = rabbit_amqqueue:purge(Q),
+
+    %% give the queue a second to receive the close_fds callback msg
+    timer:sleep(1000),
+
+    rabbit_amqqueue:delete(Q, false, false),
     passed.
 
 test_configurable_server_properties() ->

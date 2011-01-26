@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue).
@@ -35,7 +20,7 @@
 -export([internal_declare/2, internal_delete/1,
          maybe_run_queue_via_backing_queue/2,
          maybe_run_queue_via_backing_queue_async/2,
-         update_ram_duration/1, set_ram_duration_target/2,
+         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
@@ -68,6 +53,8 @@
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
       'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+
+-type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -147,7 +134,7 @@
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
-        -> rabbit_types:amqqueue() | 'not_found').
+        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit()).
@@ -155,6 +142,7 @@
         (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(maybe_run_queue_via_backing_queue_async/2 ::
         (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+-spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
@@ -462,6 +450,9 @@ maybe_run_queue_via_backing_queue(QPid, Fun) ->
 
 maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
     gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
+
+sync_timeout(QPid) ->
+    gen_server2:cast(QPid, sync_timeout).
 
 update_ram_duration(QPid) ->
     gen_server2:cast(QPid, update_ram_duration).

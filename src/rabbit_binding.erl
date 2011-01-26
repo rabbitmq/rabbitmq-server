@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binding).
@@ -59,17 +44,18 @@
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
+-type(add_res() :: bind_res() | rabbit_misc:const(bind_res())).
+-type(bind_or_error() :: bind_res() | rabbit_types:error('binding_not_found')).
+-type(remove_res() :: bind_or_error() | rabbit_misc:const(bind_or_error())).
 
 -opaque(deletions() :: dict()).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
--spec(add/1 :: (rabbit_types:binding()) -> bind_res()).
--spec(remove/1 :: (rabbit_types:binding()) ->
-                       bind_res() | rabbit_types:error('binding_not_found')).
--spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
--spec(remove/2 :: (rabbit_types:binding(), inner_fun()) ->
-                       bind_res() | rabbit_types:error('binding_not_found')).
+-spec(add/1 :: (rabbit_types:binding()) -> add_res()).
+-spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
+-spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> add_res()).
+-spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> remove_res()).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
 -spec(list_for_source/1 ::
         (rabbit_types:binding_source()) -> bindings()).
@@ -345,7 +331,7 @@ group_bindings_fold(Fun, SrcName, Acc, Removed, Bindings) ->
     group_bindings_fold(Fun, Fun(SrcName, Bindings, Acc), Removed).
 
 maybe_auto_delete(XName, Bindings, Deletions) ->
-    case mnesia:read(rabbit_exchange, XName) of
+    case mnesia:read({rabbit_exchange, XName}) of
         [] ->
             add_deletion(XName, {undefined, not_deleted, Bindings}, Deletions);
         [X] ->
