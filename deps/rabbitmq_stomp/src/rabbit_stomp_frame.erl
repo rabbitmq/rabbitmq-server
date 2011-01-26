@@ -217,8 +217,6 @@ serialize(#stomp_frame{command = Command,
 
 serialize_header({K, V}) when is_integer(V) ->
     [K, $:, integer_to_list(V), $\n];
-serialize_header({K, V}) when is_binary(V) ->
-    serialize_header({K, binary_to_list(V)});
 serialize_header({K, V}) when is_list(V) ->
     [K, $:, [escape(C) || C <- V], $\n].
 

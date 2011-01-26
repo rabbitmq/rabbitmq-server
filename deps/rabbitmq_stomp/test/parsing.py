@@ -68,9 +68,9 @@ class TestParsing(unittest.TestCase):
                         'destination:/exchange/amq.fanout\n\n'
                         'hello\n\x00\n')
         resp = ('MESSAGE\n'
+                'content-type:text/plain\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -87,9 +87,9 @@ class TestParsing(unittest.TestCase):
                         'destination:/exchange/amq.fanout\n'
                         '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
+                'content-type:text/plain\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -134,10 +134,10 @@ class TestParsing(unittest.TestCase):
                         '\n\0')
 
         resp=('MESSAGE\n'
-            'destination:/exchange/amq.topic/da9d4779\n'
-            'message-id:(.*)\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
+            'destination:/exchange/amq.topic/da9d4779\n'
+            'message-id:(.*)\n'
             'content-length:8\n'
             '\n'
             'message'
@@ -164,10 +164,10 @@ class TestParsing(unittest.TestCase):
                         '\0' % message)
 
         resp=('MESSAGE\n'
-            'destination:/exchange/amq.topic/test_huge_message\n'
-            'message-id:(.*)\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
+            'destination:/exchange/amq.topic/test_huge_message\n'
+            'message-id:(.*)\n'
             'content-length:%i\n'
             '\n'
             '%s(.*)'
