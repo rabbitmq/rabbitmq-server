@@ -73,7 +73,7 @@ can_send(undefined, _QPid, _AckRequired) ->
     true;
 can_send(LimiterPid, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
-      fun () -> true end,
+      rabbit_misc:const(true),
       fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired},
                                  infinity) end).
 
@@ -92,7 +92,7 @@ get_limit(undefined) ->
     0;
 get_limit(Pid) ->
     rabbit_misc:with_exit_handler(
-      fun () -> 0 end,
+      rabbit_misc:const(0),
       fun () -> gen_server2:call(Pid, get_limit, infinity) end).
 
 block(undefined) ->

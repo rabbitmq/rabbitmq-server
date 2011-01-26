@@ -54,7 +54,7 @@
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([lock_file/1]).
--export([const_ok/1, const/1]).
+-export([const_ok/1, const/1, id/1]).
 -export([ntoa/1, ntoab/1]).
 
 %%----------------------------------------------------------------------------
@@ -125,7 +125,10 @@
 -spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
--spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+-spec(with_exit_handler/2 ::
+        (fun ((rabbit_types:error({'noproc' | 'nodedown' |
+                                   'normal' | 'shutdown' , term()})) -> A),
+         thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
@@ -192,6 +195,7 @@
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/1 :: (any()) -> 'ok').
 -spec(const/1 :: (A) -> const(A)).
+-spec(id/1 :: (A) -> A).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
 
@@ -341,17 +345,15 @@ throw_on_error(E, Thunk) ->
 with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
-    catch exit:{R, _} when R =:= noproc; R =:= nodedown;
-                           R =:= normal; R =:= shutdown ->
-            Handler()
+    catch exit:{R, _} = Err when R =:= noproc; R =:= nodedown;
+                                 R =:= normal; R =:= shutdown ->
+            Handler({error, Err})
     end.
 
 filter_exit_map(F, L) ->
     Ref = make_ref(),
     lists:filter(fun (R) -> R =/= Ref end,
-                 [with_exit_handler(
-                    fun () -> Ref end,
-                    fun () -> F(I) end) || I <- L]).
+                 [with_exit_handler(const(Ref), fun () -> F(I) end) || I <- L]).
 
 with_user(Username, Thunk) ->
     fun () ->
@@ -835,6 +837,7 @@ lock_file(Path) ->
 
 const_ok(_) -> ok.
 const(X) -> fun (_) -> X end.
+id(X) -> X.
 
 %% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
 %% when IPv6 is enabled but not used (i.e. 99% of the time).

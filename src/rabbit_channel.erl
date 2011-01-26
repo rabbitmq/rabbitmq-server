@@ -708,7 +708,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                    end) of
                 ok ->
                     {noreply, NewState};
-                {error, not_found} ->
+                {error, _} ->
                     %% Spec requires we ignore this situation.
                     return_ok(NewState, NoWait, OkMsg)
             end
@@ -874,7 +874,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
         {ok, MessageCount, ConsumerCount} ->
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
-        {error, not_found} ->
+        {error, _} ->
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner) of
                 {new, Q = #amqqueue{}} ->

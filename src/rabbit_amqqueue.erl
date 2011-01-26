@@ -66,7 +66,11 @@
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found')).
--spec(with/2 :: (name(), qfun(A)) -> A | rabbit_types:error('not_found')).
+-spec(with/2 :: (name(), qfun(A)) -> A | rabbit_types:error('not_found' |
+                                                            {'noproc'   |
+                                                             'nodedown' |
+                                                             'normal'   |
+                                                             'shutdown' , _} )).
 -spec(with_or_die/2 ::
         (name(), qfun(A)) -> A | rabbit_types:channel_exit()).
 -spec(assert_equivalence/5 ::
@@ -246,13 +250,13 @@ lookup(Name) ->
 with(Name, F, E) ->
     case lookup(Name) of
         {ok, Q} -> rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
-        {error, not_found} -> E()
+        {error, not_found} = Err -> E(Err)
     end.
 
 with(Name, F) ->
-    with(Name, F, fun () -> {error, not_found} end).
+    with(Name, F, fun rabbit_misc:id/1).
 with_or_die(Name, F) ->
-    with(Name, F, fun () -> rabbit_misc:not_found(Name) end).
+    with(Name, F, fun (_) -> rabbit_misc:not_found(Name) end).
 
 assert_equivalence(#amqqueue{durable     = Durable,
                              auto_delete = AutoDelete} = Q,
@@ -498,7 +502,7 @@ pseudo_queue(QueueName, Pid) ->
 safe_delegate_call_ok(F, Pids) ->
     case delegate:invoke(Pids, fun (Pid) ->
                                        rabbit_misc:with_exit_handler(
-                                         fun () -> ok end,
+                                         fun rabbit_misc:const_ok/1,
                                          fun () -> F(Pid) end)
                                end) of
         {_,  []} -> ok;

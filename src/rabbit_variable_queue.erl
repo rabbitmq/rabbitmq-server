@@ -1114,8 +1114,8 @@ msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
                           end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
-                                     fun () -> remove_persistent_messages(
-                                                 PersistentGuids)
+                                     fun (_) -> remove_persistent_messages(
+                                                  PersistentGuids)
                                      end, F)
                     end)
     end.
