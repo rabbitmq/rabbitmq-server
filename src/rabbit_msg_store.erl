@@ -756,7 +756,7 @@ handle_cast({write, CRef, Guid},
           {ignore, Loc, State1} ->
               ok = maybe_remove_from_cache(Guid, Loc, Msg, State1),
               State;
-          {confirm, Loc, File, State1} ->
+          {confirm, Loc = #msg_location { file = File }, State1} ->
               ok = maybe_remove_from_cache(Guid, Loc, Msg, State1),
               client_confirm_if_on_disk(CRef, Guid, File, State1)
       end);
@@ -927,14 +927,14 @@ write_action({Mask, #msg_location { ref_count = 0, file = File,
         {_Mask, [#file_summary {}]} ->
             ok = index_update_ref_count(Guid, 1, State),
             State1 = adjust_valid_total_size(File, TotalSize, State),
-            {confirm, Loc, File, State1}
+            {confirm, Loc, State1}
     end;
-write_action({_Mask, #msg_location { ref_count = RefCount, file = File } = Loc},
+write_action({_Mask, #msg_location { ref_count = RefCount } = Loc},
              Guid, State) ->
     ok = index_update_ref_count(Guid, RefCount + 1, State),
     %% We already know about it, just update counter. Only update
     %% field otherwise bad interaction with concurrent GC
-    {confirm, Loc, File, State}.
+    {confirm, Loc, State}.
 
 write_message(CRef, Guid, Msg, State) ->
     write_message(Guid, Msg, record_pending_confirm(CRef, Guid, State)).
