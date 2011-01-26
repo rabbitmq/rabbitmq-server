@@ -304,19 +304,19 @@ action(wait, Node, [], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, ?WAIT_FOR_VM_TIMEOUT).
 
-wait_for_application(_Node, NodeTimeout) when NodeTimeout =< 0 ->
-    {badrpc, nodedown};
-
 wait_for_application(Node, NodeTimeout) ->
-    case call(Node, {application, which_applications, []}) of
-        {badrpc, nodedown} -> wait_for_application0(Node, NodeTimeout - 1000);
-        {badrpc, _} = E    -> E;
-        Apps               -> case proplists:is_defined(rabbit, Apps) of
-                                  %% We've seen the node up; if it goes down
-                                  %% die immediately.
-                                  false -> wait_for_application0(Node, 0);
-                                  true  -> ok
-                              end
+    case call(Node, {application, which_applications, [infinity]}) of
+        {badrpc, _} = E -> NewTimeout = NodeTimeout - 1000,
+                           case NewTimeout =< 0 of
+                               true  -> E;
+                               false -> wait_for_application0(Node, NewTimeout)
+                           end;
+        Apps            -> case proplists:is_defined(rabbit, Apps) of
+                               %% We've seen the node up; if it goes down
+                               %% die immediately.
+                               true  -> ok;
+                               false -> wait_for_application0(Node, 0)
+                           end
     end.
 
 wait_for_application0(Node, NodeTimeout) ->
