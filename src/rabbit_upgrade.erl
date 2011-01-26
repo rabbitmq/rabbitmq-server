@@ -163,7 +163,8 @@ read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
         {ok, [V]}        -> case is_new_version(V) of
                                 false -> {ok, convert_old_version(V)};
-                                true  -> {ok, V}
+                                true  -> [{rabbit, RV}] = V,
+                                         {ok, RV}
                             end;
         {error, _} = Err -> Err
     end.
@@ -175,13 +176,14 @@ read_version(Scope) ->
     end.
 
 write_version() ->
-    ok = rabbit_misc:write_term_file(schema_filename(), [desired_version()]),
+    ok = rabbit_misc:write_term_file(schema_filename(),
+                                     [[{rabbit, desired_version()}]]),
     ok.
 
 write_version(Scope) ->
     {ok, V0} = read_version(),
     V = orddict:store(Scope, desired_version(Scope), V0),
-    ok = rabbit_misc:write_term_file(schema_filename(), [V]),
+    ok = rabbit_misc:write_term_file(schema_filename(), [[{rabbit, V}]]),
     ok.
 
 desired_version() ->
