@@ -305,7 +305,7 @@ action(wait, Node, [], _Opts, Inform) ->
     wait_for_application(Node, ?WAIT_FOR_VM_TIMEOUT).
 
 wait_for_application(Node, NodeTimeout) ->
-    case call(Node, {application, which_applications, [infinity]}) of
+    case rpc_call(Node, application, which_applications, [infinity]) of
         {badrpc, _} = E -> NewTimeout = NodeTimeout - 1000,
                            case NewTimeout =< 0 of
                                true  -> E;
