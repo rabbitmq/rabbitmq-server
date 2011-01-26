@@ -22,7 +22,6 @@ DAEMON=/usr/sbin/${NAME}
 CONTROL=/usr/sbin/rabbitmqctl
 DESC=rabbitmq-server
 USER=rabbitmq
-TIMEOUT=10
 ROTATE_SUFFIX=
 INIT_LOG_DIR=/var/log/rabbitmq
 
@@ -40,7 +39,7 @@ start_rabbitmq () {
         set +e
         nohup $DAEMON > ${INIT_LOG_DIR}/startup_log \
             2> ${INIT_LOG_DIR}/startup_err &
-        wait_for_rabbitmq
+        $CONTROL wait >/dev/null 2>&1
         case "$?" in
             0)
                 echo SUCCESS
@@ -57,18 +56,6 @@ start_rabbitmq () {
         echo RabbitMQ is currently running
         RETVAL=1
     fi
-}
-
-wait_for_rabbitmq() {
-    WAITED=0
-    while [ $WAITED != $TIMEOUT ]; do
-        if status_rabbitmq quiet ; then
-            return 0
-        fi
-        sleep 1
-        WAITED=`expr $WAITED + 1`
-    done
-    return 1
 }
 
 stop_rabbitmq () {

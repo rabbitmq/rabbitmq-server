@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(WAIT_FOR_VM_TIMEOUT, 5000).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -297,7 +298,30 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]})).
+                             list_vhost_permissions, [VHost]}));
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_TIMEOUT).
+
+wait_for_application(_Node, NodeTimeout) when NodeTimeout =< 0 ->
+    {badrpc, nodedown};
+
+wait_for_application(Node, NodeTimeout) ->
+    case call(Node, {application, which_applications, []}) of
+        {badrpc, nodedown} -> wait_for_application0(Node, NodeTimeout - 1000);
+        {badrpc, _} = E    -> E;
+        Apps               -> case proplists:is_defined(rabbit, Apps) of
+                                  %% We've seen the node up; if it goes down
+                                  %% die immediately.
+                                  false -> wait_for_application0(Node, 0);
+                                  true  -> ok
+                              end
+    end.
+
+wait_for_application0(Node, NodeTimeout) ->
+    timer:sleep(1000),
+    wait_for_application(Node, NodeTimeout).
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] ->
