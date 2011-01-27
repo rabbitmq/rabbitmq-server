@@ -135,7 +135,7 @@ specified: whenever the connection to a broker is lost, another one is
 chosen at random from the list and a connection attempt is made to
 that. The syntax for broker URIs is:
 
-amqp://username:password@host:port/vhost
+amqp://username:password@host:port/vhost?key1=value1&key2=value2...
 
 If username or password are omitted, the default values of guest and
 guest are used. If the vhost is omitted, the default value of / is
@@ -160,6 +160,18 @@ Note that SSL cannot be used with the direct connection (i.e. a host
 must be specified when using SSL), and that it is preferable to use
 the non-SSL direct connection when connecting to the same node that's
 running the shovel.
+
+The query part of the URI permits the configuration of additional
+connection parameters, permitting heartbeat, channel_max, and
+frame_max to be specified. These can be given in any order, and
+omitted fields assume default values. For example:
+
+amqp://myhost/?heartbeat=5&frame_max=8192
+
+Specifies a non-encrypted network connection to the host 'myhost',
+using default username, password, port, vhost and channel_max, but
+specifying the heartbeat interval of 5 seconds, and the maximum frame
+size of 8192 bytes.
 
 
 Resource Declarations

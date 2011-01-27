@@ -214,7 +214,7 @@ parse_uri({[Uri | Uris], Acc}) when is_list(Uri) ->
                            "amqps" -> build_ssl_broker(Parsed);
                            Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
                        end,
-            return({Uris, [Endpoint | Acc]})
+            return({Uris, [broker_add_query(Endpoint, Parsed) | Acc]})
     end;
 parse_uri({[Uri | _Uris], _Acc}) ->
     fail({expected_string_uri, Uri}).
@@ -250,7 +250,7 @@ build_ssl_broker(ParsedUri) ->
           [fun (L) -> KeyString = atom_to_list(Key),
                       case lists:keysearch(KeyString, 1, Query) of
                           {value, {_, Value}} ->
-                              try [{Key, Fun(Value)} | L]
+                              try return([{Key, Fun(Value)} | L])
                               catch throw:{error, Reason} ->
                                       fail({invalid_ssl_parameter,
                                             Key, Value, Query, Reason})
@@ -270,6 +270,41 @@ build_ssl_broker(ParsedUri) ->
         undefined -> Params1#amqp_params{port = ?PROTOCOL_PORT - 1};
         _         -> Params1
     end.
+
+broker_add_query(Params, ParsedUri) ->
+    Query = proplists:get_value('query', ParsedUri),
+    Fields = record_info(fields, amqp_params),
+    {Params1, _Pos} =
+        run_state_monad(
+          [fun ({ParamsN, Pos}) ->
+                   Pos1 = Pos + 1,
+                   KeyString = atom_to_list(Field),
+                   case proplists:get_value(KeyString, Query) of
+                       undefined ->
+                           return({ParamsN, Pos1});
+                       true -> %% proplists short form, not permitted
+                           return({ParamsN, Pos1});
+                       Value ->
+                           try
+                               ValueParsed = parse_amqp_param(Field, Value),
+                               return(
+                                 {setelement(Pos, ParamsN, ValueParsed), Pos1})
+                           catch throw:{error, Reason} ->
+                                   fail({invalid_amqp_params_parameter,
+                                         Field, Value, Query, Reason})
+                           end
+                   end
+           end || Field <- Fields], {Params, 2}),
+    Params1.
+
+parse_amqp_param(Field, String) when Field =:= channel_max orelse
+                                     Field =:= frame_max   orelse
+                                     Field =:= heartbeat   ->
+    try return(list_to_integer(String))
+    catch error:badarg -> fail({not_an_integer, String})
+    end;
+parse_amqp_param(Field, String) ->
+    fail({parameter_unconfigurable_in_query, Field, String}).
 
 find_path_parameter(Value) -> return(Value).
 

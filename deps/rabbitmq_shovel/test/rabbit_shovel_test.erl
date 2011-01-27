@@ -92,6 +92,16 @@ test() ->
           [{broker, "amqp://"},
            {declarations, [{'queue.declare', [invalid]}]}]),
 
+
+    {invalid_amqp_params_parameter, heartbeat, "text",
+     [{"heartbeat", "text"}], {not_an_integer, "text"}} =
+        test_broken_shovel_sources([{broker, "amqp://?heartbeat=text"}]),
+
+    {invalid_amqp_params_parameter, username, "text",
+     [{"username", "text"}],
+     {parameter_unconfigurable_in_query, username, "text"}} =
+        test_broken_shovel_sources([{broker, "amqp://?username=text"}]),
+
     {invalid_parameter_value, prefetch_count,
      {require_non_negative_integer, invalid}} =
         test_broken_shovel_config([{prefetch_count, invalid} | Config]),
@@ -127,7 +137,7 @@ test() ->
       shovels,
       [{test_shovel,
         [{sources,
-          [{broker, "amqp://"},
+          [{broker, "amqp://?heartbeat=5"},
            {declarations,
             [{'queue.declare',    [exclusive, auto_delete]},
              {'exchange.declare', [{exchange, ?EXCHANGE}, auto_delete]},
