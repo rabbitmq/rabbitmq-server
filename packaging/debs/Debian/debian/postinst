@@ -26,7 +26,8 @@ fi
 # create rabbitmq user
 if ! getent passwd rabbitmq >/dev/null; then
         adduser --system --ingroup rabbitmq --home /var/lib/rabbitmq \
-        	--no-create-home --gecos "RabbitMQ messaging server" rabbitmq
+        	--no-create-home --gecos "RabbitMQ messaging server" \
+                --disabled-login rabbitmq
 fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
