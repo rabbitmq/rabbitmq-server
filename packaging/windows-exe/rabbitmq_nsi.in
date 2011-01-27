@@ -108,6 +108,11 @@ SectionEnd
 ;--------------------------------
 
 Section "Start Menu" RabbitStartMenu
+  ; In case the service is not installed, or the service installation fails,
+  ; make sure these exist or Explorer will get confused.
+  CreateDirectory "$APPDATA\RabbitMQ\log"
+  CreateDirectory "$APPDATA\RabbitMQ\db"
+
   CreateDirectory "$SMPROGRAMS\RabbitMQ"
   CreateShortCut "$SMPROGRAMS\RabbitMQ\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
   CreateShortCut "$SMPROGRAMS\RabbitMQ\Plugins Directory.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\plugins"
