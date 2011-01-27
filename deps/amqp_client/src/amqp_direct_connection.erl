@@ -78,8 +78,8 @@ connect(#amqp_params{username = Username,
                                                    user = User,
                                                    vhost = VHost,
                                                    collector = Collector}}};
-        {badrpc, {'EXIT', Exit}} ->
-            {error, Exit};
+        {error, _} = E ->
+            E;
         {badrpc, nodedown} ->
             {error, {nodedown, Node}}
     end.
