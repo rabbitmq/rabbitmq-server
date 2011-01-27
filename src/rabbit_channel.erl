@@ -737,14 +737,18 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
 handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ,
                              limiter_pid = LimiterPid}) ->
+    OkFun = fun () -> ok end,
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    %% The Qpid python test suite incorrectly assumes
                    %% that messages will be requeued in their original
                    %% order. To keep it happy we reverse the id list
                    %% since we are given them in reverse order.
-                   rabbit_amqqueue:requeue(
-                     QPid, lists:reverse(MsgIds), self())
+                   rabbit_misc:with_exit_handler(
+                     OkFun, fun () ->
+                                    rabbit_amqqueue:requeue(
+                                      QPid, lists:reverse(MsgIds), self())
+                            end)
            end, ok, UAMQ),
     ok = notify_limiter(LimiterPid, UAMQ),
     %% No answer required - basic.recover is the newer, synchronous

@@ -137,7 +137,9 @@
         -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
-                    rabbit_types:connection_exit()).
+                    rabbit_types:connection_exit() |
+                    fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
+                                        rabbit_types:connection_exit())).
 -spec(maybe_run_queue_via_backing_queue/2 ::
         (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(maybe_run_queue_via_backing_queue_async/2 ::
@@ -215,8 +217,12 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           [_] -> %% Q exists on stopped node
                                  rabbit_misc:const(not_found)
                       end;
-                  [ExistingQ] ->
-                      rabbit_misc:const(ExistingQ)
+                  [ExistingQ = #amqqueue{pid = QPid}] ->
+                      case is_process_alive(QPid) of
+                          true  -> rabbit_misc:const(ExistingQ);
+                          false -> TailFun = internal_delete(QueueName),
+                                   fun (Tx) -> TailFun(Tx), ExistingQ end
+                      end
               end
       end).
 
@@ -432,17 +438,15 @@ internal_delete1(QueueName) ->
     rabbit_binding:remove_for_destination(QueueName).
 
 internal_delete(QueueName) ->
-    rabbit_misc:execute_mnesia_transaction(
+    rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
-                  []  -> {error, not_found};
-                  [_] -> internal_delete1(QueueName)
+                  []  -> rabbit_misc:const({error, not_found});
+                  [_] -> Deletions = internal_delete1(QueueName),
+                         fun (Tx) -> ok = rabbit_binding:process_deletions(
+                                            Deletions, Tx)
+                         end
               end
-      end,
-      fun ({error, _} = Err, _Tx) ->
-              Err;
-          (Deletions, Tx) ->
-              ok = rabbit_binding:process_deletions(Deletions, Tx)
       end).
 
 maybe_run_queue_via_backing_queue(QPid, Fun) ->
