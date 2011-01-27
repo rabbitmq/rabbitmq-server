@@ -272,13 +272,22 @@ function update() {
             replace_content('main', html);
             postprocess();
             postprocess_partial();
+            maybe_scroll();
             reset_timer();
         });
 }
 
+var update_counter = 0;
+
 function partial_update() {
     if ($('.updatable').length > 0) {
+        if (update_counter >= 200) {
+            update_counter = 0;
+            full_refresh();
+            return;
+        }
         with_update(function(html) {
+            update_counter++;
             replace_content('scratch', html);
             var befores = $('#main .updatable');
             var afters = $('#scratch .updatable');
@@ -291,6 +300,36 @@ function partial_update() {
             postprocess_partial();
         });
     }
+}
+
+function full_refresh() {
+    store_pref('position', x_position() + ',' + y_position());
+    location.reload();
+}
+
+function maybe_scroll() {
+    var pos = get_pref('position');
+    if (pos) {
+        clear_pref('position');
+        var xy = pos.split(",");
+        window.scrollTo(parseInt(xy[0]), parseInt(xy[1]));
+    }
+}
+
+function x_position() {
+    return window.pageXOffset ?
+        window.pageXOffset :
+        document.documentElement.scrollLeft ?
+        document.documentElement.scrollLeft :
+        document.body.scrollLeft;
+}
+
+function y_position() {
+    return window.pageYOffset ?
+        window.pageYOffset :
+        document.documentElement.scrollTop ?
+        document.documentElement.scrollTop :
+        document.body.scrollTop;
 }
 
 function with_update(fun) {
@@ -590,6 +629,7 @@ function sync_post(sammy, path_template) {
 }
 
 function sync_req(type, params0, path_template) {
+    update_counter = 0; // If there's interaction, reset the counter.
     var params = params_magic(params0);
     var path;
     try {
