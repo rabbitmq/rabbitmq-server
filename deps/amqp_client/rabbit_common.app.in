@@ -3,6 +3,7 @@
   {vsn, "%%VSN%%"},
   {modules, [
              gen_server2,
+             delegate,
              priority_queue,
              rabbit_backing_queue,
              rabbit_basic,
@@ -22,6 +23,7 @@
              rabbit_reader,
              rabbit_writer,
              rabbit_queue_collector,
+             rabbit_amqqueue,
              supervisor2
   ]},
   {registered, []},

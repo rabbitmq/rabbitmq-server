@@ -95,7 +95,7 @@ test_direct: prepare_tests
 	$(MAKE) run_test_in_broker RUN_TEST_ARGS="-s direct_client_SUITE test"
 
 test_remote_direct: prepare_tests
-	$(MAKE) run_test_in_broker RUN_TEST_ARGS="-s direct_client_SUITE test"
+	$(MAKE) run_test_detached RUN_TEST_ARGS="-s direct_client_SUITE test"
 
 test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) package prepare_tests
 	$(MAKE) run_test_detached RUN="$(LIBS_PATH) erl -pa $(TEST_DIR)" \
@@ -111,3 +111,6 @@ test_network_coverage: prepare_tests
 
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_in_broker RUN_TEST_ARGS="-s direct_client_SUITE test_coverage"
+
+test_direct_remote_coverage: prepare_tests
+	$(MAKE) run_test_detached RUN_TEST_ARGS="-s direct_client_SUITE test_coverage"

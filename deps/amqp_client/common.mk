@@ -63,7 +63,7 @@ export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)$(if $(APPEND_VERSION),-$(VERSION),)
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
-                                 file:consult("$(COMMON_PACKAGE).app"), \
+                                 file:consult("$(COMMON_PACKAGE).app.in"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
