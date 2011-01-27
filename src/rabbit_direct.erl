@@ -51,20 +51,21 @@ boot() ->
 
 connect(Username, Password, VHost) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
-        true  -> ok;
-        false -> exit(broker_not_found_in_vm)
-    end,
-    User = try rabbit_access_control:user_pass_login(Username, Password) of
-               #user{} = User1 -> User1
-           catch
-               exit:#amqp_error{name = access_refused} -> exit(auth_failure)
-           end,
-    try rabbit_access_control:check_vhost_access(User, VHost) of
-        ok -> ok
-    catch
-        exit:#amqp_error{name = access_refused} -> exit(access_refused)
-    end,
-    {ok, {User, rabbit_reader:server_properties()}}.
+        true  ->
+            try rabbit_access_control:user_pass_login(Username, Password) of
+                #user{} = User ->
+                    try rabbit_access_control:check_vhost_access(User, VHost) of
+                        ok -> {ok, {User, rabbit_reader:server_properties()}}
+                    catch
+                        exit:#amqp_error{name = access_refused} ->
+                            {error, access_refused}
+                    end
+            catch
+                exit:#amqp_error{name = access_refused} -> {error, auth_failure}
+            end;
+        false ->
+            {error, broker_not_found_on_node}
+    end.
 
 start_channel(Number, ClientChannelPid, User, VHost, Collector) ->
     {ok, _, {ChannelPid, _}} =
