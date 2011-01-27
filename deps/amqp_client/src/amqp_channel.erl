@@ -439,24 +439,33 @@ handle_close(Code, Text, From, State) ->
         BlockReply -> {reply, BlockReply, State}
     end.
 
-handle_subscribe(#'basic.consume'{consumer_tag = Tag} = Method, Consumer,
+handle_subscribe(#'basic.consume'{consumer_tag = Tag, nowait = NoWait} = Method,
+                 Consumer,
                  From, State = #state{tagged_sub_requests = Tagged,
                                       anon_sub_requests   = Anon,
                                       consumers           = Consumers}) ->
     case check_block(Method, none, State) of
         ok when Tag =:= undefined orelse size(Tag) == 0 ->
-            NewMethod = Method#'basic.consume'{consumer_tag = <<"">>},
-            NewState = State#state{anon_sub_requests =
-                                    queue:in(Consumer, Anon)},
-            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
-        ok when is_binary(Tag) ->
+            case NoWait of
+                true ->
+                    {reply, {error, command_invalid}, State};
+                false ->
+                    NewMethod = Method#'basic.consume'{consumer_tag = <<"">>},
+                    NewState = State#state{anon_sub_requests =
+                                               queue:in(Consumer, Anon)},
+                    {noreply, rpc_top_half(NewMethod, none, From, NewState)}
+            end;
+        ok when is_binary(Tag) andalso size(Tag) >= 0 ->
             case dict:is_key(Tag, Tagged) orelse dict:is_key(Tag, Consumers) of
                 true ->
                     {reply, {error, consumer_tag_already_in_use}, State};
-                false ->
+                false when not(NoWait)->
                     NewState = State#state{tagged_sub_requests =
                                              dict:store(Tag, Consumer, Tagged)},
-                    {noreply, rpc_top_half(Method, none, From, NewState)}
+                    {noreply, rpc_top_half(Method, none, From, NewState)};
+                false when NoWait ->
+                    NewState = register_consumer(Tag, Consumer, State),
+                    {reply, ok, rpc_top_half(Method, none, none, NewState)}
             end;
         BlockReply ->
             {reply, BlockReply, State}
@@ -532,7 +541,7 @@ handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
                  if Drop -> ?LOG_INFO("Channel (~p): dropping method ~p from "
                                       "server because channel is closing~n",
                                       [self(), {Method, Content}]),
-                                      {noreply, State};
+                            {noreply, State};
                     true -> handle_method_from_server1(Method,
                                                        amqp_msg(Content), State)
                  end

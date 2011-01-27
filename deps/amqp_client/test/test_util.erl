@@ -457,6 +457,19 @@ confirm_test(Connection) ->
          end,
     teardown(Connection, Channel).
 
+subscribe_nowait_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    ok = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
+                                                          consumer_tag = uuid(),
+                                                          nowait = true},
+                                self()),
+    receive
+        {#'basic.deliver'{delivery_tag = DTag}, _Content} ->
+            amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DTag})
+    end,
+    teardown(Connection, Channel).
+
 basic_nack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q}
