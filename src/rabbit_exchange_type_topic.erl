@@ -80,34 +80,27 @@ assert_args_equivalence(X, Args) ->
 %%----------------------------------------------------------------------------
 
 trie_match(X, Words) ->
-    trie_match(X, root, Words).
+    trie_match(X, root, Words, []).
 
-trie_match(X, Node, []) ->
-    FinalRes = trie_bindings(X, Node),
-    HashRes = case trie_child(X, Node, "#") of
-                  {ok, HashNode} -> trie_match(X, HashNode, []);
-                  error          -> []
-              end,
-    FinalRes ++ HashRes;
-trie_match(X, Node, [W | RestW] = Words) ->
-    ExactRes = case trie_child(X, Node, W) of
-                   {ok, NextNode} -> trie_match(X, NextNode, RestW);
-                   error          -> []
-               end,
-    StarRes = case trie_child(X, Node, "*") of
-                  {ok, StarNode} -> trie_match(X, StarNode, RestW);
-                  error          -> []
-              end,
-    HashRes = case trie_child(X, Node, "#") of
-                  {ok, HashNode} -> trie_match_skip_any(X, HashNode, Words);
-                  error          -> []
-              end,
-    ExactRes ++ StarRes ++ HashRes.
+trie_match(X, Node, [], ResAcc) ->
+    ResAcc1 = trie_bindings(X, Node) ++ ResAcc,
+    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, [], ResAcc1);
+trie_match(X, Node, [W | RestW] = Words, ResAcc) ->
+    ResAcc1 = trie_match_part(X, Node, W, fun trie_match/4, RestW, ResAcc),
+    ResAcc2 = trie_match_part(X, Node, "*", fun trie_match/4, RestW, ResAcc1),
+    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, Words, ResAcc2).
 
-trie_match_skip_any(X, Node, []) ->
-    trie_match(X, Node, []);
-trie_match_skip_any(X, Node, [_ | RestW] = Words) ->
-    trie_match(X, Node, Words) ++ trie_match_skip_any(X, Node, RestW).
+trie_match_part(X, Node, Search, MatchFun, RestW, ResAcc) ->
+    case trie_child(X, Node, Search) of
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, ResAcc);
+        error          -> ResAcc
+    end.
+
+trie_match_skip_any(X, Node, [], ResAcc) ->
+    trie_match(X, Node, [], ResAcc);
+trie_match_skip_any(X, Node, [_ | RestW] = Words, ResAcc) ->
+    ResAcc1 = trie_match(X, Node, Words, ResAcc),
+    trie_match_skip_any(X, Node, RestW, ResAcc1).
 
 follow_down_create(X, Words) ->
     case follow_down_last_node(X, Words) of
