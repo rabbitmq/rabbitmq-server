@@ -23,13 +23,13 @@ all_tests: prepare_tests
 	OK=true && \
 	{ $(MAKE) test_suites || OK=false; } && \
 	{ $(MAKE) test_common_package || OK=false; } && \
-	{ $(MAKE) test_remote_direct || OK=false; } && \
+	{ $(MAKE) test_direct || OK=false; } && \
 	$$OK
 
 test_suites: prepare_tests
 	OK=true && \
 	{ $(MAKE) test_network || OK=false; } && \
-	{ $(MAKE) test_direct || OK=false; } && \
+	{ $(MAKE) test_remote_direct || OK=false; } && \
 	$(ALL_SSL) && \
 	$$OK
 
@@ -100,6 +100,8 @@ test_remote_direct: prepare_tests
 test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) package prepare_tests
 	$(MAKE) run_test_detached RUN="$(LIBS_PATH) erl -pa $(TEST_DIR)" \
 	    RUN_TEST_ARGS="-s network_client_SUITE test"
+	$(MAKE) run_test_detached RUN="$(LIBS_PATH) erl -pa $(TEST_DIR) -sname amqp_client" \
+	    RUN_TEST_ARGS="-s direct_client_SUITE test"
 
 test_ssl_coverage: prepare_tests ssl
 	$(MAKE) run_test_detached RUN_TEST_ARGS="-s ssl_client_SUITE test_coverage"

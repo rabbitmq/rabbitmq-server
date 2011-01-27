@@ -21,6 +21,7 @@
              rabbit_net,
              rabbit_reader,
              rabbit_writer,
+             rabbit_queue_collector,
              supervisor2
   ]},
   {registered, []},
