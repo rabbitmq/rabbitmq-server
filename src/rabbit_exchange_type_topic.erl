@@ -83,12 +83,14 @@ trie_match(X, Words) ->
     trie_match(X, root, Words, []).
 
 trie_match(X, Node, [], ResAcc) ->
-    ResAcc1 = trie_bindings(X, Node) ++ ResAcc,
-    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, [], ResAcc1);
+    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, [],
+                    trie_bindings(X, Node) ++ ResAcc);
 trie_match(X, Node, [W | RestW] = Words, ResAcc) ->
-    ResAcc1 = trie_match_part(X, Node, W, fun trie_match/4, RestW, ResAcc),
-    ResAcc2 = trie_match_part(X, Node, "*", fun trie_match/4, RestW, ResAcc1),
-    trie_match_part(X, Node, "#", fun trie_match_skip_any/4, Words, ResAcc2).
+    lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
+                        trie_match_part(X, Node, WArg, MatchFun, RestWArg, Acc)
+                end, ResAcc, [{W, fun trie_match/4, RestW},
+                              {"*", fun trie_match/4, RestW},
+                              {"#", fun trie_match_skip_any/4, Words}]).
 
 trie_match_part(X, Node, Search, MatchFun, RestW, ResAcc) ->
     case trie_child(X, Node, Search) of
@@ -99,8 +101,8 @@ trie_match_part(X, Node, Search, MatchFun, RestW, ResAcc) ->
 trie_match_skip_any(X, Node, [], ResAcc) ->
     trie_match(X, Node, [], ResAcc);
 trie_match_skip_any(X, Node, [_ | RestW] = Words, ResAcc) ->
-    ResAcc1 = trie_match(X, Node, Words, ResAcc),
-    trie_match_skip_any(X, Node, RestW, ResAcc1).
+    trie_match_skip_any(X, Node, RestW,
+                        trie_match(X, Node, Words, ResAcc)).
 
 follow_down_create(X, Words) ->
     case follow_down_last_node(X, Words) of
