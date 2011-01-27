@@ -359,8 +359,8 @@ handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
     {noreply, NState};
 handle_cast({delayed_restart, {RestartType, Reason, Child}}, State) ->
     case get_child(Child#child.name, State) of
-        {value, Child} ->
-            {ok, NState} = do_restart(RestartType, Reason, Child, State),
+        {value, Child1} ->
+            {ok, NState} = do_restart(RestartType, Reason, Child1, State),
             {noreply, NState};
         _ ->
             {noreply, State}
@@ -539,7 +539,7 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
             {ok, _TRef} = timer:apply_after(
                             trunc(Delay*1000), ?MODULE, delayed_restart,
                             [self(), {{RestartType, Delay}, Reason, Child}]),
-            {ok, NState}
+            {ok, state_del_child(Child, NState)}
     end;
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),

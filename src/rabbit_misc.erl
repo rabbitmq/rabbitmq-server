@@ -55,6 +55,7 @@
 -export([now_ms/0]).
 -export([lock_file/1]).
 -export([const_ok/1, const/1]).
+-export([ntoa/1, ntoab/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -191,6 +192,8 @@
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/1 :: (any()) -> 'ok').
 -spec(const/1 :: (A) -> const(A)).
+-spec(ntoa/1 :: (inet:ip_address()) -> string()).
+-spec(ntoab/1 :: (inet:ip_address()) -> string()).
 
 -endif.
 
@@ -832,3 +835,17 @@ lock_file(Path) ->
 
 const_ok(_) -> ok.
 const(X) -> fun (_) -> X end.
+
+%% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
+%% when IPv6 is enabled but not used (i.e. 99% of the time).
+ntoa({0,0,0,0,0,16#ffff,AB,CD}) ->
+    inet_parse:ntoa({AB bsr 8, AB rem 256, CD bsr 8, CD rem 256});
+ntoa(IP) ->
+    inet_parse:ntoa(IP).
+
+ntoab(IP) ->
+    Str = ntoa(IP),
+    case string:str(Str, ":") of
+        0 -> Str;
+        _ -> "[" ++ Str ++ "]"
+    end.

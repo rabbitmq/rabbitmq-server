@@ -33,6 +33,10 @@
 %% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
 %% apparently, by OpenAMQ.
 
+%% TODO: once the minimum erlang becomes R13B03, reimplement this
+%% using the binary module - that makes use of BIFs to do binary
+%% matching and will thus be much faster.
+
 description() ->
     [{name, <<"PLAIN">>},
      {description, <<"SASL PLAIN authentication mechanism">>}].
@@ -41,11 +45,32 @@ init(_Sock) ->
     [].
 
 handle_response(Response, _State) ->
-    %% The '%%"' at the end of the next line is for Emacs
-    case re:run(Response, "^\\0([^\\0]*)\\0([^\\0]*)$",%%"
-                [{capture, all_but_first, binary}]) of
-        {match, [User, Pass]} ->
+    case extract_user_pass(Response) of
+        {ok, User, Pass} ->
             rabbit_access_control:check_user_pass_login(User, Pass);
-        _ ->
+        error ->
             {protocol_error, "response ~p invalid", [Response]}
     end.
+
+extract_user_pass(Response) ->
+    case extract_elem(Response) of
+        {ok, User, Response1} -> case extract_elem(Response1) of
+                                     {ok, Pass, <<>>} -> {ok, User, Pass};
+                                     _                -> error
+                                 end;
+        error                 -> error
+    end.
+
+extract_elem(<<0:8, Rest/binary>>) ->
+    Count = next_null_pos(Rest),
+    <<Elem:Count/binary, Rest1/binary>> = Rest,
+    {ok, Elem, Rest1};
+extract_elem(_) ->
+    error.
+
+next_null_pos(Bin) ->
+    next_null_pos(Bin, 0).
+
+next_null_pos(<<>>, Count)                  -> Count;
+next_null_pos(<<0:8, _Rest/binary>>, Count) -> Count;
+next_null_pos(<<_:8, Rest/binary>>,  Count) -> next_null_pos(Rest, Count + 1).
