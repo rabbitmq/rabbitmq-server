@@ -164,7 +164,8 @@ Section "Uninstall"
   ; Remove start menu items
   RMDir /r "$SMPROGRAMS\RabbitMQ"
 
-  ; TODO: unset ERLANG_HOME?
+  DeleteRegValue ${env_hklm} ERLANG_HOME
+  SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 
 SectionEnd
 
