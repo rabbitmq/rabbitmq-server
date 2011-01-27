@@ -87,7 +87,8 @@ div.section-invisible h2 { background: white; border: 1px solid #ddd; background
 div.section-visible h2 { background: #eee;  border: 1px solid #eee; background-image: url(../img/expand.png); background-repeat:no-repeat; background-position:4px 4px; }
 
 form { margin: 0; }
-form.inline-form { float: left; margin-right: 100px; }
+form.inline-form { float: left; }
+form.inline-form-right { float: right; }
 input, select { padding: 0.2em; }
 input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; }
 input[type=text].wide { width: 300px; }
