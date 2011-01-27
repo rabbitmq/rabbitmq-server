@@ -408,22 +408,6 @@ basic_qos_test(Connection, Prefetch) ->
     wait_for_death(Chan),
     Res.
 
-
-confirm_test(Connection) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
-    amqp_channel:register_ack_handler(Channel, self()),
-    io:format("Registered ~p~n", [self()]),
-    {ok, Q} = setup_publish(Channel),
-    {#'basic.get_ok'{}, _}
-        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
-    ok = receive
-             #'basic.ack'{} -> ok
-         after 2000 ->
-                 exit(did_not_receive_pub_ack)
-         end,
-    teardown(Connection, Channel).
-
 sleeping_consumer(Channel, Sleep, Parent) ->
     receive
         stop ->
@@ -458,6 +442,21 @@ producer_loop(Channel, RoutingKey, N) ->
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<>>}),
     producer_loop(Channel, RoutingKey, N - 1).
 
+confirm_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+    amqp_channel:register_ack_handler(Channel, self()),
+    io:format("Registered ~p~n", [self()]),
+    {ok, Q} = setup_publish(Channel),
+    {#'basic.get_ok'{}, _}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
+    ok = receive
+             #'basic.ack'{} -> ok
+         after 2000 ->
+                 exit(did_not_receive_pub_ack)
+         end,
+    teardown(Connection, Channel).
+
 basic_nack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q}
@@ -478,7 +477,7 @@ basic_nack_test(Connection) ->
 
     get_and_assert_empty(Channel, Q),
     teardown(Connection, Channel).
-
+    
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->
     amqp_connection:close(Connection).
