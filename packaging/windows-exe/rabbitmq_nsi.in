@@ -11,7 +11,7 @@
 ;--------------------------------
 
 ; The name of the installer
-Name "RabbitMQ"
+Name "RabbitMQ %%VERSION%%"
 
 ; The file to write
 OutFile "rabbitmq-server-%%VERSION%%.exe"
@@ -29,6 +29,8 @@ InstallDirRegKey HKLM "Software\RabbitMQ" "Install_Dir"
 
 ; Request application privileges for Windows Vista
 RequestExecutionLevel admin
+
+SetCompressor /solid lzma
 
 VIProductVersion "%%VERSION%%.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "%%VERSION%%"
