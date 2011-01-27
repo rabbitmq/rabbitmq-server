@@ -101,8 +101,9 @@ SectionEnd
 ;--------------------------------
 
 Section "RabbitMQ Service" RabbitService
-  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat install"
-  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat start"
+  ExpandEnvStrings $0 %COMSPEC%
+  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" install'
+  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start'
   CopyFiles "$WINDIR\.erlang.cookie" "$PROFILE\.erlang.cookie"
   CopyFiles "$WINDIR\.erlang.cookie" "$APPDATA\.erlang.cookie"
 SectionEnd
@@ -152,8 +153,9 @@ Section "Uninstall"
   DeleteRegKey HKLM SOFTWARE\RabbitMQ
 
   ; TODO these will fail if the service is not installed - do we care?
-  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat stop"
-  ExecWait "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat remove"
+  ExpandEnvStrings $0 %COMSPEC%
+  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" stop'
+  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" remove'
 
   ; Remove from PATH
   ${un.EnvVarUpdate} $0 "PATH" "R" "HKLM" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
@@ -218,6 +220,10 @@ Function findErlang
     ; See http://nsis.sourceforge.net/Setting_Environment_Variables
     WriteRegExpandStr ${env_hklm} ERLANG_HOME $0
     SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
+
+    ; On Windows XP changing the permanent environment does not change *our*
+    ; environment, so do that as well.
+    System::Call 'Kernel32::SetEnvironmentVariableA(t, t) i("ERLANG_HOME", "$0").r0'
   ${EndIf}
 
 FunctionEnd
