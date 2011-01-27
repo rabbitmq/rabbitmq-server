@@ -417,6 +417,7 @@ function postprocess() {
             setTimeout('app.run()');
             return false;
         });
+    $('input, select').die();
     $('.multifield input').live('blur', function() {
             update_multifields();
         });
@@ -432,6 +433,9 @@ function postprocess() {
     setup_visibility();
     $('.help').die().live('click', function() {
         help($(this).attr('id'))
+    });
+    $('input, select').live('focus', function() {
+        update_counter = 0; // If there's interaction, reset the counter.
     });
     if (! user_administrator) {
         $('.administrator-only').remove();
@@ -629,7 +633,6 @@ function sync_post(sammy, path_template) {
 }
 
 function sync_req(type, params0, path_template) {
-    update_counter = 0; // If there's interaction, reset the counter.
     var params = params_magic(params0);
     var path;
     try {
