@@ -137,7 +137,9 @@
         -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
-                    rabbit_types:connection_exit()).
+                    rabbit_types:connection_exit() |
+                    fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
+                                        rabbit_types:connection_exit())).
 -spec(maybe_run_queue_via_backing_queue/2 ::
         (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(maybe_run_queue_via_backing_queue_async/2 ::
