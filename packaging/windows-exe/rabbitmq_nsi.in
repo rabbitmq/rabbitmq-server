@@ -178,14 +178,14 @@ Function .onInit
 
   ReadRegStr $0 HKLM ${uninstall} "UninstallString"
   ${If} $0 != ""
-    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "RabbitMQ is already installed. $\n$\nClick 'OK' to remove the previous version or 'Cancel' to cancel this installation." IDOK uninst
-
-    Abort
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "RabbitMQ is already installed. $\n$\nClick 'OK' to remove the previous version or 'Cancel' to cancel this installation." IDCANCEL norun
 
     ;Run the uninstaller
-    uninst:
-      ClearErrors
-      Exec $INSTDIR\uninstall.exe
+    ClearErrors
+    ExecWait $INSTDIR\uninstall.exe
+
+    norun:
+    Abort
   ${EndIf}
 FunctionEnd
 
