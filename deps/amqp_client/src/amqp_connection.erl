@@ -46,17 +46,18 @@
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
 %%     defaults to &lt;&lt;"/"&gt;&gt;</li>
 %% <li>host :: string() - The hostname of the broker,
-%%     defaults to "localhost"</li>
+%%     defaults to "localhost" (network only)</li>
 %% <li>port :: integer() - The port the broker is listening on,
-%%     defaults to 5672</li>
+%%     defaults to 5672 (network only)</li>
+%% <li>node :: atom() - The node the broker runs on (direct only)</li>
 %% <li>channel_max :: non_neg_integer() - The channel_max handshake parameter,
 %%     defaults to 0</li>
 %% <li>frame_max :: non_neg_integer() - The frame_max handshake parameter,
-%%     defaults to 0</li>
+%%     defaults to 0 (network only)</li>
 %% <li>heartbeat :: non_neg_integer() - The hearbeat interval in seconds,
-%%     defaults to 0 (turned off)</li>
+%%     defaults to 0 (turned off) (network only)</li>
 %% <li>ssl_options :: term() - The second parameter to be used with the
-%%     ssl:connect/2 function, defaults to 'none'</li>
+%%     ssl:connect/2 function, defaults to 'none' (network only)</li>
 %% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
 %%     client properties to be sent to the server, defaults to []</li>
 %% </ul>
