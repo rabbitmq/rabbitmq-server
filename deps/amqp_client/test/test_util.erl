@@ -408,23 +408,6 @@ basic_qos_test(Connection, Prefetch) ->
     wait_for_death(Chan),
     Res.
 
-
-confirm_test(Connection) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Channel, self()),
-    io:format("Registered ~p~n", [self()]),
-    {ok, Q} = setup_publish(Channel),
-    {#'basic.get_ok'{}, _}
-        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
-    ok = receive
-             #'basic.ack'{}  -> ok;
-             #'basic.nack'{} -> fail
-         after 2000 ->
-                 exit(did_not_receive_pub_ack)
-         end,
-    teardown(Connection, Channel).
-
 sleeping_consumer(Channel, Sleep, Parent) ->
     receive
         stop ->
@@ -458,6 +441,35 @@ producer_loop(Channel, RoutingKey, N) ->
     Publish = #'basic.publish'{exchange = <<>>, routing_key = RoutingKey},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<>>}),
     producer_loop(Channel, RoutingKey, N - 1).
+
+confirm_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Channel, self()),
+    io:format("Registered ~p~n", [self()]),
+    {ok, Q} = setup_publish(Channel),
+    {#'basic.get_ok'{}, _}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
+    ok = receive
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
+         after 2000 ->
+                 exit(did_not_receive_pub_ack)
+         end,
+    teardown(Connection, Channel).
+
+subscribe_nowait_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    ok = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
+                                                          consumer_tag = uuid(),
+                                                          nowait = true},
+                                self()),
+    receive
+        {#'basic.deliver'{delivery_tag = DTag}, _Content} ->
+            amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DTag})
+    end,
+    teardown(Connection, Channel).
 
 basic_nack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
