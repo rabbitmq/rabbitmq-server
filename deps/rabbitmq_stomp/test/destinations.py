@@ -1,6 +1,7 @@
 import unittest
 import stomp
 import base
+import time
 
 class TestExchange(base.BaseTest):
 
@@ -32,6 +33,8 @@ class TestExchange(base.BaseTest):
         self.assertEquals("not_found", err['headers']['message'])
         self.assertEquals("no exchange 'does.not.exist' in vhost '/'\n",
                           err['message'])
+        time.sleep(1)
+        self.assertFalse(self.conn.is_connected())
 
     def __test_exchange_send_rec(self, exchange, route = None):
         dest = "/exchange/" + exchange

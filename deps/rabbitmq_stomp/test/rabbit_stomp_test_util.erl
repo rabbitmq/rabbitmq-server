@@ -41,8 +41,8 @@ message_properties_test() ->
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
                 {"amqp-message-id", "M123"},
-                {"X-str", "foo"},
-                {"X-int", "123"}
+                {"str", "foo"},
+                {"int", "123"}
               ],
 
     #'P_basic'{
@@ -91,35 +91,70 @@ message_headers_test() ->
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
                 {"amqp-message-id", "M123"},
-                {"X-str", "foo"},
-                {"X-int", "123"}
+                {"str", "foo"},
+                {"int", "123"}
                ],
 
     [] = lists:subtract(Headers, Expected).
 
+negotiate_version_both_empty_test() ->
+    {error, no_common_version} = rabbit_stomp_util:negotiate_version([],[]).
+
+negotiate_version_no_common_test() ->
+    {error, no_common_version} =
+        rabbit_stomp_util:negotiate_version(["1.2"],["1.3"]).
+
+negotiate_version_simple_common_test() ->
+    {ok, "1.2"} =
+        rabbit_stomp_util:negotiate_version(["1.2"],["1.2"]).
+
+negotiate_version_two_choice_common_test() ->
+    {ok, "1.3"} =
+        rabbit_stomp_util:negotiate_version(["1.2", "1.3"],["1.2", "1.3"]).
+
+negotiate_version_two_choice_common_out_of_order_test() ->
+    {ok, "1.3"} =
+        rabbit_stomp_util:negotiate_version(["1.3", "1.2"],["1.2", "1.3"]).
+
+negotiate_version_two_choice_big_common_test() ->
+    {ok, "1.20.23"} =
+        rabbit_stomp_util:negotiate_version(["1.20.23", "1.30.456"],
+                                            ["1.20.23", "1.30.457"]).
+negotiate_version_choice_mismatched_length_test() ->
+    {ok, "1.2.3"} =
+        rabbit_stomp_util:negotiate_version(["1.2", "1.2.3"],
+                                            ["1.2.3", "1.2"]).
+negotiate_version_choice_duplicates_test() ->
+    {ok, "1.2"} =
+        rabbit_stomp_util:negotiate_version(["1.2", "1.2"],
+                                            ["1.2", "1.2"]).
 %%--------------------------------------------------------------------
 %% Frame Parsing Tests
 %%--------------------------------------------------------------------
 
 ack_mode_auto_test() ->
     Frame = #stomp_frame{headers = [{"ack", "auto"}]},
-    auto = rabbit_stomp_util:ack_mode(Frame).
+    {auto, _} = rabbit_stomp_util:ack_mode(Frame).
 
 ack_mode_auto_default_test() ->
     Frame = #stomp_frame{headers = []},
-    auto = rabbit_stomp_util:ack_mode(Frame).
+    {auto, _} = rabbit_stomp_util:ack_mode(Frame).
 
 ack_mode_client_test() ->
     Frame = #stomp_frame{headers = [{"ack", "client"}]},
-    client = rabbit_stomp_util:ack_mode(Frame).
+    {client, true} = rabbit_stomp_util:ack_mode(Frame).
+
+ack_mode_client_individual_test() ->
+    Frame = #stomp_frame{headers = [{"ack", "client-individual"}]},
+    {client, false} = rabbit_stomp_util:ack_mode(Frame).
 
 consumer_tag_id_test() ->
     Frame = #stomp_frame{headers = [{"id", "foo"}]},
-    {ok, <<"T_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+    {ok, <<"T_foo">>, _} = rabbit_stomp_util:consumer_tag(Frame).
 
 consumer_tag_destination_test() ->
     Frame = #stomp_frame{headers = [{"destination", "foo"}]},
-    {ok, <<"Q_foo">>} = rabbit_stomp_util:consumer_tag(Frame).
+    {ok, <<"Q_foo">>, _} = rabbit_stomp_util:consumer_tag(Frame).
 
 consumer_tag_invalid_test() ->
     Frame = #stomp_frame{headers = []},

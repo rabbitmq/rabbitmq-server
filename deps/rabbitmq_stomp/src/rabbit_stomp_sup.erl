@@ -39,36 +39,24 @@ start_link(Listeners) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
 init([Listeners]) ->
-    ChildSpecs = [
-                  {rabbit_stomp_client_sup_sup,
-                   {tcp_client_sup, start_link,
-                    [{local, rabbit_stomp_client_sup_sup},
-                     {rabbit_stomp_client_sup, start_link,[]}]},
-                   transient,
-                   infinity,
-                   supervisor,
-                   [tcp_client_sup]} | make_listener_specs(Listeners)
-                  ],
-    {ok, {{one_for_all, 10, 10}, ChildSpecs}}.
-
-make_listener_specs(Listeners) ->
-    lists:foldl(
-      fun({Host, Port}, Acc) ->
-              {IPAddress, Name} = rabbit_networking:check_tcp_listener_address(
-                                    rabbit_stomp_listener_sup,
-                                    Host,
-                                    Port),
-              [{Name,
-                {tcp_listener_sup, start_link,
-                 [IPAddress, Port,
-                  [{packet, raw},
-                   {reuseaddr, true}],
-                  {?MODULE, listener_started, []},
-                  {?MODULE, listener_stopped, []},
-                  {?MODULE, start_client, []}, "STOMP Listener"]},
-                transient, infinity, supervisor, [tcp_listener_sup]} | Acc]
-
-      end, [], Listeners).
+    {ok, {{one_for_all, 10, 10},
+          [{rabbit_stomp_client_sup_sup,
+            {tcp_client_sup, start_link,
+             [{local, rabbit_stomp_client_sup_sup},
+              {rabbit_stomp_client_sup, start_link,[]}]},
+            transient, infinity, supervisor, [tcp_client_sup]} |
+           [{Name,
+             {tcp_listener_sup, start_link,
+              [IPAddress, Port,
+               [Family, {packet, raw}, {reuseaddr, true}, {backlog, 128}],
+               {?MODULE, listener_started, []},
+               {?MODULE, listener_stopped, []},
+               {?MODULE, start_client, []}, "STOMP Listener"]},
+             transient, infinity, supervisor, [tcp_listener_sup]} ||
+               Listener <- Listeners,
+               {IPAddress, Port, Family, Name} <-
+                   rabbit_networking:check_tcp_listener_address(
+                     rabbit_stomp_listener_sup, Listener)]]}}.
 
 listener_started(IPAddress, Port) ->
     rabbit_networking:tcp_listener_started(stomp, IPAddress, Port).

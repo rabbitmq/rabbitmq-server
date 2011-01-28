@@ -32,21 +32,26 @@ You need to install the rabbit\_stomp.ez and amqp\_client.ez packages.
 
 ## Running the STOMP adapter
 
-### Configuring the server to start the plugin automatically
+When no configuration is specified the STOMP Adapter will listen on
+all interfaces on port 61613.
 
-Most RabbitMQ server packages are set up to cause the server to pick
-up configuration from `/etc/rabbitmq/rabbitmq.conf`. To tell the
-server to start your plugin, first make sure it is compiled, and then
-add the following text to `/etc/rabbitmq/rabbitmq.conf`:
+To change this, edit your [Configuration file](http://www.rabbitmq.com/install.html#configfile),
+to contain a tcp_listeners variable for the rabbit_stomp application.
 
-    SERVER_START_ARGS='-rabbit_stomp listeners [{"0.0.0.0",61613}]'
+For example, a complete configuration file which changes the listener
+port to 12345 would look like:
 
-Then restart the server with
+[
+  {rabbit_stomp, [{tcp_listeners, [12345]} ]}
+].
 
-    sudo /etc/init.d/rabbitmq-server restart
+while one which changes the listener to listen only on localhost (for
+both IPv4 and IPv6) would look like:
 
-When no configuration is specified the STOMP Adapter will listen on 
-localhost by default.
+[
+  {rabbit_stomp, [{tcp_listeners, [{"127.0.0.1", 61613},
+                                   {"::1",       61613} ]} ]}
+].
 
 ### Checking that the adapter is running
 

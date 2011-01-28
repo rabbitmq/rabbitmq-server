@@ -1,13 +1,37 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Thu Oct 07 11:04:59 2010 +0100
-@@ -449,6 +449,9 @@
++++ b/stomp/connect.py	Wed Nov 10 20:44:32 2010 +0000
+@@ -88,7 +88,9 @@
+                  ssl_key_file = None,
+                  ssl_cert_file = None,
+                  ssl_ca_certs = None,
+-                 ssl_cert_validator = None):
++                 ssl_cert_validator = None,
++                 version = None,
++                 heartbeat = None):
+         """
+         Initialize and start this connection.
+
+@@ -204,6 +206,12 @@
+         if user is not None and passcode is not None:
+             self.__connect_headers['login'] = user
+             self.__connect_headers['passcode'] = passcode
++
++        if version is not None:
++            self.__connect_headers['accept-version'] = version
++
++        if heartbeat is not None:
++            self.__connect_headers['heartbeat'] = heartbeat
+
+         self.__socket = None
+         self.__socket_semaphore = threading.BoundedSemaphore(1)
+@@ -449,6 +457,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
- 
+
 +    def send_frame(self, command, headers={}, payload=''):
 +        self.__send_frame(command, headers, payload)
-+        
++
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.

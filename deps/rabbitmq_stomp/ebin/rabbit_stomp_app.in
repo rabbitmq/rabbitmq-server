@@ -12,5 +12,5 @@
   ]},
   {registered, []},
   {mod, {rabbit_stomp, []}},
-  {env, [{listeners, [{"127.0.0.1", 61613}]}]},
+  {env, [{tcp_listeners, [61613]}]},
   {applications, [kernel, stdlib, rabbit]}]}.
