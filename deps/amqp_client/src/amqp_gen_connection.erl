@@ -296,13 +296,15 @@ server_misbehaved_close(AmqpError, State) ->
 set_closing_state(ChannelCloseType, NewClosing,
                   State = #state{channels_manager = ChMgr,
                                  closing = CurClosing}) ->
-    amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType),
     ResClosing =
         case closing_priority(NewClosing) =< closing_priority(CurClosing) of
             true  -> NewClosing;
             false -> CurClosing
         end,
-    callback(closing, [ChannelCloseType, closing_to_reason(ResClosing)],
+    ClosingReason = closing_to_reason(ResClosing),
+    amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
+                                                    ClosingReason),
+    callback(closing, [ChannelCloseType, ClosingReason],
              State#state{closing = ResClosing}).
 
 closing_priority(false)                                     -> 99;

@@ -67,23 +67,24 @@ hard_error_test(Connection) ->
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{connection_closing, _} ->
-            %% Network case
+        %% Network case
+        exit:{{connection_closing,
+               {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _} ->
             ok;
-        exit:Reason ->
-            %% Direct case
-            %% TODO: fix error code in the direct case
-            ?assertMatch({{server_initiated_hard_close, ?NOT_IMPLEMENTED, _}, _},
-                         Reason)
+        %% Direct case
+        exit:{{connection_closing,
+               {server_initiated_hard_close, ?NOT_IMPLEMENTED, _}}, _} ->
+            ok
     end,
-    receive {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
-        case OtherExit of
-            %% Direct case
-            %% TODO fix error code in the direct case
-            killed -> ok;
-            %% Network case
-            _      -> ?assertMatch(connection_closing, OtherExit)
-        end
+    receive
+        %% Direct case
+        %% TODO fix error code in the direct case
+        {'DOWN', OtherChannelMonitor, process, OtherChannel, killed} ->
+            ok;
+        {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
+            ?assertMatch({connection_closing,
+                          {server_initiated_close, ?NOT_IMPLEMENTED, _}},
+                         OtherExit)
     end,
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection).
