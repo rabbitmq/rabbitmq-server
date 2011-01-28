@@ -459,13 +459,13 @@ handle_subscribe(#'basic.consume'{consumer_tag = Tag, nowait = NoWait} = Method,
             case dict:is_key(Tag, Tagged) orelse dict:is_key(Tag, Consumers) of
                 true ->
                     {reply, {error, consumer_tag_already_in_use}, State};
-                false when not(NoWait)->
-                    NewState = State#state{tagged_sub_requests =
-                                             dict:store(Tag, Consumer, Tagged)},
-                    {noreply, rpc_top_half(Method, none, From, NewState)};
                 false when NoWait ->
                     NewState = register_consumer(Tag, Consumer, State),
-                    {reply, ok, rpc_top_half(Method, none, none, NewState)}
+                    {reply, ok, rpc_top_half(Method, none, none, NewState)};
+                false ->
+                    NewState = State#state{tagged_sub_requests =
+                                             dict:store(Tag, Consumer, Tagged)},
+                    {noreply, rpc_top_half(Method, none, From, NewState)}
             end;
         BlockReply ->
             {reply, BlockReply, State}
