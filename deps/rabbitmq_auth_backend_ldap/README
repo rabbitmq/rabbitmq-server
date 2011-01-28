@@ -12,12 +12,18 @@ starting.
 Requirements
 ============
 
-Currently this needs bug23455 in rabbitmq-server. If you want to use
-the management plugin, you'll need bug23455 in rabbitmq-erlang-client
-and rabbitmq-management, and bug23467 in rabbitmq-management-agent.
+You can build and install it like any other plugin (see
+http://www.rabbitmq.com/plugin-development.html).
 
-Once you have the right branches, you can build and install it like
-any other plugin (see http://www.rabbitmq.com/plugin-development.html).
+You will need ASN.1 support in Erlang. This will not be an issue for
+most users, but Debian / Ubuntu users may need to run:
+ # apt-get install erlang-asn1
+
+If nothing works and you see errors like:
+  {undef,
+   [{asn1rt,
+     encode, ...
+in the RabbitMQ log, this means you do not have ASN.1 support.
 
 Enabling the plugin
 ===================
