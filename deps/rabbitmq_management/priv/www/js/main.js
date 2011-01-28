@@ -551,8 +551,7 @@ function with_reqs(reqs, acc, fun) {
 }
 
 function replace_content(id, html) {
-    $("#" + id).empty();
-    $(html).appendTo("#" + id);
+    $("#" + id).html(html);
 }
 
 function format(template, json) {
