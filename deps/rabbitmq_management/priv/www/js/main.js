@@ -295,7 +295,7 @@ function partial_update() {
                 throw("before/after mismatch");
             }
             for (var i = 0; i < befores.length; i++) {
-                befores[i].innerHTML = afters[i].innerHTML;
+                $(befores[i]).replaceWith(afters[i]);
             }
             postprocess_partial();
         });
