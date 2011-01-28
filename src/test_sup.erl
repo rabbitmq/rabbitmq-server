@@ -59,19 +59,21 @@ start_child() ->
 
 ping_child(SupPid) ->
     Ref = make_ref(),
-    get_child_pid(SupPid) ! {ping, Ref, self()},
+    with_child_pid(SupPid, fun(ChildPid) -> ChildPid ! {ping, Ref, self()} end),
     receive {pong, Ref} -> ok
     after 1000          -> timeout
     end.
 
 exit_child(SupPid) ->
-    true = exit(get_child_pid(SupPid), abnormal),
+    with_child_pid(SupPid, fun(ChildPid) -> exit(ChildPid, abnormal) end),
     ok.
 
-get_child_pid(SupPid) ->
-    [{_Id, ChildPid, worker, [test_sup]}] =
-        supervisor2:which_children(SupPid),
-    ChildPid.
+with_child_pid(SupPid, Fun) ->
+    case supervisor2:which_children(SupPid) of
+        [{_Id, undefined, worker, [test_sup]}] -> ok;
+        [{_Id,  ChildPid, worker, [test_sup]}] -> Fun(ChildPid);
+        []                                     -> ok
+    end.
 
 run_child() ->
     receive {ping, Ref, Pid} -> Pid ! {pong, Ref},
