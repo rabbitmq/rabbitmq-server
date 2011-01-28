@@ -80,7 +80,7 @@ else
     LIBS_PATH=ERL_LIBS=$(LIBS_PATH_UNIX)
 endif
 
-LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
+LOAD_PATH=$(EBIN_DIR) $(TEST_DIR) $(ERL_PATH)
 
 RUN:=$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
 
@@ -150,10 +150,8 @@ run: compile
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(DIST_DIR)/$(PACKAGE_DIR) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
-
-$(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+	rm -f $@
 	rm -rf $(DIST_DIR)/$(PACKAGE_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
@@ -161,6 +159,7 @@ $(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 
