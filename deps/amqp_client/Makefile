@@ -72,18 +72,6 @@ $(DOC_DIR)/index.html: $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) $(DOC_DIR)/overview.edo
 
 include test.mk
 
-test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) package prepare_tests
-	$(MAKE) start_test_broker_node
-	OK=true && \
-	TMPFILE=$(MKTEMP) && \
-	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
-	    -eval 'error_logger:tty(false), network_client_SUITE:test(), halt().' 2>&1 | \
-		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && \
-	$(MAKE) stop_test_broker_node && \
-	$$OK
-
 compile_tests: $(TEST_TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 
 $(TEST_TARGETS): $(TEST_DIR)
@@ -98,10 +86,8 @@ $(TEST_DIR): $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 
 COPY=cp -pR
 
-$(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(DIST_DIR)/$(COMMON_PACKAGE_DIR) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
-
-$(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_DIR)
+$(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_DIR)
+	rm -f $@
 	$(MAKE) -C $(BROKER_DIR)
 	rm -rf $(DIST_DIR)/$(COMMON_PACKAGE_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)
@@ -111,6 +97,7 @@ $(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST
 	    ( cp $(BROKER_DIR)/ebin/$(DEP).beam $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/ \
 	    );)
 	cp $(BROKER_DIR)/include/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)/
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
 
 source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)

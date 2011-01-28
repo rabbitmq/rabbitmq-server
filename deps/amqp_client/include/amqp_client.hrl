@@ -31,6 +31,7 @@
                       virtual_host      = <<"/">>,
                       host              = "localhost",
                       port              = ?PROTOCOL_PORT,
+                      node              = node(),
                       channel_max       = 0,
                       frame_max         = 0,
                       heartbeat         = 0,

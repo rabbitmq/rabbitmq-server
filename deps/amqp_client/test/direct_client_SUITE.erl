@@ -132,12 +132,14 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(direct, AmqpParams) of {ok, Conn}     -> Conn;
-                                                      {error, _} = E -> E
+    case amqp_connection:start(
+             direct,
+             AmqpParams#amqp_params{node = rabbit_misc:makenode(rabbit)}) of
+        {ok, Conn}     -> Conn;
+        {error, _} = E -> E
     end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
-

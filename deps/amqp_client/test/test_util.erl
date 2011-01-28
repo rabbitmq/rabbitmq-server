@@ -632,8 +632,8 @@ rpc_test(Connection) ->
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
-                       q = <<"a.b.c">>,
-                       x = <<"x">>,
+                       q = uuid(),
+                       x = uuid(),
                        bind_key = <<"a.b.c.*">>,
                        payload = <<"foobar">>},
     setup_publish(Channel, Publish).
