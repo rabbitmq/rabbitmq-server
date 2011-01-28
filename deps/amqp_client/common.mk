@@ -11,7 +11,7 @@
 # The Original Code is RabbitMQ.
 #
 # The Initial Developer of the Original Code is VMware, Inc.
-# Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+# Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 #
 
 # The client library can either be built from source control or by downloading
@@ -63,7 +63,7 @@ export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)-$(VERSION)
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
-                                 file:consult("$(COMMON_PACKAGE).app"), \
+                                 file:consult("$(COMMON_PACKAGE).app.in"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
@@ -80,10 +80,9 @@ else
     LIBS_PATH=ERL_LIBS=$(LIBS_PATH_UNIX)
 endif
 
-LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
+LOAD_PATH=$(EBIN_DIR) $(TEST_DIR) $(ERL_PATH)
 
-COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
-COVER_STOP := -s rabbit_misc report_cover ../rabbitmq-erlang-client -s cover stop
+RUN:=$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
 
 MKTEMP=$$(mktemp $(TMPDIR)/tmp.XXXXXXXXXX)
 
@@ -142,19 +141,17 @@ common_clean:
 	rm -f $(DEPS_FILE)
 	$(MAKE) -C $(TEST_DIR) clean
 
-compile: $(TARGETS)
+compile: $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 
-run: compile $(EBIN_DIR)/$(PACKAGE).app
-	$(LIBS_PATH) erl -pa $(LOAD_PATH)
+run: compile
+	$(RUN)
 
 ###############################################################################
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(DIST_DIR)/$(PACKAGE_DIR) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
-
-$(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+	rm -f $@
 	rm -rf $(DIST_DIR)/$(PACKAGE_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
@@ -162,6 +159,7 @@ $(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 

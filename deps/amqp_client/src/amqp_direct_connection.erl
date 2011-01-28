@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -24,7 +24,8 @@
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
--record(state, {user,
+-record(state, {node,
+                user,
                 vhost,
                 collector,
                 closing_reason %% undefined | Reason
@@ -37,8 +38,11 @@
 init([]) ->
     {ok, #state{}}.
 
-open_channel_args(#state{user = User, vhost = VHost, collector = Collector}) ->
-    [User, VHost, Collector].
+open_channel_args(#state{node = Node,
+                         user = User,
+                         vhost = VHost,
+                         collector = Collector}) ->
+    [Node, User, VHost, Collector].
 
 do(_Method, _State) ->
     ok.
@@ -63,26 +67,19 @@ i(Item, _State) -> throw({bad_argument, Item}).
 info_keys() ->
     ?INFO_KEYS.
 
-connect(AmqpParams, SIF, _ChMgr, State) ->
-    try do_connect(AmqpParams, SIF, State) of
-        Return -> Return
-    catch
-        exit:#amqp_error{name = access_refused} ->
-            {error, auth_failure};
-        _:Reason ->
-            {error, {Reason, erlang:get_stacktrace()}}
-    end.
-
-do_connect(#amqp_params{username = Username, password = Pass,
-                        virtual_host = VHost},
-           SIF, State) ->
-    case lists:keymember(rabbit, 1, application:which_applications()) of
-        true  -> User = rabbit_access_control:user_pass_login(Username, Pass),
-                 rabbit_access_control:check_vhost_access(User, VHost),
-                 {ok, Collector} = SIF(),
-                 {ok, rabbit_reader:server_properties(), 0,
-                  State#state{user = User,
-                              vhost = VHost,
-                              collector = Collector}};
-        false -> {error, broker_not_found_in_vm}
+connect(#amqp_params{username = Username,
+                     password = Pass,
+                     node = Node,
+                     virtual_host = VHost}, SIF, _ChMgr, State) ->
+    case rpc:call(Node, rabbit_direct, connect, [Username, Pass, VHost]) of
+        {ok, {User, ServerProperties}} ->
+            {ok, Collector} = SIF(),
+            {ok, {ServerProperties, 0, State#state{node = Node,
+                                                   user = User,
+                                                   vhost = VHost,
+                                                   collector = Collector}}};
+        {error, _} = E ->
+            E;
+        {badrpc, nodedown} ->
+            {error, {nodedown, Node}}
     end.

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(network_client_SUITE).
@@ -37,6 +37,9 @@ basic_recover_test() ->
 
 basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
+
+basic_nack_test() ->
+    test_util:basic_nack_test(new_connection()).
 
 large_content_test() ->
     test_util:large_content_test(new_connection()).
@@ -84,7 +87,8 @@ sync_async_method_serialization_test_() ->
         end}.
 
 teardown_test() ->
-    repeat(fun test_util:teardown_test/1, ?ITERATIONS).
+    {timeout, 50,
+        fun () -> repeat(fun test_util:teardown_test/1, ?ITERATIONS) end}.
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
@@ -98,29 +102,41 @@ pub_and_close_test_() ->
 channel_tune_negotiation_test() ->
     amqp_connection:close(new_connection(#amqp_params{ channel_max = 10 })).
 
+confirm_test() ->
+    test_util:confirm_test(new_connection()).
+
+subscribe_nowait_test() ->
+    test_util:subscribe_nowait_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% Negative Tests
 
 non_existent_exchange_test() ->
     negative_test_util:non_existent_exchange_test(new_connection()).
 
-bogus_rpc_test() ->
-    repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS).
+bogus_rpc_test_() ->
+    {timeout, 50,
+        fun () ->
+                repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS)
+        end}.
 
-hard_error_test() ->
-    repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS).
+hard_error_test_() ->
+    {timeout, 50,
+        fun () ->
+                repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS)
+        end}.
 
 non_existent_user_test() ->
-    negative_test_util:non_existent_user_test().
+    negative_test_util:non_existent_user_test(fun new_connection/1).
 
 invalid_password_test() ->
-    negative_test_util:invalid_password_test().
+    negative_test_util:invalid_password_test(fun new_connection/1).
 
 non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test().
+    negative_test_util:non_existent_vhost_test(fun new_connection/1).
 
 no_permission_test() ->
-    negative_test_util:no_permission_test().
+    negative_test_util:no_permission_test(fun new_connection/1).
 
 channel_writer_death_test() ->
     negative_test_util:channel_writer_death_test(new_connection()).
@@ -150,12 +166,12 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(network, AmqpParams) of
-        {ok, Conn}            -> Conn;
-        {error, _Err} = Error -> Error
+    case amqp_connection:start(network, AmqpParams) of {ok, Conn}     -> Conn;
+                                                       {error, _} = E -> E
     end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
+

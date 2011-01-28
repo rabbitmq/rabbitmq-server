@@ -11,9 +11,10 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
+%% @private
 -module(amqp_gen_connection).
 
 -include("amqp_client.hrl").
@@ -105,7 +106,10 @@ behaviour_info(callbacks) ->
      {terminate, 2},
 
      %% connect(AmqpParams, SIF, ChMgr, State) ->
-     %%     {ok, ServerProperties, ChannelMax} | {error, Error}
+     %%     {ok, ConnectParams} | {closing, ConnectParams, AmqpError, Reply} |
+     %%         {error, Error}
+     %% where
+     %%     ConnectParams = {ServerProperties, ChannelMax, NewState}
      {connect, 4},
 
      %% do(Method, State) -> Ignored
@@ -157,26 +161,21 @@ init([Mod, Sup, AmqpParams, SIF, SChMF, ExtraParams]) ->
                 start_channels_manager_fun = SChMF}}.
 
 handle_call(connect, _From,
-            State = #state{module = Mod,
-                           module_state = MState,
-                           amqp_params = AmqpParams,
-                           start_infrastructure_fun = SIF,
-                           start_channels_manager_fun = SChMF}) ->
+            State0 = #state{module = Mod,
+                            module_state = MState,
+                            amqp_params = AmqpParams,
+                            start_infrastructure_fun = SIF,
+                            start_channels_manager_fun = SChMF}) ->
     {ok, ChMgr} = SChMF(),
+    State1 = State0#state{channels_manager = ChMgr},
     case Mod:connect(AmqpParams, SIF, ChMgr, MState) of
-        {ok, ServerProperties, ChannelMax, NewMState} ->
-            if ChannelMax =/= 0 ->
-                   amqp_channels_manager:set_channel_max(ChMgr, ChannelMax);
-               true ->
-                   ok
-            end,
-            {reply, {ok, self()},
-             State#state{module_state = NewMState,
-                         server_properties = ServerProperties,
-                         channel_max = ChannelMax,
-                         channels_manager = ChMgr}};
+        {ok, Params} ->
+            {reply, {ok, self()}, after_connect(Params, State1)};
+        {closing, Params, #amqp_error{} = AmqpError, Error} ->
+            server_misbehaved(self(), AmqpError),
+            {reply, Error, after_connect(Params, State1)};
         {error, _} = Error ->
-            {stop, Error, Error, State}
+            {stop, Error, Error, State0}
     end;
 handle_call({command, Command}, From, State = #state{closing = Closing}) ->
     case Closing of false -> handle_command(Command, From, State);
@@ -186,6 +185,16 @@ handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State = #state{module = Mod}) ->
     {reply, ?INFO_KEYS ++ Mod:info_keys(), State}.
+
+after_connect({ServerProperties, ChannelMax, NewMState},
+               State = #state{channels_manager = ChMgr}) ->
+    case ChannelMax of
+        0 -> ok;
+        _ -> amqp_channels_manager:set_channel_max(ChMgr, ChannelMax)
+    end,
+    State#state{server_properties = ServerProperties,
+                channel_max       = ChannelMax,
+                module_state      = NewMState}.
 
 handle_cast({method, Method, none}, State) ->
     handle_method(Method, State);

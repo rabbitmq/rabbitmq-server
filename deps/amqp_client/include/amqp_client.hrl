@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -31,6 +31,7 @@
                       virtual_host      = <<"/">>,
                       host              = "localhost",
                       port              = ?PROTOCOL_PORT,
+                      node              = node(),
                       channel_max       = 0,
                       frame_max         = 0,
                       heartbeat         = 0,

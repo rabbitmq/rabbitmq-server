@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(test_util).
@@ -135,7 +135,7 @@ sync_method_serialization_test(Connection) ->
 async_sync_method_serialization_test(Connection) ->
     abstract_method_serialization_test(
         Connection,
-        fun (Channel, X) ->
+        fun (Channel, _X) ->
                 #'queue.declare_ok'{queue = Q} =
                     amqp_channel:call(Channel, #'queue.declare'{}),
                 Q
@@ -168,7 +168,7 @@ sync_async_method_serialization_test(Connection) ->
     abstract_method_serialization_test(
         Connection,
         fun (_, _) -> ok end,
-        fun (Channel, X, Payload, _) ->
+        fun (Channel, X, _Payload, _) ->
                 Q = uuid(),
                 %% The sync methods (called with cast to resume immediately;
                 %% the order should still be preserved)
@@ -219,10 +219,14 @@ get_and_assert_empty(Channel, Q) ->
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}).
 
 get_and_assert_equals(Channel, Q, Payload) ->
-    {#'basic.get_ok'{}, Content}
-        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}),
+    get_and_assert_equals(Channel, Q, Payload, true).
+
+get_and_assert_equals(Channel, Q, Payload, NoAck) ->
+    {GetOk = #'basic.get_ok'{}, Content}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = NoAck}),
     #amqp_msg{payload = Payload2} = Content,
-    ?assertMatch(Payload, Payload2).
+    ?assertMatch(Payload, Payload2),
+    GetOk.
 
 basic_get_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -240,7 +244,7 @@ basic_return_test(Connection) ->
     amqp_channel:register_return_handler(Channel, self()),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
-    Publish = #'basic.publish'{exchange = X, routing_key = Key, 
+    Publish = #'basic.publish'{exchange = X, routing_key = Key,
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     receive
@@ -290,7 +294,7 @@ channel_multi_open_close_test(Connection) ->
 basic_ack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    {#'basic.get_ok'{delivery_tag = Tag}, _} 
+    {#'basic.get_ok'{delivery_tag = Tag}, _}
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
     teardown(Connection, Channel).
@@ -438,6 +442,56 @@ producer_loop(Channel, RoutingKey, N) ->
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<>>}),
     producer_loop(Channel, RoutingKey, N - 1).
 
+confirm_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Channel, self()),
+    io:format("Registered ~p~n", [self()]),
+    {ok, Q} = setup_publish(Channel),
+    {#'basic.get_ok'{}, _}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
+    ok = receive
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
+         after 2000 ->
+                 exit(did_not_receive_pub_ack)
+         end,
+    teardown(Connection, Channel).
+
+subscribe_nowait_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    ok = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
+                                                          consumer_tag = uuid(),
+                                                          nowait = true},
+                                self()),
+    receive
+        {#'basic.deliver'{delivery_tag = DTag}, _Content} ->
+            amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DTag})
+    end,
+    teardown(Connection, Channel).
+
+basic_nack_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{}),
+
+    Payload = <<"m1">>,
+
+    amqp_channel:call(Channel,
+                      #'basic.publish'{exchange = <<>>, routing_key = Q},
+                      #amqp_msg{payload = Payload}),
+
+    #'basic.get_ok'{delivery_tag = Tag} =
+        get_and_assert_equals(Channel, Q, Payload, false),
+
+    amqp_channel:call(Channel, #'basic.nack'{delivery_tag = Tag,
+                                             multiple     = false,
+                                             requeue      = false}),
+
+    get_and_assert_empty(Channel, Q),
+    teardown(Connection, Channel).
+
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->
     amqp_connection:close(Connection).
@@ -475,8 +529,8 @@ pub_and_close_test(Connection1, Connection2) ->
     amqp_connection:close(Connection1),
     %% Get sent messages back and count them
     {ok, Channel2} = amqp_connection:open_channel(Connection2),
-    amqp_channel:subscribe(Channel2, 
-                           #'basic.consume'{queue = Q, no_ack = true}, 
+    amqp_channel:subscribe(Channel2,
+                           #'basic.consume'{queue = Q, no_ack = true},
                            self()),
     ?assert(pc_consumer_loop(Channel2, Payload, 0) == NMessages),
     %% Make sure queue is empty
@@ -535,7 +589,7 @@ channel_flow_test(Connection) ->
                       end,
                       Publish = #'basic.publish'{exchange = X,
                                                  routing_key = K},
-                      blocked = 
+                      blocked =
                         amqp_channel:call(Channel, Publish,
                                           #amqp_msg{payload = Payload}),
                       memsup:set_sysmem_high_watermark(0.99),
@@ -578,8 +632,8 @@ rpc_test(Connection) ->
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
-                       q = <<"a.b.c">>,
-                       x = <<"x">>,
+                       q = uuid(),
+                       x = uuid(),
                        bind_key = <<"a.b.c.*">>,
                        payload = <<"foobar">>},
     setup_publish(Channel, Publish).
