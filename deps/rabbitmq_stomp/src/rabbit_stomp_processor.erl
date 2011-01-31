@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 -module(rabbit_stomp_processor).
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/2, process_frame/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -51,13 +51,13 @@
 %% Public API
 %%----------------------------------------------------------------------------
 start_link(Sock, StartHeartbeatFun) ->
-    gen_server:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
+    gen_server2:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
 
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
-    gen_server:cast(Pid, {Command, Frame}).
+    gen_server2:cast(Pid, {Command, Frame}).
 
 %%----------------------------------------------------------------------------
-%% Basic gen_server callbacks
+%% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
 init([Sock, StartHeartbeatFun]) ->
@@ -560,7 +560,7 @@ ensure_heartbeats(Heartbeats,
 
     Pid = self(),
     ReceiveFun = fun() ->
-                         gen_server:cast(Pid, client_timeout)
+                         gen_server2:cast(Pid, client_timeout)
                  end,
 
     {SendTimeout, ReceiveTimeout} =
@@ -687,7 +687,7 @@ send_error(Message, Format, Args, State) ->
     send_error(Message, format_detail(Format, Args), State).
 
 %%----------------------------------------------------------------------------
-%% Skeleton gen_server callbacks
+%% Skeleton gen_server2 callbacks
 %%----------------------------------------------------------------------------
 handle_call(_Cmd, _From, State) ->
     State.
