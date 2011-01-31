@@ -240,8 +240,8 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
                            precondition_failed,
-                           "inequivalent arg '~s' for ~s:  "
-                           "received: ~s, current: ~s",
+                           "inequivalent arg '~s' for ~s: "
+                           "received ~s but current is ~s",
                            [Key, rs(Name), val(New1), val(Orig1)])
     end.
 
