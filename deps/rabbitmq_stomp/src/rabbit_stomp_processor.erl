@@ -131,10 +131,7 @@ handle_info({Delivery = #'basic.deliver'{},
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State};
 handle_info({inet_reply, _, Status}, State) ->
-    {stop, Status, State};
-handle_info(Other, State) ->
-    {stop, because, State}.
-
+    {stop, Status, State}.
 
 process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
