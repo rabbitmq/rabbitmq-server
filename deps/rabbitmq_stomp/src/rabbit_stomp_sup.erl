@@ -41,10 +41,10 @@ start_link(Listeners) ->
 init([Listeners]) ->
     {ok, {{one_for_all, 10, 10},
           [{rabbit_stomp_client_sup_sup,
-            {tcp_client_sup, start_link,
+            {rabbit_client_sup, start_link,
              [{local, rabbit_stomp_client_sup_sup},
               {rabbit_stomp_client_sup, start_link,[]}]},
-            transient, infinity, supervisor, [tcp_client_sup]} |
+            transient, infinity, supervisor, [rabbit_client_sup]} |
            [{Name,
              {tcp_listener_sup, start_link,
               [IPAddress, Port,
@@ -70,5 +70,3 @@ start_client(Sock) ->
     ok = gen_tcp:controlling_process(Sock, ReaderPid),
     ReaderPid ! {go, Sock},
     SupPid.
-
-
