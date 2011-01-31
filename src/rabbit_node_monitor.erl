@@ -44,6 +44,8 @@ handle_cast(_Msg, State) ->
 
 handle_info({nodeup, Node}, State) ->
     rabbit_log:info("node ~p up", [Node]),
+    erlang:monitor(process, {rabbit, Node}),
+    io:format("monitored 'rabbit' on ~p~n", [Node]),
     {noreply, State};
 handle_info({nodedown, Node}, State) ->
     rabbit_log:info("node ~p down", [Node]),
@@ -52,6 +54,9 @@ handle_info({nodedown, Node}, State) ->
     %% *one* node, rather than all of them.
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
+    {noreply, State};
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
+    io:format("node ~p lost 'rabbit'~n", [Node]),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
