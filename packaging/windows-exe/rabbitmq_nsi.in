@@ -1,9 +1,9 @@
 ; Use the "Modern" UI
 !include MUI2.nsh
 !include LogicLib.nsh
-!include "winmessages.nsh"
-!include "FileFunc.nsh"
-!include "lib\EnvVarUpdate.nsh"
+!include WinMessages.nsh
+!include FileFunc.nsh
+!include lib\EnvVarUpdate.nsh
 
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
 !define uninstall "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
