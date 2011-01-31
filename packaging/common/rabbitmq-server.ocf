@@ -210,8 +210,18 @@ rabbit_validate_full() {
 }
 
 rabbit_status() {
+    rabbitmqctl_action "status"
+}
+
+rabbit_wait() {
+    rabbitmqctl_action "wait"
+}
+
+rabbitmqctl_action() {
     local rc
-    $RABBITMQ_CTL $NODENAME_ARG status > /dev/null 2> /dev/null
+    local action
+    action=$1
+    $RABBITMQ_CTL $NODENAME_ARG $action > /dev/null 2> /dev/null
     rc=$?
     case "$rc" in
         0)
@@ -223,7 +233,7 @@ rabbit_status() {
             return $OCF_NOT_RUNNING
             ;;
         *)
-            ocf_log err "Unexpected return from rabbitmqctl $NODENAME_ARG status: $rc"
+            ocf_log err "Unexpected return from rabbitmqctl $NODENAME_ARG $action: $rc"
             exit $OCF_ERR_GENERIC
     esac
 }
@@ -248,18 +258,12 @@ rabbit_start() {
 
     # Spin waiting for the server to come up.
     # Let the CRM/LRM time us out if required
-    start_wait=1
-    while [ $start_wait = 1 ]; do
-        rabbit_status
-        rc=$?
-        if [ "$rc" = $OCF_SUCCESS ]; then
-            start_wait=0
-        elif [ "$rc" != $OCF_NOT_RUNNING ]; then
-            ocf_log info "rabbitmq-server start failed: $rc"
-            exit $OCF_ERR_GENERIC
-        fi
-        sleep 1
-    done
+    rabbit_wait
+    rc=$?
+    if [ "$rc" != $OCF_SUCCESS ]; then
+        ocf_log info "rabbitmq-server start failed: $rc"
+        exit $OCF_ERR_GENERIC
+    fi
 
     return $OCF_SUCCESS
 }
