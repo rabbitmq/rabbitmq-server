@@ -230,7 +230,16 @@ start(normal, []) ->
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
-
+            io:format("informing other clustered brokers: ~p~n",
+                      [rabbit_mnesia:running_clustered_nodes()]),
+            %% notify other rabbits of this rabbit
+            [ rpc:call(Node, rabbit_node_monitor, rabbit_running_on, [node()])
+              || Node <- rabbit_mnesia:running_clustered_nodes(),
+                 Node =/= node() ],
+            %% register other active rabbits with this rabbit
+            [ rabbit_node_monitor:rabbit_running_on(Node)
+              || Node <- rabbit_mnesia:running_clustered_nodes(),
+                 Node =/= node() ],
             {ok, SupPid};
         Error ->
             Error

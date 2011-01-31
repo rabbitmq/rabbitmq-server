@@ -22,6 +22,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+-export([rabbit_running_on/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -29,6 +30,9 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+rabbit_running_on(Node) ->
+    gen_server:cast(rabbit_node_monitor, {rabbit_running_on, Node}).
 
 %%--------------------------------------------------------------------
 
@@ -39,14 +43,14 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_info({nodeup, Node}, State) ->
+handle_cast({rabbit_running_on, Node}, State) ->
     rabbit_log:info("node ~p up", [Node]),
     erlang:monitor(process, {rabbit, Node}),
     io:format("monitored 'rabbit' on ~p~n", [Node]),
     {noreply, State};
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
 handle_info({nodedown, Node}, State) ->
     rabbit_log:info("node ~p down", [Node]),
     %% TODO: This may turn out to be a performance hog when there are
@@ -68,4 +72,3 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%--------------------------------------------------------------------
-
