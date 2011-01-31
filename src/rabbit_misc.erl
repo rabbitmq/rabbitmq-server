@@ -248,7 +248,11 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
 val(undefined) ->
     "none";
 val({Type, Value}) ->
-    lists:flatten(io_lib:format("a value '~s' of type '~s'", [Value, Type])).
+    Fmt = case Value of
+              _ when is_binary (Value) -> "a value '~s' of type '~s'";
+              _                        -> "a value '~w' of type '~s'"
+          end,
+    lists:flatten(io_lib:format(Fmt, [Value, Type])).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
