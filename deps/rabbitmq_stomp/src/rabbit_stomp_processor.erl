@@ -70,7 +70,9 @@ init([Sock, StartHeartbeatFun]) ->
        connection          = none,
        subscriptions       = dict:new(),
        version             = none,
-       start_heartbeat_fun = StartHeartbeatFun}
+       start_heartbeat_fun = StartHeartbeatFun},
+     hibernate,
+     {backoff, 1000, 1000, 10000}
     }.
 
 terminate(_Reason, State) ->
@@ -122,14 +124,14 @@ handle_cast(client_timeout, State) ->
     {stop, client_timeout, State}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State};
+    {noreply, State, hibernate};
 handle_info(#'basic.cancel_ok'{}, State) ->
-    {noreply, State};
+    {noreply, State, hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
-    {noreply, send_delivery(Delivery, Props, Payload, State)};
+    {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
 handle_info({inet_reply, _, ok}, State) ->
-    {noreply, State};
+    {noreply, State, hibernate};
 handle_info({inet_reply, _, Status}, State) ->
     {stop, Status, State}.
 
@@ -150,9 +152,9 @@ process_request(ProcessFun, SuccessFun, State) ->
                 none -> ok;
                 _    -> send_frame(Frame, NewState)
             end,
-            {noreply, SuccessFun(NewState)};
+            {noreply, SuccessFun(NewState), hibernate};
         {error, Message, Detail, NewState} ->
-            {noreply, send_error(Message, Detail, NewState)};
+            {noreply, send_error(Message, Detail, NewState), hibernate};
         {stop, R, State} ->
             {stop, R, State}
     end.
