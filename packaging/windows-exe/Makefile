@@ -1,5 +1,3 @@
-# You must be on cygwin under Windows. NSIS must be installed and in your path
-
 VERSION=0.0.0
 ZIP=../windows/rabbitmq-server-windows-$(VERSION)
 
