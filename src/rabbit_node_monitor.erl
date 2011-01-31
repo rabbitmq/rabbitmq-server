@@ -22,9 +22,19 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
--export([rabbit_running_on/1]).
+-export([notify_cluster/0, rabbit_running_on/1]).
 
 -define(SERVER, ?MODULE).
+-define(RABBIT_UP_RPC_TIMEOUT, 2000).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(rabbit_running_on/1 :: (node()) -> 'ok').
+-spec(notify_cluster/0 :: () -> 'ok').
+
+-endif.
 
 %%--------------------------------------------------------------------
 
@@ -33,6 +43,22 @@ start_link() ->
 
 rabbit_running_on(Node) ->
     gen_server:cast(rabbit_node_monitor, {rabbit_running_on, Node}).
+
+notify_cluster() ->
+    %% notify other rabbits of this rabbit
+    {_, BadNodes} =
+        rpc:multicall(rabbit_mnesia:running_clustered_nodes() -- [node()],
+                      rabbit_node_monitor, rabbit_running_on, [node()],
+                      ?RABBIT_UP_RPC_TIMEOUT),
+    case BadNodes of
+        [] -> ok;
+        _  -> rabbit_log:warn("failed to contact nodes ~p", [BadNodes])
+    end,
+    %% register other active rabbits with this rabbit
+    [ rabbit_node_monitor:rabbit_running_on(Node)
+      || Node <- rabbit_mnesia:running_clustered_nodes(),
+         Node =/= node() ],
+    ok.
 
 %%--------------------------------------------------------------------
 
@@ -46,7 +72,6 @@ handle_call(_Request, _From, State) ->
 handle_cast({rabbit_running_on, Node}, State) ->
     rabbit_log:info("node ~p up", [Node]),
     erlang:monitor(process, {rabbit, Node}),
-    io:format("monitored 'rabbit' on ~p~n", [Node]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -56,7 +81,7 @@ handle_info({nodedown, Node}, State) ->
     ok = handle_dead_rabbit(Node, true),
      {noreply, State};
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
-    io:format("node ~p lost 'rabbit'~n", [Node]),
+    rabbit_log:info("node ~p lost 'rabbit'", [Node]),
     ok = handle_dead_rabbit(Node, false),
     {noreply, State};
 handle_info(_Info, State) ->
