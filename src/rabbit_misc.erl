@@ -247,9 +247,8 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
 
 val(undefined) ->
     "none";
-
 val({Type, Value}) ->
-    lists:flatten(io_lib:format("value '~s' of type '~s'", [Value, Type])).
+    lists:flatten(io_lib:format("a value '~s' of type '~s'", [Value, Type])).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
