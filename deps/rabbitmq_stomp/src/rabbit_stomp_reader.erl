@@ -36,7 +36,9 @@
 
 -include("rabbit_stomp_frame.hrl").
 
--record(reader_state, {socket, parse_state, processor, state}).
+-record(reader_state, {socket, parse_state, processor, state, iterations}).
+
+-define(FLUSH_ITERATIONS, 1000).
 
 start_link(ProcessorPid) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [ProcessorPid])}.
@@ -57,7 +59,8 @@ init(ProcessorPid) ->
                      #reader_state{socket      = Sock,
                                    parse_state = ParseState,
                                    processor   = ProcessorPid,
-                                   state       = running}), 0)
+                                   state       = running,
+                                   iterations  = 0}), 0)
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
                                       [self(), PeerAddressS, PeerPort])
@@ -66,9 +69,10 @@ init(ProcessorPid) ->
 
 mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
     run_socket(State, ByteCount),
+    State1 = flush_processor(State),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
-            process_received_bytes(Data, State);
+            process_received_bytes(Data, State1);
         {inet_async, Sock, _Ref, {error, closed}} ->
             error_logger:info_msg("Socket ~p closed by client~n", [Sock]),
             ok;
@@ -78,7 +82,7 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
                                    [Sock, Reason]),
             ok;
         {conserve_memory, Conserve} ->
-            mainloop(internal_conserve_memory(Conserve, State), ByteCount)
+            mainloop(internal_conserve_memory(Conserve, State1), ByteCount)
     end.
 
 process_received_bytes([], State) ->
@@ -100,6 +104,13 @@ process_received_bytes(Bytes,
                                      parse_state = PS,
                                      state       = next_state(S, Frame)})
     end.
+
+flush_processor(State = #reader_state{iterations = ?FLUSH_ITERATIONS,
+                                      processor  = Processor}) ->
+    rabbit_stomp_processor:flush(Processor),
+    State#reader_state{iterations = 0};
+flush_processor(State = #reader_state{iterations = Iterations}) ->
+    State#reader_state{iterations = Iterations + 1}.
 
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
