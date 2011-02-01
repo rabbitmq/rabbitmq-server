@@ -158,9 +158,9 @@ i(auth_mechanisms, _State) ->
       auth_mechanism,
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications, _State) ->
-    rabbit_mgmt_util:sort_list([rabbit_mgmt_format:application(A) ||
-                                   A <- application:which_applications()],
-                               [], "name", false).
+    [format_application(A) ||
+        A <- lists:sort(fun ({A, _, _}, {B, _, _}) -> A < B end,
+                        application:which_applications())].
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
@@ -171,6 +171,12 @@ list_registry_plugins(Type, Fun) ->
 
 registry_plugin_enabled(Desc, Fun) ->
     Desc ++ [{enabled, Fun(proplists:get_value(name, Desc))}].
+
+format_application({Application, Description, Version}) ->
+    [{name, Application},
+     {description, list_to_binary(Description)},
+     {version, list_to_binary(Version)}].
+
 
 %%--------------------------------------------------------------------
 
