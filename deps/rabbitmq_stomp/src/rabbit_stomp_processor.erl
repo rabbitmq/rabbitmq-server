@@ -46,6 +46,7 @@
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
+-define(FLUSH_TIMEOUT, 60000).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -57,7 +58,7 @@ process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server2:cast(Pid, {Command, Frame}).
 
 flush(Pid) ->
-    gen_server2:call(Pid, flush).
+    gen_server2:call(Pid, flush, ?FLUSH_TIMEOUT).
 
 %%----------------------------------------------------------------------------
 %% Basic gen_server2 callbacks
@@ -114,7 +115,11 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
       State);
 
 handle_cast(_Request, State = #state{channel = none}) ->
-    error("Illegal command", "You must log in using CONNECT first\n", State);
+    {noreply,
+     send_error("Illegal command",
+                "You must log in using CONNECT first\n",
+                State),
+     hibernate};
 
 handle_cast({Command, Frame}, State) ->
     process_request(
