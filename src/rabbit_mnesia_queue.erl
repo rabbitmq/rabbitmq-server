@@ -195,9 +195,7 @@
 %% start/1 promises that a list of (durable) queue names will be
 %% started in the near future. This lets us perform early checking of
 %% the consistency of those queues, and initialize other shared
-%% resources. This function creates an Mnesia transaction to run in,
-%% and therefore may not be called from inside another Mnesia
-%% transaction.
+%% resources. It is ignored in this implementation.
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 
@@ -209,9 +207,7 @@ start(_DurableQueues) -> ok.
 
 %%----------------------------------------------------------------------------
 %% stop/0 tears down all state/resources upon shutdown. It might not
-%% be called. This function creates an Mnesia transaction to run in,
-%% and therefore may not be called from inside another Mnesia
-%% transaction.
+%% be called. It is ignored in this implementation.
 %%
 %% -spec(stop/0 :: () -> 'ok').
 
@@ -232,63 +228,68 @@ stop() -> ok.
 %% BUG: It's unfortunate that this can't all be done in a single
 %% Mnesia transaction!
 
-init(QueueName, _IsDurable, _Recover) ->
-    rabbit_log:info("init(~n ~p,~n _, _) ->", [QueueName]),
+init(QueueName, IsDurable, Recover) ->
+    rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->",
+                    [QueueName, IsDurable, Recover]),
     {QTable, PTable, NTable} = db_tables(QueueName),
-    QAttributes = record_info(fields, q_record),
-    case mnesia:create_table(QTable,
-                             [{record_name, 'q_record'},
-                              {attributes, QAttributes},
-                              {type, ordered_set}])
-    of
-        {atomic, ok} -> ok;
-        {aborted, {already_exists, QTable}} ->
-            'q_record' = mnesia:table_info(QTable, record_name),
-            QAttributes = mnesia:table_info(QTable, attributes),
-            ok
+    case Recover of
+        false -> _ = mnesia:delete_table(QTable),
+                 _ = mnesia:delete_table(PTable),
+                 _ = mnesia:delete_table(NTable);
+        true -> ok
     end,
-    PAttributes = record_info(fields, p_record),
-    case mnesia:create_table(
-           PTable,
-           [{record_name, 'p_record'}, {attributes, PAttributes}])
-    of
-        {atomic, ok} -> ok;
-        {aborted, {already_exists, PTable}} ->
-            'p_record' = mnesia:table_info(PTable, record_name),
-            PAttributes = mnesia:table_info(PTable, attributes),
-            ok
-    end,
-    NAttributes = record_info(fields, n_record),
-    {NextSeqId, NextOutId} =
-        case mnesia:create_table(
-               NTable,
-               [{record_name, 'n_record'}, {attributes, NAttributes}])
-        of
-            {atomic, ok} -> {0, 0};
-            {aborted, {already_exists, NTable}} ->
-                'n_record' = mnesia:table_info(NTable, record_name),
-                NAttributes = mnesia:table_info(NTable, attributes),
-                [#n_record { key = 'n',
-                             next_seq_id = NextSeqId0,
-                             next_out_id = NextOutId0 }] =
-                    mnesia:dirty_read(NTable, 'n'),
-                {NextSeqId0, NextOutId0}
-        end,
+    create_table(QTable, 'q_record', 'ordered_set', record_info(fields,
+                                                                q_record)),
+    create_table(PTable, 'p_record', 'set', record_info(fields, p_record)),
+    create_table(NTable, 'n_record', 'set', record_info(fields, n_record)),
     {atomic, Result} =
-        mnesia:transaction(fun () -> RS = #s { q_table = QTable,
-                                               p_table = PTable,
-                                               n_table = NTable,
-                                               next_seq_id = NextSeqId,
-                                               next_out_id = NextOutId,
-                                               txn_dict = dict:new() },
-                                     db_save(RS),
-                                     RS
-                           end),
+        mnesia:transaction(
+          fun () ->
+                  {NextSeqId, NextOutId} =
+                      case mnesia:read(NTable, 'n', 'read') of
+                          [] -> {0, 0};
+                          [#n_record { next_seq_id = NextSeqId0,
+                                       next_out_id = NextOutId0 }] ->
+                              {NextSeqId0, NextOutId0}
+                      end,
+                  RS = #s { q_table = QTable,
+                            p_table = PTable,
+                            n_table = NTable,
+                            next_seq_id = NextSeqId,
+                            next_out_id = NextOutId,
+                            txn_dict = dict:new() },
+                  db_save(RS),
+                  RS
+          end),
+    rabbit_log:info(" -> ~p", [Result]),
+    Result.
+
+-spec create_table(atom(), atom(), atom(), [atom()]) -> ok.
+
+create_table(Table, RecordName, Type, Attributes) ->
+    rabbit_log:info("create_table(~n ~p,~n ~p,~n ~p,~n ~p) ->",
+                    [Table, RecordName, Type, Attributes]),
+    Result = case mnesia:create_table(Table, [{record_name, RecordName},
+					      {type, Type},
+					      {attributes, Attributes},
+					      {ram_copies, []},
+					      {disc_copies, [node()]}]) of
+                 {atomic, ok} -> rabbit_log:info("***CREATED***"),
+                                 ok;
+                 {aborted, {already_exists, Table}} ->
+                     rabbit_log:info("***ALREADY EXISTS***"),
+                     rabbit_log:info(
+                       "KEYS ARE ~p", [mnesia:dirty_all_keys(Table)]),
+                     RecordName = mnesia:table_info(Table, record_name),
+                     Type = mnesia:table_info(Table, type),
+                     Attributes = mnesia:table_info(Table, attributes),
+                     ok
+             end,
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% terminate/1 deletes all of a queue's enqueued msgs. This function
+%% terminate/1 deletes all of a queue's pending acks. This function
 %% creates an Mnesia transaction to run in, and therefore may not be
 %% called from inside another Mnesia transaction.
 %%
@@ -312,8 +313,8 @@ terminate(S = #s { p_table = PTable }) ->
 delete_and_terminate(S = #s { q_table = QTable, p_table = PTable }) ->
     rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
     {atomic, Result} =
-        mnesia:transaction(fun () -> clear_table(PTable),
-                                     clear_table(QTable),
+        mnesia:transaction(fun () -> clear_table(QTable),
+                                     clear_table(PTable),
                                      S
                            end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -400,9 +401,9 @@ publish_delivered(true,
 %% dropwhile/2 drops msgs from the head of the queue while there are
 %% msgs and while the supplied predicate returns true. This function
 %% creates an Mnesia transaction to run in, and therefore may not be
-%% called from inside another Mnesia transaction, and the supplied
-%% Pred may not call another function that creates an Mnesia
-%% transaction.
+%% called from inside another Mnesia transaction. The supplied Pred is
+%% called from inside the transaction, and therefore may not call
+%% another function that creates an Mnesia transaction.
 %%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
@@ -816,7 +817,7 @@ tx_commit_state(Pubs, SeqIds, PropsF, S) ->
 %% Like mnesia:clear_table, but within a transaction.
 
 %% BUG: The write-set of the transaction may be huge if the table is
-%% huge.
+%% huge. Then again, this might not bother Mnesia.
 
 -spec clear_table(atom()) -> ok.
 
