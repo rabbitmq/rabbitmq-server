@@ -24,13 +24,13 @@ start_link(Listeners) ->
 init([Listeners]) ->
     ChildSpecs = [
                   {rabbit_amqp1_0_client_sup_sup,
-                   {tcp_client_sup, start_link,
+                   {rabbit_client_sup, start_link,
                     [{local, rabbit_amqp1_0_client_sup_sup},
                      {rabbit_amqp1_0_client_sup, start_link, []}]},
                    transient,
                    infinity,
                    supervisor,
-                   [tcp_client_sup]} | make_listener_specs(Listeners)
+                   [rabbit_client_sup]} | make_listener_specs(Listeners)
                   ],
     {ok, {{one_for_all, 10, 10}, ChildSpecs}}.
 
