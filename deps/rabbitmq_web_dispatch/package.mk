@@ -1,2 +1,2 @@
 DEPS:=mochiweb-wrapper
-TEST_COMMANDS:=rabbit_mochiweb_test:test()
+IN_BROKER_TEST_COMMANDS:=rabbit_mochiweb_test:test()
