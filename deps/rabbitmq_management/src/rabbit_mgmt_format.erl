@@ -18,7 +18,7 @@
 -export([format/2, print/2, pid/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([timestamp/1, timestamp_ms/1]).
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
--export([exchange/1, user/1, internal_user/1, binding/1, url/2, application/1]).
+-export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([args_type/1, listener/1, properties/1]).
 
@@ -194,11 +194,6 @@ args_type(X) ->
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
-
-application({Application, Description, Version}) ->
-    [{name, Application},
-     {description, list_to_binary(Description)},
-     {version, list_to_binary(Version)}].
 
 exchange(X) ->
     format(X, [{fun resource/1,   [name]},
