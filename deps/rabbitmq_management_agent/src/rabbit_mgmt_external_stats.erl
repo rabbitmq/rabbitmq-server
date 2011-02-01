@@ -159,8 +159,7 @@ i(auth_mechanisms, _State) ->
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications, _State) ->
     [format_application(A) ||
-        A <- lists:sort(fun ({A, _, _}, {B, _, _}) -> A < B end,
-                        application:which_applications())].
+        A <- lists:keysort(1, application:which_applications())].
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
