@@ -22,7 +22,7 @@
          handle_info/2, prioritise_call/3]).
 -export([start_link/2]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
--export([get_limit/1, block/1, unblock/1, is_blocked/1]).
+-export([get_limit/1, set_credit/3, is_blocked/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -38,8 +38,8 @@
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(get_limit/1 :: (maybe_pid()) -> non_neg_integer()).
--spec(block/1 :: (maybe_pid()) -> 'ok').
--spec(unblock/1 :: (maybe_pid()) -> 'ok' | 'stopped').
+%% -spec(block/1 :: (maybe_pid()) -> 'ok').
+%% -spec(unblock/1 :: (maybe_pid()) -> 'ok' | 'stopped').
 -spec(is_blocked/1 :: (maybe_pid()) -> boolean()).
 
 -endif.
@@ -48,7 +48,8 @@
 
 -record(lim, {prefetch_count = 0,
               ch_pid,
-              blocked = false,
+              credit = unlimited,
+              drain = false,
               queues = dict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
@@ -95,15 +96,12 @@ get_limit(Pid) ->
       fun () -> 0 end,
       fun () -> gen_server2:call(Pid, get_limit, infinity) end).
 
-block(undefined) ->
+set_credit(undefined, _, _) ->
     ok;
-block(LimiterPid) ->
-    gen_server2:call(LimiterPid, block, infinity).
-
-unblock(undefined) ->
-    ok;
-unblock(LimiterPid) ->
-    gen_server2:call(LimiterPid, unblock, infinity).
+set_credit(LimiterPid, -1, Drain) ->
+    gen_server2:call(LimiterPid, {set_credit, unlimited, Drain}, infinity);
+set_credit(LimiterPid, Credit, Drain) ->
+    gen_server2:call(LimiterPid, {set_credit, Credit, Drain}, infinity).
 
 is_blocked(undefined) ->
     false;
@@ -121,14 +119,18 @@ prioritise_call(get_limit, _From, _State) -> 9;
 prioritise_call(_Msg,      _From, _State) -> 0.
 
 handle_call({can_send, _QPid, _AckRequired}, _From,
-            State = #lim{blocked = true}) ->
+            State = #lim{credit = 0}) ->
     {reply, false, State};
 handle_call({can_send, QPid, AckRequired}, _From,
-            State = #lim{volume = Volume}) ->
+            State = #lim{volume = Volume, credit = Credit}) ->
     case limit_reached(State) of
         true  -> {reply, false, limit_queue(QPid, State)};
         false -> {reply, true,  State#lim{volume = if AckRequired -> Volume + 1;
                                                       true        -> Volume
+                                                   end,
+                                          credit = case Credit of
+                                                       unlimited -> unlimited;
+                                                       _         -> Credit - 1
                                                    end}}
     end;
 
@@ -141,11 +143,8 @@ handle_call({limit, PrefetchCount}, _From, State) ->
         {stop, State1} -> {stop, normal, stopped, State1}
     end;
 
-handle_call(block, _From, State) ->
-    {reply, ok, State#lim{blocked = true}};
-
-handle_call(unblock, _From, State) ->
-    case maybe_notify(State, State#lim{blocked = false}) of
+handle_call({set_credit, Credit, Drain}, _From, State) ->
+    case maybe_notify(State, State#lim{credit = Credit, drain = Drain}) of
         {cont, State1} -> {reply, ok, State1};
         {stop, State1} -> {stop, normal, stopped, State1}
     end;
@@ -183,9 +182,9 @@ maybe_notify(OldState, NewState) ->
     case (limit_reached(OldState) orelse blocked(OldState)) andalso
         not (limit_reached(NewState) orelse blocked(NewState)) of
         true  -> NewState1 = notify_queues(NewState),
-                 {case NewState1#lim.prefetch_count of
-                      0 -> stop;
-                      _ -> cont
+                 {case {NewState1#lim.prefetch_count, NewState1#lim.credit} of
+                      {0, unlimited} -> stop;
+                      _              -> cont
                   end, NewState1};
         false -> {cont, NewState}
     end.
@@ -193,7 +192,8 @@ maybe_notify(OldState, NewState) ->
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
 
-blocked(#lim{blocked = Blocked}) -> Blocked.
+blocked(#lim{credit = 0}) -> true;
+blocked(_)                -> false.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
     case dict:is_key(QPid, Queues) of

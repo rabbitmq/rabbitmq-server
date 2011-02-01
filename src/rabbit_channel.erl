@@ -462,6 +462,7 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
 check_name(_Kind, NameBin) ->
     NameBin.
 
+%% TODO port this
 queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     case dict:find(QPid, Blocking) of
         error      -> State;
@@ -1003,31 +1004,46 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
     return_ok(State#ch{confirm_enabled = true},
               NoWait, #'confirm.select_ok'{});
 
-handle_method(#'channel.flow'{active = true}, _,
-              State = #ch{limiter_pid = LimiterPid}) ->
-    LimiterPid1 = case rabbit_limiter:unblock(LimiterPid) of
-                      ok      -> LimiterPid;
-                      stopped -> unlimit_queues(State)
-                  end,
-    {reply, #'channel.flow_ok'{active = true},
-     State#ch{limiter_pid = LimiterPid1}};
+handle_method(#'channel.flow'{active = true}, Content, State) ->
+    {noreply, State1 = #ch{writer_pid = WriterPid}} =
+        handle_method(#'channel.credit'{credit = -1, drain = true},
+                      Content, State),
+    ok = rabbit_writer:send_command(WriterPid,
+                                    #'channel.flow_ok'{active = true}),
+    {noreply, State1};
 
-handle_method(#'channel.flow'{active = false}, _,
-              State = #ch{limiter_pid = LimiterPid,
+handle_method(#'channel.flow'{active = false}, Content, State) ->
+    {noreply, State1 = #ch{writer_pid = WriterPid}} =
+        handle_method(#'channel.credit'{credit = 0, drain = true},
+                      Content, State),
+    ok = rabbit_writer:send_command(WriterPid,
+                                    #'channel.flow_ok'{active = false}),
+    {noreply, State1};
+
+handle_method(#'channel.credit'{credit = Credit, drain = Drain}, _,
+              State = #ch{limiter_pid      = LimiterPid,
                           consumer_mapping = Consumers}) ->
     LimiterPid1 = case LimiterPid of
                       undefined -> start_limiter(State);
                       Other     -> Other
                   end,
-    State1 = State#ch{limiter_pid = LimiterPid1},
-    ok = rabbit_limiter:block(LimiterPid1),
-    case consumer_queues(Consumers) of
-        []    -> {reply, #'channel.flow_ok'{active = false}, State1};
-        QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
-                              QPid <- QPids],
-                 ok = rabbit_amqqueue:flush_all(QPids, self()),
-                 {noreply, State1#ch{blocking = dict:from_list(Queues)}}
-    end;
+    LimiterPid2 =
+        case rabbit_limiter:set_credit(LimiterPid1, Credit, Drain) of
+            ok      -> limit_queues(LimiterPid1, State),
+                       LimiterPid1;
+            stopped -> unlimit_queues(State)
+        end,
+    State1 = State#ch{limiter_pid = LimiterPid2},
+    {noreply, State1};
+
+    %% TODO port this bit
+    %% case consumer_queues(Consumers) of
+    %%     []    -> {reply, #'channel.flow_ok'{active = false}, State1};
+    %%     QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
+    %%                           QPid <- QPids],
+    %%              ok = rabbit_amqqueue:flush_all(QPids, self()),
+    %%              {noreply, State1#ch{blocking = dict:from_list(Queues)}}
+    %% end;
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(

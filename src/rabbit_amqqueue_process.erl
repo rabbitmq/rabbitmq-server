@@ -1075,7 +1075,8 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                    true ->
                         ok
                 end,
-                NewLimited = Limited andalso LimiterPid =/= undefined,
+                NewLimited = Limited andalso LimiterPid =/= undefined
+                    andalso rabbit_limiter:is_blocked(LimiterPid),
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 
