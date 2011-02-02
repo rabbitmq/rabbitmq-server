@@ -1034,6 +1034,19 @@ handle_method(#'basic.credit'{consumer_tag = CTag, credit = Credit,
                               drain = Drain}, _,
               State = #ch{limiter_pid      = LimiterPid,
                           consumer_mapping = Consumers}) ->
+    %% We get Available first because it's likely that as soon as we set
+    %% the credit msgs will get consumed and it'll be out of date. Why do we
+    %% want that? Because at least then it's consistent with the credit value
+    %% we return. And Available is always going to be racy.
+    Available = case dict:find(CTag, Consumers) of
+                    {ok, QName} ->
+                        case rabbit_amqqueue:with(
+                               QName, fun (Q) -> rabbit_amqqueue:stat(Q) end) of
+                                   {ok, Len, _} -> Len;
+                                   _            -> -1
+                               end;
+                    error   -> -1
+                end,
     LimiterPid1 = case LimiterPid of
                       undefined -> start_limiter(State);
                       Other     -> Other
@@ -1045,7 +1058,10 @@ handle_method(#'basic.credit'{consumer_tag = CTag, credit = Credit,
             stopped -> unlimit_queues(State)
         end,
     State1 = State#ch{limiter_pid = LimiterPid2},
-    {noreply, State1};
+    return_ok(State1, false, #'basic.credit_state'{consumer_tag = CTag,
+                                                   credit = Credit,
+                                                   available = Available,
+                                                   drain = Drain});
 
     %% TODO port this bit ?
     %% case consumer_queues(Consumers) of
