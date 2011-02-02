@@ -38,7 +38,7 @@
 
 -record(reader_state, {socket, parse_state, processor, state, iterations}).
 
--define(FLUSH_ITERATIONS, 1000).
+-define(FLUSH_ITERATIONS, 50).
 
 start_link(ProcessorPid) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [ProcessorPid])}.

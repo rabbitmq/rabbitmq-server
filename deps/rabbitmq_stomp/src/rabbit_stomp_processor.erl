@@ -604,10 +604,10 @@ ensure_queue(send, {exchange, _}, _Channel) ->
 ensure_queue(_, {queue, Name}, Channel) ->
     %% Always create named queue for /queue destinations
     Queue = list_to_binary(Name),
-    #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel,
-                          #'queue.declare'{durable = true,
-                                           queue   = Queue}),
+    amqp_channel:cast(Channel,
+                      #'queue.declare'{durable = true,
+                                       queue   = Queue,
+                                       nowait  = true}),
     {ok, Queue};
 ensure_queue(subscribe, {topic, _}, Channel) ->
     %% Create anonymous, exclusive queue for SUBSCRIBE on /topic destinations
