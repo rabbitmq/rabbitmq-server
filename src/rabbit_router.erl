@@ -1,38 +1,22 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_router).
 -include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
--include("rabbit_framing.hrl").
 
 -export([deliver/2, match_bindings/2, match_routing_key/2]).
 
@@ -69,39 +53,22 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
     %% is preserved. This scales much better than the non-immediate
     %% case below.
     QPids = lookup_qpids(QNames),
-    ModifiedDelivery = strip_header(Delivery, ?DELETED_HEADER),
     delegate:invoke_no_result(
-      QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, ModifiedDelivery) end),
+      QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
 deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
-    ModifiedDelivery = strip_header(Delivery, ?DELETED_HEADER),
     {Success, _} =
         delegate:invoke(QPids,
                         fun (Pid) ->
-                                rabbit_amqqueue:deliver(Pid, ModifiedDelivery)
+                                rabbit_amqqueue:deliver(Pid, Delivery)
                         end),
     {Routed, Handled} =
          lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Mandatory, Immediate, {Routed, Handled}).
 
-%% This breaks the spec rule forbidding message modification
-strip_header(Delivery = #delivery{message = Message = #basic_message{
-                 content = Content = #content{
-                 properties = Props = #'P_basic'{headers = Headers}}}},
-             Key) when Headers =/= undefined ->
-    case lists:keyfind(Key, 1, Headers) of
-        false -> Delivery;
-        Tuple -> Headers0 = lists:delete(Tuple, Headers),
-                 Delivery#delivery{message = Message#basic_message{
-                     content = Content#content{
-                         properties_bin = none,
-                         properties = Props#'P_basic'{headers = Headers0}}}}
-    end;
-strip_header(Delivery, _Key) ->
-    Delivery.
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source

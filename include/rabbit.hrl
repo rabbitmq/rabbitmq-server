@@ -72,7 +72,7 @@
 -record(listener, {node, protocol, host, ip_address, port}).
 
 -record(basic_message, {exchange_name, routing_key, content, guid,
-                        is_persistent}).
+                        is_persistent, route_list = []}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, txn, sender, message,

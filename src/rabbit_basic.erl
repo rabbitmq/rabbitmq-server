@@ -33,10 +33,9 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/4, properties/1, delivery/5]).
+-export([publish/1, message/3, message/4, properties/1, delivery/5]).
 -export([publish/4, publish/7]).
 -export([build_content/2, from_content/1]).
--export([is_message_persistent/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -56,8 +55,10 @@
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
-         properties_input(), binary()) ->
-                        (rabbit_types:message() | rabbit_types:error(any()))).
+         properties_input(), binary()) -> rabbit_types:message()).
+-spec(message/3 ::
+        (rabbit_exchange:name(), rabbit_router:routing_key(),
+         rabbit_types:decoded_content()) -> rabbit_types:message()).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 ::
@@ -71,9 +72,6 @@
                               rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
                              {rabbit_framing:amqp_property_record(), binary()}).
--spec(is_message_persistent/1 :: (rabbit_types:decoded_content()) ->
-                                      (boolean() |
-                                       {'invalid', non_neg_integer()})).
 
 -endif.
 
@@ -113,19 +111,33 @@ from_content(Content) ->
         rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
+%% This breaks the spec rule forbidding message modification
+strip_header(#content{properties = Props = #'P_basic'{headers = Headers}} = DecodedContent,
+             Key) when Headers =/= undefined ->
+    case lists:keyfind(Key, 1, Headers) of
+        false -> DecodedContent;
+        Tuple -> Headers0 = lists:delete(Tuple, Headers),
+                     DecodedContent#content{
+                         properties_bin = none,
+                         properties = Props#'P_basic'{headers = Headers0}}
+    end;
+strip_header(DecodedContent, _Key) ->
+    DecodedContent.
+
+message(ExchangeName, RoutingKey,
+        #content{properties = Props} = DecodedContent) ->
+    #basic_message{
+        exchange_name = ExchangeName,
+        routing_key   = RoutingKey,
+        content       = strip_header(DecodedContent, ?DELETED_HEADER),
+        guid          = rabbit_guid:guid(),
+        is_persistent = is_message_persistent(DecodedContent),
+        route_list    = [RoutingKey | header_routes(Props#'P_basic'.headers)]}.
+
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     Properties = properties(RawProperties),
     Content = build_content(Properties, BodyBin),
-    case is_message_persistent(Content) of
-        {invalid, Other} ->
-            {error, {invalid_delivery_mode, Other}};
-        IsPersistent when is_boolean(IsPersistent) ->
-            #basic_message{exchange_name  = ExchangeName,
-                           routing_key    = RoutingKeyBin,
-                           content        = Content,
-                           guid           = rabbit_guid:guid(),
-                           is_persistent  = IsPersistent}
-    end.
+    message(ExchangeName, RoutingKeyBin, Content).
 
 properties(P = #'P_basic'{}) ->
     P;
@@ -167,5 +179,26 @@ is_message_persistent(#content{properties = #'P_basic'{
         1         -> false;
         2         -> true;
         undefined -> false;
-        Other     -> {invalid, Other}
+        Other     -> rabbit_log:warning("Unknown delivery mode ~p - "
+                                        "treating as 1, non-persistent~n",
+                                        [Other]),
+                     false
     end.
+
+% Extract CC routes from headers
+header_routes(undefined) ->
+    [];
+header_routes(HeadersTable) ->
+    lists:flatten([case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
+                       {longstr, Route} -> Route;
+                       {array, Routes}  -> rkeys(Routes, []);
+                       _                -> []
+                   end || HeaderKey <- ?ROUTING_HEADERS]).
+
+rkeys([{longstr, Route} | Rest], RKeys) ->
+   rkeys(Rest, [Route | RKeys]);
+rkeys([_ | Rest], RKeys) ->
+   rkeys(Rest, RKeys);
+rkeys(_, RKeys) ->
+   RKeys.
+
