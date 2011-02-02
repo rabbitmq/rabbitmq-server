@@ -24,7 +24,8 @@
              rabbit_writer,
              rabbit_queue_collector,
              rabbit_amqqueue,
-             supervisor2
+             supervisor2,
+             vm_memory_monitor
   ]},
   {registered, []},
   {env, []},
