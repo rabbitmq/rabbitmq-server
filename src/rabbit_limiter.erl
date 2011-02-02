@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_limiter).
+-include("rabbit_framing.hrl").
 
 -behaviour(gen_server2).
 
@@ -217,17 +218,26 @@ limit_reached(CTag, #lim{prefetch_count = Limit, volume = Volume,
         _                           -> false
     end orelse (Limit =/= 0 andalso Volume >= Limit).
 
-decr_credit(CTag, Len, State = #lim{ credits = Credits } ) ->
+decr_credit(CTag, Len, State = #lim{ credits = Credits, ch_pid = ChPid } ) ->
     case dict:find(CTag, Credits) of
         {ok, #credit{ credit = Credit, drain = Drain }} ->
-            NewCredit = case {Len, Drain} of
-                            {1, true} -> 0;
-                            {_, _}    -> Credit - 1
+            NewCredit = case {Credit, Len, Drain} of
+                            {1, _, _}    -> 0; %% Usual reduction to 0
+                            {_, 1, true} -> send_drained(ChPid, CTag),
+                                            0; %% Magic reduction to 0
+                            {_, _, _}    -> Credit - 1
                         end,
             update_credit(CTag, NewCredit, Drain, State);
         error ->
             State
     end.
+
+send_drained(ChPid, CTag) ->
+    rabbit_channel:send_command(ChPid,
+                                #'basic.credit_state'{consumer_tag = CTag,
+                                                      credit       = 0,
+                                                      available    = 0,
+                                                      drain        = true}).
 
 update_credit(CTag, -1, _Drain, State = #lim{credits = Credits}) ->
     State#lim{credits = dict:erase(CTag, Credits)};

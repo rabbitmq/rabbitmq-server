@@ -462,7 +462,7 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
 check_name(_Kind, NameBin) ->
     NameBin.
 
-%% TODO port this
+%% TODO port this(?)
 queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     case dict:find(QPid, Blocking) of
         error      -> State;
