@@ -252,7 +252,7 @@ init(QueueName, IsDurable, Recover) ->
                                        next_out_id = NextOutId0 }] ->
                               {NextSeqId0, NextOutId0}
                       end,
-                  transactional_delete_nonpersistent_msgs(QTable),
+                  delete_nonpersistent_msgs(QTable),
                   RS = #s { q_table = QTable,
                             p_table = PTable,
                             n_table = NTable,
@@ -264,35 +264,6 @@ init(QueueName, IsDurable, Recover) ->
           end),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
-
--spec transactional_delete_nonpersistent_msgs(atom()) -> ok.
-
-transactional_delete_nonpersistent_msgs(QTable) ->
-    lists:foreach(
-      fun (Key) ->
-	      [#q_record { out_id = Key, m = M }] =
-		  mnesia:read(QTable, Key, 'read'),
-	      case M of
-		  #m { msg = #basic_message { is_persistent = true }} -> ok;
-		  _ -> mnesia:delete(QTable, Key, 'write')
-              end
-      end,
-      mnesia:all_keys(QTable)).
-
--spec create_table(atom(), atom(), atom(), [atom()]) -> ok.
-
-create_table(Table, RecordName, Type, Attributes) ->
-    case mnesia:create_table(Table, [{record_name, RecordName},
-				     {type, Type},
-				     {attributes, Attributes},
-				     {ram_copies, [node()]}]) of
-	{atomic, ok} -> ok;
-	{aborted, {already_exists, Table}} ->
-	    RecordName = mnesia:table_info(Table, record_name),
-	    Type = mnesia:table_info(Table, type),
-	    Attributes = mnesia:table_info(Table, attributes),
-	    ok
-    end.
 
 %%----------------------------------------------------------------------------
 %% terminate/1 deletes all of a queue's pending acks, prior to
@@ -632,7 +603,7 @@ len(S = #s { q_table = QTable }) ->
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
 is_empty(S = #s { q_table = QTable }) ->
-    rabbit_log:info("is_empty(~n ~p)", [S]),
+    rabbit_log:info("is_empty(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> 0 == length(mnesia:all_keys(QTable)) end),
     rabbit_log:info(" -> ~p", [Result]),
@@ -709,19 +680,99 @@ status(S = #s { q_table = QTable, p_table = PTable,
 %% Monadic helper functions for inside transactions.
 %% ----------------------------------------------------------------------------
 
-%% db_save copies the volatile part of the state (next_seq_id and
-%% next_out_id) to Mnesia.
+-spec create_table(atom(), atom(), atom(), [atom()]) -> ok.
 
--spec db_save(s()) -> ok.
+create_table(Table, RecordName, Type, Attributes) ->
+    case mnesia:create_table(Table, [{record_name, RecordName},
+                                     {type, Type},
+                                     {attributes, Attributes},
+                                     {ram_copies, [node()]}]) of
+        {atomic, ok} -> ok;
+        {aborted, {already_exists, Table}} ->
+            RecordName = mnesia:table_info(Table, record_name),
+            Type = mnesia:table_info(Table, type),
+            Attributes = mnesia:table_info(Table, attributes),
+            ok
+    end.
 
-db_save(#s { n_table = NTable,
-                 next_seq_id = NextSeqId,
-                 next_out_id = NextOutId }) ->
-    ok = mnesia:write(NTable,
-                      #n_record { key = 'n',
-                                  next_seq_id = NextSeqId,
-                                  next_out_id = NextOutId },
-                      'write').
+%% Like mnesia:clear_table, but within a transaction.
+
+%% BUG: The write-set of the transaction may be huge if the table is
+%% huge. Then again, this might not bother Mnesia.
+
+-spec clear_table(atom()) -> ok.
+
+clear_table(Table) ->
+    case mnesia:first(Table) of
+        '$end_of_table' -> ok;
+        Key -> mnesia:delete(Table, Key, 'write'),
+               clear_table(Table)
+        end.
+
+%% Delete non-persistent msgs after a restart.
+
+-spec delete_nonpersistent_msgs(atom()) -> ok.
+
+delete_nonpersistent_msgs(QTable) ->
+    lists:foreach(
+      fun (Key) ->
+              [#q_record { out_id = Key, m = M }] =
+                  mnesia:read(QTable, Key, 'read'),
+              case M of
+                  #m { msg = #basic_message { is_persistent = true }} -> ok;
+                  _ -> mnesia:delete(QTable, Key, 'write')
+              end
+      end,
+      mnesia:all_keys(QTable)).
+
+-spec tx_commit_state([rabbit_types:basic_message()],
+                      [seq_id()],
+                      message_properties_transformer(),
+                      s()) ->
+                             s().
+
+tx_commit_state(Pubs, SeqIds, PropsF, S) ->
+    {_, S1} = internal_ack(SeqIds, S),
+    lists:foldl(
+      fun ({Msg, Props}, Si) -> publish_state(Msg, Props, false, Si) end,
+      S1,
+      [{Msg, PropsF(Props)} || {Msg, Props} <- lists:reverse(Pubs)]).
+
+-spec publish_state(rabbit_types:basic_message(),
+                    rabbit_types:message_properties(),
+                    boolean(),
+                    s()) ->
+                           s().
+
+publish_state(Msg,
+              Props,
+              IsDelivered,
+              S = #s { q_table = QTable,
+                       next_seq_id = SeqId,
+                       next_out_id = OutId }) ->
+    M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
+    mnesia:write(QTable, #q_record { out_id = OutId, m = M }, 'write'),
+    S #s { next_seq_id = SeqId + 1, next_out_id = OutId + 1 }.
+
+-spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
+
+internal_ack(SeqIds, S) -> db_del_ps(fun (_, Si) -> Si end, SeqIds, S).
+
+-spec(internal_dropwhile/2 ::
+        (fun ((rabbit_types:message_properties()) -> boolean()), s())
+        -> {empty | ok, s()}).
+
+internal_dropwhile(Pred, S) ->
+    case db_q_peek(S) of
+        nothing -> {empty, S};
+        {just, M = #m { props = Props }} ->
+            case Pred(Props) of
+                true -> _ = db_q_pop(S),
+                        _ = db_post_pop(false, M, S),
+                        internal_dropwhile(Pred, S);
+                false -> {ok, S}
+            end
+    end.
 
 %% db_q_pop pops a msg, if any, from the Q table in Mnesia.
 
@@ -784,80 +835,53 @@ db_del_ps(F, SeqIds, S = #s { p_table = PTable }) ->
     {AllGuids, S1} =
         lists:foldl(
           fun (SeqId, {Acc, Si}) ->
-                  [#p_record { m = M }] = mnesia:read(PTable, SeqId, 'read'),
+                  [#p_record {
+                      m = M = #m { msg = #basic_message { guid = Guid }} }] =
+                      mnesia:read(PTable, SeqId, 'read'),
                   mnesia:delete(PTable, SeqId, 'write'),
-                  {[m_guid(M) | Acc], F(M, Si)}
+                  {[Guid | Acc], F(M, Si)}
           end,
           {[], S},
           SeqIds),
     {lists:reverse(AllGuids), S1}.
 
--spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
+%% db_save copies the volatile part of the state (next_seq_id and
+%% next_out_id) to Mnesia.
 
-internal_ack(SeqIds, S) -> db_del_ps(fun (_, Si) -> Si end, SeqIds, S).
+-spec db_save(s()) -> ok.
 
--spec(internal_dropwhile/2 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()), s())
-        -> {empty | ok, s()}).
-
-internal_dropwhile(Pred, S) ->
-    case db_q_peek(S) of
-        nothing -> {empty, S};
-        {just, M = #m { props = Props }} ->
-            case Pred(Props) of
-                true -> _ = db_q_pop(S),
-                        _ = db_post_pop(false, M, S),
-                        internal_dropwhile(Pred, S);
-                false -> {ok, S}
-            end
-    end.
-
--spec tx_commit_state([rabbit_types:basic_message()],
-                      [seq_id()],
-                      message_properties_transformer(),
-                      s()) ->
-                             s().
-
-tx_commit_state(Pubs, SeqIds, PropsF, S) ->
-    {_, S1} = internal_ack(SeqIds, S),
-    lists:foldl(
-      fun ({Msg, Props}, Si) -> publish_state(Msg, Props, false, Si) end,
-      S1,
-      [{Msg, PropsF(Props)} || {Msg, Props} <- lists:reverse(Pubs)]).
-
-%% Like mnesia:clear_table, but within a transaction.
-
-%% BUG: The write-set of the transaction may be huge if the table is
-%% huge. Then again, this might not bother Mnesia.
-
--spec clear_table(atom()) -> ok.
-
-clear_table(Table) ->
-    case mnesia:first(Table) of
-        '$end_of_table' -> ok;
-        Key -> mnesia:delete(Table, Key, 'write'),
-               clear_table(Table)
-        end.
-
--spec publish_state(rabbit_types:basic_message(),
-                    rabbit_types:message_properties(),
-                    boolean(),
-                    s()) ->
-                           s().
-
-publish_state(Msg,
-              Props,
-              IsDelivered,
-              S = #s { q_table = QTable,
-                       next_seq_id = SeqId,
-                       next_out_id = OutId }) ->
-    M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
-    mnesia:write(QTable, #q_record { out_id = OutId, m = M }, 'write'),
-    S #s { next_seq_id = SeqId + 1, next_out_id = OutId + 1 }.
+db_save(#s { n_table = NTable,
+                 next_seq_id = NextSeqId,
+                 next_out_id = NextOutId }) ->
+    ok = mnesia:write(NTable,
+                      #n_record { key = 'n',
+                                  next_seq_id = NextSeqId,
+                                  next_out_id = NextOutId },
+                      'write').
 
 %%----------------------------------------------------------------------------
 %% Pure helper functions.
 %% ----------------------------------------------------------------------------
+
+%% Convert a queue name (a record) into an Mnesia table name (an atom).
+
+%% TODO: Import correct argument type.
+
+%% BUG: Mnesia has undocumented restrictions on table names. Names
+%% with slashes fail some operations, so we replace replace slashes
+%% with the string SLASH. We should extend this as necessary, and
+%% perhaps make it a little prettier.
+
+-spec db_tables({resource, binary(), queue, binary()}) ->
+                       {atom(), atom(), atom()}.
+
+db_tables({resource, VHost, queue, Name}) ->
+    VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
+    Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
+    Str = lists:flatten(io_lib:format("~p ~p", [VHost2, Name2])),
+    {list_to_atom(lists:append("q: ", Str)),
+     list_to_atom(lists:append("p: ", Str)),
+     list_to_atom(lists:append("n: ", Str))}.
 
 -spec m(rabbit_types:basic_message(),
         seq_id(),
@@ -885,26 +909,3 @@ store_tx(Txn, Tx, S = #s { txn_dict = TxnDict }) ->
 erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
     S #s { txn_dict = dict:erase(Txn, TxnDict) }.
 
--spec m_guid(m()) -> rabbit_guid:guid().
-
-m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
-
-%% Convert a queue name (a record) into an Mnesia table name (an atom).
-
-%% TODO: Import correct argument type.
-
-%% BUG: Mnesia has undocumented restrictions on table names. Names
-%% with slashes fail some operations, so we replace replace slashes
-%% with the string SLASH. We should extend this as necessary, and
-%% perhaps make it a little prettier.
-
--spec db_tables({resource, binary(), queue, binary()}) ->
-                       {atom(), atom(), atom()}.
-
-db_tables({resource, VHost, queue, Name}) ->
-    VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
-    Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
-    Str = lists:flatten(io_lib:format("~p ~p", [VHost2, Name2])),
-    {list_to_atom(lists:append("q: ", Str)),
-     list_to_atom(lists:append("p: ", Str)),
-     list_to_atom(lists:append("n: ", Str))}.
