@@ -248,9 +248,9 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
 val(undefined) ->
     "none";
 val({Type, Value}) ->
-    Fmt = case Value of
-              _ when is_binary (Value) -> "a value '~s' of type '~s'";
-              _                        -> "a value '~w' of type '~s'"
+    Fmt = case is_binary(Value) of
+              true  -> "the value '~s' of type '~s'";
+              false -> "the value '~w' of type '~s'"
           end,
     lists:flatten(io_lib:format(Fmt, [Value, Type])).
 
