@@ -223,7 +223,7 @@ stop() -> ok.
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
 %%         -> state()).
 
-%% BUG: Should fsck state, and should drop non-persistent msgs.
+%% BUG: We should allow clustering of the Mnesia tables.
 
 %% BUG: It's unfortunate that this can't all be done in a single
 %% Mnesia transaction!
@@ -252,6 +252,7 @@ init(QueueName, IsDurable, Recover) ->
                                        next_out_id = NextOutId0 }] ->
                               {NextSeqId0, NextOutId0}
                       end,
+                  transactional_delete_nonpersistent_msgs(QTable),
                   RS = #s { q_table = QTable,
                             p_table = PTable,
                             n_table = NTable,
@@ -264,59 +265,69 @@ init(QueueName, IsDurable, Recover) ->
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
+-spec transactional_delete_nonpersistent_msgs(atom()) -> ok.
+
+transactional_delete_nonpersistent_msgs(QTable) ->
+    lists:foreach(
+      fun (Key) ->
+	      [#q_record { out_id = Key, m = M }] =
+		  mnesia:read(QTable, Key, 'read'),
+	      case M of
+		  #m { msg = #basic_message { is_persistent = true }} -> ok;
+		  _ -> mnesia:delete(QTable, Key, 'write')
+              end
+      end,
+      mnesia:all_keys(QTable)).
+
 -spec create_table(atom(), atom(), atom(), [atom()]) -> ok.
 
 create_table(Table, RecordName, Type, Attributes) ->
-    rabbit_log:info("create_table(~n ~p,~n ~p,~n ~p,~n ~p) ->",
-                    [Table, RecordName, Type, Attributes]),
-    Result = case mnesia:create_table(Table, [{record_name, RecordName},
-					      {type, Type},
-					      {attributes, Attributes},
-					      {ram_copies, []},
-					      {disc_copies, [node()]}]) of
-                 {atomic, ok} -> rabbit_log:info("***CREATED***"),
-                                 ok;
-                 {aborted, {already_exists, Table}} ->
-                     rabbit_log:info("***ALREADY EXISTS***"),
-                     rabbit_log:info(
-                       "KEYS ARE ~p", [mnesia:dirty_all_keys(Table)]),
-                     RecordName = mnesia:table_info(Table, record_name),
-                     Type = mnesia:table_info(Table, type),
-                     Attributes = mnesia:table_info(Table, attributes),
-                     ok
-             end,
-    rabbit_log:info(" -> ~p", [Result]),
-    Result.
+    case mnesia:create_table(Table, [{record_name, RecordName},
+				     {type, Type},
+				     {attributes, Attributes},
+				     {ram_copies, [node()]}]) of
+	{atomic, ok} -> ok;
+	{aborted, {already_exists, Table}} ->
+	    RecordName = mnesia:table_info(Table, record_name),
+	    Type = mnesia:table_info(Table, type),
+	    Attributes = mnesia:table_info(Table, attributes),
+	    ok
+    end.
 
 %%----------------------------------------------------------------------------
-%% terminate/1 deletes all of a queue's pending acks. This function
-%% creates an Mnesia transaction to run in, and therefore may not be
-%% called from inside another Mnesia transaction.
+%% terminate/1 deletes all of a queue's pending acks, prior to
+%% shutdown. This function creates an Mnesia transaction to run in,
+%% and therefore may not be called from inside another Mnesia
+%% transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
-terminate(S = #s { p_table = PTable }) ->
+terminate(S = #s { q_table = QTable, p_table = PTable, n_table = NTable }) ->
     rabbit_log:info("terminate(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> clear_table(PTable), S end),
+    mnesia:dump_tables([QTable, PTable, NTable]),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
 %% delete_and_terminate/1 deletes all of a queue's enqueued msgs and
-%% pending acks. This function creates an Mnesia transaction to run
-%% in, and therefore may not be called from inside another Mnesia
-%% transaction.
+%% pending acks, prior to shutdown. This function creates an Mnesia
+%% transaction to run in, and therefore may not be called from inside
+%% another Mnesia transaction.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
-delete_and_terminate(S = #s { q_table = QTable, p_table = PTable }) ->
+delete_and_terminate(S = #s { q_table = QTable,
+                              p_table = PTable,
+                              n_table = NTable }) ->
     rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> clear_table(QTable),
                                      clear_table(PTable),
                                      S
                            end),
+    mnesia:dump_tables([QTable, PTable, NTable]),
     rabbit_log:info(" -> ~p", [Result]),
     Result.
 
@@ -882,10 +893,18 @@ m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
 
 %% TODO: Import correct argument type.
 
--spec db_tables(_) -> {atom(), atom(), atom()}.
+%% BUG: Mnesia has undocumented restrictions on table names. Names
+%% with slashes fail some operations, so we replace replace slashes
+%% with the string SLASH. We should extend this as necessary, and
+%% perhaps make it a little prettier.
 
-db_tables(QueueName) ->
-    Str = lists:flatten(io_lib:format("~p", [QueueName])),
+-spec db_tables({resource, binary(), queue, binary()}) ->
+                       {atom(), atom(), atom()}.
+
+db_tables({resource, VHost, queue, Name}) ->
+    VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
+    Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
+    Str = lists:flatten(io_lib:format("~p ~p", [VHost2, Name2])),
     {list_to_atom(lists:append("q: ", Str)),
      list_to_atom(lists:append("p: ", Str)),
      list_to_atom(lists:append("n: ", Str))}.
