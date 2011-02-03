@@ -134,10 +134,14 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
 
 handle_info(#'basic.credit_state'{consumer_tag = CTag,
                                   credit       = LinkCredit,
-                                  available    = Available,
+                                  available    = Available0,
                                   drain        = Drain},
             State = #session{ backing_channel = Ch,
                               writer_pid = WriterPid}) ->
+    Available = case Available0 of
+                    -1 -> undefined;
+                    _  -> Available0
+                end,
     F = #'v1_0.flow'{ handle     = ctag_to_handle(CTag),
                       flow_state = #'v1_0.flow_state'{
                         link_credit = LinkCredit,
@@ -312,7 +316,7 @@ handle_control(#'v1_0.end'{}, State = #session{ writer_pid = Sock }) ->
 handle_control(#'v1_0.flow'{ handle = Handle,
                              flow_state = Flow = #'v1_0.flow_state' {
                                unsettled_lwm = {uint, NewLWM},
-                               link_credit = LinkCredit,
+                               link_credit = LinkCredit0,
                                drain = Drain
                               }
                            },
@@ -321,6 +325,10 @@ handle_control(#'v1_0.flow'{ handle = Handle,
                                  writer_pid = WriterPid}) ->
     case get({outgoing, Handle}) of
         #outgoing_link{ } ->
+            LinkCredit = case LinkCredit0 of
+                             undefined -> -1;
+                             _         -> LinkCredit0
+                         end,
             #'basic.credit_ok'{ available = Available } =
                 amqp_channel:call(Ch, #'basic.credit'{consumer_tag = Handle,
                                                       credit       = LinkCredit,
