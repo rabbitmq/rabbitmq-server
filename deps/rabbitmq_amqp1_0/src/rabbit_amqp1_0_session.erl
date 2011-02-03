@@ -205,7 +205,7 @@ noreply(State) ->
 %% total number of entries, rather than the smallest entry. Thus, our
 %% window will always be, by definition, BOUND - TOTAL.
 
-handle_control(#'v1_0.begin'{next_outgoing_id = {ulong, RemoteNextIn},
+handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
                              window_size = RemoteWindow},
                State = #session{
                  next_transfer_number = LocalNextOut,
@@ -218,16 +218,15 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {ulong, RemoteNextIn},
         end,
     SessionBufferSize = erlang:min(Window, ?MAX_SESSION_BUFFER_SIZE),
     %% Attempt to limit the number of "at risk" messages we can have.
-    #'basic.qos_ok'{} =
-        amqp_channel:call(AmqpChannel,
-                          #'basic.qos'{prefetch_count = SessionBufferSize}),
+    amqp_channel:cast(AmqpChannel,
+                      #'basic.qos'{prefetch_count = SessionBufferSize}),
     {reply, #'v1_0.begin'{
        remote_channel = {ushort, Channel},
        next_outgoing_id = {ulong, LocalNextOut},
        window_size = {uint, SessionBufferSize}},
      State#session{
        next_incoming_id = RemoteNextIn,
-       max_outgoing_id = RemoteNextIn + RemoteWindow, % TODO sequence number addition
+       max_outgoing_id = RemoteNextIn + Window, % TODO sequence number addition
        window_size = SessionBufferSize}};
 
 handle_control(#'v1_0.attach'{name = Name,
@@ -353,9 +352,9 @@ handle_control(Flow = #'v1_0.flow'{},
                State = #session{ next_incoming_id = LocalNextIn,
                                  max_outgoing_id = LocalMaxOut,
                                  next_transfer_number = LocalNextOut }) ->
-    #'v1_0.flow'{ next_incoming_id = {ulong, RemoteNextIn},
+    #'v1_0.flow'{ next_incoming_id = {uint, RemoteNextIn},
                   incoming_window = {uint, RemoteWindowIn},
-                  next_outgoing_id = {ulong, RemoteNextOut},
+                  next_outgoing_id = {uint, RemoteNextOut},
                   outgoing_window = {uint, RemoteWindowOut}} = Flow,
     %% Check the things that we know for sure
     %% TODO sequence number comparisons
