@@ -132,9 +132,21 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
             {noreply, State}
     end;
 
-handle_info(M = #'basic.credit_state'{}, State) ->
-    %% TODO handle
-    io:format("Got credit state ~p~n", [M]);
+handle_info(#'basic.credit_state'{consumer_tag = CTag,
+                                  credit       = LinkCredit,
+                                  available    = Available,
+                                  drain        = Drain},
+            State = #session{ backing_channel = Ch,
+                              writer_pid = WriterPid}) ->
+    F = #'v1_0.flow'{ handle     = ctag_to_handle(CTag),
+                      flow_state = #'v1_0.flow_state'{
+                        link_credit = LinkCredit,
+                        available   = Available,
+                        drain       = Drain
+                       }
+                    },
+    rabbit_amqp1_0_writer:send_command(WriterPid, F),
+    {noreply, State};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
