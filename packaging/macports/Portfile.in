@@ -102,10 +102,10 @@ post-destroot {
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
 
-    file copy ${mansrc}/man1/rabbitmq-multi.1.gz  ${mandest}/man1/
-    file copy ${mansrc}/man1/rabbitmq-server.1.gz ${mandest}/man1/
-    file copy ${mansrc}/man1/rabbitmqctl.1.gz     ${mandest}/man1/
-    file copy ${mansrc}/man5/rabbitmq.conf.5.gz   ${mandest}/man5/
+    file copy ${mansrc}/man1/rabbitmq-multi.1.gz    ${mandest}/man1/
+    file copy ${mansrc}/man1/rabbitmq-server.1.gz   ${mandest}/man1/
+    file copy ${mansrc}/man1/rabbitmqctl.1.gz       ${mandest}/man1/
+    file copy ${mansrc}/man5/rabbitmq-env.conf.5.gz ${mandest}/man5/
 }
 
 pre-install {
