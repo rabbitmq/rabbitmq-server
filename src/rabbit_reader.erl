@@ -393,6 +393,9 @@ switch_callback(State, Callback, Length) ->
                               State#v1.sock, Length, infinity) end),
     State#v1{callback = Callback, recv_length = Length, recv_ref = Ref}.
 
+switch_callback_to_frame_header(State) ->
+    switch_callback(State, frame_header, 7).
+
 next_connection_state(State = #v1{connection_state = CS}) ->
     State#v1{connection_state = next_connection_state1(CS)}.
 
@@ -611,7 +614,7 @@ handle_input({frame_payload, Type, Channel, PayloadSize},
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
             handle_frame(Type, Channel, Payload,
-                         switch_callback(State, frame_header, 7));
+                         switch_callback_to_frame_header(State));
         _ ->
             throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
@@ -665,11 +668,11 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
       mechanisms = auth_mechanisms_binary(),
       locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
-    switch_callback(
+    switch_callback_to_frame_header(
       next_connection_state(
         State#v1{connection = Connection#connection{
                                 timeout_sec = ?NORMAL_TIMEOUT,
-                                protocol = Protocol}}), frame_header, 7).
+                                protocol = Protocol}})).
 
 refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
