@@ -17,8 +17,6 @@
                   outgoing_lwm = 0, outgoing_session_credit,
                   xfer_num_to_tag }).
 -record(outgoing_link, {queue,
-                        available = 0,
-                        credit,
                         transfer_count = 0,
                         transfer_unit = 0,
                         no_ack,
@@ -65,17 +63,8 @@
 %% For incoming links we simply issue a large credit, and maintain it.
 %% TODO reduce it if we get backpressure.
 %%
-%% For outgoing frames, there's not much we can do since there's no
-%% way to credit-control individual queue consumers (and cancelling
-%% would almost always be too late, leaving messages in limbo in a
-%% process mailbox).  Currently we act as if we have unlimited credit.
-%%
-%% Likewise, we cannot support the drain flag since in general, we
-%% don't know the state at the queue.  However, we may be able to
-%% approximate this and link flow control by cancelling consume,
-%% exhausting the credit, and requeueing the rest.  Since link flow
-%% control will be the rule rather than the exception, though, this is
-%% pretty horrible.
+%% For outgoing frames we use our basic.credit extension to AMQP 0-9-1
+%% which is in bug 23749
 
 %% TODO links can be migrated between sessions -- seriously.
 
@@ -142,6 +131,10 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
             io:format("Delivery to non-existent consumer ~p", [ConsumerTag]),
             {noreply, State}
     end;
+
+handle_info(M = #'basic.credit_state'{}, State) ->
+    %% TODO handle
+    io:format("Got credit state ~p~n", [M]);
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -229,8 +222,6 @@ handle_control(#'v1_0.attach'{name = Name,
                                "Attach rejected: ~p", [Reason])
     end;
 
-%% TODO we don't really implement link-based flow control. Reject connections
-%% that try to use it - except ATM the Python test case asks to use it
 handle_control(#'v1_0.attach'{local = Linkage,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
@@ -340,7 +331,8 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                local = ClientLinkage,
                                flow_state = Flow = #'v1_0.flow_state'{
                                               session_credit = {uint, ClientSC},
-                                              link_credit = {uint, Credit}},
+                                              link_credit = {uint, LinkCredit},
+                                              drain = Drain},
                                transfer_unit = Unit},
                State = #session{backing_channel = Ch,
                                 outgoing_session_credit = ServerSC}) ->
@@ -349,8 +341,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
     case ensure_source(Source,
-                       #outgoing_link{ credit = Credit,
-                                       transfer_unit = Unit,
+                       #outgoing_link{ transfer_unit = Unit,
                                        no_ack = NoAck,
                                        default_outcome = DOSym}, State) of
         {ok, Source1,
@@ -363,9 +354,18 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                  ClientSC;
                     _         -> ServerSC
                 end,
+            CTag = handle_to_ctag(Handle),
+            #'basic.credit_state'{consumer_tag = CTag,
+                                  credit       = LinkCredit,
+                                  available    = Available,
+                                  drain        = Drain} =
+                amqp_channel:call(Ch, #'basic.credit'{consumer_tag = CTag,
+                                                      credit       = LinkCredit,
+                                                      drain        = Drain}),
+            io:format("Credit, avail, drain: ~p~n", [{LinkCredit, Available, Drain}]),
             case amqp_channel:subscribe(
                    Ch, #'basic.consume' { queue = QueueName,
-                                          consumer_tag = handle_to_ctag(Handle),
+                                          consumer_tag = CTag,
                                           no_ack = NoAck,
                                           %% TODO exclusive?
                                           exclusive = false}, self()) of
@@ -387,7 +387,12 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                     %% and [...]. We think we're correct here
                                     %% outcomes = Outcomes
                                    }},
-                       flow_state = Flow#'v1_0.flow_state'{},
+                       flow_state = Flow#'v1_0.flow_state'{
+                                      transfer_count = 0,
+                                      link_credit    = LinkCredit,
+                                      available      = Available,
+                                      drain          = Drain
+                                     },
                        role = ?SEND_ROLE},
                      State1#session{outgoing_session_credit = SessionCredit}};
                 Fail ->
@@ -398,8 +403,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
     end.
 
 transfer(WriterPid, LinkHandle,
-         Link = #outgoing_link{ credit = Credit,
-                                transfer_unit = Unit,
+         Link = #outgoing_link{ transfer_unit = Unit,
                                 transfer_count = Count,
                                 no_ack = NoAck,
                                 default_outcome = DefaultOutcome },
@@ -410,7 +414,6 @@ transfer(WriterPid, LinkHandle,
          DeliveryTag) ->
     TransferSize = transfer_size(Content, Unit),
     NewLink = Link#outgoing_link{
-                credit = Credit - TransferSize,
                 transfer_count = Count + TransferSize
                },
     NewSession = Session#session {outgoing_session_credit = SessionCredit - 1},
@@ -535,15 +538,14 @@ implicit_settle(NewLWM, State = #session{
             end
     end.
 
-flow_state(#outgoing_link{credit = Credit,
-                          transfer_count = Count},
+flow_state(#outgoing_link{transfer_count = Count},
            #session{outgoing_lwm = LWM,
                     outgoing_session_credit = SessionCredit}) ->
     #'v1_0.flow_state'{
             unsettled_lwm = {uint, LWM},
             session_credit = {uint, SessionCredit},
             transfer_count = {uint, Count},
-            link_credit = {uint, Credit}
+            link_credit = {uint, 99}
            }.
 
 acknowledgement(Txfrs, Disposition) ->
@@ -677,7 +679,6 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
                                 {ok, QueueName, Available, State1} ->
                                     {ok, Source,
                                      Link#outgoing_link{
-                                       available = Available,
                                        queue = QueueName},
                                      State1};
                                 {error, Reason, State1} ->
