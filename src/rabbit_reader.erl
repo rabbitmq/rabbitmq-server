@@ -387,6 +387,15 @@ switch_callback(State, Callback, Length) ->
                               State#v1.sock, Length, infinity) end),
     State#v1{callback = Callback, recv_length = Length, recv_ref = Ref}.
 
+next_connection_state(State = #v1{connection_state = CS}) ->
+    State#v1{connection_state = next_connection_state1(CS)}.
+
+next_connection_state1(pre_init) -> starting;
+next_connection_state1(starting) -> securing;
+next_connection_state1(securing) -> tuning;
+next_connection_state1(tuning)   -> opening;
+next_connection_state1(opening)  -> running.
+
 terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, send_exception(State, 0,
                             rabbit_misc:amqp_error(
@@ -650,11 +659,11 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
       mechanisms = auth_mechanisms_binary(),
       locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
-    switch_callback(State#v1{connection = Connection#connection{
-                                            timeout_sec = ?NORMAL_TIMEOUT,
-                                            protocol = Protocol},
-                             connection_state = starting},
-                    frame_header, 7).
+    switch_callback(
+      next_connection_state(
+        State#v1{connection = Connection#connection{
+                                timeout_sec = ?NORMAL_TIMEOUT,
+                                protocol = Protocol}}), frame_header, 7).
 
 refuse_connection(Sock, Exception) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",0,0,9,1>>) end),
@@ -700,12 +709,12 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                             connection       = Connection,
                             sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism),
-    State = State0#v1{auth_mechanism   = AuthMechanism,
-                      auth_state       = AuthMechanism:init(Sock),
-                      connection_state = securing,
-                      connection       =
-                          Connection#connection{
-                            client_properties = ClientProperties}},
+    State = next_connection_state(
+              State0#v1{auth_mechanism   = AuthMechanism,
+                        auth_state       = AuthMechanism:init(Sock),
+                        connection       =
+                            Connection#connection{
+                              client_properties = ClientProperties}}),
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -733,11 +742,11 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
             ReceiveFun = fun() -> Parent ! timeout end,
             Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
                               ClientHeartbeat, ReceiveFun),
-            State#v1{connection_state = opening,
-                     connection = Connection#connection{
-                                    timeout_sec = ClientHeartbeat,
-                                    frame_max = FrameMax},
-                     heartbeater = Heartbeater}
+            next_connection_state(
+              State#v1{connection = Connection#connection{
+                                      timeout_sec = ClientHeartbeat,
+                                      frame_max = FrameMax},
+                       heartbeater = Heartbeater})
     end;
 
 handle_method0(#'connection.open'{virtual_host = VHostPath},
@@ -751,10 +760,10 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    State1 = internal_conserve_memory(
-               rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
-               State#v1{connection_state = running,
-                        connection = NewConnection}),
+    State1 = next_connection_state(
+               internal_conserve_memory(
+                 rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+                 State#v1{connection = NewConnection})),
     rabbit_event:notify(connection_created,
                         infos(?CREATION_EVENT_KEYS, State1)),
     rabbit_event:if_enabled(StatsTimer,
@@ -837,8 +846,8 @@ auth_phase(Response,
                                       frame_max = ?FRAME_MAX,
                                       heartbeat = 0},
             ok = send_on_channel0(Sock, Tune, Protocol),
-            State#v1{connection_state = tuning,
-                     connection = Connection#connection{user = User}}
+            next_connection_state(
+              State#v1{connection = Connection#connection{user = User}})
     end.
 
 %%--------------------------------------------------------------------------
