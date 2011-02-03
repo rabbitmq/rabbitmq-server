@@ -105,7 +105,6 @@ Section "RabbitMQ Service" RabbitService
   ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" install'
   ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start'
   CopyFiles "$WINDIR\.erlang.cookie" "$PROFILE\.erlang.cookie"
-  CopyFiles "$WINDIR\.erlang.cookie" "$APPDATA\.erlang.cookie"
 SectionEnd
 
 ;--------------------------------
