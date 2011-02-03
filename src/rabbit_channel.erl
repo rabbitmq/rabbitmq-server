@@ -1058,10 +1058,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag, credit = Credit,
             stopped -> unlimit_queues(State)
         end,
     State1 = State#ch{limiter_pid = LimiterPid2},
-    return_ok(State1, false, #'basic.credit_ok'{consumer_tag = CTag,
-                                                credit = Credit,
-                                                available = Available,
-                                                drain = Drain});
+    return_ok(State1, false, #'basic.credit_ok'{available = Available});
 
     %% TODO port this bit ?
     %% case consumer_queues(Consumers) of
