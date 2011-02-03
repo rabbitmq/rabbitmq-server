@@ -355,14 +355,9 @@ attach_outgoing(DefaultOutcome, Outcomes,
                     _         -> ServerSC
                 end,
             CTag = handle_to_ctag(Handle),
-            #'basic.credit_state'{consumer_tag = CTag,
-                                  credit       = LinkCredit,
-                                  available    = Available,
-                                  drain        = Drain} =
-                amqp_channel:call(Ch, #'basic.credit'{consumer_tag = CTag,
-                                                      credit       = LinkCredit,
-                                                      drain        = Drain}),
-            io:format("Credit, avail, drain: ~p~n", [{LinkCredit, Available, Drain}]),
+            amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
+                                                  credit       = LinkCredit,
+                                                  drain        = Drain}),
             case amqp_channel:subscribe(
                    Ch, #'basic.consume' { queue = QueueName,
                                           consumer_tag = CTag,
@@ -388,10 +383,10 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                     %% outcomes = Outcomes
                                    }},
                        flow_state = Flow#'v1_0.flow_state'{
-                                      transfer_count = 0,
-                                      link_credit    = LinkCredit,
-                                      available      = Available,
-                                      drain          = Drain
+                                      %% transfer_count = 0,
+                                      %% link_credit    = LinkCredit,
+                                      %% available      = Available,
+                                      %% drain          = Drain
                                      },
                        role = ?SEND_ROLE},
                      State1#session{outgoing_session_credit = SessionCredit}};
