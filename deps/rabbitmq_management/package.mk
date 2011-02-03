@@ -11,6 +11,10 @@ $(PACKAGE_DIR)/priv/www-cli/rabbitmqadmin: $(PACKAGE_DIR)/bin/rabbitmqadmin
 
 # The tests require erlang/OTP R14 (httpc issue)
 $(PACKAGE_DIR)+pre-test:: assert-erlang-r14
+	if [ "`erl -noshell -eval 'io:format(lists:map(fun erlang:list_to_integer/1, string:tokens(erlang:system_info(version), ".")) >= [5,8]),halt().'`" != true ] ; then \
+	  echo "Need Erlang/OTP R14A or higher" ; \
+	  exit 1 ; \
+	fi
 
 $(PACKAGE_DIR)+clean::
 	rm -f $(PACKAGE_DIR)/priv/www-cli/rabbitmqadmin
