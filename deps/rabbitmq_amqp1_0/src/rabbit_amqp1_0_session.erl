@@ -11,11 +11,17 @@
 -export([parse_destination/1]).
 -endif.
 
--record(session, {channel_num, backing_connection, backing_channel,
-                  declaring_channel,
-                  reader_pid, writer_pid, transfer_number = 0,
-                  outgoing_lwm = 0, outgoing_session_credit,
-                  xfer_num_to_tag }).
+-record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
+                  backing_connection, backing_channel,
+                  declaring_channel, %% a sacrificial client channel for declaring things
+                  reader_pid, writer_pid,
+                  next_transfer_number = 0, % next outgoing id
+                  max_outgoing_id, % based on the remote incoming window size
+                  next_incoming_id, % just to keep a check
+                  %% we make incoming and outgoing session buffers the
+                  %% same size
+                  window_size,
+                  outgoing_unsettled_map }).
 -record(outgoing_link, {queue,
                         transfer_count = 0,
                         transfer_unit = 0,
@@ -36,37 +42,11 @@
                    ?V_1_0_SYMBOL_REJECTED,
                    ?V_1_0_SYMBOL_RELEASED]).
 
+%% TODO test where the sweetspot for gb_trees is
+-define(MAX_SESSION_BUFFER_SIZE, 4096).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
-
-%% Session LWM and credit: (largely TODO)
-%%
-%% transfer-id, unsettled-lwm, and session-credit define a window:
-%% |<- LWM     |<- txfr    |<- LWM + session-credit
-%% [ | | | | | | | | | | | ]
-%%
-%% session-credit gives an offset from the lwm (it is given as txfr-id
-%% in the spec, but this is a typo).  It can be used to bound the
-%% amount of unsettled state.
-%%
-%% For incoming links, we simply echo the session credit; we are happy
-%% for the client to do whatever it likes, since we don't keep track of
-%% incoming messages (we're either about to settle them, or they're
-%% settled when they come in; this will change if we use publisher acks).
-%%
-%% For outgoing links, we try to follow what the client says by using
-%% basic.qos.  Unless told to change it, we try to keep an accurate
-%% credit count.
-%%
-%% Link credit:
-%% 
-%% For incoming links we simply issue a large credit, and maintain it.
-%% TODO reduce it if we get backpressure.
-%%
-%% For outgoing frames we use our basic.credit extension to AMQP 0-9-1
-%% which is in bug 23749
-
-%% TODO links can be migrated between sessions -- seriously.
 
 %% TODO account for all these things
 start_link(Channel, ReaderPid, WriterPid, _Username, _VHost,
@@ -83,12 +63,12 @@ init([Channel, ReaderPid, WriterPid]) ->
     %% TODO pass through authentication information
     {ok, Conn} = amqp_connection:start(direct),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    {ok, #session{ channel_num        = Channel,
-                   backing_connection = Conn,
-                   backing_channel    = Ch,
-                   reader_pid         = ReaderPid,
-                   writer_pid         = WriterPid,
-                   xfer_num_to_tag    = gb_trees:empty()}}.
+    {ok, #session{ channel_num            = Channel,
+                   backing_connection     = Conn,
+                   backing_channel        = Ch,
+                   reader_pid             = ReaderPid,
+                   writer_pid             = WriterPid,
+                   outgoing_unsettled_map = gb_trees:empty()}}.
 
 terminate(_Reason, State = #session{ backing_connection = Conn,
                                      declaring_channel = DeclCh,
@@ -116,7 +96,7 @@ handle_info(#'basic.consume_ok'{}, State) ->
 handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
                               delivery_tag = DeliveryTag}, Msg},
             State = #session{ writer_pid = WriterPid,
-                              transfer_number = TransferNum }) ->
+                              next_transfer_number = TransferNum }) ->
     %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
     Handle = ctag_to_handle(ConsumerTag),
     case get({out, Handle}) of
@@ -125,7 +105,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
                 transfer(WriterPid, Handle, Link, State, Msg, DeliveryTag),
             put({out, Handle}, NewLink),
             {noreply, NewState#session{
-                        transfer_number = next_transfer_number(TransferNum)}};
+                        next_transfer_number = next_transfer_number(TransferNum)}};
         undefined ->
             %% FIXME handle missing link -- why does the queue think it's there?
             io:format("Delivery to non-existent consumer ~p", [ConsumerTag]),
@@ -136,19 +116,15 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
                                   credit       = LinkCredit,
                                   available    = Available0,
                                   drain        = Drain},
-            State = #session{ backing_channel = Ch,
-                              writer_pid = WriterPid}) ->
+            State = #session{writer_pid = WriterPid}) ->
     Available = case Available0 of
-                    -1 -> undefined;
-                    _  -> Available0
+                    -1  -> undefined;
+                    Num -> {uint, Num}
                 end,
     F = #'v1_0.flow'{ handle     = ctag_to_handle(CTag),
-                      flow_state = #'v1_0.flow_state'{
-                        link_credit = LinkCredit,
-                        available   = Available,
-                        drain       = Drain
-                       }
-                    },
+                      link_credit = {uint, LinkCredit},
+                      available   = Available,
+                      drain       = Drain },
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {noreply, State};
 
@@ -192,16 +168,74 @@ noreply(State) ->
 
 %% ------
 
-handle_control(#'v1_0.begin'{}, State = #session{ channel_num = Channel }) ->
+%% Session window:
+%%
+%% Each session has two buffers, one to record the unsettled state of
+%% incoming messages, one to record the unsettled state of outgoing
+%% messages.  In general we want to bound these buffers; but if we
+%% bound them, and don't tell the other side, we may end up
+%% deadlocking the other party.
+%%
+%% Hence the flow frame contains a session window, expressed as the
+%% next-id and the window size for each of the buffers. The frame
+%% refers to the buffers of the sender of the frame, of course.
+%%
+%% The numbers work this way: for the outgoing buffer, the next-id is
+%% the next transfer id the session will send, and it will stop
+%% sending at next-id + window.  For the incoming buffer, the next-id
+%% is the next transfer id expected, and it will not accept messages
+%% beyond next-id + window (in fact it will probably close the
+%% session, since sending outside the window is a transgression of the
+%% protocol).
+%%
+%% Usually we will want to base our incoming window size on the other
+%% party's outgoing window size (given in begin{}), since we will
+%% never need more state than they are keeping (they'll stop sending
+%% before that happens), subject to a maximum.  Similarly the outgoing
+%% window, on the basis that the other party is likely to make its
+%% buffers the same size (or that's our best guess).
+%%
+%% Note that we will occasionally overestimate these buffers, because
+%% the far side may be using a circular buffer, in which case they
+%% care about the distance from the low water mark (i.e., the least
+%% transfer for which they have unsettled state) rather than the
+%% number of entries.
+%%
+%% We use ordered sets for our buffers, which means we care about the
+%% total number of entries, rather than the smallest entry. Thus, our
+%% window will always be, by definition, BOUND - TOTAL.
+
+handle_control(#'v1_0.begin'{next_outgoing_id = {ulong, RemoteNextIn},
+                             window_size = RemoteWindow},
+               State = #session{
+                 next_transfer_number = LocalNextOut,
+                 backing_channel = AmqpChannel,
+                 channel_num = Channel }) ->
+    Window =
+        case RemoteWindow of
+            {uint, Size} -> Size;
+            undefined    -> ?MAX_SESSION_BUFFER_SIZE
+        end,
+    SessionBufferSize = erlang:min(Window, ?MAX_SESSION_BUFFER_SIZE),
+    %% Attempt to limit the number of "at risk" messages we can have.
+    #'basic.qos_ok'{} =
+        amqp_channel:call(AmqpChannel,
+                          #'basic.qos'{prefetch_count = SessionBufferSize}),
     {reply, #'v1_0.begin'{
-       remote_channel = {ushort, Channel}}, State};
+       remote_channel = {ushort, Channel},
+       next_outgoing_id = {ulong, LocalNextOut},
+       window_size = {uint, SessionBufferSize}},
+     State#session{
+       next_incoming_id = RemoteNextIn,
+       max_outgoing_id = RemoteNextIn + RemoteWindow, % TODO sequence number addition
+       window_size = SessionBufferSize}};
 
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = ClientLinkage,
                               transfer_unit = Unit,
                               role = ?SEND_ROLE}, %% client is sender
-               State = #session{ outgoing_lwm = LWM }) ->
+               State = #session{ }) ->
     %% TODO associate link name with target
     #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
     case ensure_target(Target, #incoming_link{ name = Name }, State) of
@@ -215,29 +249,18 @@ handle_control(#'v1_0.attach'{name = Name,
                local = #'v1_0.linkage'{
                  source = Source,
                  target = ServerTarget },
-               flow_state = #'v1_0.flow_state'{
-                 %% we ought to be able to issue unlimited credit by
-                 %% supplying a null ('undefined') here, but this is
-                 %% apparently not accounted for in the Python client
-                 %% code.
-                 link_credit = {uint, 1000000},
-                 unsettled_lwm = {uint, LWM},
-                 transfer_count = {uint, 0}},
                transfer_unit = Unit,
                role = ?RECV_ROLE}, %% server is receiver
              State1};
         {error, Reason, State1} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
-            {reply,
-             #'v1_0.attach'{
-               name = Name,
-               handle = Handle,
-               remote = ClientLinkage,
-               local = undefined}, State1},
+            %% TODO proper link estalishment protocol here?
             protocol_error(?V_1_0_INVALID_FIELD,
                                "Attach rejected: ~p", [Reason])
     end;
 
+%% TODO we don't really implement link-based flow control. Reject connections
+%% that try to use it - except ATM the Python test case asks to use it
 handle_control(#'v1_0.attach'{local = Linkage,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
@@ -262,50 +285,42 @@ handle_control(#'v1_0.attach'{local = Linkage,
     end;
 
 handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
-                                settled = Settled,
-                                fragments = Fragments},
-                          State = #session{backing_channel = Ch}) ->
+                                       settled = Settled,
+                                       fragments = Fragments,
+                                       transfer_id = TxfrId},
+               State = #session{backing_channel = Ch}) ->
     case get({incoming, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK } ->
             Msg = rabbit_amqp1_0_message:assemble(Fragments),
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = RK }, Msg),
-            %% TODO use publisher acknowledgement
+            %% TODO use publisher acknowledgement, keep incoming unsettled map
             case Settled of
                 true  -> {noreply, State};
                 %% Move LWM, credit etc.
                 false -> {reply,
-                          acknowledgement([Txfr],
-                                          #'v1_0.disposition'{
-                                            role = ?RECV_ROLE}), State}
+                          acknowledgement(Txfr,
+                                          #'v1_0.disposition'{role = ?RECV_ROLE}),
+                          State#session{ next_incoming_id = next_transfer_number(TxfrId) }}
             end;
         undefined ->
             protocol_error(?V_1_0_ILLEGAL_STATE,
                            "Unknown link handle ~p", [Handle])
     end;
 
-handle_control(#'v1_0.disposition'{ batchable = Batchable,
-                                    extents = Extents,
-                                    role = ?RECV_ROLE} = Disp, %% Client is receiver
-               State) ->
-    {SettledExtents, NewState} =
-        lists:foldl(fun(Extent, {SettledExtents1, State1}) ->
-                            {Settled, State2} = settle(Extent, Batchable, State1),
-                            {[Settled | SettledExtents1], State2}
-                    end, {[], State}, Extents),
-    LWM = get_lwm(State),
-    NewState1 = NewState#session { outgoing_lwm = LWM },
-    case lists:filter(fun (none) -> false;
-                          (_Ext)  -> true
-                      end, SettledExtents) of
-        []   -> {noreply, NewState1}; %% everything in its place
-        Exts -> {reply,
-                 Disp#'v1_0.disposition'{ extents = Exts,
-                                          role = ?SEND_ROLE }, %% server is sender
-                 NewState1}
+%% Disposition: a single extent is settled at a time.  This may
+%% involve more than one message. TODO: should we send a flow after
+%% this, to indicate the state of the session window?
+handle_control(#'v1_0.disposition'{ role = ?RECV_ROLE } = Disp, State) ->
+    case settle(Disp, State) of
+        {none, NewState} ->
+            {noreply, NewState};
+        {ReplyDisp, NewState} ->
+            {reply, ReplyDisp, NewState}
     end;
 
 handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
+    %% TODO keep the state around depending on the lifetime
     erase({incoming, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
@@ -313,50 +328,62 @@ handle_control(#'v1_0.end'{}, State = #session{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
-handle_control(#'v1_0.flow'{ handle = Handle,
-                             flow_state = Flow = #'v1_0.flow_state' {
-                               unsettled_lwm = {uint, NewLWM},
-                               link_credit = LinkCredit0,
-                               drain = Drain
-                              }
-                           },
-               State = #session{ outgoing_lwm = CurrentLWM,
-                                 backing_channel = Ch,
-                                 writer_pid = WriterPid}) ->
-    case get({outgoing, Handle}) of
-        #outgoing_link{ } ->
-            LinkCredit = case LinkCredit0 of
-                             undefined -> -1;
-                             _         -> LinkCredit0
-                         end,
-            #'basic.credit_ok'{ available = Available } =
-                amqp_channel:call(Ch, #'basic.credit'{consumer_tag = Handle,
-                                                      credit       = LinkCredit,
-                                                      drain        = Drain}),
-            case Available of
-                -1 -> ok; %% We don't know - probably because this flow relates
-                          %% to a handle that does not yet exist
-                          %% TODO is this an error?
-                _  ->     F = #'v1_0.flow'{
-                            handle = Handle,
-                            flow_state = Flow#'v1_0.flow_state'{
-                                          available = Available}},
-                          rabbit_amqp1_0_writer:send_command(WriterPid, F)
-            end;
-        _ ->
-            ok
-    end,
-    State1 = case NewLWM < CurrentLWM of
-                 true ->
-                     protocol_error(?V_1_0_ILLEGAL_STATE,
-                                    "Attempt to roll back lwm from ~p to ~p",
-                                    [CurrentLWM, NewLWM]);
-                 _ ->
-                     implicit_settle(NewLWM, State)
-             end,
-    %%% implicit settle sets the LWM
-    ?DEBUG("Implicitly settled up to ~p", [NewLWM]),
-    {noreply, State1};
+%% Flow control.  These frames come with two pieces of information:
+%% the session window, and optionally, credit for a particular link.
+%% We'll deal with each of them separately.
+%%
+%% See above regarding the session window. We should already know the
+%% next outgoing transfer sequence number, because it's one more than
+%% the last transfer we saw; and, we don't need to know the next
+%% incoming transfer sequence number (although we might use it to
+%% detect congestion -- e.g., if it's lagging far behind our outgoing
+%% sequence number). We probably care about the outgoing window, since
+%% we want to keep it open by sending back settlements, but there's
+%% not much we can do to hurry things along.
+%%
+%% We do care about the incoming window, because we must not send
+%% beyond it. This may cause us problems, even in normal operation,
+%% since we want our unsettled transfers to be exactly those that are
+%% held as unacked by the backing channel; however, the far side may
+%% close the window while we still have messages pending
+%% transfer. Note that this isn't a race so far as AMQP 1.0 is
+%% concerned; it's only because AMQP 0-9-1 defines QoS in terms of the
+%% total number of unacked messages, whereas 1.0 has an explicit window.
+handle_control(Flow = #'v1_0.flow'{},
+               State = #session{ next_incoming_id = LocalNextIn,
+                                 max_outgoing_id = LocalMaxOut,
+                                 next_transfer_number = LocalNextOut }) ->
+    #'v1_0.flow'{ next_incoming_id = {ulong, RemoteNextIn},
+                  incoming_window = {uint, RemoteWindowIn},
+                  next_outgoing_id = {ulong, RemoteNextOut},
+                  outgoing_window = {uint, RemoteWindowOut}} = Flow,
+    %% Check the things that we know for sure
+    %% TODO sequence number comparisons
+    RemoteNextOut = LocalNextIn,
+    true = (RemoteNextIn =< LocalNextOut),
+    %% Adjust our window
+    RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
+    State1 = State#session{ max_outgoing_id = RemoteMaxOut },
+    case Flow#'v1_0.flow'.handle of
+        undefined ->
+            {noreply, State1};
+        Handle ->
+            case get({in, Handle}) of
+                undefined ->
+                    case get({out, Handle}) of
+                        undefined ->
+                            rabbit_log:warning("Flow for unknown link handle ~p", [Flow]),
+                            protocol_error(?V_1_0_INVALID_FIELD,
+                                           "Unattached handle: ~p", [Handle]);
+                        Out = #outgoing_link{} ->
+                            outgoing_flow(Out, Flow, State1)
+                    end;
+                In = #incoming_link{} ->
+                    %% We're being told about available messages at
+                    %% the sender.  Yawn.
+                    {noreply, State1}
+            end
+    end;
 
 handle_control(Frame, State) ->
     io:format("Ignoring frame: ~p~n", [Frame]),
@@ -375,11 +402,8 @@ attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
                                handle = Handle,
                                local = ClientLinkage,
-                               flow_state = Flow = #'v1_0.flow_state'{
-                                              session_credit = {uint, ClientSC}},
                                transfer_unit = Unit},
-               State = #session{backing_channel = Ch,
-                                outgoing_session_credit = ServerSC}) ->
+               State = #session{backing_channel = Ch}) ->
     #'v1_0.linkage'{ source = Source } = ClientLinkage,
     NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
@@ -390,19 +414,12 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                        default_outcome = DOSym}, State) of
         {ok, Source1,
          OutgoingLink = #outgoing_link{ queue = QueueName }, State1} ->
-            SessionCredit =
-                case ServerSC of
-                    undefined -> #'basic.qos_ok'{} =
-                                     amqp_channel:call(Ch, #'basic.qos'{
-                                                         prefetch_count = ClientSC}),
-                                 ClientSC;
-                    _         -> ServerSC
-                end,
             CTag = handle_to_ctag(Handle),
-            %% Default credit in 1-0 is 0. Default in 0-9-1 is infinite.
-            amqp_channel:call(Ch, #'basic.credit'{consumer_tag = CTag,
+            %% Zero the credit before we start consuming, so that we only
+            %% use explicitly given credit.
+            amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                                   credit       = 0,
-                                                  drain        = true}),
+                                                  drain        = false}),
             case amqp_channel:subscribe(
                    Ch, #'basic.consume' { queue = QueueName,
                                           consumer_tag = CTag,
@@ -427,14 +444,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                     %% and [...]. We think we're correct here
                                     %% outcomes = Outcomes
                                    }},
-                       flow_state = Flow#'v1_0.flow_state'{
-                                      %% transfer_count = 0,
-                                      %% link_credit    = LinkCredit,
-                                      %% available      = Available,
-                                      %% drain          = Drain
-                                     },
-                       role = ?SEND_ROLE},
-                     State1#session{outgoing_session_credit = SessionCredit}};
+                       role = ?SEND_ROLE}, State1};
                 Fail ->
                     protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
             end;
@@ -442,166 +452,179 @@ attach_outgoing(DefaultOutcome, Outcomes,
             {reply, #'v1_0.attach'{local = undefined}, State1}
     end.
 
+outgoing_flow(#outgoing_link{},
+              Flow = #'v1_0.flow'{
+                handle = Handle,
+                link_credit = Credit,
+                transfer_count = Count,
+                drain = Drain},
+              State = #session{backing_channel = Ch}) ->
+    CTag = handle_to_ctag(Handle),
+    #'basic.credit_ok'{available = Available} =
+        amqp_channel:call(Ch,
+                          #'basic.credit'{consumer_tag = CTag,
+                                          credit       = Credit,
+                                          drain        = Drain}),
+    case Available of
+        -1 ->
+            {noreply, State};
+        %% We don't know - probably because this flow relates
+        %% to a handle that does not yet exist TODO is this an error?
+        _  ->
+            F = #'v1_0.flow'{
+              handle = Handle,
+              available = Available},
+            {reply, F, State}
+    end.
+
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ transfer_unit = Unit,
                                 transfer_count = Count,
                                 no_ack = NoAck,
                                 default_outcome = DefaultOutcome },
-         Session = #session{ transfer_number = TransferNumber,
-                             outgoing_session_credit = SessionCredit,
-                             xfer_num_to_tag = Dict },
+         Session = #session{ next_transfer_number = TransferNumber,
+                             max_outgoing_id = LocalMaxOut,
+                             window_size = WindowSize,
+                             backing_channel = AmqpChannel,
+                             outgoing_unsettled_map = Unsettled },
          Msg = #amqp_msg{payload = Content},
          DeliveryTag) ->
     TransferSize = transfer_size(Content, Unit),
-    NewLink = Link#outgoing_link{
-                transfer_count = Count + TransferSize
-               },
-    NewSession = Session#session {outgoing_session_credit = SessionCredit - 1},
-    T = #'v1_0.transfer'{handle = LinkHandle,
-                         flow_state = flow_state(NewLink, NewSession),
-                         delivery_tag = {binary, <<DeliveryTag:64>>},
-                         transfer_id = {uint, TransferNumber},
-                         settled = NoAck,
-                         state = #'v1_0.transfer_state'{
-                           %% TODO DUBIOUS this replicates information we
-                           %% and the client already have
-                           bytes_transferred = {ulong, 0}
-                          },
-                         resume = false,
-                         more = false,
-                         aborted = false,
-                         batchable = false,
-                         fragments =
-                             rabbit_amqp1_0_message:fragments(Msg)},
-    rabbit_amqp1_0_writer:send_command(WriterPid, T),
-    Dict1 = gb_trees:insert(TransferNumber,
-                            #outgoing_transfer{
-                              delivery_tag = DeliveryTag,
-                              expected_outcome = DefaultOutcome }, Dict),
-    {NewLink, NewSession#session { xfer_num_to_tag = Dict1 }}.
 
-settle(#'v1_0.extent'{
-          first = {uint, First0},
-          last = Last0,
-          handle = _Handle, %% TODO DUBIOUS what on earth is this for?
-          settled = Settled,
-          state = #'v1_0.transfer_state'{ outcome = Outcome }
-         } = Extent,
-       _Batchable, %% TODO is this documented anywhere? Handle it.
+    %% FIXME
+    %% If either the outgoing session window, or the remote incoming
+    %% session window, is closed, we can't send this. This probably
+    %% happened because the far side is basing its window on the low
+    %% water mark, whereas we can only tell the queue to have at most
+    %% "prefetch_count" messages in flight (i.e., a total). For the
+    %% minute we will have to just break things.
+    NumUnsettled = gb_trees:size(Unsettled),
+    if (LocalMaxOut < TransferNumber andalso
+        NumUnsettled >= WindowSize) ->
+            NewLink = Link#outgoing_link{
+                        transfer_count = Count + TransferSize
+                       },
+            T = #'v1_0.transfer'{handle = LinkHandle,
+                                 delivery_tag = {binary, <<DeliveryTag:64>>},
+                                 transfer_id = {uint, TransferNumber},
+                                 settled = NoAck,
+                                 state = #'v1_0.transfer_state'{
+                                   %% TODO DUBIOUS this replicates
+                                   %% information we and the client
+                                   %% already have. Also TODO: should
+                                   %% it be inclusive of this
+                                   %% transfer?
+                                   bytes_transferred = {ulong, 0},
+                                   %% DUBIOUS it seems to mean the
+                                   %% same thing if we include the
+                                   %% outcome or send null here
+                                   outcome = ?DEFAULT_OUTCOME
+                                  },
+                                 resume = false,
+                                 more = false,
+                                 aborted = false,
+                                 %% TODO: actually batchable would be
+                                 %% fine, but in any case it's only a
+                                 %% hint
+                                 batchable = false,
+                                 fragments =
+                                 rabbit_amqp1_0_message:fragments(Msg)},
+            Unsettled1 = case NoAck of
+                             true -> Unsettled;
+                             false -> gb_trees:insert(TransferNumber,
+                                                      #outgoing_transfer{
+                                                        delivery_tag = DeliveryTag,
+                                                        expected_outcome = DefaultOutcome },
+                                                      Unsettled)
+                         end,
+            rabbit_amqp1_0_writer:send_command(WriterPid, T),
+            {NewLink, Session#session { outgoing_unsettled_map = Unsettled1 }};
+       %% TODO We can't knowingly exceed our credit.  On the other
+       %% hand, we've been handed a message to deliver. This has
+       %% probably happened because the receiver has suddenly reduced
+       %% the credit. Once we delegate the flow control to the queue,
+       %% via basic.credit, this won't (or at least, we won't be
+       %% keeping track of the credit, so we won't notice).
+       NoAck ->
+            {Link, Session};
+       true ->
+            amqp_channel:call(AmqpChannel, #'basic.reject'{requeue = true,
+                                                           delivery_tag = DeliveryTag}),
+            {Link, Session}
+    end.
+
+%% We've been told that the fate of a transfer has been determined.
+%% Generally if the other side has not settled it, we will do so.  If
+%% the other side /has/ settled it, we don't need to reply -- it's
+%% already forgotten its state for the transfer anyway.
+settle(Disp = #'v1_0.disposition'{ first = First0,
+                                   last = Last0,
+                                   settled = Settled,
+                                   state = #'v1_0.transfer_state'{outcome = Outcome}},
        State = #session{backing_channel = Ch,
-                        outgoing_session_credit = SessionCredit,
-                        outgoing_lwm = LWM,
-                        xfer_num_to_tag = Dict}) ->
+                        outgoing_unsettled_map = Unsettled}) ->
+    {uint, First} = First0,
     %% Last may be omitted, in which case it's the same as first
     Last = case Last0 of
                {uint, L} -> L;
-               undefined -> First0
+               undefined -> First
            end,
-    %% TODO check that Last < First
-    First = max(First0, LWM),
-    if Last < LWM -> % FIXME it's a sequence number
-            %% This is talking about transfers we've forgotten about
+
+    %% The other party may be talking about something we've already
+    %% forgotten; this isn't a crime, we can just ignore it.
+
+    case gb_trees:is_empty(Unsettled) of
+        true ->
             {none, State};
-       true ->
-            {Dict1, SessionCredit1} =
-                lists:foldl(
-                  fun (Transfer, {TransferMap, SC}) ->
-                          ?DEBUG("Settling ~p with ~p~n", [Transfer, Outcome]),
-                          #outgoing_transfer{ delivery_tag = DeliveryTag }
-                              = gb_trees:get(Transfer, TransferMap),
-                          Ack =
-                              case Outcome of
-                                  #'v1_0.accepted'{} ->
-                                      #'basic.ack' {delivery_tag = DeliveryTag,
-                                                    multiple     = false };
-                                  #'v1_0.rejected'{} ->
-                                      #'basic.reject' {delivery_tag = DeliveryTag,
-                                                       requeue      = false };
-                                  #'v1_0.released'{} ->
-                                      #'basic.reject' {delivery_tag = DeliveryTag,
-                                                       requeue      = true }
-                              end,
-                          ok = amqp_channel:call(Ch, Ack),
-                          {gb_trees:delete(Transfer, TransferMap), SC + 1}
-                  end,
-                  {Dict, SessionCredit}, lists:seq(max(LWM, First), Last)),
-            {case Settled of
-                 true  -> none;
-                 false -> Extent#'v1_0.extent'{ settled = true }
-             end,
-             State#session{outgoing_session_credit = SessionCredit1,
-                           xfer_num_to_tag = Dict1}}
-    end.
-
-implicit_settle(NewLWM, State = #session{
-                          backing_channel = Ch,
-                          outgoing_lwm = LWM,
-                          outgoing_session_credit = SessionCredit,
-                          xfer_num_to_tag = TransferMap }) ->
-
-    if NewLWM =< LWM ->
-            %% Nothing more to settle; our LWM is brought up to the new one
-            ?DEBUG("(no more to implicitly settle, given LWM ~p~n)", [NewLWM]),
-            State;
-       true ->
-            case gb_trees:is_empty(TransferMap) of
-                true ->
-                    %% We have been told the LWM is higher than our
-                    %% _H_WM.  This may happen if we have expired
-                    %% messages but not yet told anyone (if we expired
-                    %% messages).
-                    State;
-                false ->
-                    {Id, Value, NewMap} =
-                        gb_trees:take_smallest(TransferMap),
-                    #outgoing_transfer{ delivery_tag = DeliveryTag,
-                                        expected_outcome = Outcome } = Value,
-                    ?DEBUG("Implicitly settling ~p as ~p~n", [Id, Outcome]),
-                    Ack =
-                        case Outcome of
-                            ?V_1_0_SYMBOL_ACCEPTED ->
-                                #'basic.ack' {delivery_tag = DeliveryTag,
-                                              multiple     = false };
-                            ?V_1_0_SYMBOL_REJECTED ->
-                                #'basic.reject' {delivery_tag = DeliveryTag,
-                                                 requeue      = false };
-                            ?V_1_0_SYMBOL_RELEASED ->
-                                #'basic.reject' {delivery_tag = DeliveryTag,
-                                                 requeue      = true }
-                        end,
-                    ok = amqp_channel:call(Ch, Ack),
-                    State1 = State#session{
-                               outgoing_session_credit = SessionCredit + 1,
-                               outgoing_lwm = get_lwm(State),
-                               xfer_num_to_tag = NewMap },
-                    implicit_settle(NewLWM, State1)
+        false ->
+            {LWM, _Val} = gb_tree:smallest(outgoing_unsettled_map),
+            {HWM, _Val} = gb_tree:largest(outgoing_unsettled_map),
+            if Last < LWM ->
+                    {none, State};
+               First > HWM ->
+                    State; %% FIXME this should probably be an error, rather than ignored.
+               true ->
+                    Unsettled1 =
+                        lists:foldl(
+                          fun (Transfer, Map) ->
+                                  case gb_trees:lookup(Unsettled, Transfer) of
+                                      none ->
+                                          Map;
+                                      {value, Entry} ->
+                                          ?DEBUG("Settling ~p with ~p~n", [Transfer, Outcome]),
+                                          #outgoing_transfer{ delivery_tag = DeliveryTag } = Entry,
+                                          Ack =
+                                              case Outcome of
+                                                  #'v1_0.accepted'{} ->
+                                                      #'basic.ack' {delivery_tag = DeliveryTag,
+                                                                    multiple     = false };
+                                                  #'v1_0.rejected'{} ->
+                                                      #'basic.reject' {delivery_tag = DeliveryTag,
+                                                                       requeue      = false };
+                                                  #'v1_0.released'{} ->
+                                                      #'basic.reject' {delivery_tag = DeliveryTag,
+                                                                       requeue      = true }
+                                              end,
+                                          ok = amqp_channel:call(Ch, Ack),
+                                          gb_trees:delete(Transfer, Map)
+                                  end
+                          end,
+                          Unsettled, lists:seq(erlang:max(LWM, First),
+                                               erlang:min(HWM, Last))),
+                    {case Settled of
+                         true  -> none;
+                         false -> Disp#'v1_0.disposition'{ settled = true }
+                     end,
+                     State#session{outgoing_unsettled_map = Unsettled1}}
             end
     end.
 
-flow_state(#outgoing_link{transfer_count = Count},
-           #session{outgoing_lwm = LWM,
-                    outgoing_session_credit = SessionCredit}) ->
-    #'v1_0.flow_state'{
-            unsettled_lwm = {uint, LWM},
-            session_credit = {uint, SessionCredit},
-            transfer_count = {uint, Count},
-            link_credit = {uint, 99}
-           }.
-
-acknowledgement(Txfrs, Disposition) ->
-    acknowledgement(Txfrs, Disposition, []).
-
-acknowledgement([], Disposition, Extents) ->
-    %% TODO We could reverse this to be friendly to clients ..
-    Disposition#'v1_0.disposition'{extents = Extents};
-acknowledgement([#'v1_0.transfer'{ transfer_id = TxfrId } | Rest],
-                Disposition, Exts) ->
-    %% TODO coalesce extents
-    Ext = #'v1_0.extent'{ first = TxfrId,
-                          last = TxfrId,
-                          settled = true,
-                          state = #'v1_0.accepted'{}},
-    acknowledgement(Rest, Disposition, [Ext | Exts]).
+acknowledgement(#'v1_0.transfer'{ transfer_id = TxfrId }, Disposition) ->
+    Disposition#'v1_0.disposition'{ first = TxfrId,
+                               last = TxfrId,
+                               settled = true,
+                               state = #'v1_0.transfer_state'{
+                                 outcome = #'v1_0.accepted'{}}}.
 
 ensure_declaring_channel(State = #session{
                            backing_connection = Conn,
@@ -821,16 +844,6 @@ queue_address(QueueName) when is_binary(QueueName) ->
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
     TransferNumber + 1.
-
-get_lwm(#session{ transfer_number = Txfr,
-                  xfer_num_to_tag = Map}) ->
-    case gb_trees:is_empty(Map) of
-        true ->
-            Txfr; 
-        false ->
-            {LWM, _} = gb_trees:smallest(Map),
-            LWM
-    end.
 
 %% FIXME
 transfer_size(_Content, _Unit) ->
