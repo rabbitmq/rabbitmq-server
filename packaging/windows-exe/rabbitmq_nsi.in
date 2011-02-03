@@ -51,11 +51,12 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "%%VERSION%%"
   !insertmacro MUI_PAGE_COMPONENTS
   !insertmacro MUI_PAGE_DIRECTORY
   !insertmacro MUI_PAGE_INSTFILES
-;  !insertmacro MUI_PAGE_FINISH
+  !insertmacro MUI_PAGE_FINISH
 
   !insertmacro MUI_UNPAGE_CONFIRM
   !insertmacro MUI_UNPAGE_INSTFILES
-;  !insertmacro MUI_UNPAGE_FINISH
+  !define MUI_FINISHPAGE_TEXT "RabbitMQ Server %%VERSION%% has been uninstalled from your computer.$\n$\nPlease note that the log and database directories located at $APPDATA\RabbitMQ have not been removed. You can remove them manually if desired."
+  !insertmacro MUI_UNPAGE_FINISH
 
 ;--------------------------------
 ;Languages
