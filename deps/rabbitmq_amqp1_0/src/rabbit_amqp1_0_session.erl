@@ -297,9 +297,38 @@ handle_control(#'v1_0.end'{}, State = #session{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
-handle_control(#'v1_0.flow'{ flow_state = #'v1_0.flow_state' {
-                               unsettled_lwm = {uint, NewLWM}}},
-               State = #session{ outgoing_lwm = CurrentLWM }) ->
+handle_control(#'v1_0.flow'{ handle = Handle,
+                             flow_state = Flow = #'v1_0.flow_state' {
+                               unsettled_lwm = {uint, NewLWM},
+                               link_credit = LinkCredit,
+                               drain = Drain
+                              }
+                           },
+               State = #session{ outgoing_lwm = CurrentLWM,
+                                 backing_channel = Ch,
+                                 writer_pid = WriterPid}) ->
+    case get({outgoing, Handle}) of
+        #outgoing_link{ } ->
+            #'basic.credit_ok'{consumer_tag = Handle,
+                               credit       = LinkCredit,
+                               available    = Available,
+                               drain        = Drain} =
+                amqp_channel:call(Ch, #'basic.credit'{consumer_tag = Handle,
+                                                      credit       = LinkCredit,
+                                                      drain        = Drain}),
+            case Available of
+                -1 -> ok; %% We don't know - probably because this flow relates
+                          %% to a handle that does not yet exist
+                          %% TODO is this an error?
+                _  ->     F = #'v1_0.flow'{
+                            handle = Handle,
+                            flow_state = Flow#'v1_0.flow_state'{
+                                          available = Available}},
+                          rabbit_amqp1_0_writer:send_command(WriterPid, F)
+            end;
+        _ ->
+            ok
+    end,
     State1 = case NewLWM < CurrentLWM of
                  true ->
                      protocol_error(?V_1_0_ILLEGAL_STATE,
@@ -330,9 +359,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                handle = Handle,
                                local = ClientLinkage,
                                flow_state = Flow = #'v1_0.flow_state'{
-                                              session_credit = {uint, ClientSC},
-                                              link_credit = {uint, LinkCredit},
-                                              drain = Drain},
+                                              session_credit = {uint, ClientSC}},
                                transfer_unit = Unit},
                State = #session{backing_channel = Ch,
                                 outgoing_session_credit = ServerSC}) ->
@@ -355,9 +382,10 @@ attach_outgoing(DefaultOutcome, Outcomes,
                     _         -> ServerSC
                 end,
             CTag = handle_to_ctag(Handle),
-            amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                                  credit       = LinkCredit,
-                                                  drain        = Drain}),
+            %% Default credit in 1-0 is 0. Default in 0-9-1 is infinite.
+            amqp_channel:call(Ch, #'basic.credit'{consumer_tag = CTag,
+                                                  credit       = 0,
+                                                  drain        = true}),
             case amqp_channel:subscribe(
                    Ch, #'basic.consume' { queue = QueueName,
                                           consumer_tag = CTag,
