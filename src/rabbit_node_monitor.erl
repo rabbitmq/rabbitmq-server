@@ -52,7 +52,7 @@ notify_cluster() ->
                       ?RABBIT_UP_RPC_TIMEOUT),
     case BadNodes of
         [] -> ok;
-        _  -> rabbit_log:warn("failed to contact nodes ~p", [BadNodes])
+        _  -> rabbit_log:info("failed to contact nodes ~p", [BadNodes])
     end,
     %% register other active rabbits with this rabbit
     [ rabbit_node_monitor:rabbit_running_on(Node)
