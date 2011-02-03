@@ -18,7 +18,6 @@ OutFile "rabbitmq-server-%%VERSION%%.exe"
 
 ; Icons
 !define MUI_ICON "rabbitmq.ico"
-!define MUI_UNICON "rabbitmq.ico"
 
 ; The default installation directory
 InstallDir "$PROGRAMFILES\RabbitMQ Server"
