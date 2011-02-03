@@ -309,10 +309,7 @@ handle_control(#'v1_0.flow'{ handle = Handle,
                                  writer_pid = WriterPid}) ->
     case get({outgoing, Handle}) of
         #outgoing_link{ } ->
-            #'basic.credit_ok'{consumer_tag = Handle,
-                               credit       = LinkCredit,
-                               available    = Available,
-                               drain        = Drain} =
+            #'basic.credit_ok'{ available = Available } =
                 amqp_channel:call(Ch, #'basic.credit'{consumer_tag = Handle,
                                                       credit       = LinkCredit,
                                                       drain        = Drain}),
