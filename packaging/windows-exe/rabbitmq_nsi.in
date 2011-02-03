@@ -11,7 +11,7 @@
 ;--------------------------------
 
 ; The name of the installer
-Name "RabbitMQ %%VERSION%%"
+Name "RabbitMQ Server %%VERSION%%"
 
 ; The file to write
 OutFile "rabbitmq-server-%%VERSION%%.exe"
@@ -21,11 +21,11 @@ OutFile "rabbitmq-server-%%VERSION%%.exe"
 !define MUI_UNICON "rabbitmq.ico"
 
 ; The default installation directory
-InstallDir $PROGRAMFILES\RabbitMQ
+InstallDir "$PROGRAMFILES\RabbitMQ Server"
 
 ; Registry key to check for directory (so if you install again, it will
 ; overwrite the old one automatically)
-InstallDirRegKey HKLM "Software\RabbitMQ" "Install_Dir"
+InstallDirRegKey HKLM "Software\RabbitMQ Server" "Install_Dir"
 
 ; Request application privileges for Windows Vista
 RequestExecutionLevel admin
@@ -34,12 +34,12 @@ SetCompressor /solid lzma
 
 VIProductVersion "%%VERSION%%.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "%%VERSION%%"
-VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ Server"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" ""
 VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "VMware, Inc"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "" ; TODO ?
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2011 VMware, Inc.  All rights reserved."
-VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "RabbitMQ"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "RabbitMQ Server"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "%%VERSION%%"
 
 ;--------------------------------
@@ -65,7 +65,7 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "%%VERSION%%"
 ;--------------------------------
 
 ; The stuff to install
-Section "RabbitMQ (required)" Rabbit
+Section "RabbitMQ Server (required)" Rabbit
 
   SectionIn RO
 
@@ -116,15 +116,15 @@ Section "Start Menu" RabbitStartMenu
   CreateDirectory "$APPDATA\RabbitMQ\log"
   CreateDirectory "$APPDATA\RabbitMQ\db"
 
-  CreateDirectory "$SMPROGRAMS\RabbitMQ"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Plugins Directory.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\plugins"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Log Directory.lnk" "$APPDATA\RabbitMQ\log"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Database Directory.lnk" "$APPDATA\RabbitMQ\db"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\(Re)Install Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "install" "$INSTDIR\rabbitmq.ico"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Remove Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "remove" "$INSTDIR\rabbitmq.ico"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Start Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "start" "$INSTDIR\rabbitmq.ico"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ\Stop Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "stop" "$INSTDIR\rabbitmq.ico"
+  CreateDirectory "$SMPROGRAMS\RabbitMQ Server"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Plugins Directory.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\plugins"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Log Directory.lnk" "$APPDATA\RabbitMQ\log"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Database Directory.lnk" "$APPDATA\RabbitMQ\db"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\(Re)Install Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "install" "$INSTDIR\rabbitmq.ico"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Remove Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "remove" "$INSTDIR\rabbitmq.ico"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Start Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "start" "$INSTDIR\rabbitmq.ico"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Stop Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "stop" "$INSTDIR\rabbitmq.ico"
 
 SectionEnd
 
@@ -166,7 +166,7 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
 
   ; Remove start menu items
-  RMDir /r "$SMPROGRAMS\RabbitMQ"
+  RMDir /r "$SMPROGRAMS\RabbitMQ Server"
 
   DeleteRegValue ${env_hklm} ERLANG_HOME
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
