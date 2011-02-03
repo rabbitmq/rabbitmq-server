@@ -240,10 +240,19 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
                            precondition_failed,
-                           "inequivalent arg '~s' for ~s:  "
-                           "required ~w, received ~w",
-                           [Key, rabbit_misc:rs(Name), New1, Orig1])
+                           "inequivalent arg '~s' for ~s: "
+                           "received ~s but current is ~s",
+                           [Key, rs(Name), val(New1), val(Orig1)])
     end.
+
+val(undefined) ->
+    "none";
+val({Type, Value}) ->
+    Fmt = case is_binary(Value) of
+              true  -> "the value '~s' of type '~s'";
+              false -> "the value '~w' of type '~s'"
+          end,
+    lists:flatten(io_lib:format(Fmt, [Value, Type])).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
