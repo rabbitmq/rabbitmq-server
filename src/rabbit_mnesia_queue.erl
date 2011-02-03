@@ -63,8 +63,6 @@
 
 %% TODO: Need to provide better back-pressure when queue is filling up.
 
-%% TODO: Need to think about recovering pending acks.
-
 %% BUG: Should not use mnesia:all_keys to count entries.
 
 %% BUG: P records do not need a separate seq_id.
@@ -262,7 +260,7 @@ init(QueueName, IsDurable, Recover) ->
                   db_save(RS),
                   RS
           end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("init ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -278,7 +276,7 @@ terminate(S = #s { q_table = QTable, p_table = PTable, n_table = NTable }) ->
     {atomic, Result} =
         mnesia:transaction(fun () -> clear_table(PTable), S end),
     mnesia:dump_tables([QTable, PTable, NTable]),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -299,14 +297,14 @@ delete_and_terminate(S = #s { q_table = QTable,
                                      S
                            end),
     mnesia:dump_tables([QTable, PTable, NTable]),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% purge/1 deletes all of queue's enqueued msgs, and also returns the
-%% count of msgs purged. This function creates an Mnesia transaction
-%% to run in, and therefore may not be called from inside another
-%% Mnesia transaction.
+%% purge/1 deletes all of queue's enqueued msgs, generating pending
+%% acks as required, and returning the count of msgs purged. This
+%% function creates an Mnesia transaction to run in, and therefore may
+%% not be called from inside another Mnesia transaction.
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
@@ -314,10 +312,10 @@ purge(S = #s { q_table = QTable }) ->
     rabbit_log:info("purge(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> LQ = length(mnesia:all_keys(QTable)),
-                                     clear_table(QTable),
+                                     internal_purge(S),
                                      {LQ, S}
                            end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("purge ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -338,7 +336,7 @@ publish(Msg, Props, S) ->
                                      db_save(RS),
                                      RS
                            end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -358,7 +356,7 @@ publish(Msg, Props, S) ->
 publish_delivered(false, _, _, S) ->
     rabbit_log:info("publish_delivered(false, _, _,~n ~p) ->", [S]),
     Result = {blank_ack, S},
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result;
 publish_delivered(true,
                   Msg,
@@ -376,7 +374,7 @@ publish_delivered(true,
                   db_save(RS),
                   {SeqId, RS}
           end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -398,7 +396,7 @@ dropwhile(Pred, S) ->
                                      db_save(RS),
                                      {Atom, RS}
                            end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -411,15 +409,10 @@ dropwhile(Pred, S) ->
 
 fetch(AckRequired, S) ->
     rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
-    {atomic, Result} =
-        mnesia:transaction(
-          fun () -> DR = case db_q_pop(S) of
-                             nothing -> empty;
-                             {just, M} -> db_post_pop(AckRequired, M, S)
-                         end,
-                    {DR, S}
-          end),
-    rabbit_log:info(" -> ~p", [Result]),
+    {atomic, FR} =
+        mnesia:transaction(fun () -> internal_fetch(AckRequired, S) end),
+    Result = {FR, S},
+    rabbit_log:info("fetch ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -439,15 +432,15 @@ ack(SeqIds, S) ->
                                      db_save(RS),
                                      {Guids, RS}
                            end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_publish/4 is a publish, but in the context of an AMQP
-%% transaction. It stores the msg and its properties in the to_pub
-%% field of the txn, waiting to be committed. This function creates an
-%% Mnesia transaction to run in, and therefore may not be called from
-%% inside another Mnesia transaction.
+%% tx_publish/4 is a publish within an AMQP transaction. It stores the
+%% msg and its properties in the to_pub field of the txn, waiting to
+%% be committed. This function creates an Mnesia transaction to run
+%% in, and therefore may not be called from inside another Mnesia
+%% transaction.
 %%
 %% -spec(tx_publish/4 ::
 %%         (rabbit_types:txn(),
@@ -468,15 +461,14 @@ tx_publish(Txn, Msg, Props, S) ->
                     db_save(RS),
                     RS
           end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("tx_publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_ack/3 acks, but in the context of an AMQP transaction. It stores
-%% the seq_id in the acks field of the txn, waiting to be
-%% committed. This function creates an Mnesia transaction to run in,
-%% and therefore may not be called from inside another Mnesia
-%% transaction.
+%% tx_ack/3 acks within an AMQP transaction. It stores the seq_id in
+%% the acks field of the txn, waiting to be committed. This function
+%% creates an Mnesia transaction to run in, and therefore may not be
+%% called from inside another Mnesia transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -494,14 +486,13 @@ tx_ack(Txn, SeqIds, S) ->
                     db_save(RS),
                     RS
           end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("tx_ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_rollback/2 undoes anything that has been done in the context of
-%% the specified AMQP transaction. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% tx_rollback/2 aborts an AMQP transaction. This function creates an
+%% Mnesia transaction to run in, and therefore may not be called from
+%% inside another Mnesia transaction.
 %%
 %% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
@@ -516,7 +507,7 @@ tx_rollback(Txn, S) ->
                                    db_save(RS),
                                    {SeqIds, RS}
                            end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("tx_rollback ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -549,7 +540,7 @@ tx_commit(Txn, F, PropsF, S) ->
                   {SeqIds, RS}
           end),
     F(),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("tx_commit ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -577,7 +568,7 @@ requeue(SeqIds, PropsF, S) ->
                     db_save(RS),
                     RS
           end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("requeue ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -591,14 +582,13 @@ len(S = #s { q_table = QTable }) ->
     rabbit_log:info("len(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> length(mnesia:all_keys(QTable)) end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("len ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% is_empty/1 returns true if the queue is empty, and false
-%% otherwise. This function creates an Mnesia transaction to run in,
-%% and therefore may not be called from inside another Mnesia
-%% transaction.
+%% is_empty/1 returns true iff the queue is empty. This function
+%% creates an Mnesia transaction to run in, and therefore may not be
+%% called from inside another Mnesia transaction.
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
@@ -606,13 +596,13 @@ is_empty(S = #s { q_table = QTable }) ->
     rabbit_log:info("is_empty(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> 0 == length(mnesia:all_keys(QTable)) end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("is_empty ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% set_ram_duration_target states that the target is to have no more
-%% msgs in RAM than indicated by the duration and the current queue
-%% rates. It is ignored in this implementation.
+%% set_ram_duration_target informs us that the target is to have no
+%% more msgs in RAM than indicated by the duration and the current
+%% queue rates. It is ignored in this implementation.
 %%
 %% -spec(set_ram_duration_target/2 ::
 %%         (('undefined' | 'infinity' | number()), state())
@@ -631,10 +621,10 @@ set_ram_duration_target(_, S) -> S.
 ram_duration(S) -> {0, S}.
 
 %%----------------------------------------------------------------------------
-%% needs_idle_timeout/1 returns true if idle_timeout should be called
+%% needs_idle_timeout/1 returns true iff idle_timeout should be called
 %% as soon as the queue process can manage (either on an empty
-%% mailbox, or when a timer fires), and false otherwise. It always
-%% returns false in this implementation.
+%% mailbox, or when a timer fires). It always returns false in this
+%% implementation.
 %%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
@@ -666,14 +656,14 @@ handle_pre_hibernate(S) -> S.
 
 status(S = #s { q_table = QTable, p_table = PTable,
                 next_seq_id = NextSeqId }) ->
-    rabbit_log:info("status(~n ~p)", [S]),
+    rabbit_log:info("status(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () -> LQ = length(mnesia:all_keys(QTable)),
                     LP = length(mnesia:all_keys(PTable)),
                     [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}]
           end),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("status ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -695,7 +685,7 @@ create_table(Table, RecordName, Type, Attributes) ->
             ok
     end.
 
-%% Like mnesia:clear_table, but within a transaction.
+%% Like mnesia:clear_table, but within an Mnesia transaction.
 
 %% BUG: The write-set of the transaction may be huge if the table is
 %% huge. Then again, this might not bother Mnesia.
@@ -724,6 +714,27 @@ delete_nonpersistent_msgs(QTable) ->
               end
       end,
       mnesia:all_keys(QTable)).
+
+%% internal_purge/1 purges all messages, generating pending acks as
+%% necessary.
+
+-spec internal_purge(state()) -> ok.
+
+internal_purge(S) -> case internal_fetch(true, S) of
+                         empty -> ok;
+                         _ -> internal_purge(S)
+                     end.
+
+%% internal_fetch/2 fetches the next msg, if any, inside a
+%% transaction, generating a pending ack as necessary.
+
+-spec internal_fetch(ack_required(), state()) -> ok | fetch_result().
+
+internal_fetch(AckRequired, S) -> 
+    case db_q_pop(S) of
+        nothing -> empty;
+        {just, M} -> db_post_pop(AckRequired, M, S)
+    end.
 
 -spec tx_commit_state([rabbit_types:basic_message()],
                       [seq_id()],
@@ -823,8 +834,8 @@ db_add_p(M = #m { seq_id = SeqId }, #s { p_table = PTable }) ->
     ok.
 
 %% db_del_fs deletes some number of pending acks from the P table in
-%% Mnesia, applying a transactional function F after each msg is
-%% deleted, and returns their guids.
+%% Mnesia, applying a (Mnesia transactional) function F after each msg
+%% is deleted, returning their guids.
 
 -spec db_del_ps(fun (([rabbit_guid:guid()], s()) -> s()),
                     [rabbit_guid:guid()],
