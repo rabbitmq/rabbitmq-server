@@ -80,7 +80,7 @@ Section "RabbitMQ Server (required)" Rabbit
   ${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
 
   ; Write the installation path into the registry
-  WriteRegStr HKLM SOFTWARE\RabbitMQ "Install_Dir" "$INSTDIR"
+  WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ" "Install_Dir" "$INSTDIR"
 
   ; Write the uninstall keys for Windows
   WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
@@ -150,7 +150,7 @@ Section "Uninstall"
 
   ; Remove registry keys
   DeleteRegKey HKLM ${uninstall}
-  DeleteRegKey HKLM SOFTWARE\RabbitMQ
+  DeleteRegKey HKLM "SOFTWARE\VMware, Inc.\RabbitMQ"
 
   ; TODO these will fail if the service is not installed - do we care?
   ExpandEnvStrings $0 %COMSPEC%
