@@ -2,12 +2,11 @@
 
 <!--
 
-Copyright (c) 2010 Bank of America, N.A., Barclays Bank PLC, Cisco Systems,
-Credit Suisse, Deutsche Boerse Systems, Envoy Technologies Inc.,Goldman Sachs,
-IONA Technologies PLC, iMatix Corporation sprl.,JPMorgan Chase Bank Inc. N.A,
-Microsoft Corporation, Novell, Rabbit Technologies Ltd., Red Hat Inc., Solace
-Systems Inc., Tervela Inc., TWIST Process Innovations Ltd, WS02 Inc. and
-29West Inc
+Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
+Suisse, Deutsche Boerse Systems, Envoy Technologies Inc., Goldman Sachs, INETCO
+Systems Limited, JPMorgan Chase Bank Inc. N.A, Microsoft Corporation, Novell,
+Progress Software, Rabbit Technologies Ltd., Red Hat Inc., Solace Systems Inc.,
+Tervela Inc., TWIST Process Innovations Ltd, WS02 Inc. and 29West Inc 2006-2010.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -36,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 <amqp name="transport" xmlns="http://www.amqp.org/schema/amqp.xsd">
   <section name="frame-bodies">
     <type name="open" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:open:list" code="0x00000001:0x00000100"/>
+      <descriptor name="amqp:open:list" code="0x00000000:0x00000010"/>
       <field name="options" type="options"/>
       <field name="container-id" type="string" mandatory="true"/>
       <field name="hostname" type="string"/>
@@ -50,21 +49,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <field name="properties" type="fields"/>
     </type>
     <type name="begin" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:begin:list" code="0x00000001:0x00000101"/>
+      <descriptor name="amqp:begin:list" code="0x00000000:0x00000011"/>
       <field name="options" type="options"/>
       <field name="remote-channel" type="ushort"/>
+      <field name="next-outgoing-id" type="transfer-number"/>
+      <field name="window-size" type="uint"/>
       <field name="offered-capabilities" type="symbol" multiple="true"/>
       <field name="desired-capabilities" type="symbol" multiple="true"/>
       <field name="properties" type="fields"/>
     </type>
     <type name="attach" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:attach:list" code="0x00000001:0x00000102"/>
+      <descriptor name="amqp:attach:list" code="0x00000000:0x00000012"/>
       <field name="options" type="options"/>
       <field name="name" type="string" mandatory="true"/>
       <field name="handle" type="handle" mandatory="true">
         <error name="handle-busy" type="amqp-error" value="invalid-field"/>
       </field>
-      <field name="flow-state" type="flow-state" mandatory="true"/>
       <field name="role" type="role" mandatory="true"/>
       <field name="local" type="linkage"/>
       <field name="remote" type="linkage"/>
@@ -78,21 +78,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <field name="properties" type="fields"/>
     </type>
     <type name="flow" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:flow:list" code="0x00000001:0x00000103"/>
+      <descriptor name="amqp:flow:list" code="0x00000000:0x00000013"/>
       <field name="options" type="options"/>
       <field name="handle" type="handle" mandatory="true">
         <error name="unattached-handle" type="amqp-error" value="invalid-field"/>
       </field>
-      <field name="flow-state" type="flow-state" mandatory="true"/>
+      <field name="next-incoming-id" type="transfer-number"/>
+      <field name="incoming-window" type="uint"/>
+      <field name="next-outgoing-id" type="transfer-number"/>
+      <field name="outgoing-window" type="uint"/>
+      <field name="transfer-count" type="sequence-no"/>
+      <field name="link-credit" type="uint"/>
+      <field name="available" type="uint"/>
+      <field name="drain" type="boolean"/>
       <field name="echo" type="boolean"/>
     </type>
     <type name="transfer" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:transfer:list" code="0x00000001:0x00000104"/>
+      <descriptor name="amqp:transfer:list" code="0x00000000:0x00000014"/>
       <field name="options" type="options"/>
       <field name="handle" type="handle" mandatory="true">
         <error name="unattached-handle" type="amqp-error" value="invalid-field"/>
       </field>
-      <field name="flow-state" type="flow-state" mandatory="true"/>
       <field name="delivery-tag" type="delivery-tag" mandatory="true"/>
       <field name="transfer-id" type="transfer-number" mandatory="true"/>
       <field name="settled" type="boolean"/>
@@ -104,14 +110,17 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <field name="fragments" type="fragment" multiple="true"/>
     </type>
     <type name="disposition" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:disposition:list" code="0x00000001:0x00000105"/>
+      <descriptor name="amqp:disposition:list" code="0x00000000:0x00000015"/>
       <field name="options" type="options"/>
       <field name="role" type="role" mandatory="true"/>
       <field name="batchable" type="boolean"/>
-      <field name="extents" type="extent" multiple="true"/>
+      <field name="first" type="transfer-number" mandatory="true"/>
+      <field name="last" type="transfer-number"/>
+      <field name="settled" type="boolean"/>
+      <field name="state" type="*" requires="transfer-state"/>
     </type>
     <type name="detach" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:detach:list" code="0x00000001:0x00000106"/>
+      <descriptor name="amqp:detach:list" code="0x00000000:0x00000016"/>
       <field name="options" type="options"/>
       <field name="handle" type="handle" mandatory="true"/>
       <field name="local" type="linkage"/>
@@ -119,12 +128,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <field name="error" type="error"/>
     </type>
     <type name="end" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:end:list" code="0x00000001:0x00000107"/>
+      <descriptor name="amqp:end:list" code="0x00000000:0x00000017"/>
       <field name="options" type="options"/>
       <field name="error" type="error"/>
     </type>
     <type name="close" class="composite" source="list" provides="frame">
-      <descriptor name="amqp:close:list" code="0x00000001:0x00000108"/>
+      <descriptor name="amqp:close:list" code="0x00000000:0x00000018"/>
       <field name="options" type="options"/>
       <field name="error" type="error"/>
     </type>
@@ -136,7 +145,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     </type>
     <type name="handle" class="restricted" source="uint"/>
     <type name="linkage" class="composite" source="list">
-      <descriptor name="amqp:linkage:list" code="0x00000001:0x00000109"/>
+      <descriptor name="amqp:linkage:list" code="0x00000000:0x00000019"/>
       <field name="source" type="*" requires="source"/>
       <field name="target" type="*" requires="target"/>
     </type>
@@ -146,32 +155,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <choice name="never" value="never"/>
     </type>
     <type name="seconds" class="restricted" source="uint"/>
-    <type name="flow-state" class="composite" source="list">
-      <descriptor name="amqp:flow-state:list" code="0x00000001:0x0000010a"/>
-      <field name="unsettled-lwm" type="transfer-number"/>
-      <field name="session-credit" type="uint" mandatory="true"/>
-      <field name="transfer-count" type="sequence-no"/>
-      <field name="link-credit" type="uint"/>
-      <field name="available" type="uint"/>
-      <field name="drain" type="boolean"/>
-    </type>
     <type name="delivery-tag" class="restricted" source="binary"/>
     <type name="transfer-number" class="restricted" source="sequence-no"/>
     <type name="sequence-no" class="restricted" source="uint"/>
-    <type name="extent" class="composite" source="list">
-      <descriptor name="amqp:extent:list" code="0x00000001:0x0000010b"/>
-      <field name="first" type="transfer-number" mandatory="true"/>
-      <field name="last" type="transfer-number"/>
-      <field name="handle" type="uint"/>
-      <field name="settled" type="boolean"/>
-      <field name="state" type="*" requires="transfer-state"/>
-    </type>
     <type name="fragment" class="composite" source="list">
-      <descriptor name="amqp:fragment:list" code="0x00000001:0x0000010c"/>
+      <descriptor name="amqp:fragment:list" code="0x00000000:0x0000001c"/>
       <field name="first" type="boolean"/>
       <field name="last" type="boolean"/>
       <field name="format-code" type="uint"/>
-      <field name="fragment-offset" type="ulong"/>
+      <field name="section-number" type="uint"/>
+      <field name="section-offset" type="ulong"/>
       <field name="payload" type="binary"/>
     </type>
     <type name="fields" class="restricted" source="map"/>
@@ -183,7 +176,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <choice name="end" value="end"/>
     </type>
     <type name="error" class="composite" source="list">
-      <descriptor name="amqp:error:list" code="0x00000001:0x0000010d"/>
+      <descriptor name="amqp:error:list" code="0x00000000:0x0000001d"/>
       <field name="condition" type="symbol" mandatory="true" requires="error"/>
       <field name="description" type="string"/>
       <field name="info" type="map"/>

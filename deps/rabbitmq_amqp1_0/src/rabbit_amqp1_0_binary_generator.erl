@@ -29,10 +29,16 @@ generate(null) -> <<?FIXED_0:4,0:4>>;
 generate(true) -> <<?FIXED_0:4,1:4>>;
 generate(false) -> <<?FIXED_0:4,2:4>>;
 
+%% most integral types have a compact encoding as a byte; this is in
+%% particular for the descriptors of AMQP types, which have the domain
+%% bits set to zero and values < 256.
 generate({ubyte, Value}) -> <<?FIXED_1:4,0:4,Value:8/unsigned>>;
 generate({ushort, Value}) -> <<?FIXED_2:4,0:4,Value:16/unsigned>>;
 generate({uint, Value}) -> <<?FIXED_4:4,0:4,Value:32/unsigned>>;
-generate({ulong, Value}) -> <<?FIXED_8:4,0:4,Value:64/unsigned>>;
+generate({ulong, Value}) ->
+    if Value < 256 -> <<?FIXED_1:4,3:4,Value:8/unsigned>>;
+       true        -> <<?FIXED_8:4,0:4,Value:64/unsigned>>
+    end;
 generate({byte, Value}) -> <<?FIXED_1:4,1:4,Value:8/signed>>;
 generate({short, Value}) -> <<?FIXED_2:4,1:4,Value:16/signed>>;
 generate({int, Value}) -> <<?FIXED_4:4,1:4,Value:32/signed>>;

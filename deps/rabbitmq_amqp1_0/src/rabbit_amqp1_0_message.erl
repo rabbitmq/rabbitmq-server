@@ -88,7 +88,8 @@ fragment(Code, Content) ->
                      format_code = Code,
                      %% TODO DUBIOUS this is definitely wrong but I don't see
                      %% the point
-                     fragment_offset = {ulong, 0},
+                     section_offset = {ulong, 0},
+                     section_number = {uint, 0},
                      payload = {binary, Content}}.
 
 enc_properties(Props) ->
