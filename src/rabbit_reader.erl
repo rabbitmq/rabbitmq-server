@@ -72,7 +72,13 @@
 %% pre-init:
 %%   receive protocol header -> send connection.start, *starting*
 %% starting:
-%%   receive connection.start_ok -> send connection.tune, *tuning*
+%%   receive connection.start_ok -> *securing*
+%% securing:
+%%   check authentication credentials
+%%     if authentication success -> send connection.tune, *tuning*
+%%     if more challenge needed -> send connection.secure,
+%%                                 receive connection.secure_ok *securing*
+%%     otherwise send close, *exit*
 %% tuning:
 %%   receive connection.tune_ok -> start heartbeats, *opening*
 %% opening:
