@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc. All rights reserved.
 %%
 
 -module(rabbit_mnesia_queue).
@@ -32,7 +32,7 @@
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
-%% This module wraps msgs into M records for internal use, including
+%% This module wraps msgs into Ms for internal use, including
 %% additional information. Pending acks are also recorded as Ms. Msgs
 %% and pending acks are both stored in Mnesia.
 %%
@@ -51,7 +51,7 @@
 
 %% BUG: Should not use mnesia:all_keys to count entries.
 
-%% BUG: P records do not need a separate seq_id.
+%% BUG: p_records do not need a separate seq_id.
 
 %% TODO: Worry about dropping txn_dict upon failure.
 
@@ -59,7 +59,7 @@
 
 %% The S record is the in-RAM AMQP queue state. It contains the names
 %% of three Mnesia queues; the next_seq_id and next_out_id (also
-%% stored in the N table in Mnesia); and the transaction dictionary
+%% stored in the N table in Mnesia); and the AMQP transaction dict
 %% (which can be dropped on a crash).
 
 -record(s,                  % The in-RAM queue state
@@ -83,12 +83,12 @@
           is_delivered      % Has the msg been delivered? (for reporting)
         }).
 
-%% A TX record is the value stored in the in-RAM txn_dict. It contains
-%% a list of (msg, props) pairs to be published after the AMQP
-%% transaction, in reverse order, and a list of seq_ids to ack, in any
-%% order. No other write-operations are allowed in AMQP transactions,
-%% and the effects of these operations are not visible to the client
-%% until after the AMQP transaction commits.
+%% A TX record is the value stored in the txn_dict. It contains a list
+%% of (msg, props) pairs to be published after the AMQP transaction,
+%% in reverse order, and a list of seq_ids to ack after the AMQP
+%% transaction, in any order. No other write-operations are allowed in
+%% AMQP transactions, and the effects of these operations are not
+%% visible to the client until after the AMQP transaction commits.
 
 -record(tx,
         { to_pub,           % List of (msg, props) pairs to publish
@@ -183,10 +183,6 @@
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 
-%%----------------------------------------------------------------------------
-%% Public API
-%%----------------------------------------------------------------------------
-
 start(_DurableQueues) -> ok.
 
 %%----------------------------------------------------------------------------
@@ -199,9 +195,10 @@ stop() -> ok.
 
 %%----------------------------------------------------------------------------
 %% init/3 creates one backing queue, returning its state. Names are
-%% local to the vhost, and must be unique. This function creates
-%% Mnesia transactions to run in, and therefore may not be called from
-%% inside another Mnesia transaction.
+%% local to the vhost, and must be unique.
+%%
+%% This function creates Mnesia transactions to run in, and therefore
+%% may not be called from inside another Mnesia transaction.
 %%
 %% -spec(init/3 ::
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
@@ -215,7 +212,7 @@ stop() -> ok.
 init(QueueName, IsDurable, Recover) ->
     rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->",
                     [QueueName, IsDurable, Recover]),
-    {QTable, PTable, NTable} = db_tables(QueueName),
+    {QTable, PTable, NTable} = tables(QueueName),
     case Recover of
         false -> _ = mnesia:delete_table(QTable),
                  _ = mnesia:delete_table(PTable),
@@ -243,7 +240,7 @@ init(QueueName, IsDurable, Recover) ->
                             next_seq_id = NextSeqId,
                             next_out_id = NextOutId,
                             txn_dict = dict:new() },
-                  db_save(RS),
+                  save(RS),
                   RS
           end),
     rabbit_log:info("init ->~n ~p", [Result]),
@@ -251,9 +248,10 @@ init(QueueName, IsDurable, Recover) ->
 
 %%----------------------------------------------------------------------------
 %% terminate/1 deletes all of a queue's pending acks, prior to
-%% shutdown. This function creates an Mnesia transaction to run in,
-%% and therefore may not be called from inside another Mnesia
-%% transaction.
+%% shutdown.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
@@ -267,9 +265,10 @@ terminate(S = #s { q_table = QTable, p_table = PTable, n_table = NTable }) ->
 
 %%----------------------------------------------------------------------------
 %% delete_and_terminate/1 deletes all of a queue's enqueued msgs and
-%% pending acks, prior to shutdown. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% pending acks, prior to shutdown.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
@@ -288,9 +287,10 @@ delete_and_terminate(S = #s { q_table = QTable,
 
 %%----------------------------------------------------------------------------
 %% purge/1 deletes all of queue's enqueued msgs, generating pending
-%% acks as required, and returning the count of msgs purged. This
-%% function creates an Mnesia transaction to run in, and therefore may
-%% not be called from inside another Mnesia transaction.
+%% acks as required, and returning the count of msgs purged.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
@@ -305,9 +305,10 @@ purge(S = #s { q_table = QTable }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% publish/3 publishes a msg. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% publish/3 publishes a msg.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(publish/3 ::
 %%         (rabbit_types:basic_message(),
@@ -319,7 +320,7 @@ publish(Msg, Props, S) ->
     rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> RS = publish_state(Msg, Props, false, S),
-                                     db_save(RS),
+                                     save(RS),
                                      RS
                            end),
     rabbit_log:info("publish ->~n ~p", [Result]),
@@ -328,9 +329,10 @@ publish(Msg, Props, S) ->
 %%----------------------------------------------------------------------------
 %% publish_delivered/4 is called after a msg has been passed straight
 %% out to a client because the queue is empty. We update all state
-%% (e.g., next_seq_id) as if we had in fact handled the msg. This
-%% function creates an Mnesia transaction to run in, and therefore may
-%% not be called from inside another Mnesia transaction.
+%% (e.g., next_seq_id) as if we had in fact handled the msg.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(publish_delivered/4 :: (true, rabbit_types:basic_message(),
 %%                               rabbit_types:message_properties(), state())
@@ -341,7 +343,7 @@ publish(Msg, Props, S) ->
 
 publish_delivered(false, _, _, S) ->
     rabbit_log:info("publish_delivered(false, _, _,~n ~p) ->", [S]),
-    Result = {blank_ack, S},
+    Result = {undefined, S},
     rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result;
 publish_delivered(true,
@@ -353,11 +355,10 @@ publish_delivered(true,
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  db_add_p(
-                       (m(Msg, SeqId, Props)) #m { is_delivered = true }, S),
+                  add_p((m(Msg, SeqId, Props)) #m { is_delivered = true }, S),
                   RS = S #s { next_seq_id = SeqId + 1,
                               next_out_id = OutId + 1 },
-                  db_save(RS),
+                  save(RS),
                   {SeqId, RS}
           end),
     rabbit_log:info("publish_delivered ->~n ~p", [Result]),
@@ -365,11 +366,13 @@ publish_delivered(true,
 
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops msgs from the head of the queue while there are
-%% msgs and while the supplied predicate returns true. This function
-%% creates an Mnesia transaction to run in, and therefore may not be
-%% called from inside another Mnesia transaction. The supplied Pred is
-%% called from inside the transaction, and therefore may not call
-%% another function that creates an Mnesia transaction.
+%% msgs and while the supplied predicate returns true.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia
+%% transaction. The supplied Pred is called from inside the
+%% transaction, and therefore may not call another function that
+%% creates an Mnesia transaction.
 %%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
@@ -379,16 +382,17 @@ dropwhile(Pred, S) ->
     rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
     {atomic, {_, Result}} =
         mnesia:transaction(fun () -> {Atom, RS} = internal_dropwhile(Pred, S),
-                                     db_save(RS),
+                                     save(RS),
                                      {Atom, RS}
                            end),
     rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% fetch/2 produces the next msg, if any. This function creates an
-%% Mnesia transaction to run in, and therefore may not be called from
-%% inside another Mnesia transaction.
+%% fetch/2 produces the next msg, if any.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(fetch/2 :: (true,  state()) -> {fetch_result(ack()), state()};
 %%                  (false, state()) -> {fetch_result(undefined), state()}).
@@ -403,20 +407,19 @@ fetch(AckRequired, S) ->
 
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges msgs named by SeqIds, mapping SeqIds to guids
-%% upon return. This function creates an Mnesia transaction to run in,
-%% and therefore may not be called from inside another Mnesia
-%% transaction.
+%% upon return.
 %%
-%% The following spec is wrong, as a blank_ack cannot be passed back in.
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(ack/2 :: ([ack()], state()) -> state()).
 
 ack(SeqIds, S) ->
     rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
     {atomic, Result} =
-        mnesia:transaction(fun () -> {Guids, RS} = internal_ack(SeqIds, S),
-                                     db_save(RS),
-                                     {Guids, RS}
+        mnesia:transaction(fun () -> {_, RS} = internal_ack(SeqIds, S),
+                                     save(RS),
+                                     RS
                            end),
     rabbit_log:info("ack ->~n ~p", [Result]),
     Result.
@@ -424,9 +427,10 @@ ack(SeqIds, S) ->
 %%----------------------------------------------------------------------------
 %% tx_publish/4 is a publish within an AMQP transaction. It stores the
 %% msg and its properties in the to_pub field of the txn, waiting to
-%% be committed. This function creates an Mnesia transaction to run
-%% in, and therefore may not be called from inside another Mnesia
-%% transaction.
+%% be committed.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(tx_publish/4 ::
 %%         (rabbit_types:txn(),
@@ -444,7 +448,7 @@ tx_publish(Txn, Msg, Props, S) ->
                     RS = store_tx(Txn,
                                   Tx #tx { to_pub = [{Msg, Props} | Pubs] },
                                   S),
-                    db_save(RS),
+                    save(RS),
                     RS
           end),
     rabbit_log:info("tx_publish ->~n ~p", [Result]),
@@ -452,11 +456,10 @@ tx_publish(Txn, Msg, Props, S) ->
 
 %%----------------------------------------------------------------------------
 %% tx_ack/3 acks within an AMQP transaction. It stores the seq_id in
-%% the acks field of the txn, waiting to be committed. This function
-%% creates an Mnesia transaction to run in, and therefore may not be
-%% called from inside another Mnesia transaction.
+%% the acks field of the txn, waiting to be committed.
 %%
-%% The following spec is wrong, as a blank_ack cannot be passed back in.
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
@@ -469,18 +472,17 @@ tx_ack(Txn, SeqIds, S) ->
                                   Tx #tx {
                                     to_ack = lists:append(SeqIds, SeqIds0) },
                                 S),
-                    db_save(RS),
+                    save(RS),
                     RS
           end),
     rabbit_log:info("tx_ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_rollback/2 aborts an AMQP transaction. This function creates an
-%% Mnesia transaction to run in, and therefore may not be called from
-%% inside another Mnesia transaction.
+%% tx_rollback/2 aborts an AMQP transaction.
 %%
-%% The following spec is wrong, as a blank_ack cannot be passed back in.
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
@@ -490,7 +492,7 @@ tx_rollback(Txn, S) ->
         mnesia:transaction(fun () ->
                                    #tx { to_ack = SeqIds } = lookup_tx(Txn, S),
                                    RS = erase_tx(Txn, S),
-                                   db_save(RS),
+                                   save(RS),
                                    {SeqIds, RS}
                            end),
     rabbit_log:info("tx_rollback ->~n ~p", [Result]),
@@ -499,12 +501,12 @@ tx_rollback(Txn, S) ->
 %%----------------------------------------------------------------------------
 %% tx_commit/4 commits an AMQP transaction. The F passed in is called
 %% once the msgs have really been commited. This CPS permits the
-%% possibility of commit coalescing. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction. However, the supplied F is called
-%% outside the transaction.
+%% possibility of commit coalescing.
 %%
-%% The following spec is wrong, as blank_acks cannot be returned.
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia
+%% transaction. However, the supplied F is called outside the
+%% transaction.
 %%
 %% -spec(tx_commit/4 ::
 %%         (rabbit_types:txn(),
@@ -522,7 +524,7 @@ tx_commit(Txn, F, PropsF, S) ->
                   #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S),
                   RS =
                       tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S)),
-                  db_save(RS),
+                  save(RS),
                   {SeqIds, RS}
           end),
     F(),
@@ -531,11 +533,10 @@ tx_commit(Txn, F, PropsF, S) ->
 
 %%----------------------------------------------------------------------------
 %% requeue/3 reinserts msgs into the queue that have already been
-%% delivered and were pending acknowledgement. This function creates
-%% an Mnesia transaction to run in, and therefore may not be called
-%% from inside another Mnesia transaction.
+%% delivered and were pending acknowledgement.
 %%
-%% The following spec is wrong, as blank_acks cannot be passed back in.
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(requeue/3 ::
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
@@ -545,22 +546,23 @@ requeue(SeqIds, PropsF, S) ->
     {atomic, Result} =
         mnesia:transaction(
           fun () -> {_, RS} =
-                        db_del_ps(
+                        del_ps(
                           fun (#m { msg = Msg, props = Props }, Si) ->
                                   publish_state(Msg, PropsF(Props), true, Si)
                           end,
                           SeqIds,
                           S),
-                    db_save(RS),
+                    save(RS),
                     RS
           end),
     rabbit_log:info("requeue ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% len/1 returns the queue length. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% len/1 returns the queue length.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
@@ -572,9 +574,10 @@ len(S = #s { q_table = QTable }) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% is_empty/1 returns true iff the queue is empty. This function
-%% creates an Mnesia transaction to run in, and therefore may not be
-%% called from inside another Mnesia transaction.
+%% is_empty/1 returns true iff the queue is empty.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
@@ -634,13 +637,15 @@ handle_pre_hibernate(S) -> S.
 
 %%----------------------------------------------------------------------------
 %% status/1 exists for debugging and operational purposes, to be able
-%% to expose state via rabbitmqctl. This function creates an Mnesia
-%% transaction to run in, and therefore may not be called from inside
-%% another Mnesia transaction.
+%% to expose state via rabbitmqctl.
+%%
+%% This function creates an Mnesia transaction to run in, and
+%% therefore may not be called from inside another Mnesia transaction.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(S = #s { q_table = QTable, p_table = PTable,
+status(S = #s { q_table = QTable,
+		p_table = PTable,
                 next_seq_id = NextSeqId }) ->
     rabbit_log:info("status(~n ~p) ->", [S]),
     {atomic, Result} =
@@ -711,15 +716,16 @@ internal_purge(S) -> case internal_fetch(true, S) of
                          _ -> internal_purge(S)
                      end.
 
-%% internal_fetch/2 fetches the next msg, if any, inside a
+%% internal_fetch/2 fetches the next msg, if any, inside an Mnesia
 %% transaction, generating a pending ack as necessary.
 
--spec internal_fetch(boolean(), state()) -> ok | fetch_result(ack()).
+-spec(internal_fetch(true, s()) -> {fetch_result(ack()), s()};
+                    (false, s()) -> {fetch_result(undefined), s()}).
 
 internal_fetch(AckRequired, S) -> 
-    case db_q_pop(S) of
+    case q_pop(S) of
         nothing -> empty;
-        {just, M} -> db_post_pop(AckRequired, M, S)
+        {just, M} -> post_pop(AckRequired, M, S)
     end.
 
 -spec tx_commit_state([rabbit_types:basic_message()],
@@ -753,29 +759,29 @@ publish_state(Msg,
 
 -spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
 
-internal_ack(SeqIds, S) -> db_del_ps(fun (_, Si) -> Si end, SeqIds, S).
+internal_ack(SeqIds, S) -> del_ps(fun (_, Si) -> Si end, SeqIds, S).
 
 -spec(internal_dropwhile/2 ::
         (fun ((rabbit_types:message_properties()) -> boolean()), s())
         -> {empty | ok, s()}).
 
 internal_dropwhile(Pred, S) ->
-    case db_q_peek(S) of
+    case q_peek(S) of
         nothing -> {empty, S};
         {just, M = #m { props = Props }} ->
             case Pred(Props) of
-                true -> _ = db_q_pop(S),
-                        _ = db_post_pop(false, M, S),
+                true -> _ = q_pop(S),
+                        _ = post_pop(false, M, S),
                         internal_dropwhile(Pred, S);
                 false -> {ok, S}
             end
     end.
 
-%% db_q_pop pops a msg, if any, from the Q table in Mnesia.
+%% q_pop pops a msg, if any, from the Q table in Mnesia.
 
--spec db_q_pop(s()) -> maybe(m()).
+-spec q_pop(s()) -> maybe(m()).
 
-db_q_pop(#s { q_table = QTable }) ->
+q_pop(#s { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
         OutId -> [#q_record { out_id = OutId, m = M }] =
@@ -784,12 +790,12 @@ db_q_pop(#s { q_table = QTable }) ->
                  {just, M}
     end.
 
-%% db_q_peek returns the first msg, if any, from the Q table in
+%% q_peek returns the first msg, if any, from the Q table in
 %% Mnesia.
 
--spec db_q_peek(s()) -> maybe(m()).
+-spec q_peek(s()) -> maybe(m()).
 
-db_q_peek(#s { q_table = QTable }) ->
+q_peek(#s { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
         OutId -> [#q_record { out_id = OutId, m = M }] =
@@ -797,39 +803,42 @@ db_q_peek(#s { q_table = QTable }) ->
                  {just, M}
     end.
 
-%% db_post_pop operates after db_q_pop, calling db_add_p if necessary.
+%% post_pop operates after q_pop, calling add_p if necessary.
 
--spec db_post_pop/3 :: (boolean(), m(), s()) -> fetch_result(ack()).
+-spec(post_pop(true, m(), s()) -> {fetch_result(ack()), s()};
+              (false, m(), s()) -> {fetch_result(undefined), s()}).
 
-db_post_pop(AckRequired,
-            M = #m { seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
-            S = #s { q_table = QTable }) ->
+post_pop(true,
+	 M = #m { seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
+	 S = #s { q_table = QTable }) ->
     LQ = length(mnesia:all_keys(QTable)),
-    Ack = case AckRequired of
-              true -> db_add_p(M #m { is_delivered = true }, S), SeqId;
-              false -> blank_ack
-          end,
-    {Msg, IsDelivered, Ack, LQ}.
+    add_p(M #m { is_delivered = true }, S),
+    {Msg, IsDelivered, SeqId, LQ};
+post_pop(false,
+	 #m { msg = Msg, is_delivered = IsDelivered },
+	 #s { q_table = QTable }) ->
+    LQ = length(mnesia:all_keys(QTable)),
+    {Msg, IsDelivered, undefined, LQ}.
 
-%% db_add_p adds a pending ack to the P table in Mnesia.
+%% add_p adds a pending ack to the P table in Mnesia.
 
--spec db_add_p(m(), s()) -> ok.
+-spec add_p(m(), s()) -> ok.
 
-db_add_p(M = #m { seq_id = SeqId }, #s { p_table = PTable }) ->
+add_p(M = #m { seq_id = SeqId }, #s { p_table = PTable }) ->
     mnesia:write(PTable, #p_record { seq_id = SeqId, m = M }, 'write'),
     ok.
 
-%% db_del_fs deletes some number of pending acks from the P table in
+%% del_fs deletes some number of pending acks from the P table in
 %% Mnesia, applying a (Mnesia transactional) function F after each msg
-%% is deleted, returning their guids.
+%% is deleted, and returning their guids.
 
--spec db_del_ps(fun (([rabbit_guid:guid()], s()) -> s()),
-                    [rabbit_guid:guid()],
-                    s()) ->
-                           {[rabbit_guid:guid()], s()}.
+-spec del_ps(fun (([rabbit_guid:guid()], s()) -> s()),
+	     [rabbit_guid:guid()],
+	     s()) ->
+		    {[rabbit_guid:guid()], s()}.
 
-db_del_ps(F, SeqIds, S = #s { p_table = PTable }) ->
-    {AllGuids, S1} =
+del_ps(F, SeqIds, S = #s { p_table = PTable }) ->
+    {AllGuids, Sn} =
         lists:foldl(
           fun (SeqId, {Acc, Si}) ->
                   [#p_record {
@@ -840,16 +849,16 @@ db_del_ps(F, SeqIds, S = #s { p_table = PTable }) ->
           end,
           {[], S},
           SeqIds),
-    {lists:reverse(AllGuids), S1}.
+    {lists:reverse(AllGuids), Sn}.
 
-%% db_save copies the volatile part of the state (next_seq_id and
+%% save copies the volatile part of the state (next_seq_id and
 %% next_out_id) to Mnesia.
 
--spec db_save(s()) -> ok.
+-spec save(s()) -> ok.
 
-db_save(#s { n_table = NTable,
-                 next_seq_id = NextSeqId,
-                 next_out_id = NextOutId }) ->
+save(#s { n_table = NTable,
+	  next_seq_id = NextSeqId,
+	  next_out_id = NextOutId }) ->
     ok = mnesia:write(NTable,
                       #n_record { key = 'n',
                                   next_seq_id = NextSeqId,
@@ -869,10 +878,10 @@ db_save(#s { n_table = NTable,
 %% with the string SLASH. We should extend this as necessary, and
 %% perhaps make it a little prettier.
 
--spec db_tables({resource, binary(), queue, binary()}) ->
-                       {atom(), atom(), atom()}.
+-spec tables({resource, binary(), queue, binary()}) ->
+		    {atom(), atom(), atom()}.
 
-db_tables({resource, VHost, queue, Name}) ->
+tables({resource, VHost, queue, Name}) ->
     VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
     Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
     Str = lists:flatten(io_lib:format("~p ~p", [VHost2, Name2])),
@@ -905,4 +914,3 @@ store_tx(Txn, Tx, S = #s { txn_dict = TxnDict }) ->
 
 erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
     S #s { txn_dict = dict:erase(Txn, TxnDict) }.
-

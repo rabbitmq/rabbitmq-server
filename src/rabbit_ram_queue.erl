@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2011 VMware, Inc. All rights reserved.
 %%
 
 -module(rabbit_ram_queue).
@@ -32,34 +32,60 @@
 %% ----------------------------------------------------------------------------
 
 %%----------------------------------------------------------------------------
-%% This module wraps messages into M records for internal use,
-%% containing the messages themselves and additional
-%% information. Pending acks are also recorded in memory as M records.
+%% This module wraps msgs into Ms for internal use, including
+%% additional information. Pending acks are also recorded as Ms. Msgs
+%% and pending acks are both stored in RAM.
 %%
-%% All queues are non-durable in this version, and all messages are
-%% transient (non-persistent). (This breaks some Java tests for
-%% durable queues.)
-%%----------------------------------------------------------------------------
+%% All queues are durable in this version, and all msgs are treated as
+%% persistent. (This will break some clients and some tests for
+%% non-durable queues.)
+%% ----------------------------------------------------------------------------
+
+%% BUG: The rabbit_backing_queue_spec behaviour needs improvement. For
+%% example, rabbit_amqqueue_process knows too much about the state of
+%% a backing queue, even though this state may now change without its
+%% knowledge. Additionally, there are points in the protocol where
+%% failures can lose msgs.
+
+%% TODO: Need to provide better back-pressure when queue is filling up.
+
+%% BUG: p_records do not need a separate seq_id.
 
 -behaviour(rabbit_backing_queue).
 
--record(s,                        % The in-RAM queue state
-        { q,                      % A temporary in-RAM queue of Ms
-          next_seq_id,            % The next seq_id to use to build an M
-          pending_ack_dict,       % Map from seq_id to M, pending ack
-          txn_dict                % Map from txn to tx, in progress
+%% The S record is the in-RAM AMQP queue state. It contains the queue
+%% of Ms; the next_seq_id; and the AMQP transaction dict.
+
+-record(s,                  % The in-RAM queue state
+        { q,                % The queue of Ms
+          p,                % The seq_id->M map of pending acks
+          next_seq_id,      % The next M's seq_id
+          txn_dict          % In-progress txn->tx map
         }).
 
--record(m,                        % A wrapper aroung a msg
-        { seq_id,                 % The seq_id for the msg
-          msg,                    % The msg itself
-          props,                  % The message properties
-          is_delivered            % Has the msg been delivered? (for reporting)
+%% An M record is a wrapper around a msg. It contains a seq_id,
+%% assigned when the msg is published; the msg itself; the msg's
+%% props, as presented by the client or as transformed by the client;
+%% and an is-delivered flag, for reporting.
+
+-record(m,                  % A wrapper aroung a msg
+        { seq_id,           % The seq_id for the msg
+          msg,              % The msg itself
+          props,            % The msg properties
+          is_delivered      % Has the msg been delivered? (for reporting)
         }).
+
+%% A TX record is the value stored in the txn_dict. It contains a list
+%% of (msg, props) pairs to be published after the AMQP transaction,
+%% in reverse order, and a list of seq_ids to ack after the AMQP
+%% transaction, in any order. No other write-operations are allowed in
+%% AMQP transactions, and the effects of these operations are not
+%% visible to the client until after the AMQP transaction commits.
 
 -record(tx,
-        { to_pub,
-          to_ack }).
+        { to_pub,           % List of (msg, props) pairs to publish
+          to_ack            % List of seq_ids to ack
+        }).
 
 -include("rabbit.hrl").
 
@@ -69,16 +95,19 @@
 
 %% -ifdef(use_specs).
 
+-type(maybe(T) :: nothing | {just, T}).
+
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id()).
 
 -type(s() :: #s { q :: queue(),
+                  p :: dict(),
                   next_seq_id :: seq_id(),
-                  pending_ack_dict :: dict() }).
+                  txn_dict :: dict() }).
 -type(state() :: s()).
 
--type(m() :: #m { msg :: rabbit_types:basic_message(),
-                  seq_id :: seq_id(),
+-type(m() :: #m { seq_id :: seq_id(),
+                  msg :: rabbit_types:basic_message(),
                   props :: rabbit_types:message_properties(),
                   is_delivered :: boolean() }).
 
@@ -97,109 +126,90 @@
 
 %%----------------------------------------------------------------------------
 %% start/1 promises that a list of (durable) queue names will be
-%% started in the near future. This lets us perform early checking
-%% necessary for the consistency of those queues or initialise other
-%% shared resources.
-%%
-%% This function should be called only from outside this module.
+%% started in the near future. This lets us perform early checking of
+%% the consistency of those queues, and initialize other shared
+%% resources. It is ignored in this implementation.
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 
-%%----------------------------------------------------------------------------
-%% Public API
-%%----------------------------------------------------------------------------
-
-start(_DurableQueues) ->
-    rabbit_log:info("start(_) ->"),
-    rabbit_log:info(" -> ok"),
-    ok.
+start(_DurableQueues) -> ok.
 
 %%----------------------------------------------------------------------------
 %% stop/0 tears down all state/resources upon shutdown. It might not
-%% be called.
-%%
-%% This function should be called only from outside this module.
+%% be called. It is ignored in this implementation.
 %%
 %% -spec(stop/0 :: () -> 'ok').
 
-stop() ->
-    rabbit_log:info("stop(_) ->"),
-    rabbit_log:info(" -> ok"),
-    ok.
+stop() -> ok.
 
 %%----------------------------------------------------------------------------
 %% init/3 creates one backing queue, returning its state. Names are
-%% local to the vhost, and need not be unique.
+%% local to the vhost, and must be unique.
+%%
+%% This function should be called only from outside this module.
 %%
 %% -spec(init/3 ::
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
 %%         -> state()).
-%%
-%% This function should be called only from outside this module.
 
-%% BUG: Need to provide better back-pressure when queue is filling up.
-
-init(QueueName, _IsDurable, _Recover) ->
-    rabbit_log:info("init(~p, _, _) ->", [QueueName]),
+init(QueueName, IsDurable, Recover) ->
+    rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->",
+                    [QueueName, IsDurable, Recover]),
     Result = #s { q = queue:new(),
+                  p = dict:new(),
                   next_seq_id = 0,
-                  pending_ack_dict = dict:new(),
                   txn_dict = dict:new() },
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("init ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% terminate/1 is called on queue shutdown when the queue isn't being
-%% deleted.
+%% terminate/1 deletes all of a queue's pending acks, prior to
+%% shutdown.
 %%
 %% This function should be called only from outside this module.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S) ->
-    Result = remove_acks_state(S),
-    rabbit_log:info("terminate(~p) ->", [S]),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("terminate(~n ~p) ->", [S]),
+    Result = S #s { p = dict:new() },
+    rabbit_log:info("terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% delete_and_terminate/1 is called when the queue is terminating and
-%% needs to delete all its content. The only difference between purge
-%% and delete is that delete also needs to delete everything that's
-%% been delivered and not ack'd.
+%% delete_and_terminate/1 deletes all of a queue's enqueued msgs and
+%% pending acks, prior to shutdown.
 %%
 %% This function should be called only from outside this module.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
-%% the only difference between purge and delete is that delete also
-%% needs to delete everything that's been delivered and not ack'd.
-
 delete_and_terminate(S) ->
-    rabbit_log:info("delete_and_terminate(~p) ->", [S]),
-    Result = remove_acks_state(S #s { q = queue:new() }),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
+    Result = S #s { q = queue:new(), p = dict:new() },
+    rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% purge/1 removes all messages in the queue, but not messages which
-%% have been fetched and are pending acks.
+%% purge/1 deletes all of queue's enqueued msgs, generating pending
+%% acks as required, and returning the count of msgs purged.
 %%
 %% This function should be called only from outside this module.
 %%
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
 purge(S = #s { q = Q }) ->
-    rabbit_log:info("purge(~p) ->", [S]),
-    Result = {queue:len(Q), S #s { q = queue:new() }},
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("purge(~n ~p) ->", [S]),
+    LQ = queue:len(Q),
+    S1 = internal_purge(S),
+    Result = {LQ, S1},
+    rabbit_log:info("purge ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% publish/3 publishes a message.
+%% publish/3 publishes a msg.
 %%
-%% This function should be called only from outside this module. All
-%% msgs are silently reated as non-persistent.
+%% This function should be called only from outside this module.
 %%
 %% -spec(publish/3 ::
 %%         (rabbit_types:basic_message(),
@@ -208,19 +218,15 @@ purge(S = #s { q = Q }) ->
 %%         -> state()).
 
 publish(Msg, Props, S) ->
-    rabbit_log:info("publish("),
-    rabbit_log:info(" ~p,", [Msg]),
-    rabbit_log:info(" ~p,", [Props]),
-    rabbit_log:info(" ~p) ->", [S]),
+    rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     Result = publish_state(Msg, Props, false, S),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% publish_delivered/4 is called for messages which have already been
-%% passed straight out to a client. The queue will be empty for these
-%% calls (i.e. saves the round trip through the backing queue). All
-%% msgs are silently treated as non-persistent.
+%% publish_delivered/4 is called after a msg has been passed straight
+%% out to a client because the queue is empty. We update all state
+%% (e.g., next_seq_id) as if we had in fact handled the msg.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -232,27 +238,22 @@ publish(Msg, Props, S) ->
 %%                              -> {undefined, state()}).
 
 publish_delivered(false, _, _, S) ->
-    rabbit_log:info("publish_delivered(false, _, _,"),
-    rabbit_log:info(" ~p) ->", [S]),
+    rabbit_log:info("publish_delivered(false, _, _,~n ~p) ->", [S]),
     Result = {undefined, S},
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result;
 publish_delivered(true, Msg, Props, S = #s { next_seq_id = SeqId }) ->
-    rabbit_log:info("publish_delivered(true, "),
-    rabbit_log:info(" ~p,", [Msg]),
-    rabbit_log:info(" ~p,", [Props]),
-    rabbit_log:info(" ~p) ->", [S]),
-    Result =
-        {SeqId,
-         (record_pending_ack_state(
-          ((m(Msg, SeqId, Props)) #m { is_delivered = true }), S))
-         #s { next_seq_id = SeqId + 1 }},
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info(
+      "publish_delivered(true,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    S1 = add_p((m(Msg, SeqId, Props)) #m { is_delivered = true }, S),
+    RS = S1 #s { next_seq_id = SeqId + 1 },
+    Result = {SeqId, RS},
+    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% dropwhile/2 drops messages from the head of the queue while the
-%% supplied predicate returns true.
+%% dropwhile/2 drops msgs from the head of the queue while there are
+%% msgs and while the supplied predicate returns true.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -261,14 +262,13 @@ publish_delivered(true, Msg, Props, S = #s { next_seq_id = SeqId }) ->
 %%         -> state()).
 
 dropwhile(Pred, S) ->
-    rabbit_log:info("dropwhile(~p, ~p) ->", [Pred, S]),
-    {_, S1} = dropwhile_state(Pred, S),
-    Result = S1,
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
+    {_, Result} = internal_dropwhile(Pred, S),
+    rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% fetch/2 produces the next message.
+%% fetch/2 produces the next msg, if any.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -276,63 +276,29 @@ dropwhile(Pred, S) ->
 %%                  (false, state()) -> {fetch_result(undefined), state()}).
 
 fetch(AckRequired, S) ->
-    rabbit_log:info("fetch(~p, ~p) ->", [AckRequired, S]),
-    Result =
-        internal_queue_out(
-          fun (M, Si) -> internal_fetch(AckRequired, M, Si) end, S),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
+    Result = internal_fetch(AckRequired, S),
+    rabbit_log:info("fetch ->~n ~p", [Result]),
     Result.
 
--spec internal_queue_out(fun ((m(), state()) -> T), state()) ->
-                                {empty, state()} | T.
-
-internal_queue_out(F, S = #s { q = Q }) ->
-    case queue:out(Q) of
-        {empty, _} -> {empty, S};
-        {{value, M}, Qa} -> F(M, S #s { q = Qa })
-    end.
-
--spec internal_fetch/3 :: (boolean(), m(), s()) -> {fetch_result(ack()), s()}.
-
-internal_fetch(AckRequired,
-               M = #m {
-                 seq_id = SeqId,
-                 msg = Msg,
-                 is_delivered = IsDelivered },
-               S = #s { q = Q }) ->
-    {Ack, S1} =
-        case AckRequired of
-            true ->
-                {SeqId,
-                 record_pending_ack_state(
-                   M #m { is_delivered = true }, S)};
-            false -> {blank_ack, S}
-        end,
-    {{Msg, IsDelivered, Ack, queue:len(Q)}, S1}.
-
 %%----------------------------------------------------------------------------
-%% ack/2 acknowledges messages names by SeqIds. Maps SeqIds to guids
+%% ack/2 acknowledges msgs named by SeqIds, mapping SeqIds to guids
 %% upon return.
 %%
 %% This function should be called only from outside this module.
 %%
-%% The following spec is wrong, as a blank_ack cannot be passed back in.
-%%
-%% -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+%% -spec(ack/2 :: ([ack()], state()) -> state()).
 
 ack(SeqIds, S) ->
-    rabbit_log:info("ack("),
-    rabbit_log:info("~p,", [SeqIds]),
-    rabbit_log:info(" ~p) ->", [S]),
-    {Guids, S1} = internal_ack(SeqIds, S),
-    Result = {Guids, S1},
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
+    {_, Result} = internal_ack(SeqIds, S),
+    rabbit_log:info("ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_publish/4 is a publish, but in the context of a transaction. It
-%% stores the message and its properties in the to_pub field of the txn,
-%% waiting to be committed.
+%% tx_publish/4 is a publish within an AMQP transaction. It stores the
+%% msg and its properties in the to_pub field of the txn, waiting to
+%% be committed.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -344,56 +310,51 @@ ack(SeqIds, S) ->
 %%         -> state()).
 
 tx_publish(Txn, Msg, Props, S) ->
-    rabbit_log:info("tx_publish(~p, ~p, ~p, ~p) ->", [Txn, Msg, Props, S]),
+    rabbit_log:info(
+      "tx_publish(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, Msg, Props, S]),
     Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, S),
     Result = store_tx(Txn, Tx #tx { to_pub = [{Msg, Props} | Pubs] }, S),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("tx_publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_ack/3 acks, but in the context of a transaction. It stores the
-%% seq_id in the acks field of the txn, waiting to be committed.
+%% tx_ack/3 acks within an AMQP transaction. It stores the seq_id in
+%% the acks field of the txn, waiting to be committed.
 %%
 %% This function should be called only from outside this module.
-%%
-%% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
 tx_ack(Txn, SeqIds, S) ->
-    rabbit_log:info("tx_ack(~p, ~p, ~p) ->", [Txn, SeqIds, S]),
+    rabbit_log:info("tx_ack(~n ~p,~n ~p,~n ~p) ->", [Txn, SeqIds, S]),
     Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S),
-    Result =
-        store_tx(Txn, Tx #tx { to_ack = lists:append(SeqIds, SeqIds0) }, S),
-    rabbit_log:info(" -> ~p", [Result]),
+    Result = store_tx(Txn,
+                  Tx #tx { to_ack = lists:append(SeqIds, SeqIds0) },
+                  S),
+    rabbit_log:info("tx_ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_rollback/2 undoes anything which has been done in the context of
-%% the specified transaction. It returns the state with to_pub and
-%% to_ack erased.
+%% tx_rollback/2 aborts an AMQP transaction.
 %%
 %% This function should be called only from outside this module.
-%%
-%% The following spec is wrong, as a blank_ack cannot be passed back in.
 %%
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
 tx_rollback(Txn, S) ->
-    rabbit_log:info("tx_rollback(~p, ~p) ->", [Txn, S]),
+    rabbit_log:info("tx_rollback(~n ~p,~n ~p) ->", [Txn, S]),
     #tx { to_ack = SeqIds } = lookup_tx(Txn, S),
-    Result = {SeqIds, erase_tx(Txn, S)},
-    rabbit_log:info(" -> ~p", [Result]),
+    RS = erase_tx(Txn, S),
+    Result = {SeqIds, RS},
+    rabbit_log:info("tx_rollback ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% tx_commit/4 commits a transaction. The F passed in must be called
-%% once the messages have really been commited. This CPS permits the
+%% tx_commit/4 commits an AMQP transaction. The F passed in is called
+%% once the msgs have really been commited. This CPS permits the
 %% possibility of commit coalescing.
 %%
 %% This function should be called only from outside this module.
-%%
-%% The following spec is wrong, blank_acks cannot be returned.
 %%
 %% -spec(tx_commit/4 ::
 %%         (rabbit_types:txn(),
@@ -404,186 +365,148 @@ tx_rollback(Txn, S) ->
 
 tx_commit(Txn, F, PropsF, S) ->
     rabbit_log:info(
-      "tx_commit(~p, ~p, ~p, ~p) ->", [Txn, F, PropsF, S]),
+      "tx_commit(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, F, PropsF, S]),
     #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S),
-    Result = {SeqIds, tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S))},
+    RS = tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S)),
+    Result = {SeqIds, RS},
     F(),
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("tx_commit ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% requeue/3 reinserts messages into the queue which have already been
+%% requeue/3 reinserts msgs into the queue that have already been
 %% delivered and were pending acknowledgement.
 %%
 %% This function should be called only from outside this module.
-%%
-%% The following spec is wrong, as blank_acks cannot be passed back in.
 %%
 %% -spec(requeue/3 ::
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
 requeue(SeqIds, PropsF, S) ->
-    rabbit_log:info("requeue(~p, ~p, ~p) ->", [SeqIds, PropsF, S]),
-    {_, S1} =
-        internal_ack3(
-          fun (#m { msg = Msg, props = Props }, Si) ->
-                  publish_state(Msg, PropsF(Props), true, Si)
-          end,
-          SeqIds,
-          S),
-    Result = S1,
-    rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("requeue(~n ~p,~n ~p,~n ~p) ->", [SeqIds, PropsF, S]),
+    {_, Result} = del_ps(
+                    fun (#m { msg = Msg, props = Props }, Si) ->
+                            publish_state(Msg, PropsF(Props), true, Si)
+                    end,
+                    SeqIds,
+                    S),
+    rabbit_log:info("requeue ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
 %% len/1 returns the queue length.
 %%
+%% This function should be called only from outside this module.
+%%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
-len(#s { q = Q }) ->
-%   rabbit_log:info("len(~p) ->", [Q]),
+len(S = #s { q = Q }) ->
+    rabbit_log:info("len(~n ~p) ->", [S]),
     Result = queue:len(Q),
-%   rabbit_log:info(" -> ~p", [Result]),
+    rabbit_log:info("len ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% is_empty/1 returns 'true' if the queue is empty, and 'false'
-%% otherwise.
+%% is_empty/1 returns true iff the queue is empty.
+%%
+%% This function should be called only from outside this module.
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
-is_empty(#s { q = Q }) ->
-%   rabbit_log:info("is_empty(~p)", [Q]),
-    Result = queue:is_empty(Q),
-%   rabbit_log:info(" -> ~p", [Result]),
+is_empty(S = #s { q = Q }) ->
+    rabbit_log:info("is_empty(~n ~p) ->", [S]),
+    Result = 0 == queue:len(Q),
+    rabbit_log:info("is_empty ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% For the next two functions, the assumption is that you're
-%% monitoring something like the ingress and egress rates of the
-%% queue. The RAM duration is thus the length of time represented by
-%% the messages held in RAM given the current rates. If you want to
-%% ignore all of this stuff, then do so, and return 0 in
-%% ram_duration/1.
-
-%% set_ram_duration_target states that the target is to have no more
-%% messages in RAM than indicated by the duration and the current
-%% queue rates.
-%%
-%% This function should be called only from outside this module.
+%% set_ram_duration_target informs us that the target is to have no
+%% more msgs in RAM than indicated by the duration and the current
+%% queue rates. It is ignored in this implementation.
 %%
 %% -spec(set_ram_duration_target/2 ::
 %%         (('undefined' | 'infinity' | number()), state())
 %%         -> state()).
 
-set_ram_duration_target(_, S) ->
-    rabbit_log:info("set_ram_duration_target(_~p) ->", [S]),
-    Result = S,
-    rabbit_log:info(" -> ~p", [Result]),
-    Result.
+set_ram_duration_target(_, S) -> S.
 
 %%----------------------------------------------------------------------------
 %% ram_duration/1 optionally recalculates the duration internally
 %% (likely to be just update your internal rates), and report how many
-%% seconds the messages in RAM represent given the current rates of
-%% the queue.
-%%
-%% This function should be called only from outside this module.
+%% seconds the msgs in RAM represent given the current rates of the
+%% queue. It is a dummy in this implementation.
 %%
 %% -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 
-ram_duration(S) ->
-    rabbit_log:info("ram_duration(~p) ->", [S]),
-    Result = {0, S},
-    rabbit_log:info(" -> ~p", [Result]),
-    Result.
+ram_duration(S) -> {0, S}.
 
 %%----------------------------------------------------------------------------
-%% needs_idle_timeout/1 returns 'true' if 'idle_timeout' should be
-%% called as soon as the queue process can manage (either on an empty
-%% mailbox, or when a timer fires), and 'false' otherwise.
-%%
-%% This function should be called only from outside this module.
+%% needs_idle_timeout/1 returns true iff idle_timeout should be called
+%% as soon as the queue process can manage (either on an empty
+%% mailbox, or when a timer fires). It always returns false in this
+%% implementation.
 %%
 %% -spec(needs_idle_timeout/1 :: (state()) -> boolean()).
 
-needs_idle_timeout(_) ->
-    rabbit_log:info("needs_idle_timeout(_) ->"),
-    Result = false,
-    rabbit_log:info(" -> ~p", [Result]),
-    Result.
+needs_idle_timeout(_) -> false.
 
 %%----------------------------------------------------------------------------
-%% idle_timeout/1 is called (eventually) after needs_idle_timeout returns
-%% 'true'. Note this may be called more than once for each 'true'
-%% returned from needs_idle_timeout.
-%%
-%% This function should be called only from outside this module.
+%% idle_timeout/1 is called (eventually) after needs_idle_timeout
+%% returns true. It is a dummy in this implementation.
 %%
 %% -spec(idle_timeout/1 :: (state()) -> state()).
 
-idle_timeout(S) ->
-    rabbit_log:info("idle_timeout(~p) ->", [S]),
-    Result = S,
-    rabbit_log:info(" -> ~p", [Result]),
-    Result.
+idle_timeout(S) -> S.
 
 %%----------------------------------------------------------------------------
 %% handle_pre_hibernate/1 is called immediately before the queue
-%% hibernates.
-%%
-%% This function should be called only from outside this module.
+%% hibernates. It is a dummy in this implementation.
 %%
 %% -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 
-handle_pre_hibernate(S) ->
-    Result = S,
-    rabbit_log:info("handle_pre_hibernate(~p) ->", [S]),
-    rabbit_log:info(" -> ~p", [Result]),
-    Result.
+handle_pre_hibernate(S) -> S.
 
 %%----------------------------------------------------------------------------
-%% status/1 exists for debugging purposes, to be able to expose state
-%% via rabbitmqctl list_queues backing_queue_status
+%% status/1 exists for debugging and operational purposes, to be able
+%% to expose state via rabbitmqctl.
 %%
 %% This function should be called only from outside this module.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(#s { q = Q,
-            next_seq_id = NextSeqId,
-            pending_ack_dict = PAD }) ->
-    rabbit_log:info("status(_) ->"),
-    Result = [{len, queue:len(Q)},
-              {next_seq_id, NextSeqId},
-              {acks, dict:size(PAD)}],
-    rabbit_log:info(" ~p", [Result]),
+status(S = #s { q = Q, p = P, next_seq_id = NextSeqId }) ->
+    rabbit_log:info("status(~n ~p) ->", [S]),
+    LQ = queue:len(Q),
+    LP = dict:size(P),
+    Result = [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}],
+    rabbit_log:info("status ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
-%% Various helpers
-%%----------------------------------------------------------------------------
+%% Helper functions.
+%% ----------------------------------------------------------------------------
 
--spec(dropwhile_state/2 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()), s())
-        -> {empty | ok, s()}).
+%% internal_purge/1 purges all messages, generating pending acks as
+%% necessary.
 
-dropwhile_state(Pred, S) ->
-    internal_queue_out(
-      fun (M = #m { props = Props }, Si = #s { q = Q }) ->
-              case Pred(Props) of
-                  true ->
-                      {_, Si1} = internal_fetch(false, M, Si),
-                      dropwhile_state(Pred, Si1);
-                  false -> {ok, Si #s {q = queue:in_r(M, Q) }}
-              end
-      end,
-      S).
+-spec internal_purge(state()) -> s().
 
--spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
+internal_purge(S) -> case internal_fetch(true, S) of
+                         {empty, _} -> S;
+                         {_, S1} -> internal_purge(S1)
+                     end.
 
-internal_ack(SeqIds, S) ->
-    internal_ack3(fun (_, Si) -> Si end, SeqIds, S).
+%% internal_fetch/2 fetches the next msg, if any, generating a pending
+%% ack as necessary.
+
+-spec(internal_fetch(true, s()) -> {fetch_result(ack()), s()};
+                    (false, s()) -> {fetch_result(undefined), s()}).
+
+internal_fetch(AckRequired, S) -> 
+    case q_pop(S) of
+        {nothing, _} -> {empty, S};
+        {{just, M}, S1} -> post_pop(AckRequired, M, S1)
+    end.
 
 -spec tx_commit_state([rabbit_types:basic_message()],
                       [seq_id()],
@@ -598,32 +521,6 @@ tx_commit_state(Pubs, SeqIds, PropsF, S) ->
       S1,
       [{Msg, PropsF(Props)} || {Msg, Props} <- lists:reverse(Pubs)]).
 
--spec m(rabbit_types:basic_message(),
-        seq_id(),
-        rabbit_types:message_properties()) ->
-               m().
-
-m(Msg, SeqId, Props) ->
-    #m { seq_id = SeqId, msg = Msg, props = Props, is_delivered = false }.
-
--spec lookup_tx(rabbit_types:txn(), state()) -> tx().
-
-lookup_tx(Txn, #s { txn_dict = TxnDict }) ->
-    case dict:find(Txn, TxnDict) of
-        error -> #tx { to_pub = [], to_ack = [] };
-        {ok, Tx} -> Tx
-    end.
-
--spec store_tx(rabbit_types:txn(), tx(), state()) -> state().
-
-store_tx(Txn, Tx, S = #s { txn_dict = TxnDict }) ->
-    S #s { txn_dict = dict:store(Txn, Tx, TxnDict) }.
-
--spec erase_tx(rabbit_types:txn(), state()) -> state().
-
-erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
-    S #s { txn_dict = dict:erase(Txn, TxnDict) }.
-
 -spec publish_state(rabbit_types:basic_message(),
                     rabbit_types:message_properties(),
                     boolean(),
@@ -634,41 +531,121 @@ publish_state(Msg,
               Props,
               IsDelivered,
               S = #s { q = Q, next_seq_id = SeqId }) ->
-    S #s {
-      q = queue:in(
-            (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered }, Q),
-      next_seq_id = SeqId + 1 }.
+    M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
+    S #s { q = queue:in(M, Q), next_seq_id = SeqId + 1 }.
 
--spec record_pending_ack_state(m(), s()) -> s().
+-spec(internal_ack/2 :: ([seq_id()], s()) -> {[rabbit_guid:guid()], s()}).
 
-record_pending_ack_state(M = #m { seq_id = SeqId },
-                         S = #s { pending_ack_dict = PAD }) ->
-    S #s { pending_ack_dict = dict:store(SeqId, M, PAD) }.
+internal_ack(SeqIds, S) -> del_ps(fun (_, Si) -> Si end, SeqIds, S).
 
-% -spec remove_acks_state(s()) -> s().
+-spec(internal_dropwhile/2 ::
+        (fun ((rabbit_types:message_properties()) -> boolean()), s())
+        -> {empty | ok, s()}).
 
-remove_acks_state(S = #s { pending_ack_dict = PAD }) ->
-    _ = dict:fold(fun (_, M, Acc) -> [m_guid(M) | Acc] end, [], PAD),
-    S #s { pending_ack_dict = dict:new() }.
+internal_dropwhile(Pred, S) ->
+    case q_peek(S) of
+        nothing -> {empty, S};
+        {just, M = #m { props = Props }} ->
+            case Pred(Props) of
+                true -> {_, S1} = q_pop(S),
+                        {_, S2} = post_pop(false, M, S1),
+                        internal_dropwhile(Pred, S2);
+                false -> {ok, S}
+            end
+    end.
 
--spec internal_ack3(fun (([rabbit_guid:guid()], s()) -> s()),
-                    [rabbit_guid:guid()],
-                    s()) ->
-                           {[rabbit_guid:guid()], s()}.
+%% q_pop pops a msg, if any, from the queue.
 
-internal_ack3(_, [], S) -> {[], S};
-internal_ack3(F, SeqIds, S) ->
-    {AllGuids, S1} =
+-spec q_pop(s()) -> {maybe(m()), s()}.
+
+q_pop(S = #s { q = Q }) ->
+    case queue:out(Q) of
+        {empty, _}  -> {nothing, S};
+        {{value, M}, Q1} -> {{just, M}, S #s { q = Q1 }}
+    end.
+
+%% q_peek returns the first msg, if any, from the queue.
+
+-spec q_peek(s()) -> maybe(m()).
+
+q_peek(#s { q = Q }) ->
+    case queue:peek(Q) of
+        empty -> nothing;
+        {value, M} -> {just, M}
+    end.
+
+%% post_pop operates after q_pop, calling add_p if necessary.
+
+-spec(post_pop(true, m(), s()) -> {fetch_result(ack()), s()};
+              (false, m(), s()) -> {fetch_result(undefined), s()}).
+
+post_pop(true,
+	 M = #m { seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
+	 S = #s { q = Q }) ->
+    LQ = queue:len(Q),
+    S1 = add_p(M #m { is_delivered = true }, S),
+    {{Msg, IsDelivered, SeqId, LQ}, S1};
+post_pop(false,
+	 #m { msg = Msg, is_delivered = IsDelivered },
+	 S = #s { q = Q }) ->
+    LQ = queue:len(Q),
+    {{Msg, IsDelivered, undefined, LQ}, S}.
+
+%% add_p adds a pending ack to the P dict.
+
+-spec add_p(m(), s()) -> s().
+
+add_p(M = #m { seq_id = SeqId }, S = #s { p = P }) ->
+    S #s { p = dict:store(SeqId, M, P) }.
+
+%% del_fs deletes some number of pending acks from the P dict,
+%% applying a function F after each msg is deleted, and returning
+%% their guids.
+
+-spec del_ps(fun (([rabbit_guid:guid()], s()) -> s()),
+                  [rabbit_guid:guid()],
+                  s()) ->
+                    {[rabbit_guid:guid()], s()}.
+
+del_ps(F, SeqIds, S = #s { p = P }) ->
+    {AllGuids, Sn} =
         lists:foldl(
-          fun (SeqId, {Acc, Si = #s { pending_ack_dict = PAD }}) ->
-                  M = dict:fetch(SeqId, PAD),
-                  {[m_guid(M) | Acc],
-                   F(M, Si #s { pending_ack_dict = dict:erase(SeqId, PAD)})}
+          fun (SeqId, {Acc, Si}) ->
+                  {ok, M = #m { msg = #basic_message { guid = Guid } }} =
+                      dict:find(SeqId, P),
+                  Si2 = Si #s { p = dict:erase(SeqId, P) },
+                  {[Guid | Acc], F(M, Si2)}
           end,
           {[], S},
           SeqIds),
-    {lists:reverse(AllGuids), S1}.
+    {lists:reverse(AllGuids), Sn}.
 
--spec m_guid(m()) -> rabbit_guid:guid().
+%%----------------------------------------------------------------------------
+%% Pure helper functions.
+%% ----------------------------------------------------------------------------
 
-m_guid(#m { msg = #basic_message { guid = Guid }}) -> Guid.
+-spec m(rabbit_types:basic_message(),
+        seq_id(),
+        rabbit_types:message_properties()) ->
+               m().
+
+m(Msg, SeqId, Props) ->
+    #m { seq_id = SeqId, msg = Msg, props = Props, is_delivered = false }.
+
+-spec lookup_tx(rabbit_types:txn(), s()) -> tx().
+
+lookup_tx(Txn, #s { txn_dict = TxnDict }) ->
+    case dict:find(Txn, TxnDict) of
+        error -> #tx { to_pub = [], to_ack = [] };
+        {ok, Tx} -> Tx
+    end.
+
+-spec store_tx(rabbit_types:txn(), tx(), s()) -> s().
+
+store_tx(Txn, Tx, S = #s { txn_dict = TxnDict }) ->
+    S #s { txn_dict = dict:store(Txn, Tx, TxnDict) }.
+
+-spec erase_tx(rabbit_types:txn(), s()) -> s().
+
+erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
+    S #s { txn_dict = dict:erase(Txn, TxnDict) }.
