@@ -543,8 +543,8 @@ transfer(WriterPid, LinkHandle,
     %% "prefetch_count" messages in flight (i.e., a total). For the
     %% minute we will have to just break things.
     NumUnsettled = gb_trees:size(Unsettled),
-    if (LocalMaxOut < TransferNumber andalso
-        NumUnsettled >= WindowSize) ->
+    if (LocalMaxOut >= TransferNumber andalso
+        NumUnsettled < WindowSize) ->
             NewLink = Link#outgoing_link{
                         transfer_count = Count + TransferSize
                        },
