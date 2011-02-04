@@ -147,7 +147,7 @@ handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
             ok;
         _ ->
             D = acknowledgement(TransferIds,
-                                #'v1_0.disposition'{role = ?SEND_ROLE}),
+                                #'v1_0.disposition'{role = ?RECV_ROLE}),
             rabbit_amqp1_0_writer:send_command(WriterPid, D)
     end,
     {noreply, State};
