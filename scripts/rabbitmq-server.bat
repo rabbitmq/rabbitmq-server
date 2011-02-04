@@ -1,33 +1,18 @@
 @echo off
-REM   The contents of this file are subject to the Mozilla Public License
-REM   Version 1.1 (the "License"); you may not use this file except in
-REM   compliance with the License. You may obtain a copy of the License at
-REM   http://www.mozilla.org/MPL/
+REM  The contents of this file are subject to the Mozilla Public License
+REM  Version 1.1 (the "License"); you may not use this file except in
+REM  compliance with the License. You may obtain a copy of the License
+REM  at http://www.mozilla.org/MPL/
 REM
-REM   Software distributed under the License is distributed on an "AS IS"
-REM   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-REM   License for the specific language governing rights and limitations
-REM   under the License.
+REM  Software distributed under the License is distributed on an "AS IS"
+REM  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+REM  the License for the specific language governing rights and
+REM  limitations under the License.
 REM
-REM   The Original Code is RabbitMQ.
+REM  The Original Code is RabbitMQ.
 REM
-REM   The Initial Developers of the Original Code are LShift Ltd,
-REM   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-REM
-REM   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-REM   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-REM   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-REM   Technologies LLC, and Rabbit Technologies Ltd.
-REM
-REM   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-REM   Ltd. Portions created by Cohesive Financial Technologies LLC are
-REM   Copyright (C) 2007-2010 Cohesive Financial Technologies
-REM   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-REM   (C) 2007-2010 Rabbit Technologies Ltd.
-REM
-REM   All Rights Reserved.
-REM
-REM   Contributor(s): ______________________________________.
+REM  The Initial Developer of the Original Code is VMware, Inc.
+REM  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 REM
 
 setlocal
@@ -52,7 +37,7 @@ if "!RABBITMQ_NODENAME!"=="" (
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    if not "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_NODE_IP_ADDRESS=0.0.0.0
+      set RABBITMQ_NODE_IP_ADDRESS=auto
    )
 ) else (
    if "!RABBITMQ_NODE_PORT!"=="" (
@@ -117,13 +102,14 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
--s rabbit_plugin_activator ^
+-s rabbit_prelaunch ^
+-sname rabbitmqprelaunch!RANDOM! ^
 -extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
-       "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"
+       "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
+       "!RABBITMQ_NODENAME!"
 
 set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
-if not exist "!RABBITMQ_BOOT_FILE!.boot" (
-    echo Custom Boot File "!RABBITMQ_BOOT_FILE!.boot" is missing.
+if ERRORLEVEL 1 (
     exit /B 1
 )
 

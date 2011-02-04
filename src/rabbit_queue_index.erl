@@ -1,39 +1,24 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
 
 -export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/2, flush/1, read/3,
+         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
          next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
@@ -297,11 +282,12 @@ deliver(SeqIds, State) ->
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
 
-sync([], State) ->
-    State;
-sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
-    State;
-sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
+%% This is only called when there are outstanding confirms and the
+%% queue is idle.
+sync(State = #qistate { unsynced_guids = Guids }) ->
+    sync_if([] =/= Guids, State).
+
+sync(SeqIds, State) ->
     %% The SeqIds here contains the SeqId of every publish and ack in
     %% the transaction. Ideally we should go through these seqids and
     %% only sync the journal if the pubs or acks appear in the
@@ -309,9 +295,8 @@ sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
     %% the variable queue publishes and acks to the qi, and then
     %% syncs, all in one operation, there is no possibility of the
     %% seqids not being in the journal, provided the transaction isn't
-    %% emptied (handled above anyway).
-    ok = file_handle_cache:sync(JournalHdl),
-    notify_sync(State).
+    %% emptied (handled by sync_if anyway).
+    sync_if([] =/= SeqIds, State).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
@@ -722,6 +707,14 @@ deliver_or_ack(Kind, SeqIds, State) ->
     maybe_flush_journal(lists:foldl(fun (SeqId, StateN) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
+
+sync_if(false, State) ->
+    State;
+sync_if(_Bool, State = #qistate { journal_handle = undefined }) ->
+    State;
+sync_if(true, State = #qistate { journal_handle = JournalHdl }) ->
+    ok = file_handle_cache:sync(JournalHdl),
+    notify_sync(State).
 
 notify_sync(State = #qistate { unsynced_guids = UG, on_sync = OnSyncFun }) ->
     OnSyncFun(gb_sets:from_list(UG)),

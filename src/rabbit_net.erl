@@ -1,38 +1,23 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_net).
 -include("rabbit.hrl").
 
--export([is_ssl/1, controlling_process/2, getstat/2,
+-export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          async_recv/3, port_command/2, send/2, close/1,
          sockname/1, peername/1, peercert/1]).
 
@@ -50,6 +35,9 @@
 -type(socket() :: port() | #ssl_socket{}).
 
 -spec(is_ssl/1 :: (socket()) -> boolean()).
+-spec(ssl_info/1 :: (socket())
+                    -> 'nossl' | ok_val_or_error(
+                                   {atom(), {atom(), atom(), atom()}})).
 -spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
@@ -76,6 +64,11 @@
 -define(IS_SSL(Sock), is_record(Sock, ssl_socket)).
 
 is_ssl(Sock) -> ?IS_SSL(Sock).
+
+ssl_info(Sock) when ?IS_SSL(Sock) ->
+    ssl:connection_info(Sock#ssl_socket.ssl);
+ssl_info(_Sock) ->
+    nossl.
 
 controlling_process(Sock, Pid) when ?IS_SSL(Sock) ->
     ssl:controlling_process(Sock#ssl_socket.ssl, Pid);

@@ -170,7 +170,7 @@ start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
-		./scripts/rabbitmq-server ; sleep 1
+		./scripts/rabbitmq-server; sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
@@ -314,3 +314,4 @@ endif
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
+
