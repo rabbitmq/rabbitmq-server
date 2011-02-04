@@ -46,8 +46,13 @@
     <td><span class="mini-highlight"><%= fmt_rate(totals, 'publish') %></span></td>
     <td><span class="mini-highlight"><%= fmt_rate(totals, 'confirm') %></span></td>
 <% if (mode == 'channel' || mode == 'exchange-incoming') { %>
-    <td><span class="mini-highlight"><%= fmt_rate(totals, 'return_unroutable') %></span></td>
-    <td><span class="mini-highlight"><%= fmt_rate(totals, 'return_not_delivered') %></span></td<% } %>
+    <td><span class="mini-highlight">
+      <%= fmt_rate(totals, 'return_unroutable') %>
+    </span></td>
+    <td><span class="mini-highlight">
+      <%= fmt_rate(totals, 'return_not_delivered') %>
+    </span></td>
+<% } %>
   </tr>
 </table>
 <% } else { %>
