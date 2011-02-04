@@ -155,7 +155,6 @@ handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
         [] -> ok;
         _  -> D = acknowledgement(TransferIds,
                                   #'v1_0.disposition'{role = ?RECV_ROLE}),
-              io:format("Send: ~p~n", [D]),
               rabbit_amqp1_0_writer:send_command(WriterPid, D)
     end,
     {noreply, State#session{ incoming_unsettled_map = Unsettled1 }};
