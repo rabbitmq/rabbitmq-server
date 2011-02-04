@@ -543,8 +543,8 @@ transfer(WriterPid, LinkHandle,
     %% "prefetch_count" messages in flight (i.e., a total). For the
     %% minute we will have to just break things.
     NumUnsettled = gb_trees:size(Unsettled),
-    if (LocalMaxOut >= TransferNumber andalso
-        NumUnsettled < WindowSize) ->
+    if (LocalMaxOut >= TransferNumber) andalso
+       (WindowSize >= NumUnsettled) ->
             NewLink = Link#outgoing_link{
                         transfer_count = Count + TransferSize
                        },
@@ -621,8 +621,8 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
         true ->
             {none, State};
         false ->
-            {LWM, _Val} = gb_tree:smallest(outgoing_unsettled_map),
-            {HWM, _Val} = gb_tree:largest(outgoing_unsettled_map),
+            {LWM, _} = gb_trees:smallest(Unsettled),
+            {HWM, _} = gb_trees:largest(Unsettled),
             if Last < LWM ->
                     {none, State};
                First > HWM ->
@@ -631,7 +631,7 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
                     Unsettled1 =
                         lists:foldl(
                           fun (Transfer, Map) ->
-                                  case gb_trees:lookup(Unsettled, Transfer) of
+                                  case gb_trees:lookup(Transfer, Map) of
                                       none ->
                                           Map;
                                       {value, Entry} ->
