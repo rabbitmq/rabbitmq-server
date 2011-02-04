@@ -228,7 +228,9 @@ function message_rates(stats) {
                      ['Deliver', 'deliver'], ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
-                     ['Return', 'return']];
+                     ['Return (mandatory)', 'return_unroutable'],
+                     ['Return (immediate)', 'return_not_delivered']
+		    ];
         for (var i in items) {
             var name = items[i][0];
             var key = items[i][1] + '_details';

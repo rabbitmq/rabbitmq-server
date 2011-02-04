@@ -13,6 +13,10 @@
 <% } %>
     <th>publish</th>
     <th>confirm</th>
+<% if (mode == 'channel' || mode == 'exchange-incoming') { %>
+    <th>return (mandatory)</th>
+    <th>return (immediate)</th>
+<% } %>
   </tr>
 <%
      for (var i = 0; i < object.length; i++) {
@@ -31,12 +35,19 @@
 <% } %>
       <td class="r"><%= fmt_rate(pub.stats, 'publish') %></td>
       <td class="r"><%= fmt_rate(pub.stats, 'confirm') %></td>
+<% if (mode == 'channel' || mode == 'exchange-incoming') { %>
+      <td class="r"><%= fmt_rate(pub.stats, 'return_unroutable') %></td>
+      <td class="r"><%= fmt_rate(pub.stats, 'return_not_delivered') %></td>
+<% } %>
     </tr>
 <% } %>
   <tr class="total">
     <th>Total:</th>
     <td><span class="mini-highlight"><%= fmt_rate(totals, 'publish') %></span></td>
     <td><span class="mini-highlight"><%= fmt_rate(totals, 'confirm') %></span></td>
+<% if (mode == 'channel' || mode == 'exchange-incoming') { %>
+    <td><span class="mini-highlight"><%= fmt_rate(totals, 'return_unroutable') %></span></td>
+    <td><span class="mini-highlight"><%= fmt_rate(totals, 'return_not_delivered') %></span></td<% } %>
   </tr>
 </table>
 <% } else { %>
