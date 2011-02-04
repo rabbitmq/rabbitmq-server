@@ -141,16 +141,24 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
 handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
             State = #session{incoming_unsettled_map = Unsettled,
                              writer_pid = WriterPid}) ->
-    {TransferIds, Unsettled1} = acknowledgement_range(DTag, Unsettled),
+    {TransferIds, Unsettled1} =
+        case Multiple of
+            true  -> acknowledgement_range(DTag, Unsettled);
+            false -> case gb_trees:lookup(DTag, Unsettled) of
+                         {value, Id} ->
+                             {[Id], gb_trees:delete(DTag, Unsettled)};
+                         none ->
+                             {[], Unsettled}
+                     end
+        end,
     case TransferIds of
-        [] ->
-            ok;
-        _ ->
-            D = acknowledgement(TransferIds,
-                                #'v1_0.disposition'{role = ?RECV_ROLE}),
-            rabbit_amqp1_0_writer:send_command(WriterPid, D)
+        [] -> ok;
+        _  -> D = acknowledgement(TransferIds,
+                                  #'v1_0.disposition'{role = ?RECV_ROLE}),
+              io:format("Send: ~p~n", [D]),
+              rabbit_amqp1_0_writer:send_command(WriterPid, D)
     end,
-    {noreply, State};
+    {noreply, State#session{ incoming_unsettled_map = Unsettled1 }};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
