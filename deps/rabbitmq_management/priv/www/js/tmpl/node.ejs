@@ -10,8 +10,21 @@
         <sub>(used / available)</sub>
       </th>
       <td class="status">
-        <div class="<%= fmt_color(node.fd_used / node.fd_total) %>">
+        <div class="<%= fmt_color(node.fd_used / node.fd_total,
+                                  FD_THRESHOLDS) %>">
           <%= node.fd_used %> / <%= node.fd_total %>
+       </div>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Socket Descriptors
+        <sub>(used / available)</sub>
+      </th>
+      <td class="status">
+        <div class="<%= fmt_color(node.sockets_used / node.sockets_total,
+                                  SOCKETS_THRESHOLDS) %>">
+          <%= node.sockets_used %> / <%= node.sockets_total %>
        </div>
       </td>
     </tr>
@@ -21,7 +34,8 @@
         <sub>(used / available)</sub>
       </th>
      <td class="status">
-       <div class="<%= fmt_color(node.proc_used / node.proc_total) %>">
+       <div class="<%= fmt_color(node.proc_used / node.proc_total,
+                                 PROCESS_THRESHOLDS) %>">
          <%= node.proc_used %> / <%= node.proc_total %>
        </div>
      </td>

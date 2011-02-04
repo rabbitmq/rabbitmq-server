@@ -1,6 +1,10 @@
 UNKNOWN_REPR = '<span class="unknown">?</span>';
-DESCRIPTOR_THRESHOLDS=[[0.75, 'red'],
-		       [0.5, 'yellow']];
+FD_THRESHOLDS=[[0.95, 'red'],
+	       [0.9, 'yellow']];
+SOCKETS_THRESHOLDS=[[1.0, 'red'],
+		    [0.9, 'yellow']];
+PROCESS_THRESHOLDS=[[0.75, 'red'],
+		    [0.5, 'yellow']];
 MEMORY_THRESHOLDS=[[1.0, 'red']];
 
 function fmt_string(str) {
@@ -76,13 +80,12 @@ function fmt_channel_mode(ch) {
 
 function fmt_color(r, thresholds) {
     if (r == undefined) return '';
-    if (thresholds == undefined) thresholds = DESCRIPTOR_THRESHOLDS;
 
     for (var i in thresholds) {
 	var threshold = thresholds[i][0];
 	var color = thresholds[i][1];
 
-	if (r > threshold) {
+	if (r >= threshold) {
 	    return color;
 	}
     }
