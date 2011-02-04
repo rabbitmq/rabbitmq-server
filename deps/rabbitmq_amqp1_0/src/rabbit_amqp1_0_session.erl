@@ -516,7 +516,9 @@ outgoing_flow(#outgoing_link{ transfer_count = Count },
             {reply, Flow1#'v1_0.flow'{
                       handle = Handle,
                       transfer_count = {uint, Count},
-                      available = {uint, Available}}, State}
+                      link_credit = {uint, Credit},
+                      available = {uint, Available},
+                      drain = Drain}, State}
     end.
 
 transfer(WriterPid, LinkHandle,
