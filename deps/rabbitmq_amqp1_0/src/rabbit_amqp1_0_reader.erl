@@ -483,8 +483,7 @@ all_channels() -> [ChFrPid || {{ch_sup_pid, _ChSupPid},
 
 terminate_channels() ->
     NChannels =
-        length([rabbit_framing_channel:shutdown(ChFrPid)
-                || ChFrPid <- all_channels()]),
+        length([rabbit_channel:shutdown(ChPid) || ChPid <- all_channels()]),
     if NChannels > 0 ->
             Timeout = 1000 * ?CHANNEL_TERMINATION_TIMEOUT * NChannels,
             TimerRef = erlang:send_after(Timeout, self(), cancel_wait),
@@ -737,7 +736,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
     State2;
 
 handle_1_0_connection_frame(_Frame, State) ->
-    lists:foreach(fun rabbit_framing_channel:shutdown/1, all_channels()),
+    lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing}).
 
 handle_1_0_session_frame(Channel, Frame, State) ->
