@@ -138,19 +138,18 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {noreply, State};
 
-handle_info(#'basic.ack'{delivery_tag = DTag, multiple = false},
+handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
             State = #session{incoming_unsettled_map = Unsettled}) ->
-    case gb_trees:lookup(DTag, Unsettled) of
-        {value, TxfrId} ->
+    {TransferIds, Unsettled1} = acknowledgement_range(DTag, Unsettled),
+    case TransferIds of
+        [] ->
+            {noreply, State};
+        _ ->
             {reply,
-             acknowledgement(TxfrId, #'v1_0.disposition'{role = ?SEND_ROLE}),
-             State};
-        none ->
-            {noreply, State}
+             acknowledgement(TransferIds,
+                             #'v1_0.disposition'{role = ?SEND_ROLE}),
+             State}
     end;
-
-handle_info(#'basic.ack'{delivery_tag = _DTag, multiple = true}, _State) ->
-    exit("Can't handle multiple confirms yet");
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -711,9 +710,28 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
             end
     end.
 
-acknowledgement(TxfrId, Disposition) ->
-    Disposition#'v1_0.disposition'{ first = TxfrId,
-                                    last = TxfrId,
+acknowledgement_range(DTag, Unsettled) ->
+    acknowledgement_range(DTag, Unsettled, []).
+
+acknowledgement_range(DTag, Unsettled, Acc) ->
+    case gb_trees:is_empty(Unsettled) of
+        true ->
+            {lists:reverse(Acc), Unsettled};
+        false ->
+            {DTag1, TransferId} = gb_trees:smallest(Unsettled),
+            case DTag1 =< DTag of
+                true ->
+                    {_K, _V, Unsettled1} = gb_trees:take_smallest(Unsettled),
+                    acknowledgement_range(DTag, Unsettled1,
+                                          [TransferId|Acc]);
+                false ->
+                    {lists:reverse(Acc), Unsettled}
+            end
+    end.
+
+acknowledgement(TransferIds, Disposition) ->
+    Disposition#'v1_0.disposition'{ first = hd(TransferIds),
+                                    last = lists:last(TransferIds),
                                     settled = true,
                                     state = #'v1_0.transfer_state'{
                                       outcome = #'v1_0.accepted'{}}}.
