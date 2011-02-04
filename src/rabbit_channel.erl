@@ -1239,17 +1239,15 @@ is_message_persistent(Content) ->
             IsPersistent
     end.
 
-process_routing_result(unroutable,    _, XName,  MsgSeqNo,
-		       Msg = #basic_message{exchange_name = ExchangeName},
-		       State) ->
+process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State#ch.writer_pid, no_route),
-    maybe_incr_stats([{ExchangeName, 1}], return_unroutable, State),
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+		     return_unroutable, State),
     record_confirm(MsgSeqNo, XName, State);
-process_routing_result(not_delivered, _, XName,  MsgSeqNo,
-		       Msg = #basic_message{exchange_name = ExchangeName},
-		       State) ->
+process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State#ch.writer_pid, no_consumers),
-    maybe_incr_stats([{ExchangeName, 1}], return_not_delivered, State),
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+		     return_not_delivered, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);
