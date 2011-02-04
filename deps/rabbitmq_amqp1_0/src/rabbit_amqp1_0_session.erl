@@ -657,7 +657,8 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
                                                erlang:min(HWM, Last))),
                     {case Settled of
                          true  -> none;
-                         false -> Disp#'v1_0.disposition'{ settled = true }
+                         false -> Disp#'v1_0.disposition'{ settled = true,
+                                                           role = ?SEND_ROLE }
                      end,
                      State#session{outgoing_unsettled_map = Unsettled1}}
             end
