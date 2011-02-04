@@ -18,9 +18,11 @@
                   next_transfer_number = 0, % next outgoing id
                   max_outgoing_id, % based on the remote incoming window size
                   next_incoming_id, % just to keep a check
+                  next_publish_id, %% the 0-9-1-side counter for confirms
                   %% we make incoming and outgoing session buffers the
                   %% same size
                   window_size,
+                  incoming_unsettled_map,
                   outgoing_unsettled_map }).
 -record(outgoing_link, {queue,
                         transfer_count = 0,
@@ -74,6 +76,8 @@ init([Channel, ReaderPid, WriterPid]) ->
                    backing_channel        = Ch,
                    reader_pid             = ReaderPid,
                    writer_pid             = WriterPid,
+                   next_publish_id        = 0,
+                   incoming_unsettled_map = gb_trees:empty(),
                    outgoing_unsettled_map = gb_trees:empty()}}.
 
 terminate(_Reason, State = #session{ backing_connection = Conn,
@@ -133,6 +137,20 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
                       drain       = Drain },
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {noreply, State};
+
+handle_info(#'basic.ack'{delivery_tag = DTag, multiple = false},
+            State = #session{incoming_unsettled_map = Unsettled}) ->
+    case gb_trees:lookup(DTag, Unsettled) of
+        {value, TxfrId} ->
+            {reply,
+             acknowledgement(TxfrId, #'v1_0.disposition'{role = ?SEND_ROLE}),
+             State};
+        none ->
+            {noreply, State}
+    end;
+
+handle_info(#'basic.ack'{delivery_tag = _DTag, multiple = true}, _State) ->
+    exit("Can't handle multiple confirms yet");
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -245,15 +263,27 @@ handle_control(#'v1_0.attach'{name = Name,
                               local = ClientLinkage,
                               transfer_unit = _Unit,
                               role = ?SEND_ROLE}, %% client is sender
-               State = #session{ }) ->
+               State = #session{ backing_channel = Ch,
+                                 next_publish_id = NextPublishId }) ->
     %% TODO associate link name with target
     #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
     case ensure_target(Target, #incoming_link{ name = Name }, State) of
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ transfer_unit = Unit }, State1} ->
+            {_, Outcomes} = outcomes(ClientLinkage),
+            State2 =
+                case Outcomes of
+                    [?V_1_0_SYMBOL_ACCEPTED] ->
+                        State1;
+                    _ ->
+                        amqp_channel:register_confirm_handler(Ch, self()),
+                        amqp_channel:call(Ch, #'confirm.select'{}),
+                        State1#session{ next_publish_id =
+                                            erlang:max(1, NextPublishId) }
+            end,
             put({in, Handle}, IncomingLink),
             %% Also grant credit
-            Flow = flow_session_fields(State1),
+            Flow = flow_session_fields(State2),
             Flow1 = Flow#'v1_0.flow'{ handle = Handle,
                                       link_credit = {uint, ?INCOMING_CREDIT},
                                       drain = false,
@@ -267,7 +297,7 @@ handle_control(#'v1_0.attach'{name = Name,
                 target = ServerTarget },
               transfer_unit = {uint, Unit}, % We count messages, not bytes
               role = ?RECV_ROLE}, %% server is receiver
-            {reply, [Attach, Flow1], State1};
+            {reply, [Attach, Flow1], State2};
         {error, Reason, State1} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link estalishment protocol here?
@@ -286,8 +316,10 @@ handle_control(#'v1_0.attach'{local = Linkage,
 handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                                        settled = Settled,
                                        fragments = Fragments,
-                                       transfer_id = TxfrId},
-               State = #session{backing_channel = Ch}) ->
+                                       transfer_id = {uint, TxfrId}},
+               State = #session{backing_channel = Ch,
+                                next_publish_id = NextPublishId,
+                                incoming_unsettled_map = Unsettled}) ->
     case get({in, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK,
                         transfer_count = Count,
@@ -295,19 +327,28 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
             TransferSize = transfer_size(Txfr, Unit),
             NewCount = Count + TransferSize,
             Msg = rabbit_amqp1_0_message:assemble(Fragments),
+            NextPublishId1 = case NextPublishId of
+                                 0 -> 0;
+                                 _ -> NextPublishId + 1
+                             end,
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = RK }, Msg),
             put({in, Handle}, Link#incoming_link{ transfer_count = NewCount }),
-            %% TODO use publisher acknowledgement, keep incoming unsettled map
             %% TODO send flow if the credit is running low
-            case Settled of
-                true  -> {noreply, State};
-                %% Move LWM, credit etc.
-                false -> {reply,
-                          acknowledgement(Txfr,
-                                          #'v1_0.disposition'{role = ?RECV_ROLE}),
-                          State#session{ next_incoming_id = next_transfer_number(TxfrId) }}
-            end;
+            State1 = State#session{
+                       next_publish_id = NextPublishId1,
+                       next_incoming_id = next_transfer_number(TxfrId) },
+            State2 = case Settled of
+                         true  -> State1;
+                         %% Move LWM, credit etc.
+                         false -> Unsettled1 = gb_trees:insert(
+                                                 NextPublishId,
+                                                 TxfrId,
+                                                 Unsettled),
+                                  State1#session{
+                                    incoming_unsettled_map = Unsettled1}
+                     end,
+            {noreply, State2};
         undefined ->
             protocol_error(?V_1_0_ILLEGAL_STATE,
                            "Unknown link handle ~p", [Handle])
@@ -411,21 +452,27 @@ protocol_error(Condition, Msg, Args) ->
 
 
 outcomes(Linkage) ->
-    #'v1_0.linkage'{ source  = #'v1_0.source' {
-                       default_outcome = DO,
-                       outcomes = Os
-                      }} = Linkage,
-    DefaultOutcome = case DO of
-                         undefined -> ?DEFAULT_OUTCOME;
-                         _         -> DO
-                     end,
-    Outcomes = case Os of
-                   undefined -> ?OUTCOMES;
-                   _         -> Os
-               end,
-    case lists:filter(fun(O) -> not lists:member(O, ?OUTCOMES) end, Outcomes) of
+    #'v1_0.linkage'{ source = Source } = Linkage,
+    {DefaultOutcome, Outcomes} =
+        case Source of
+            #'v1_0.source' {
+                      default_outcome = DO,
+                      outcomes = Os
+                     } ->
+                DO1 = case DO of
+                          undefined -> ?DEFAULT_OUTCOME;
+                          _         -> DO
+                      end,
+                Os1 = case Os of
+                          undefined -> ?OUTCOMES;
+                          _         -> Os
+                      end,
+                {DO1, Os1};
+            _ ->
+                {?DEFAULT_OUTCOME, ?OUTCOMES}
+        end,
+    case [O || O <- Outcomes, not lists:member(O, ?OUTCOMES)] of
         []   -> {DefaultOutcome, Outcomes};
-
         Bad  -> protocol_error(?V_1_0_NOT_IMPLEMENTED,
                                "Outcomes not supported: ~p", [Bad])
     end.
@@ -664,12 +711,12 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
             end
     end.
 
-acknowledgement(#'v1_0.transfer'{ transfer_id = TxfrId }, Disposition) ->
+acknowledgement(TxfrId, Disposition) ->
     Disposition#'v1_0.disposition'{ first = TxfrId,
-                               last = TxfrId,
-                               settled = true,
-                               state = #'v1_0.transfer_state'{
-                                 outcome = #'v1_0.accepted'{}}}.
+                                    last = TxfrId,
+                                    settled = true,
+                                    state = #'v1_0.transfer_state'{
+                                      outcome = #'v1_0.accepted'{}}}.
 
 ensure_declaring_channel(State = #session{
                            backing_connection = Conn,
