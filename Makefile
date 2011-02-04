@@ -42,7 +42,7 @@ RABBIT_PLT=rabbit.plt
 ifndef USE_SPECS
 # our type specs rely on features and bug fixes in dialyzer that are
 # only available in R14A upwards (R13B04 is erts 5.7.5)
-USE_SPECS:=$(shell erl -noshell -eval 'io:format(lists:map(fun erlang:list_to_integer/1, string:tokens(erlang:system_info(version), ".")) >= [5,8]),halt().')
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8]), halt().')
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
@@ -312,3 +312,4 @@ endif
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
+
