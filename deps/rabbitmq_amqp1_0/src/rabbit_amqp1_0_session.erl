@@ -280,23 +280,8 @@ handle_control(#'v1_0.attach'{local = Linkage,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
     %% TODO ensure_destination
-    #'v1_0.linkage'{ source  = #'v1_0.source' {
-                       default_outcome = DO,
-                       outcomes = Os
-                      }} = Linkage,
-    DefaultOutcome = case DO of
-                         undefined -> ?DEFAULT_OUTCOME;
-                         _         -> DO
-                     end,
-    Outcomes = case Os of
-                   undefined -> ?OUTCOMES;
-                   _         -> Os
-               end,
-    case lists:filter(fun(O) -> not lists:member(O, ?OUTCOMES) end, Outcomes) of
-        []   -> attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
-        Bad  -> protocol_error(?V_1_0_NOT_IMPLEMENTED,
-                               "Outcomes not supported: ~p", [Bad])
-    end;
+    {DefaultOutcome, Outcomes} = outcomes(Linkage),
+    attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
 
 handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                                        settled = Settled,
@@ -423,6 +408,27 @@ protocol_error(Condition, Msg, Args) ->
         description = {utf8, list_to_binary(
                                lists:flatten(io_lib:format(Msg, Args)))}
        }).
+
+
+outcomes(Linkage) ->
+    #'v1_0.linkage'{ source  = #'v1_0.source' {
+                       default_outcome = DO,
+                       outcomes = Os
+                      }} = Linkage,
+    DefaultOutcome = case DO of
+                         undefined -> ?DEFAULT_OUTCOME;
+                         _         -> DO
+                     end,
+    Outcomes = case Os of
+                   undefined -> ?OUTCOMES;
+                   _         -> Os
+               end,
+    case lists:filter(fun(O) -> not lists:member(O, ?OUTCOMES) end, Outcomes) of
+        []   -> {DefaultOutcome, Outcomes};
+
+        Bad  -> protocol_error(?V_1_0_NOT_IMPLEMENTED,
+                               "Outcomes not supported: ~p", [Bad])
+    end.
 
 attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
