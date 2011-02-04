@@ -139,17 +139,18 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
     {noreply, State};
 
 handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
-            State = #session{incoming_unsettled_map = Unsettled}) ->
+            State = #session{incoming_unsettled_map = Unsettled,
+                             writer_pid = WriterPid}) ->
     {TransferIds, Unsettled1} = acknowledgement_range(DTag, Unsettled),
     case TransferIds of
         [] ->
-            {noreply, State};
+            ok;
         _ ->
-            {reply,
-             acknowledgement(TransferIds,
-                             #'v1_0.disposition'{role = ?SEND_ROLE}),
-             State}
-    end;
+            D = acknowledgement(TransferIds,
+                                #'v1_0.disposition'{role = ?SEND_ROLE}),
+            rabbit_amqp1_0_writer:send_command(WriterPid, D)
+    end,
+    {noreply, State};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -730,8 +731,8 @@ acknowledgement_range(DTag, Unsettled, Acc) ->
     end.
 
 acknowledgement(TransferIds, Disposition) ->
-    Disposition#'v1_0.disposition'{ first = hd(TransferIds),
-                                    last = lists:last(TransferIds),
+    Disposition#'v1_0.disposition'{ first = {uint, hd(TransferIds)},
+                                    last = {uint, lists:last(TransferIds)},
                                     settled = true,
                                     state = #'v1_0.transfer_state'{
                                       outcome = #'v1_0.accepted'{}}}.
