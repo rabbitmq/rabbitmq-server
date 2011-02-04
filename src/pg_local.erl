@@ -13,7 +13,7 @@
 %%    versions of Erlang/OTP. The remaining type specs have been
 %%    removed.
 
-%% All modifications are (C) 2010 LShift Ltd.
+%% All modifications are (C) 2010-2011 VMware, Inc.
 
 %% %CopyrightBegin%
 %% 

@@ -59,7 +59,7 @@
 %% being used. Instead it'll wait for the current timeout as described
 %% above.
 
-%% All modifications are (C) 2009-2010 LShift Ltd.
+%% All modifications are (C) 2009-2011 VMware, Inc.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
