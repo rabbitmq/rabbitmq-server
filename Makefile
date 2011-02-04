@@ -41,7 +41,7 @@ RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
 # our type specs rely on features and bug fixes in dialyzer that are
-# only available in R14A upwards (R13B04 is erts 5.7.5)
+# only available in R14A upwards (R14A is erts 5.8)
 USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8]), halt().')
 endif
 
