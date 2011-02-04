@@ -1,6 +1,7 @@
 -module(rabbit_amqp1_0_framing).
 
--export([encode/1, encode_described/3, decode/1, version/0, symbol_for/1]).
+-export([encode/1, encode_described/3, decode/1, version/0,
+         symbol_for/1, number_for/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -55,11 +56,13 @@ decode(null) -> undefined;
 decode(Other) ->
      Other.
 
-encode_described(list, Symbol, Frame) ->
-    {described, {symbol, Symbol},
+encode_described(list, ListOrNumber, Frame) ->
+    Desc = descriptor(ListOrNumber),
+    {described, Desc,
      {list, lists:map(fun encode/1, tl(tuple_to_list(Frame)))}};
-encode_described(map, Symbol, Frame) ->
-    {described, {symbol, Symbol},
+encode_described(map, ListOrNumber, Frame) ->
+    Desc = descriptor(ListOrNumber),
+    {described, Desc,
      {map, lists:zip(keys(Frame),
                      lists:map(fun encode/1, tl(tuple_to_list(Frame))))}}.
 
@@ -68,3 +71,11 @@ encode(X) ->
 
 symbol_for(X) ->
     rabbit_amqp1_0_framing0:symbol_for(X).
+
+number_for(X) ->
+    rabbit_amqp1_0_framing0:number_for(X).
+
+descriptor(Symbol) when is_list(Symbol) ->
+    {symbol, Symbol};
+descriptor(Number) when is_number(Number) ->
+    {ulong, Number}.
