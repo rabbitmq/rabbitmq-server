@@ -487,11 +487,10 @@ flow_session_fields(State = #session{ next_transfer_number = NextOut,
                   next_incoming_id = {uint, NextIn},
                   incoming_window = {uint, Window}}.
 
-outgoing_flow(#outgoing_link{},
+outgoing_flow(#outgoing_link{ transfer_count = Count },
               Flow = #'v1_0.flow'{
                 handle = Handle,
-                link_credit = Credit,
-                transfer_count = Count,
+                link_credit = {uint, Credit},
                 drain = Drain},
               State = #session{backing_channel = Ch}) ->
     CTag = handle_to_ctag(Handle),
@@ -507,11 +506,11 @@ outgoing_flow(#outgoing_link{},
         %% to a handle that does not yet exist
         %% TODO is this an error?
         _  ->
-            Flow = flow_session_fields(State),
-            {reply, Flow#'v1_0.flow'{
+            Flow1 = flow_session_fields(State),
+            {reply, Flow1#'v1_0.flow'{
                       handle = Handle,
-                      transfer_count = Count,
-                      available = Available}, State}
+                      transfer_count = {uint, Count},
+                      available = {uint, Available}}, State}
     end.
 
 transfer(WriterPid, LinkHandle,
@@ -887,7 +886,7 @@ transfer_size(_Content, _Unit) ->
     1.
 
 handle_to_ctag({uint, H}) ->
-    <<H:32/integer>>.
+    <<"ctag-", H:32/integer>>.
 
-ctag_to_handle(<<H:32/integer>>) ->
+ctag_to_handle(<<"ctag-", H:32/integer>>) ->
     {uint, H}.
