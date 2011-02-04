@@ -28,7 +28,10 @@
                         no_ack,
                         default_outcome}).
 
--record(incoming_link, {name, exchange, routing_key}).
+-record(incoming_link, {name, exchange, routing_key,
+                        transfer_unit = 0,
+                        transfer_count = 0}).
+
 -record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
 -define(SEND_ROLE, false).
@@ -44,6 +47,9 @@
 
 %% TODO test where the sweetspot for gb_trees is
 -define(MAX_SESSION_BUFFER_SIZE, 4096).
+
+%% Just make this constant for the time being.
+-define(INCOMING_CREDIT, 65536).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -142,8 +148,13 @@ handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
 handle_cast({frame, Frame},
             State = #session{ writer_pid = Sock }) ->
     try handle_control(Frame, State) of
+        {reply, Replies, NewState} when is_list(Replies) ->
+            lists:foreach(fun (Reply) ->
+                                  rabbit_amqp1_0_writer:send_command(Sock, Reply)
+                          end, Replies),
+            noreply(NewState);
         {reply, Reply, NewState} ->
-            ok = rabbit_amqp1_0_writer:send_command(Sock, Reply),
+            rabbit_amqp1_0_writer:send_command(Sock, Reply),
             noreply(NewState);
         {noreply, NewState} ->
             noreply(NewState);
@@ -232,34 +243,39 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = ClientLinkage,
-                              transfer_unit = Unit,
+                              transfer_unit = _Unit,
                               role = ?SEND_ROLE}, %% client is sender
                State = #session{ }) ->
     %% TODO associate link name with target
     #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
     case ensure_target(Target, #incoming_link{ name = Name }, State) of
-        {ok, ServerTarget, IncomingLink, State1} ->
-            put({incoming, Handle}, IncomingLink),
-            {reply,
-             #'v1_0.attach'{
-               name = Name,
-               handle = Handle,
-               remote = ClientLinkage,
-               local = #'v1_0.linkage'{
-                 source = Source,
-                 target = ServerTarget },
-               transfer_unit = Unit,
-               role = ?RECV_ROLE}, %% server is receiver
-             State1};
+        {ok, ServerTarget,
+         IncomingLink = #incoming_link{ transfer_unit = Unit }, State1} ->
+            put({in, Handle}, IncomingLink),
+            %% Also grant credit
+            Flow = flow_session_fields(State1),
+            Flow1 = Flow#'v1_0.flow'{ handle = Handle,
+                                      link_credit = {uint, ?INCOMING_CREDIT},
+                                      drain = false,
+                                      echo = false },
+            Attach = #'v1_0.attach'{
+              name = Name,
+              handle = Handle,
+              remote = ClientLinkage,
+              local = #'v1_0.linkage'{
+                source = Source,
+                target = ServerTarget },
+              transfer_unit = {uint, Unit}, % We count messages, not bytes
+              role = ?RECV_ROLE}, %% server is receiver
+            {reply, [Attach, Flow1], State1};
         {error, Reason, State1} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link estalishment protocol here?
             protocol_error(?V_1_0_INVALID_FIELD,
-                               "Attach rejected: ~p", [Reason])
+                               "Attach rejected: ~p", [Reason]),
+            {noreply, State1}
     end;
 
-%% TODO we don't really implement link-based flow control. Reject connections
-%% that try to use it - except ATM the Python test case asks to use it
 handle_control(#'v1_0.attach'{local = Linkage,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
@@ -267,8 +283,7 @@ handle_control(#'v1_0.attach'{local = Linkage,
     #'v1_0.linkage'{ source  = #'v1_0.source' {
                        default_outcome = DO,
                        outcomes = Os
-                      }
-                   } = Linkage,
+                      }} = Linkage,
     DefaultOutcome = case DO of
                          undefined -> ?DEFAULT_OUTCOME;
                          _         -> DO
@@ -288,12 +303,18 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                                        fragments = Fragments,
                                        transfer_id = TxfrId},
                State = #session{backing_channel = Ch}) ->
-    case get({incoming, Handle}) of
-        #incoming_link{ exchange = X, routing_key = RK } ->
+    case get({in, Handle}) of
+        #incoming_link{ exchange = X, routing_key = RK,
+                        transfer_count = Count,
+                        transfer_unit = Unit } = Link ->
+            TransferSize = transfer_size(Txfr, Unit),
+            NewCount = Count + TransferSize,
             Msg = rabbit_amqp1_0_message:assemble(Fragments),
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = RK }, Msg),
+            put({in, Handle}, Link#incoming_link{ transfer_count = NewCount }),
             %% TODO use publisher acknowledgement, keep incoming unsettled map
+            %% TODO send flow if the credit is running low
             case Settled of
                 true  -> {noreply, State};
                 %% Move LWM, credit etc.
@@ -320,10 +341,10 @@ handle_control(#'v1_0.disposition'{ role = ?RECV_ROLE } = Disp, State) ->
 
 handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
     %% TODO keep the state around depending on the lifetime
-    erase({incoming, Handle}),
+    erase({in, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
-handle_control(#'v1_0.end'{}, State = #session{ writer_pid = Sock }) ->
+handle_control(#'v1_0.end'{}, _State = #session{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
@@ -350,15 +371,20 @@ handle_control(#'v1_0.end'{}, State = #session{ writer_pid = Sock }) ->
 %% total number of unacked messages, whereas 1.0 has an explicit window.
 handle_control(Flow = #'v1_0.flow'{},
                State = #session{ next_incoming_id = LocalNextIn,
-                                 max_outgoing_id = LocalMaxOut,
+                                 max_outgoing_id = _LocalMaxOut,
                                  next_transfer_number = LocalNextOut }) ->
-    #'v1_0.flow'{ next_incoming_id = {uint, RemoteNextIn},
+    #'v1_0.flow'{ next_incoming_id = RemoteNextIn0,
                   incoming_window = {uint, RemoteWindowIn},
                   next_outgoing_id = {uint, RemoteNextOut},
                   outgoing_window = {uint, RemoteWindowOut}} = Flow,
     %% Check the things that we know for sure
     %% TODO sequence number comparisons
     RemoteNextOut = LocalNextIn,
+    %% The far side may not have our begin{} with our next-transfer-id
+    RemoteNextIn = case RemoteNextIn0 of
+                       {uint, Id} -> Id;
+                       undefined  -> LocalNextOut
+                   end,
     true = (RemoteNextIn =< LocalNextOut),
     %% Adjust our window
     RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
@@ -377,9 +403,10 @@ handle_control(Flow = #'v1_0.flow'{},
                         Out = #outgoing_link{} ->
                             outgoing_flow(Out, Flow, State1)
                     end;
-                In = #incoming_link{} ->
+                _In = #incoming_link{} ->
                     %% We're being told about available messages at
                     %% the sender.  Yawn.
+                    %% TODO at least check transfer-count?
                     {noreply, State1}
             end
     end;
@@ -451,6 +478,15 @@ attach_outgoing(DefaultOutcome, Outcomes,
             {reply, #'v1_0.attach'{local = undefined}, State1}
     end.
 
+flow_session_fields(State = #session{ next_transfer_number = NextOut,
+                                      next_incoming_id = NextIn,
+                                      window_size = Window,
+                                      outgoing_unsettled_map = Unsettled }) ->
+    #'v1_0.flow'{ next_outgoing_id = {uint, NextOut},
+                  outgoing_window = {uint, Window - gb_trees:size(Unsettled)},
+                  next_incoming_id = {uint, NextIn},
+                  incoming_window = {uint, Window}}.
+
 outgoing_flow(#outgoing_link{},
               Flow = #'v1_0.flow'{
                 handle = Handle,
@@ -468,12 +504,14 @@ outgoing_flow(#outgoing_link{},
         -1 ->
             {noreply, State};
         %% We don't know - probably because this flow relates
-        %% to a handle that does not yet exist TODO is this an error?
+        %% to a handle that does not yet exist
+        %% TODO is this an error?
         _  ->
-            F = #'v1_0.flow'{
-              handle = Handle,
-              available = Available},
-            {reply, F, State}
+            Flow = flow_session_fields(State),
+            {reply, Flow#'v1_0.flow'{
+                      handle = Handle,
+                      transfer_count = Count,
+                      available = Available}, State}
     end.
 
 transfer(WriterPid, LinkHandle,
