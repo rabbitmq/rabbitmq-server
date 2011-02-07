@@ -46,7 +46,12 @@ route(#exchange{name = X},
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
-recover(_X, _Bs) -> ok.
+
+recover(_Exchange, Bs) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun () ->
+                lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
+        end).
 
 delete(true, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
@@ -55,10 +60,8 @@ delete(true, #exchange{name = X}, _Bs) ->
 delete(false, _Exchange, _Bs) ->
     ok.
 
-add_binding(true, _Exchange, #binding{source = X, key = K, destination = D}) ->
-    FinalNode = follow_down_create(X, split_topic_key(K)),
-    trie_add_binding(X, FinalNode, D),
-    ok;
+add_binding(true, _Exchange, Binding) ->
+    internal_add_binding(Binding);
 add_binding(false, _Exchange, _Binding) ->
     ok.
 
@@ -78,6 +81,11 @@ assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
 
 %%----------------------------------------------------------------------------
+
+internal_add_binding(#binding{source = X, key = K, destination = D}) ->
+    FinalNode = follow_down_create(X, split_topic_key(K)),
+    trie_add_binding(X, FinalNode, D),
+    ok.
 
 trie_match(X, Words) ->
     trie_match(X, root, Words, []).
