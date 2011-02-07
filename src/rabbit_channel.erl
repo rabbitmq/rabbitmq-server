@@ -109,7 +109,9 @@ flush(Pid) ->
     gen_server2:call(Pid, flush).
 
 shutdown(Pid) ->
-    gen_server2:call(Pid, terminate, infinity).
+    rabbit_misc:with_exit_handler(
+      fun () -> ok end,
+      fun () -> gen_server2:call(Pid, terminate, infinity) end).
 
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
