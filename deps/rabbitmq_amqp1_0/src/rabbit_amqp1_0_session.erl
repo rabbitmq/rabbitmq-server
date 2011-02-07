@@ -258,7 +258,7 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
                       #'basic.qos'{prefetch_count = SessionBufferSize}),
     {reply, #'v1_0.begin'{
        remote_channel = {ushort, Channel},
-       next_outgoing_id = {ulong, LocalNextOut},
+       next_outgoing_id = {uint, LocalNextOut},
        window_size = {uint, SessionBufferSize}},
      State#session{
        next_incoming_id = RemoteNextIn,
