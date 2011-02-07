@@ -259,7 +259,8 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
                         Node =
                             case proplists:get_value(<<"node">>, Props) of
                                 undefined -> node();
-                                N         -> list_to_atom(binary_to_list(N))
+                                N         -> rabbit_misc:makenode(
+                                               binary_to_list(N))
                             end,
                         amqp_request(VHost, ReqData, Context, Node,
                                      props_to_method(
