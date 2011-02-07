@@ -75,11 +75,11 @@ handle_cast(_Msg, State) ->
 
 handle_info({nodedown, Node}, State) ->
     rabbit_log:info("node ~p down~n", [Node]),
-    ok = handle_dead_rabbit(Node, true),
+    ok = handle_dead_rabbit(Node),
      {noreply, State};
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
     rabbit_log:info("node ~p lost 'rabbit'~n", [Node]),
-    ok = handle_dead_rabbit(Node, false),
+    ok = handle_dead_rabbit(Node),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -95,8 +95,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% TODO: This may turn out to be a performance hog when there are
 %% lots of nodes.  We really only need to execute this code on
 %% *one* node, rather than all of them.
-handle_dead_rabbit(Node, true = _TakeDownNetworking) ->
+handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
-    handle_dead_rabbit(Node, false);
-handle_dead_rabbit(Node, false) ->
     ok = rabbit_amqqueue:on_node_down(Node).
