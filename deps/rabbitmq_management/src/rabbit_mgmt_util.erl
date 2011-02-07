@@ -330,8 +330,7 @@ amqp_request(VHost, ReqData,
           when ServerClose =:= server_initiated_close;
                ServerClose =:= server_initiated_hard_close ->
             bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
-                        ReqData, Context);
-        E:R -> io:format("~p~n", [{E,R}])
+                        ReqData, Context)
     end.
 
 all_or_one_vhost(ReqData, Fun) ->
