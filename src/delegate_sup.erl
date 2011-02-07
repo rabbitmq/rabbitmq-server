@@ -48,7 +48,8 @@ count([Node | Nodes]) ->
         length(supervisor:which_children({?SERVER, Node}))
     catch exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
             count(Nodes);
-          exit:{R, _}      when R =:= noproc; R =:= normal; R =:= shutdown ->
+          exit:{R, _}      when R =:= noproc; R =:= normal; R =:= shutdown;
+                                R =:= nodedown ->
             count(Nodes)
     end.
 
