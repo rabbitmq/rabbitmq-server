@@ -319,7 +319,12 @@ amqp_request(VHost, ReqData,
                 amqp_connection:close(Conn),
                 {true, ReqData, Context};
             {error, auth_failure} ->
-                not_authorised(<<"">>, ReqData, Context)
+                not_authorised(<<"">>, ReqData, Context);
+            {error, {nodedown, N}} ->
+                bad_request(
+                  list_to_binary(
+                    io_lib:format("Node ~s could not be contacted", [N])),
+                 ReqData, Context)
         end
     catch
         exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
