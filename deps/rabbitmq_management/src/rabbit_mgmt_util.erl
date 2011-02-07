@@ -256,10 +256,14 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
             case decode(wrq:req_body(ReqData)) of
                 {ok, Props} ->
                     try
-                        rabbit_mgmt_util:amqp_request(
-                          VHost, ReqData, Context,
-                          props_to_method(
-                            MethodName, Props, Transformers, Extra))
+                        Node =
+                            case proplists:get_value(<<"node">>, Props) of
+                                undefined -> node();
+                                N         -> list_to_atom(binary_to_list(N))
+                            end,
+                        amqp_request(VHost, ReqData, Context, Node,
+                                     props_to_method(
+                                       MethodName, Props, Transformers, Extra))
                     catch {error, Error} ->
                             bad_request(Error, ReqData, Context)
                     end;
@@ -295,12 +299,16 @@ parse_bool(true)        -> true;
 parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
+amqp_request(VHost, ReqData, Context, Method) ->
+    amqp_request(VHost, ReqData, Context, node(), Method).
+
 amqp_request(VHost, ReqData,
              Context = #context{ user = #user { username = Username },
-                                 password = Password }, Method) ->
+                                 password = Password }, Node, Method) ->
     try
-        Params = #amqp_params{username = Username,
-                              password = Password,
+        Params = #amqp_params{username     = Username,
+                              password     = Password,
+                              node         = Node,
                               virtual_host = VHost},
         case amqp_connection:start(direct, Params) of
             {ok, Conn} ->

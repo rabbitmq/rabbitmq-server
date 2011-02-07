@@ -143,7 +143,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
+    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts', 'nodes': '/nodes'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': path,
