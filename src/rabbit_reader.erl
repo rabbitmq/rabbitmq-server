@@ -357,10 +357,9 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                     throw({handshake_timeout, State#v1.callback})
             end;
         timeout ->
-            ConnectionState = State#v1.connection_state,
-            case ConnectionState of
+            case State#v1.connection_state of
                 closed -> mainloop(Deb, State);
-                _      -> throw({timeout, ConnectionState})
+                S      -> throw({timeout, S})
             end;
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
