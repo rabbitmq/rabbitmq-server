@@ -421,7 +421,7 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                        infinity).
 
 notify_sent(QPid, ChPid) ->
-    delegate_cast(QPid, {notify_sent, ChPid}).
+    gen_server2:cast(QPid, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
     delegate_cast(QPid, {unblock, ChPid}).
