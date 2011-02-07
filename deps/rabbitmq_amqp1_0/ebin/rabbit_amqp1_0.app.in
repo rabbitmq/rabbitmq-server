@@ -12,5 +12,11 @@
   ]},
   {registered, []},
   {mod, {rabbit_amqp1_0, []}},
-  {env, [{tcp_listeners, [5673]}]},
+  {env, [{tcp_listeners, [5673]},
+         {tcp_listen_options, [binary,
+                               {packet,        raw},
+                               {reuseaddr,     true},
+                               {backlog,       128},
+                               {nodelay,       true},
+                               {exit_on_close, false}]}]},
   {applications, [kernel, stdlib, rabbit]}]}.
