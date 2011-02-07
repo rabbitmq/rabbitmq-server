@@ -1079,7 +1079,7 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
                             timer_ref      = TRef }) ->
     Now = now(),
     {CStates, Sum, ClientCount} =
-        dict:fold(fun (Pid, Eldest, {CStatesAcc, SumAcc, CountAcc} = Accs) ->
+        dict:fold(fun (Pid, Eldest, {CStatesAcc, SumAcc, CountAcc} = A<ccs) ->
                           [#cstate { pending_closes = PendingCloses,
                                      opened         = Opened,
                                      blocked        = Blocked } = CState] =

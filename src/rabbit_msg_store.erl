@@ -24,11 +24,11 @@
          write/3, read/2, contains/2, remove/2, release/2, sync/3]).
 
 -export([set_maximum_since_use/2, has_readers/2, combine_files/3,
-	 delete_file/2]). %% internal
+         delete_file/2]). %% internal
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-	 code_change/3, prioritise_call/3, prioritise_cast/2,
-	 prioritise_info/2]).
+         code_change/3, prioritise_call/3, prioritise_cast/2,
+         prioritise_info/2]).
 
 %%----------------------------------------------------------------------------
 
