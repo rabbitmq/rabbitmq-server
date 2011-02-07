@@ -925,10 +925,14 @@ socket_info(Get, Select) ->
     end.
 
 ssl_info(F, Sock) ->
+    %% The first ok form is R14
+    %% The second is R13 - the extra term is exportability (by inspection,
+    %% the docs are wrong)
     case rabbit_net:ssl_info(Sock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Info}  -> F(Info)
+        nossl                   -> '';
+        {error, _}              -> '';
+        {ok, {P, {K, C, H}}}    -> F({P, {K, C, H}});
+        {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
     end.
 
 cert_info(F, Sock) ->
