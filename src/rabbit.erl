@@ -230,7 +230,7 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, SupPid} = rabbit_sup:start_link(),
-            register(rabbit, self()),
+            true = register(rabbit, self()),
 
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
