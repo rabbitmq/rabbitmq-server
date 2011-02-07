@@ -549,18 +549,13 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(DecodedContent#content.properties, State),
-    IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1} =
         case ConfirmEnabled of
             false -> {undefined, State};
             true  -> SeqNo = State#ch.publish_seqno,
                      {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
-    Message = #basic_message{exchange_name = ExchangeName,
-                             routing_key   = RoutingKey,
-                             content       = DecodedContent,
-                             guid          = rabbit_guid:guid(),
-                             is_persistent = IsPersistent},
+    Message = rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent),
     {RoutingRes, DeliveredQPids} =
         rabbit_exchange:publish(
           Exchange,
@@ -1226,17 +1221,6 @@ notify_limiter(LimiterPid, Acked) ->
                                 end, 0, Acked) of
         0     -> ok;
         Count -> rabbit_limiter:ack(LimiterPid, Count)
-    end.
-
-is_message_persistent(Content) ->
-    case rabbit_basic:is_message_persistent(Content) of
-        {invalid, Other} ->
-            rabbit_log:warning("Unknown delivery mode ~p - "
-                               "treating as 1, non-persistent~n",
-                               [Other]),
-            false;
-        IsPersistent when is_boolean(IsPersistent) ->
-            IsPersistent
     end.
 
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->

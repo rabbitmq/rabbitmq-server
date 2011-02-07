@@ -44,11 +44,12 @@ description() ->
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
 route(#exchange{name = Name},
-        #delivery{message = #basic_message{routing_key = RoutingKey}}) ->
-    rabbit_router:match_bindings(Name,
-                                 fun (#binding{key = BindingKey}) ->
-                                         topic_matches(BindingKey, RoutingKey)
-                                 end).
+        #delivery{message = #basic_message{route_list = Routes}}) ->
+   lists:flatten([rabbit_router:match_bindings(
+                      Name,
+                      fun (#binding{key = BindingKey}) ->
+                              topic_matches(BindingKey, RKey)
+                      end) || RKey <- Routes]).
 
 split_topic_key(Key) ->
     string:tokens(binary_to_list(Key), ".").
