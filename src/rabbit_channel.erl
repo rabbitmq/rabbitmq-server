@@ -109,7 +109,7 @@ flush(Pid) ->
     gen_server2:call(Pid, flush).
 
 shutdown(Pid) ->
-    gen_server2:cast(Pid, terminate).
+    gen_server2:call(Pid, terminate, infinity).
 
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
@@ -207,6 +207,11 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
+handle_call(terminate, _From, State) ->
+    {ok, State1} = maybe_rollback_and_notify(State),
+    %% ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+    {stop, normal, ok, State1};
+
 handle_call(_Request, _From, State) ->
     noreply(State).
 
@@ -216,14 +221,12 @@ handle_cast({method, Method, Content}, State) ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
             noreply(NewState);
         {noreply, NewState} ->
-            noreply(NewState);
-        stop ->
-            {stop, normal, State#ch{state = terminating}}
+            noreply(NewState)
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            {stop, normal, terminating(Reason#amqp_error{method = MethodName},
-                                       State)};
+            {stop, normal, rollback_and_notify_channel(
+                             Reason#amqp_error{method = MethodName}, State)};
         exit:normal ->
             {stop, normal, State};
         _:Reason ->
@@ -232,9 +235,6 @@ handle_cast({method, Method, Content}, State) ->
 
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State), hibernate};
-
-handle_cast(terminate, State) ->
-    {stop, normal, State};
 
 handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Msg),
@@ -302,18 +302,16 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
-terminate(_Reason, State = #ch{state = terminating}) ->
-    terminate(State);
-
 terminate(Reason, State) ->
-    Res = rollback_and_notify(State),
+    {Res, _State1} = maybe_rollback_and_notify(State),
     case Reason of
         normal            -> ok = Res;
         shutdown          -> ok = Res;
         {shutdown, _Term} -> ok = Res;
         _                 -> ok
     end,
-    terminate(State).
+    pg_local:leave(rabbit_channels, self()),
+    rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -351,10 +349,11 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
-    ok = rollback_and_notify(State),
+rollback_and_notify_channel(Reason, State = #ch{channel    = Channel,
+                                                reader_pid = Reader}) ->
+    {ok, State1} = maybe_rollback_and_notify(State),
     Reader ! {channel_exit, Channel, Reason},
-    State#ch{state = terminating}.
+    State1.
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
@@ -525,11 +524,6 @@ handle_method(#'channel.open'{}, _, _State) ->
 
 handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
-
-handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
-    ok = rollback_and_notify(State),
-    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
-    stop;
 
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
@@ -1170,6 +1164,11 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
     NewUAMQ = queue:join(UAQ, UAMQ),
     new_tx(State#ch{unacked_message_q = NewUAMQ}).
 
+maybe_rollback_and_notify(State = #ch{state = unrolled}) ->
+    {ok, State};
+maybe_rollback_and_notify(State) ->
+    {rollback_and_notify(State), State#ch{state = unrolled}}.
+
 rollback_and_notify(State = #ch{transaction_id = none}) ->
     notify_queues(State);
 rollback_and_notify(State) ->
@@ -1304,10 +1303,6 @@ coalesce_and_send(MsgSeqNos, MkMsgFun,
     [ok = rabbit_writer:send_command(
             WriterPid, MkMsgFun(SeqNo, false)) || SeqNo <- Ss],
     State.
-
-terminate(_State) ->
-    pg_local:leave(rabbit_channels, self()),
-    rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
