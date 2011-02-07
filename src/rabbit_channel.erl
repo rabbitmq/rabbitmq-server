@@ -225,7 +225,7 @@ handle_cast({method, Method, Content}, State) ->
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            {stop, normal, rollback_and_notify_channel(
+            {stop, normal, rollback_and_notify_queues(
                              Reason#amqp_error{method = MethodName}, State)};
         exit:normal ->
             {stop, normal, State};
@@ -349,8 +349,8 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-rollback_and_notify_channel(Reason, State = #ch{channel    = Channel,
-                                                reader_pid = Reader}) ->
+rollback_and_notify_queues(Reason, State = #ch{channel    = Channel,
+                                               reader_pid = Reader}) ->
     {ok, State1} = maybe_rollback_and_notify(State),
     Reader ! {channel_exit, Channel, Reason},
     State1.
