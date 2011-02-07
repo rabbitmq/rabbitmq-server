@@ -336,6 +336,8 @@ get_node_tcp_listener() ->
             case application:get_env(rabbit, tcp_listeners) of
                 {ok, [{_IpAddy, _Port} = Listener]} ->
                     Listener;
+                {ok, [Port]} when is_number(Port) ->
+                    {"0.0.0.0", Port};
                 {ok, []} ->
                     undefined;
                 {ok, Other} ->

@@ -40,7 +40,7 @@ start_link() ->
 %%----------------------------------------------------------------------------
 
 init(_Args) ->
-    DCount = delegate:delegate_count(),
+    DCount = delegate:delegate_count([node()]),
     {ok, {{one_for_one, 10, 10},
           [{Num, {delegate, start_link, [Num]},
             transient, 16#ffffffff, worker, [delegate]} ||

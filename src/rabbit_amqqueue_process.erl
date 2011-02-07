@@ -617,6 +617,10 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
+backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
+    maybe_run_queue_via_backing_queue(
+      fun (BQS) -> {[], BQ:idle_timeout(BQS)} end, State).
+
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
     {Guids, BQS1} = Fun(BQS),
     run_message_queue(
@@ -996,10 +1000,8 @@ handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
 handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
     noreply(maybe_run_queue_via_backing_queue(Fun, State));
 
-handle_cast(sync_timeout, State = #q{backing_queue = BQ,
-                                     backing_queue_state = BQS}) ->
-    noreply(State#q{backing_queue_state = BQ:idle_timeout(BQS),
-                    sync_timer_ref = undefined});
+handle_cast(sync_timeout, State) ->
+    noreply(backing_queue_idle_timeout(State#q{sync_timer_ref = undefined}));
 
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -1133,9 +1135,8 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {stop, NewState} -> {stop, normal, NewState}
     end;
 
-handle_info(timeout, State = #q{backing_queue = BQ}) ->
-    noreply(maybe_run_queue_via_backing_queue(
-              fun (BQS) -> {[], BQ:idle_timeout(BQS)} end, State));
+handle_info(timeout, State) ->
+    noreply(backing_queue_idle_timeout(State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -1149,15 +1150,15 @@ handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS,
                                 stats_timer = StatsTimer}) ->
-    BQS1 = BQ:handle_pre_hibernate(BQS),
-    %% no activity for a while == 0 egress and ingress rates
+    {RamDuration, BQS1} = BQ:ram_duration(BQS),
     DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), infinity),
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    BQS3 = BQ:handle_pre_hibernate(BQS2),
     rabbit_event:if_enabled(StatsTimer,
                             fun () ->
                                     emit_stats(State, [{idle_since, now()}])
                             end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
-                     backing_queue_state = BQS2},
+                     backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.
