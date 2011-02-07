@@ -3,6 +3,7 @@
 !include LogicLib.nsh
 !include WinMessages.nsh
 !include FileFunc.nsh
+!include WordFunc.nsh
 !include lib\EnvVarUpdate.nsh
 
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
@@ -214,6 +215,18 @@ Function findErlang
     abort:
     Abort
   ${Else}
+    ${VersionCompare} $2 "5.6.3" $0
+    ${VersionCompare} $2 "5.8.1" $1
+
+    ${If} $0 = 2
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Your installed version of Erlang ($2) is too old. Please install a more recent version."
+      Abort
+    ${ElseIf} $1 = 2
+      MessageBox MB_YESNO|MB_ICONEXCLAMATION "Your installed version of Erlang ($2) is comparatively old.$\nFor best results, please install a newer version.$\nDo you wish to continue?" IDYES no_abort
+      Abort
+      no_abort:
+    ${EndIf}
+
     ReadRegStr $0 HKLM "Software\Ericsson\Erlang\$2" ""
 
     ; See http://nsis.sourceforge.net/Setting_Environment_Variables
