@@ -34,15 +34,26 @@ generate(false) -> <<?FIXED_0:4,2:4>>;
 %% bits set to zero and values < 256.
 generate({ubyte, Value}) -> <<?FIXED_1:4,0:4,Value:8/unsigned>>;
 generate({ushort, Value}) -> <<?FIXED_2:4,0:4,Value:16/unsigned>>;
-generate({uint, Value}) -> <<?FIXED_4:4,0:4,Value:32/unsigned>>;
+generate({uint, Value}) ->
+    if Value < 256 -> <<?FIXED_1:4,2:4,Value:8/unsigned>>;
+       true        -> <<?FIXED_4:4,0:4,Value:32/unsigned>>
+    end;
 generate({ulong, Value}) ->
     if Value < 256 -> <<?FIXED_1:4,3:4,Value:8/unsigned>>;
        true        -> <<?FIXED_8:4,0:4,Value:64/unsigned>>
     end;
 generate({byte, Value}) -> <<?FIXED_1:4,1:4,Value:8/signed>>;
 generate({short, Value}) -> <<?FIXED_2:4,1:4,Value:16/signed>>;
-generate({int, Value}) -> <<?FIXED_4:4,1:4,Value:32/signed>>;
-generate({long, Value}) -> <<?FIXED_8:4,1:4,Value:64/signed>>;
+generate({int, Value}) ->
+    if Value < 128 andalso
+       Value > -129 -> <<?FIXED_1:4,4:4,Value:8/signed>>;
+       true         -> <<?FIXED_4:4,1:4,Value:32/signed>>
+    end;
+generate({long, Value}) ->
+    if Value < 128 andalso
+       Value > -129 -> <<?FIXED_1:4,5:4,Value:8/signed>>;
+       true         -> <<?FIXED_8:4,1:4,Value:64/signed>>
+    end;
 
 generate({float, Value}) -> <<?FIXED_4:4,2:4,Value:32/float>>;
 generate({double, Value}) -> <<?FIXED_8:4,2:4,Value:64/float>>;

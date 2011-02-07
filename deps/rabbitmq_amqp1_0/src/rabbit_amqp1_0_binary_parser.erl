@@ -39,18 +39,24 @@ parse_primitive(?FIXED_1, 0, <<Value:8/unsigned,Rest/binary>>) ->
     {{ubyte, Value}, Rest};
 parse_primitive(?FIXED_2, 0, <<Value:16/unsigned,Rest/binary>>) ->
     {{ushort, Value}, Rest};
+parse_primitive(?FIXED_1, 2, <<Value:8/unsigned,Rest/binary>>) ->
+    {{uint, Value}, Rest};
 parse_primitive(?FIXED_4, 0, <<Value:32/unsigned,Rest/binary>>) ->
     {{uint, Value}, Rest};
-parse_primitive(?FIXED_8, 0, <<Value:64/unsigned,Rest/binary>>) ->
-    {{ulong, Value}, Rest};
 parse_primitive(?FIXED_1, 3, <<Value:8/unsigned,Rest/binary>>) ->
+    {{ulong, Value}, Rest};
+parse_primitive(?FIXED_8, 0, <<Value:64/unsigned,Rest/binary>>) ->
     {{ulong, Value}, Rest};
 parse_primitive(?FIXED_1, 1, <<Value:8/signed,Rest/binary>>) ->
     {{byte, Value}, Rest};
 parse_primitive(?FIXED_2, 1, <<Value:16/signed,Rest/binary>>) ->
     {{short, Value}, Rest};
+parse_primitive(?FIXED_1, 4, <<Value:8/signed,Rest/binary>>) ->
+    {{int, Value}, Rest};
 parse_primitive(?FIXED_4, 1, <<Value:32/signed,Rest/binary>>) ->
     {{int, Value}, Rest};
+parse_primitive(?FIXED_1, 5, <<Value:8/signed,Rest/binary>>) ->
+    {{long, Value}, Rest};
 parse_primitive(?FIXED_8, 1, <<Value:64/signed,Rest/binary>>) ->
     {{long, Value}, Rest};
 
