@@ -96,7 +96,7 @@ run_cluster_dependent_tests(SecondaryNode) ->
     receive
         {Remote, Result} ->
             Result = [passed, passed, passed]
-    after 2000 ->
+    after 30000 ->
             throw(timeout)
     end,
 
