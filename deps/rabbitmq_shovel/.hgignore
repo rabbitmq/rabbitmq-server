@@ -1,10 +1,5 @@
 ~$
 \.beam$
+^build/
 ^dist/
-^deps/
-^deps.mk$
-^toke$
-^priv$
 ^cover/
-^ebin/rabbit_shovel.app$
-^rabbit-test-output$
