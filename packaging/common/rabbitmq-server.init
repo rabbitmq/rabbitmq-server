@@ -99,7 +99,7 @@ rotate_logs_rabbitmq() {
 }
 
 restart_rabbitmq() {
-    stop_rabbitmq	    
+    stop_rabbitmq
     start_rabbitmq
 }
 
