@@ -27,7 +27,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0]).
 
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
@@ -101,7 +101,7 @@
 
 -rabbit_boot_step({delegate_sup,
                    [{description, "cluster delegate"},
-                    {mfa,         {delegate_sup, boot, []}},
+                    {mfa,         {rabbit, boot_delegate, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
@@ -177,6 +177,9 @@
                {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(boot_delegate/0 :: () -> 'ok').
 
 -endif.
 
@@ -446,6 +449,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                                   end
                      end
     end.
+
+boot_delegate() ->
+    {ok, Count} = application:get_env(rabbit, delegate_count),
+    rabbit_sup:start_child(delegate_sup, [Count]).
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of

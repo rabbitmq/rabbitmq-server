@@ -19,7 +19,6 @@
 -behaviour(supervisor).
 
 -export([start_link/1, count/1]).
--export([boot/0]).
 
 -export([init/1]).
 
@@ -31,8 +30,6 @@
 
 -spec(start_link/1 :: (integer()) -> {'ok', pid()} | {'error', any()}).
 -spec(count/1 :: ([node()]) -> integer()).
-
--spec(boot/0 :: () -> 'ok').
 
 -endif.
 
@@ -52,10 +49,6 @@ count([Node | Nodes]) ->
                                 R =:= nodedown ->
             count(Nodes)
     end.
-
-boot() ->
-    {ok, Count} = application:get_env(rabbit, delegate_count),
-    rabbit_sup:start_child(delegate_sup, [Count]).
 
 %%----------------------------------------------------------------------------
 
