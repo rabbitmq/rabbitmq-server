@@ -224,7 +224,7 @@ stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
     TRef = erlang:send_after(
-	     ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
+             ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
     State#q{rate_timer_ref = TRef};
 ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
@@ -236,13 +236,13 @@ stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
 stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
+    _ = erlang:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
+    _ = erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry
@@ -261,9 +261,9 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
     end.
 
 ensure_stats_timer(State = #q { stats_timer = StatsTimer,
-				q = #amqqueue { pid = QPid }}) ->
+                                q = #amqqueue { pid = QPid }}) ->
     State #q { stats_timer = rabbit_event:ensure_stats_timer(
-			       StatsTimer, QPid, emit_stats) }.
+                               StatsTimer, QPid, emit_stats) }.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
