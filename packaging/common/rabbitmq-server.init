@@ -48,8 +48,8 @@ start_rabbitmq () {
                 ;;
             *)
                 echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
-                    RETVAL=1
-                    ;;
+                RETVAL=1
+                ;;
         esac
         set -e
     else
