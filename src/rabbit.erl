@@ -153,6 +153,11 @@
                    [{mfa,         {rabbit_networking, boot, []}},
                     {requires,    log_relay}]}).
 
+-rabbit_boot_step({notify_cluster,
+                   [{description, "notify cluster nodes"},
+                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {requires,    networking}]}).
+
 %%---------------------------------------------------------------------------
 
 -include("rabbit_framing.hrl").
@@ -225,11 +230,11 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, SupPid} = rabbit_sup:start_link(),
+            true = register(rabbit, self()),
 
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
-
             {ok, SupPid};
         Error ->
             Error

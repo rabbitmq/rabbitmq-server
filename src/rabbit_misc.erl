@@ -352,8 +352,11 @@ throw_on_error(E, Thunk) ->
 with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
-    catch exit:{R, _} when R =:= noproc; R =:= nodedown;
-                           R =:= normal; R =:= shutdown ->
+    catch
+        exit:{R, _} when R =:= noproc; R =:= nodedown;
+                         R =:= normal; R =:= shutdown ->
+            Handler();
+        exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
             Handler()
     end.
 
