@@ -41,12 +41,6 @@
 %% non-durable queues.)
 %% ----------------------------------------------------------------------------
 
-%% BUG: The rabbit_backing_queue_spec behaviour needs improvement. For
-%% example, rabbit_amqqueue_process knows too much about the state of
-%% a backing queue, even though this state may now change without its
-%% knowledge. Additionally, there are points in the protocol where
-%% failures can lose msgs.
-
 %% TODO: Need to provide better back-pressure when queue is filling up.
 
 %% BUG: p_records do not need a separate seq_id.
@@ -191,8 +185,8 @@ delete_and_terminate(S) ->
     Result.
 
 %%----------------------------------------------------------------------------
-%% purge/1 deletes all of queue's enqueued msgs, generating pending
-%% acks as required, and returning the count of msgs purged.
+%% purge/1 deletes all of queue's enqueued msgs, returning the count
+%% of msgs purged.
 %%
 %% This function should be called only from outside this module.
 %%
@@ -201,7 +195,7 @@ delete_and_terminate(S) ->
 purge(S = #s { q = Q }) ->
     rabbit_log:info("purge(~n ~p) ->", [S]),
     LQ = queue:len(Q),
-    S1 = internal_purge(S),
+    S1 = S #s { q = queue:new() },
     Result = {LQ, S1},
     rabbit_log:info("purge ->~n ~p", [Result]),
     Result.
@@ -485,16 +479,6 @@ status(S = #s { q = Q, p = P, next_seq_id = NextSeqId }) ->
 %%----------------------------------------------------------------------------
 %% Helper functions.
 %% ----------------------------------------------------------------------------
-
-%% internal_purge/1 purges all messages, generating pending acks as
-%% necessary.
-
--spec internal_purge(state()) -> s().
-
-internal_purge(S) -> case internal_fetch(true, S) of
-                         {empty, _} -> S;
-                         {_, S1} -> internal_purge(S1)
-                     end.
 
 %% internal_fetch/2 fetches the next msg, if any, generating a pending
 %% ack as necessary.

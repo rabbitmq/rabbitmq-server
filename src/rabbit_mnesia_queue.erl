@@ -210,8 +210,7 @@ stop() -> ok.
 %% Mnesia transaction!
 
 init(QueueName, IsDurable, Recover) ->
-    rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->",
-                    [QueueName, IsDurable, Recover]),
+    % rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
     {QTable, PTable, NTable} = tables(QueueName),
     case Recover of
         false -> _ = mnesia:delete_table(QTable),
@@ -243,7 +242,7 @@ init(QueueName, IsDurable, Recover) ->
                   save(RS),
                   RS
           end),
-    rabbit_log:info("init ->~n ~p", [Result]),
+    % rabbit_log:info("init ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -256,11 +255,11 @@ init(QueueName, IsDurable, Recover) ->
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S = #s { q_table = QTable, p_table = PTable, n_table = NTable }) ->
-    rabbit_log:info("terminate(~n ~p) ->", [S]),
+    % rabbit_log:info("terminate(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> clear_table(PTable), S end),
     mnesia:dump_tables([QTable, PTable, NTable]),
-    rabbit_log:info("terminate ->~n ~p", [Result]),
+    % rabbit_log:info("terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -275,14 +274,14 @@ terminate(S = #s { q_table = QTable, p_table = PTable, n_table = NTable }) ->
 delete_and_terminate(S = #s { q_table = QTable,
                               p_table = PTable,
                               n_table = NTable }) ->
-    rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
+    % rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> clear_table(QTable),
                                      clear_table(PTable),
                                      S
                            end),
     mnesia:dump_tables([QTable, PTable, NTable]),
-    rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
+    % rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -295,13 +294,13 @@ delete_and_terminate(S = #s { q_table = QTable,
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
 purge(S = #s { q_table = QTable }) ->
-    rabbit_log:info("purge(~n ~p) ->", [S]),
+    % rabbit_log:info("purge(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> LQ = length(mnesia:all_keys(QTable)),
                                      internal_purge(S),
                                      {LQ, S}
                            end),
-    rabbit_log:info("purge ->~n ~p", [Result]),
+    % rabbit_log:info("purge ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -317,13 +316,13 @@ purge(S = #s { q_table = QTable }) ->
 %%         -> state()).
 
 publish(Msg, Props, S) ->
-    rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    % rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> RS = publish_state(Msg, Props, false, S),
                                      save(RS),
                                      RS
                            end),
-    rabbit_log:info("publish ->~n ~p", [Result]),
+    % rabbit_log:info("publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -342,16 +341,15 @@ publish(Msg, Props, S) ->
 %%                              -> {undefined, state()}).
 
 publish_delivered(false, _, _, S) ->
-    rabbit_log:info("publish_delivered(false, _, _,~n ~p) ->", [S]),
+    % rabbit_log:info("publish_delivered(false, _, _,~n ~p) ->", [S]),
     Result = {undefined, S},
-    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
+    % rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result;
 publish_delivered(true,
                   Msg,
                   Props,
                   S = #s { next_seq_id = SeqId, next_out_id = OutId }) ->
-    rabbit_log:info(
-      "publish_delivered(true,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    % rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
@@ -361,7 +359,7 @@ publish_delivered(true,
                   save(RS),
                   {SeqId, RS}
           end),
-    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
+    % rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -379,13 +377,13 @@ publish_delivered(true,
 %%         -> state()).
 
 dropwhile(Pred, S) ->
-    rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
+    % rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
     {atomic, {_, Result}} =
         mnesia:transaction(fun () -> {Atom, RS} = internal_dropwhile(Pred, S),
                                      save(RS),
                                      {Atom, RS}
                            end),
-    rabbit_log:info("dropwhile ->~n ~p", [Result]),
+    % rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -398,11 +396,11 @@ dropwhile(Pred, S) ->
 %%                  (false, state()) -> {fetch_result(undefined), state()}).
 
 fetch(AckRequired, S) ->
-    rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
+    % rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
     {atomic, FR} =
         mnesia:transaction(fun () -> internal_fetch(AckRequired, S) end),
     Result = {FR, S},
-    rabbit_log:info("fetch ->~n ~p", [Result]),
+    % rabbit_log:info("fetch ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -415,13 +413,13 @@ fetch(AckRequired, S) ->
 %% -spec(ack/2 :: ([ack()], state()) -> state()).
 
 ack(SeqIds, S) ->
-    rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
+    % rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> {_, RS} = internal_ack(SeqIds, S),
                                      save(RS),
                                      RS
                            end),
-    rabbit_log:info("ack ->~n ~p", [Result]),
+    % rabbit_log:info("ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -440,8 +438,7 @@ ack(SeqIds, S) ->
 %%         -> state()).
 
 tx_publish(Txn, Msg, Props, S) ->
-    rabbit_log:info(
-      "tx_publish(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, Msg, Props, S]),
+    % rabbit_log:info("tx_publish(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, Msg, Props, S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () -> Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, S),
@@ -451,7 +448,7 @@ tx_publish(Txn, Msg, Props, S) ->
                     save(RS),
                     RS
           end),
-    rabbit_log:info("tx_publish ->~n ~p", [Result]),
+    % rabbit_log:info("tx_publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -464,7 +461,7 @@ tx_publish(Txn, Msg, Props, S) ->
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
 tx_ack(Txn, SeqIds, S) ->
-    rabbit_log:info("tx_ack(~n ~p,~n ~p,~n ~p) ->", [Txn, SeqIds, S]),
+    % rabbit_log:info("tx_ack(~n ~p,~n ~p,~n ~p) ->", [Txn, SeqIds, S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () -> Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S),
@@ -475,7 +472,7 @@ tx_ack(Txn, SeqIds, S) ->
                     save(RS),
                     RS
           end),
-    rabbit_log:info("tx_ack ->~n ~p", [Result]),
+    % rabbit_log:info("tx_ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -487,7 +484,7 @@ tx_ack(Txn, SeqIds, S) ->
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
 tx_rollback(Txn, S) ->
-    rabbit_log:info("tx_rollback(~n ~p,~n ~p) ->", [Txn, S]),
+    % rabbit_log:info("tx_rollback(~n ~p,~n ~p) ->", [Txn, S]),
     {atomic, Result} =
         mnesia:transaction(fun () ->
                                    #tx { to_ack = SeqIds } = lookup_tx(Txn, S),
@@ -495,7 +492,7 @@ tx_rollback(Txn, S) ->
                                    save(RS),
                                    {SeqIds, RS}
                            end),
-    rabbit_log:info("tx_rollback ->~n ~p", [Result]),
+    % rabbit_log:info("tx_rollback ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -516,8 +513,7 @@ tx_rollback(Txn, S) ->
 %%         -> {[ack()], state()}).
 
 tx_commit(Txn, F, PropsF, S) ->
-    rabbit_log:info(
-      "tx_commit(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, F, PropsF, S]),
+    % rabbit_log:info("tx_commit(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, F, PropsF, S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
@@ -528,7 +524,7 @@ tx_commit(Txn, F, PropsF, S) ->
                   {SeqIds, RS}
           end),
     F(),
-    rabbit_log:info("tx_commit ->~n ~p", [Result]),
+    % rabbit_log:info("tx_commit ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -542,7 +538,7 @@ tx_commit(Txn, F, PropsF, S) ->
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
 requeue(SeqIds, PropsF, S) ->
-    rabbit_log:info("requeue(~n ~p,~n ~p,~n ~p) ->", [SeqIds, PropsF, S]),
+    % rabbit_log:info("requeue(~n ~p,~n ~p,~n ~p) ->", [SeqIds, PropsF, S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () -> {_, RS} =
@@ -555,7 +551,7 @@ requeue(SeqIds, PropsF, S) ->
                     save(RS),
                     RS
           end),
-    rabbit_log:info("requeue ->~n ~p", [Result]),
+    % rabbit_log:info("requeue ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -567,10 +563,10 @@ requeue(SeqIds, PropsF, S) ->
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
 len(S = #s { q_table = QTable }) ->
-    rabbit_log:info("len(~n ~p) ->", [S]),
+    % rabbit_log:info("len(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> length(mnesia:all_keys(QTable)) end),
-    rabbit_log:info("len ->~n ~p", [Result]),
+    % rabbit_log:info("len ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -582,10 +578,10 @@ len(S = #s { q_table = QTable }) ->
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
 is_empty(S = #s { q_table = QTable }) ->
-    rabbit_log:info("is_empty(~n ~p) ->", [S]),
+    % rabbit_log:info("is_empty(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> 0 == length(mnesia:all_keys(QTable)) end),
-    rabbit_log:info("is_empty ->~n ~p", [Result]),
+    % rabbit_log:info("is_empty ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -647,14 +643,14 @@ handle_pre_hibernate(S) -> S.
 status(S = #s { q_table = QTable,
 		p_table = PTable,
                 next_seq_id = NextSeqId }) ->
-    rabbit_log:info("status(~n ~p) ->", [S]),
+    % rabbit_log:info("status(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(
           fun () -> LQ = length(mnesia:all_keys(QTable)),
                     LP = length(mnesia:all_keys(PTable)),
                     [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}]
           end),
-    rabbit_log:info("status ->~n ~p", [Result]),
+    % rabbit_log:info("status ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -706,12 +702,11 @@ delete_nonpersistent_msgs(QTable) ->
       end,
       mnesia:all_keys(QTable)).
 
-%% internal_purge/1 purges all messages, generating pending acks as
-%% necessary.
+%% internal_purge/1 purges all messages.
 
 -spec internal_purge(state()) -> ok.
 
-internal_purge(S) -> case internal_fetch(true, S) of
+internal_purge(S) -> case q_pop(S) of
                          empty -> ok;
                          _ -> internal_purge(S)
                      end.
