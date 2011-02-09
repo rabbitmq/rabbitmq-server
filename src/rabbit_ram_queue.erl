@@ -43,8 +43,6 @@
 
 %% TODO: Need to provide better back-pressure when queue is filling up.
 
-%% BUG: p_records do not need a separate seq_id.
-
 -behaviour(rabbit_backing_queue).
 
 %% The S record is the in-RAM AMQP queue state. It contains the queue

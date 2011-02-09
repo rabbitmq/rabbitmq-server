@@ -297,7 +297,7 @@ purge(S = #s { q_table = QTable }) ->
     % rabbit_log:info("purge(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> LQ = length(mnesia:all_keys(QTable)),
-                                     internal_purge(S),
+				     clear_table(QTable),
                                      {LQ, S}
                            end),
     % rabbit_log:info("purge ->~n ~p", [Result]),
@@ -701,15 +701,6 @@ delete_nonpersistent_msgs(QTable) ->
               end
       end,
       mnesia:all_keys(QTable)).
-
-%% internal_purge/1 purges all messages.
-
--spec internal_purge(state()) -> ok.
-
-internal_purge(S) -> case q_pop(S) of
-                         empty -> ok;
-                         _ -> internal_purge(S)
-                     end.
 
 %% internal_fetch/2 fetches the next msg, if any, inside an Mnesia
 %% transaction, generating a pending ack as necessary.
