@@ -248,7 +248,7 @@ rabbit_start() {
 
     export_vars
 
-    nohup $RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
+    setsid sh -c "$RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err" &
 
     # Wait for the server to come up.
     # Let the CRM/LRM time us out if required

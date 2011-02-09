@@ -40,8 +40,8 @@ start_rabbitmq () {
     else
         RETVAL=0
         set +e
-        nohup $DAEMON > ${INIT_LOG_DIR}/startup_log \
-            2> ${INIT_LOG_DIR}/startup_err &
+        setsid sh -c "$DAEMON > ${INIT_LOG_DIR}/startup_log \
+            2> ${INIT_LOG_DIR}/startup_err" &
         $CONTROL wait >/dev/null 2>&1
         case "$?" in
             0)
