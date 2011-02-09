@@ -249,14 +249,8 @@ rabbit_start() {
     export_vars
 
     nohup $RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err &
-    rc=$?
 
-    if [ "$rc" != 0 ]; then
-        ocf_log err "rabbitmq-server start command failed: $RABBITMQ_SERVER, $rc"
-        return $rc
-    fi
-
-    # Spin waiting for the server to come up.
+    # Wait for the server to come up.
     # Let the CRM/LRM time us out if required
     rabbit_wait
     rc=$?
