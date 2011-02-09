@@ -1030,7 +1030,9 @@ handle_method(#'channel.flow'{active = false}, _,
                  {noreply, State1#ch{blocking = dict:from_list(Queues)}}
     end;
 
-handle_method(#'basic.credit'{consumer_tag = CTag, credit = Credit,
+handle_method(#'basic.credit'{consumer_tag = CTag,
+                              credit = Credit,
+                              count = Count,
                               drain = Drain}, _,
               State = #ch{limiter_pid      = LimiterPid,
                           consumer_mapping = Consumers}) ->
@@ -1052,7 +1054,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag, credit = Credit,
                       Other     -> Other
                   end,
     LimiterPid2 =
-        case rabbit_limiter:set_credit(LimiterPid1, CTag, Credit, Drain) of
+        case rabbit_limiter:set_credit(LimiterPid1, CTag, Credit, Count, Drain) of
             ok      -> limit_queues(LimiterPid1, State),
                        LimiterPid1;
             stopped -> unlimit_queues(State)
