@@ -265,17 +265,18 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                      end, State),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
-    internal_emit_stats(State),
-    noreply([ensure_stats_timer],
-            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
-
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
 
 handle_info(timeout, State) ->
     noreply(State);
+
+handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+    internal_emit_stats(State),
+    noreply([ensure_stats_timer],
+            State#ch{
+              stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
 handle_info({'DOWN', _MRef, process, QPid, Reason},
             State = #ch{unconfirmed = UC}) ->
