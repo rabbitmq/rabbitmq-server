@@ -42,7 +42,7 @@
                 connection, subscriptions, version,
                 start_heartbeat_fun}).
 
--record(subscription, {dest_hdr, channel, multi_ack}).
+-record(subscription, {dest_hdr, channel, multi_ack, description}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
@@ -51,7 +51,7 @@
 %% Public API
 %%----------------------------------------------------------------------------
 start_link(Sock, StartHeartbeatFun) ->
-    gen_server:start_link(?MODULE, [Sock,StartHeartbeatFun], []).
+    gen_server:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
 
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server:cast(Pid, {Command, Frame}).
@@ -124,6 +124,8 @@ handle_cast(client_timeout, State) ->
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State)}.
@@ -132,7 +134,7 @@ process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
               {'EXIT',
                {{server_initiated_close, ReplyCode, Explanation}, _}} ->
-                  explain_amqp_death(ReplyCode, Explanation, State);
+                  amqp_death(ReplyCode, Explanation, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error\n",
                               Reason, State);
@@ -163,30 +165,9 @@ handle_frame("DISCONNECT", _Frame, State) ->
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
 
-handle_frame("UNSUBSCRIBE", Frame, State = #state{subscriptions = Subs}) ->
-    ConsumerTag = case rabbit_stomp_frame:header(Frame, "id") of
-                      {ok, IdStr} ->
-                          list_to_binary("T_" ++ IdStr);
-                      not_found ->
-                          case rabbit_stomp_frame:header(Frame,
-                                                         "destination") of
-                              {ok, QueueStr} ->
-                                  list_to_binary("Q_" ++ QueueStr);
-                              not_found ->
-                                  missing
-                          end
-                  end,
-    if
-        ConsumerTag == missing ->
-            error("Missing destination or id",
-                  "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
-                  State);
-        true ->
-            ok(send_method(#'basic.cancel'{consumer_tag = ConsumerTag,
-                                           nowait       = true},
-                           State#state{subscriptions =
-                                           dict:erase(ConsumerTag, Subs)}))
-    end;
+handle_frame("UNSUBSCRIBE", Frame, State) ->
+    ConsumerTag = rabbit_stomp_util:consumer_tag(Frame),
+    cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
@@ -246,6 +227,51 @@ ack_action(Command, Frame,
                   State)
     end.
 
+%%----------------------------------------------------------------------------
+%% Internal helpers for processing frames callbacks
+%%----------------------------------------------------------------------------
+
+cancel_subscription({error, _}, State) ->
+    error("Missing destination or id",
+          "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
+          State);
+
+cancel_subscription({ok, ConsumerTag, Description},
+                    State = #state{channel       = MainChannel,
+                                   subscriptions = Subs}) ->
+    case dict:find(ConsumerTag, Subs) of
+        error ->
+            error("No subscription found",
+                  "UNSUBSCRIBE must refer to an existing subscription.\n"
+                  "Subscription to ~p not found.\n",
+                  [Description],
+                  State);
+        {ok, #subscription{channel = SubChannel}} ->
+            case amqp_channel:call(SubChannel,
+                                   #'basic.cancel'{
+                                     consumer_tag = ConsumerTag}) of
+                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    NewSubs = dict:erase(ConsumerTag, Subs),
+                    ensure_subchannel_closed(SubChannel,
+                                             MainChannel,
+                                             State#state{
+                                               subscriptions = NewSubs});
+                _ ->
+                    error("Failed to cancel subscription",
+                          "UNSUBSCRIBE to ~p failed.\n",
+                          [Description],
+                          State)
+            end
+    end.
+
+ensure_subchannel_closed(SubChannel, MainChannel, State)
+  when SubChannel == MainChannel ->
+    ok(State);
+
+ensure_subchannel_closed(SubChannel, _MainChannel, State) ->
+    amqp_channel:close(SubChannel),
+    ok(State).
+
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
         {ok, DestHdr} ->
@@ -281,10 +307,11 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
 
-    {{SX, SY}, State1} = ensure_heartbeats(Heartbeat, State),
+    {{SendTimeout, ReceiveTimeout}, State1} =
+        ensure_heartbeats(Heartbeat, State),
     ok("CONNECTED",
        [{"session", SessionId},
-        {"heartbeat", io_lib:format("~B,~B", [SX, SY])},
+        {"heartbeat", io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
         {"version", Version}],
        "",
        State1#state{session_id = SessionId,
@@ -318,7 +345,7 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
 
-    {ok, ConsumerTag} = rabbit_stomp_util:consumer_tag(Frame),
+    {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
 
     amqp_channel:subscribe(Channel,
                            #'basic.consume'{
@@ -334,9 +361,10 @@ do_subscribe(Destination, DestHdr, Frame,
 
     ok(State#state{subscriptions =
                        dict:store(ConsumerTag,
-                                  #subscription{dest_hdr  = DestHdr,
-                                                channel   = Channel,
-                                                multi_ack = IsMulti},
+                                  #subscription{dest_hdr    = DestHdr,
+                                                channel     = Channel,
+                                                multi_ack   = IsMulti,
+                                                description = Description},
                                   Subs)}).
 
 do_send(Destination, _DestHdr,
@@ -389,21 +417,33 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
-   #subscription{dest_hdr = Destination} = dict:fetch(ConsumerTag, Subs),
+    case dict:find(ConsumerTag, Subs) of
+        {ok, #subscription{dest_hdr = Destination}} ->
+            send_frame(
+              "MESSAGE",
+              rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+              Body,
+              State);
+        error ->
+            send_error("Subscription not found",
+                       "There is no current subscription with tag '~s'.",
+                       [ConsumerTag],
+                       State)
+    end.
 
-   send_frame(
-     "MESSAGE",
-     rabbit_stomp_util:message_headers(Destination, SessionId,
-                                       Delivery, Properties),
-     Body,
-     State).
-
-send_method(Method, State = #state{channel = Channel}) ->
+send_method(Method, Channel, State) ->
     amqp_channel:call(Channel, Method),
     State.
 
+send_method(Method, State = #state{channel = Channel}) ->
+    send_method(Method, Channel, State).
+
 send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
+    send_method(Method, Channel, Properties, BodyFragments, State).
+
+send_method(Method, Channel, Properties, BodyFragments, State) ->
     amqp_channel:call(Channel, Method, #amqp_msg{
                                 props = Properties,
                                 payload = lists:reverse(BodyFragments)}),
@@ -498,8 +538,7 @@ abort_transaction(Transaction, State0) ->
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
-    amqp_channel:call(Channel, Method),
-    State;
+    send_method(Method, Channel, State);
 perform_transaction_action({Method, Props, BodyFragments}, State) ->
     send_method(Method, Props, BodyFragments, State).
 
@@ -592,10 +631,12 @@ ok(Command, Headers, BodyFragments, State) ->
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
 
-explain_amqp_death(ReplyCode, Explanation, State) ->
+amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
-    error(atom_to_list(ErrorName), "~s\n",
-               [Explanation], State).
+    {stop, amqp_death,
+     send_error(atom_to_list(ErrorName),
+                format_detail("~s~n", [Explanation]),
+                State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
@@ -612,10 +653,11 @@ priv_error(Message, Detail, ServerPrivateDetail, State) ->
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, lists:flatten(io_lib:format(Format, Args)),
+    priv_error(Message, format_detail(Format, Args),
                     ServerPrivateDetail, State).
 
-
+format_detail(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
 %%----------------------------------------------------------------------------
@@ -646,6 +688,9 @@ send_error(Message, Detail, State) ->
                          {"content-type", "text/plain"},
                          {"version", string:join(?SUPPORTED_VERSIONS, ",")}],
                          Detail, State).
+
+send_error(Message, Format, Args, State) ->
+    send_error(Message, format_detail(Format, Args), State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server callbacks

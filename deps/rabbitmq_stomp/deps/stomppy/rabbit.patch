@@ -25,19 +25,12 @@ diff -r 16a4000624a7 stomp/connect.py
 
          self.__socket = None
          self.__socket_semaphore = threading.BoundedSemaphore(1)
-@@ -449,2 +457,2 @@
+@@ -449,6 +457,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
 
 +    def send_frame(self, command, headers={}, payload=''):
 +        self.__send_frame(command, headers, payload)
-+
-+    def send_heartbeat(self):
-+        self.__socket_semaphore.acquire()
-+        try:
-+            self.__socket.sendall('\x00')
-+        finally:
-+            self.__socket_semaphore.release()
 +
      def __send_frame(self, command, headers={}, payload=''):
          """

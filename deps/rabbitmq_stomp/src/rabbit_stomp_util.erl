@@ -60,11 +60,11 @@
 consumer_tag(Frame) ->
     case rabbit_stomp_frame:header(Frame, "id") of
         {ok, Str} ->
-            {ok, list_to_binary("T_" ++ Str)};
+            {ok, list_to_binary("T_" ++ Str), "id='" ++ Str ++ "'"};
         not_found ->
             case rabbit_stomp_frame:header(Frame, "destination") of
                 {ok, DestHdr} ->
-                    {ok, list_to_binary("Q_" ++ DestHdr)};
+                    {ok, list_to_binary("Q_" ++ DestHdr), "destination='" ++ DestHdr ++ "'"};
                 not_found ->
                     {error, missing_destination_header}
             end
