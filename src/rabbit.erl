@@ -212,7 +212,8 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{running_applications, application:which_applications()}] ++
+    [{pid, list_to_integer(os:getpid())},
+     {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
 rotate_logs(BinarySuffix) ->
