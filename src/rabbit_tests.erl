@@ -26,6 +26,7 @@
 
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
+-define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
@@ -80,19 +81,21 @@ run_cluster_dependent_tests(SecondaryNode) ->
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
+    passed = test_queue_cleanup(SecondaryNode),
 
     %% we now run the tests remotely, so that code coverage on the
     %% local node picks up more of the delegate
     Node = node(),
     Self = self(),
     Remote = spawn(SecondaryNode,
-                   fun () -> A = test_delegates_async(Node),
-                             B = test_delegates_sync(Node),
-                             Self ! {self(), {A, B}}
+                   fun () -> Rs = [ test_delegates_async(Node),
+                                    test_delegates_sync(Node),
+                                    test_queue_cleanup(Node) ],
+                             Self ! {self(), Rs}
                    end),
     receive
         {Remote, Result} ->
-            Result = {passed, passed}
+            Result = [passed, passed, passed]
     after 2000 ->
             throw(timeout)
     end,
@@ -1375,6 +1378,35 @@ test_delegates_sync(SecondaryNode) ->
     Magical = lists:usort(MagicalPids),
     Magical = lists:usort(BadNodesPids),
 
+    passed.
+
+test_queue_cleanup_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, Method} ->
+            Pid ! Method,
+            test_queue_cleanup_receiver(Pid)
+    end.
+
+
+test_queue_cleanup(_SecondaryNode) ->
+    {_Writer, Ch} = test_spawn(fun test_queue_cleanup_receiver/1),
+    rabbit_channel:do(Ch, #'queue.declare'{ queue = ?CLEANUP_QUEUE_NAME }),
+    receive #'queue.declare_ok'{queue = ?CLEANUP_QUEUE_NAME} ->
+            ok
+    after 1000 -> throw(failed_to_receive_queue_declare_ok)
+    end,
+    rabbit:stop(),
+    rabbit:start(),
+    rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
+                                            queue   = ?CLEANUP_QUEUE_NAME }),
+    receive
+        {channel_exit, 1, {amqp_error, not_found, _, _}} ->
+            ok
+    after 2000 ->
+            throw(failed_to_receive_channel_exit)
+    end,
     passed.
 
 %---------------------------------------------------------------------
