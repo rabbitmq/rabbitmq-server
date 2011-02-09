@@ -114,7 +114,6 @@ unblock(LimiterPid) ->
 set_credit(undefined, _, _, _, _) ->
     ok;
 set_credit(LimiterPid, CTag, Credit, Count, Drain) ->
-    io:format("Set credit for ~p: credit ~p, count ~p, drain ~p~n", [CTag, Credit, Count, Drain]),
     gen_server2:call(LimiterPid, {set_credit, CTag, Credit, Count, Drain}, infinity).
 
 is_blocked(undefined) ->
