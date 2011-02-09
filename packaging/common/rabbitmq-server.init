@@ -79,9 +79,9 @@ stop_rabbitmq () {
 status_rabbitmq() {
     set +e
     if [ "$1" != "quiet" ] ; then
-        $CONTROL status 2>&1
+        $CONTROL init_status 2>&1
     else
-        $CONTROL status > /dev/null 2>&1
+        $CONTROL init_status > /dev/null 2>&1
     fi
     if [ $? != 0 ] ; then
         RETVAL=1

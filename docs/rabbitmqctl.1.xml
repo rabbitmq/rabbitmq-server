@@ -197,6 +197,24 @@
           </listitem>
         </varlistentry>
 
+        <varlistentry>
+          <term><cmdsynopsis><command>init_status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays an init.d-style status line about whether the server
+              is running.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl init_status</screen>
+            <para role="example">
+              This command displays:
+              rabbit@hostname is running (pid 1234).
+              or
+              rabbit@hostname is NOT running.
+            </para>
+          </listitem>
+        </varlistentry>
+
         <varlistentry id="reset">
           <term><cmdsynopsis><command>reset</command></cmdsynopsis></term>
           <listitem>

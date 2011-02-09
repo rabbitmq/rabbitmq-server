@@ -25,6 +25,7 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(INHERENTLY_QUIET, [init_status]).
 
 %%----------------------------------------------------------------------------
 
@@ -62,7 +63,8 @@ start() ->
                               end
                       end, Opts),
     Command = list_to_atom(Command0),
-    Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
+    Quiet = proplists:get_bool(?QUIET_OPT, Opts1)
+        orelse lists:member(Command, ?INHERENTLY_QUIET),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
@@ -79,6 +81,8 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             quit(0);
+        fail_silent ->
+            quit(1);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
@@ -171,6 +175,14 @@ action(status, Node, [], _Opts, Inform) ->
         {badrpc, _} = Res -> Res;
         Res               -> io:format("~p~n", [Res]),
                              ok
+    end;
+
+action(init_status, Node, [], Opts, _) ->
+    case call(Node, {os, getpid, []}) of
+        {badrpc, _} -> io:format("~p is NOT running.", [Node]),
+                       fail_silent;
+        Res         -> io:format("~p is running (pid ~s).", [Node, Res]),
+                       ok
     end;
 
 action(rotate_logs, Node, [], _Opts, Inform) ->
