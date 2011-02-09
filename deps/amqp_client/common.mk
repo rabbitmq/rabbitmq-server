@@ -95,7 +95,7 @@ ifndef USE_SPECS
 # make -C, which causes problems whenever the test here and the test
 # there compare system_info(version) against *different* eshell
 # version numbers.
-USE_SPECS:=$(shell erl -noshell -eval 'io:format(lists:map(fun erlang:list_to_integer/1, string:tokens(erlang:system_info(version), ".")) >= [5,7.2]),halt().')
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,7,2]), halt().')
 endif
 
 ERLC_OPTS=-I $(INCLUDE_DIR) -pa $(EBIN_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
