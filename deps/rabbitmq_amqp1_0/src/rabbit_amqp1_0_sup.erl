@@ -6,16 +6,6 @@
 
 -export([listener_started/2, listener_stopped/2, start_client/1]).
 
--define(RABBIT_TCP_OPTS, [
-        binary,
-        {packet, raw}, % no packaging
-        {reuseaddr, true}, % allow rebind without waiting
-        {backlog, 128}, % use the maximum listen(2) backlog value
-        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.
-        %% {delay_send, true},
-        {exit_on_close, false}
-    ]).
-
 start_link(Listeners) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
@@ -44,7 +34,7 @@ make_listener_spec({IPAddress, Port, Family, Name}) ->
     {Name,
      {tcp_listener_sup, start_link,
       [IPAddress, Port,
-       [Family|?RABBIT_TCP_OPTS],
+       [Family | tcp_opts()],
        {?MODULE, listener_started, []},
        {?MODULE, listener_stopped, []},
        {?MODULE, start_client, []}, "AMQP 1.0 Listener"]},
@@ -62,3 +52,7 @@ start_client(Sock) ->
     ok = gen_tcp:controlling_process(Sock, ReaderPid),
     ReaderPid ! {go, Sock, fun (S) -> {ok, S} end},
     SupPid.
+
+tcp_opts() ->
+    {ok, Opts} = application:get_env(rabbit_amqp1_0, tcp_listen_options),
+    Opts.
