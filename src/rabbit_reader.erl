@@ -357,7 +357,10 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                     throw({handshake_timeout, State#v1.callback})
             end;
         timeout ->
-            throw({timeout, State#v1.connection_state});
+            case State#v1.connection_state of
+                closed -> mainloop(Deb, State);
+                S      -> throw({timeout, S})
+            end;
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
             gen_server:reply(From, ok),
@@ -926,10 +929,14 @@ socket_info(Get, Select) ->
     end.
 
 ssl_info(F, Sock) ->
+    %% The first ok form is R14
+    %% The second is R13 - the extra term is exportability (by inspection,
+    %% the docs are wrong)
     case rabbit_net:ssl_info(Sock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Info}  -> F(Info)
+        nossl                   -> '';
+        {error, _}              -> '';
+        {ok, {P, {K, C, H}}}    -> F({P, {K, C, H}});
+        {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
     end.
 
 cert_info(F, Sock) ->
