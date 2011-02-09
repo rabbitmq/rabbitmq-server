@@ -7,11 +7,8 @@
 
 %% TODO: we don't care about fragment_offset while reading. Should we?
 assemble(Fragments) ->
-    %%io:format("Fragments: ~p~n", [Fragments]),
     {Props, Content} = assemble(?V_1_0_HEADER, {#'P_basic'{}, undefined},
                                 Fragments),
-    %%io:format("Props: ~p~n", [Props]),
-    %%io:format("Content: ~p~n", [Content]),
     #amqp_msg{props = Props, payload = Content}.
 
 assemble(?V_1_0_HEADER, {PropsIn, ContentIn},
@@ -20,6 +17,8 @@ assemble(?V_1_0_HEADER, {PropsIn, ContentIn},
                            format_code = ?V_1_0_HEADER} | Fragments]) ->
     assemble(?V_1_0_PROPERTIES, {parse_header(Payload, PropsIn), ContentIn},
              Fragments);
+assemble(?V_1_0_HEADER, State, Fragments) ->
+    assemble(?V_1_0_PROPERTIES, State, Fragments);
 
 assemble(?V_1_0_PROPERTIES, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
@@ -28,6 +27,8 @@ assemble(?V_1_0_PROPERTIES, {PropsIn, ContentIn},
     %% TODO allow for AMQP_DATA, _MAP, _LIST
     assemble(?V_1_0_DATA, {parse_properties(Payload, PropsIn), ContentIn},
              Fragments);
+assemble(?V_1_0_PROPERTIES, State, Fragments) ->
+    assemble(?V_1_0_DATA, State, Fragments);
 
 assemble(?V_1_0_DATA, {PropsIn, _ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
@@ -35,6 +36,8 @@ assemble(?V_1_0_DATA, {PropsIn, _ContentIn},
                            format_code = ?V_1_0_DATA} | Fragments]) ->
     %% TODO allow for multiple fragments
     assemble(?V_1_0_FOOTER, {PropsIn, Payload}, Fragments);
+assemble(?V_1_0_DATA, State, Fragments) ->
+    assemble(?V_1_0_FOOTER, State, Fragments);
 
 assemble(?V_1_0_FOOTER, {PropsIn, ContentIn},
          [#'v1_0.fragment'{first = true, last = true,
@@ -42,6 +45,10 @@ assemble(?V_1_0_FOOTER, {PropsIn, ContentIn},
                            format_code = ?V_1_0_FOOTER}]) ->
     %% TODO parse FOOTER
     {PropsIn, ContentIn};
+assemble(?V_1_0_FOOTER, State, []) ->
+    State;
+assemble(?V_1_0_FOOTER, State, [Left | _]) ->
+    exit({unexpected_trailing_fragments, Left});
 
 assemble(Expected, {_, _}, Actual) ->
     exit({expected_fragment, Expected, Actual}).
