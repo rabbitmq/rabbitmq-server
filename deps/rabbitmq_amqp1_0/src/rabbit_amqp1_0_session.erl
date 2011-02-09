@@ -129,6 +129,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
 %% or there are no more messages
 handle_info(#'basic.credit_state'{consumer_tag = CTag,
                                   credit       = LinkCredit,
+                                  count        = Count,
                                   available    = Available0,
                                   drain        = Drain},
             State = #session{writer_pid = WriterPid}) ->
@@ -137,12 +138,22 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
                     Num -> {uint, Num}
                 end,
     Handle = ctag_to_handle(CTag),
-    #outgoing_link{ transfer_count = Count } = get({out, Handle}),
+    
+    %% The transfer count that is given by the queue should be at
+    %% least that we have locally, since we will either have received
+    %% all the deliveries and transfered them, or the queue will have
+    %% advanced it due to drain. So we adopt the queue's idea of the
+    %% count.
+
+    %% FIXME account for it not being there any more
+    Out = get({out, Handle}),
+    
     F = #'v1_0.flow'{ handle      = Handle,
-                      transfer_count = Count,
+                      transfer_count = {uint, Count},
                       link_credit = {uint, LinkCredit},
                       available   = Available,
                       drain       = Drain },
+    put({out, Handle}, Out#outgoing_link{ transfer_count = Count}),
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {noreply, State};
 
@@ -438,14 +449,14 @@ handle_control(Flow = #'v1_0.flow'{},
                   outgoing_window = {uint, RemoteWindowOut}} = Flow,
     %% Check the things that we know for sure
     %% TODO sequence number comparisons
-    ?DEBUG("~p == ~p", [RemoteNextOut, LocalNextIn]),
+    ?DEBUG("~p == ~p~n", [RemoteNextOut, LocalNextIn]),
     RemoteNextOut = LocalNextIn,
     %% The far side may not have our begin{} with our next-transfer-id
     RemoteNextIn = case RemoteNextIn0 of
                        {uint, Id} -> Id;
                        undefined  -> LocalNextOut
                    end,
-    ?DEBUG("~p =< ~p", [RemoteNextIn, LocalNextOut]),
+    ?DEBUG("~p =< ~p~n", [RemoteNextIn, LocalNextOut]),
     true = (RemoteNextIn =< LocalNextOut),
     %% Adjust our window
     RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
@@ -528,12 +539,14 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                        no_ack = NoAck,
                                        default_outcome = DOSym}, State) of
         {ok, Source1,
-         OutgoingLink = #outgoing_link{ queue = QueueName }, State1} ->
+         OutgoingLink = #outgoing_link{ queue = QueueName,
+                                        transfer_count = Count }, State1} ->
             CTag = handle_to_ctag(Handle),
             %% Zero the credit before we start consuming, so that we only
             %% use explicitly given credit.
             amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
                                                   credit       = 0,
+                                                  count        = Count,
                                                   drain        = false}),
             case amqp_channel:subscribe(
                    Ch, #'basic.consume' { queue = QueueName,
@@ -578,18 +591,26 @@ flow_session_fields(State = #session{ next_transfer_number = NextOut,
                   next_incoming_id = {uint, NextIn},
                   incoming_window = {uint, Window}}.
 
-outgoing_flow(#outgoing_link{ transfer_count = Count },
+outgoing_flow(#outgoing_link{ transfer_count = LocalCount },
               Flow = #'v1_0.flow'{
                 handle = Handle,
-                link_credit = {uint, Credit},
+                transfer_count = Count0,
+                link_credit = {uint, RemoteCredit},
                 drain = Drain},
               State = #session{backing_channel = Ch}) ->
+    RemoteCount = case Count0 of
+                      undefined -> LocalCount;
+                      {uint, Count} -> Count
+                  end,
+    %% Rebase to our transfer-count
+    Credit = RemoteCount + RemoteCredit - LocalCount,
     CTag = handle_to_ctag(Handle),
     #'basic.credit_ok'{available = Available} =
         %% FIXME calculate the credit based on the transfer count
         amqp_channel:call(Ch,
                           #'basic.credit'{consumer_tag = CTag,
                                           credit       = Credit,
+                                          count        = LocalCount,
                                           drain        = Drain}),
     case Available of
         -1 ->
@@ -601,7 +622,7 @@ outgoing_flow(#outgoing_link{ transfer_count = Count },
             Flow1 = flow_session_fields(State),
             {reply, Flow1#'v1_0.flow'{
                       handle = Handle,
-                      transfer_count = {uint, Count},
+                      transfer_count = {uint, LocalCount},
                       link_credit = {uint, Credit},
                       available = {uint, Available},
                       drain = Drain}, State}
@@ -629,7 +650,7 @@ transfer(WriterPid, LinkHandle,
     %% "prefetch_count" messages in flight (i.e., a total). For the
     %% minute we will have to just break things.
     NumUnsettled = gb_trees:size(Unsettled),
-    if (LocalMaxOut >= TransferNumber) andalso
+    if (LocalMaxOut > TransferNumber) andalso
        (WindowSize >= NumUnsettled) ->
             NewLink = Link#outgoing_link{
                         transfer_count = Count + TransferSize
@@ -669,12 +690,10 @@ transfer(WriterPid, LinkHandle,
                          end,
             rabbit_amqp1_0_writer:send_command(WriterPid, T),
             {NewLink, Session#session { outgoing_unsettled_map = Unsettled1 }};
-       %% TODO We can't knowingly exceed our credit.  On the other
+       %% FIXME We can't knowingly exceed our credit.  On the other
        %% hand, we've been handed a message to deliver. This has
        %% probably happened because the receiver has suddenly reduced
-       %% the credit. Once we delegate the flow control to the queue,
-       %% via basic.credit, this won't (or at least, we won't be
-       %% keeping track of the credit, so we won't notice).
+       %% the credit or session window.
        NoAck ->
             {Link, Session};
        true ->
