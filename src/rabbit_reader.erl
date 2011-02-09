@@ -515,8 +515,8 @@ maybe_close(State = #v1{connection_state = closing,
 maybe_close(State) ->
     State.
 
-termination_kind(normal)            -> controlled;
-termination_kind(_)                 -> uncontrolled.
+termination_kind(normal) -> controlled;
+termination_kind(_)      -> uncontrolled.
 
 handle_frame(Type, 0, Payload,
              State = #v1{connection_state = CS,
@@ -553,7 +553,6 @@ handle_frame(Type, Channel, Payload,
                     put({channel, Channel}, {ChPid, NewAState}),
                     case AnalyzedFrame of
                         {method, 'channel.close', _} ->
-                            ok = rabbit_channel:shutdown(ChPid),
                             ok = rabbit_writer:internal_send_command(
                                    State#v1.sock, Channel,
                                    #'channel.close_ok'{}, Protocol),
@@ -969,7 +968,9 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState}                     -> NewAState;
-        {ok, #'channel.close'{}, NewAState} -> NewAState;
+        {ok, #'channel.close'{}, NewAState} -> ok = rabbit_channel:shutdown(
+                                                      ChPid),
+                                               NewAState;
         {ok, Method, NewAState}             -> rabbit_channel:do(ChPid, Method),
                                                NewAState;
         {ok, Method, Content, NewAState}    -> rabbit_channel:do(

@@ -210,8 +210,7 @@ handle_call({info, Items}, _From, State) ->
     end;
 
 handle_call(terminate, _From, State) ->
-    {ok, State1} = maybe_rollback_and_notify(State),
-    %% ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+    {ok, State1} = maybe_rollback_and_notify_queues(State),
     {stop, normal, ok, State1};
 
 handle_call(_Request, _From, State) ->
@@ -227,7 +226,7 @@ handle_cast({method, Method, Content}, State) ->
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            {stop, normal, rollback_and_notify_reader(
+            {stop, normal, rollback_and_notify_queues_and_reader(
                              Reason#amqp_error{method = MethodName}, State)};
         exit:normal ->
             {stop, normal, State};
@@ -305,7 +304,7 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
 terminate(Reason, State) ->
-    {Res, _State1} = maybe_rollback_and_notify(State),
+    {Res, _State1} = maybe_rollback_and_notify_queues(State),
     case Reason of
         normal            -> ok = Res;
         shutdown          -> ok = Res;
@@ -351,9 +350,10 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-rollback_and_notify_reader(Reason, State = #ch{channel    = Channel,
-                                               reader_pid = Reader}) ->
-    {ok, State1} = maybe_rollback_and_notify(State),
+rollback_and_notify_queues_and_reader(Reason,
+                                      State = #ch{channel    = Channel,
+                                                  reader_pid = Reader}) ->
+    {ok, State1} = maybe_rollback_and_notify_queues(State),
     Reader ! {channel_exit, Channel, Reason},
     State1.
 
@@ -1166,14 +1166,14 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
     NewUAMQ = queue:join(UAQ, UAMQ),
     new_tx(State#ch{unacked_message_q = NewUAMQ}).
 
-maybe_rollback_and_notify(State = #ch{state = unrolled}) ->
+maybe_rollback_and_notify_queues(State = #ch{state = unrolled}) ->
     {ok, State};
-maybe_rollback_and_notify(State) ->
-    {rollback_and_notify(State), State#ch{state = unrolled}}.
+maybe_rollback_and_notify_queues(State) ->
+    {rollback_and_notify_queues(State), State#ch{state = unrolled}}.
 
-rollback_and_notify(State = #ch{transaction_id = none}) ->
+rollback_and_notify_queues(State = #ch{transaction_id = none}) ->
     notify_queues(State);
-rollback_and_notify(State) ->
+rollback_and_notify_queues(State) ->
     notify_queues(internal_rollback(State)).
 
 fold_per_queue(F, Acc0, UAQ) ->
