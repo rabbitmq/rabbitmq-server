@@ -49,9 +49,12 @@
 
 %% TODO test where the sweetspot for gb_trees is
 -define(MAX_SESSION_BUFFER_SIZE, 4096).
+-define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 
-%% Just make this constant for the time being.
+%% Just make these constant for the time being.
 -define(INCOMING_CREDIT, 65536).
+-define(INIT_TXFR_COUNT, 0).
+-define(TRANSFER_UNIT, 0).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -122,6 +125,8 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
             {noreply, State}
     end;
 
+%% A message from the queue saying that the credit is either exhausted
+%% or there are no more messages
 handle_info(#'basic.credit_state'{consumer_tag = CTag,
                                   credit       = LinkCredit,
                                   available    = Available0,
@@ -131,7 +136,10 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
                     -1  -> undefined;
                     Num -> {uint, Num}
                 end,
-    F = #'v1_0.flow'{ handle     = ctag_to_handle(CTag),
+    Handle = ctag_to_handle(CTag),
+    #outgoing_link{ transfer_count = Count } = get({out, Handle}),
+    F = #'v1_0.flow'{ handle      = Handle,
+                      transfer_count = Count,
                       link_credit = {uint, LinkCredit},
                       available   = Available,
                       drain       = Drain },
@@ -242,24 +250,32 @@ noreply(State) ->
 %% window will always be, by definition, BOUND - TOTAL.
 
 handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
-                             window_size = RemoteWindow},
+                             incoming_window = RemoteInWindow,
+                             outgoing_window = RemoteOutWindow,
+                             handle_max = HandleMax0},
                State = #session{
                  next_transfer_number = LocalNextOut,
                  backing_channel = AmqpChannel,
                  channel_num = Channel }) ->
     Window =
-        case RemoteWindow of
+        case RemoteInWindow of
             {uint, Size} -> Size;
             undefined    -> ?MAX_SESSION_BUFFER_SIZE
         end,
+    HandleMax = case HandleMax0 of
+                    {uint, Max} -> Max;
+                    _ -> ?DEFAULT_MAX_HANDLE
+                end,
     SessionBufferSize = erlang:min(Window, ?MAX_SESSION_BUFFER_SIZE),
     %% Attempt to limit the number of "at risk" messages we can have.
     amqp_channel:cast(AmqpChannel,
                       #'basic.qos'{prefetch_count = SessionBufferSize}),
     {reply, #'v1_0.begin'{
        remote_channel = {ushort, Channel},
+       handle_max = {uint, HandleMax},
        next_outgoing_id = {uint, LocalNextOut},
-       window_size = {uint, SessionBufferSize}},
+       incoming_window = {uint, SessionBufferSize},
+       outgoing_window = {uint, SessionBufferSize}},
      State#session{
        next_incoming_id = RemoteNextIn,
        max_outgoing_id = RemoteNextIn + Window, % TODO sequence number addition
@@ -268,6 +284,7 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               local = ClientLinkage,
+                              initial_transfer_count = {uint, InitTransfer},
                               transfer_unit = _Unit,
                               role = ?SEND_ROLE}, %% client is sender
                State = #session{ backing_channel = Ch,
@@ -276,7 +293,9 @@ handle_control(#'v1_0.attach'{name = Name,
     #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
     case ensure_target(Target, #incoming_link{ name = Name }, State) of
         {ok, ServerTarget,
-         IncomingLink = #incoming_link{ transfer_unit = Unit }, State1} ->
+         IncomingLink = #incoming_link{ transfer_unit = Unit,
+                                        transfer_count = InitTransfer },
+         State1} ->
             {_, Outcomes} = outcomes(ClientLinkage),
             State2 =
                 case Outcomes of
@@ -314,6 +333,7 @@ handle_control(#'v1_0.attach'{name = Name,
     end;
 
 handle_control(#'v1_0.attach'{local = Linkage,
+                              initial_transfer_count = undefined,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
     %% TODO ensure_destination
@@ -412,12 +432,14 @@ handle_control(Flow = #'v1_0.flow'{},
                   outgoing_window = {uint, RemoteWindowOut}} = Flow,
     %% Check the things that we know for sure
     %% TODO sequence number comparisons
+    ?DEBUG("~p == ~p", [RemoteNextOut, LocalNextIn]),
     RemoteNextOut = LocalNextIn,
     %% The far side may not have our begin{} with our next-transfer-id
     RemoteNextIn = case RemoteNextIn0 of
                        {uint, Id} -> Id;
                        undefined  -> LocalNextOut
                    end,
+    ?DEBUG("~p =< ~p", [RemoteNextIn, LocalNextOut]),
     true = (RemoteNextIn =< LocalNextOut),
     %% Adjust our window
     RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
@@ -488,14 +510,15 @@ attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
                                handle = Handle,
                                local = ClientLinkage,
-                               transfer_unit = Unit},
+                               transfer_unit = _Unit},
                State = #session{backing_channel = Ch}) ->
     #'v1_0.linkage'{ source = Source } = ClientLinkage,
     NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
     case ensure_source(Source,
-                       #outgoing_link{ transfer_unit = Unit,
+                       #outgoing_link{ transfer_unit = ?TRANSFER_UNIT,
+                                       transfer_count = ?INIT_TXFR_COUNT,
                                        no_ack = NoAck,
                                        default_outcome = DOSym}, State) of
         {ok, Source1,
@@ -555,6 +578,7 @@ outgoing_flow(#outgoing_link{ transfer_count = Count },
               State = #session{backing_channel = Ch}) ->
     CTag = handle_to_ctag(Handle),
     #'basic.credit_ok'{available = Available} =
+        %% FIXME calculate the credit based on the transfer count
         amqp_channel:call(Ch,
                           #'basic.credit'{consumer_tag = CTag,
                                           credit       = Credit,

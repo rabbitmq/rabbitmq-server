@@ -52,8 +52,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <descriptor name="amqp:begin:list" code="0x00000000:0x00000011"/>
       <field name="options" type="options"/>
       <field name="remote-channel" type="ushort"/>
-      <field name="next-outgoing-id" type="transfer-number"/>
-      <field name="window-size" type="uint"/>
+      <field name="next-outgoing-id" type="transfer-number" mandatory="true"/>
+      <field name="incoming-window" type="uint" mandatory="true"/>
+      <field name="outgoing-window" type="uint" mandatory="true"/>
+      <field name="handle-max" type="handle" mandatory="true"/>
       <field name="offered-capabilities" type="symbol" multiple="true"/>
       <field name="desired-capabilities" type="symbol" multiple="true"/>
       <field name="properties" type="fields"/>
@@ -68,10 +70,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <field name="role" type="role" mandatory="true"/>
       <field name="local" type="linkage"/>
       <field name="remote" type="linkage"/>
-      <field name="durable" type="boolean"/>
-      <field name="expiry-policy" type="link-expiry-policy" default="session"/>
-      <field name="timeout" type="seconds" default="0"/>
       <field name="unsettled" type="map"/>
+      <field name="initial-transfer-count" type="sequence-no"/>
       <field name="transfer-unit" type="ulong"/>
       <field name="max-message-size" type="ulong"/>
       <field name="error-mode" type="error-mode"/>
@@ -80,13 +80,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <type name="flow" class="composite" source="list" provides="frame">
       <descriptor name="amqp:flow:list" code="0x00000000:0x00000013"/>
       <field name="options" type="options"/>
-      <field name="handle" type="handle" mandatory="true">
-        <error name="unattached-handle" type="amqp-error" value="invalid-field"/>
-      </field>
       <field name="next-incoming-id" type="transfer-number"/>
       <field name="incoming-window" type="uint"/>
       <field name="next-outgoing-id" type="transfer-number"/>
       <field name="outgoing-window" type="uint"/>
+      <field name="handle" type="handle">
+        <error name="unattached-handle" type="amqp-error" value="invalid-field"/>
+      </field>
       <field name="transfer-count" type="sequence-no"/>
       <field name="link-credit" type="uint"/>
       <field name="available" type="uint"/>
@@ -148,11 +148,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <descriptor name="amqp:linkage:list" code="0x00000000:0x00000019"/>
       <field name="source" type="*" requires="source"/>
       <field name="target" type="*" requires="target"/>
-    </type>
-    <type name="link-expiry-policy" class="restricted" source="symbol">
-      <choice name="session" value="session"/>
-      <choice name="connection" value="connection"/>
-      <choice name="never" value="never"/>
     </type>
     <type name="seconds" class="restricted" source="uint"/>
     <type name="delivery-tag" class="restricted" source="binary"/>
