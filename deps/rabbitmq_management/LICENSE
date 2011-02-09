@@ -1,7 +1,7 @@
 This package, the RabbitMQ Management Plugin is licensed under the MPL. For the
 MPL, please see LICENSE-MPL-RabbitMQ.
 
-This pacakage makes use of the following third party libraries:
+This package makes use of the following third party libraries:
 jQuery     - http://jquery.com/                - MIT license
 EJS        - http://embeddedjs.com/            - MIT license
 Sammy      - http://code.quirkey.com/sammy/    - MIT license
