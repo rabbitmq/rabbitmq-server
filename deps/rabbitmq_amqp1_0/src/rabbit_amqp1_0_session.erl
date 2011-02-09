@@ -121,7 +121,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
                         next_transfer_number = next_transfer_number(TransferNum)}};
         undefined ->
             %% FIXME handle missing link -- why does the queue think it's there?
-            io:format("Delivery to non-existent consumer ~p", [ConsumerTag]),
+            rabbit_log:warning("Delivery to non-existent consumer ~p", [ConsumerTag]),
             {noreply, State}
     end;
 
@@ -321,7 +321,8 @@ handle_control(#'v1_0.attach'{name = Name,
               local = #'v1_0.linkage'{
                 source = Source,
                 target = ServerTarget },
-              transfer_unit = {uint, Unit}, % We count messages, not bytes
+              transfer_unit = {ulong, Unit}, % We count messages, not bytes
+              initial_transfer_count = undefined, % must be, I am the recvr
               role = ?RECV_ROLE}, %% server is receiver
             {reply, [Attach, Flow1], State2};
         {error, Reason, State1} ->
@@ -367,13 +368,18 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                        next_incoming_id = next_transfer_number(TxfrId) },
             State2 = case Settled of
                          true  -> State1;
-                         %% Move LWM, credit etc.
-                         false -> Unsettled1 = gb_trees:insert(
-                                                 NextPublishId,
-                                                 TxfrId,
-                                                 Unsettled),
-                                  State1#session{
-                                    incoming_unsettled_map = Unsettled1}
+                         %% Be lenient -- this is a boolean and really ought
+                         %% to have a value, but the spec doesn't currently
+                         %% require it.
+                         Symbol when
+                         Symbol =:= false orelse
+                         Symbol =:= undefined ->
+                             Unsettled1 = gb_trees:insert(
+                                            NextPublishId,
+                                            TxfrId,
+                                            Unsettled),
+                             State1#session{
+                               incoming_unsettled_map = Unsettled1}
                      end,
             {noreply, State2};
         undefined ->
@@ -542,6 +548,8 @@ attach_outgoing(DefaultOutcome, Outcomes,
                     {reply, #'v1_0.attach'{
                        name = Name,
                        handle = Handle,
+                       transfer_unit = {ulong, ?TRANSFER_UNIT},
+                       initial_transfer_count = {uint, ?INIT_TXFR_COUNT},
                        remote = ClientLinkage,
                        local =
                        ClientLinkage#'v1_0.linkage'{
