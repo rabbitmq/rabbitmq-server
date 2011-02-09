@@ -34,7 +34,10 @@ set -e
 
 start_rabbitmq () {
     status_rabbitmq quiet
-    if [ $RETVAL != 0 ] ; then
+    if [ $RETVAL = 0 ] ; then
+        echo RabbitMQ is currently running
+        RETVAL=1
+    else
         RETVAL=0
         set +e
         nohup $DAEMON > ${INIT_LOG_DIR}/startup_log \
@@ -52,9 +55,6 @@ start_rabbitmq () {
                 ;;
         esac
         set -e
-    else
-        echo RabbitMQ is currently running
-        RETVAL=1
     fi
 }
 
