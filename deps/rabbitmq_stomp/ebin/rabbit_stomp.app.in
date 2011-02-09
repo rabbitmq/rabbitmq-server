@@ -12,5 +12,10 @@
   ]},
   {registered, []},
   {mod, {rabbit_stomp, []}},
-  {env, [{tcp_listeners, [61613]}]},
+  {env, [{tcp_listeners, [61613]},
+         {tcp_listen_options, [binary,
+                               {packet,    raw},
+                               {reuseaddr, true},
+                               {backlog,   128},
+                               {nodelay,   true}]}]},
   {applications, [kernel, stdlib, rabbit]}]}.
