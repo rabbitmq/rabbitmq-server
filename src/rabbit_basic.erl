@@ -97,15 +97,15 @@ from_content(Content) ->
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 %% This breaks the spec rule forbidding message modification
-strip_header(#content{properties = Props = #'P_basic'{headers = Headers}} = DecodedContent,
-             Key) when Headers =/= undefined ->
-    case lists:keyfind(Key, 1, Headers) of
-        false -> DecodedContent;
-        Tuple -> Headers0 = lists:delete(Tuple, Headers),
+strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
+             = DecodedContent, Key) when Headers =/= undefined ->
+    rabbit_binary_generator:clear_encoded_content(
+        case lists:keyfind(Key, 1, Headers) of
+            false -> DecodedContent;
+            Tuple -> Headers0 = lists:delete(Tuple, Headers),
                      DecodedContent#content{
-                         properties_bin = none,
                          properties = Props#'P_basic'{headers = Headers0}}
-    end;
+        end);
 strip_header(DecodedContent, _Key) ->
     DecodedContent.
 
@@ -113,11 +113,10 @@ message(ExchangeName, RoutingKey,
         #content{properties = Props} = DecodedContent) ->
     #basic_message{
         exchange_name = ExchangeName,
-        routing_key   = RoutingKey,
         content       = strip_header(DecodedContent, ?DELETED_HEADER),
         guid          = rabbit_guid:guid(),
         is_persistent = is_message_persistent(DecodedContent),
-        route_list    = [RoutingKey | header_routes(Props#'P_basic'.headers)]}.
+        routing_keys  = [RoutingKey | header_routes(Props#'P_basic'.headers)]}.
 
 message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
     Properties = properties(RawProperties),
@@ -164,26 +163,15 @@ is_message_persistent(#content{properties = #'P_basic'{
         1         -> false;
         2         -> true;
         undefined -> false;
-        Other     -> rabbit_log:warning("Unknown delivery mode ~p - "
-                                        "treating as 1, non-persistent~n",
-                                        [Other]),
-                     false
+        _         -> false
     end.
 
 % Extract CC routes from headers
 header_routes(undefined) ->
     [];
 header_routes(HeadersTable) ->
-    lists:flatten([case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
-                       {longstr, Route} -> Route;
-                       {array, Routes}  -> rkeys(Routes, []);
-                       _                -> []
-                   end || HeaderKey <- ?ROUTING_HEADERS]).
-
-rkeys([{longstr, Route} | Rest], RKeys) ->
-   rkeys(Rest, [Route | RKeys]);
-rkeys([_ | Rest], RKeys) ->
-   rkeys(Rest, RKeys);
-rkeys(_, RKeys) ->
-   RKeys.
+    lists:append([case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
+                      {array, Routes}  -> [Route || {longstr, Route} <- Routes];
+                      _                -> []
+                  end || HeaderKey <- ?ROUTING_HEADERS]).
 

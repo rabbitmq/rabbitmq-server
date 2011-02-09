@@ -36,9 +36,9 @@ description() ->
      {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
 
 route(#exchange{name = Name},
-      #delivery{message = #basic_message{route_list = Routes}}) ->
-    lists:flatten([rabbit_router:match_routing_key(Name, RKey) ||
-                   RKey <- Routes]).
+      #delivery{message = #basic_message{routing_keys = Routes}}) ->
+    lists:append([rabbit_router:match_routing_key(Name, RKey) ||
+                  RKey <- Routes]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.

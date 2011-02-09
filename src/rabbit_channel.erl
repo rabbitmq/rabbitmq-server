@@ -243,7 +243,7 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({deliver, ConsumerTag, AckRequired,
              Msg = {_QName, QPid, _MsgId, Redelivered,
                     #basic_message{exchange_name = ExchangeName,
-                                   routing_key = RoutingKey,
+                                   routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
@@ -609,7 +609,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
         {ok, MessageCount,
          Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
-                               routing_key = RoutingKey,
+                               routing_keys = [RoutingKey | _CcRoutes],
                                content = Content}}} ->
             State1 = lock_message(not(NoAck),
                                   ack_record(DeliveryTag, none, Msg),
@@ -1074,7 +1074,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     end.
 
 basic_return(#basic_message{exchange_name = ExchangeName,
-                            routing_key   = RoutingKey,
+                            routing_keys  = [RoutingKey | _CcRoutes],
                             content       = Content},
              WriterPid, Reason) ->
     {_Close, ReplyCode, ReplyText} =
