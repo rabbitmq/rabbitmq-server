@@ -31,7 +31,7 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/2, process_frame/2, flush/1]).
+-export([start_link/2, process_frame/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -57,9 +57,6 @@ start_link(Sock, StartHeartbeatFun) ->
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server2:cast(Pid, {Command, Frame}).
 
-flush(Pid) ->
-    gen_server2:call(Pid, flush, ?FLUSH_TIMEOUT).
-
 %%----------------------------------------------------------------------------
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
@@ -81,9 +78,6 @@ init([Sock, StartHeartbeatFun]) ->
 
 terminate(_Reason, State) ->
     shutdown_channel_and_connection(State).
-
-handle_call(flush, _From, State) ->
-    {reply, ok, State, hibernate}.
 
 handle_cast({"STOMP", Frame}, State) ->
     handle_cast({"CONNECT", Frame}, State);
@@ -699,6 +693,9 @@ send_error(Message, Format, Args, State) ->
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server2 callbacks
 %%----------------------------------------------------------------------------
+handle_call(_Msg, _From, State) ->
+    {noreply, State}.
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
