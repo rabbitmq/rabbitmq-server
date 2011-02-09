@@ -99,13 +99,13 @@ from_content(Content) ->
 %% This breaks the spec rule forbidding message modification
 strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
              = DecodedContent, Key) when Headers =/= undefined ->
-    rabbit_binary_generator:clear_encoded_content(
-        case lists:keyfind(Key, 1, Headers) of
-            false -> DecodedContent;
-            Tuple -> Headers0 = lists:delete(Tuple, Headers),
+    case lists:keyfind(Key, 1, Headers) of
+        false -> DecodedContent;
+        Tuple -> Headers0 = lists:delete(Tuple, Headers),
+                 rabbit_binary_generator:clear_encoded_content(
                      DecodedContent#content{
-                         properties = Props#'P_basic'{headers = Headers0}}
-        end);
+                         properties = Props#'P_basic'{headers = Headers0}})
+    end;
 strip_header(DecodedContent, _Key) ->
     DecodedContent.
 
