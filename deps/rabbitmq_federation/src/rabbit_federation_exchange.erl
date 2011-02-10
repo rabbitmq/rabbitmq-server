@@ -51,6 +51,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    %% TODO get rid of this ets table when bug 23825 lands.
     ?ETS_NAME = ets:new(?ETS_NAME, [public, set, named_table]).
 
 description() ->
@@ -82,12 +83,14 @@ delete(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
 add_binding(?TX, X, B) ->
+    %% TODO add bindings only if needed.
     call(X, {add_binding, B}),
     with_module(X, fun (M) -> M:add_binding(?TX, X, B) end);
 add_binding(Tx, X, B) ->
     with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
 
 remove_bindings(Tx, X, Bs) ->
+    %% TODO remove bindings only if needed.
     with_module(X, fun (M) -> M:remove_bindings(Tx, X, Bs) end).
 
 assert_args_equivalence(X, Args) ->
