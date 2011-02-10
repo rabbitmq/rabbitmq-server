@@ -219,22 +219,22 @@ handle_cast({method, Method, Content}, State) ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
             noreply(NewState);
         {noreply, NewState} ->
-            noreply(NewState);
-        stop ->
-            {stop, normal, State#ch{state = terminating}}
+            noreply(NewState)
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
             {stop, normal, terminating(Reason#amqp_error{method = MethodName},
                                        State)};
-        exit:normal ->
-            {stop, normal, State};
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State), hibernate};
+
+handle_cast(closed, State = #ch{state = closing, writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+    {stop, normal, State};
 
 handle_cast(terminate, State) ->
     {stop, normal, State};
@@ -529,10 +529,13 @@ handle_method(#'channel.open'{}, _, _State) ->
 handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
 
-handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
+handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid,
+                                                 channel = Channel}) ->
+    Self = self(),
+    ReaderPid ! {channel_closing, Channel,
+                 fun () -> ok = gen_server2:cast(Self, closed) end},
     ok = rollback_and_notify(State),
-    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
-    stop;
+    {noreply, State#ch{state = closing}};
 
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};

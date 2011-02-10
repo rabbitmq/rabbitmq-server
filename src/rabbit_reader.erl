@@ -328,6 +328,10 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             throw({inet_error, Reason});
         {conserve_memory, Conserve} ->
             mainloop(Deb, internal_conserve_memory(Conserve, State));
+        {channel_closing, Channel, Fun} ->
+            ok = Fun(),
+            erase({channel, Channel}),
+            mainloop(Deb, State);
         {'EXIT', Parent, Reason} ->
             terminate(io_lib:format("broker forced connection closure "
                                     "with reason '~w'", [Reason]), State),
@@ -552,9 +556,6 @@ handle_frame(Type, Channel, Payload,
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
                     case AnalyzedFrame of
-                        {method, 'channel.close', _} ->
-                            erase({channel, Channel}),
-                            State;
                         {method, MethodName, _} ->
                             case (State#v1.connection_state =:= blocking
                                   andalso
