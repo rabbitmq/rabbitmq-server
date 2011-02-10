@@ -157,13 +157,13 @@ init(QueueName, IsDurable, Recover) ->
 
 init(QueueName, IsDurable, false, MsgOnDiskF, MsgIdxOnDiskF) ->
     IndexS = rabbit_queue_index:init(QueueName, MsgIdxOnDiskF),
-    init(IsDurable, IndexS, 0, [],
-         case IsDurable of
-             true -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                           MsgOnDiskF);
-             false -> undefined
-         end,
-         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
+    init6(IsDurable, IndexS, 0, [],
+	  case IsDurable of
+	      true -> msg_store_client_init(?PERSISTENT_MSG_STORE,
+					    MsgOnDiskF);
+	      false -> undefined
+	  end,
+	  msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
 
 init(QueueName, true, true, MsgOnDiskF, MsgIdxOnDiskF) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
@@ -186,8 +186,7 @@ init(QueueName, true, true, MsgOnDiskF, MsgIdxOnDiskF) ->
                   rabbit_msg_store:contains(Guid, PersistentClient)
           end,
           MsgIdxOnDiskF),
-    init(true, IndexS, DeltaCount, Terms1,
-         PersistentClient, TransientClient).
+    init6(true, IndexS, DeltaCount, Terms1, PersistentClient, TransientClient).
 
 terminate(S) ->
     S1 = #s { persistent_count = PCount,
@@ -210,8 +209,7 @@ terminate(S) ->
 
 delete_and_terminate(S) ->
     {_PurgeCount, S1} = purge(S),
-    S2 = #s { index_s = IndexS,
-              msg_store_clients = {MSCSP, MSCST} } =
+    S2 = #s { index_s = IndexS, msg_store_clients = {MSCSP, MSCST} } =
         remove_pending_ack(false, S1),
     IndexS1 = rabbit_queue_index:delete_and_terminate(IndexS),
     case MSCSP of
@@ -609,8 +607,7 @@ beta_fold(F, Init, Q) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-init(IsDurable, IndexS, DeltaCount, Terms,
-     PersistentClient, TransientClient) ->
+init6(IsDurable, IndexS, DeltaCount, Terms, PersistentClient, TransientClient) ->
     {_, NextSeqId, IndexS1} = rabbit_queue_index:bounds(IndexS),
 
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
