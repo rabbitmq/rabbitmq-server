@@ -529,6 +529,9 @@ handle_method(#'channel.open'{}, _, _State) ->
 handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
 
+handle_method(_Method, _, State = #ch{state = closing}) ->
+    {noreply, State};
+
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid,
                                                  channel = Channel}) ->
     Self = self(),
