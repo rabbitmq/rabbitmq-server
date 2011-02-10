@@ -519,8 +519,8 @@ maybe_close(State = #v1{connection_state = closing,
 maybe_close(State) ->
     State.
 
-termination_kind(normal)            -> controlled;
-termination_kind(_)                 -> uncontrolled.
+termination_kind(normal) -> controlled;
+termination_kind(_)      -> uncontrolled.
 
 handle_frame(Type, 0, Payload,
              State = #v1{connection_state = CS,
