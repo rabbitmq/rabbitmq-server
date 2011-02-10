@@ -3,4 +3,11 @@ This is all very experimental.
 Configuration might look like:
 
   {rabbit_federation,
-   [ {exchanges, [{"local", "amqp://amqp.example.com/%2f/remote"}] } ]}
+   [ {exchanges, [{ %% local exchange people can bind to
+                   "local",
+                    %% remote exchange they effectively bind to
+                   "amqp://amqp.example.com/%2f/remote",
+                    %% type of remote exchange
+                   "direct"}]
+     }
+   ]}

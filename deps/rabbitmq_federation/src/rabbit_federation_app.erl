@@ -33,7 +33,7 @@ stop(_State) ->
 
 %%----------------------------------------------------------------------------
 
-declare_exchange({Local, Remote}) ->
+declare_exchange({Local, Remote, Type}) ->
     {ok, Conn} = amqp_connection:start(direct),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     %% TODO make durable, recover bindings etc
@@ -41,6 +41,7 @@ declare_exchange({Local, Remote}) ->
                         exchange = list_to_binary(Local),
                         type = <<"x-federation">>,
                         arguments =
-                            [{<<"remote">>, longstr, list_to_binary(Remote)}]}),
+                            [{<<"remote">>, longstr, list_to_binary(Remote)},
+                             {<<"type">>,   longstr, list_to_binary(Type)}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn).

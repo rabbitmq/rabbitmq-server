@@ -36,7 +36,7 @@
 -export([validate/1, create/2, recover/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -46,8 +46,7 @@
 -define(TX, false).
 -record(state, { local_connection, local_channel,
                  remote_connection, remote_channel,
-                 local, remote,
-                 remote_queue }).
+                 local, remote, remote_queue }).
 
 %%----------------------------------------------------------------------------
 
@@ -58,39 +57,61 @@ description() ->
     [{name, <<"x-federation">>},
      {description, <<"Federation exchange">>}].
 
-route(_X, _Delivery) ->
-    exit(not_implemented).
+route(X, Delivery) ->
+    with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(_X) -> ok.
+validate(X) ->
+    ok.
+    %%with_module(X, fun (M) -> M:validate(X) end).
 
-create(?TX, #exchange{ name = Local, arguments = Args }) ->
+create(?TX, X = #exchange{ name = Local, arguments = Args }) ->
     {longstr, Remote} = rabbit_misc:table_lookup(Args, <<"remote">>),
-    rabbit_federation_sup:start_child(Local, binary_to_list(Remote));
-create(_, _) -> ok.
+    {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
+    {ok, Module} = rabbit_registry:lookup_module(
+                     exchange, rabbit_exchange:check_type(Type)),
+    rabbit_federation_sup:start_child(Local, binary_to_list(Remote), Module),
+    with_module(X, fun (M) -> M:create(?TX, X) end);
+create(Tx, X) ->
+    ok.
+    %%with_module(X, fun (M) -> M:create(Tx, X) end).
 
-recover(_X, _Bs) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
+recover(X, Bs) ->
+    with_module(X, fun (M) -> M:recover(X, Bs) end).
+
+delete(Tx, X, Bs) ->
+    with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
+
 add_binding(?TX, X, B) ->
-    call(X, {add_binding, B});
-add_binding(_, _, _) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
+    call(X, {add_binding, B}),
+    with_module(X, fun (M) -> M:add_binding(?TX, X, B) end);
+add_binding(Tx, X, B) ->
+    with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
+
+remove_bindings(Tx, X, Bs) ->
+    with_module(X, fun (M) -> M:remove_bindings(Tx, X, Bs) end).
+
 assert_args_equivalence(X, Args) ->
-    rabbit_exchange:assert_args_equivalence(X, Args).
+    with_module(X, fun (M) -> M:assert_args_equivalence(X, Args) end).
 
 %%----------------------------------------------------------------------------
 
 call(#exchange{ name = Local }, Msg) ->
-    [{_, Pid}] = ets:lookup(?ETS_NAME, Local),
+    [{_, Pid, _}] = ets:lookup(?ETS_NAME, Local),
     gen_server:call(Pid, Msg, infinity).
 
+with_module(#exchange{ name = Local }, Fun) ->
+    [{_, _, Module}] = ets:lookup(?ETS_NAME, Local),
+    Fun(Module).
+
 %%----------------------------------------------------------------------------
 
-start_link(Local, Remote) ->
-    gen_server:start_link(?MODULE, {Local, Remote}, [{timeout, infinity}]).
+start_link(Local, Remote, Module) ->
+    gen_server:start_link(?MODULE, {Local, Remote, Module},
+                          [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({Local, RemoteURI}) ->
+init({Local, RemoteURI, Module}) ->
     Remote0 = uri_parser:parse(RemoteURI, [{host, undefined}, {path, "/"},
                                            {port, undefined}, {'query', []}]),
     [VHostEnc, XEnc] = string:tokens(proplists:get_value(path, Remote0), "/"),
@@ -108,7 +129,7 @@ init({Local, RemoteURI}) ->
                            self()),
     {ok, LConn} = amqp_connection:start(direct),
     {ok, LCh} = amqp_connection:open_channel(LConn),
-    true = ets:insert(?ETS_NAME, {Local, self()}),
+    true = ets:insert(?ETS_NAME, {Local, self(), Module}),
     {ok, #state{local_connection = LConn, local_channel = LCh,
                 remote_connection = RConn, remote_channel = RCh,
                 local = Local,
