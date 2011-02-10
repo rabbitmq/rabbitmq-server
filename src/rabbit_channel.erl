@@ -367,6 +367,8 @@ send_exception(Reason, State = #ch{channel = Channel,
     State1 = State#ch{state = closing},
     case CloseChannel of
         Channel ->
+            rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
+                             [ReaderPid, Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         _ ->
