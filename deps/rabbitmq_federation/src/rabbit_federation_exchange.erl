@@ -62,6 +62,7 @@ route(X, Delivery) ->
     with_module(X, fun (M) -> M:route(X, Delivery) end).
 
 validate(_X) ->
+    %% TODO validate args
     ok.
     %%with_module(X, fun (M) -> M:validate(X) end).
 
@@ -80,6 +81,7 @@ recover(X, Bs) ->
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
 delete(Tx, X, Bs) ->
+    %% TODO shut down process
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
 add_binding(?TX, X, B) ->
@@ -89,11 +91,17 @@ add_binding(?TX, X, B) ->
 add_binding(Tx, X, B) ->
     with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
 
-remove_bindings(Tx, X, Bs) ->
+remove_bindings(?TX, X, Bs) ->
     %% TODO remove bindings only if needed.
+    call(X, {remove_bindings, Bs}),
+    with_module(X, fun (M) -> M:remove_bindings(?TX, X, Bs) end);
+remove_bindings(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(Tx, X, Bs) end).
 
-assert_args_equivalence(X, Args) ->
+assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
+                        NewArgs) ->
+    rabbit_misc:assert_args_equivalence(Args, NewArgs, Name,
+                                        [<<"upstream">>, <<"type">>]),
     with_module(X, fun (M) -> M:assert_args_equivalence(X, Args) end).
 
 %%----------------------------------------------------------------------------
@@ -144,12 +152,23 @@ handle_call({add_binding, #binding{key = Key, args = Args} }, _From,
             State = #state{ upstream_channel = UCh,
                             upstream_properties = UpstreamProps,
                             upstream_queue = Q}) ->
-    amqp_channel:call(
-      UCh, #'queue.bind'{
-        queue = Q,
-        exchange = list_to_binary(proplists:get_value(exchange, UpstreamProps)),
-        routing_key = Key,
-        arguments = Args}),
+    X = list_to_binary(proplists:get_value(exchange, UpstreamProps)),
+    amqp_channel:call(UCh, #'queue.bind'{queue       = Q,
+                                         exchange    = X,
+                                         routing_key = Key,
+                                         arguments   = Args}),
+    {reply, ok, State};
+
+handle_call({remove_bindings, Bs }, _From,
+            State = #state{ upstream_channel = UCh,
+                            upstream_properties = UpstreamProps,
+                            upstream_queue = Q}) ->
+    X = list_to_binary(proplists:get_value(exchange, UpstreamProps)),
+    [amqp_channel:call(UCh, #'queue.unbind'{queue       = Q,
+                                            exchange    = X,
+                                            routing_key = Key,
+                                            arguments   = Args}) ||
+        #binding{key = Key, args = Args} <- Bs],
     {reply, ok, State};
 
 handle_call(Msg, _From, State) ->
