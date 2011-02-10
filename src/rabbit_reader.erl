@@ -446,7 +446,7 @@ close_channel(Channel, State) ->
 handle_dependent_exit(ChPid, Reason, State) ->
     case termination_kind(Reason) of
         controlled ->
-            erase({ch_pid, ChPid}),
+            channel_cleanup(ChPid),
             maybe_close(State);
         uncontrolled ->
             case channel_cleanup(ChPid) of
