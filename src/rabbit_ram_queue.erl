@@ -33,7 +33,6 @@
 -record(s,
         { q1,
           q2,
-          delta,
           q3,
           q4,
           next_seq_id,
@@ -49,8 +48,6 @@
           len,
           persistent_count,
         
-          ram_msg_count,
-          ram_index_count,
           msgs_on_disk,
           msg_indices_on_disk,
           unconfirmed
@@ -65,12 +62,6 @@
           msg_on_disk,
           index_on_disk,
           msg_props
-        }).
-
--record(delta,
-        { start_seq_id, %% start_seq_id is inclusive
-          count,
-          end_seq_id %% end_seq_id is exclusive
         }).
 
 -record(tx, { pending_messages, pending_acks }).
@@ -90,10 +81,6 @@
 -type(seq_id() :: non_neg_integer()).
 -type(ack() :: seq_id()).
 
--type(delta() :: #delta { start_seq_id :: non_neg_integer(),
-                          count :: non_neg_integer(),
-                          end_seq_id :: non_neg_integer() }).
-
 -type(sync() :: #sync { acks_persistent :: [[seq_id()]],
                         acks_all :: [[seq_id()]],
                         pubs :: [{message_properties_transformer(),
@@ -103,7 +90,6 @@
 -type(s() :: #s {
          q1 :: queue(),
          q2 :: bpqueue:bpqueue(),
-         delta :: delta(),
          q3 :: bpqueue:bpqueue(),
          q4 :: queue(),
          next_seq_id :: seq_id(),
@@ -119,8 +105,6 @@
          persistent_count :: non_neg_integer(),
         
          transient_threshold :: non_neg_integer(),
-         ram_msg_count :: non_neg_integer(),
-         ram_index_count :: non_neg_integer(),
          msgs_on_disk :: gb_set(),
          msg_indices_on_disk :: gb_set(),
          unconfirmed :: gb_set() }).
@@ -129,13 +113,6 @@
 -include("rabbit_backing_queue_spec.hrl").
 
 -endif.
-
--define(BLANK_DELTA, #delta { start_seq_id = undefined,
-                              count = 0,
-                              end_seq_id = undefined }).
--define(BLANK_DELTA_PATTERN(Z), #delta { start_seq_id = Z,
-                                         count = 0,
-                                         end_seq_id = Z }).
 
 -define(BLANK_SYNC, #sync { acks_persistent = [],
                             acks_all = [],
@@ -147,24 +124,24 @@
 %%----------------------------------------------------------------------------
 
 start(DurableQueues) ->
-    {AllTerms, StartFunS} = rabbit_queue_index:recover(DurableQueues),
+    {AllTerms, StartFS} = rabbit_queue_index:recover(DurableQueues),
     start_msg_store(
       [Ref || Terms <- AllTerms,
               begin
                   Ref = proplists:get_value(persistent_ref, Terms),
                   Ref =/= undefined
               end],
-      StartFunS).
+      StartFS).
 
 stop() -> stop_msg_store().
 
-start_msg_store(Refs, StartFunS) ->
+start_msg_store(Refs, StartFS) ->
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  undefined, {fun (ok) -> finished end, ok}]),
     ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
                                 [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 Refs, StartFunS]).
+                                 Refs, StartFS]).
 
 stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
@@ -178,17 +155,17 @@ init(QueueName, IsDurable, Recover) ->
          end,
          fun (Guids) -> msg_indices_written_to_disk(Self, Guids) end).
 
-init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
-    IndexS = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
+init(QueueName, IsDurable, false, MsgOnDiskF, MsgIdxOnDiskF) ->
+    IndexS = rabbit_queue_index:init(QueueName, MsgIdxOnDiskF),
     init(IsDurable, IndexS, 0, [],
          case IsDurable of
              true -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                           MsgOnDiskFun);
+                                           MsgOnDiskF);
              false -> undefined
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
 
-init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(QueueName, true, true, MsgOnDiskF, MsgIdxOnDiskF) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -198,7 +175,7 @@ init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
             _ -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
         end,
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
-                                             MsgOnDiskFun),
+                                             MsgOnDiskF),
     TransientClient = msg_store_client_init(?TRANSIENT_MSG_STORE, TRef,
                                             undefined),
     {DeltaCount, IndexS} =
@@ -208,7 +185,7 @@ init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
           fun (Guid) ->
                   rabbit_msg_store:contains(Guid, PersistentClient)
           end,
-          MsgIdxOnDiskFun),
+          MsgIdxOnDiskF),
     init(true, IndexS, DeltaCount, Terms1,
          PersistentClient, TransientClient).
 
@@ -266,13 +243,11 @@ purge(S = #s { q4 = Q4,
     {Len, a(S1 #s { q1 = queue:new(),
                     index_s = IndexS3,
                     len = 0,
-                    ram_msg_count = 0,
-                    ram_index_count = 0,
                     persistent_count = PCount1 })}.
 
 publish(Msg, MsgProps, S) ->
     {_SeqId, S1} = publish(Msg, MsgProps, false, false, S),
-    a(reduce_memory_use(S1)).
+    a(S1).
 
 publish_delivered(false, #basic_message { guid = Guid },
                   _MsgProps, S = #s { len = 0 }) ->
@@ -294,10 +269,9 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
     S2 = record_pending_ack(m(M1), S1),
     PCount1 = PCount + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, Guid, UC),
-    {SeqId, a(reduce_memory_use(
-                S2 #s { next_seq_id = SeqId + 1,
-                        persistent_count = PCount1,
-                        unconfirmed = UC1 }))}.
+    {SeqId, a(S2 #s { next_seq_id = SeqId + 1,
+		      persistent_count = PCount1,
+		      unconfirmed = UC1 })}.
 
 dropwhile(Pred, S) ->
     {_OkOrEmpty, S1} = dropwhile1(Pred, S),
@@ -324,27 +298,25 @@ fetch(AckRequired, S) ->
               internal_fetch(AckRequired, M1, S2)
       end, S).
 
-internal_queue_out(Fun, S = #s { q4 = Q4 }) ->
+internal_queue_out(F, S = #s { q4 = Q4 }) ->
     case queue:out(Q4) of
         {empty, _Q4} ->
             case fetch_from_q3(S) of
                 {empty, S1} = Result -> a(S1), Result;
-                {loaded, {M, S1}} -> Fun(M, S1)
+                {loaded, {M, S1}} -> F(M, S1)
             end;
         {{value, M}, Q4a} ->
-            Fun(M, S #s { q4 = Q4a })
+            F(M, S #s { q4 = Q4a })
     end.
 
 read_msg(M = #m { msg = undefined,
                   guid = Guid,
                   is_persistent = IsPersistent },
-         S = #s { ram_msg_count = RamMsgCount,
-                  msg_store_clients = MSCS}) ->
+         S = #s { msg_store_clients = MSCS}) ->
     {{ok, Msg = #basic_message {}}, MSCS1} =
         msg_store_read(MSCS, IsPersistent, Guid),
     {M #m { msg = Msg },
-     S #s { ram_msg_count = RamMsgCount + 1,
-            msg_store_clients = MSCS1 }};
+     S #s { msg_store_clients = MSCS1 }};
 read_msg(M, S) ->
     {M, S}.
 
@@ -356,8 +328,7 @@ internal_fetch(AckRequired, M = #m {
                               is_delivered = IsDelivered,
                               msg_on_disk = MsgOnDisk,
                               index_on_disk = IndexOnDisk },
-               S = #s {ram_msg_count = RamMsgCount,
-                       index_s = IndexS,
+               S = #s {index_s = IndexS,
                        msg_store_clients = MSCS,
                        len = Len,
                        persistent_count = PCount }) ->
@@ -387,11 +358,9 @@ internal_fetch(AckRequired, M = #m {
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
     Len1 = Len - 1,
-    RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
 
     {{Msg, IsDelivered, AckTag, Len1},
-     a(S1 #s { ram_msg_count = RamMsgCount1,
-               index_s = IndexS2,
+     a(S1 #s { index_s = IndexS2,
                len = Len1,
                persistent_count = PCount1 })}.
 
@@ -428,7 +397,7 @@ tx_rollback(Txn, S = #s { durable = IsDurable,
          end,
     {lists:append(AckTags), a(S)}.
 
-tx_commit(Txn, Fun, MsgPropsFun,
+tx_commit(Txn, F, MsgPropsF,
           S = #s { durable = IsDurable,
                    msg_store_clients = MSCS }) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
@@ -441,33 +410,32 @@ tx_commit(Txn, Fun, MsgPropsFun,
            true -> ok = msg_store_sync(
                           MSCS, true, PersistentGuids,
                           msg_store_callback(PersistentGuids, Pubs, AckTags1,
-                                             Fun, MsgPropsFun)),
+                                             F, MsgPropsF)),
                    S;
            false -> tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags1,
-                                             Fun, MsgPropsFun, S)
+                                             F, MsgPropsF, S)
        end)}.
 
-requeue(AckTags, MsgPropsFun, S) ->
-    MsgPropsFun1 = fun (MsgProps) ->
-                           (MsgPropsFun(MsgProps)) #message_properties {
+requeue(AckTags, MsgPropsF, S) ->
+    MsgPropsF1 = fun (MsgProps) ->
+                           (MsgPropsF(MsgProps)) #message_properties {
                              needs_confirming = false }
                    end,
-    a(reduce_memory_use(
-        ack(fun msg_store_release/3,
-            fun (#m { msg = Msg, msg_props = MsgProps }, S1) ->
-                    {_SeqId, S2} = publish(Msg, MsgPropsFun1(MsgProps),
-                                           true, false, S1),
-                    S2;
-                ({IsPersistent, Guid, MsgProps}, S1) ->
-                    #s { msg_store_clients = MSCS } = S1,
-                    {{ok, Msg = #basic_message{}}, MSCS1} =
-                        msg_store_read(MSCS, IsPersistent, Guid),
-                    S2 = S1 #s { msg_store_clients = MSCS1 },
-                    {_SeqId, S3} = publish(Msg, MsgPropsFun1(MsgProps),
-                                           true, true, S2),
-                    S3
-            end,
-            AckTags, S))).
+    a(ack(fun msg_store_release/3,
+	  fun (#m { msg = Msg, msg_props = MsgProps }, S1) ->
+		  {_SeqId, S2} = publish(Msg, MsgPropsF1(MsgProps),
+					 true, false, S1),
+		  S2;
+	      ({IsPersistent, Guid, MsgProps}, S1) ->
+		  #s { msg_store_clients = MSCS } = S1,
+		  {{ok, Msg = #basic_message{}}, MSCS1} =
+		      msg_store_read(MSCS, IsPersistent, Guid),
+		  S2 = S1 #s { msg_store_clients = MSCS1 },
+		  {_SeqId, S3} = publish(Msg, MsgPropsF1(MsgProps),
+					 true, true, S2),
+		  S3
+	  end,
+	  AckTags, S)).
 
 len(#s { len = Len }) -> Len.
 
@@ -485,26 +453,21 @@ handle_pre_hibernate(S = #s { index_s = IndexS }) ->
     S #s { index_s = rabbit_queue_index:flush(IndexS) }.
 
 status(#s {
-          q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+          q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4,
           len = Len,
           pending_ack = PA,
           ram_ack_index = RAI,
           on_sync = #sync { funs = From },
-          ram_msg_count = RamMsgCount,
-          ram_index_count = RamIndexCount,
           next_seq_id = NextSeqId,
           persistent_count = PersistentCount } ) ->
     [ {q1 , queue:len(Q1)},
       {q2 , bpqueue:len(Q2)},
-      {delta , Delta},
       {q3 , bpqueue:len(Q3)},
       {q4 , queue:len(Q4)},
       {len , Len},
       {pending_acks , dict:size(PA)},
       {outstanding_txns , length(From)},
-      {ram_msg_count , RamMsgCount},
       {ram_ack_count , gb_trees:size(RAI)},
-      {ram_index_count , RamIndexCount},
       {next_seq_id , NextSeqId},
       {persistent_count , PersistentCount} ].
 
@@ -512,27 +475,21 @@ status(#s {
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-a(S = #s { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+a(S = #s { q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4,
            len = Len,
-           persistent_count = PersistentCount,
-           ram_msg_count = RamMsgCount,
-           ram_index_count = RamIndexCount }) ->
+           persistent_count = PersistentCount }) ->
     E1 = queue:is_empty(Q1),
     E2 = bpqueue:is_empty(Q2),
-    ED = Delta#delta.count == 0,
     E3 = bpqueue:is_empty(Q3),
     E4 = queue:is_empty(Q4),
     LZ = Len == 0,
 
     true = E1 or not E3,
-    true = E2 or not ED,
-    true = ED or not E3,
+    true = E2,
     true = LZ == (E3 and E4),
 
     true = Len >= 0,
     true = PersistentCount >= 0,
-    true = RamMsgCount >= 0,
-    true = RamIndexCount >= 0,
 
     S.
 
@@ -562,26 +519,26 @@ m(IsPersistent, SeqId, Msg = #basic_message { guid = Guid },
          msg_on_disk = false, index_on_disk = false,
          msg_props = MsgProps }.
 
-with_msg_store_s({MSCSP, MSCST}, true, Fun) ->
-    {Result, MSCSP1} = Fun(MSCSP),
+with_msg_store_s({MSCSP, MSCST}, true, F) ->
+    {Result, MSCSP1} = F(MSCSP),
     {Result, {MSCSP1, MSCST}};
-with_msg_store_s({MSCSP, MSCST}, false, Fun) ->
-    {Result, MSCST1} = Fun(MSCST),
+with_msg_store_s({MSCSP, MSCST}, false, F) ->
+    {Result, MSCST1} = F(MSCST),
     {Result, {MSCSP, MSCST1}}.
 
-with_immutable_msg_store_s(MSCS, IsPersistent, Fun) ->
+with_immutable_msg_store_s(MSCS, IsPersistent, F) ->
     {Res, MSCS} = with_msg_store_s(MSCS, IsPersistent,
                                    fun (MSCS1) ->
-                                           {Fun(MSCS1), MSCS1}
+                                           {F(MSCS1), MSCS1}
                                    end),
     Res.
 
-msg_store_client_init(MsgStore, MsgOnDiskFun) ->
-    msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun).
+msg_store_client_init(MsgStore, MsgOnDiskF) ->
+    msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskF).
 
-msg_store_client_init(MsgStore, Ref, MsgOnDiskFun) ->
+msg_store_client_init(MsgStore, Ref, MsgOnDiskF) ->
     rabbit_msg_store:client_init(
-      MsgStore, Ref, MsgOnDiskFun,
+      MsgStore, Ref, MsgOnDiskF,
       msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE)).
 
 msg_store_write(MSCS, IsPersistent, Guid, Msg) ->
@@ -645,34 +602,8 @@ persistent_guids(Pubs) ->
     [Guid || {#basic_message { guid = Guid,
                                is_persistent = true }, _MsgProps} <- Pubs].
 
-betas_from_index_entries(List, TransientThreshold, IndexS) ->
-    {Filtered, Delivers, Acks} =
-        lists:foldr(
-          fun ({Guid, SeqId, MsgProps, IsPersistent, IsDelivered},
-               {Filtered1, Delivers1, Acks1}) ->
-                  case SeqId < TransientThreshold andalso not IsPersistent of
-                      true -> {Filtered1,
-                               cons_if(not IsDelivered, SeqId, Delivers1),
-                               [SeqId | Acks1]};
-                      false -> {[m(#m { msg = undefined,
-                                        guid = Guid,
-                                        seq_id = SeqId,
-                                        is_persistent = IsPersistent,
-                                        is_delivered = IsDelivered,
-                                        msg_on_disk = true,
-                                        index_on_disk = true,
-                                        msg_props = MsgProps
-                                      }) | Filtered1],
-                                Delivers1,
-                                Acks1}
-                  end
-          end, {[], [], []}, List),
-    {bpqueue:from_list([{true, Filtered}]),
-     rabbit_queue_index:ack(Acks,
-                            rabbit_queue_index:deliver(Delivers, IndexS))}.
-
-beta_fold(Fun, Init, Q) ->
-    bpqueue:foldr(fun (_Prefix, Value, Acc) -> Fun(Value, Acc) end, Init, Q).
+beta_fold(F, Init, Q) ->
+    bpqueue:foldr(fun (_Prefix, Value, Acc) -> F(Value, Acc) end, Init, Q).
 
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
@@ -680,19 +611,12 @@ beta_fold(Fun, Init, Q) ->
 
 init(IsDurable, IndexS, DeltaCount, Terms,
      PersistentClient, TransientClient) ->
-    {LowSeqId, NextSeqId, IndexS1} = rabbit_queue_index:bounds(IndexS),
+    {_, NextSeqId, IndexS1} = rabbit_queue_index:bounds(IndexS),
 
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
-    Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
-                true -> ?BLANK_DELTA;
-                false -> #delta { start_seq_id = LowSeqId,
-                                  count = DeltaCount1,
-                                  end_seq_id = NextSeqId }
-            end,
     S = #s {
       q1 = queue:new(),
       q2 = bpqueue:new(),
-      delta = Delta,
       q3 = bpqueue:new(),
       q4 = queue:new(),
       next_seq_id = NextSeqId,
@@ -707,19 +631,17 @@ init(IsDurable, IndexS, DeltaCount, Terms,
       len = DeltaCount1,
       persistent_count = DeltaCount1,
 
-      ram_msg_count = 0,
-      ram_index_count = 0,
       msgs_on_disk = gb_sets:new(),
       msg_indices_on_disk = gb_sets:new(),
       unconfirmed = gb_sets:new() },
-    a(maybe_deltas_to_betas(S)).
+    a(S).
 
-msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun) ->
+msg_store_callback(PersistentGuids, Pubs, AckTags, F, MsgPropsF) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
                     Self, fun (SN) -> {[], tx_commit_post_msg_store(
                                              true, Pubs, AckTags,
-                                             Fun, MsgPropsFun, SN)}
+                                             F, MsgPropsF, SN)}
                           end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
@@ -734,13 +656,13 @@ remove_persistent_messages(Guids) ->
     ok = rabbit_msg_store:remove(Guids, PersistentClient),
     rabbit_msg_store:client_delete_and_terminate(PersistentClient).
 
-tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun, MsgPropsFun,
+tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, F, MsgPropsF,
                          S = #s {
                            on_sync = OnSync = #sync {
                                        acks_persistent = SPAcks,
                                        acks_all = SAcks,
                                        pubs = SPubs,
-                                       funs = SFuns },
+                                       funs = SFs },
                            pending_ack = PA,
                            durable = IsDurable }) ->
     PersistentAcks =
@@ -759,15 +681,15 @@ tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun, MsgPropsFun,
                   on_sync = #sync {
                     acks_persistent = [PersistentAcks | SPAcks],
                     acks_all = [AckTags | SAcks],
-                    pubs = [{MsgPropsFun, Pubs} | SPubs],
-                    funs = [Fun | SFuns] }};
+                    pubs = [{MsgPropsF, Pubs} | SPubs],
+                    funs = [F | SFs] }};
         false -> S1 = tx_commit_index(
                         S #s {
                           on_sync = #sync {
                             acks_persistent = [],
                             acks_all = [AckTags],
-                            pubs = [{MsgPropsFun, Pubs}],
-                            funs = [Fun] } }),
+                            pubs = [{MsgPropsF, Pubs}],
+                            funs = [F] } }),
                  S1 #s { on_sync = OnSync }
     end.
 
@@ -777,11 +699,11 @@ tx_commit_index(S = #s { on_sync = #sync {
                            acks_persistent = SPAcks,
                            acks_all = SAcks,
                            pubs = SPubs,
-                           funs = SFuns },
+                           funs = SFs },
                          durable = IsDurable }) ->
     PAcks = lists:append(SPAcks),
     Acks = lists:append(SAcks),
-    Pubs = [{Msg, Fun(MsgProps)} || {Fun, PubsN} <- lists:reverse(SPubs),
+    Pubs = [{Msg, F(MsgProps)} || {F, PubsN} <- lists:reverse(SPubs),
                                     {Msg, MsgProps} <- lists:reverse(PubsN)],
     {SeqIds, S1 = #s { index_s = IndexS }} =
         lists:foldl(
@@ -794,9 +716,8 @@ tx_commit_index(S = #s { on_sync = #sync {
                   {cons_if(IsPersistent1, SeqId, SeqIdsAcc), S3}
           end, {PAcks, ack(Acks, S)}, Pubs),
     IndexS1 = rabbit_queue_index:sync(SeqIds, IndexS),
-    [ Fun() || Fun <- lists:reverse(SFuns) ],
-    reduce_memory_use(
-      S1 #s { index_s = IndexS1, on_sync = ?BLANK_SYNC }).
+    [ F() || F <- lists:reverse(SFs) ],
+    S1 #s { index_s = IndexS1, on_sync = ?BLANK_SYNC }.
 
 purge_betas_and_deltas(LensByStore,
                        S = #s { q3 = Q3,
@@ -808,10 +729,9 @@ purge_betas_and_deltas(LensByStore,
                      remove_queue_entries(fun beta_fold/3, Q3,
                                           LensByStore, IndexS, MSCS),
                  purge_betas_and_deltas(LensByStore1,
-                                        maybe_deltas_to_betas(
-                                          S #s {
-                                            q3 = bpqueue:new(),
-                                            index_s = IndexS1 }))
+					S #s {
+					  q3 = bpqueue:new(),
+					  index_s = IndexS1 })
     end.
 
 remove_queue_entries(Fold, Q, LensByStore, IndexS, MSCS) ->
@@ -854,7 +774,6 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
                  len = Len,
                  persistent_count = PCount,
                  durable = IsDurable,
-                 ram_msg_count = RamMsgCount,
                  unconfirmed = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     M = (m(IsPersistent1, SeqId, Msg, MsgProps))
@@ -869,7 +788,6 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
     {SeqId, S2 #s { next_seq_id = SeqId + 1,
                     len = Len + 1,
                     persistent_count = PCount1,
-                    ram_msg_count = RamMsgCount + 1,
                     unconfirmed = UC1 }}.
 
 maybe_write_msg_to_disk(_Force, M = #m {
@@ -956,9 +874,9 @@ remove_pending_ack(KeepPersistent,
                  S1 #s { index_s = IndexS1 }
     end.
 
-ack(_MsgStoreFun, _Fun, [], S) ->
+ack(_MsgStoreF, _F, [], S) ->
     S;
-ack(MsgStoreFun, Fun, AckTags, S) ->
+ack(MsgStoreF, F, AckTags, S) ->
     {{PersistentSeqIds, GuidsByStore},
      S1 = #s { index_s = IndexS,
                msg_store_clients = MSCS,
@@ -968,13 +886,13 @@ ack(MsgStoreFun, Fun, AckTags, S) ->
                                       ram_ack_index = RAI }}) ->
                   AckEntry = dict:fetch(SeqId, PA),
                   {accumulate_ack(SeqId, AckEntry, Acc),
-                   Fun(AckEntry, S2 #s {
+                   F(AckEntry, S2 #s {
                                    pending_ack = dict:erase(SeqId, PA),
                                    ram_ack_index =
                                        gb_trees:delete_any(SeqId, RAI)})}
           end, {accumulate_ack_init(), S}, AckTags),
     IndexS1 = rabbit_queue_index:ack(PersistentSeqIds, IndexS),
-    [ok = MsgStoreFun(MSCS, IsPersistent, Guids)
+    [ok = MsgStoreF(MSCS, IsPersistent, Guids)
      || {IsPersistent, Guids} <- orddict:to_list(GuidsByStore)],
     PCount1 = PCount - find_persistent_count(sum_guids_by_store_to_len(
                                                orddict:new(), GuidsByStore)),
@@ -1047,75 +965,21 @@ msg_indices_written_to_disk(QPid, GuidSet) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-reduce_memory_use(S) -> S.
-
 fetch_from_q3(S = #s {
                 q1 = Q1,
-                q2 = Q2,
-                delta = #delta { count = DeltaCount },
-                q3 = Q3,
-                q4 = Q4,
-                ram_index_count = RamIndexCount}) ->
+                q3 = Q3}) ->
     case bpqueue:out(Q3) of
         {empty, _Q3} ->
             {empty, S};
-        {{value, IndexOnDisk, M}, Q3a} ->
-            RamIndexCount1 = RamIndexCount - one_if(not IndexOnDisk),
-            true = RamIndexCount1 >= 0, %% ASSERTION
-            S1 = S #s { q3 = Q3a,
-                        ram_index_count = RamIndexCount1 },
+        {{value, _, M}, Q3a} ->
+            S1 = S #s { q3 = Q3a },
             S2 =
-                case {bpqueue:is_empty(Q3a), 0 == DeltaCount} of
-                    {true, true} ->
-                        true = bpqueue:is_empty(Q2), %% ASSERTION
-                        true = queue:is_empty(Q4), %% ASSERTION
+                case bpqueue:is_empty(Q3a) of
+                    true ->
                         S1 #s { q1 = queue:new(),
                                 q4 = Q1 };
-                    {true, false} ->
-                        maybe_deltas_to_betas(S1);
-                    {false, _} ->
+                     false ->
                         S1
                 end,
             {loaded, {M, S2}}
     end.
-
-maybe_deltas_to_betas(S = #s { delta = ?BLANK_DELTA_PATTERN(X) }) ->
-    S;
-maybe_deltas_to_betas(S = #s {
-                        q2 = Q2,
-                        delta = Delta,
-                        q3 = Q3,
-                        index_s = IndexS,
-                        transient_threshold = TransientThreshold }) ->
-    #delta { start_seq_id = DeltaSeqId,
-             count = DeltaCount,
-             end_seq_id = DeltaSeqIdEnd } = Delta,
-    DeltaSeqId1 =
-        lists:min([rabbit_queue_index:next_segment_boundary(DeltaSeqId),
-                   DeltaSeqIdEnd]),
-    {List, IndexS1} =
-        rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexS),
-    {Q3a, IndexS2} =
-        betas_from_index_entries(List, TransientThreshold, IndexS1),
-    S1 = S #s { index_s = IndexS2 },
-    case bpqueue:len(Q3a) of
-        0 ->
-            maybe_deltas_to_betas(
-              S1 #s {
-                delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
-        Q3aLen ->
-            Q3b = bpqueue:join(Q3, Q3a),
-            case DeltaCount - Q3aLen of
-                0 ->
-                    S1 #s { q2 = bpqueue:new(),
-                            delta = ?BLANK_DELTA,
-                            q3 = bpqueue:join(Q3b, Q2) };
-                N when N > 0 ->
-                    Delta1 = #delta { start_seq_id = DeltaSeqId1,
-                                      count = N,
-                                      end_seq_id = DeltaSeqIdEnd },
-                    S1 #s { delta = Delta1,
-                            q3 = Q3b }
-            end
-    end.
-
