@@ -1,0 +1,6 @@
+This is all very experimental.
+
+Configuration might look like:
+
+  {rabbit_federation,
+   [ {exchanges, [{"local", "amqp://amqp.example.com/%2f/remote"}] } ]}

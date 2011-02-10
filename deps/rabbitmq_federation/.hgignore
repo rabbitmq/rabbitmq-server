@@ -1,0 +1,7 @@
+syntax: regexp
+
+^build/
+^dist/
+.*\.beam
+^ebin/rabbit_federation.app
+^tmp/
