@@ -362,13 +362,13 @@ send_exception(Reason, State = #ch{channel = Channel,
                                    reader_pid = ReaderPid}) ->
     {_ShouldClose, CloseChannel, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+    rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
+                     [ReaderPid, Channel, Reason]),
     %% something bad's happened: rollback_and_notify make not be 'ok'
     rollback_and_notify(State),
     State1 = State#ch{state = closing},
     case CloseChannel of
         Channel ->
-            rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
-                             [ReaderPid, Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         _ ->

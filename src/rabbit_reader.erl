@@ -976,29 +976,20 @@ process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
                                             AState
     end.
 
-log_channel_error(ConnectionState, Channel, Reason) ->
-    rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",
-                     [self(), ConnectionState, Channel, Reason]).
-
-handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
-    log_channel_error(closed, Channel, Reason),
+handle_exception(State = #v1{connection_state = closed}, _Channel, _Reason) ->
     State;
-handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
-    log_channel_error(CS, Channel, Reason),
+handle_exception(State, Channel, Reason) ->
     send_exception(State, Channel, Reason).
 
 send_exception(State = #v1{connection = #connection{protocol = Protocol}},
                Channel, Reason) ->
-    {ShouldClose, CloseChannel, CloseMethod} =
+    {true, 0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    NewState = case ShouldClose of
-                   true  -> terminate_channels(),
-                            close_connection(State);
-                   false -> close_channel(Channel, State)
-               end,
+    terminate_channels(),
+    State1 = close_connection(State),
     ok = rabbit_writer:internal_send_command(
-           NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
-    NewState.
+           State1#v1.sock, 0, CloseMethod, Protocol),
+    State1.
 
 internal_emit_stats(State = #v1{stats_timer = StatsTimer}) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
