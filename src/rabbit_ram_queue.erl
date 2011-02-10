@@ -31,10 +31,7 @@
 -behaviour(rabbit_backing_queue).
 
 -record(s,
-        { q1,
-          q2,
-          q3,
-          q4,
+        { q,
           next_seq_id,
           pending_ack,
           pending_ack_index,
@@ -48,8 +45,6 @@
           len,
           persistent_count,
         
-          msgs_on_disk,
-          msg_indices_on_disk,
           unconfirmed
         }).
 
@@ -59,8 +54,6 @@
           msg,
           is_persistent,
           is_delivered,
-          msg_on_disk,
-          index_on_disk,
           msg_props
         }).
 
@@ -88,10 +81,7 @@
                         funs :: [fun (() -> any())] }).
 
 -type(s() :: #s {
-         q1 :: queue(),
-         q2 :: bpqueue:bpqueue(),
-         q3 :: bpqueue:bpqueue(),
-         q4 :: queue(),
+         q :: queue(),
          next_seq_id :: seq_id(),
          pending_ack :: dict(),
          ram_ack_index :: gb_tree(),
@@ -105,8 +95,6 @@
          persistent_count :: non_neg_integer(),
         
          transient_threshold :: non_neg_integer(),
-         msgs_on_disk :: gb_set(),
-         msg_indices_on_disk :: gb_set(),
          unconfirmed :: gb_set() }).
 -type(state() :: s()).
 
@@ -220,26 +208,21 @@ delete_and_terminate(S) ->
     a(S2 #s { index_s = IndexS1,
               msg_store_clients = undefined }).
 
-purge(S = #s { q4 = Q4,
+purge(S = #s { q = Q,
                index_s = IndexS,
                msg_store_clients = MSCS,
                len = Len,
                persistent_count = PCount }) ->
     {LensByStore, IndexS1} = remove_queue_entries(
-                               fun rabbit_misc:queue_fold/3, Q4,
+                               fun rabbit_misc:queue_fold/3, Q,
                                orddict:new(), IndexS, MSCS),
-    {LensByStore1, S1 = #s { q1 = Q1,
-                             index_s = IndexS2,
-                             msg_store_clients = MSCS1 }} =
+    {LensByStore1, S1 = #s { index_s = IndexS2 }} =
         purge_betas_and_deltas(LensByStore,
-                               S #s { q4 = queue:new(),
+                               S #s { q = queue:new(),
                                       index_s = IndexS1 }),
-    {LensByStore2, IndexS3} = remove_queue_entries(
-                                fun rabbit_misc:queue_fold/3, Q1,
-                                LensByStore1, IndexS2, MSCS1),
+    {LensByStore2, IndexS3} = {LensByStore1, IndexS2},
     PCount1 = PCount - find_persistent_count(LensByStore2),
-    {Len, a(S1 #s { q1 = queue:new(),
-                    index_s = IndexS3,
+    {Len, a(S1 #s { index_s = IndexS3,
                     len = 0,
                     persistent_count = PCount1 })}.
 
@@ -283,9 +266,9 @@ dropwhile1(Pred, S) ->
                       {_, S2} = internal_fetch(false, M, S1),
                       dropwhile1(Pred, S2);
                   false ->
-                      {M1, S2 = #s { q4 = Q4 }} =
+                      {M1, S2 = #s { q = Q }} =
                           read_msg(M, S1),
-                      {ok, S2 #s {q4 = queue:in_r(M1, Q4) }}
+                      {ok, S2 #s {q = queue:in_r(M1, Q) }}
               end
       end, S).
 
@@ -296,15 +279,12 @@ fetch(AckRequired, S) ->
               internal_fetch(AckRequired, M1, S2)
       end, S).
 
-internal_queue_out(F, S = #s { q4 = Q4 }) ->
-    case queue:out(Q4) of
-        {empty, _Q4} ->
-            case fetch_from_q3(S) of
-                {empty, S1} = Result -> a(S1), Result;
-                {loaded, {M, S1}} -> F(M, S1)
-            end;
-        {{value, M}, Q4a} ->
-            F(M, S #s { q4 = Q4a })
+internal_queue_out(F, S = #s { q = Q }) ->
+    case queue:out(Q) of
+        {empty, _Q} ->
+	    {empty, S};
+        {{value, M}, Qa} ->
+            F(M, S #s { q = Qa })
     end.
 
 read_msg(M = #m { msg = undefined,
@@ -320,31 +300,15 @@ read_msg(M, S) ->
 
 internal_fetch(AckRequired, M = #m {
                               seq_id = SeqId,
-                              guid = Guid,
                               msg = Msg,
                               is_persistent = IsPersistent,
-                              is_delivered = IsDelivered,
-                              msg_on_disk = MsgOnDisk,
-                              index_on_disk = IndexOnDisk },
+                              is_delivered = IsDelivered },
                S = #s {index_s = IndexS,
-                       msg_store_clients = MSCS,
                        len = Len,
                        persistent_count = PCount }) ->
-    IndexS1 = maybe_write_delivered(
-                IndexOnDisk andalso not IsDelivered,
-                SeqId, IndexS),
+    IndexS1 = IndexS,
 
-    Rem = fun () ->
-                  ok = msg_store_remove(MSCS, IsPersistent, [Guid])
-          end,
-    Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexS1) end,
-    IndexS2 =
-        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
-            {false, true, false, _} -> Rem(), IndexS1;
-            {false, true, true, _} -> Rem(), Ack();
-            { true, true, true, false} -> Ack();
-            _ -> IndexS1
-        end,
+    IndexS2 = IndexS1,
 
     {AckTag, S1} = case AckRequired of
                        true -> SN = record_pending_ack(
@@ -374,8 +338,7 @@ tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
     case IsPersistent andalso IsDurable of
         true -> M = m(true, undefined, Msg, MsgProps),
-                #m { msg_on_disk = true } =
-                    maybe_write_msg_to_disk(false, M, MSCS);
+		maybe_write_msg_to_disk(false, M, MSCS);
         false -> ok
     end,
     a(S).
@@ -451,17 +414,14 @@ handle_pre_hibernate(S = #s { index_s = IndexS }) ->
     S #s { index_s = rabbit_queue_index:flush(IndexS) }.
 
 status(#s {
-          q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4,
+          q = Q,
           len = Len,
           pending_ack = PA,
           ram_ack_index = RAI,
           on_sync = #sync { funs = From },
           next_seq_id = NextSeqId,
-          persistent_count = PersistentCount } ) ->
-    [ {q1 , queue:len(Q1)},
-      {q2 , bpqueue:len(Q2)},
-      {q3 , bpqueue:len(Q3)},
-      {q4 , queue:len(Q4)},
+          persistent_count = PersistentCount }) ->
+    [ {q , queue:len(Q)},
       {len , Len},
       {pending_acks , dict:size(PA)},
       {outstanding_txns , length(From)},
@@ -473,35 +433,11 @@ status(#s {
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-a(S = #s { q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4,
-           len = Len,
-           persistent_count = PersistentCount }) ->
-    E1 = queue:is_empty(Q1),
-    E2 = bpqueue:is_empty(Q2),
-    E3 = bpqueue:is_empty(Q3),
-    E4 = queue:is_empty(Q4),
-    LZ = Len == 0,
+a(S) -> S.
 
-    true = E1 or not E3,
-    true = E2,
-    true = LZ == (E3 and E4),
+m(M) -> M.
 
-    true = Len >= 0,
-    true = PersistentCount >= 0,
-
-    S.
-
-m(M = #m { msg = Msg,
-           is_persistent = IsPersistent,
-           msg_on_disk = MsgOnDisk,
-           index_on_disk = IndexOnDisk }) ->
-    true = (not IsPersistent) or IndexOnDisk,
-    true = (not IndexOnDisk) or MsgOnDisk,
-    true = (Msg =/= undefined) or MsgOnDisk,
-
-    M.
-
-one_if(true ) -> 1;
+one_if(true) -> 1;
 one_if(false) -> 0.
 
 cons_if(true, E, L) -> [E | L];
@@ -514,7 +450,6 @@ m(IsPersistent, SeqId, Msg = #basic_message { guid = Guid },
   MsgProps) ->
     #m { seq_id = SeqId, guid = Guid, msg = Msg,
          is_persistent = IsPersistent, is_delivered = false,
-         msg_on_disk = false, index_on_disk = false,
          msg_props = MsgProps }.
 
 with_msg_store_s({MSCSP, MSCST}, true, F) ->
@@ -538,11 +473,6 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskF) ->
     rabbit_msg_store:client_init(
       MsgStore, Ref, MsgOnDiskF,
       msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE)).
-
-msg_store_write(MSCS, IsPersistent, Guid, Msg) ->
-    with_immutable_msg_store_s(
-      MSCS, IsPersistent,
-      fun (MSCS1) -> rabbit_msg_store:write(Guid, Msg, MSCS1) end).
 
 msg_store_read(MSCS, IsPersistent, Guid) ->
     with_msg_store_s(
@@ -581,11 +511,6 @@ msg_store_close_fds_fun(IsPersistent) ->
               end)
     end.
 
-maybe_write_delivered(false, _SeqId, IndexS) ->
-    IndexS;
-maybe_write_delivered(true, SeqId, IndexS) ->
-    rabbit_queue_index:deliver([SeqId], IndexS).
-
 lookup_tx(Txn) -> case get({txn, Txn}) of
                       undefined -> #tx { pending_messages = [],
                                          pending_acks = [] };
@@ -600,9 +525,6 @@ persistent_guids(Pubs) ->
     [Guid || {#basic_message { guid = Guid,
                                is_persistent = true }, _MsgProps} <- Pubs].
 
-beta_fold(F, Init, Q) ->
-    bpqueue:foldr(fun (_Prefix, Value, Acc) -> F(Value, Acc) end, Init, Q).
-
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
@@ -612,10 +534,7 @@ init6(IsDurable, IndexS, DeltaCount, Terms, PersistentClient, TransientClient) -
 
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
     S = #s {
-      q1 = queue:new(),
-      q2 = bpqueue:new(),
-      q3 = bpqueue:new(),
-      q4 = queue:new(),
+      q = queue:new(),
       next_seq_id = NextSeqId,
       pending_ack = dict:new(),
       ram_ack_index = gb_trees:empty(),
@@ -628,8 +547,6 @@ init6(IsDurable, IndexS, DeltaCount, Terms, PersistentClient, TransientClient) -
       len = DeltaCount1,
       persistent_count = DeltaCount1,
 
-      msgs_on_disk = gb_sets:new(),
-      msg_indices_on_disk = gb_sets:new(),
       unconfirmed = gb_sets:new() },
     a(S).
 
@@ -716,20 +633,7 @@ tx_commit_index(S = #s { on_sync = #sync {
     [ F() || F <- lists:reverse(SFs) ],
     S1 #s { index_s = IndexS1, on_sync = ?BLANK_SYNC }.
 
-purge_betas_and_deltas(LensByStore,
-                       S = #s { q3 = Q3,
-                                index_s = IndexS,
-                                msg_store_clients = MSCS }) ->
-    case bpqueue:is_empty(Q3) of
-        true -> {LensByStore, S};
-        false -> {LensByStore1, IndexS1} =
-                     remove_queue_entries(fun beta_fold/3, Q3,
-                                          LensByStore, IndexS, MSCS),
-                 purge_betas_and_deltas(LensByStore1,
-					S #s {
-					  q3 = bpqueue:new(),
-					  index_s = IndexS1 })
-    end.
+purge_betas_and_deltas(LensByStore, S) -> {LensByStore, S}.
 
 remove_queue_entries(Fold, Q, LensByStore, IndexS, MSCS) ->
     {GuidsByStore, Delivers, Acks} =
@@ -741,17 +645,8 @@ remove_queue_entries(Fold, Q, LensByStore, IndexS, MSCS) ->
      rabbit_queue_index:ack(Acks,
                             rabbit_queue_index:deliver(Delivers, IndexS))}.
 
-remove_queue_entries1(
-  #m { guid = Guid, seq_id = SeqId,
-       is_delivered = IsDelivered, msg_on_disk = MsgOnDisk,
-       index_on_disk = IndexOnDisk, is_persistent = IsPersistent },
-  {GuidsByStore, Delivers, Acks}) ->
-    {case MsgOnDisk of
-         true -> rabbit_misc:orddict_cons(IsPersistent, Guid, GuidsByStore);
-         false -> GuidsByStore
-     end,
-     cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
-     cons_if(IndexOnDisk, SeqId, Acks)}.
+remove_queue_entries1(_, {GuidsByStore, Delivers, Acks}) ->
+    {GuidsByStore, Delivers, Acks}.
 
 sum_guids_by_store_to_len(LensByStore, GuidsByStore) ->
     orddict:fold(
@@ -765,21 +660,18 @@ sum_guids_by_store_to_len(LensByStore, GuidsByStore) ->
 
 publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        IsDelivered, MsgOnDisk,
-        S = #s { q1 = Q1, q3 = Q3, q4 = Q4,
+        IsDelivered,
+	_,
+        S = #s { q = Q,
                  next_seq_id = SeqId,
                  len = Len,
                  persistent_count = PCount,
                  durable = IsDurable,
                  unconfirmed = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
-    M = (m(IsPersistent1, SeqId, Msg, MsgProps))
-        #m { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
+    M = (m(IsPersistent1, SeqId, Msg, MsgProps)) #m { is_delivered = IsDelivered },
     {M1, S1} = maybe_write_to_disk(false, false, M, S),
-    S2 = case bpqueue:is_empty(Q3) of
-             false -> S1 #s { q1 = queue:in(m(M1), Q1) };
-             true -> S1 #s { q4 = queue:in(m(M1), Q4) }
-         end,
+    S2 = S1 #s { q = queue:in(m(M1), Q) },
     PCount1 = PCount + one_if(IsPersistent1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, Guid, UC),
     {SeqId, S2 #s { next_seq_id = SeqId + 1,
@@ -787,64 +679,22 @@ publish(Msg = #basic_message { is_persistent = IsPersistent, guid = Guid },
                     persistent_count = PCount1,
                     unconfirmed = UC1 }}.
 
-maybe_write_msg_to_disk(_Force, M = #m {
-                                  msg_on_disk = true }, _MSCS) ->
-    M;
-maybe_write_msg_to_disk(Force, M = #m {
-                                 msg = Msg, guid = Guid,
-                                 is_persistent = IsPersistent }, MSCS)
-  when Force orelse IsPersistent ->
-    Msg1 = Msg #basic_message {
-             content = rabbit_binary_parser:clear_decoded_content(
-                         Msg #basic_message.content)},
-    ok = msg_store_write(MSCS, IsPersistent, Guid, Msg1),
-    M #m { msg_on_disk = true };
-maybe_write_msg_to_disk(_Force, M, _MSCS) ->
-    M.
+maybe_write_msg_to_disk(_Force, M, _MSCS) -> M.
 
-maybe_write_index_to_disk(_Force, M = #m {
-                                    index_on_disk = true }, IndexS) ->
-    true = M #m.msg_on_disk, %% ASSERTION
-    {M, IndexS};
-maybe_write_index_to_disk(Force, M = #m {
-                                   guid = Guid,
-                                   seq_id = SeqId,
-                                   is_persistent = IsPersistent,
-                                   is_delivered = IsDelivered,
-                                   msg_props = MsgProps}, IndexS)
-  when Force orelse IsPersistent ->
-    true = M #m.msg_on_disk, %% ASSERTION
-    IndexS1 = rabbit_queue_index:publish(
-                Guid, SeqId, MsgProps, IsPersistent, IndexS),
-    {M #m { index_on_disk = true },
-     maybe_write_delivered(IsDelivered, SeqId, IndexS1)};
-maybe_write_index_to_disk(_Force, M, IndexS) ->
-    {M, IndexS}.
-
-maybe_write_to_disk(ForceMsg, ForceIndex, M,
-                    S = #s { index_s = IndexS,
-                             msg_store_clients = MSCS }) ->
+maybe_write_to_disk(ForceMsg, _, M,
+                    S = #s { index_s = IndexS, msg_store_clients = MSCS }) ->
     M1 = maybe_write_msg_to_disk(ForceMsg, M, MSCS),
-    {M2, IndexS1} =
-        maybe_write_index_to_disk(ForceIndex, M1, IndexS),
+    {M2, IndexS1} = {M1, IndexS},
     {M2, S #s { index_s = IndexS1 }}.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
-record_pending_ack(#m { seq_id = SeqId,
-                        guid = Guid,
-                        is_persistent = IsPersistent,
-                        msg_on_disk = MsgOnDisk,
-                        msg_props = MsgProps } = M,
+record_pending_ack(#m { seq_id = SeqId, guid = Guid } = M,
                    S = #s { pending_ack = PA,
                             ram_ack_index = RAI}) ->
-    {AckEntry, RAI1} =
-        case MsgOnDisk of
-            true -> {{IsPersistent, Guid, MsgProps}, RAI};
-            false -> {M, gb_trees:insert(SeqId, Guid, RAI)}
-        end,
+    {AckEntry, RAI1} = {M, gb_trees:insert(SeqId, Guid, RAI)},
     PA1 = dict:store(SeqId, AckEntry, PA),
     S #s { pending_ack = PA1,
            ram_ack_index = RAI1 }.
@@ -898,10 +748,7 @@ ack(MsgStoreF, F, AckTags, S) ->
 
 accumulate_ack_init() -> {[], orddict:new()}.
 
-accumulate_ack(_SeqId, #m { is_persistent = false, %% ASSERTIONS
-                            msg_on_disk = false,
-                            index_on_disk = false },
-               {PersistentSeqIdsAcc, GuidsByStore}) ->
+accumulate_ack(_SeqId, _, {PersistentSeqIdsAcc, GuidsByStore}) ->
     {PersistentSeqIdsAcc, GuidsByStore};
 accumulate_ack(SeqId, {IsPersistent, Guid, _MsgProps},
                {PersistentSeqIdsAcc, GuidsByStore}) ->
@@ -918,12 +765,8 @@ find_persistent_count(LensByStore) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-remove_confirms(GuidSet, S = #s { msgs_on_disk = MOD,
-                                  msg_indices_on_disk = MIOD,
-                                  unconfirmed = UC }) ->
-    S #s { msgs_on_disk = gb_sets:difference(MOD, GuidSet),
-           msg_indices_on_disk = gb_sets:difference(MIOD, GuidSet),
-           unconfirmed = gb_sets:difference(UC, GuidSet) }.
+remove_confirms(GuidSet, S = #s { unconfirmed = UC }) ->
+    S #s { unconfirmed = gb_sets:difference(UC, GuidSet) }.
 
 msgs_confirmed(GuidSet, S) ->
     {gb_sets:to_list(GuidSet), remove_confirms(GuidSet, S)}.
@@ -932,51 +775,11 @@ blind_confirm(QPid, GuidSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       QPid, fun (S) -> msgs_confirmed(GuidSet, S) end).
 
-msgs_written_to_disk(QPid, GuidSet, removed) ->
-    blind_confirm(QPid, GuidSet);
-msgs_written_to_disk(QPid, GuidSet, written) ->
+msgs_written_to_disk(QPid, GuidSet, removed) -> blind_confirm(QPid, GuidSet);
+msgs_written_to_disk(QPid, _, written) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (S = #s { msgs_on_disk = MOD,
-                          msg_indices_on_disk = MIOD,
-                          unconfirmed = UC }) ->
-                    msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
-                                   S #s {
-                                     msgs_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MOD, GuidSet), UC) })
-            end).
+      QPid, fun (S) -> msgs_confirmed(gb_sets:new(), S) end).
 
-msg_indices_written_to_disk(QPid, GuidSet) ->
+msg_indices_written_to_disk(QPid, _) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (S = #s { msgs_on_disk = MOD,
-                          msg_indices_on_disk = MIOD,
-                          unconfirmed = UC }) ->
-                    msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
-                                   S #s {
-                                     msg_indices_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MIOD, GuidSet), UC) })
-            end).
-
-%%----------------------------------------------------------------------------
-%% Phase changes
-%%----------------------------------------------------------------------------
-
-fetch_from_q3(S = #s {
-                q1 = Q1,
-                q3 = Q3}) ->
-    case bpqueue:out(Q3) of
-        {empty, _Q3} ->
-            {empty, S};
-        {{value, _, M}, Q3a} ->
-            S1 = S #s { q3 = Q3a },
-            S2 =
-                case bpqueue:is_empty(Q3a) of
-                    true ->
-                        S1 #s { q1 = queue:new(),
-                                q4 = Q1 };
-                     false ->
-                        S1
-                end,
-            {loaded, {M, S2}}
-    end.
+      QPid, fun (S) -> msgs_confirmed(gb_sets:new(), S) end).
