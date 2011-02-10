@@ -219,12 +219,13 @@ handle_cast({method, Method, Content}, State) ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
             noreply(NewState);
         {noreply, NewState} ->
-            noreply(NewState)
+            noreply(NewState);
+        stop ->
+            {stop, normal, State}
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            {stop, normal, terminating(Reason#amqp_error{method = MethodName},
-                                       State)};
+            send_exception(Reason#amqp_error{method = MethodName}, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
@@ -358,6 +359,21 @@ terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
     ok = rollback_and_notify(State),
     Reader ! {channel_exit, Channel, Reason},
     State#ch{state = terminating}.
+
+send_exception(Reason, State = #ch{channel = Channel,
+                                   writer_pid = WriterPid,
+                                   protocol = Protocol,
+                                   reader_pid = ReaderPid}) ->
+    {_ShouldClose, CloseChannel, CloseMethod} =
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+    case CloseChannel of
+        Channel ->
+            ok = rabbit_writer:send_command(WriterPid, CloseMethod),
+            {noreply, State#ch{state = closing}};
+        _ ->
+            ReaderPid ! {channel_exit, Channel, Reason},
+            {stop, normal, State}
+    end.
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
@@ -528,6 +544,9 @@ handle_method(#'channel.open'{}, _, _State) ->
 
 handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
+
+handle_method(#'channel.close_ok'{}, _, #ch{state = closing}) ->
+    stop;
 
 handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
