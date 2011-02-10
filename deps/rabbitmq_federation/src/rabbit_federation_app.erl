@@ -33,15 +33,15 @@ stop(_State) ->
 
 %%----------------------------------------------------------------------------
 
-declare_exchange({Local, Remote, Type}) ->
+declare_exchange({Downstream, Upstream, Type}) ->
     {ok, Conn} = amqp_connection:start(direct),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     %% TODO make durable, recover bindings etc
-    amqp_channel:call(Ch, #'exchange.declare'{
-                        exchange = list_to_binary(Local),
-                        type = <<"x-federation">>,
-                        arguments =
-                            [{<<"remote">>, longstr, list_to_binary(Remote)},
-                             {<<"type">>,   longstr, list_to_binary(Type)}]}),
+    amqp_channel:call(
+      Ch, #'exchange.declare'{
+        exchange = list_to_binary(Downstream),
+        type = <<"x-federation">>,
+        arguments = [{<<"upstream">>, longstr, list_to_binary(Upstream)},
+                     {<<"type">>,     longstr, list_to_binary(Type)}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn).

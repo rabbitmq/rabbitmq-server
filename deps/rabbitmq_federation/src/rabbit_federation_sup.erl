@@ -27,10 +27,10 @@
 start_link() ->
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
-start_child(Local, Remote, Module) ->
+start_child(Downstream, Upstream, Module) ->
     supervisor:start_child(?SUPERVISOR,
                            {exchange, {rabbit_federation_exchange, start_link,
-                                       [Local, Remote, Module]},
+                                       [Downstream, Upstream, Module]},
                             permanent, brutal_kill, worker,
                             [rabbit_federation_exchange]}).
 
