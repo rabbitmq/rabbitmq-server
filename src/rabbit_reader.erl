@@ -552,7 +552,7 @@ handle_frame(Type, Channel, Payload,
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
                     case AnalyzedFrame of
-                        {method, #'channel.close_ok'{}, _} ->
+                        {method, 'channel.close_ok', _} ->
                             erase({channel, Channel}),
                             State;
                         {method, MethodName, _} ->
