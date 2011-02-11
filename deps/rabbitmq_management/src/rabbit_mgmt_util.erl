@@ -24,6 +24,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
+-export([relativise/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -350,3 +351,22 @@ args({struct, L}) ->
     args(L);
 args(L) ->
     [{K, rabbit_mgmt_format:args_type(V), V} || {K, V} <- L].
+
+relativise("/" ++ F, "/" ++ T) ->
+    From = string:tokens(F, "/"),
+    To = string:tokens(T, "/"),
+    relativise0(From, To).
+
+relativise0([H], [H|_] = To) ->
+    string:join(To, "/");
+relativise0([H|From], [H|To]) ->
+    relativise0(From, To);
+relativise0(From, []) ->
+    relativise(From, [], 0);
+relativise0(From, To) ->
+    relativise(From, To, 1).
+
+relativise(From, To, Diff) ->
+    string:join(lists:duplicate(length(From) - Diff, "..") ++ To, "/").
+
+
