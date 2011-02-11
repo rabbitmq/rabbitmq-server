@@ -1305,7 +1305,7 @@ test_queue_cleanup(_SecondaryNode) ->
     rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
                                             queue   = ?CLEANUP_QUEUE_NAME }),
     receive
-        #'channel.close'{reply_code = 404} = CC ->
+        #'channel.close'{reply_code = 404} ->
             ok
     after 2000 ->
             throw(failed_to_receive_channel_exit)
