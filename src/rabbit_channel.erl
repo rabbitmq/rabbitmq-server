@@ -23,7 +23,7 @@
 -export([start_link/8, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1]).
+-export([emit_stats/1, ready_for_close/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -89,6 +89,7 @@
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
+-spec(ready_for_close/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -146,6 +147,9 @@ info_all(Items) ->
 
 emit_stats(Pid) ->
     gen_server2:cast(Pid, emit_stats).
+
+ready_for_close(Pid) ->
+    gen_server2:cast(Pid, ready_for_close).
 
 %%---------------------------------------------------------------------------
 
@@ -232,7 +236,8 @@ handle_cast({method, Method, Content}, State) ->
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State), hibernate};
 
-handle_cast(closed, State = #ch{state = closing, writer_pid = WriterPid}) ->
+handle_cast(ready_for_close, State = #ch{state      = closing,
+                                         writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
     {stop, normal, State};
 
@@ -552,9 +557,7 @@ handle_method(_Method, _, State = #ch{state = closing}) ->
 
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid,
                                                  channel = Channel}) ->
-    Self = self(),
-    ReaderPid ! {channel_closing, Channel,
-                 fun () -> ok = gen_server2:cast(Self, closed) end},
+    ReaderPid ! {channel_closing, Channel, self()},
     %% no error, so rollback_and_notify should be 'ok'. Do in parallel
     %% with the reader picking up our message and running our Fun.
     {ok, State1} = rollback_and_notify(State),

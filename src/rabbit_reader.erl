@@ -242,8 +242,8 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             throw({inet_error, Reason});
         {conserve_memory, Conserve} ->
             mainloop(Deb, internal_conserve_memory(Conserve, State));
-        {channel_closing, Channel, Fun} ->
-            ok = Fun(),
+        {channel_closing, Channel, ChPid} ->
+            ok = rabbit_channel:ready_for_close(ChPid),
             erase({channel, Channel}),
             mainloop(Deb, State);
         {'EXIT', Parent, Reason} ->
