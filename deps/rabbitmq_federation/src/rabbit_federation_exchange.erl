@@ -164,10 +164,7 @@ handle_call({remove_bindings, Bs }, _From,
                             upstream_properties = UpstreamProps,
                             upstream_queue = Q}) ->
     X = list_to_binary(proplists:get_value(exchange, UpstreamProps)),
-    [amqp_channel:call(UCh, #'queue.unbind'{queue       = Q,
-                                            exchange    = X,
-                                            routing_key = Key,
-                                            arguments   = Args}) ||
+    [maybe_unbind(UCh, X, Q, Key, Args) ||
         #binding{key = Key, args = Args} <- Bs],
     {reply, ok, State};
 
@@ -203,3 +200,16 @@ terminate(_Reason, State = #state { downstream_connection = DConn,
     amqp_connection:close(UConn),
     true = ets:delete(?ETS_NAME, DownstreamX),
     State.
+
+%%----------------------------------------------------------------------------
+
+maybe_unbind(Ch, X, Q, Key, Args) ->
+    %% We may already be unbound if e.g. someone has deleted the upstream
+    %% exchange
+    try amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
+                                              exchange    = X,
+                                              routing_key = Key,
+                                              arguments   = Args})
+    catch exit:{{server_initiated_close, ?NOT_FOUND, _}, _} ->
+            ok
+    end.
