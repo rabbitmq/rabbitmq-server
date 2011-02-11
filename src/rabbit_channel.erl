@@ -555,9 +555,8 @@ handle_method(#'channel.close'{}, _, State = #ch{state = closing}) ->
 handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
 
-handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid,
-                                                 channel = Channel}) ->
-    ReaderPid ! {channel_closing, Channel, self()},
+handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
+    ReaderPid ! {channel_closing, self()},
     %% no error, so rollback_and_notify should be 'ok'. Do in parallel
     %% with the reader picking up our message and running our Fun.
     {ok, State1} = rollback_and_notify(State),

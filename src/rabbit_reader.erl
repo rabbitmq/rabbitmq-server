@@ -242,9 +242,9 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
             throw({inet_error, Reason});
         {conserve_memory, Conserve} ->
             mainloop(Deb, internal_conserve_memory(Conserve, State));
-        {channel_closing, Channel, ChPid} ->
+        {channel_closing, ChPid} ->
             ok = rabbit_channel:ready_for_close(ChPid),
-            erase({channel, Channel}),
+            channel_cleanup(ChPid),
             mainloop(Deb, State);
         {'EXIT', Parent, Reason} ->
             terminate(io_lib:format("broker forced connection closure "
@@ -467,7 +467,7 @@ handle_frame(Type, Channel, Payload,
                     put({channel, Channel}, {ChPid, NewAState}),
                     case AnalyzedFrame of
                         {method, 'channel.close_ok', _} ->
-                            erase({channel, Channel}),
+                            channel_cleanup(ChPid),
                             State;
                         {method, MethodName, _} ->
                             case (State#v1.connection_state =:= blocking
