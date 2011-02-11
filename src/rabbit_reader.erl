@@ -877,7 +877,7 @@ handle_exception(State, Channel, Reason) ->
 
 send_exception(State = #v1{connection = #connection{protocol = Protocol}},
                Channel, Reason) ->
-    {true, 0, CloseMethod} =
+    {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     terminate_channels(),
     State1 = close_connection(State),

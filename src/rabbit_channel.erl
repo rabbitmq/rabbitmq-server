@@ -359,7 +359,7 @@ send_exception(Reason, State = #ch{protocol   = Protocol,
                                    channel    = Channel,
                                    writer_pid = WriterPid,
                                    reader_pid = ReaderPid}) ->
-    {_ShouldClose, CloseChannel, CloseMethod} =
+    {CloseChannel, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
                      [ReaderPid, Channel, Reason]),
