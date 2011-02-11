@@ -29,12 +29,16 @@ start_link() ->
 
 start_child(Downstream, Upstream, Module) ->
     supervisor:start_child(?SUPERVISOR,
-                           {exchange, {rabbit_federation_exchange, start_link,
-                                       [Downstream, Upstream, Module]},
+                           {id(Downstream, Upstream),
+                            {rabbit_federation_exchange, start_link,
+                             [Downstream, Upstream, Module]},
                             permanent, brutal_kill, worker,
                             [rabbit_federation_exchange]}).
 
 %%----------------------------------------------------------------------------
+
+id(Downstream, Upstream) ->
+    {Downstream, Upstream}.
 
 init([]) ->
     {ok, {{one_for_one,3,10},[]}}.

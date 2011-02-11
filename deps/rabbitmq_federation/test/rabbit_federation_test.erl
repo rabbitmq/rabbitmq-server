@@ -20,35 +20,80 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 simple_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream">>, <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream">>,
+                                   <<"amqp://localhost/%2f/upstream">>,
+                                   <<"direct">>),
+              Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO">>),
+              expect(Ch, Q, <<"HELLO">>),
+              delete_exchange(Ch, <<"downstream">>),
+              delete_exchange(Ch, <<"upstream">>)
+      end).
+
+conf_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream">>, <<"topic">>),
+              Q = bind_queue(Ch, <<"downstream-conf">>, <<"key">>),
+              publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO">>),
+              expect(Ch, Q, <<"HELLO">>),
+              delete_exchange(Ch, <<"upstream">>)
+      end).
+
+
+%%----------------------------------------------------------------------------
+
+with_ch(Fun) ->
     {ok, Conn} = amqp_connection:start(network),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    amqp_channel:call(Ch, #'exchange.declare'{ exchange = <<"upstream">>,
-                                               type = <<"direct">> }),
-    amqp_channel:call(
-      Ch, #'exchange.declare'{
-        exchange = <<"downstream">>,
-        type = <<"x-federation">>,
-        arguments = [{<<"upstream">>, longstr,
-                      <<"amqp://localhost/%2f/upstream">>},
-                     {<<"type">>, longstr, <<"direct">>}]
-       }),
-    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"result">>,
-                                            exclusive = true }),
-    amqp_channel:call(Ch, #'queue.bind'{ queue = <<"result">>,
-                                         exchange = <<"downstream">>,
-                                         routing_key = <<"key">> }),
-    amqp_channel:call(Ch, #'basic.publish'{ exchange = <<"upstream">>,
-                                            routing_key = <<"key">> },
-                      #amqp_msg { payload = <<"HELLO">> }),
-    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = <<"result">> },
-                           self()),
-    receive
-        #'basic.consume_ok'{} -> ok
-    end,
-    receive
-        {#'basic.deliver'{}, #amqp_msg { payload = <<"HELLO">> }} -> ok
-    end,
-    amqp_channel:call(Ch, #'exchange.delete'{ exchange = <<"downstream">> }),
-    amqp_channel:call(Ch, #'exchange.delete'{ exchange = <<"upstream">> }),
+    Fun(Ch),
     amqp_connection:close(Conn),
     ok.
+
+args(Args) ->
+    [{list_to_binary(atom_to_list(K)), longstr, V} || {K, V} <- Args].
+
+declare_fed_exchange(Ch, X, Upstream, Type) ->
+    amqp_channel:call(
+      Ch, #'exchange.declare'{
+        exchange  = X,
+        type      = <<"x-federation">>,
+        arguments = args([{upstream, Upstream},
+                          {type,     Type}])
+       }).
+
+declare_exchange(Ch, X, Type) ->
+    amqp_channel:call(Ch, #'exchange.declare'{ exchange = X,
+                                               type     = Type }).
+
+bind_queue(Ch, X, Key) ->
+    #'queue.declare_ok'{ queue = Q } =
+        amqp_channel:call(Ch, #'queue.declare'{ exclusive = true }),
+    amqp_channel:call(Ch, #'queue.bind'{ queue       = Q,
+                                         exchange    = X,
+                                         routing_key = Key }),
+    Q.
+
+delete_exchange(Ch, X) ->
+    amqp_channel:call(Ch, #'exchange.delete'{ exchange = X }).
+
+publish(Ch, X, Key, Payload) ->
+    amqp_channel:call(Ch, #'basic.publish'{ exchange    = X,
+                                            routing_key = Key },
+                      #amqp_msg { payload = Payload }).
+
+expect(Ch, Q, Payload) ->
+    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q },
+                           self()),
+    receive
+        #'basic.consume_ok'{ consumer_tag = CTag } -> ok
+    end,
+    receive
+        {#'basic.deliver'{}, #amqp_msg { payload = Payload }} -> ok
+    end,
+    amqp_channel:call(Ch, #'basic.cancel'{ consumer_tag = CTag }).
+
+%%----------------------------------------------------------------------------
