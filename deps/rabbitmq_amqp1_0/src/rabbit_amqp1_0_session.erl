@@ -22,6 +22,7 @@
                   %% we make incoming and outgoing session buffers the
                   %% same size
                   window_size,
+                  ack_counter = 0,
                   incoming_unsettled_map,
                   outgoing_unsettled_map }).
 -record(outgoing_link, {queue,
@@ -30,9 +31,16 @@
                         no_ack,
                         default_outcome}).
 
+%% Just make these constant for the time being.
+-define(INCOMING_CREDIT, 65536).
+-define(INIT_TXFR_COUNT, 0).
+-define(TRANSFER_UNIT, 0).
+
 -record(incoming_link, {name, exchange, routing_key,
                         transfer_unit = 0,
-                        transfer_count = 0}).
+                        transfer_count = 0,
+                        credit_used = ?INCOMING_CREDIT div 2
+                       }).
 
 -record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
@@ -50,11 +58,6 @@
 %% TODO test where the sweetspot for gb_trees is
 -define(MAX_SESSION_BUFFER_SIZE, 4096).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
-
-%% Just make these constant for the time being.
--define(INCOMING_CREDIT, 65536).
--define(INIT_TXFR_COUNT, 0).
--define(TRANSFER_UNIT, 0).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -80,6 +83,7 @@ init([Channel, ReaderPid, WriterPid]) ->
                    reader_pid             = ReaderPid,
                    writer_pid             = WriterPid,
                    next_publish_id        = 0,
+                   ack_counter            = 0,
                    incoming_unsettled_map = gb_trees:empty(),
                    outgoing_unsettled_map = gb_trees:empty()}}.
 
@@ -153,12 +157,18 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
                       link_credit = {uint, LinkCredit},
                       available   = Available,
                       drain       = Drain },
-    put({out, Handle}, Out#outgoing_link{ transfer_count = Count}),
+    put({out, Handle}, Out#outgoing_link{ transfer_count = Count }),
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {noreply, State};
 
+%% An acknowledgement from the queue.  To keep the incoming window
+%% moving, we make sure to update them with the session counters every
+%% once in a while.  Assuming that the buffer is an appropriate size,
+%% about once every window_size / 2 is a good heuristic.
 handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
             State = #session{incoming_unsettled_map = Unsettled,
+                             window_size = Window,
+                             ack_counter = AckCounter,
                              writer_pid = WriterPid}) ->
     {TransferIds, Unsettled1} =
         case Multiple of
@@ -176,7 +186,18 @@ handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
                                   #'v1_0.disposition'{role = ?RECV_ROLE}),
               rabbit_amqp1_0_writer:send_command(WriterPid, D)
     end,
-    {noreply, State#session{ incoming_unsettled_map = Unsettled1 }};
+    HalfWindow = Window div 2,
+    AckCounter1 = case (AckCounter + length(TransferIds)) of
+                      Over when Over >= HalfWindow ->
+                          F = flow_session_fields(State),
+                          rabbit_amqp1_0_writer:send_command(WriterPid, F),
+                          Over - HalfWindow;
+                      Counter ->
+                          Counter
+                  end,
+    {noreply, State#session{
+                ack_counter = AckCounter1,
+                incoming_unsettled_map = Unsettled1 }};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -277,6 +298,7 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
                     {uint, Max} -> Max;
                     _ -> ?DEFAULT_MAX_HANDLE
                 end,
+    %% TODO does it make sense to have two different sizes
     SessionBufferSize = erlang:min(Window, ?MAX_SESSION_BUFFER_SIZE),
     %% Attempt to limit the number of "at risk" messages we can have.
     amqp_channel:cast(AmqpChannel,
@@ -289,7 +311,7 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
        outgoing_window = {uint, SessionBufferSize}},
      State#session{
        next_incoming_id = RemoteNextIn,
-       max_outgoing_id = RemoteNextIn + Window, % TODO sequence number addition
+       max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
        window_size = SessionBufferSize}};
 
 handle_control(#'v1_0.attach'{name = Name,
@@ -319,7 +341,6 @@ handle_control(#'v1_0.attach'{name = Name,
                                             erlang:max(1, NextPublishId) }
             end,
             put({in, Handle}, IncomingLink),
-            %% Also grant credit
             Flow = flow_session_fields(State2),
             Flow1 = Flow#'v1_0.flow'{ handle = Handle,
                                       link_credit = {uint, ?INCOMING_CREDIT},
@@ -362,18 +383,26 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
     case get({in, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK,
                         transfer_count = Count,
+                        credit_used = CreditUsed,
                         transfer_unit = Unit } = Link ->
             TransferSize = transfer_size(Txfr, Unit),
-            NewCount = Count + TransferSize,
+            NewCount = rabbit_misc:serial_add(Count, TransferSize),
             Msg = rabbit_amqp1_0_message:assemble(Fragments),
             NextPublishId1 = case NextPublishId of
                                  0 -> 0;
-                                 _ -> NextPublishId + 1
+                                 _ -> NextPublishId + 1 % serial?
                              end,
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = RK }, Msg),
-            put({in, Handle}, Link#incoming_link{ transfer_count = NewCount }),
-            %% TODO send flow if the credit is running low
+            {SendFlow, CreditUsed1} = case CreditUsed - TransferSize of
+                                          C when C =< 0 ->
+                                              {true,  ?INCOMING_CREDIT div 2};
+                                          D ->
+                                              {false, D}
+                                      end,
+            NewLink = Link#incoming_link{ transfer_count = NewCount,
+                                          credit_used = CreditUsed1 },
+            put({in, Handle}, NewLink),
             State1 = State#session{
                        next_publish_id = NextPublishId1,
                        next_incoming_id = next_transfer_number(TxfrId) },
@@ -392,7 +421,13 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                              State1#session{
                                incoming_unsettled_map = Unsettled1}
                      end,
-            {noreply, State2};
+            case SendFlow of
+                true ->
+                    ?DEBUG("sending flow for incoming ~p", [NewLink]),
+                    incoming_flow(NewLink, Handle, State2);
+                false ->
+                    {noreply, State2}
+            end;
         undefined ->
             protocol_error(?V_1_0_ILLEGAL_STATE,
                            "Unknown link handle ~p", [Handle])
@@ -484,6 +519,7 @@ handle_control(Flow = #'v1_0.flow'{},
     end;
 
 handle_control(Frame, State) ->
+    %% FIXME should this bork?
     io:format("Ignoring frame: ~p~n", [Frame]),
     {noreply, State}.
 
@@ -585,11 +621,12 @@ attach_outgoing(DefaultOutcome, Outcomes,
 flow_session_fields(State = #session{ next_transfer_number = NextOut,
                                       next_incoming_id = NextIn,
                                       window_size = Window,
-                                      outgoing_unsettled_map = Unsettled }) ->
+                                      outgoing_unsettled_map = UnsettledOut,
+                                      incoming_unsettled_map = UnsettledIn }) ->
     #'v1_0.flow'{ next_outgoing_id = {uint, NextOut},
-                  outgoing_window = {uint, Window - gb_trees:size(Unsettled)},
+                  outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
                   next_incoming_id = {uint, NextIn},
-                  incoming_window = {uint, Window}}.
+                  incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}}.
 
 outgoing_flow(#outgoing_link{ transfer_count = LocalCount },
               Flow = #'v1_0.flow'{
@@ -627,6 +664,14 @@ outgoing_flow(#outgoing_link{ transfer_count = LocalCount },
                       available = {uint, Available},
                       drain = Drain}, State}
     end.
+
+incoming_flow(#incoming_link{ transfer_count = Count }, Handle, State) ->
+    Flow = flow_session_fields(State),
+    {reply, Flow#'v1_0.flow'{
+              handle = Handle,
+              transfer_count = {uint, Count},
+              link_credit = {uint, ?INCOMING_CREDIT}},
+     State}.
 
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ transfer_unit = Unit,
@@ -1012,7 +1057,7 @@ queue_address(QueueName) when is_binary(QueueName) ->
 
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
-    TransferNumber + 1.
+    rabbit_misc:serial_add(TransferNumber, 1).
 
 %% FIXME
 transfer_size(_Content, _Unit) ->
