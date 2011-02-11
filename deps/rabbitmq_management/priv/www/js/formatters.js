@@ -124,19 +124,29 @@ function fmt_download_filename(host) {
 }
 
 function fmt_table_short(table) {
+    return '<table class="mini">' + fmt_table_body(table, ':') + '</table>';
+}
+
+function fmt_table_long(table) {
+    return '<table class="facts">' + fmt_table_body(table, '') +
+        '</table><span class="br"></span>';
+}
+
+function fmt_table_body(table, x) {
     var res = '';
     for (k in table) {
-        res += k + '=' + table[k] + '<br/>';
+        res += '<tr><th>' + k + x + '</th><td>' + fmt_amqp_value(table[k]) +
+            '</td>';
     }
     return res;
 }
 
-function fmt_table_long(table) {
-    var res = '<table class="facts">';
-    for (k in table) {
-        res += '<tr><th>' + k + '</th><td>' + table[k] + '</td>';
+function fmt_amqp_value(val) {
+    if (typeof(val) == 'object') {
+        return val.join("<br/>");
+    } else {
+        return val;
     }
-    return res + '</table><span class="br"></span>';
 }
 
 function fmt_uptime(u) {
