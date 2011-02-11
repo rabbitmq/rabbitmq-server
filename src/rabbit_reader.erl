@@ -361,7 +361,10 @@ handle_dependent_exit(ChPid, Reason, State) ->
         uncontrolled ->
             case channel_cleanup(ChPid) of
                 undefined -> exit({abnormal_dependent_exit, ChPid, Reason});
-                Channel   -> maybe_close(
+                Channel   -> rabbit_log:error(
+                               "connection ~p, channel ~p - error:~n~p~n",
+                               [self(), Channel, Reason]),
+                             maybe_close(
                                handle_exception(State, Channel, Reason))
             end
     end.
