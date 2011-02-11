@@ -306,15 +306,12 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
 terminate(Reason, State) ->
-    case State#ch.state of
-        closing -> ok;
-        _       -> Res = rollback_and_notify(State),
-                   case Reason of
-                       normal            -> ok = Res;
-                       shutdown          -> ok = Res;
-                       {shutdown, _Term} -> ok = Res;
-                       _                 -> ok
-                   end
+    {Res, _State1} = rollback_and_notify(State),
+    case Reason of
+        normal            -> ok = Res;
+        shutdown          -> ok = Res;
+        {shutdown, _Term} -> ok = Res;
+        _                 -> ok
     end,
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
@@ -364,8 +361,7 @@ send_exception(Reason, State = #ch{protocol   = Protocol,
     rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
                      [ReaderPid, Channel, Reason]),
     %% something bad's happened: rollback_and_notify make not be 'ok'
-    rollback_and_notify(State),
-    State1 = State#ch{state = closing},
+    {_Result, State1} = rollback_and_notify(State),
     case CloseChannel of
         Channel ->
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
@@ -561,8 +557,8 @@ handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid,
                  fun () -> ok = gen_server2:cast(Self, closed) end},
     %% no error, so rollback_and_notify should be 'ok'. Do in parallel
     %% with the reader picking up our message and running our Fun.
-    ok = rollback_and_notify(State),
-    {noreply, State#ch{state = closing}};
+    {ok, State1} = rollback_and_notify(State),
+    {noreply, State1};
 
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
@@ -1202,10 +1198,13 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
     NewUAMQ = queue:join(UAQ, UAMQ),
     new_tx(State#ch{unacked_message_q = NewUAMQ}).
 
+rollback_and_notify(State = #ch{state = closing}) ->
+    {ok, State};
 rollback_and_notify(State = #ch{transaction_id = none}) ->
-    notify_queues(State);
+    {notify_queues(State), State#ch{state = closing}};
 rollback_and_notify(State) ->
-    notify_queues(internal_rollback(State)).
+    State1 = internal_rollback(State),
+    {notify_queues(State1), State1#ch{state = closing}}.
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = rabbit_misc:queue_fold(
