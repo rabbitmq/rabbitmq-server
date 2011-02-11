@@ -849,30 +849,6 @@ handle_call({open, Pid, Requested, EldestUnusedSince}, From,
         false -> {noreply, run_pending_item(Item, State1)}
     end;
 
-%% handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
-%%                                                       obtain_count   = Count,
-%%                                                       obtain_pending = Pending,
-%%                                                       clients = Clients })
-%%   when Limit =/= infinity andalso Count >= Limit ->
-%%     ok = track_client(Pid, Clients),
-%%     true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
-%%     Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
-%%     {noreply, State #fhc_state { obtain_pending = pending_in(Item, Pending) }};
-
-%% handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
-%%                                                       obtain_pending = Pending,
-%%                                                       clients = Clients }) ->
-%%     Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
-%%     ok = track_client(Pid, Clients),
-%%     case needs_reduce(State #fhc_state { obtain_count = Count + 1 }) of
-%%         true ->
-%%             true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
-%%             {noreply, reduce(State #fhc_state {
-%%                                obtain_pending = pending_in(Item, Pending) })};
-%%         false ->
-%%             {noreply, adjust_alarm(State, run_pending_item(Item, State))}
-%%     end;
-
 handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
                                                       obtain_pending = Pending,
                                                       clients = Clients }) ->
