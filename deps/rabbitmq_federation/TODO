@@ -1,0 +1,15 @@
+Automated tests
+Allow multiple upstreams
+Cycle detection
+Allow things to be durable
+Be smarter about bind / unbind
+Deal with connection going down
+Deal with upstream going down
+Deal with downstream going down
+Remove that ETS table
+
+---
+
+Message transformation (e.g. transient to persistent)?
+Add / remove upstreams dynamically
+Automated federate-all-exchanges mode
