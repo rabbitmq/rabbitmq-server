@@ -166,8 +166,7 @@
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
 -spec(force_recovery/2 :: (file:filename(), server()) -> 'ok').
 -spec(transform_dir/3 :: (file:filename(), server(),
-        fun ((binary())->({'ok', msg()} | {error, any()}))) ->
-         non_neg_integer()).
+        fun ((binary()) -> ({'ok', msg()} | {error, any()}))) -> 'ok').
 
 -endif.
 
@@ -1976,21 +1975,19 @@ transform_dir(BaseDir, Server, TransformFun) ->
     Dir = filename:join(BaseDir, atom_to_list(Server)),
     TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
     case filelib:is_dir(TmpDir) of
-        true  -> throw({error, previously_failed_transform});
+        true  -> throw({error, transform_failed_previously});
         false ->
-            Count = lists:sum(
-                [transform_msg_file(filename:join(Dir, File),
-                                    filename:join(TmpDir, File),
-                                    TransformFun) ||
-                 File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)]),
+            [transform_msg_file(filename:join(Dir, File),
+                                filename:join(TmpDir, File),
+                                TransformFun) ||
+             File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)],
             [file:delete(filename:join(Dir, File)) ||
              File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)],
             [file:copy(filename:join(TmpDir, File), filename:join(Dir, File)) ||
              File <- list_sorted_file_names(TmpDir, ?FILE_EXTENSION)],
             [file:delete(filename:join(TmpDir, File)) ||
              File <- list_sorted_file_names(TmpDir, ?FILE_EXTENSION)],
-            ok = file:del_dir(TmpDir),
-            Count
+            ok = file:del_dir(TmpDir)
     end.
 
 transform_msg_file(FileOld, FileNew, TransformFun) ->
@@ -2000,21 +1997,21 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
     {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
                                           [{write_buffer,
                                             ?HANDLE_CACHE_BUFFER_SIZE}]),
-    {ok, Acc, Size} =
+    {ok, Acc, _IgnoreSize} =
         rabbit_msg_file:scan(
             RefOld, Size,
-            fun(Guid, _Size, _Offset, BinMsg) ->
+            fun({Guid, _Size, _Offset, BinMsg}, ok) ->
                 case TransformFun(BinMsg) of
                     {ok, MsgNew} ->
-                        rabbit_msg_file:append(RefNew, Guid, MsgNew),
-                        1;
+                        {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
+                        ok;
                     {error, Reason} ->
                         error_logger:error_msg("Message transform failed: ~p~n",
                                                [Reason]),
-                        0
+                        ok
                 end
-            end),
+            end, ok),
     file_handle_cache:close(RefOld),
     file_handle_cache:close(RefNew),
-    lists:sum(Acc).
+    ok = Acc.
 

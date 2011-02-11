@@ -1808,7 +1808,7 @@ push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
 
 %% Assumes message store is not running
 transform_storage(TransformFun) ->
-    transform_store(?PERSISTENT_MSG_STORE, TransformFun) +
+    transform_store(?PERSISTENT_MSG_STORE, TransformFun),
     transform_store(?TRANSIENT_MSG_STORE, TransformFun).
 
 transform_store(Store, TransformFun) ->

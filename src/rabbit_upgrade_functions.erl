@@ -107,7 +107,7 @@ mnesia(TableName, Fun, FieldList, NewRecordName) ->
 %%--------------------------------------------------------------------
 
 multiple_routing_keys() ->
-    _UpgradeMsgCount = rabbit_variable_queue:transform_storage(
+    rabbit_variable_queue:transform_storage(
         fun (BinMsg) ->
             case binary_to_term(BinMsg) of
                 {basic_message, ExchangeName, Routing_Key, Content, Guid,

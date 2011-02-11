@@ -16,7 +16,7 @@
 
 -module(rabbit_msg_file).
 
--export([append/3, read/2, scan/2, scan/3]).
+-export([append/3, read/2, scan/2, scan/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -48,9 +48,9 @@
 -spec(scan/2 :: (io_device(), file_size()) ->
                      {'ok', [{rabbit_guid:guid(), msg_size(), position()}],
                       position()}).
--spec(scan/3 :: (io_device(), file_size(),
-    fun ((rabbit_guid:guid(), msg_size(), position(), binary()) -> any())) ->
-    {'ok', [any()], position()}).
+-spec(scan/4 :: (io_device(), file_size(),
+       fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
+       A) -> {'ok', A, position()}).
 
 -endif.
 
@@ -82,14 +82,14 @@ read(FileHdl, TotalSize) ->
         KO -> KO
     end.
 
-scan_fun(Guid, TotalSize, Offset, _Msg) ->
-    {Guid, TotalSize, Offset}.
+scan_fun({Guid, TotalSize, Offset, _Msg}, Acc) ->
+    [{Guid, TotalSize, Offset} | Acc].
 
 scan(FileHdl, FileSize) when FileSize >= 0 ->
-    scan(FileHdl, FileSize, <<>>, 0, [], 0, fun scan_fun/4).
+    scan(FileHdl, FileSize, <<>>, 0, [], 0, fun scan_fun/2).
 
-scan(FileHdl, FileSize, Fun) when FileSize >= 0 ->
-    scan(FileHdl, FileSize, <<>>, 0, [], 0, Fun).
+scan(FileHdl, FileSize, Fun, Acc) when FileSize >= 0 ->
+    scan(FileHdl, FileSize, <<>>, 0, Acc, 0, Fun).
 
 scan(_FileHdl, FileSize, _Data, FileSize, Acc, ScanOffset, _Fun) ->
     {ok, Acc, ScanOffset};
@@ -122,7 +122,7 @@ scanner(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
                <<GuidNum:?GUID_SIZE_BITS, Msg/binary>> =
                    <<GuidAndMsg:Size/binary>>,
                <<Guid:?GUID_SIZE_BYTES/binary>> = <<GuidNum:?GUID_SIZE_BITS>>,
-               scanner(Rest, [Fun(Guid, TotalSize, Offset, Msg) | Acc],
+               scanner(Rest, Fun({Guid, TotalSize, Offset, Msg}, Acc),
                        Offset + TotalSize, Fun);
            _ ->
                scanner(Rest, Acc, Offset + TotalSize, Fun)
