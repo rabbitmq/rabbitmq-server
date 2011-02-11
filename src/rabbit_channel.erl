@@ -556,10 +556,8 @@ handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
 
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
-    ReaderPid ! {channel_closing, self()},
-    %% no error, so rollback_and_notify should be 'ok'. Do in parallel
-    %% with the reader picking up our message and casting back to us.
     {ok, State1} = rollback_and_notify(State),
+    ReaderPid ! {channel_closing, self()},
     {noreply, State1};
 
 handle_method(#'access.request'{},_, State) ->
