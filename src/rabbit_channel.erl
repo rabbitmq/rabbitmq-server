@@ -29,13 +29,12 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2]).
 
--record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
+-record(ch, {state, protocol, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, publish_seqno, unconfirmed, confirmed,
-             protocol}).
+             confirm_enabled, publish_seqno, unconfirmed, confirmed}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -156,6 +155,7 @@ init([Protocol, Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
     ok = pg_local:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
+                protocol                = Protocol,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
                 writer_pid              = WriterPid,
@@ -176,8 +176,7 @@ init([Protocol, Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed             = gb_trees:empty(),
-                confirmed               = [],
-                protocol                = Protocol},
+                confirmed               = []},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -356,9 +355,9 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-send_exception(Reason, State = #ch{channel = Channel,
+send_exception(Reason, State = #ch{protocol   = Protocol,
+                                   channel    = Channel,
                                    writer_pid = WriterPid,
-                                   protocol = Protocol,
                                    reader_pid = ReaderPid}) ->
     {_ShouldClose, CloseChannel, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
