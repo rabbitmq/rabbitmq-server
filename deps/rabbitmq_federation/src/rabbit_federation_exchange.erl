@@ -45,8 +45,8 @@
 -define(ETS_NAME, ?MODULE).
 -define(TX, false).
 -record(state, { downstream_connection, downstream_channel,
-                 upstream_connection, upstream_channel,
-                 downstream_exchange, upstream_queue, upstream_properties }).
+                 downstream_exchange, upstreams }).
+-record(upstream, {connection, channel, queue, properties}).
 
 %%----------------------------------------------------------------------------
 
@@ -67,11 +67,13 @@ validate(_X) ->
     %%with_module(X, fun (M) -> M:validate(X) end).
 
 create(?TX, X = #exchange{ name = Downstream, arguments = Args }) ->
-    {longstr, Upstream} = rabbit_misc:table_lookup(Args, <<"upstream">>),
+    {array, UpstreamURIs0} =
+        rabbit_misc:table_lookup(Args, <<"upstreams">>),
+    UpstreamURIs = [binary_to_list(U) || {longstr, U} <- UpstreamURIs0],
     {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
     {ok, Module} = rabbit_registry:lookup_module(
                      exchange, rabbit_exchange:check_type(Type)),
-    rabbit_federation_sup:start_child(Downstream, binary_to_list(Upstream), Module),
+    rabbit_federation_sup:start_child(Downstream, UpstreamURIs, Module),
     with_module(X, fun (M) -> M:create(?TX, X) end);
 create(_Tx, _X) ->
     ok.
@@ -116,56 +118,30 @@ with_module(#exchange{ name = Downstream }, Fun) ->
 
 %%----------------------------------------------------------------------------
 
-start_link(Downstream, Upstream, Module) ->
-    gen_server:start_link(?MODULE, {Downstream, Upstream, Module},
+start_link(Downstream, UpstreamURIs, Module) ->
+    gen_server:start_link(?MODULE, {Downstream, UpstreamURIs, Module},
                           [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({DownstreamX, UpstreamURI, Module}) ->
-    UpstreamProps0 = uri_parser:parse(
-                       UpstreamURI, [{host, undefined}, {path, "/"},
-                                     {port, undefined}, {'query', []}]),
-    [VHostEnc, XEnc] = string:tokens(
-                         proplists:get_value(path, UpstreamProps0), "/"),
-    VHost = httpd_util:decode_hex(VHostEnc),
-    X = httpd_util:decode_hex(XEnc),
-    UpstreamProps = [{vhost, VHost}, {exchange, X}] ++ UpstreamProps0,
-    Params = #amqp_params{host = proplists:get_value(host, UpstreamProps),
-                          virtual_host = list_to_binary(VHost)},
-    {ok, UConn} = amqp_connection:start(network, Params),
-    {ok, UCh} = amqp_connection:open_channel(UConn),
-    #'queue.declare_ok' {queue = Q} =
-        amqp_channel:call(UCh, #'queue.declare'{ exclusive = true}),
-    amqp_channel:subscribe(UCh, #'basic.consume'{ queue = Q,
-                                                  no_ack = true }, %% FIXME
-                           self()),
+init({DownstreamX, UpstreamURIs, Module}) ->
+    Upstreams = [connect_upstream(UpstreamURI) || UpstreamURI <- UpstreamURIs],
     {ok, DConn} = amqp_connection:start(direct),
     {ok, DCh} = amqp_connection:open_channel(DConn),
     true = ets:insert(?ETS_NAME, {DownstreamX, self(), Module}),
     {ok, #state{downstream_connection = DConn, downstream_channel = DCh,
-                upstream_connection = UConn, upstream_channel = UCh,
-                downstream_exchange = DownstreamX,
-                upstream_properties = UpstreamProps, upstream_queue = Q} }.
+                downstream_exchange = DownstreamX, upstreams = Upstreams} }.
 
 handle_call({add_binding, #binding{key = Key, args = Args} }, _From,
-            State = #state{ upstream_channel = UCh,
-                            upstream_properties = UpstreamProps,
-                            upstream_queue = Q}) ->
-    X = list_to_binary(proplists:get_value(exchange, UpstreamProps)),
-    amqp_channel:call(UCh, #'queue.bind'{queue       = Q,
-                                         exchange    = X,
-                                         routing_key = Key,
-                                         arguments   = Args}),
+            State = #state{ upstreams = Upstreams }) ->
+    [bind_upstream(U, Key, Args) || U <- Upstreams],
     {reply, ok, State};
 
 handle_call({remove_bindings, Bs }, _From,
-            State = #state{ upstream_channel = UCh,
-                            upstream_properties = UpstreamProps,
-                            upstream_queue = Q}) ->
-    X = list_to_binary(proplists:get_value(exchange, UpstreamProps)),
-    [maybe_unbind(UCh, X, Q, Key, Args) ||
-        #binding{key = Key, args = Args} <- Bs],
+            State = #state{ upstreams = Upstreams }) ->
+    [unbind_upstream(U, Key, Args) ||
+        #binding{key = Key, args = Args} <- Bs,
+        U                                <- Upstreams],
     {reply, ok, State};
 
 handle_call(Msg, _From, State) ->
@@ -194,16 +170,49 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State = #state { downstream_connection = DConn,
-                                    upstream_connection = UConn,
-                                    downstream_exchange = DownstreamX }) ->
+                                    downstream_exchange = DownstreamX,
+                                    upstreams = Upstreams }) ->
     amqp_connection:close(DConn),
-    amqp_connection:close(UConn),
+    [amqp_connection:close(C) || #upstream{ connection = C } <- Upstreams],
     true = ets:delete(?ETS_NAME, DownstreamX),
     State.
 
 %%----------------------------------------------------------------------------
 
-maybe_unbind(Ch, X, Q, Key, Args) ->
+connect_upstream(UpstreamURI) ->
+    Props0 = uri_parser:parse(
+               UpstreamURI, [{host, undefined}, {path, "/"},
+                             {port, undefined}, {'query', []}]),
+    [VHostEnc, XEnc] = string:tokens(
+                         proplists:get_value(path, Props0), "/"),
+    VHost = httpd_util:decode_hex(VHostEnc),
+    X = httpd_util:decode_hex(XEnc),
+    Props = [{vhost, VHost}, {exchange, X}] ++ Props0,
+    Params = #amqp_params{host = proplists:get_value(host, Props),
+                          virtual_host = list_to_binary(VHost)},
+    {ok, Conn} = amqp_connection:start(network, Params),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok' {queue = Q} =
+        amqp_channel:call(Ch, #'queue.declare'{ exclusive = true}),
+    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
+                                                 no_ack = true }, %% FIXME
+                           self()),
+    #upstream{ connection = Conn,
+               channel    = Ch,
+               queue      = Q,
+               properties = Props }.
+
+bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
+              Key, Args) ->
+    X = list_to_binary(proplists:get_value(exchange, Props)),
+    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
+                                        exchange    = X,
+                                        routing_key = Key,
+                                        arguments   = Args}).
+
+unbind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
+                Key, Args) ->
+    X = list_to_binary(proplists:get_value(exchange, Props)),
     %% We may already be unbound if e.g. someone has deleted the upstream
     %% exchange
     try amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,

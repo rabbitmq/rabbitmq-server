@@ -1,4 +1,3 @@
-Allow multiple upstreams
 Cycle detection
 Allow things to be durable
 Change downstream spec to (local) URL or otherwise handle vhosts

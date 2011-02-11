@@ -1,13 +1,13 @@
 This is all very experimental.
 
-Configuration might look like:
+Static configuration might look like:
 
   {rabbit_federation,
    [ {exchanges, [{ %% local exchange people can bind to
                    "local",
-                    %% remote exchange they effectively bind to
-                   "amqp://amqp.example.com/%2f/remote",
-                    %% type of remote exchange
+                    %% remote exchanges they effectively bind to
+                   ["amqp://amqp.example.com/%2f/remote"],
+                    %% type of remote exchanges
                    "direct"}]
      }
    ]}

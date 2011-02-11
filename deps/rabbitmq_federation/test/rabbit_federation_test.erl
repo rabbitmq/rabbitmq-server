@@ -24,11 +24,10 @@ simple_test() ->
       fun (Ch) ->
               declare_exchange(Ch, <<"upstream">>, <<"direct">>),
               declare_fed_exchange(Ch, <<"downstream">>,
-                                   <<"amqp://localhost/%2f/upstream">>,
+                                   [<<"amqp://localhost/%2f/upstream">>],
                                    <<"direct">>),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
-              publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO">>),
-              expect(Ch, Q, <<"HELLO">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
               delete_exchange(Ch, <<"downstream">>),
               delete_exchange(Ch, <<"upstream">>)
       end).
@@ -38,11 +37,26 @@ conf_test() ->
       fun (Ch) ->
               declare_exchange(Ch, <<"upstream">>, <<"topic">>),
               Q = bind_queue(Ch, <<"downstream-conf">>, <<"key">>),
-              publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO">>),
-              expect(Ch, Q, <<"HELLO">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
               delete_exchange(Ch, <<"upstream">>)
       end).
 
+multiple_upstreams_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream1">>, <<"direct">>),
+              declare_exchange(Ch, <<"upstream2">>, <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream">>,
+                                   [<<"amqp://localhost/%2f/upstream1">>,
+                                    <<"amqp://localhost/%2f/upstream2">>],
+                                   <<"direct">>),
+              Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              publish_expect(Ch, <<"upstream1">>, <<"key">>, Q, <<"HELLO1">>),
+              publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>),
+              delete_exchange(Ch, <<"downstream">>),
+              delete_exchange(Ch, <<"upstream1">>),
+              delete_exchange(Ch, <<"upstream2">>)
+      end).
 
 %%----------------------------------------------------------------------------
 
@@ -53,16 +67,13 @@ with_ch(Fun) ->
     amqp_connection:close(Conn),
     ok.
 
-args(Args) ->
-    [{list_to_binary(atom_to_list(K)), longstr, V} || {K, V} <- Args].
-
-declare_fed_exchange(Ch, X, Upstream, Type) ->
+declare_fed_exchange(Ch, X, Upstreams, Type) ->
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange  = X,
         type      = <<"x-federation">>,
-        arguments = args([{upstream, Upstream},
-                          {type,     Type}])
+        arguments = [{<<"upstreams">>, array, [{longstr, U} || U <- Upstreams]},
+                     {<<"type">>,      longstr, Type}]
        }).
 
 declare_exchange(Ch, X, Type) ->
@@ -95,5 +106,9 @@ expect(Ch, Q, Payload) ->
         {#'basic.deliver'{}, #amqp_msg { payload = Payload }} -> ok
     end,
     amqp_channel:call(Ch, #'basic.cancel'{ consumer_tag = CTag }).
+
+publish_expect(Ch, X, Key, Q, Payload) ->
+    publish(Ch, X, Key, Payload),
+    expect(Ch, Q, Payload).
 
 %%----------------------------------------------------------------------------

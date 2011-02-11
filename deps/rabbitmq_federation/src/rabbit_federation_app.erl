@@ -33,7 +33,7 @@ stop(_State) ->
 
 %%----------------------------------------------------------------------------
 
-declare_exchange({Downstream, Upstream, Type}) ->
+declare_exchange({Downstream, Upstreams, Type}) ->
     {ok, Conn} = amqp_connection:start(direct),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     %% TODO make durable, recover bindings etc
@@ -41,7 +41,9 @@ declare_exchange({Downstream, Upstream, Type}) ->
       Ch, #'exchange.declare'{
         exchange = list_to_binary(Downstream),
         type = <<"x-federation">>,
-        arguments = [{<<"upstream">>, longstr, list_to_binary(Upstream)},
-                     {<<"type">>,     longstr, list_to_binary(Type)}]}),
+        arguments =
+            [{<<"upstreams">>, array,  [{longstr, list_to_binary(U)} ||
+                                           U <- Upstreams]},
+             {<<"type">>,      longstr, list_to_binary(Type)}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn).
