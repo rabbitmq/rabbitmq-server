@@ -371,13 +371,14 @@ handle_dependent_exit(ChPid, Reason, State) ->
 
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
-        undefined -> undefined;
-        Channel   -> erase({channel, Channel}),
-                     erase({ch_pid, ChPid}),
-                     Channel
+        undefined       -> undefined;
+        {Channel, MRef} -> erase({channel, Channel}),
+                           erase({ch_pid, ChPid}),
+                           erlang:demonitor(MRef, [flush]),
+                           Channel
     end.
 
-all_channels() -> [ChPid || {{ch_pid, ChPid}, _Channel} <- get()].
+all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
 
 terminate_channels() ->
     NChannels =
@@ -853,11 +854,11 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {tcp, Protocol, Sock, Channel, FrameMax, self(), User,
                        VHost, Collector}),
-    erlang:monitor(process, ChPid),
+    MRef = erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
     put({channel, Channel}, {ChPid, NewAState}),
-    put({ch_pid, ChPid}, Channel),
+    put({ch_pid, ChPid}, {Channel, MRef}),
     State.
 
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
