@@ -25,6 +25,8 @@
 -export([limit/2, can_send/5, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, set_credit/5, is_blocked/1]).
 
+-import(rabbit_misc, [serial_add/2, serial_diff/2]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -224,12 +226,13 @@ decr_credit(CTag, Len, State = #lim{ credits = Credits,
         {ok, #credit{ credit = Credit, count = Count, drain = Drain }} ->
             {NewCredit, NewCount} =
                 case {Credit, Len, Drain} of
-                    {1, _, _}    -> {0, Count + 1}; %% Usual reduction to 0
+                    {1, _, _}    -> {0, serial_add(Count, 1)};
                     {_, 1, true} ->
-                        NewCount0 = Count + (Credit - 1),
+                        %% Drain, so advance til credit = 0
+                        NewCount0 = serial_add(Count, (Credit - 1)),
                         send_drained(ChPid, CTag, NewCount0),
                         {0, NewCount0}; %% Magic reduction to 0
-                    {_, _, _}    -> {Credit - 1, Count + 1}
+                    {_, _, _}    -> {Credit - 1, serial_add(Count, 1)}
                 end,
             update_credit(CTag, NewCredit, NewCount, Drain, State);
         error ->
@@ -255,9 +258,9 @@ reset_credit(CTag, Credit0, Count0, Drain, State = #lim{credits = Credits}) ->
                 LocalCount;
             _ -> Count0
         end,
-    %% Our credit may have been reduced while messages are
-    %% in flight, so we bottom out at 0.
-    Credit = erlang:max(0, Count0 + Credit0 - Count),
+    %% Our credit may have been reduced while messages are in flight,
+    %% so we bottom out at 0.
+    Credit = erlang:max(0, serial_diff(serial_add(Count0, Credit0), Count)),
     update_credit(CTag, Credit, Count, Drain, State).
 
 %% Store the credit
