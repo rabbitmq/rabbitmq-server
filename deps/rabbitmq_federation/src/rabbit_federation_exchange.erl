@@ -82,9 +82,12 @@ create(_Tx, _X) ->
 recover(X, Bs) ->
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
-delete(Tx, X, Bs) ->
-    %% TODO shut down process
-    with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
+delete(?TX, X, _Bs) ->
+    call(X, stop);
+    %%with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
+delete(_Tx, _X, _Bs) ->
+    ok.
+    %%with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
 add_binding(?TX, X, B) ->
     %% TODO add bindings only if needed.
@@ -144,6 +147,9 @@ handle_call({remove_bindings, Bs }, _From,
         U                                <- Upstreams],
     {reply, ok, State};
 
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State};
+
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
@@ -169,13 +175,18 @@ handle_info(Msg, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(_Reason, State = #state { downstream_connection = DConn,
-                                    downstream_exchange = DownstreamX,
-                                    upstreams = Upstreams }) ->
-    amqp_connection:close(DConn),
-    [amqp_connection:close(C) || #upstream{ connection = C } <- Upstreams],
+terminate(_Reason, #state { downstream_channel = DCh,
+                            downstream_connection = DConn,
+                            downstream_exchange = DownstreamX,
+                            upstreams = Upstreams }) ->
+    ok = amqp_channel:close(DCh),
+    ok = amqp_connection:close(DConn),
+    [begin
+         ok = amqp_channel:close(Ch),
+         ok = amqp_connection:close(C)
+     end || #upstream{ connection = C, channel = Ch } <- Upstreams],
     true = ets:delete(?ETS_NAME, DownstreamX),
-    State.
+    ok.
 
 %%----------------------------------------------------------------------------
 
@@ -220,5 +231,6 @@ unbind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
                                               routing_key = Key,
                                               arguments   = Args})
     catch exit:{{server_initiated_close, ?NOT_FOUND, _}, _} ->
+            %% TODO this is inadequate. The channel will die.
             ok
     end.

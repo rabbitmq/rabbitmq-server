@@ -32,7 +32,7 @@ start_child(Downstream, UpstreamURIs, Module) ->
                            {id(Downstream, UpstreamURIs),
                             {rabbit_federation_exchange, start_link,
                              [Downstream, UpstreamURIs, Module]},
-                            permanent, brutal_kill, worker,
+                            transient, brutal_kill, worker,
                             [rabbit_federation_exchange]}).
 
 %%----------------------------------------------------------------------------
