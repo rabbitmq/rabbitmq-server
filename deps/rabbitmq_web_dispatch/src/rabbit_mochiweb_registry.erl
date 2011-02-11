@@ -85,15 +85,23 @@ listing_fallback_handler(Req) ->
         "<head><title>RabbitMQ Web Server</title></head>"
         "<body><h1>RabbitMQ Web Server</h1><p>Contexts available:</p><ul>",
     HTMLSuffix = "</ul></body></html>",
-    Contexts = [{"/" ++ P, D} || {P, D} <- gen_server:call(?MODULE, list)],
+    {ReqPath, _, _} = mochiweb_util:urlsplit_path(Req:get(raw_path)),
+    Contexts = gen_server:call(?MODULE, list),
     List =
         case Contexts of
             [] ->
                 "<li>No contexts installed</li>";
             _ ->
-                [io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc])
-                 || {Path, Desc} <- Contexts, Desc =/= none] ++
-                    [io_lib:format("<li>~s</li>", [Path])
-                     || {Path, Desc} <- Contexts, Desc == none]
+                [handler_listing(Path, ReqPath, Desc)
+                 || {Path, Desc} <- Contexts]
         end,
     Req:respond({200, [], HTMLPrefix ++ List ++ HTMLSuffix}).
+
+handler_listing(Path, ReqPath, Desc) ->
+    handler_listing(rabbit_mochiweb_util:relativise(ReqPath, "/" ++ Path),
+                    Desc).
+
+handler_listing(Path, none) ->
+    io_lib:format("<li>~s</li>", [Path]);
+handler_listing(Path, Desc) ->
+    io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc]).

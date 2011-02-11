@@ -22,6 +22,7 @@
 -module(rabbit_mochiweb_util).
 
 -export([parse_auth_header/1]).
+-export([relativise/2]).
 
 parse_auth_header(Header) ->
     case Header of
@@ -35,3 +36,19 @@ parse_auth_header(Header) ->
          _ ->
             invalid
     end.
+
+relativise("/" ++ F, "/" ++ T) ->
+    From = string:tokens(F, "/"),
+    To = string:tokens(T, "/"),
+    string:join(relativise0(From, To), "/").
+
+relativise0([H], [H|_] = To) ->
+    To;
+relativise0([H|From], [H|To]) ->
+    relativise0(From, To);
+relativise0(From, []) ->
+    lists:duplicate(length(From), "..");
+relativise0([_|From], To) ->
+    lists:duplicate(length(From), "..") ++ To;
+relativise0([], To) ->
+    To.
