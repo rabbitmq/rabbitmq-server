@@ -1530,7 +1530,8 @@ scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
                                      Hdl, filelib:file_size(
-                                            form_filename(Dir, FileName))),
+                                            form_filename(Dir, FileName)),
+                                            fun scan_fun/2, []),
                            %% if something really bad has happened,
                            %% the close could fail, but ignore
                            file_handle_cache:close(Hdl),
@@ -1538,6 +1539,9 @@ scan_file_for_valid_messages(Dir, FileName) ->
         {error, enoent} -> {ok, [], 0};
         {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
+
+scan_fun({Guid, TotalSize, Offset, _Msg}, Acc) ->
+    [{Guid, TotalSize, Offset} | Acc].
 
 %% Takes the list in *ascending* order (i.e. eldest message
 %% first). This is the opposite of what scan_file_for_valid_messages

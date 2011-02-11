@@ -16,7 +16,7 @@
 
 -module(rabbit_msg_file).
 
--export([append/3, read/2, scan/2, scan/4]).
+-export([append/3, read/2, scan/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -45,9 +45,6 @@
 -spec(read/2 :: (io_device(), msg_size()) ->
                      rabbit_types:ok_or_error2({rabbit_guid:guid(), msg()},
                                                any())).
--spec(scan/2 :: (io_device(), file_size()) ->
-                     {'ok', [{rabbit_guid:guid(), msg_size(), position()}],
-                      position()}).
 -spec(scan/4 :: (io_device(), file_size(),
        fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
        A) -> {'ok', A, position()}).
@@ -81,12 +78,6 @@ read(FileHdl, TotalSize) ->
             {ok, {Guid, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
-
-scan_fun({Guid, TotalSize, Offset, _Msg}, Acc) ->
-    [{Guid, TotalSize, Offset} | Acc].
-
-scan(FileHdl, FileSize) when FileSize >= 0 ->
-    scan(FileHdl, FileSize, <<>>, 0, [], 0, fun scan_fun/2).
 
 scan(FileHdl, FileSize, Fun, Acc) when FileSize >= 0 ->
     scan(FileHdl, FileSize, <<>>, 0, Acc, 0, Fun).
