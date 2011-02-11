@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1]).
+         status/1, transform_storage/1]).
 
 -export([start/1, stop/0]).
 
@@ -1801,3 +1801,16 @@ push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
             push_betas_to_deltas(
               Generator, Limit, Qa, Count + 1, RamIndexCount1, IndexState1)
     end.
+
+%%----------------------------------------------------------------------------
+%% Upgrading
+%%----------------------------------------------------------------------------
+
+%% Assumes message store is not running
+transform_storage(TransformFun) ->
+    transform_store(?PERSISTENT_MSG_STORE, TransformFun) +
+    transform_store(?TRANSIENT_MSG_STORE, TransformFun).
+
+transform_store(Store, TransformFun) ->
+    rabbit_msg_store:force_recovery(rabbit_mnesia:dir(), Store),
+    rabbit_msg_store:transform_dir(rabbit_mnesia:dir(), Store, TransformFun).

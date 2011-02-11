@@ -26,16 +26,20 @@
 -export([sync/1, set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
 
+-export([transform_dir/3, force_recovery/2]). %% upgrade
+
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
 
 %%----------------------------------------------------------------------------
 
 -include("rabbit_msg_store.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -define(SYNC_INTERVAL,  5).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
+-define(TRANSFORM_TMP, "transform_tmp").
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
@@ -160,6 +164,10 @@
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                               deletion_thunk()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
+-spec(force_recovery/2 :: (file:filename(), server()) -> 'ok').
+-spec(transform_dir/3 :: (file:filename(), server(),
+        fun ((binary())->({'ok', msg()} | {error, any()}))) ->
+         non_neg_integer()).
 
 -endif.
 
@@ -1956,3 +1964,57 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {got, FinalOffsetZ},
                         {destination, Destination}]}
     end.
+
+force_recovery(BaseDir, Server) ->
+    Dir = filename:join(BaseDir, atom_to_list(Server)),
+    file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
+    [file:delete(filename:join(Dir, File)) ||
+     File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
+    ok.
+
+transform_dir(BaseDir, Server, TransformFun) ->
+    Dir = filename:join(BaseDir, atom_to_list(Server)),
+    TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
+    case filelib:is_dir(TmpDir) of
+        true  -> throw({error, previously_failed_transform});
+        false ->
+            Count = lists:sum(
+                [transform_msg_file(filename:join(Dir, File),
+                                    filename:join(TmpDir, File),
+                                    TransformFun) ||
+                 File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)]),
+            [file:delete(filename:join(Dir, File)) ||
+             File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)],
+            [file:copy(filename:join(TmpDir, File), filename:join(Dir, File)) ||
+             File <- list_sorted_file_names(TmpDir, ?FILE_EXTENSION)],
+            [file:delete(filename:join(TmpDir, File)) ||
+             File <- list_sorted_file_names(TmpDir, ?FILE_EXTENSION)],
+            ok = file:del_dir(TmpDir),
+            Count
+    end.
+
+transform_msg_file(FileOld, FileNew, TransformFun) ->
+    rabbit_misc:ensure_parent_dirs_exist(FileNew),
+    {ok, #file_info{size=Size}} = file:read_file_info(FileOld),
+    {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
+    {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
+                                          [{write_buffer,
+                                            ?HANDLE_CACHE_BUFFER_SIZE}]),
+    {ok, Acc, Size} =
+        rabbit_msg_file:scan(
+            RefOld, Size,
+            fun(Guid, _Size, _Offset, BinMsg) ->
+                case TransformFun(BinMsg) of
+                    {ok, MsgNew} ->
+                        rabbit_msg_file:append(RefNew, Guid, MsgNew),
+                        1;
+                    {error, Reason} ->
+                        error_logger:error_msg("Message transform failed: ~p~n",
+                                               [Reason]),
+                        0
+                end
+            end),
+    file_handle_cache:close(RefOld),
+    file_handle_cache:close(RefNew),
+    lists:sum(Acc).
+

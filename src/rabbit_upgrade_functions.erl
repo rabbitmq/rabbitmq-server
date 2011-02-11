@@ -25,6 +25,7 @@
 -rabbit_upgrade({add_ip_to_listener, []}).
 -rabbit_upgrade({internal_exchanges, []}).
 -rabbit_upgrade({user_to_internal_user, [hash_passwords]}).
+-rabbit_upgrade({multiple_routing_keys, []}).
 
 %% -------------------------------------------------------------------
 
@@ -35,6 +36,7 @@
 -spec(add_ip_to_listener/0 :: () -> 'ok').
 -spec(internal_exchanges/0 :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
+-spec(multiple_routing_keys/0 :: () -> 'ok').
 
 -endif.
 
@@ -101,3 +103,20 @@ mnesia(TableName, Fun, FieldList, NewRecordName) ->
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList,
                                           NewRecordName),
     ok.
+
+%%--------------------------------------------------------------------
+
+multiple_routing_keys() ->
+    _UpgradeMsgCount = rabbit_variable_queue:transform_storage(
+        fun (BinMsg) ->
+            case binary_to_term(BinMsg) of
+                {basic_message, ExchangeName, Routing_Key, Content, Guid,
+                 Persistent} ->
+                    {ok, {basic_message, ExchangeName, [Routing_Key], Content,
+                          Guid, Persistent}};
+                _ ->
+                    {error, corrupt_message}
+            end
+        end),
+    ok.
+
