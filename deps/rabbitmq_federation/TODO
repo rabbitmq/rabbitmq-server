@@ -1,7 +1,9 @@
-Automated tests
 Allow multiple upstreams
 Cycle detection
 Allow things to be durable
+Change downstream spec to (local) URL or otherwise handle vhosts
+Test / fix with alternate PLAIN creds
+Allow use of EXTERNAL etc
 Be smarter about bind / unbind
 Deal with connection going down
 Deal with upstream going down
