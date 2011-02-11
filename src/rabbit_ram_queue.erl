@@ -40,14 +40,10 @@
         { seq_id,
           msg,
           is_delivered,
-          msg_props
+          props
         }).
 
 -record(tx, { pending_messages, pending_acks }).
-
--define(IO_BATCH_SIZE, 64).
--define(PERSISTENT_MSG_STORE, msg_store_persistent).
--define(TRANSIENT_MSG_STORE, msg_store_transient).
 
 -include("rabbit.hrl").
 
@@ -69,11 +65,6 @@
 
 -endif.
 
--define(BLANK_SYNC, #sync { acks_persistent = [],
-                            acks_all = [],
-                            pubs = [],
-                            funs = [] }).
-
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -83,103 +74,81 @@ start(_) -> ok.
 stop() -> ok.
 
 init(_, _, _) ->
-    S = #s {
+    #s {
       q = queue:new(),
       next_seq_id = 0,
       pending_ack = dict:new(),
-      unconfirmed = gb_sets:new() },
-    a(S).
+      unconfirmed = gb_sets:new() }.
 
-terminate(S) ->
-    S1 = remove_pending_ack(S),
-    a(S1).
+terminate(S) -> remove_pending_ack(S).
 
-delete_and_terminate(S) ->
-    {_PurgeCount, S1} = purge(S),
-    S2 = remove_pending_ack(S1),
-    a(S2).
+delete_and_terminate(S) -> {_PurgeCount, S1} = purge(S),
+                           remove_pending_ack(S1).
 
-purge(S = #s { q = Q }) ->
-    S1 = S #s { q = queue:new() },
-    {queue:size(Q), a(S)}.
+purge(S = #s { q = Q }) -> {queue:len(Q), S #s { q = queue:new() }}.
 
-publish(Msg, MsgProps, S) ->
-    {_SeqId, S1} = publish(Msg, MsgProps, false, false, S),
-    a(S1).
+publish(Msg, Props, S) -> publish5(Msg, Props, false, S).
 
 publish_delivered(false,
-		  #basic_message { guid = Guid },
-                  _MsgProps,
-		  S) ->
+                  #basic_message { guid = Guid },
+                  _Props,
+                  S) ->
     blind_confirm(self(), gb_sets:singleton(Guid)),
-    {undefined, a(S)};
+    {undefined, S};
 publish_delivered(true,
 		  Msg = #basic_message { guid = Guid },
-                  MsgProps = #message_properties {
-                    needs_confirming = NeedsConfirming },
-                  S = #s { next_seq_id = SeqId,
-                           unconfirmed = UC }) ->
-    M = (m(SeqId, Msg, MsgProps)) #m { is_delivered = true },
-    {M1, S1} = {M, S},
-    S2 = record_pending_ack(m(M1), S1),
+		  Props = #message_properties {
+		    needs_confirming = NeedsConfirming },
+		  S = #s { next_seq_id = SeqId, unconfirmed = UC }) ->
+    S1 = record_pending_ack((m(SeqId, Msg, Props))
+			    #m { is_delivered = true }, S),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, Guid, UC),
-    {SeqId, a(S2 #s { next_seq_id = SeqId + 1,
-                      unconfirmed = UC1 })}.
+    {SeqId, S1 #s { next_seq_id = SeqId + 1, unconfirmed = UC1 }}.
 
-dropwhile(Pred, S) ->
-    {_OkOrEmpty, S1} = dropwhile1(Pred, S),
-    S1.
+dropwhile(Pred, S) -> {_OkOrEmpty, S1} = dropwhile1(Pred, S),
+                      S1.
 
 dropwhile1(Pred, S) ->
     internal_queue_out(
-      fun(M = #m { msg_props = MsgProps }, S1) ->
-              case Pred(MsgProps) of
-                  true ->
-                      {_, S2} = internal_fetch(false, M, S1),
-                      dropwhile1(Pred, S2);
-                  false ->
-                      {M1, S2 = #s { q = Q }} =
-                          read_msg(M, S1),
-                      {ok, S2 #s {q = queue:in_r(M1, Q) }}
+      fun(M = #m { props = Props }, S1 = #s { q = Q }) ->
+              case Pred(Props) of
+                  true -> {_, S2} = internal_fetch(false, M, S1),
+			  dropwhile1(Pred, S2);
+                  false -> {ok, S1 #s {q = queue:in_r(M, Q) }}
               end
-      end, S).
+      end,
+      S).
 
 fetch(AckRequired, S) ->
     internal_queue_out(
-      fun(M, S1) ->
-              {M1, S2} = read_msg(M, S1),
-              internal_fetch(AckRequired, M1, S2)
-      end, S).
+      fun(M, S1) -> internal_fetch(AckRequired, M, S1) end, S).
 
 internal_queue_out(F, S = #s { q = Q }) ->
     case queue:out(Q) of
-        {empty, _Q} ->
-            {empty, S};
-        {{value, M}, Qa} ->
-            F(M, S #s { q = Qa })
+        {empty, _Q} -> {empty, S};
+        {{value, M}, Qa} -> F(M, S #s { q = Qa })
     end.
 
-read_msg(M, S) -> {M, S}.
-
-internal_fetch(AckRequired, M = #m {
-                              seq_id = SeqId,
-                              msg = Msg,
-                              is_delivered = IsDelivered },
+internal_fetch(AckRequired,
+	       M = #m { seq_id = SeqId,
+			msg = Msg,
+			is_delivered = IsDelivered },
                S = #s { q = Q }) ->
     {AckTag, S1} = case AckRequired of
                        true -> SN = record_pending_ack(
-                                      M #m { is_delivered = true }, S),
+				      M #m { is_delivered = true },
+				      S),
                                {SeqId, SN};
                        false -> {undefined, S}
                    end,
-    {{Msg, IsDelivered, AckTag, Len1}, a(S1)}.
+    {{Msg, IsDelivered, AckTag, queue:len(Q)}, S1}.
 
-ack(AckTags, S) -> a(ack(fun (_, S0) -> S0 end, AckTags, S)).
+ack(AckTags, S) -> ack(fun (_, S0) -> S0 end, AckTags, S).
 
-tx_publish(Txn, Msg, MsgProps, S) ->
+tx_publish(Txn, Msg, Props, S) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
-    a(S).
+    store_tx(Txn, Tx #tx { pending_messages = [{Msg, Props} | Pubs] }),
+    S.
 
 tx_ack(Txn, AckTags, S) ->
     Tx = #tx { pending_acks = Acks } = lookup_tx(Txn),
@@ -189,29 +158,28 @@ tx_ack(Txn, AckTags, S) ->
 tx_rollback(Txn, S) ->
     #tx { pending_acks = AckTags } = lookup_tx(Txn),
     erase_tx(Txn),
-    {lists:append(AckTags), a(S)}.
+    {lists:append(AckTags), S}.
 
-tx_commit(Txn, F, MsgPropsF, S) ->
+tx_commit(Txn, F, PropsF, S) ->
     #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
     erase_tx(Txn),
     AckTags1 = lists:append(AckTags),
-    {AckTags1, a(tx_commit_post_msg_store(Pubs, AckTags1, F, MsgPropsF, S))}.
+    {AckTags1, tx_commit_post_msg_store(Pubs, AckTags1, F, PropsF, S)}.
 
-requeue(AckTags, MsgPropsF, S) ->
-    MsgPropsF1 = fun (MsgProps) ->
-                           (MsgPropsF(MsgProps)) #message_properties {
-                             needs_confirming = false }
-                   end,
-    a(ack(fun (#m { msg = Msg, msg_props = MsgProps }, S1) ->
-                  {_SeqId, S2} = publish(Msg, MsgPropsF1(MsgProps),
-                                         true, false, S1),
-                  S2
-          end,
-          AckTags, S)).
+requeue(AckTags, PropsF, S) ->
+    PropsF1 = fun (Props) ->
+		      (PropsF(Props)) #message_properties {
+			needs_confirming = false }
+	      end,
+    ack(fun (#m { msg = Msg, props = Props }, S1) ->
+                publish5(Msg, PropsF1(Props), true, S1)
+        end,
+        AckTags,
+        S).
 
-len(#s { q = Q }) -> queue:size(Q).
+len(#s { q = Q }) -> queue:len(Q).
 
-is_empty(S #s { q = Q }) -> queue:empty(Q).
+is_empty(#s { q = Q }) -> queue:is_empty(Q).
 
 set_ram_duration_target(_, S) -> S.
 
@@ -223,12 +191,9 @@ idle_timeout(S) -> S.
 
 handle_pre_hibernate(S) -> S.
 
-status(#s {
-          q = Q,
-          pending_ack = PA,
-          next_seq_id = NextSeqId }) ->
+status(#s { q = Q, pending_ack = PA, next_seq_id = NextSeqId }) ->
     [ {q , queue:len(Q)},
-      {len , Len},
+      {len , queue:len(Q)},
       {pending_acks , dict:size(PA)},
       {next_seq_id , NextSeqId} ].
 
@@ -236,18 +201,13 @@ status(#s {
 %% Minor helpers
 %%----------------------------------------------------------------------------
 
-a(S) -> S.
-
-m(M) -> M.
-
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true, Val, Set) -> gb_sets:add(Val, Set).
 
-m(SeqId, Msg, MsgProps) ->
-    #m { seq_id = SeqId,
-         msg = Msg,
-         is_delivered = false,
-         msg_props = MsgProps }.
+m(SeqId, Msg, Props) -> #m { seq_id = SeqId,
+			     msg = Msg,
+			     is_delivered = false,
+			     props = Props }.
 
 lookup_tx(Txn) -> case get({txn, Txn}) of
                       undefined -> #tx { pending_messages = [],
@@ -263,40 +223,28 @@ erase_tx(Txn) -> erase({txn, Txn}).
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-tx_commit_post_msg_store(Pubs, AckTags, F, MsgPropsF, S) ->
-    SPAcks = [],
-    SAcks = [AckTags],
-    SPubs = [{MsgPropsF, Pubs}],
-    SFs = [F],
-    PAcks = lists:append(SPAcks),
-    Acks = lists:append(SAcks),
-    Pubs = [{Msg, F1(MsgProps)} || {F1, PubsN} <- lists:reverse(SPubs),
-				   {Msg, MsgProps} <- lists:reverse(PubsN)],
-    {_, S1} =
-        lists:foldl(
-          fun ({Msg, MsgProps}, {SeqIdsAcc, S2}) ->
-                  {_, S3} = publish(Msg, MsgProps, false, false, S2),
-                  {SeqIdsAcc, S3}
-          end, {PAcks, ack(Acks, S)}, Pubs),
-    [ F1() || F1 <- lists:reverse(SFs) ],
+tx_commit_post_msg_store(Pubs, AckTags, F, PropsF, S) ->
+    Pubs2 = [{Msg, PropsF(Props)} || {Msg, Props} <- lists:reverse(Pubs)],
+    S1 = lists:foldl(
+	   fun ({Msg, Props}, S2) -> publish5(Msg, Props, false, S2) end,
+	   ack(AckTags, S),
+	   Pubs2),
+    F(),
     S1.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
-publish(Msg = #basic_message { guid = Guid },
-        MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        IsDelivered,
-        _,
-        S = #s { q = Q,
-                 next_seq_id = SeqId,
-                 unconfirmed = UC }) ->
-    M = (m(SeqId, Msg, MsgProps)) #m { is_delivered = IsDelivered },
-    {M1, S1} = {M, S},
-    S2 = S1 #s { q = queue:in(m(M1), Q) },
+publish5(Msg = #basic_message { guid = Guid },
+	 Props = #message_properties { needs_confirming = NeedsConfirming },
+	 IsDelivered,
+	 S = #s { q = Q, next_seq_id = SeqId, unconfirmed = UC }) ->
+    S1 = S #s { q = queue:in((m(SeqId, Msg, Props))
+			     #m { is_delivered = IsDelivered },
+			     Q) },
     UC1 = gb_sets_maybe_insert(NeedsConfirming, Guid, UC),
-    {SeqId, S2 #s { next_seq_id = SeqId + 1, unconfirmed = UC1 }}.
+    S1 #s { next_seq_id = SeqId + 1, unconfirmed = UC1 }.
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
@@ -307,26 +255,16 @@ record_pending_ack(#m { seq_id = SeqId } = M, S = #s { pending_ack = PA }) ->
     PA1 = dict:store(SeqId, AckEntry, PA),
     S #s { pending_ack = PA1 }.
 
-remove_pending_ack(S) ->
-    S1 = S #s { pending_ack = dict:new() },
-    S1.
+remove_pending_ack(S) -> S #s { pending_ack = dict:new() }.
 
-ack(_F, [], S) -> S;
 ack(F, AckTags, S) ->
-    {{_, _}, S1} =
-        lists:foldl(
-          fun (SeqId, {Acc, S2 = #s { pending_ack = PA }}) ->
-                  AckEntry = dict:fetch(SeqId, PA),
-                  {accumulate_ack(SeqId, AckEntry, Acc),
-                   F(AckEntry, S2 #s {
-                                   pending_ack = dict:erase(SeqId, PA)})}
-          end, {accumulate_ack_init(), S}, AckTags),
-    S1.
-
-accumulate_ack_init() -> {[], orddict:new()}.
-
-accumulate_ack(_SeqId, _, {PersistentSeqIdsAcc, GuidsByStore}) ->
-    {PersistentSeqIdsAcc, GuidsByStore}.
+    lists:foldl(
+      fun (SeqId, S2 = #s { pending_ack = PA }) ->
+	      AckEntry = dict:fetch(SeqId, PA),
+	      F(AckEntry, S2 #s { pending_ack = dict:erase(SeqId, PA)})
+      end,
+      S,
+      AckTags).
 
 %%----------------------------------------------------------------------------
 %% Internal plumbing for confirms (aka publisher acks)
