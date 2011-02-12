@@ -58,6 +58,15 @@
 %% hibernate the process immediately, as it would if backoff wasn't
 %% being used. Instead it'll wait for the current timeout as described
 %% above.
+%%
+%% 7) The callback module can return from any of the handle_*
+%% functions, a {become, Module, State} triple, or a {become, Module,
+%% State, Timeout} quadruple. This allows the gen_server to
+%% dynamically change the callback module. The State is the new state
+%% which will be passed into any of the callback functions in the new
+%% module. Note there is no form also encompassing a reply, thus if
+%% you wish to reply in handle_call/3 and change the callback module,
+%% you need to use gen_server2:reply/2 to issue the reply manually.
 
 %% All modifications are (C) 2009-2011 VMware, Inc.
 
