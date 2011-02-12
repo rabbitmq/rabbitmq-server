@@ -432,6 +432,20 @@
 
 behaviour_info(callbacks) ->
     [
+     %% The joined, members_changed and handle_msg callbacks can all
+     %% return any of the following terms:
+     %%
+     %% 'ok' - the callback function returns normally
+     %%
+     %% {'stop', Reason} - the callback indicates the member should
+     %% stop with reason Reason and should leave the group.
+     %%
+     %% {'become', Module, Args} - the callback indicates that the
+     %% callback module should be changed to Module and that the
+     %% callback functions should now be passed the arguments
+     %% Args. This allows the callback module to be dynamically
+     %% changed.
+
      %% Called when we've successfully joined the group. Supplied with
      %% Args provided in start_link, plus current group members.
      {joined, 2},

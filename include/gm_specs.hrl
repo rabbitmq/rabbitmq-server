@@ -16,7 +16,7 @@
 
 -ifdef(use_specs).
 
--type(callback_result() :: 'ok' | {'stop', any()}).
+-type(callback_result() :: 'ok' | {'stop', any()} | {'become', atom(), args()}).
 -type(args() :: [any()]).
 -type(members() :: [pid()]).
 
