@@ -72,7 +72,13 @@
 %% pre-init:
 %%   receive protocol header -> send connection.start, *starting*
 %% starting:
-%%   receive connection.start_ok -> send connection.tune, *tuning*
+%%   receive connection.start_ok -> *securing*
+%% securing:
+%%   check authentication credentials
+%%     if authentication success -> send connection.tune, *tuning*
+%%     if more challenge needed -> send connection.secure,
+%%                                 receive connection.secure_ok *securing*
+%%     otherwise send close, *exit*
 %% tuning:
 %%   receive connection.tune_ok -> start heartbeats, *opening*
 %% opening:
@@ -256,7 +262,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
     {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
-    PeerAddressS = inet_parse:ntoa(PeerAddress),
+    PeerAddressS = rabbit_misc:ntoab(PeerAddress),
     rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
                     [self(), PeerAddressS, PeerPort]),
     ClientSock = socket_op(Sock, SockTransform),
@@ -351,7 +357,10 @@ mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
                     throw({handshake_timeout, State#v1.callback})
             end;
         timeout ->
-            throw({timeout, State#v1.connection_state});
+            case State#v1.connection_state of
+                closed -> mainloop(Deb, State);
+                S      -> throw({timeout, S})
+            end;
         {'$gen_call', From, {shutdown, Explanation}} ->
             {ForceTermination, NewState} = terminate(Explanation, State),
             gen_server:reply(From, ok),
@@ -916,10 +925,14 @@ socket_info(Get, Select) ->
     end.
 
 ssl_info(F, Sock) ->
+    %% The first ok form is R14
+    %% The second is R13 - the extra term is exportability (by inspection,
+    %% the docs are wrong)
     case rabbit_net:ssl_info(Sock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Info}  -> F(Info)
+        nossl                   -> '';
+        {error, _}              -> '';
+        {ok, {P, {K, C, H}}}    -> F({P, {K, C, H}});
+        {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
     end.
 
 cert_info(F, Sock) ->
@@ -940,8 +953,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  vhost     = VHost}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {Protocol, Sock, Channel, FrameMax,
-                       self(), User, VHost, Collector}),
+          ChanSupSup, {tcp, Protocol, Sock, Channel, FrameMax, self(), User,
+                       VHost, Collector}),
     erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),

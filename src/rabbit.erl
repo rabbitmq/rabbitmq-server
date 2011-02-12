@@ -27,13 +27,19 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0]).
 
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
                                    check_empty_content_body_frame_size,
                                    []}},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({rabbit_registry,
+                   [{description, "plugin registry"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_registry]}},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database,
@@ -53,13 +59,6 @@
 
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
-
--rabbit_boot_step({rabbit_registry,
-                   [{description, "plugin registry"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_registry]}},
-                    {requires,    external_infrastructure},
-                    {enables,     kernel_ready}]}).
 
 -rabbit_boot_step({rabbit_log,
                    [{description, "logging server"},
@@ -101,8 +100,7 @@
 
 -rabbit_boot_step({delegate_sup,
                    [{description, "cluster delegate"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [delegate_sup]}},
+                    {mfa,         {rabbit, boot_delegate, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
@@ -145,13 +143,18 @@
                     {requires,    routing_ready},
                     {enables,     networking}]}).
 
+-rabbit_boot_step({direct_client,
+                   [{mfa,        {rabbit_direct, boot, []}},
+                    {requires,   log_relay}]}).
+
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
-                    {requires,    log_relay},
-                    {enables,     networking_listening}]}).
+                    {requires,    log_relay}]}).
 
--rabbit_boot_step({networking_listening,
-                   [{description, "network listeners available"}]}).
+-rabbit_boot_step({notify_cluster,
+                   [{description, "notify cluster nodes"},
+                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {requires,    networking}]}).
 
 %%---------------------------------------------------------------------------
 
@@ -178,6 +181,9 @@
                {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(boot_delegate/0 :: () -> 'ok').
 
 -endif.
 
@@ -225,11 +231,11 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, SupPid} = rabbit_sup:start_link(),
+            true = register(rabbit, self()),
 
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
-
             {ok, SupPid};
         Error ->
             Error
@@ -447,6 +453,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                                   end
                      end
     end.
+
+boot_delegate() ->
+    {ok, Count} = application:get_env(rabbit, delegate_count),
+    rabbit_sup:start_child(delegate_sup, [Count]).
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of

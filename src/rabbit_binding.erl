@@ -331,7 +331,7 @@ group_bindings_fold(Fun, SrcName, Acc, Removed, Bindings) ->
     group_bindings_fold(Fun, Fun(SrcName, Bindings, Acc), Removed).
 
 maybe_auto_delete(XName, Bindings, Deletions) ->
-    case mnesia:read(rabbit_exchange, XName) of
+    case mnesia:read({rabbit_exchange, XName}) of
         [] ->
             add_deletion(XName, {undefined, not_deleted, Bindings}, Deletions);
         [X] ->

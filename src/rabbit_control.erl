@@ -77,24 +77,24 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            halt();
+            quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
-            halt(2);
+            quit(2);
         Other ->
             print_error("~p", [Other]),
-            halt(2)
+            quit(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
@@ -130,7 +130,7 @@ stop() ->
 
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
-    halt(1).
+    quit(1).
 
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -327,11 +327,11 @@ format_info_item(#resource{name = Name}) ->
     escape(Name);
 format_info_item({N1, N2, N3, N4} = Value) when
       ?IS_U8(N1), ?IS_U8(N2), ?IS_U8(N3), ?IS_U8(N4) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value) when
       ?IS_U16(K1), ?IS_U16(K2), ?IS_U16(K3), ?IS_U16(K4),
       ?IS_U16(K5), ?IS_U16(K6), ?IS_U16(K7), ?IS_U16(K8) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item(Value) when is_pid(Value) ->
     rabbit_misc:pid_to_string(Value);
 format_info_item(Value) when is_binary(Value) ->
@@ -342,6 +342,12 @@ format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
                      Value) when is_binary(TableEntryKey) andalso
                                  is_atom(TableEntryType) ->
     io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+format_info_item([T | _] = Value)
+  when is_tuple(T) orelse is_pid(T) orelse is_binary(T) orelse is_atom(T) orelse
+       is_list(T) ->
+    "[" ++
+        lists:nthtail(2, lists:append(
+                           [", " ++ format_info_item(E) || E <- Value])) ++ "]";
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 
@@ -392,4 +398,13 @@ prettify_typed_amqp_value(Type, Value) ->
         table   -> prettify_amqp_table(Value);
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
+    end.
+
+% the slower shutdown on windows required to flush stdout
+quit(Status) ->
+    case os:type() of
+        {unix, _} ->
+            halt(Status);
+        {win32, _} ->
+            init:stop(Status)
     end.
