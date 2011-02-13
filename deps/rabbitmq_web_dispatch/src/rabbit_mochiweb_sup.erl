@@ -38,10 +38,10 @@ init([Specs]) ->
     Registry = {rabbit_mochiweb_registry,
                 {rabbit_mochiweb_registry, start_link, [Specs]},
                 permanent, 5000, worker, dynamic},
-    Webs = [{rabbit_mochiweb_web,
-             {rabbit_mochiweb_web, start, [InstanceSpec]},
+    Webs = [{{rabbit_mochiweb_web, Instance},
+             {rabbit_mochiweb_web, start, [{Instance, Spec}]},
              permanent, 5000, worker, dynamic} ||
-               InstanceSpec <- Specs],
+               {Instance, Spec} <- Specs],
 
     Processes = [Registry | Webs],
     {ok, {{one_for_one, 10, 10}, Processes}}.
