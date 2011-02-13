@@ -1,10 +1,10 @@
 -module(rabbit_mochiweb).
 
 -export([start/0, stop/0]).
--export([register_handler/4, register_global_handler/1]).
--export([register_context_handler/3, register_static_context/4]).
+-export([register_handler/5, register_global_handler/2]).
+-export([register_context_handler/4, register_static_context/5]).
 -export([static_context_selector/1, static_context_handler/3, static_context_handler/2]).
--export([register_authenticated_static_context/5]).
+-export([register_authenticated_static_context/6]).
 
 -define(APP, ?MODULE).
 
@@ -22,22 +22,22 @@ stop() ->
 
 %% @doc Registers a completely dynamic selector and handler combination, with
 %% a link to display in the global context.
-register_handler(Selector, Handler, LinkPath, LinkDesc) ->
-    rabbit_mochiweb_registry:add(default, Selector, Handler, {LinkPath, LinkDesc}).
+register_handler(Instance, Selector, Handler, LinkPath, LinkDesc) ->
+    rabbit_mochiweb_registry:add(Instance, Selector, Handler, {LinkPath, LinkDesc}).
 
 %% Utility Methods for standard use cases
 
 %% @spec register_global_handler(HandlerFun) -> ok
 %% @doc Sets the fallback handler for the global mochiweb instance.
-register_global_handler(Handler) ->
-    rabbit_mochiweb_registry:set_fallback(default, Handler).
+register_global_handler(Instance, Handler) ->
+    rabbit_mochiweb_registry:set_fallback(Instance, Handler).
 
 %% @spec register_context_handler(Context, Handler, Link) -> ok
 %% @doc Registers a dynamic handler under a fixed context path, with
 %% link to display in the global context.
-register_context_handler(Context, Handler, LinkDesc) ->
+register_context_handler(Instance, Context, Handler, LinkDesc) ->
     rabbit_mochiweb_registry:add(
-      default,
+      Instance,
       fun(Req) ->
               "/" ++ Path = Req:get(raw_path),
               (Path == Context) or (string:str(Path, Context ++ "/") == 1)
@@ -48,8 +48,9 @@ register_context_handler(Context, Handler, LinkDesc) ->
 %% @doc Convenience function registering a fully static context to
 %% serve content from a module-relative directory, with
 %% link to display in the global context.
-register_static_context(Context, Module, FSPath, LinkDesc) ->
-    register_handler(static_context_selector(Context),
+register_static_context(Instance, Context, Module, FSPath, LinkDesc) ->
+    register_handler(Instance,
+                     static_context_selector(Context),
                      static_context_handler(Context, Module, FSPath),
                      Context, LinkDesc).
 
@@ -96,8 +97,8 @@ static_context_handler(Context, LocalPath) ->
 %% @doc Register a fully static but HTTP-authenticated context to
 %% serve content from a module-relative directory, with link to
 %% display in the global context.
-register_authenticated_static_context(Context, Module, FSPath, LinkDesc,
-                                      AuthFun) ->
+register_authenticated_static_context(Instance, Context, Module, FSPath,
+                                      LinkDesc, AuthFun) ->
     RawHandler = static_context_handler(Context, Module, FSPath),
     Unauthorized = {401, [{"WWW-Authenticate",
                            "Basic realm=\"" ++ LinkDesc ++ "\""}], ""},
@@ -114,5 +115,6 @@ register_authenticated_static_context(Context, Module, FSPath, LinkDesc,
                         Req:respond(Unauthorized)
                 end
         end,
-    register_handler(static_context_selector(Context),
+    register_handler(Instance,
+                     static_context_selector(Context),
                      Handler, Context, LinkDesc).
