@@ -1,28 +1,34 @@
 -module(rabbit_mochiweb_web).
 
--export([start/0, stop/0]).
+-export([start/1, stop/1]).
 
 %% ----------------------------------------------------------------------
 %% HTTPish API
 %% ----------------------------------------------------------------------
 
-start() ->
-    Port = case application:get_env(port) of
-        {ok, P} -> P;
-        _       -> 55672
-    end,
-    Loop = fun loop/1,
-    mochiweb_http:start([{name, ?MODULE}, {port, Port}, {loop, Loop}]).
+start({Instance, Env}) ->
+    Port = proplists:get_value(port, Env, 55672),
+    Loop = loopfun(Instance),
+    {_, OtherOptions} = proplists:split(Env, [port]),
+    Name = name(Instance),
+    mochiweb_http:start(
+      [{name, Name}, {port, Port}, {loop, Loop}] ++
+          OtherOptions).
 
-stop() ->
-    mochiweb_http:stop(?MODULE).
+stop(Instance) ->
+    mochiweb_http:stop(name(Instance)).
 
-loop(Req) ->
-    case rabbit_mochiweb_registry:lookup(Req) of
-	    no_handler ->
-	        Req:not_found();
-	    {lookup_failure, Reason} ->
-	        Req:respond({500, [], "Registry Error: " ++ Reason});
-	    {handler, Handler} ->
-	        Handler(Req)
-	end.
+loopfun(Instance) ->
+    fun (Req) ->
+            case rabbit_mochiweb_registry:lookup(Instance, Req) of
+                no_handler ->
+                    Req:not_found();
+                {lookup_failure, Reason} ->
+                    Req:respond({500, [], "Registry Error: " ++ Reason});
+                {handler, Handler} ->
+                    Handler(Req)
+            end
+    end.
+
+name(Instance) ->
+    list_to_atom(atom_to_list(?MODULE) ++ "_" ++ atom_to_list(Instance)).

@@ -6,6 +6,8 @@
 -export([static_context_selector/1, static_context_handler/3, static_context_handler/2]).
 -export([register_authenticated_static_context/5]).
 
+-define(APP, ?MODULE).
+
 %% @spec start() -> ok
 %% @doc Start the rabbit_mochiweb server.
 start() ->
@@ -21,20 +23,21 @@ stop() ->
 %% @doc Registers a completely dynamic selector and handler combination, with
 %% a link to display in the global context.
 register_handler(Selector, Handler, LinkPath, LinkDesc) ->
-    rabbit_mochiweb_registry:add(Selector, Handler, {LinkPath, LinkDesc}).
+    rabbit_mochiweb_registry:add(default, Selector, Handler, {LinkPath, LinkDesc}).
 
 %% Utility Methods for standard use cases
 
 %% @spec register_global_handler(HandlerFun) -> ok
 %% @doc Sets the fallback handler for the global mochiweb instance.
 register_global_handler(Handler) ->
-    rabbit_mochiweb_registry:set_fallback(Handler).
+    rabbit_mochiweb_registry:set_fallback(default, Handler).
 
 %% @spec register_context_handler(Context, Handler, Link) -> ok
 %% @doc Registers a dynamic handler under a fixed context path, with
 %% link to display in the global context.
 register_context_handler(Context, Handler, LinkDesc) ->
     rabbit_mochiweb_registry:add(
+      default,
       fun(Req) ->
               "/" ++ Path = Req:get(raw_path),
               (Path == Context) or (string:str(Path, Context ++ "/") == 1)

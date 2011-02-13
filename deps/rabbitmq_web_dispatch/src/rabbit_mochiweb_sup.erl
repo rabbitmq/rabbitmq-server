@@ -3,20 +3,20 @@
 -behaviour(supervisor).
 
 %% External exports
--export([start_link/0, upgrade/0]).
+-export([start_link/1, upgrade/1]).
 
 %% supervisor callbacks
 -export([init/1]).
 
 %% @spec start_link() -> ServerRet
 %% @doc API for starting the supervisor.
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+start_link(Instances) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [Instances]).
 
-%% @spec upgrade() -> ok
+%% @spec upgrade([instance()]) -> ok
 %% @doc Add processes if necessary.
-upgrade() ->
-    {ok, {_, Specs}} = init([]),
+upgrade(Instances) ->
+    {ok, {_, Specs}} = init([Instances]),
 
     Old = sets:from_list(
             [Name || {Name, _, _, _} <- supervisor:which_children(?MODULE)]),
@@ -32,15 +32,16 @@ upgrade() ->
     [supervisor:start_child(?MODULE, Spec) || Spec <- Specs],
     ok.
 
-%% @spec init([]) -> SupervisorTree
+%% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
-init([]) ->
+init([Specs]) ->
     Registry = {rabbit_mochiweb_registry,
-                {rabbit_mochiweb_registry, start_link, []},
+                {rabbit_mochiweb_registry, start_link, [Specs]},
                 permanent, 5000, worker, dynamic},
-    Web = {rabbit_mochiweb_web,
-           {rabbit_mochiweb_web, start, []},
-           permanent, 5000, worker, dynamic},
+    Webs = [{rabbit_mochiweb_web,
+             {rabbit_mochiweb_web, start, [InstanceSpec]},
+             permanent, 5000, worker, dynamic} ||
+               InstanceSpec <- Specs],
 
-    Processes = [Registry, Web],
+    Processes = [Registry | Webs],
     {ok, {{one_for_one, 10, 10}, Processes}}.
