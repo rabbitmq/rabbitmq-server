@@ -36,6 +36,7 @@
 -spec(add_ip_to_listener/0 :: () -> 'ok').
 -spec(internal_exchanges/0 :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
+-spec(topic_trie/0 :: () -> 'ok').
 
 -endif.
 
@@ -79,8 +80,8 @@ internal_exchanges() ->
                 {exchange, Name, Type, Durable, AutoDelete, false, Args}
         end,
     [ ok = transform(T,
-                  AddInternalFun,
-                  [name, type, durable, auto_delete, internal, arguments])
+                     AddInternalFun,
+                     [name, type, durable, auto_delete, internal, arguments])
       || T <- Tables ],
     ok.
 
@@ -95,11 +96,11 @@ user_to_internal_user() ->
 topic_trie() ->
     create(rabbit_topic_trie_edge,
            [{record_name, topic_trie_edge},
-            {attributes, {trie_edge, exchange_name, node_id, word}},
+            {attributes, {topic_trie_edge, trie_edge, node_id}},
             {type, ordered_set}]),
     create(rabbit_topic_trie_binding,
            [{record_name, topic_trie_binding},
-            {attributes, {trie_binding, exchange_name, node_id, destination}},
+            {attributes, {topic_trie_binding, trie_binding, value = const}},
             {type, ordered_set}]).
 
 %%--------------------------------------------------------------------
