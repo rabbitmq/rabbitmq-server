@@ -43,27 +43,28 @@ start_rabbitmq () {
         setsid sh -c "$DAEMON > ${INIT_LOG_DIR}/startup_log \
             2> ${INIT_LOG_DIR}/startup_err" &
         $CONTROL wait >/dev/null 2>&1
-        case "$?" in
+        RETVAL=$?
+        set -e
+        case "$RETVAL" in
             0)
                 echo SUCCESS
                 [ -n "$LOCK_FILE" ] && touch $LOCK_FILE
-                RETVAL=0
                 ;;
             *)
                 echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
                 RETVAL=1
                 ;;
         esac
-        set -e
     fi
 }
 
 stop_rabbitmq () {
-    set +e
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
+        set +e
         $CONTROL stop > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
         RETVAL=$?
+        set -e
         if [ $RETVAL = 0 ] ; then
             [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
         else
@@ -73,7 +74,6 @@ stop_rabbitmq () {
         echo RabbitMQ is not running
         RETVAL=0
     fi
-    set -e
 }
 
 status_rabbitmq() {
