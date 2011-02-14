@@ -709,12 +709,18 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                             connection       = Connection,
                             sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism),
+    Capabilities =
+        case lists:keyfind(<<"capabilities">>, 1, ClientProperties) of
+            {<<"capabilities">>, table, Capabilities1} -> Capabilities1;
+            _                                          -> []
+        end,
     State = State0#v1{auth_mechanism   = AuthMechanism,
                       auth_state       = AuthMechanism:init(Sock),
                       connection_state = securing,
                       connection       =
                           Connection#connection{
-                            client_properties = ClientProperties}},
+                            client_properties = ClientProperties,
+                            capabilities      = Capabilities}},
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -947,14 +953,15 @@ cert_info(F, Sock) ->
 send_to_new_channel(Channel, AnalyzedFrame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
-        connection = #connection{protocol  = Protocol,
-                                 frame_max = FrameMax,
-                                 user      = User,
-                                 vhost     = VHost}} = State,
+        connection = #connection{protocol     = Protocol,
+                                 frame_max    = FrameMax,
+                                 user         = User,
+                                 vhost        = VHost,
+                                 capabilities = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Protocol, Sock, Channel, FrameMax, self(), User,
-                       VHost, Collector}),
+          ChanSupSup, {tcp, Protocol, Capabilities, Sock, Channel, FrameMax,
+                       self(), User, VHost, Collector}),
     erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
