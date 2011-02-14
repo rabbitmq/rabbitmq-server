@@ -66,8 +66,7 @@ maybe_upgrade_mnesia() ->
     end.
 
 am_i_upgrader(Nodes) ->
-    Running = nodes_running(Nodes),
-    case Running of
+    case nodes_running(Nodes) of
         [] ->
             case am_i_disc_node() of
                 true  -> true;
