@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, invoke_no_result/2, invoke/2, delegate_count/1]).
+-export([start_link/1, invoke_no_result/2, invoke/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,8 +35,6 @@
         ( pid(),  fun ((pid()) -> A)) -> A;
         ([pid()], fun ((pid()) -> A)) -> {[{pid(), A}],
                                           [{pid(), term()}]}).
-
--spec(delegate_count/1 :: ([node()]) -> non_neg_integer()).
 
 -endif.
 
@@ -111,22 +109,14 @@ group_pids_by_node(Pids) ->
                  node(Pid), fun (List) -> [Pid | List] end, [Pid], Remote)}
       end, {[], orddict:new()}, Pids).
 
-delegate_count([RemoteNode | _]) ->
-    {ok, Count} = case application:get_env(rabbit, delegate_count) of
-                      undefined -> rpc:call(RemoteNode, application, get_env,
-                                            [rabbit, delegate_count]);
-                      Result    -> Result
-                  end,
-    Count.
-
 delegate_name(Hash) ->
     list_to_atom("delegate_" ++ integer_to_list(Hash)).
 
 delegate(RemoteNodes) ->
     case get(delegate) of
-        undefined -> Name =
-                         delegate_name(erlang:phash2(
-                                         self(), delegate_count(RemoteNodes))),
+        undefined -> Name = delegate_name(
+                              erlang:phash2(self(),
+                                            delegate_sup:count(RemoteNodes))),
                      put(delegate, Name),
                      Name;
         Name      -> Name

@@ -56,6 +56,7 @@
 -export([lock_file/1]).
 -export([const_ok/1, const/1]).
 -export([ntoa/1, ntoab/1]).
+-export([is_process_alive/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -194,6 +195,7 @@
 -spec(const/1 :: (A) -> const(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
+-spec(is_process_alive/1 :: (pid()) -> boolean()).
 
 -endif.
 
@@ -240,10 +242,19 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
         {Same, Same}  -> ok;
         {Orig1, New1} -> protocol_error(
                            precondition_failed,
-                           "inequivalent arg '~s' for ~s:  "
-                           "required ~w, received ~w",
-                           [Key, rabbit_misc:rs(Name), New1, Orig1])
+                           "inequivalent arg '~s' for ~s: "
+                           "received ~s but current is ~s",
+                           [Key, rs(Name), val(New1), val(Orig1)])
     end.
+
+val(undefined) ->
+    "none";
+val({Type, Value}) ->
+    Fmt = case is_binary(Value) of
+              true  -> "the value '~s' of type '~s'";
+              false -> "the value '~w' of type '~s'"
+          end,
+    lists:flatten(io_lib:format(Fmt, [Value, Type])).
 
 dirty_read(ReadSpec) ->
     case mnesia:dirty_read(ReadSpec) of
@@ -341,8 +352,11 @@ throw_on_error(E, Thunk) ->
 with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
-    catch exit:{R, _} when R =:= noproc; R =:= nodedown;
-                           R =:= normal; R =:= shutdown ->
+    catch
+        exit:{R, _} when R =:= noproc; R =:= nodedown;
+                         R =:= normal; R =:= shutdown ->
+            Handler();
+        exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
             Handler()
     end.
 
@@ -849,3 +863,12 @@ ntoab(IP) ->
         0 -> Str;
         _ -> "[" ++ Str ++ "]"
     end.
+
+is_process_alive(Pid) when node(Pid) =:= node() ->
+    erlang:is_process_alive(Pid);
+is_process_alive(Pid) ->
+    case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+        true -> true;
+        _    -> false
+    end.
+

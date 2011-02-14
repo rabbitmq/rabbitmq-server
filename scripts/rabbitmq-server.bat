@@ -142,7 +142,6 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 +W w ^
 +A30 ^
 +P 1048576 ^
--kernel inet_default_listen_options "[{nodelay, true}]" ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
 -kernel error_logger {file,\""!RABBITMQ_LOG_BASE!/!RABBITMQ_NODENAME!.log"\"} ^
