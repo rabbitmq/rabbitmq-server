@@ -365,15 +365,13 @@ send_exception(Reason, State = #ch{protocol   = Protocol,
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
                      [ReaderPid, Channel, Reason]),
-    %% something bad's happened: rollback_and_notify make not be 'ok'
+    %% something bad's happened: rollback_and_notify may not be 'ok'
     {_Result, State1} = rollback_and_notify(State),
     case CloseChannel of
-        Channel ->
-            ok = rabbit_writer:send_command(WriterPid, CloseMethod),
-            {noreply, State1};
-        _ ->
-            ReaderPid ! {channel_exit, Channel, Reason},
-            {stop, normal, State1}
+        Channel -> ok = rabbit_writer:send_command(WriterPid, CloseMethod),
+                   {noreply, State1};
+        _       -> ReaderPid ! {channel_exit, Channel, Reason},
+                   {stop, normal, State1}
     end.
 
 return_queue_declare_ok(#resource{name = ActualName},
