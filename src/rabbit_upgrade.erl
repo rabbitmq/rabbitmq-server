@@ -49,19 +49,19 @@ maybe_upgrade_mnesia() ->
     rabbit:prepare(),
     Nodes = rabbit_mnesia:all_clustered_nodes(),
     case upgrades_required(mnesia) of
-        [_|_] = Upgrades ->
-            case am_i_upgrader(Nodes) of
-                true  -> primary_upgrade(Upgrades, Nodes);
-                false -> non_primary_upgrade(Nodes)
-            end;
-        [] ->
-            ok;
         version_not_available ->
             case Nodes of
                 [_] -> ok;
                 _   -> die("Cluster upgrade needed but upgrading from "
                            "< 2.1.1.~n   Unfortunately you will need to "
                            "rebuild the cluster.", [])
+            end;
+        [] ->
+            ok;
+        Upgrades ->
+            case am_i_upgrader(Nodes) of
+                true  -> primary_upgrade(Upgrades, Nodes);
+                false -> non_primary_upgrade(Nodes)
             end
     end.
 
