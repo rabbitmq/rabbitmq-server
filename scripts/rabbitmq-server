@@ -16,7 +16,6 @@
 ##
 
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
--kernel inet_default_listen_options [{nodelay,true}] \
 -kernel inet_default_connect_options [{nodelay,true}]"
 CONFIG_FILE=/etc/rabbitmq/rabbitmq
 LOG_BASE=/var/log/rabbitmq

@@ -82,6 +82,7 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
     passed = test_queue_cleanup(SecondaryNode),
+    passed = test_declare_on_dead_queue(SecondaryNode),
 
     %% we now run the tests remotely, so that code coverage on the
     %% local node picks up more of the delegate
@@ -90,13 +91,14 @@ run_cluster_dependent_tests(SecondaryNode) ->
     Remote = spawn(SecondaryNode,
                    fun () -> Rs = [ test_delegates_async(Node),
                                     test_delegates_sync(Node),
-                                    test_queue_cleanup(Node) ],
+                                    test_queue_cleanup(Node),
+                                    test_declare_on_dead_queue(Node) ],
                              Self ! {self(), Rs}
                    end),
     receive
         {Remote, Result} ->
-            Result = [passed, passed, passed]
-    after 2000 ->
+            Result = lists:duplicate(length(Result), passed)
+    after 30000 ->
             throw(timeout)
     end,
 
@@ -1408,6 +1410,32 @@ test_queue_cleanup(_SecondaryNode) ->
             throw(failed_to_receive_channel_exit)
     end,
     passed.
+
+test_declare_on_dead_queue(SecondaryNode) ->
+    QueueName = rabbit_misc:r(<<"/">>, queue, ?CLEANUP_QUEUE_NAME),
+    Self = self(),
+    Pid = spawn(SecondaryNode,
+                fun () ->
+                        {new, #amqqueue{name = QueueName, pid = QPid}} =
+                            rabbit_amqqueue:declare(QueueName, false, false, [],
+                                                    none),
+                        exit(QPid, kill),
+                        Self ! {self(), killed, QPid}
+                end),
+    receive
+        {Pid, killed, QPid} ->
+            {existing, #amqqueue{name = QueueName,
+                                 pid = QPid}} =
+                rabbit_amqqueue:declare(QueueName, false, false, [], none),
+            false = rabbit_misc:is_process_alive(QPid),
+            {new, Q} = rabbit_amqqueue:declare(QueueName, false, false, [],
+                                               none),
+            true = rabbit_misc:is_process_alive(Q#amqqueue.pid),
+            {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
+            passed
+    after 2000 ->
+            throw(failed_to_create_and_kill_queue)
+    end.
 
 %---------------------------------------------------------------------
 
