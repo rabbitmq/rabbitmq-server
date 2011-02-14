@@ -167,8 +167,8 @@
               This command will wait for the RabbitMQ application to
               start at the node. As long as the Erlang node is up but
               the RabbitMQ application is down it will wait
-              indefinitely. If the node itself goes down, or takes too
-              long to come up, it will fail.
+              indefinitely. If the node itself goes down, or takes
+              more than five seconds to come up, it will fail.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl wait</screen>
