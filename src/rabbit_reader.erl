@@ -220,7 +220,7 @@ conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
     ok.
 
-server_properties(_Protocol) ->
+server_properties(Protocol) ->
     {ok, Product} = application:get_key(rabbit, id),
     {ok, Version} = application:get_key(rabbit, vsn),
 
@@ -231,21 +231,29 @@ server_properties(_Protocol) ->
     %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
     %% from the config and merge them with the generated built-in properties
     NormalizedConfigServerProps =
-        [case X of
-             {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
-                                  longstr,
-                                  list_to_binary(Value)};
-             {BinKey, Type, Value} -> {BinKey, Type, Value}
-         end || X <- RawConfigServerProps ++
-                    [{product,     Product},
-                     {version,     Version},
-                     {platform,    "Erlang/OTP"},
-                     {copyright,   ?COPYRIGHT_MESSAGE},
-                     {information, ?INFORMATION_MESSAGE}]],
+        [{<<"capabilities">>, table, server_capabilities(Protocol)} |
+         [case X of
+              {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
+                                   longstr,
+                                   list_to_binary(Value)};
+              {BinKey, Type, Value} -> {BinKey, Type, Value}
+          end || X <- RawConfigServerProps ++
+                     [{product,     Product},
+                      {version,     Version},
+                      {platform,    "Erlang/OTP"},
+                      {copyright,   ?COPYRIGHT_MESSAGE},
+                      {information, ?INFORMATION_MESSAGE}]]],
 
     %% Filter duplicated properties in favor of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
+
+server_capabilities(rabbit_framing_amqp_0_9_1) ->
+    [{<<"publisher_confirms">>,         bool, true},
+     {<<"exchange_exchange_bindings">>, bool, true},
+     {<<"basic.nack">>,                 bool, true}];
+server_capabilities(_) ->
+    [].
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
