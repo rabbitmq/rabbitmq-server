@@ -2001,7 +2001,7 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
     {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
                                           [{write_buffer,
                                             ?HANDLE_CACHE_BUFFER_SIZE}]),
-    {ok, Acc, _IgnoreSize} =
+    {ok, _Acc, _IgnoreSize} =
         rabbit_msg_file:scan(
             RefOld, Size,
             fun({Guid, _Size, _Offset, BinMsg}, ok) ->
@@ -2017,5 +2017,5 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
             end, ok),
     file_handle_cache:close(RefOld),
     file_handle_cache:close(RefNew),
-    ok = Acc.
+    ok.
 

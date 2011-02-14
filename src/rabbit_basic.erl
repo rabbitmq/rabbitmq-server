@@ -101,7 +101,7 @@ strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
              = DecodedContent, Key) when Headers =/= undefined ->
     case lists:keyfind(Key, 1, Headers) of
         false -> DecodedContent;
-        Tuple -> Headers0 = lists:delete(Tuple, Headers),
+        Found -> Headers0 = lists:delete(Found, Headers),
                  rabbit_binary_generator:clear_encoded_content(
                      DecodedContent#content{
                          properties = Props#'P_basic'{headers = Headers0}})
