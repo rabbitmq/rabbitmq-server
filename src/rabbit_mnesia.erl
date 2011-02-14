@@ -373,7 +373,7 @@ init_db(ClusterNodes, Force) ->
                 {[], false} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
-                {[], _} ->
+                {[], true} ->
                     %% We're the first node up
                     ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade(local) of
