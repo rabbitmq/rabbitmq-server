@@ -553,19 +553,14 @@ create_local_table_copy(Tab, Type) ->
     ok.
 
 wait_for_replicated_tables() ->
-    AllTablesSet = ordsets:from_list(mnesia:system_info(tables)),
-    ReplicatedTablesSet = ordsets:from_list(replicated_table_names()),
-    wait_for_tables(ordsets:to_list(ordsets:intersection(AllTablesSet,
-                                                         ReplicatedTablesSet))).
+    wait_for_tables(replicated_table_names()).
 
 wait_for_tables() ->
-    AllTablesSet = ordsets:from_list(mnesia:system_info(tables)),
-    RabbitTablesSet = ordsets:from_list(table_names()),
-    wait_for_tables(ordsets:to_list(ordsets:intersection(AllTablesSet,
-                                                         RabbitTablesSet))).
+    wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    case mnesia:wait_for_tables(TableNames, 30000) of
+    Inexistent = TableNames -- mnesia:system_info(tables),
+    case mnesia:wait_for_tables(TableNames -- Inexistent, 30000) of
         ok -> ok;
         {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
