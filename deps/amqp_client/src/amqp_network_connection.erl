@@ -231,10 +231,7 @@ client_properties(UserProperties) ->
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
                   "See http://www.rabbitmq.com/">>},
-               {<<"capabilities">>, table,
-                [{<<"publisher_confirms">>,         bool, true},
-                 {<<"exchange_exchange_bindings">>, bool, true},
-                 {<<"basic.nack">>,                 bool, true}]}],
+               {<<"capabilities">>, table, ?CLIENT_CAPABILITIES}],
     lists:foldl(fun({K, _, _} = Tuple, Acc) ->
                     lists:keystore(K, 1, Acc, Tuple)
                 end, Default, UserProperties).
