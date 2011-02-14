@@ -94,14 +94,12 @@ user_to_internal_user() ->
       [username, password_hash, is_admin], internal_user).
 
 topic_trie() ->
-    create(rabbit_topic_trie_edge,
-           [{record_name, topic_trie_edge},
-            {attributes, {topic_trie_edge, trie_edge, node_id}},
-            {type, ordered_set}]),
-    create(rabbit_topic_trie_binding,
-           [{record_name, topic_trie_binding},
-            {attributes, {topic_trie_binding, trie_binding, value = const}},
-            {type, ordered_set}]).
+    create(rabbit_topic_trie_edge, [{record_name, topic_trie_edge},
+                                    {attributes, [trie_edge, node_id]},
+                                    {type, ordered_set}]),
+    create(rabbit_topic_trie_binding, [{record_name, topic_trie_binding},
+                                       {attributes, [trie_binding, value]},
+                                       {type, ordered_set}]).
 
 %%--------------------------------------------------------------------
 
