@@ -24,7 +24,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_memory/2, server_properties/0]).
+-export([conserve_memory/2, server_properties/1]).
 
 -export([process_channel_frame/5]). %% used by erlang-client
 
@@ -160,7 +160,8 @@
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
--spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
+-spec(server_properties/1 :: (rabbit_types:protocol()) ->
+                                  rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
 -spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
@@ -219,7 +220,7 @@ conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
     ok.
 
-server_properties() ->
+server_properties(_Protocol) ->
     {ok, Product} = application:get_key(rabbit, id),
     {ok, Version} = application:get_key(rabbit, vsn),
 
@@ -655,7 +656,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
-      server_properties = server_properties(),
+      server_properties = server_properties(Protocol),
       mechanisms = auth_mechanisms_binary(),
       locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
