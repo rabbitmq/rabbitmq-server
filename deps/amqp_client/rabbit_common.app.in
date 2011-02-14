@@ -4,6 +4,7 @@
   {modules, [
              gen_server2,
              delegate,
+             delegate_sup,
              priority_queue,
              rabbit_backing_queue,
              rabbit_basic,

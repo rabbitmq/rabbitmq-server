@@ -90,16 +90,15 @@ ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R13B01 upwards (R13B is eshell 5.7.2)
 #
-# NB: the test assumes that version number will only contain single digits
-# NB2: do not mark this variable for export, otherwise it will
+# NB: do not mark this variable for export, otherwise it will
 # override the test in rabbitmq-server's Makefile when it does the
 # make -C, which causes problems whenever the test here and the test
 # there compare system_info(version) against *different* eshell
 # version numbers.
-USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,7,2]), halt().')
 endif
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -pa $(EBIN_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+ERLC_OPTS=-I $(INCLUDE_DIR) -pa $(EBIN_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
