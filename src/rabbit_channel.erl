@@ -277,7 +277,7 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 handle_info(timeout, State) ->
     noreply(State);
 
-handle_info({'DOWN', _MRef, process, QPid, _Reason},
+handle_info({'DOWN', _MRef, process, QPid, Reason},
             State = #ch{unconfirmed = UC}) ->
     %% TODO: this does a complete scan and partial rebuild of the
     %% tree, which is quite efficient. To do better we'd need to
@@ -286,8 +286,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason},
                    gb_trees:next(gb_trees:iterator(UC)), QPid,
                    {[], UC}, State),
     erase_queue_stats(QPid),
-    noreply(
-      queue_blocked(QPid, record_confirms(MXs, State#ch{unconfirmed = UC1}))).
+    State1 = case Reason of
+                 normal -> record_confirms(MXs, State#ch{unconfirmed = UC1});
+                 _      -> send_nacks(MXs, State#ch{unconfirmed = UC1})
+             end,
+    noreply(queue_blocked(QPid, State1)).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -505,6 +508,8 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
 
 remove_qmsg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC}, State) ->
     Qs1 = sets:del_element(QPid, Qs),
+    %% these confirms will be emitted even when a queue dies, but that
+    %% should be fine, since the queue stats get erased immediately
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     case sets:size(Qs1) of
         0 -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UC)};
@@ -735,16 +740,22 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
     {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
 
 handle_method(#'basic.recover_async'{requeue = true},
-              _, State = #ch{unacked_message_q = UAMQ}) ->
+              _, State = #ch{unacked_message_q = UAMQ,
+                             limiter_pid = LimiterPid}) ->
+    OkFun = fun () -> ok end,
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    %% The Qpid python test suite incorrectly assumes
                    %% that messages will be requeued in their original
                    %% order. To keep it happy we reverse the id list
                    %% since we are given them in reverse order.
-                   rabbit_amqqueue:requeue(
-                     QPid, lists:reverse(MsgIds), self())
+                   rabbit_misc:with_exit_handler(
+                     OkFun, fun () ->
+                                    rabbit_amqqueue:requeue(
+                                      QPid, lists:reverse(MsgIds), self())
+                            end)
            end, ok, UAMQ),
+    ok = notify_limiter(LimiterPid, UAMQ),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
@@ -1249,6 +1260,16 @@ lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
 lock_message(false, _MsgStruct, State) ->
     State.
 
+send_nacks([], State) ->
+    State;
+send_nacks(MXs, State) ->
+    MsgSeqNos = [ MsgSeqNo || {MsgSeqNo, _} <- MXs ],
+    coalesce_and_send(MsgSeqNos,
+                      fun(MsgSeqNo, Multiple) ->
+                              #'basic.nack'{delivery_tag = MsgSeqNo,
+                                            multiple = Multiple}
+                      end, State).
+
 send_confirms(State = #ch{confirmed = C}) ->
     C1 = lists:append(C),
     MsgSeqNos = [ begin maybe_incr_stats([{ExchangeName, 1}], confirm, State),
@@ -1258,27 +1279,31 @@ send_confirms(State = #ch{confirmed = C}) ->
 send_confirms([], State) ->
     State;
 send_confirms([MsgSeqNo], State = #ch{writer_pid = WriterPid}) ->
-    send_confirm(MsgSeqNo, WriterPid),
+    ok = rabbit_writer:send_command(WriterPid,
+                                    #'basic.ack'{delivery_tag = MsgSeqNo}),
     State;
-send_confirms(Cs, State = #ch{writer_pid  = WriterPid, unconfirmed = UC}) ->
-    SCs = lists:usort(Cs),
+send_confirms(Cs, State) ->
+    coalesce_and_send(Cs, fun(MsgSeqNo, Multiple) ->
+                                  #'basic.ack'{delivery_tag = MsgSeqNo,
+                                               multiple     = Multiple}
+                          end, State).
+
+coalesce_and_send(MsgSeqNos, MkMsgFun,
+                  State = #ch{writer_pid = WriterPid, unconfirmed = UC}) ->
+    SMsgSeqNos = lists:usort(MsgSeqNos),
     CutOff = case gb_trees:is_empty(UC) of
-                 true  -> lists:last(SCs) + 1;
+                 true  -> lists:last(SMsgSeqNos) + 1;
                  false -> {SeqNo, _XQ} = gb_trees:smallest(UC), SeqNo
              end,
-    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SCs),
+    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SMsgSeqNos),
     case Ms of
         [] -> ok;
         _  -> ok = rabbit_writer:send_command(
-                     WriterPid, #'basic.ack'{delivery_tag = lists:last(Ms),
-                                             multiple = true})
+                     WriterPid, MkMsgFun(lists:last(Ms), true))
     end,
-    [ok = send_confirm(SeqNo, WriterPid) || SeqNo <- Ss],
+    [ok = rabbit_writer:send_command(
+            WriterPid, MkMsgFun(SeqNo, false)) || SeqNo <- Ss],
     State.
-
-send_confirm(SeqNo, WriterPid) ->
-    ok = rabbit_writer:send_command(WriterPid,
-                                    #'basic.ack'{delivery_tag = SeqNo}).
 
 terminate(_State) ->
     pg_local:leave(rabbit_channels, self()),
