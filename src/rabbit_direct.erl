@@ -68,10 +68,10 @@ connect(Username, Password, VHost) ->
             {error, broker_not_found_on_node}
     end.
 
-start_channel(Capabilities, Number, ClientChannelPid, User, VHost, Collector) ->
+start_channel(Number, ClientChannelPid, User, VHost, Capabilities, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
             rabbit_direct_client_sup,
-            [{direct, Capabilities, Number, ClientChannelPid, User, VHost,
+            [{direct, Number, ClientChannelPid, User, VHost, Capabilities,
               Collector}]),
     {ok, ChannelPid}.

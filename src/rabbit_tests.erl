@@ -1019,8 +1019,8 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    {ok, Ch} = rabbit_channel:start_link([], 1, self(), Writer,
-                                         user(<<"user">>), <<"/">>, self(),
+    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
+                                         user(<<"user">>), <<"/">>, [], self(),
                                          fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
@@ -1079,8 +1079,8 @@ test_server_status() ->
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link([], 1, Me, Writer,
-                                         user(<<"guest">>), <<"/">>, self(),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer, user(<<"guest">>),
+                                         <<"/">>, [], self(),
                                          fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok

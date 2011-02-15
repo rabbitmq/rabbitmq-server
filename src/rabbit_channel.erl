@@ -68,8 +68,8 @@
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/8 ::
-      (rabbit_framing:amqp_table(), channel_number(), pid(), pid(),
-       rabbit_types:user(), rabbit_types:vhost(), pid(),
+      (channel_number(), pid(), pid(), rabbit_types:user(),
+       rabbit_types:vhost(), rabbit_framing:amqp_table(), pid(),
        fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -95,11 +95,11 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Capabilities, Channel, ReaderPid, WriterPid, User, VHost,
+start_link(Channel, ReaderPid, WriterPid, User, VHost, Capabilities,
            CollectorPid, StartLimiterFun) ->
     gen_server2:start_link(?MODULE,
-                           [Capabilities, Channel, ReaderPid, WriterPid, User,
-                            VHost, CollectorPid, StartLimiterFun], []).
+                           [Channel, ReaderPid, WriterPid, User, VHost,
+                            Capabilities, CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -150,7 +150,7 @@ emit_stats(Pid) ->
 
 %%---------------------------------------------------------------------------
 
-init([Capabilities, Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
+init([Channel, ReaderPid, WriterPid, User, VHost, Capabilities, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
