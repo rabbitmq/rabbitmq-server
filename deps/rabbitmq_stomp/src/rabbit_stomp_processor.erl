@@ -40,7 +40,7 @@
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
-                start_heartbeat_fun}).
+                start_heartbeat_fun, confirm_enabled}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -71,7 +71,8 @@ init([Sock, StartHeartbeatFun]) ->
        connection          = none,
        subscriptions       = dict:new(),
        version             = none,
-       start_heartbeat_fun = StartHeartbeatFun},
+       start_heartbeat_fun = StartHeartbeatFun,
+       confirm_enabled     = false},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -180,7 +181,8 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
     cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
-    with_destination("SEND", Frame, State, fun do_send/4);
+    with_destination("SEND", Frame, ensure_confirm(Frame, State),
+                     fun do_send/4);
 
 handle_frame("ACK", Frame, State) ->
     ack_action("ACK", Frame, State, fun create_ack_method/2);
@@ -281,6 +283,15 @@ ensure_subchannel_closed(SubChannel, MainChannel, State)
 ensure_subchannel_closed(SubChannel, _MainChannel, State) ->
     amqp_channel:close(SubChannel),
     ok(State).
+
+ensure_confirm(_Frame, State = #state{confirm_enabled = true}) ->
+    State;
+ensure_confirm(Frame, State = #state{channel = Channel}) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, _}   -> amqp_channel:cast(#'confirm.select'{}, Channel),
+                     State#state{confirm_enabled = true};
+        not_found -> State
+    end.
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
