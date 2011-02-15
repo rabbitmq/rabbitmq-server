@@ -18,7 +18,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/3]).
+-export([start_link/0, start_child/2]).
 
 -export([init/1]).
 
@@ -27,11 +27,11 @@
 start_link() ->
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
-start_child(Downstream, UpstreamURIs, Module) ->
+start_child(Downstream, UpstreamURIs) ->
     supervisor:start_child(?SUPERVISOR,
                            {id(Downstream, UpstreamURIs),
                             {rabbit_federation_exchange, start_link,
-                             [Downstream, UpstreamURIs, Module]},
+                             [Downstream, UpstreamURIs]},
                             transient, brutal_kill, worker,
                             [rabbit_federation_exchange]}).
 

@@ -36,7 +36,7 @@
 -export([validate/1, create/2, recover/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
--export([start_link/3]).
+-export([start_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -61,33 +61,27 @@ description() ->
 route(X, Delivery) ->
     with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(_X) ->
+validate(X) ->
     %% TODO validate args
-    ok.
-    %%with_module(X, fun (M) -> M:validate(X) end).
+    with_module(X, fun (M) -> M:validate(X) end).
 
 create(?TX, X = #exchange{ name = Downstream, arguments = Args }) ->
     {array, UpstreamURIs0} =
         rabbit_misc:table_lookup(Args, <<"upstreams">>),
     UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],
-    {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
-    {ok, Module} = rabbit_registry:lookup_module(
-                     exchange, rabbit_exchange:check_type(Type)),
-    rabbit_federation_sup:start_child(Downstream, UpstreamURIs, Module),
+    rabbit_federation_sup:start_child(Downstream, UpstreamURIs),
     with_module(X, fun (M) -> M:create(?TX, X) end);
-create(_Tx, _X) ->
-    ok.
-    %%with_module(X, fun (M) -> M:create(Tx, X) end).
+create(Tx, X) ->
+    with_module(X, fun (M) -> M:create(Tx, X) end).
 
 recover(X, Bs) ->
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
-delete(?TX, X, _Bs) ->
-    call(X, stop);
-    %%with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
-delete(_Tx, _X, _Bs) ->
-    ok.
-    %%with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
+delete(?TX, X, Bs) ->
+    call(X, stop),
+    with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
+delete(Tx, X, Bs) ->
+    with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
 add_binding(?TX, X, B) ->
     %% TODO add bindings only if needed.
@@ -112,26 +106,29 @@ assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
 %%----------------------------------------------------------------------------
 
 call(#exchange{ name = Downstream }, Msg) ->
-    [{_, Pid, _}] = ets:lookup(?ETS_NAME, Downstream),
+    [{_, Pid}] = ets:lookup(?ETS_NAME, Downstream),
     gen_server:call(Pid, Msg, infinity).
 
-with_module(#exchange{ name = Downstream }, Fun) ->
-    [{_, _, Module}] = ets:lookup(?ETS_NAME, Downstream),
+with_module(#exchange{ name = Name, arguments = Args }, Fun) ->
+    %% TODO should this be cached? It's on the publish path.
+    {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
+    {ok, Module} = rabbit_registry:lookup_module(
+                     exchange, rabbit_exchange:check_type(Type)),
     Fun(Module).
 
 %%----------------------------------------------------------------------------
 
-start_link(Downstream, UpstreamURIs, Module) ->
-    gen_server:start_link(?MODULE, {Downstream, UpstreamURIs, Module},
+start_link(Downstream, UpstreamURIs) ->
+    gen_server:start_link(?MODULE, {Downstream, UpstreamURIs},
                           [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({DownstreamX, UpstreamURIs, Module}) ->
+init({DownstreamX, UpstreamURIs}) ->
     Upstreams = [connect_upstream(UpstreamURI) || UpstreamURI <- UpstreamURIs],
     {ok, DConn} = amqp_connection:start(direct),
     {ok, DCh} = amqp_connection:open_channel(DConn),
-    true = ets:insert(?ETS_NAME, {DownstreamX, self(), Module}),
+    true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
     {ok, #state{downstream_connection = DConn, downstream_channel = DCh,
                 downstream_exchange = DownstreamX, upstreams = Upstreams} }.
 
