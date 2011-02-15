@@ -125,7 +125,8 @@ start_link(Downstream, UpstreamURIs) ->
 %%----------------------------------------------------------------------------
 
 init({DownstreamX, UpstreamURIs}) ->
-    Upstreams = [connect_upstream(UpstreamURI) || UpstreamURI <- UpstreamURIs],
+    Upstreams = [connect_upstream(UpstreamURI, DownstreamX) ||
+                    UpstreamURI <- UpstreamURIs],
     {ok, DConn} = amqp_connection:start(direct),
     {ok, DCh} = amqp_connection:open_channel(DConn),
     true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
@@ -187,7 +188,8 @@ terminate(_Reason, #state { downstream_channel = DCh,
 
 %%----------------------------------------------------------------------------
 
-connect_upstream(UpstreamURI) ->
+connect_upstream(UpstreamURI, #resource{ name         = DownstreamName,
+                                         virtual_host = DownstreamVHost }) ->
     Props0 = uri_parser:parse(
                binary_to_list(UpstreamURI), [{host, undefined}, {path, "/"},
                                              {port, undefined}, {'query', []}]),
@@ -200,16 +202,15 @@ connect_upstream(UpstreamURI) ->
                           virtual_host = list_to_binary(VHost)},
     {ok, Conn} = amqp_connection:start(network, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    %%XBin = list_to_binary(X),
-    %% TODO: this should really be our own URI. And the x-expires should be
-    %% configurable.
-    %%Node = list_to_binary(atom_to_list(node())),
-    %%Q = <<"federation: ", XBin/binary, " -> ", Node/binary>>,
-    #'queue.declare_ok' {queue = Q} =
-        amqp_channel:call(
-          Ch, #'queue.declare'{
-            %%queue = Q,
-            arguments = [{<<"x-expires">>, long, 86400000}] }),
+    XBin = list_to_binary(X),
+    Node = list_to_binary(atom_to_list(node())),
+    Q = <<"federation: ", XBin/binary, " -> ", Node/binary,
+          "-", DownstreamVHost/binary, "-", DownstreamName/binary>>,
+    %% TODO: The x-expires should be configurable.
+    amqp_channel:call(
+      Ch, #'queue.declare'{
+        queue = Q,
+        arguments = [{<<"x-expires">>, long, 86400000}] }),
     amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
                                                  no_ack = true }, %% FIXME
                            self()),
