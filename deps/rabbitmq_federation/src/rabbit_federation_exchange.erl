@@ -258,7 +258,7 @@ bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
 
 unbind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
                 Key, Args) ->
-    X = list_to_binary(proplists:get_value(exchange, Props)),
+    X = proplists:get_value(exchange, Props),
     %% We may already be unbound if e.g. someone has deleted the upstream
     %% exchange
     try amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
