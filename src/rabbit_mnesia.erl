@@ -388,7 +388,8 @@ init_db(ClusterNodes, Force) ->
                     %% True single disc node, attempt upgrade
                     ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok                    -> ensure_schema_ok();
+                        ok                    -> ok = wait_for_tables(),
+                                                 ensure_schema_ok();
                         version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
@@ -559,8 +560,8 @@ wait_for_tables() ->
     wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    Inexistent = TableNames -- mnesia:system_info(tables),
-    case mnesia:wait_for_tables(TableNames -- Inexistent, 30000) of
+    Nonexistent = TableNames -- mnesia:system_info(tables),
+    case mnesia:wait_for_tables(TableNames -- Nonexistent, 30000) of
         ok -> ok;
         {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
