@@ -48,8 +48,8 @@ table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px;
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-table.mini th { border: none; padding: 2px; text-align: right; }
-table.mini td { border: none; padding: 2px; }
+table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
+table.mini td { border: none; padding: 0 2px 2px 2px; }
 
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }

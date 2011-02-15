@@ -57,7 +57,7 @@ function fmt_parameters(obj) {
     }
     var args = fmt_table_short(obj.arguments);
     if (args != '') {
-        res += '<p>' + args + '</p>';
+        res += args;
     }
     return res;
 }
