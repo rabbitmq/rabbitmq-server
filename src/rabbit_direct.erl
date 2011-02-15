@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, connect/3, start_channel/5]).
+-export([boot/0, connect/3, start_channel/6]).
 
 -include("rabbit.hrl").
 
@@ -28,9 +28,9 @@
 -spec(connect/3 :: (binary(), binary(), binary()) ->
                        {'ok', {rabbit_types:user(),
                                rabbit_framing:amqp_table()}}).
--spec(start_channel/5 :: (rabbit_channel:channel_number(), pid(),
-                          rabbit_types:user(), rabbit_types:vhost(), pid()) ->
-                             {'ok', pid()}).
+-spec(start_channel/6 :: (rabbit_channel:channel_number(), pid(),
+                          rabbit_types:user(), rabbit_types:vhost(),
+                          rabbit_types:protocol(), pid()) -> {'ok', pid()}).
 
 -endif.
 
@@ -67,9 +67,9 @@ connect(Username, Password, VHost) ->
             {error, broker_not_found_on_node}
     end.
 
-start_channel(Number, ClientChannelPid, User, VHost, Collector) ->
+start_channel(Number, ClientChannelPid, User, VHost, Protocol, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
-            rabbit_direct_client_sup,
-            [{direct, Number, ClientChannelPid, User, VHost, Collector}]),
+            rabbit_direct_client_sup, [{direct, Number, ClientChannelPid, User,
+                                        VHost, Protocol, Collector}]),
     {ok, ChannelPid}.
