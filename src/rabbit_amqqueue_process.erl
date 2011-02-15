@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT,          100).
--define(SYNC_INTERVAL,                 5). %% milliseconds
+-define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
 -define(BASE_MESSAGE_PROPERTIES,
@@ -122,6 +122,8 @@ terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
 terminate(_Reason,       State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
+                               rabbit_event:notify(
+                                 queue_deleted, [{pid, self()}]),
                                BQS1 = BQ:delete_and_terminate(BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
@@ -186,7 +188,6 @@ terminate_shutdown(Fun, State) ->
                               end, BQS, all_ch_record()),
                      [emit_consumer_deleted(Ch, CTag)
                       || {Ch, CTag, _} <- consumers(State1)],
-                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
