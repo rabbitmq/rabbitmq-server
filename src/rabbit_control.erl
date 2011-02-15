@@ -20,7 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
--define(WAIT_FOR_VM_TIMEOUT, 5000).
+-define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -302,14 +302,14 @@ action(list_permissions, Node, [], Opts, Inform) ->
 
 action(wait, Node, [], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, ?WAIT_FOR_VM_TIMEOUT).
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
 
-wait_for_application(Node, NodeTimeout) ->
+wait_for_application(Node, Attempts) ->
     case rpc_call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} = E -> NewTimeout = NodeTimeout - 1000,
-                           case NewTimeout =< 0 of
-                               true  -> E;
-                               false -> wait_for_application0(Node, NewTimeout)
+        {badrpc, _} = E -> NewAttempts = Attempts - 1,
+                           case NewAttempts of
+                               0 -> E;
+                               _ -> wait_for_application0(Node, NewAttempts)
                            end;
         Apps            -> case proplists:is_defined(rabbit, Apps) of
                                %% We've seen the node up; if it goes down
@@ -319,9 +319,9 @@ wait_for_application(Node, NodeTimeout) ->
                            end
     end.
 
-wait_for_application0(Node, NodeTimeout) ->
+wait_for_application0(Node, Attempts) ->
     timer:sleep(1000),
-    wait_for_application(Node, NodeTimeout).
+    wait_for_application(Node, Attempts).
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] ->
