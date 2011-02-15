@@ -2201,9 +2201,11 @@ test_configurable_server_properties() ->
     BuiltInPropNames = [<<"product">>, <<"version">>, <<"platform">>,
                         <<"copyright">>, <<"information">>],
 
+    Protocol = rabbit_framing_amqp_0_9_1,
+
     %% Verify that the built-in properties are initially present
-    ActualPropNames = [Key ||
-                         {Key, longstr, _} <- rabbit_reader:server_properties()],
+    ActualPropNames = [Key || {Key, longstr, _} <-
+                                  rabbit_reader:server_properties(Protocol)],
     true = lists:all(fun (X) -> lists:member(X, ActualPropNames) end,
                      BuiltInPropNames),
 
@@ -2214,9 +2216,10 @@ test_configurable_server_properties() ->
     ConsProp = fun (X) -> application:set_env(rabbit,
                                               server_properties,
                                               [X | ServerProperties]) end,
-    IsPropPresent = fun (X) -> lists:member(X,
-                                            rabbit_reader:server_properties())
-                    end,
+    IsPropPresent =
+        fun (X) ->
+                lists:member(X, rabbit_reader:server_properties(Protocol))
+        end,
 
     %% Add a wholly new property of the simplified {KeyAtom, StringValue} form
     NewSimplifiedProperty = {NewHareKey, NewHareVal} = {hare, "soup"},
@@ -2239,7 +2242,7 @@ test_configurable_server_properties() ->
     {BinNewVerKey, BinNewVerVal} = {list_to_binary(atom_to_list(NewVerKey)),
                                     list_to_binary(NewVerVal)},
     ConsProp(NewVersion),
-    ClobberedServerProps = rabbit_reader:server_properties(),
+    ClobberedServerProps = rabbit_reader:server_properties(Protocol),
     %% Is the clobbering insert present?
     true = IsPropPresent({BinNewVerKey, longstr, BinNewVerVal}),
     %% Is the clobbering insert the only thing with the clobbering key?
