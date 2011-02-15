@@ -35,10 +35,10 @@ simple_test() ->
 conf_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream">>, <<"topic">>),
+              declare_exchange(Ch, <<"upstream-conf">>, <<"topic">>),
               Q = bind_queue(Ch, <<"downstream-conf">>, <<"key">>),
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-              delete_exchange(Ch, <<"upstream">>)
+              publish_expect(Ch, <<"upstream-conf">>, <<"key">>, Q, <<"HELLO">>),
+              delete_exchange(Ch, <<"upstream-conf">>)
       end).
 
 multiple_upstreams_test() ->
