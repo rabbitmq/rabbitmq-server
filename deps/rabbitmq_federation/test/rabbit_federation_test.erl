@@ -82,7 +82,21 @@ multiple_downstreams_test() ->
               delete_exchange(Ch, <<"upstream2">>)
       end).
 
-%%----------------------------------------------------------------------------
+%% Downstream: port 5672, has federation
+%% Upstream:   port 5673, may not have federation
+other_node_test() ->
+    with_2ch(
+      fun (Downstream, Upstream) ->
+              declare_exchange(Upstream, <<"upstream">>, <<"direct">>),
+              declare_fed_exchange(Downstream, <<"downstream">>,
+                                   [<<"amqp://localhost:5673/%2f/upstream">>],
+                                   <<"direct">>),
+              Q = bind_queue(Downstream, <<"downstream">>, <<"key">>),
+              publish(Upstream, <<"upstream">>, <<"key">>, <<"HELLO">>),
+              expect(Downstream, Q, [<<"HELLO">>]),
+              delete_exchange(Downstream, <<"downstream">>),
+              delete_exchange(Upstream, <<"upstream">>)
+      end).
 
 %%----------------------------------------------------------------------------
 
@@ -92,6 +106,21 @@ with_ch(Fun) ->
     Fun(Ch),
     amqp_connection:close(Conn),
     ok.
+
+with_2ch(Fun) ->
+    os:cmd("make start-other-node"),
+    %% TODO use rabbitmqctl wait when that's merged
+    timer:sleep(3000),
+    {ok, Conn} = amqp_connection:start(network),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, Conn2} = amqp_connection:start(network, #amqp_params {port = 5673}),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    Fun(Ch, Ch2),
+    amqp_connection:close(Conn),
+    amqp_connection:close(Conn2),
+    os:cmd("make stop-other-node"),
+    ok.
+
 
 declare_fed_exchange(Ch, X, Upstreams, Type) ->
     amqp_channel:call(
@@ -128,10 +157,18 @@ expect(Ch, Q, Payloads) ->
     receive
         #'basic.consume_ok'{ consumer_tag = CTag } -> ok
     end,
-    [receive
-         {#'basic.deliver'{}, #amqp_msg { payload = Payload }} -> ok
-     end || Payload <- Payloads],
+    [expect(Payload) || Payload <- Payloads],
     amqp_channel:call(Ch, #'basic.cancel'{ consumer_tag = CTag }).
+
+expect(Expected) ->
+    receive
+        {#'basic.deliver'{}, #amqp_msg { payload = Expected }} ->
+            ok;
+        {#'basic.deliver'{}, #amqp_msg { payload = Actual }} ->
+            throw({expected, Expected, actual, Actual})
+    after 5000 ->
+            throw({timeout_waiting_for, Expected})
+    end.
 
 publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),

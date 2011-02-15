@@ -192,13 +192,14 @@ connect_upstream(UpstreamURI, #resource{ name         = DownstreamName,
                                          virtual_host = DownstreamVHost }) ->
     Props0 = uri_parser:parse(
                binary_to_list(UpstreamURI), [{host, undefined}, {path, "/"},
-                                             {port, undefined}, {'query', []}]),
+                                             {port, 5672},      {'query', []}]),
     [VHostEnc, XEnc] = string:tokens(
                          proplists:get_value(path, Props0), "/"),
     VHost = httpd_util:decode_hex(VHostEnc),
     X = httpd_util:decode_hex(XEnc),
     Props = [{vhost, VHost}, {exchange, X}] ++ Props0,
     Params = #amqp_params{host = proplists:get_value(host, Props),
+                          port = proplists:get_value(port, Props),
                           virtual_host = list_to_binary(VHost)},
     {ok, Conn} = amqp_connection:start(network, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),

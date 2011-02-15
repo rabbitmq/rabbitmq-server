@@ -7,9 +7,23 @@ TEST_ARGS=-rabbit_federation exchanges '[{"downstream-conf", ["amqp://localhost/
 START_RABBIT_IN_TESTS=true
 TEST_COMMANDS=eunit:test(rabbit_federation_test,[verbose])
 
+OTHER_NODE=bunny
+OTHER_PORT=5673
+
 include ../include.mk
 
 test: cleantest
 
 cleantest:
-	rm -rf tmp
+	rm -rf tmp /tmp/rabbitmq-$(OTHER_NODE)-mnesia
+
+start-other-node:
+	RABBITMQ_MNESIA_BASE=/tmp/rabbitmq-$(OTHER_NODE)-mnesia \
+	RABBITMQ_LOG_BASE=/tmp \
+	RABBITMQ_NODENAME=$(OTHER_NODE) \
+	RABBITMQ_NODE_PORT=$(OTHER_PORT) \
+	RABBITMQ_SERVER_ERL_ARGS="-rabbit_mochiweb port 5$(OTHER_PORT)" \
+	../rabbitmq-server/scripts/rabbitmq-server -detached
+
+stop-other-node:
+	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop
