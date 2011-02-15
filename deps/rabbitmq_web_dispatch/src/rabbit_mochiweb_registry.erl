@@ -98,10 +98,10 @@ listing_fallback_handler(Req) ->
     Req:respond({200, [], HTMLPrefix ++ List ++ HTMLSuffix}).
 
 handler_listing(Path, ReqPath, Desc) ->
-    handler_listing(rabbit_mochiweb_util:relativise(ReqPath, "/" ++ Path),
-                    Desc).
-
-handler_listing(Path, none) ->
-    io_lib:format("<li>~s</li>", [Path]);
-handler_listing(Path, Desc) ->
-    io_lib:format("<li><a href=\"~s\">~s</a></li>", [Path, Desc]).
+    io_lib:format("<li><a href=\"~s\">~s</a></li>", [
+        rabbit_mochiweb_util:relativise(ReqPath, "/" ++ Path),
+        case Desc of
+            none -> Path;
+            _    -> Desc
+        end
+    ]).
