@@ -33,7 +33,7 @@ context_path(Context, Default) ->
             case proplists:get_value(Context, Contexts) of
                 undefined -> Default;
                 {_Listener, Path} -> Path;
-                Listener -> Listener
+                _Listener -> Default
             end
     end.
 
@@ -68,28 +68,28 @@ context_listener_opts(Context) ->
 %% @doc Registers a dynamic handler under a fixed context path, with
 %% link to display in the global context. Thepath may be overidden by
 %% rabbit_mochiweb's configuration.
-register_context_handler(Context, Path, Handler, LinkText) ->
-    ActualPath = context_path(Context, Path),
+register_context_handler(Context, Prefix0, Handler, LinkText) ->
+    Prefix = context_path(Context, Prefix0),
     register_handler(
       Context,
       fun(Req) ->
               "/" ++ Path = Req:get(raw_path),
-              (Path == ActualPath) orelse
-              (string:str(Path, ActualPath ++ "/") == 1)
+              (Path == Prefix) orelse
+              (string:str(Path, Prefix ++ "/") == 1)
       end,
-      Handler, {ActualPath, LinkText}),
-    {ok, ActualPath}.
+      Handler, {Prefix, LinkText}),
+    {ok, Prefix}.
 
 %% @doc Convenience function registering a fully static context to
 %% serve content from a module-relative directory, with
 %% link to display in the global context.
-register_static_context(Context, Path, Module, FSPath, LinkText) ->
-    ActualPath = context_path(Context, Path),
+register_static_context(Context, Prefix0, Module, FSPath, LinkText) ->
+    Prefix = context_path(Context, Prefix0),
     register_handler(Context,
-                     static_context_selector(ActualPath),
-                     static_context_handler(Context, Module, FSPath),
-                     {ActualPath, LinkText}),
-    {ok, ActualPath}.
+                     static_context_selector(Prefix),
+                     static_context_handler(Prefix, Module, FSPath),
+                     {Prefix, LinkText}),
+    {ok, Prefix}.
 
 %% @doc Produces a selector for use with register_handler that
 %% responds to GET and HEAD HTTP methods for resources within the
@@ -134,10 +134,10 @@ static_context_handler(Prefix, LocalPath) ->
 %% @doc Register a fully static but HTTP-authenticated context to
 %% serve content from a module-relative directory, with link to
 %% display in the global context.
-register_authenticated_static_context(Context, Path, Module, FSPath,
+register_authenticated_static_context(Context, Prefix0, Module, FSPath,
                                       LinkDesc, AuthFun) ->
-    ActualPath = context_path(Context, Path),
-    RawHandler = static_context_handler(Context, Module, FSPath),
+    Prefix = context_path(Context, Prefix0),
+    RawHandler = static_context_handler(Prefix, Module, FSPath),
     Unauthorized = {401, [{"WWW-Authenticate",
                            "Basic realm=\"" ++ LinkDesc ++ "\""}], ""},
     Handler =
@@ -154,6 +154,6 @@ register_authenticated_static_context(Context, Path, Module, FSPath,
                 end
         end,
     register_handler(Context,
-                     static_context_selector(ActualPath),
-                     Handler, {ActualPath, LinkDesc}),
-    {ok, ActualPath}.
+                     static_context_selector(Prefix),
+                     Handler, {Prefix, LinkDesc}),
+    {ok, Prefix}.

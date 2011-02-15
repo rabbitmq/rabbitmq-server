@@ -70,7 +70,7 @@ handle_call({set_fallback, Instance, FallbackHandler}, _From,
 handle_call({list, Instance}, _From, undefined) ->
     case lookup_dispatch(Instance) of
         {Selectors, _Fallback} ->
-            {reply, [Link || {_S, _H, Link} <- Selectors], undefined};
+            {reply, [Link || {_C, _S, _H, Link} <- Selectors], undefined};
         Err ->
             {stop, Err, undefined}
     end;

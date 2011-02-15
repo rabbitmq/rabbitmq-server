@@ -13,6 +13,6 @@
   {env, [
          {listeners, [{'*', [{port, 55670}]},
                       {mgmt, [{port, 55672}]}]},
-         {contexts, [{rabbit_management, {mgmt, "/"}}]}
+         {contexts, [{rabbit_management, {mgmt, "manage"}}]}
         ]},
   {applications, [kernel, stdlib]}]}.
