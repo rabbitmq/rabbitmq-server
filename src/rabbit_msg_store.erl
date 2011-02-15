@@ -1975,7 +1975,7 @@ force_recovery(BaseDir, Store) ->
      File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
     ok.
 
-for_each_file(Files, Fun) ->
+for_each_file(Fun, Files) ->
     [Fun(File) || File <- Files].
 
 transform_dir(BaseDir, Store, TransformFun) ->
@@ -1985,26 +1985,22 @@ transform_dir(BaseDir, Store, TransformFun) ->
         true  -> throw({error, transform_failed_previously});
         false ->
             OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-            for_each_file(OldFileList,
-                          fun (File) ->
+            for_each_file(fun (File) ->
                               transform_msg_file(filename:join(Dir, File),
                                                  filename:join(TmpDir, File),
                                                  TransformFun)
-                          end),
-            for_each_file(OldFileList,
-                          fun (File) ->
+                          end, OldFileList),
+            for_each_file(fun (File) ->
                               file:delete(filename:join(Dir, File))
-                          end),
+                          end, OldFileList),
             NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
-            for_each_file(NewFileList,
-                          fun (File) ->
+            for_each_file(fun (File) ->
                               file:copy(filename:join(TmpDir, File),
                                         filename:join(Dir, File))
-                          end),
-            for_each_file(NewFileList,
-                          fun (File) ->
+                          end, NewFileList),
+            for_each_file(fun (File) ->
                               file:delete(filename:join(TmpDir, File))
-                          end),
+                          end, NewFileList),
             ok = file:del_dir(TmpDir)
     end.
 
