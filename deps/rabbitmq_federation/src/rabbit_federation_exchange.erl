@@ -109,7 +109,7 @@ call(#exchange{ name = Downstream }, Msg) ->
     [{_, Pid}] = ets:lookup(?ETS_NAME, Downstream),
     gen_server:call(Pid, Msg, infinity).
 
-with_module(#exchange{ name = Name, arguments = Args }, Fun) ->
+with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.
     {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
     {ok, Module} = rabbit_registry:lookup_module(
@@ -200,14 +200,16 @@ connect_upstream(UpstreamURI) ->
                           virtual_host = list_to_binary(VHost)},
     {ok, Conn} = amqp_connection:start(network, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    XBin = list_to_binary(X),
+    %%XBin = list_to_binary(X),
     %% TODO: this should really be our own URI. And the x-expires should be
     %% configurable.
-    Node = list_to_binary(atom_to_list(node())),
-    Q = <<"federation: ", XBin/binary, " -> ", Node/binary>>,
-    amqp_channel:call(
-      Ch, #'queue.declare'{
-        queue = Q, arguments = [{<<"x-expires">>, long, 86400000}] }),
+    %%Node = list_to_binary(atom_to_list(node())),
+    %%Q = <<"federation: ", XBin/binary, " -> ", Node/binary>>,
+    #'queue.declare_ok' {queue = Q} =
+        amqp_channel:call(
+          Ch, #'queue.declare'{
+            %%queue = Q,
+            arguments = [{<<"x-expires">>, long, 86400000}] }),
     amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
                                                  no_ack = true }, %% FIXME
                            self()),

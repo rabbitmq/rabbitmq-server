@@ -58,6 +58,32 @@ multiple_upstreams_test() ->
               delete_exchange(Ch, <<"upstream2">>)
       end).
 
+multiple_downstreams_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream1">>, <<"direct">>),
+              declare_exchange(Ch, <<"upstream2">>, <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream1">>,
+                                   [<<"amqp://localhost/%2f/upstream1">>],
+                                   <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream12">>,
+                                   [<<"amqp://localhost/%2f/upstream1">>,
+                                    <<"amqp://localhost/%2f/upstream2">>],
+                                   <<"direct">>),
+              Q1 = bind_queue(Ch, <<"downstream1">>, <<"key">>),
+              Q12 = bind_queue(Ch, <<"downstream12">>, <<"key">>),
+              publish(Ch, <<"upstream1">>, <<"key">>, <<"HELLO1">>),
+              publish(Ch, <<"upstream2">>, <<"key">>, <<"HELLO2">>),
+              expect(Ch, Q1, [<<"HELLO1">>]),
+              expect(Ch, Q12, [<<"HELLO1">>, <<"HELLO2">>]),
+              delete_exchange(Ch, <<"downstream1">>),
+              delete_exchange(Ch, <<"downstream12">>),
+              delete_exchange(Ch, <<"upstream1">>),
+              delete_exchange(Ch, <<"upstream2">>)
+      end).
+
+%%----------------------------------------------------------------------------
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun) ->
@@ -96,19 +122,19 @@ publish(Ch, X, Key, Payload) ->
                                             routing_key = Key },
                       #amqp_msg { payload = Payload }).
 
-expect(Ch, Q, Payload) ->
+expect(Ch, Q, Payloads) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q },
                            self()),
     receive
         #'basic.consume_ok'{ consumer_tag = CTag } -> ok
     end,
-    receive
-        {#'basic.deliver'{}, #amqp_msg { payload = Payload }} -> ok
-    end,
+    [receive
+         {#'basic.deliver'{}, #amqp_msg { payload = Payload }} -> ok
+     end || Payload <- Payloads],
     amqp_channel:call(Ch, #'basic.cancel'{ consumer_tag = CTag }).
 
 publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),
-    expect(Ch, Q, Payload).
+    expect(Ch, Q, [Payload]).
 
 %%----------------------------------------------------------------------------
