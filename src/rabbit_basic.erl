@@ -31,6 +31,7 @@
 -type(publish_result() ::
         ({ok, rabbit_router:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
+-type(msg_or_error() :: {'ok', rabbit_types:message()} | {'error', any()}).
 
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
@@ -40,10 +41,10 @@
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
-         properties_input(), binary()) -> rabbit_types:message()).
+         properties_input(), binary()) -> msg_or_error()).
 -spec(message/3 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
-         rabbit_types:decoded_content()) -> rabbit_types:message()).
+         rabbit_types:decoded_content()) -> msg_or_error()).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 ::
@@ -111,17 +112,23 @@ strip_header(DecodedContent, _Key) ->
 
 message(ExchangeName, RoutingKey,
         #content{properties = Props} = DecodedContent) ->
-    #basic_message{
-        exchange_name = ExchangeName,
-        content       = strip_header(DecodedContent, ?DELETED_HEADER),
-        guid          = rabbit_guid:guid(),
-        is_persistent = is_message_persistent(DecodedContent),
-        routing_keys  = [RoutingKey | header_routes(Props#'P_basic'.headers)]}.
+    try
+        {ok, #basic_message{
+            exchange_name = ExchangeName,
+            content       = strip_header(DecodedContent, ?DELETED_HEADER),
+            guid          = rabbit_guid:guid(),
+            is_persistent = is_message_persistent(DecodedContent),
+            routing_keys  = [RoutingKey |
+                             header_routes(Props#'P_basic'.headers)]}}
+    catch
+        {error, _Reason} = Error -> Error
+    end.
 
-message(ExchangeName, RoutingKeyBin, RawProperties, BodyBin) ->
+message(ExchangeName, RoutingKey, RawProperties, BodyBin) ->
     Properties = properties(RawProperties),
     Content = build_content(Properties, BodyBin),
-    message(ExchangeName, RoutingKeyBin, Content).
+    {ok, Msg} = message(ExchangeName, RoutingKey, Content),
+    Msg.
 
 properties(P = #'P_basic'{}) ->
     P;
@@ -170,8 +177,12 @@ is_message_persistent(#content{properties = #'P_basic'{
 header_routes(undefined) ->
     [];
 header_routes(HeadersTable) ->
-    lists:append([case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
-                      {array, Routes}  -> [Route || {longstr, Route} <- Routes];
-                      _                -> []
-                  end || HeaderKey <- ?ROUTING_HEADERS]).
+    lists:append(
+        [case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
+             {array, Routes} -> [Route || {longstr, Route} <- Routes];
+             undefined       -> [];
+             {Type, _Val}    -> throw({error, {unacceptable_type_in_header,
+                                               Type,
+                                               binary_to_list(HeaderKey)}})
+         end || HeaderKey <- ?ROUTING_HEADERS]).
 

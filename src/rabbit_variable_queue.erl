@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, transform_storage/1]).
+         status/1, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -293,6 +293,8 @@
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
+
+-rabbit_upgrade({multiple_routing_keys, []}).
 
 -ifdef(use_specs).
 
@@ -1805,6 +1807,20 @@ push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
 %%----------------------------------------------------------------------------
 %% Upgrading
 %%----------------------------------------------------------------------------
+
+multiple_routing_keys() ->
+    transform_storage(
+        fun (BinMsg) ->
+            case binary_to_term(BinMsg) of
+                {basic_message, ExchangeName, Routing_Key, Content, Guid,
+                 Persistent} ->
+                    {ok, {basic_message, ExchangeName, [Routing_Key], Content,
+                          Guid, Persistent}};
+                _ ->
+                    {error, corrupt_message}
+            end
+        end),
+    ok.
 
 %% Assumes message store is not running
 transform_storage(TransformFun) ->

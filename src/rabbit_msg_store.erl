@@ -1968,29 +1968,43 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {destination, Destination}]}
     end.
 
-force_recovery(BaseDir, Server) ->
-    Dir = filename:join(BaseDir, atom_to_list(Server)),
+force_recovery(BaseDir, Store) ->
+    Dir = filename:join(BaseDir, atom_to_list(Store)),
     file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
     [file:delete(filename:join(Dir, File)) ||
      File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
     ok.
 
-transform_dir(BaseDir, Server, TransformFun) ->
-    Dir = filename:join(BaseDir, atom_to_list(Server)),
+for_each_file(Files, Fun) ->
+    [Fun(File) || File <- Files].
+
+transform_dir(BaseDir, Store, TransformFun) ->
+    Dir = filename:join(BaseDir, atom_to_list(Store)),
     TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
         false ->
-            [transform_msg_file(filename:join(Dir, File),
-                                filename:join(TmpDir, File),
-                                TransformFun) ||
-             File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)],
-            [file:delete(filename:join(Dir, File)) ||
-             File <- list_sorted_file_names(Dir, ?FILE_EXTENSION)],
-            [file:copy(filename:join(TmpDir, File), filename:join(Dir, File)) ||
-             File <- list_sorted_file_names(TmpDir, ?FILE_EXTENSION)],
-            [file:delete(filename:join(TmpDir, File)) ||
-             File <- list_sorted_file_names(TmpDir, ?FILE_EXTENSION)],
+            OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+            for_each_file(OldFileList,
+                          fun (File) ->
+                              transform_msg_file(filename:join(Dir, File),
+                                                 filename:join(TmpDir, File),
+                                                 TransformFun)
+                          end),
+            for_each_file(OldFileList,
+                          fun (File) ->
+                              file:delete(filename:join(Dir, File))
+                          end),
+            NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
+            for_each_file(NewFileList,
+                          fun (File) ->
+                              file:copy(filename:join(TmpDir, File),
+                                        filename:join(Dir, File))
+                          end),
+            for_each_file(NewFileList,
+                          fun (File) ->
+                              file:delete(filename:join(TmpDir, File))
+                          end),
             ok = file:del_dir(TmpDir)
     end.
 

@@ -65,6 +65,4 @@
 -spec(idle_timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
--spec(transform_storage/1 ::
-      (fun ((binary()) -> (rabbit_types:ok_or_error2(any(), any())))) ->
-       non_neg_integer()).
+-spec(multiple_routing_keys/0 :: () -> 'ok').

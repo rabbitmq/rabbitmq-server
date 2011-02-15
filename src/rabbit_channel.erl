@@ -555,21 +555,27 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             true  -> SeqNo = State#ch.publish_seqno,
                      {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
-    Message = rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent),
-    {RoutingRes, DeliveredQPids} =
-        rabbit_exchange:publish(
-          Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
-                                MsgSeqNo)),
-    State2 = process_routing_result(RoutingRes, DeliveredQPids, ExchangeName,
-                                    MsgSeqNo, Message, State1),
-    maybe_incr_stats([{ExchangeName, 1} |
-                      [{{QPid, ExchangeName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State2),
-    {noreply, case TxnKey of
-                  none -> State2;
-                  _    -> add_tx_participants(DeliveredQPids, State2)
-              end};
+    case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
+        {ok, Message} ->
+            {RoutingRes, DeliveredQPids} =
+                rabbit_exchange:publish(
+                  Exchange,
+                  rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
+                                        MsgSeqNo)),
+            State2 = process_routing_result(RoutingRes, DeliveredQPids,
+                                            ExchangeName, MsgSeqNo, Message,
+                                            State1),
+            maybe_incr_stats([{ExchangeName, 1} |
+                              [{{QPid, ExchangeName}, 1} ||
+                                  QPid <- DeliveredQPids]], publish, State2),
+            {noreply, case TxnKey of
+                          none -> State2;
+                          _    -> add_tx_participants(DeliveredQPids, State2)
+                      end};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(precondition_failed,
+                                       "invalid message: ~p", [Reason])
+    end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
