@@ -46,7 +46,7 @@
 -define(TX, false).
 -record(state, { downstream_connection, downstream_channel,
                  downstream_exchange, upstreams }).
--record(upstream, {connection, channel, queue, properties}).
+-record(upstream, {connection, channel, queue, properties, uri}).
 
 %%----------------------------------------------------------------------------
 
@@ -125,13 +125,15 @@ start_link(Downstream, UpstreamURIs) ->
 %%----------------------------------------------------------------------------
 
 init({DownstreamX, UpstreamURIs}) ->
-    Upstreams = [connect_upstream(UpstreamURI, DownstreamX) ||
-                    UpstreamURI <- UpstreamURIs],
     {ok, DConn} = amqp_connection:start(direct),
     {ok, DCh} = amqp_connection:open_channel(DConn),
+    %%erlang:monitor(process, DCh),
     true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
-    {ok, #state{downstream_connection = DConn, downstream_channel = DCh,
-                downstream_exchange = DownstreamX, upstreams = Upstreams} }.
+    State0 = #state{downstream_connection = DConn, downstream_channel = DCh,
+                    downstream_exchange = DownstreamX, upstreams = []},
+    {ok, lists:foldl(fun (UpstreamURI, State) ->
+                             connect_upstream(UpstreamURI, State)
+                     end, State0, UpstreamURIs)}.
 
 handle_call({add_binding, #binding{key = Key, args = Args} }, _From,
             State = #state{ upstreams = Upstreams }) ->
@@ -167,6 +169,18 @@ handle_info({#'basic.deliver'{delivery_tag = _DTag,
                                             routing_key = Key}, Msg),
     {noreply, State};
 
+handle_info({'DOWN', _Ref, process, Ch, _Reason},
+            State = #state{ downstream_channel = DCh }) ->
+    case Ch of
+        DCh ->
+            exit(todo_handle_downstream_channel_death);
+        _ ->
+            {noreply, restart_upstream_channel(Ch, State)}
+    end;
+
+handle_info({connect_upstream, URI}, State) ->
+    {noreply, connect_upstream(URI, State)};
+
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
@@ -177,52 +191,66 @@ terminate(_Reason, #state { downstream_channel = DCh,
                             downstream_connection = DConn,
                             downstream_exchange = DownstreamX,
                             upstreams = Upstreams }) ->
-    ok = amqp_channel:close(DCh),
-    ok = amqp_connection:close(DConn),
-    [begin
-         ok = amqp_channel:close(Ch),
-         ok = amqp_connection:close(C)
-     end || #upstream{ connection = C, channel = Ch } <- Upstreams],
+    ensure_closed(DConn, DCh),
+    [ensure_closed(C, Ch) ||
+        #upstream{ connection = C, channel = Ch } <- Upstreams],
     true = ets:delete(?ETS_NAME, DownstreamX),
     ok.
 
 %%----------------------------------------------------------------------------
 
-connect_upstream(UpstreamURI, #resource{ name         = DownstreamName,
-                                         virtual_host = DownstreamVHost }) ->
-    Props0 = uri_parser:parse(
-               binary_to_list(UpstreamURI), [{host, undefined}, {path, "/"},
-                                             {port, 5672},      {'query', []}]),
-    [VHostEnc, XEnc] = string:tokens(
-                         proplists:get_value(path, Props0), "/"),
-    VHost = httpd_util:decode_hex(VHostEnc),
-    X = httpd_util:decode_hex(XEnc),
-    Props = [{vhost, VHost}, {exchange, X}] ++ Props0,
-    Params = #amqp_params{host = proplists:get_value(host, Props),
-                          port = proplists:get_value(port, Props),
-                          virtual_host = list_to_binary(VHost)},
-    {ok, Conn} = amqp_connection:start(network, Params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    XBin = list_to_binary(X),
+connect_upstream(UpstreamURI,
+                 State = #state{ upstreams = Upstreams,
+                                 downstream_exchange = DownstreamX}) ->
+    %%io:format("Connecting to ~s...~n", [UpstreamURI]),
+    Props = parse_uri(UpstreamURI),
+    Params = #amqp_params{host         = proplists:get_value(host, Props),
+                          port         = proplists:get_value(port, Props),
+                          virtual_host = proplists:get_value(vhost, Props)},
+    case amqp_connection:start(network, Params) of
+        {ok, Conn} ->
+            %%io:format("Done!~n", []),
+            {ok, Ch} = amqp_connection:open_channel(Conn),
+            erlang:monitor(process, Ch),
+            Q = upstream_queue_name(Props, DownstreamX),
+            %% TODO: The x-expires should be configurable.
+            amqp_channel:call(
+              Ch, #'queue.declare'{
+                queue     = Q,
+                durable   = true,
+                arguments = [{<<"x-expires">>, long, 86400000}] }),
+            amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
+                                                         %% FIXME?
+                                                         no_ack = true },
+                                   self()),
+            State#state{ upstreams =
+                             [#upstream{ uri        = UpstreamURI,
+                                         connection = Conn,
+                                         channel    = Ch,
+                                         queue      = Q,
+                                         properties = Props } | Upstreams]};
+        _E ->
+            erlang:send_after(1000, self(), {connect_upstream, UpstreamURI}),
+            State
+    end.
+
+upstream_queue_name(Props, #resource{ name         = DownstreamName,
+                                      virtual_host = DownstreamVHost }) ->
+    X = proplists:get_value(exchange, Props),
     Node = list_to_binary(atom_to_list(node())),
-    Q = <<"federation: ", XBin/binary, " -> ", Node/binary,
-          "-", DownstreamVHost/binary, "-", DownstreamName/binary>>,
-    %% TODO: The x-expires should be configurable.
-    amqp_channel:call(
-      Ch, #'queue.declare'{
-        queue = Q,
-        arguments = [{<<"x-expires">>, long, 86400000}] }),
-    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
-                                                 no_ack = true }, %% FIXME
-                           self()),
-    #upstream{ connection = Conn,
-               channel    = Ch,
-               queue      = Q,
-               properties = Props }.
+    <<"federation: ", X/binary, " -> ", Node/binary,
+      "-", DownstreamVHost/binary, "-", DownstreamName/binary>>.
+
+restart_upstream_channel(OldPid, State = #state{ upstreams = Upstreams }) ->
+    {[#upstream{ uri = URI }], Rest} =
+        lists:partition(fun (#upstream{ channel = Ch }) ->
+                                OldPid == Ch
+                        end, Upstreams),
+    connect_upstream(URI, State#state{ upstreams = Rest }).
 
 bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
               Key, Args) ->
-    X = list_to_binary(proplists:get_value(exchange, Props)),
+    X = proplists:get_value(exchange, Props),
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
                                         routing_key = Key,
@@ -240,4 +268,23 @@ unbind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
     catch exit:{{server_initiated_close, ?NOT_FOUND, _}, _} ->
             %% TODO this is inadequate. The channel will die.
             ok
+    end.
+
+parse_uri(URI) ->
+    Props = uri_parser:parse(
+              binary_to_list(URI), [{host, undefined}, {path, "/"},
+                                    {port, 5672},      {'query', []}]),
+    [VHostEnc, XEnc] = string:tokens(
+                         proplists:get_value(path, Props), "/"),
+    VHost = httpd_util:decode_hex(VHostEnc),
+    X = httpd_util:decode_hex(XEnc),
+    [{vhost,    list_to_binary(VHost)},
+     {exchange, list_to_binary(X)}] ++ Props.
+
+ensure_closed(Conn, Ch) ->
+    try amqp_channel:close(Ch)
+    catch exit:{noproc, _} -> ok
+    end,
+    try amqp_connection:close(Conn)
+    catch exit:{noproc, _} -> ok
     end.

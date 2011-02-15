@@ -84,7 +84,11 @@ multiple_downstreams_test() ->
 
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
-other_node_test() ->
+
+restart_upstream_test_() ->
+    {timeout, 15, fun restart_upstream/0}.
+
+restart_upstream() ->
     with_2ch(
       fun (Downstream, Upstream) ->
               declare_exchange(Upstream, <<"upstream">>, <<"direct">>),
@@ -92,10 +96,12 @@ other_node_test() ->
                                    [<<"amqp://localhost:5673/%2f/upstream">>],
                                    <<"direct">>),
               Q = bind_queue(Downstream, <<"downstream">>, <<"key">>),
-              publish(Upstream, <<"upstream">>, <<"key">>, <<"HELLO">>),
+              stop_other_node(),
+              Upstream1 = start_other_node(),
+              publish(Upstream1, <<"upstream">>, <<"key">>, <<"HELLO">>),
               expect(Downstream, Q, [<<"HELLO">>]),
               delete_exchange(Downstream, <<"downstream">>),
-              delete_exchange(Upstream, <<"upstream">>)
+              delete_exchange(Upstream1, <<"upstream">>)
       end).
 
 %%----------------------------------------------------------------------------
@@ -108,19 +114,25 @@ with_ch(Fun) ->
     ok.
 
 with_2ch(Fun) ->
-    os:cmd("make start-other-node"),
-    %% TODO use rabbitmqctl wait when that's merged
-    timer:sleep(3000),
     {ok, Conn} = amqp_connection:start(network),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    {ok, Conn2} = amqp_connection:start(network, #amqp_params {port = 5673}),
-    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    Ch2 = start_other_node(),
     Fun(Ch, Ch2),
     amqp_connection:close(Conn),
-    amqp_connection:close(Conn2),
-    os:cmd("make stop-other-node"),
+    stop_other_node(),
     ok.
 
+start_other_node() ->
+    ?assertCmd("make start-other-node"),
+    %% TODO use rabbitmqctl wait when that's merged
+    timer:sleep(3000),
+    {ok, Conn2} = amqp_connection:start(network, #amqp_params {port = 5673}),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    Ch2.
+
+stop_other_node() ->
+    ?assertCmd("make stop-other-node"),
+    timer:sleep(1000).
 
 declare_fed_exchange(Ch, X, Upstreams, Type) ->
     amqp_channel:call(
@@ -133,7 +145,8 @@ declare_fed_exchange(Ch, X, Upstreams, Type) ->
 
 declare_exchange(Ch, X, Type) ->
     amqp_channel:call(Ch, #'exchange.declare'{ exchange = X,
-                                               type     = Type }).
+                                               type     = Type,
+                                               durable  = true}).
 
 bind_queue(Ch, X, Key) ->
     #'queue.declare_ok'{ queue = Q } =
