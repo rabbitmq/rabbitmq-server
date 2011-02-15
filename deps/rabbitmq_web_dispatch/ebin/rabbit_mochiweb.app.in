@@ -11,6 +11,7 @@
   {registered, []},
   {mod, {rabbit_mochiweb_app, []}},
   {env, [
-         {instances, [{default, [{port, 55672}]}]}
+         {listeners, [{'*', [{port, 55670}]},
+                      {mgmt, [{port, 55672}]}]}
         ]},
   {applications, [kernel, stdlib]}]}.
