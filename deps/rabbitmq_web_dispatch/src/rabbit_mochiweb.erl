@@ -3,6 +3,7 @@
 -export([start/0, stop/0]).
 -export([register_context_handler/4, register_static_context/5]).
 -export([register_authenticated_static_context/6]).
+-export([context_listener/1, context_listener_opts/1, context_path/2]).
 
 -define(APP, ?MODULE).
 
@@ -32,7 +33,7 @@ context_path(Context, Default) ->
             case proplists:get_value(Context, Contexts) of
                 undefined -> Default;
                 {_Listener, Path} -> Path;
-                Listener -> Default
+                Listener -> Listener
             end
     end.
 
@@ -46,6 +47,18 @@ context_listener(Context) ->
                 {Listener, _Path} -> Listener;
                 Listener -> Listener
             end
+    end.
+
+context_listener_opts(Context) ->
+    Listener = context_listener(Context),
+    case application:get_env(?APP, listeners) of
+        {ok, Listeners} ->
+            case proplists:get_value(Listener, Listeners) of
+                undefined -> undefined;
+                Props     -> Props
+            end;
+        undefined ->
+            undefined
     end.
 
 %% Methods for standard use cases

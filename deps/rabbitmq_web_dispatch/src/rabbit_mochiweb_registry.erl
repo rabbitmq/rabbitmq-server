@@ -15,8 +15,8 @@
 start_link(InstanceSpecs) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [InstanceSpecs], []).
 
-add(Instance, Selector, Handler, Link) ->
-    gen_server:call(?MODULE, {add, Instance, Selector, Handler, Link}).
+add(Context, Selector, Handler, Link) ->
+    gen_server:call(?MODULE, {add, Context, Selector, Handler, Link}).
 
 set_fallback(Instance, FallbackHandler) ->
     gen_server:call(?MODULE, {set_fallback, Instance, FallbackHandler}).
@@ -44,12 +44,13 @@ init([Instances]) ->
      || {Instance, _} <- Instances],
     {ok, undefined}.
 
-handle_call({add, Instance, Selector, Handler, Link}, _From,
+handle_call({add, Context, Selector, Handler, Link}, _From,
             undefined) ->
+    Instance = rabbit_mochiweb:context_listener(Context),
     case lookup_dispatch(Instance) of
         {Selectors, Fallback} ->
             set_dispatch(Instance,
-                         {Selectors ++ [{Selector, Handler, Link}],
+                         {Selectors ++ [{Context, Selector, Handler, Link}],
                           Fallback}),
             {reply, ok, undefined};
         Err ->
@@ -107,7 +108,7 @@ set_dispatch(Instance, Dispatch) ->
 
 match_request([], _) ->
     no_handler;
-match_request([{Selector, Handler, _Link}|Rest], Req) ->
+match_request([{_Context, Selector, Handler, _Link}|Rest], Req) ->
     case Selector(Req) of
         true  -> Handler;
         false -> match_request(Rest, Req)
