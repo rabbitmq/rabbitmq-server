@@ -113,6 +113,19 @@ class TestQueue(base.BaseTest):
             conn1.stop()
             conn2.stop()
 
+    def test_send_with_receipt(self):
+        d = '/queue/test-receipt'
+
+        count = 50
+
+        self.listener.reset(count)
+
+        for x in range(1, count + 1):
+            self.conn.send("test receipt", destination=d,
+                           receipt="test" + str(count))
+
+        self.assertTrue(self.listener.await(5))
+        self.assertEquals(count, len(self.listener.receipts), "no receipts")
 
 class TestTopic(base.BaseTest):
 

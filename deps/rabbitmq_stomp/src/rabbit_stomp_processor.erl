@@ -40,7 +40,7 @@
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
-                start_heartbeat_fun, confirm_enabled}).
+                start_heartbeat_fun, pending_receipts}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -72,7 +72,7 @@ init([Sock, StartHeartbeatFun]) ->
        subscriptions       = dict:new(),
        version             = none,
        start_heartbeat_fun = StartHeartbeatFun,
-       confirm_enabled     = false},
+       pending_receipts    = undefined},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -133,6 +133,8 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
 handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State, hibernate};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
@@ -181,8 +183,7 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
     cancel_subscription(ConsumerTag, State);
 
 handle_frame("SEND", Frame, State) ->
-    with_destination("SEND", Frame, ensure_confirm(Frame, State),
-                     fun do_send/4);
+    with_destination("SEND", Frame, State, fun do_send/4);
 
 handle_frame("ACK", Frame, State) ->
     ack_action("ACK", Frame, State, fun create_ack_method/2);
@@ -283,15 +284,6 @@ ensure_subchannel_closed(SubChannel, MainChannel, State)
 ensure_subchannel_closed(SubChannel, _MainChannel, State) ->
     amqp_channel:close(SubChannel),
     ok(State).
-
-ensure_confirm(_Frame, State = #state{confirm_enabled = true}) ->
-    State;
-ensure_confirm(Frame, State = #state{channel = Channel}) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
-        {ok, _}   -> amqp_channel:cast(#'confirm.select'{}, Channel),
-                     State#state{confirm_enabled = true};
-        not_found -> State
-    end.
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
@@ -408,7 +400,8 @@ do_send(Destination, _DestHdr,
                                {Method, Props, BodyFragments},
                                State);
         no ->
-            ok(send_method(Method, Props, BodyFragments, State))
+            ok(send_method(Method, Props, BodyFragments,
+                           maybe_record_receipt(Frame, State)))
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
@@ -425,11 +418,6 @@ negotiate_version(Frame) ->
                    [{return, list}]),
     rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
 
-ensure_receipt(Frame, State) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
-        {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
-        not_found -> State
-    end.
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
@@ -488,6 +476,63 @@ default_prefetch({queue, _}) ->
     ?DEFAULT_QUEUE_PREFETCH;
 default_prefetch(_) ->
     undefined.
+
+%%----------------------------------------------------------------------------
+%% Receipt Handling
+%%----------------------------------------------------------------------------
+
+ensure_receipt(Frame = #stomp_frame{command = Command}, State) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id}  -> do_receipt(Command, Id, State);
+        not_found -> State
+    end.
+
+do_receipt("SEND", _, State) ->
+    %% SEND frame receipts are handled when messages are confirmed
+    State;
+do_receipt(_Frame, ReceiptId, State) ->
+    send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
+
+maybe_record_receipt(Frame, State = #state{channel          = Channel,
+                                           pending_receipts = PR}) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id} ->
+            PR1 = case PR of
+                      undefined ->
+                          amqp_channel:register_confirm_handler(
+                            Channel, self()),
+                          #'confirm.select_ok'{} =
+                              amqp_channel:call(Channel, #'confirm.select'{}),
+                          gb_trees:empty();
+                      _ ->
+                          PR
+                  end,
+            SeqNo = amqp_channel:next_publish_seqno(Channel),
+            State#state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
+        not_found ->
+            State
+    end.
+
+flush_pending_receipts(DeliveryTag, IsMulti,
+                       State = #state{pending_receipts = PR}) ->
+    {Receipts, PR1} = accumulate_receipts(DeliveryTag, IsMulti, PR),
+    State1 = lists:foldl(fun(ReceiptId, StateN) ->
+                                 do_receipt(none, ReceiptId, StateN)
+                         end, State, Receipts),
+    State1#state{pending_receipts = PR1}.
+
+accumulate_receipts(DeliveryTag, false, PR) ->
+    ReceiptId = gb_trees:get(DeliveryTag, PR),
+    {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
+accumulate_receipts(DeliveryTag, true, PR) ->
+    accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), []).
+
+accumulate_receipts1(DeliveryTag, {Key, _Value, PR}, Acc)
+  when DeliveryTag > Key->
+    {lists:reverse(Acc), PR};
+accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
+    accumulate_receipts1(DeliveryTag,
+                         gb_trees:take_smallest(PR), [Value | Acc]).
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
