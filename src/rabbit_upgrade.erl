@@ -49,8 +49,8 @@
 %% clusters.
 %%
 %% Firstly, we have two different types of upgrades to do: Mnesia and
-%% everythinq else. Mnesia upgrades need to only be done by one node
-%% in the cluster (we treat a non-clustered node as a single-node
+%% everythinq else. Mnesia upgrades must only be done by one node in
+%% the cluster (we treat a non-clustered node as a single-node
 %% cluster). This is the primary upgrader. The other upgrades need to
 %% be done by all nodes.
 %%
@@ -75,7 +75,7 @@
 %% into the boot process by prelaunch before the mnesia application is
 %% started. By the time Mnesia is started the upgrades have happened
 %% (on the primary), or Mnesia has been reset (on the secondary) and
-%% rabbit_mnesia:init_db/2 can then make the node rejoin the clister
+%% rabbit_mnesia:init_db/2 can then make the node rejoin the cluster
 %% in the normal way.
 %%
 %% The non-mnesia upgrades are then triggered by
@@ -83,6 +83,22 @@
 %% upgrade process to only require Mnesia upgrades, or only require
 %% non-Mnesia upgrades. In the latter case no Mnesia resets and
 %% reclusterings occur.
+%%
+%% The primary upgrader needs to be a disc node. Ideally we would like
+%% it to be the last disc node to shut down (since otherwise there's a
+%% risk of data loss). On each node we therefore record the disc nodes
+%% that were still running when we shut down. A disc node that knows
+%% other nodes were up when it shut down, or a ram node, will refuse
+%% to be the primary upgrader, and will thus not start when upgrades
+%% are needed.
+%%
+%% However, this is racy if several nodes are shut down at once. Since
+%% rabbit records the running nodes, and shuts down before mnesia, the
+%% race manifests as all disc nodes thinking they are not the primary
+%% upgrader. Therefore the user can remove the record of the last disc
+%% node to shut down to get things going again. This may lose any
+%% mnesia changes that happened after the node chosen as the primary
+%% upgrader was shut down.
 
 %% -------------------------------------------------------------------
 
@@ -103,16 +119,28 @@ maybe_upgrade_mnesia() ->
                 primary   -> primary_upgrade(Upgrades, Nodes);
                 secondary -> non_primary_upgrade(Nodes)
             end
-    end.
+    end,
+    ok = rabbit_mnesia:delete_previous_run_disc_nodes().
 
 upgrade_mode(Nodes) ->
     case nodes_running(Nodes) of
         [] ->
-            case am_i_disc_node() of
-                true  -> primary;
-                false -> die("Cluster upgrade needed but this is a ram "
-                             "node.~n   Please start any of the disc nodes "
-                             "first.", [])
+            AfterUs = rabbit_mnesia:read_previous_run_disc_nodes(),
+            case {am_i_disc_node(), AfterUs} of
+                {true, []}  ->
+                    primary;
+                {true, _}  ->
+                    Filename = rabbit_mnesia:running_nodes_filename(),
+                    die("Cluster upgrade needed but other disc nodes shut "
+                        "down after this one.~n   Please start one of the "
+                        "disc nodes: ~p first.~n~n   Note: if several disc "
+                        "nodes were shut down simultaneously they may all "
+                        "show this message. In which case, remove ~s on one "
+                        "of them and start that.", [AfterUs, Filename]);
+                {false, _} ->
+                    die("Cluster upgrade needed but this is a ram "
+                        "node.~n   Please start one of the disc nodes: "
+                        "~p first.", [AfterUs])
             end;
         [Another|_] ->
             ClusterVersion =

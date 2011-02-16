@@ -203,6 +203,7 @@ start() ->
     end.
 
 stop() ->
+    rabbit_mnesia:record_running_disc_nodes(),
     ok = rabbit_misc:stop_applications(?APPS).
 
 stop_and_halt() ->
