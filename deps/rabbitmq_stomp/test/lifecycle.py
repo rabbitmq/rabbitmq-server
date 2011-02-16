@@ -5,47 +5,47 @@ import time
 
 class TestLifecycle(base.BaseTest):
 
-    def ntest_unsubscribe_exchange_destination(self):
+    def test_unsubscribe_exchange_destination(self):
         ''' Test UNSUBSCRIBE command with exchange'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d))
 
-    def ntest_unsubscribe_exchange_destination_with_receipt(self):
+    def test_unsubscribe_exchange_destination_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with exchange'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
 
-    def ntest_unsubscribe_queue_destination(self):
+    def test_unsubscribe_queue_destination(self):
         ''' Test UNSUBSCRIBE command with queue'''
         d = "/queue/unsub01"
         self.unsub_test(d, self.sub_and_send(d))
 
-    def ntest_unsubscribe_queue_destination_with_receipt(self):
+    def test_unsubscribe_queue_destination_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue'''
         d = "/queue/unsub02"
         self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
 
-    def ntest_unsubscribe_exchange_id(self):
+    def test_unsubscribe_exchange_id(self):
         ''' Test UNSUBSCRIBE command with exchange by id'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d, subid="exchid"))
 
-    def ntest_unsubscribe_exchange_id_with_receipt(self):
+    def test_unsubscribe_exchange_id_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with exchange by id'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d, subid="exchid", receipt="unsub.rct"), numRcts=1)
 
-    def ntest_unsubscribe_queue_id(self):
+    def test_unsubscribe_queue_id(self):
         ''' Test UNSUBSCRIBE command with queue by id'''
         d = "/queue/unsub03"
         self.unsub_test(d, self.sub_and_send(d, subid="queid"))
 
-    def ntest_unsubscribe_queue_id_with_receipt(self):
+    def test_unsubscribe_queue_id_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue by id'''
         d = "/queue/unsub04"
         self.unsub_test(d, self.sub_and_send(d, subid="queid", receipt="unsub.rct"), numRcts=1)
 
-    def ntest_connect_version_1_1(self):
+    def test_connect_version_1_1(self):
         ''' Test CONNECT with version 1.1'''
         self.conn.disconnect()
         new_conn = self.create_connection(version="1.1,1.0")
@@ -54,7 +54,7 @@ class TestLifecycle(base.BaseTest):
         finally:
             new_conn.disconnect()
 
-    def ntest_heartbeat_disconnects_client(self):
+    def test_heartbeat_disconnects_client(self):
         ''' Test heartbeat disconnection'''
         self.conn.disconnect()
         new_conn = self.create_connection(heartbeat="1500,0")
@@ -68,7 +68,7 @@ class TestLifecycle(base.BaseTest):
             if new_conn.is_connected():
                 new_conn.disconnect()
 
-    def ntest_unsupported_version(self):
+    def test_unsupported_version(self):
         ''' Test unsupported version on CONNECT command'''
         self.conn.disconnect()
         new_conn = stomp.Connection(user="guest",
@@ -86,15 +86,16 @@ class TestLifecycle(base.BaseTest):
             if new_conn.is_connected():
                 new_conn.disconnect()
 
-    def ntest_disconnect(self):
+    def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()
         self.assertFalse(self.conn.is_connected())
 
     def test_disconnect_with_receipt(self):
         ''' Test the DISCONNECT command with receipts '''
+        time.sleep(3)
         self.listener.reset(1)
-        self.conn.disconnect(receipt = 'd')
+        self.conn.send_frame("DISCONNECT", {"receipt": "test"})
         self.assertTrue(self.listener.await())
         self.assertEquals(1, len(self.listener.receipts))
 
