@@ -71,7 +71,8 @@ connect(#amqp_params{username = Username,
                      password = Pass,
                      node = Node,
                      virtual_host = VHost}, SIF, _ChMgr, State) ->
-    case rpc:call(Node, rabbit_direct, connect, [Username, Pass, VHost]) of
+    case rpc:call(Node, rabbit_direct, connect,
+                  [Username, Pass, VHost, ?PROTOCOL]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
             {ok, {ServerProperties, 0, State#state{node = Node,
