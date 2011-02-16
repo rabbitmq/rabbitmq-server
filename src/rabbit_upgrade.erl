@@ -45,6 +45,47 @@
 
 %% -------------------------------------------------------------------
 
+%% The upgrade logic is quite involved, due to the existence of
+%% clusters.
+%%
+%% Firstly, we have two different types of upgrades to do: Mnesia and
+%% everythinq else. Mnesia upgrades need to only be done by one node
+%% in the cluster (we treat a non-clustered node as a single-node
+%% cluster). This is the primary upgrader. The other upgrades need to
+%% be done by all nodes.
+%%
+%% The primary upgrader has to start first (and do its Mnesia
+%% upgrades). Secondary upgraders need to reset their Mnesia database
+%% and then rejoin the cluster. They can't do the Mnesia upgrades as
+%% well and then merge databases since the cookie for each table will
+%% end up different and the merge will fail.
+%%
+%% This in turn means that we need to determine whether we are the
+%% primary or secondary upgrader *before* Mnesia comes up. If we
+%% didn't then the secondary upgrader would try to start Mnesia, and
+%% either hang waiting for a node which is not yet up, or fail since
+%% its schema differs from the other nodes in the cluster.
+%%
+%% Also, the primary upgrader needs to start Mnesia to do its
+%% upgrades, but needs to forcibly load tables rather than wait for
+%% them (in case it was not the last node to shut down, in which case
+%% it would wait forever).
+%%
+%% This in turn means that maybe_upgrade_mnesia/0 has to be patched
+%% into the boot process by prelaunch before the mnesia application is
+%% started. By the time Mnesia is started the upgrades have happened
+%% (on the primary), or Mnesia has been reset (on the secondary) and
+%% rabbit_mnesia:init_db/2 can then make the node rejoin the clister
+%% in the normal way.
+%%
+%% The non-mnesia upgrades are then triggered by
+%% rabbit_mnesia:init_db/2. Of course, it's possible for a given
+%% upgrade process to only require Mnesia upgrades, or only require
+%% non-Mnesia upgrades. In the latter case no Mnesia resets and
+%% reclusterings occur.
+
+%% -------------------------------------------------------------------
+
 maybe_upgrade_mnesia() ->
     Nodes = rabbit_mnesia:all_clustered_nodes(),
     case upgrades_required(mnesia) of
