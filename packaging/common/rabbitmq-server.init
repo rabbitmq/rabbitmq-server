@@ -48,7 +48,9 @@ start_rabbitmq () {
         case "$RETVAL" in
             0)
                 echo SUCCESS
-                [ -n "$LOCK_FILE" ] && touch $LOCK_FILE
+                if [ -n "$LOCK_FILE" ] ; then
+                    touch $LOCK_FILE
+                fi
                 ;;
             *)
                 echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
@@ -66,7 +68,9 @@ stop_rabbitmq () {
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
-            [ -n "$LOCK_FILE" ] && rm -rf $LOCK_FILE
+            if [ -n "$LOCK_FILE" ] ; then
+                rm -f $LOCK_FILE
+            fi
         else
             echo FAILED - check ${INIT_LOG_DIR}/shutdown_log, _err
         fi
