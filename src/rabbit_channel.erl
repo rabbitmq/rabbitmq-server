@@ -510,7 +510,7 @@ process_confirms(MsgSeqNos, QPid, State = #ch{unconfirmed_mq = UMQ,
     {MXs, State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}}.
 
 confirm_msg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC, UQM}, State) ->
-    Qs1 = sets:del_element(QPid, Qs),
+    Qs1 = gb_sets:del_element(QPid, Qs),
     %% these confirms will be emitted even when a queue dies, but that
     %% should be fine, since the queue stats get erased immediately
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
@@ -523,7 +523,7 @@ confirm_msg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC, UQM}, State) ->
                           end;                        
             error         -> UQM
         end,    
-    case sets:size(Qs1) of
+    case gb_sets:size(Qs1) of
         0 -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UC), UQM1};
         _ -> {MXs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UC), UQM1}
     end.
@@ -1263,7 +1263,7 @@ process_routing_result(routed,        _,     _, undefined,   _, State) ->
     State;
 process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
     #ch{unconfirmed_mq = UMQ, unconfirmed_qm = UQM} = State,
-    UMQ1 = gb_trees:insert(MsgSeqNo, {XName, sets:from_list(QPids)}, UMQ),
+    UMQ1 = gb_trees:insert(MsgSeqNo, {XName, gb_sets:from_list(QPids)}, UMQ),
     SingletonSet = gb_sets:singleton(MsgSeqNo),
     UQM1 = lists:foldl(fun (QPid, UQM2) -> 
                         maybe_monitor(QPid),
