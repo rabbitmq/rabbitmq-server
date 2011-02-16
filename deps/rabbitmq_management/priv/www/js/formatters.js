@@ -142,8 +142,10 @@ function fmt_table_body(table, x) {
 }
 
 function fmt_amqp_value(val) {
-    if (typeof(val) == 'object') {
+    if (val instanceof Array) {
         return val.join("<br/>");
+    } else if (val instanceof Object) {
+        return fmt_table_long(val);
     } else {
         return val;
     }

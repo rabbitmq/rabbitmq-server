@@ -74,10 +74,9 @@ amqp_table(unknown) -> unknown;
 amqp_table(Table)   -> {struct, [{Name, amqp_value(Type, Value)} ||
                                     {Name, Type, Value} <- Table]}.
 
-amqp_value(array, Val) ->
-    [amqp_value(T, V) || {T, V} <- Val];
-amqp_value(_Type, Val) ->
-    Val.
+amqp_value(array, Val) -> [amqp_value(T, V) || {T, V} <- Val];
+amqp_value(table, Val) -> amqp_table(Val);
+amqp_value(_Type, Val) -> Val.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
