@@ -58,17 +58,17 @@ maybe_upgrade_mnesia() ->
         [] ->
             ok;
         Upgrades ->
-            case am_i_upgrader(Nodes) of
-                true  -> primary_upgrade(Upgrades, Nodes);
-                false -> non_primary_upgrade(Nodes)
+            case upgrade_mode(Nodes) of
+                primary   -> primary_upgrade(Upgrades, Nodes);
+                secondary -> non_primary_upgrade(Nodes)
             end
     end.
 
-am_i_upgrader(Nodes) ->
+upgrade_mode(Nodes) ->
     case nodes_running(Nodes) of
         [] ->
             case am_i_disc_node() of
-                true  -> true;
+                true  -> primary;
                 false -> die("Cluster upgrade needed but this is a ram "
                              "node.~n   Please start any of the disc nodes "
                              "first.", [])
@@ -85,7 +85,7 @@ am_i_upgrader(Nodes) ->
                 ClusterVersion ->
                     %% The other node(s) have upgraded already, I am not the
                     %% upgrader
-                    false;
+                    secondary;
                 MyVersion ->
                     %% The other node(s) are running an unexpected version.
                     die("Cluster upgrade needed but other nodes are "
