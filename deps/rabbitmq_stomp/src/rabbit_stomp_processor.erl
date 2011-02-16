@@ -170,7 +170,8 @@ process_request(ProcessFun, SuccessFun, State) ->
 
 handle_frame("DISCONNECT", _Frame, State) ->
     %% We'll get to shutdown the channels in terminate
-    {stop, normal, State};
+    io:format("Actually in the DISCONNECT~n"),
+    {stop, normal, shutdown_channel_and_connection(State)};
 
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
@@ -456,9 +457,12 @@ send_method(Method, Channel, Properties, BodyFragments, State) ->
                                 payload = lists:reverse(BodyFragments)}),
     State.
 
+shutdown_channel_and_connection(State = #state{channel = none}) ->
+    State;
 shutdown_channel_and_connection(State = #state{channel       = Channel,
                                                connection    = Connection,
                                                subscriptions = Subs}) ->
+    io:format("Really early on~n"),
     dict:fold(
       fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
               case SubChannel of
@@ -468,10 +472,11 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
                       Acc
               end
       end, 0, Subs),
-
+    io:format("About to close~n"),
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
-    State#state{channel = none, connection = none}.
+    io:format("Shutdown happenend~n"),
+    State#state{channel = none, connection = none, subscriptions = none}.
 
 default_prefetch({queue, _}) ->
     ?DEFAULT_QUEUE_PREFETCH;
