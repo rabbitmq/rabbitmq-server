@@ -46,7 +46,6 @@
 %% -------------------------------------------------------------------
 
 maybe_upgrade_mnesia() ->
-    rabbit:prepare(),
     Nodes = rabbit_mnesia:all_clustered_nodes(),
     case upgrades_required(mnesia) of
         version_not_available ->
