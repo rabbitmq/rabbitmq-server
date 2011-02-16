@@ -397,6 +397,9 @@ do_send(Destination, _DestHdr,
     case transactional(Frame) of
         {yes, Transaction} ->
             extend_transaction(Transaction,
+                               fun(StateN) ->
+                                       maybe_record_receipt(Frame, StateN)
+                               end,
                                {Method, Props, BodyFragments},
                                State);
         no ->
@@ -527,9 +530,8 @@ accumulate_receipts(DeliveryTag, false, PR) ->
 accumulate_receipts(DeliveryTag, true, PR) ->
     accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), []).
 
-accumulate_receipts1(DeliveryTag, {Key, _Value, PR}, Acc)
-  when DeliveryTag > Key->
-    {lists:reverse(Acc), PR};
+accumulate_receipts1(DeliveryTag, {DeliveryTag, Value, PR}, Acc) ->
+    {lists:reverse([Value | Acc]), PR};
 accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
     accumulate_receipts1(DeliveryTag,
                          gb_trees:take_smallest(PR), [Value | Acc]).
@@ -571,6 +573,9 @@ begin_transaction(Transaction, State) ->
     put({transaction, Transaction}, []),
     ok(State).
 
+extend_transaction(Transaction, Callback, Action, State) ->
+    extend_transaction(Transaction, {callback, Callback, Action}, State).
+
 extend_transaction(Transaction, Action, State0) ->
     with_transaction(
       Transaction, State0,
@@ -598,6 +603,8 @@ abort_transaction(Transaction, State0) ->
               ok(State)
       end).
 
+perform_transaction_action({callback, Callback, Action}, State) ->
+    perform_transaction_action(Action, Callback(State));
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->

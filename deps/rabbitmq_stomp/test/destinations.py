@@ -120,12 +120,32 @@ class TestQueue(base.BaseTest):
 
         self.listener.reset(count)
 
-        for x in range(1, count + 1):
+        for x in range(0, count):
             self.conn.send("test receipt", destination=d,
-                           receipt="test" + str(count))
+                           receipt="test" + str(x))
 
         self.assertTrue(self.listener.await(5))
         self.assertEquals(count, len(self.listener.receipts), "no receipts")
+
+    def test_send_with_receipt_tx(self):
+        d = '/queue/test-receipt-tx'
+        count = 20
+        tx = 'receipt.tx'
+
+        self.listener.reset(count)
+
+        self.conn.begin(transaction=tx)
+        for x in range(0, count):
+            self.conn.send("tx receipt", destination=d,
+                           receipt="test" + str(x),
+                           transaction=tx)
+
+        self.assertFalse(self.listener.await(1))
+
+        self.conn.commit(transaction=tx)
+        self.assertTrue(self.listener.await(5))
+        self.assertEquals(count, len(self.listener.receipts),
+                          "no receipts from transaction")
 
 class TestTopic(base.BaseTest):
 
