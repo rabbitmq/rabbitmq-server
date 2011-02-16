@@ -48,8 +48,11 @@ table.facts th, table.facts td { vertical-align: top; padding: 0 10px 10px 10px;
 table.facts-long th { text-align: right; font-weight: bold; }
 table.facts-long th, table.facts-long td { vertical-align: top; }
 
-tr.alt1 td { background: #eee; }
-tr.alt2 td { background: #fff; }
+table.mini th { border: none; padding: 0 2px 2px 2px; text-align: right; }
+table.mini td { border: none; padding: 0 2px 2px 2px; }
+
+tr.alt1>td { background: #eee; }
+tr.alt2>td { background: #fff; }
 
 td.status div { padding: 5px; text-align: center; border-radius: 5px; -moz-border-radius: 5px; }
 td.status div.red { background: #F62817; color:white; }
@@ -122,12 +125,12 @@ td.binding-endpoint span.arrow { font-size: 200%; }
 
 #scratch { display: none; }
 
-tr.alt1 td {
+tr.alt1>td {
     background: -moz-linear-gradient(center top, #f0f0f0 0%,#e0e0e0 100%);
     background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f0f0f0),color-stop(1, #e0e0e0));
 }
 
-tr.alt2 td {
+tr.alt2>td {
     background: -moz-linear-gradient(center top, #f8f8f8 0%,#ffffff 100%);
     background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f8f8f8),color-stop(1, #ffffff));
 }
