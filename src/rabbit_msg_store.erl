@@ -1975,12 +1975,11 @@ force_recovery(BaseDir, Store) ->
      File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
     ok.
 
-for_each_file(D) ->
-    fun(Fun, Files) -> [Fun(filename:join(D, File)) || File <- Files] end.
+for_each_file(D, Fun, Files) ->
+    [Fun(filename:join(D, File)) || File <- Files].
 
-for_each_file(D1, D2) ->
-    fun(Fun, Files) -> [Fun(filename:join(D1, File),
-                            filename:join(D2, File)) || File <- Files] end.
+for_each_file(D1, D2, Fun, Files) ->
+    [Fun(filename:join(D1, File), filename:join(D2, File)) || File <- Files].
 
 transform_dir(BaseDir, Store, TransformFun) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
@@ -1991,11 +1990,11 @@ transform_dir(BaseDir, Store, TransformFun) ->
             throw({error, transform_failed_previously});
         false ->
             OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-            (for_each_file(Dir, TmpDir))(TransformFile,     OldFileList),
-            (for_each_file(Dir)        )(fun file:delete/1, OldFileList),
+            for_each_file(Dir, TmpDir, TransformFile,     OldFileList),
+            for_each_file(Dir,         fun file:delete/1, OldFileList),
             NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
-            (for_each_file(TmpDir, Dir))(fun file:copy/2,   NewFileList),
-            (for_each_file(TmpDir)     )(fun file:delete/1, NewFileList),
+            for_each_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
+            for_each_file(TmpDir,      fun file:delete/1, NewFileList),
             ok = file:del_dir(TmpDir)
     end.
 
