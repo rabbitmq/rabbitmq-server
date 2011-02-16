@@ -36,7 +36,6 @@ start_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
         echo RabbitMQ is currently running
-        RETVAL=0
     else
         RETVAL=0
         set +e
