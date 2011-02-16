@@ -34,8 +34,8 @@
              uncommitted_ack_q, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
-             confirm_enabled, publish_seqno, unconfirmed_mq, confirmed,
-             unconfirmed_qm}).
+             confirm_enabled, publish_seqno, unconfirmed_mq, unconfirmed_qm,
+             confirmed}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -288,14 +288,14 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
     %% We remove the MsgSeqNos from UQM before calling process_confirms to
     %% prevent each MsgSeqNo being removed from the set one by one which
     %% which would be inefficient
-    NewState = State#ch{unconfirmed_qm = dict:erase(QPid, UQM)},
-    {MXs, State1} = process_confirms(MsgSeqNos, QPid, NewState),
+    State1 = State#ch{unconfirmed_qm = dict:erase(QPid, UQM)},
+    {MXs, State2} = process_confirms(MsgSeqNos, QPid, State1),
     erase_queue_stats(QPid),
-    State2 = (case Reason of
+    State3 = (case Reason of
                  normal -> fun record_confirms/2;
                  _      -> fun send_nacks/2
-              end)(MXs, State1),
-    noreply(queue_blocked(QPid, State2)).
+              end)(MXs, State2),
+    noreply(queue_blocked(QPid, State3)).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -504,13 +504,13 @@ process_confirms(MsgSeqNos, QPid, State = #ch{unconfirmed_mq = UMQ,
           fun(MsgSeqNo, {_DMs, UMQ0, _UQM} = Acc) ->
               case gb_trees:lookup(MsgSeqNo, UMQ0) of
                   none        -> Acc;
-                  {value, XQ} -> confirm_msg(MsgSeqNo, QPid, XQ, Acc, State)
+                  {value, XQ} -> remove_unconfirmed(MsgSeqNo, QPid, XQ, Acc,
+                                                    State)
               end
           end, {[], UMQ, UQM}, MsgSeqNos),
     {MXs, State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}}.
 
-confirm_msg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC, UQM}, State) ->
-    Qs1 = gb_sets:del_element(QPid, Qs),
+remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM}, State) ->   
     %% these confirms will be emitted even when a queue dies, but that
     %% should be fine, since the queue stats get erased immediately
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
@@ -522,10 +522,11 @@ confirm_msg(MsgSeqNo, QPid, {XName, Qs}, {MXs, UC, UQM}, State) ->
                               false -> dict:store(QPid, Msgs1, UQM)
                           end;                        
             error         -> UQM
-        end,    
-    case gb_sets:size(Qs1) of
-        0 -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UC), UQM1};
-        _ -> {MXs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UC), UQM1}
+        end,  
+    Qs1 = gb_sets:del_element(QPid, Qs),
+    case gb_sets:is_empty(Qs1) of
+        true -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UMQ), UQM1};
+        false -> {MXs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UMQ), UQM1}
     end.
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
