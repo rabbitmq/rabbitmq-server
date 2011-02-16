@@ -1986,16 +1986,14 @@ transform_dir(BaseDir, Store, TransformFun) ->
     TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
     TransformFile = fun (A, B) -> transform_msg_file(A, B, TransformFun) end,
     case filelib:is_dir(TmpDir) of
-        true  ->
-            throw({error, transform_failed_previously});
-        false ->
-            OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-            for_each_file(Dir, TmpDir, TransformFile,     OldFileList),
-            for_each_file(Dir,         fun file:delete/1, OldFileList),
-            NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
-            for_each_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
-            for_each_file(TmpDir,      fun file:delete/1, NewFileList),
-            ok = file:del_dir(TmpDir)
+        true  -> throw({error, transform_failed_previously});
+        false -> OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+                 for_each_file(Dir, TmpDir, TransformFile,     OldFileList),
+                 for_each_file(Dir,         fun file:delete/1, OldFileList),
+                 NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
+                 for_each_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
+                 for_each_file(TmpDir,      fun file:delete/1, NewFileList),
+                 ok = file:del_dir(TmpDir)
     end.
 
 transform_msg_file(FileOld, FileNew, TransformFun) ->
