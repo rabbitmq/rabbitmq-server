@@ -350,7 +350,7 @@ redirect(Location, ReqData) ->
 args({struct, L}) ->
     args(L);
 args(L) ->
-    [{K, rabbit_mgmt_format:args_type(V), V} || {K, V} <- L].
+    rabbit_mgmt_format:to_amqp_table(L).
 
 relativise("/" ++ F, "/" ++ T) ->
     From = string:tokens(F, "/"),
