@@ -1975,32 +1975,27 @@ force_recovery(BaseDir, Store) ->
      File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
     ok.
 
-for_each_file(Fun, Files) ->
-    [Fun(File) || File <- Files].
+for_each_file(D) ->
+    fun(Fun, Files) -> [Fun(filename:join(D, File)) || File <- Files] end.
+
+for_each_file(D1, D2) ->
+    fun(Fun, Files) -> [Fun(filename:join(D1, File),
+                            filename:join(D2, File)) || File <- Files] end.
 
 transform_dir(BaseDir, Store, TransformFun) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
     TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
+    TransformFile = fun (A, B) -> transform_msg_file(A, B, TransformFun) end,
     case filelib:is_dir(TmpDir) of
-        true  -> throw({error, transform_failed_previously});
+        true  ->
+            throw({error, transform_failed_previously});
         false ->
             OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-            for_each_file(fun (File) ->
-                              transform_msg_file(filename:join(Dir, File),
-                                                 filename:join(TmpDir, File),
-                                                 TransformFun)
-                          end, OldFileList),
-            for_each_file(fun (File) ->
-                              file:delete(filename:join(Dir, File))
-                          end, OldFileList),
+            (for_each_file(Dir, TmpDir))(TransformFile,     OldFileList),
+            (for_each_file(Dir)        )(fun file:delete/1, OldFileList),
             NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
-            for_each_file(fun (File) ->
-                              file:copy(filename:join(TmpDir, File),
-                                        filename:join(Dir, File))
-                          end, NewFileList),
-            for_each_file(fun (File) ->
-                              file:delete(filename:join(TmpDir, File))
-                          end, NewFileList),
+            (for_each_file(TmpDir, Dir))(fun file:copy/2,   NewFileList),
+            (for_each_file(TmpDir)     )(fun file:delete/1, NewFileList),
             ok = file:del_dir(TmpDir)
     end.
 
