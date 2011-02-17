@@ -290,19 +290,19 @@ bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
                                         routing_key = Key,
                                         arguments   = Args}).
 
-unbind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
+unbind_upstream(#upstream{ connection = Conn, queue = Q, properties = Props },
                 Key, Args) ->
     X = proplists:get_value(exchange, Props),
     %% We may already be unbound if e.g. someone has deleted the upstream
     %% exchange
-    try amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
-                                              exchange    = X,
-                                              routing_key = Key,
-                                              arguments   = Args})
-    catch exit:{{server_initiated_close, ?NOT_FOUND, _}, _} ->
-            %% TODO this is inadequate. The channel will die.
-            ok
-    end.
+    with_disposable_channel(
+      Conn,
+      fun (Ch) ->
+              amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
+                                                    exchange    = X,
+                                                    routing_key = Key,
+                                                    arguments   = Args})
+      end).
 
 %%----------------------------------------------------------------------------
 
