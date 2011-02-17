@@ -32,16 +32,6 @@
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
--define(RABBIT_TCP_OPTS, [
-        binary,
-        {packet, raw}, % no packaging
-        {reuseaddr, true}, % allow rebind without waiting
-        {backlog, 128}, % use the maximum listen(2) backlog value
-        %% {nodelay, true}, % TCP_NODELAY - disable Nagle's alg.
-        %% {delay_send, true},
-        {exit_on_close, false}
-    ]).
-
 -define(SSL_TIMEOUT, 5). %% seconds
 
 -define(FIRST_TEST_BIND_PORT, 10000).
@@ -200,7 +190,7 @@ start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
                rabbit_sup,
                {Name,
                 {tcp_listener_sup, start_link,
-                 [IPAddress, Port, [Family | ?RABBIT_TCP_OPTS],
+                 [IPAddress, Port, [Family | tcp_opts()],
                   {?MODULE, tcp_listener_started, [Protocol]},
                   {?MODULE, tcp_listener_stopped, [Protocol]},
                   OnConnect, Label]},
@@ -314,6 +304,10 @@ hostname() ->
     end.
 
 cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
+
+tcp_opts() ->
+    {ok, Opts} = application:get_env(rabbit, tcp_listen_options),
+    Opts.
 
 %%--------------------------------------------------------------------
 

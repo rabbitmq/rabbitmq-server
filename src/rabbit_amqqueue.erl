@@ -218,7 +218,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                                  rabbit_misc:const(not_found)
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
-                      case is_process_alive(QPid) of
+                      case rabbit_misc:is_process_alive(QPid) of
                           true  -> rabbit_misc:const(ExistingQ);
                           false -> TailFun = internal_delete(QueueName),
                                    fun (Tx) -> TailFun(Tx), ExistingQ end
@@ -300,29 +300,19 @@ check_declare_arguments(QueueName, Args) ->
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_expires_argument/1},
-                 {<<"x-message-ttl">>, fun check_message_ttl_argument/1}]],
+                [{<<"x-expires">>,     fun check_integer_argument/1},
+                 {<<"x-message-ttl">>, fun check_integer_argument/1}]],
     ok.
 
-check_expires_argument(Val) ->
-    check_integer_argument(Val,
-                           expires_not_of_acceptable_type,
-                           expires_zero_or_less).
-
-check_message_ttl_argument(Val) ->
-    check_integer_argument(Val,
-                           ttl_not_of_acceptable_type,
-                           ttl_zero_or_less).
-
-check_integer_argument(undefined, _, _) ->
+check_integer_argument(undefined) ->
     ok;
-check_integer_argument({Type, Val}, InvalidTypeError, _) when Val > 0 ->
+check_integer_argument({Type, Val}) when Val > 0 ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {InvalidTypeError, Type, Val}}
+        false -> {error, {unacceptable_type, Type}}
     end;
-check_integer_argument({_Type, _Val}, _, ZeroOrLessError) ->
-    {error, ZeroOrLessError}.
+check_integer_argument({_Type, Val}) ->
+    {error, {value_zero_or_less, Val}}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
@@ -422,7 +412,7 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
                        infinity).
 
 notify_sent(QPid, ChPid) ->
-    delegate_cast(QPid, {notify_sent, ChPid}).
+    gen_server2:cast(QPid, {notify_sent, ChPid}).
 
 unblock(QPid, ChPid) ->
     delegate_cast(QPid, {unblock, ChPid}).

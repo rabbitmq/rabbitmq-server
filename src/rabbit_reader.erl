@@ -24,7 +24,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_memory/2, server_properties/0]).
+-export([conserve_memory/2, server_properties/1]).
 
 -export([process_channel_frame/5]). %% used by erlang-client
 
@@ -160,7 +160,8 @@
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
--spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
+-spec(server_properties/1 :: (rabbit_types:protocol()) ->
+                                  rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
 -spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
@@ -219,7 +220,7 @@ conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
     ok.
 
-server_properties() ->
+server_properties(Protocol) ->
     {ok, Product} = application:get_key(rabbit, id),
     {ok, Version} = application:get_key(rabbit, vsn),
 
@@ -230,21 +231,29 @@ server_properties() ->
     %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
     %% from the config and merge them with the generated built-in properties
     NormalizedConfigServerProps =
-        [case X of
-             {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
-                                  longstr,
-                                  list_to_binary(Value)};
-             {BinKey, Type, Value} -> {BinKey, Type, Value}
-         end || X <- RawConfigServerProps ++
-                    [{product,     Product},
-                     {version,     Version},
-                     {platform,    "Erlang/OTP"},
-                     {copyright,   ?COPYRIGHT_MESSAGE},
-                     {information, ?INFORMATION_MESSAGE}]],
+        [{<<"capabilities">>, table, server_capabilities(Protocol)} |
+         [case X of
+              {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
+                                   longstr,
+                                   list_to_binary(Value)};
+              {BinKey, Type, Value} -> {BinKey, Type, Value}
+          end || X <- RawConfigServerProps ++
+                     [{product,     Product},
+                      {version,     Version},
+                      {platform,    "Erlang/OTP"},
+                      {copyright,   ?COPYRIGHT_MESSAGE},
+                      {information, ?INFORMATION_MESSAGE}]]],
 
     %% Filter duplicated properties in favor of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
+
+server_capabilities(rabbit_framing_amqp_0_9_1) ->
+    [{<<"publisher_confirms">>,         bool, true},
+     {<<"exchange_exchange_bindings">>, bool, true},
+     {<<"basic.nack">>,                 bool, true}];
+server_capabilities(_) ->
+    [].
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -655,7 +664,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
-      server_properties = server_properties(),
+      server_properties = server_properties(Protocol),
       mechanisms = auth_mechanisms_binary(),
       locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),

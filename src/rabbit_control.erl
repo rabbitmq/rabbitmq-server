@@ -45,22 +45,18 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    FullCommand = init:get_plain_arguments(),
-    case FullCommand of
-        [] -> usage();
-        _ -> ok
-    end,
     {[Command0 | Args], Opts} =
-        rabbit_misc:get_options(
-          [{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
-           {option, ?VHOST_OPT, "/"}],
-          FullCommand),
-    Opts1 = lists:map(fun({K, V}) ->
-                              case K of
-                                  ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
-                                  _    -> {K, V}
-                              end
-                      end, Opts),
+        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
+                                      {option, ?NODE_OPT, NodeStr},
+                                      {option, ?VHOST_OPT, "/"}],
+                                     init:get_plain_arguments()) of
+            {[], _Opts}    -> usage();
+            CmdArgsAndOpts -> CmdArgsAndOpts
+        end,
+    Opts1 = [case K of
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 _         -> {K, V}
+             end || {K, V} <- Opts],
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
