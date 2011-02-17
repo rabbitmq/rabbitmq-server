@@ -411,7 +411,7 @@ function postprocess() {
             }
         });
     $('#download-configuration').click(function() {
-            var path = '/api/all-configuration?download=' +
+            var path = '../api/all-configuration?download=' +
                 esc($('#download-filename').val());
             window.location = path;
             setTimeout('app.run()');
@@ -536,7 +536,7 @@ function toggle_visibility(item) {
 function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
-        with_req('/api' + reqs[key], function(resp) {
+        with_req('../api' + reqs[key], function(resp) {
                 acc[key] = jQuery.parseJSON(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
@@ -641,7 +641,7 @@ function sync_req(type, params0, path_template) {
         return false;
     }
     var req = xmlHttpRequest();
-    req.open(type, '/api' + path, false);
+    req.open(type, '../api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
         if (type == 'GET')
@@ -689,7 +689,8 @@ function fill_path_template(template, params) {
 }
 
 // Better suggestions appreciated
-var INTEGER_ARGUMENTS = map(['x-expires']);
+var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
+var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
 
 function params_magic(params) {
     return maybe_remove_password(
@@ -718,6 +719,8 @@ function collapse_multifields(params0) {
                 var v = params0[name + '_' + id + '_mfvalue'];
                 if (k in INTEGER_ARGUMENTS) {
                     v = parseInt(v);
+                } else if (k in ARRAY_ARGUMENTS) {
+                    v = v.split(" ");
                 }
                 params[name][k] = v;
             }
