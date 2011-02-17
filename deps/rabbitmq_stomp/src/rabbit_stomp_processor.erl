@@ -404,8 +404,9 @@ create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
                  multiple     = IsMulti}.
 
-create_nack_method(DeliveryTag, _Subscription) ->
-    #'basic.reject'{delivery_tag = DeliveryTag}.
+create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+    #'basic.nack'{delivery_tag = DeliveryTag,
+                  multiple     = IsMulti}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(
@@ -451,9 +452,10 @@ send_method(Method, Properties, BodyFragments,
     send_method(Method, Channel, Properties, BodyFragments, State).
 
 send_method(Method, Channel, Properties, BodyFragments, State) ->
-    amqp_channel:call(Channel, Method, #amqp_msg{
-                                props = Properties,
-                                payload = lists:reverse(BodyFragments)}),
+    amqp_channel:call(
+      Channel, Method,
+      #amqp_msg{props   = Properties,
+                payload = list_to_binary(lists:reverse(BodyFragments))}),
     State.
 
 shutdown_channel_and_connection(State = #state{channel       = Channel,
