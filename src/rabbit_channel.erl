@@ -505,9 +505,9 @@ process_confirms(MsgSeqNos, QPid, State = #ch{unconfirmed_mq = UMQ,
         lists:foldl(
           fun(MsgSeqNo, {_DMs, UMQ0, _UQM} = Acc) ->
                   case gb_trees:lookup(MsgSeqNo, UMQ0) of
-                      none        -> Acc;
                       {value, XQ} -> remove_unconfirmed(MsgSeqNo, QPid, XQ, Acc,
-                                                        State)
+                                                        State);
+                      none        -> Acc
                   end
           end, {[], UMQ, UQM}, MsgSeqNos),
     {MXs, State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}}.
