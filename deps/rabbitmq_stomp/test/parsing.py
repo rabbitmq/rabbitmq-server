@@ -207,7 +207,7 @@ class TestParsing(unittest.TestCase):
 
         message = 'xx'
         oldi = 2
-        for i in [5, 90, 1024*512, 1024*256-1, 1024*384-1, 1024*1024]:
+        for i in [5, 90, 1024*256-1, 1024*384-1, 1024*512, 1024*1024]:
             message = message + '\0' + 'x'*(i-oldi-1)
             oldi = i
 
