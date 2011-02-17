@@ -281,20 +281,15 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 handle_info(timeout, State) ->
     noreply(State);
 
-handle_info({'DOWN', _MRef, process, QPid, Reason},
-            State = #ch{unconfirmed = UC}) ->
-    %% TODO: this does a complete scan and partial rebuild of the
-    %% tree, which is quite efficient. To do better we'd need to
-    %% maintain a secondary mapping, from QPids to MsgSeqNos.
-    {MXs, UC1} = remove_queue_unconfirmed(
-                   gb_trees:next(gb_trees:iterator(UC)), QPid,
-                   {[], UC}, State),
-    erase_queue_stats(QPid),
-    State1 = case Reason of
-                 normal -> record_confirms(MXs, State#ch{unconfirmed = UC1});
-                 _      -> send_nacks(MXs, State#ch{unconfirmed = UC1})
-             end,
-    noreply(queue_blocked(QPid, State1)).
+handle_info({'DOWN', MRef, process, QPid, Reason},
+            State = #ch{consumer_monitors = ConsumerMonitors}) ->
+    noreply(
+      case dict:find(MRef, ConsumerMonitors) of
+          error ->
+              handle_non_consumer_down(QPid, Reason, State);
+          {ok, ConsumerTag} ->
+              handle_consumer_down(MRef, ConsumerTag, State)
+      end).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
@@ -1060,6 +1055,29 @@ handle_method(_MethodRecord, _Content, _State) ->
       command_invalid, "unimplemented method", []).
 
 %%----------------------------------------------------------------------------
+
+handle_non_consumer_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
+    %% TODO: this does a complete scan and partial rebuild of the
+    %% tree, which is quite efficient. To do better we'd need to
+    %% maintain a secondary mapping, from QPids to MsgSeqNos.
+    {MXs, UC1} = remove_queue_unconfirmed(
+                   gb_trees:next(gb_trees:iterator(UC)), QPid,
+                   {[], UC}, State),
+    erase_queue_stats(QPid),
+    State1 = case Reason of
+                 normal -> record_confirms(MXs, State#ch{unconfirmed = UC1});
+                 _      -> send_nacks(MXs, State#ch{unconfirmed = UC1})
+             end,
+    queue_blocked(QPid, State1).
+
+handle_consumer_down(MRef, ConsumerTag,
+                     State = #ch{consumer_monitors = ConsumerMonitors,
+                                 writer_pid        = WriterPid}) ->
+    ConsumerMonitors1 = dict:erase(MRef, ConsumerMonitors),
+    Cancel = #'basic.cancel'{consumer_tag = ConsumerTag,
+                             nowait       = true},
+    ok = rabbit_writer:send_command(WriterPid, Cancel),
+    State#ch{consumer_monitors = ConsumerMonitors1}.
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
