@@ -139,7 +139,7 @@ case "$1" in
         restart_rabbitmq
         echo "$NAME."
         ;;
-    condrestart|try-restart)
+    try-restart)
         echo -n "Restarting $DESC: "
         restart_running_rabbitmq
         echo "$NAME."
