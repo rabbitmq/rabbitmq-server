@@ -82,6 +82,23 @@ multiple_downstreams_test() ->
               delete_exchange(Ch, <<"upstream2">>)
       end).
 
+e2e_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream">>, <<"fanout">>),
+              declare_fed_exchange(Ch, <<"downstream1">>,
+                                   [<<"amqp://localhost/%2f/upstream">>],
+                                   <<"fanout">>),
+              declare_exchange(Ch, <<"downstream2">>, <<"direct">>),
+              bind_exchange(Ch, <<"downstream2">>, <<"downstream1">>, <<"">>),
+              Q = bind_queue(Ch, <<"downstream2">>, <<"key">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>),
+              delete_exchange(Ch, <<"downstream1">>),
+              delete_exchange(Ch, <<"downstream2">>),
+              delete_exchange(Ch, <<"upstream">>)
+      end).
+
+
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
 
@@ -148,12 +165,24 @@ declare_exchange(Ch, X, Type) ->
                                                type     = Type,
                                                durable  = true}).
 
-bind_queue(Ch, X, Key) ->
+declare_queue(Ch) ->
     #'queue.declare_ok'{ queue = Q } =
         amqp_channel:call(Ch, #'queue.declare'{ exclusive = true }),
+    Q.
+
+bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{ queue       = Q,
                                          exchange    = X,
-                                         routing_key = Key }),
+                                         routing_key = Key }).
+
+bind_exchange(Ch, D, S, Key) ->
+    amqp_channel:call(Ch, #'exchange.bind'{ destination = D,
+                                            source      = S,
+                                            routing_key = Key }).
+
+bind_queue(Ch, X, Key) ->
+    Q = declare_queue(Ch),
+    bind_queue(Ch, Q, X, Key),
     Q.
 
 delete_exchange(Ch, X) ->

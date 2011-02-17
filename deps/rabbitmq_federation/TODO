@@ -6,7 +6,7 @@ Test / fix with alternate PLAIN creds
 Allow use of EXTERNAL etc
 Be smarter about bind / unbind
 Deal with downstream going down
-Figure out how e2e interacts with this
+Figure out if there's a more efficient way to make e2e work with this.
 Remove that ETS table
 
 ---
