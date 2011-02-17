@@ -249,9 +249,10 @@ server_properties(Protocol) ->
                 NormalizedConfigServerProps).
 
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
-    [{<<"publisher_confirms">>,         bool, true},
-     {<<"exchange_exchange_bindings">>, bool, true},
-     {<<"basic.nack">>,                 bool, true}];
+    [{<<"publisher_confirms">>,          bool, true},
+     {<<"exchange_exchange_bindings">>,  bool, true},
+     {<<"basic.nack">>,                  bool, true},
+     {<<"consumer_death_notification">>, bool, true}];
 server_capabilities(_) ->
     [].
 
