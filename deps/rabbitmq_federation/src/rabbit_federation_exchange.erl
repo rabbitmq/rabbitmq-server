@@ -45,8 +45,9 @@
 -define(ETS_NAME, ?MODULE).
 -define(TX, false).
 -record(state, { downstream_connection, downstream_channel,
-                 downstream_exchange, upstreams }).
--record(upstream, {connection, channel, queue, properties, uri}).
+                 downstream_exchange, next_publish_id, upstreams }).
+-record(upstream, { connection, channel, queue, properties, uri, unacked,
+                    consumer_tag }).
 
 %%----------------------------------------------------------------------------
 
@@ -127,10 +128,13 @@ start_link(Downstream, UpstreamURIs) ->
 init({DownstreamX, UpstreamURIs}) ->
     {ok, DConn} = amqp_connection:start(direct),
     {ok, DCh} = amqp_connection:open_channel(DConn),
+    #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(DCh, self()),
     %%erlang:monitor(process, DCh),
     true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
     State0 = #state{downstream_connection = DConn, downstream_channel = DCh,
-                    downstream_exchange = DownstreamX, upstreams = []},
+                    downstream_exchange = DownstreamX, upstreams = [],
+                    next_publish_id = 1},
     {ok, lists:foldl(fun (UpstreamURI, State) ->
                              connect_upstream(UpstreamURI, State)
                      end, State0, UpstreamURIs)}.
@@ -159,15 +163,28 @@ handle_cast(Msg, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info({#'basic.deliver'{delivery_tag = _DTag,
+handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
+            State = #state{ upstreams = Upstreams }) ->
+    DTagUChUs = retrieve_delivery_tags(Seq, Multiple, Upstreams),
+    [amqp_channel:cast(UCh, #'basic.ack'{delivery_tag = DTag,
+                                         multiple = Multiple}) ||
+        {DTag, UCh, _} <- DTagUChUs, DTag =/= none],
+    {noreply, State#state{ upstreams = [U || {_, _, U} <- DTagUChUs] }};
+
+handle_info({#'basic.deliver'{consumer_tag = CTag,
+                              delivery_tag = DTag,
                               %%redelivered = Redelivered,
                               %%exchange = Exchange,
                               routing_key = Key},
              Msg}, State = #state{downstream_exchange = #resource {name = X},
-                                  downstream_channel = DCh}) ->
+                                  downstream_channel  = DCh,
+                                  upstreams           = Upstreams0,
+                                  next_publish_id     = Seq}) ->
+    Upstreams = record_delivery_tag(DTag, CTag, Seq, Upstreams0),
     amqp_channel:cast(DCh, #'basic.publish'{exchange = X,
                                             routing_key = Key}, Msg),
-    {noreply, State};
+    {noreply, State#state{ upstreams       = Upstreams,
+                           next_publish_id = Seq + 1}};
 
 handle_info({'DOWN', _Ref, process, Ch, _Reason},
             State = #state{ downstream_channel = DCh }) ->
@@ -219,16 +236,19 @@ connect_upstream(UpstreamURI,
                 queue     = Q,
                 durable   = true,
                 arguments = [{<<"x-expires">>, long, 86400000}] }),
-            amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
-                                                         %% FIXME?
-                                                         no_ack = true },
-                                   self()),
+            #'basic.consume_ok'{ consumer_tag = CTag } =
+                amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
+                                                             no_ack = false },
+                                       self()),
             State#state{ upstreams =
-                             [#upstream{ uri        = UpstreamURI,
-                                         connection = Conn,
-                                         channel    = Ch,
-                                         queue      = Q,
-                                         properties = Props } | Upstreams]};
+                             [#upstream{ uri          = UpstreamURI,
+                                         connection   = Conn,
+                                         channel      = Ch,
+                                         queue        = Q,
+                                         properties   = Props,
+                                         consumer_tag = CTag,
+                                         unacked      = gb_trees:empty()}
+                              | Upstreams]};
         _E ->
             erlang:send_after(1000, self(), {connect_upstream, UpstreamURI}),
             State
@@ -268,6 +288,44 @@ unbind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
     catch exit:{{server_initiated_close, ?NOT_FOUND, _}, _} ->
             %% TODO this is inadequate. The channel will die.
             ok
+    end.
+
+%%----------------------------------------------------------------------------
+
+record_delivery_tag(DTag, CTag, Seq, Upstreams) ->
+    [record_delivery_tag0(DTag, CTag, Seq, U) || U <- Upstreams].
+
+record_delivery_tag0(DTag, CTag, Seq,
+                     Upstream = #upstream { consumer_tag = CTag,
+                                            unacked      = Unacked }) ->
+    Upstream#upstream { unacked = gb_trees:insert(Seq, DTag, Unacked) };
+record_delivery_tag0(_DTag, _CTag, _Seq, Upstream) ->
+    Upstream.
+
+retrieve_delivery_tags(Seq, Multiple, Upstreams) ->
+    [retrieve_delivery_tag(Seq, Multiple, U) || U <- Upstreams].
+
+retrieve_delivery_tag(Seq, Multiple,
+                      Upstream = #upstream { channel = UCh,
+                                             unacked = Unacked0 }) ->
+    Unacked = remove_delivery_tags(Seq, Multiple, Unacked0),
+    DTag = case gb_trees:lookup(Seq, Unacked0) of
+               {value, V} -> V;
+               none       -> none
+           end,
+    {DTag, UCh, Upstream#upstream{ unacked = Unacked }}.
+
+remove_delivery_tags(Seq, false, Unacked) ->
+    gb_trees:delete_any(Seq, Unacked);
+remove_delivery_tags(Seq, true, Unacked) ->
+    case gb_trees:size(Unacked) of
+        0 -> Unacked;
+        _ -> Smallest = gb_trees:smallest(Unacked),
+             case Smallest > Seq of
+                 true  -> Unacked;
+                 false -> remove_delivery_tags(
+                            Seq, true, gb_trees:delete(Smallest, Unacked))
+             end
     end.
 
 parse_uri(URI) ->

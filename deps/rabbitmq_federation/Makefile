@@ -12,7 +12,7 @@ OTHER_PORT=5673
 
 include ../include.mk
 
-test: cleantest
+test: cleantest stop-other-node
 
 cleantest:
 	rm -rf tmp /tmp/rabbitmq-$(OTHER_NODE)-mnesia
@@ -26,4 +26,4 @@ start-other-node:
 	../rabbitmq-server/scripts/rabbitmq-server -detached
 
 stop-other-node:
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop
+	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop || true
