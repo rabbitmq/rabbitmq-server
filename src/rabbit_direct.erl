@@ -29,8 +29,8 @@
                        {'ok', {rabbit_types:user(),
                                rabbit_framing:amqp_table()}}).
 -spec(start_channel/6 ::
-        (rabbit_framing:amqp_table(), rabbit_channel:channel_number(), pid(),
-         rabbit_types:user(), rabbit_types:vhost(), pid()) ->
+        (rabbit_channel:channel_number(), pid(), rabbit_types:user(),
+         rabbit_types:vhost(), rabbit_framing:amqp_table(), pid()) ->
                               {'ok', pid()}).
 
 -endif.
