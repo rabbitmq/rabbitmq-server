@@ -145,7 +145,7 @@ function fmt_amqp_value(val) {
     if (val instanceof Array) {
         return val.join("<br/>");
     } else if (val instanceof Object) {
-        return fmt_table_long(val);
+        return fmt_table_short(val);
     } else {
         return val;
     }
