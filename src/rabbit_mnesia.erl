@@ -360,7 +360,10 @@ running_nodes_filename() ->
 
 record_running_disc_nodes() ->
     FileName = running_nodes_filename(),
-    Nodes = nodes_of_type(disc_copies) -- [node()],
+    Nodes = sets:to_list(
+              sets:intersection(
+                sets:from_list(nodes_of_type(disc_copies)),
+                sets:from_list(running_clustered_nodes()))) -- [node()],
     %% Don't check the result: we're shutting down anyway and this is
     %% a best-effort-basis.
     rabbit_misc:write_term_file(FileName, [Nodes]).
