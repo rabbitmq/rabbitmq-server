@@ -109,6 +109,14 @@ function fmt_rate0(obj, name, fmt, show_total) {
     return res;
 }
 
+function fmt_empty(obj, name) {
+    if (obj == undefined
+	|| obj[name] == undefined
+	|| obj[name + '_details'] == undefined
+	|| obj[name + '_details'].rate < 0.00001) return true;
+    return false;
+}
+
 function fmt_exchange(name) {
     return name == '' ? '<i>(AMQP default)</i>' : name;
 }
