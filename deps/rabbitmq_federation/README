@@ -1,13 +1,24 @@
-This is all very experimental.
+This is all very experimental. You have been warned.
 
 Static configuration might look like:
 
   {rabbit_federation,
-   [ {exchanges, [{ %% local exchange people can bind to
-                   "local",
-                    %% remote exchanges they effectively bind to
-                   ["amqp://amqp.example.com/%2f/remote"],
-                    %% type of remote exchanges
-                   "direct"}]
-     }
-   ]}
+   [ {exchanges, [[{exchange,    "local"},
+                   {vhost,       "/"},
+                   {type,        "topic"},
+                   {durable,     true},
+                   {auto_delete, false},
+                   {internal,    false},
+                   {upstreams,   ["amqp://localhost/%2f/upstream"]}]
+                 ]}
+   ]
+  }
+
+The upstreams parameter is a list of remote exchanges whose messages
+should be federated to the local exchange. Messages can also be
+published to the local exchage directly (in which case it just acts
+like a regular exchange).
+
+Most of the rest looks like an exchange.declare, but note that the
+type parameter must match the type of the upstream exchanges for
+routing to work at all sensibly.

@@ -33,17 +33,29 @@ stop(_State) ->
 
 %%----------------------------------------------------------------------------
 
-declare_exchange({Downstream, Upstreams, Type}) ->
+declare_exchange(Props) ->
     {ok, Conn} = amqp_connection:start(direct),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    %% TODO make durable, recover bindings etc
     amqp_channel:call(
       Ch, #'exchange.declare'{
-        exchange = list_to_binary(Downstream),
-        type = <<"x-federation">>,
-        arguments =
+        exchange    = list_to_binary(pget(exchange, Props)),
+        type        = <<"x-federation">>,
+        durable     = pget(durable,     Props, true),
+        auto_delete = pget(auto_delete, Props, false),
+        internal    = pget(internal,    Props, false),
+        arguments   =
             [{<<"upstreams">>, array,  [{longstr, list_to_binary(U)} ||
-                                           U <- Upstreams]},
-             {<<"type">>,      longstr, list_to_binary(Type)}]}),
+                                           U <- pget(upstreams, Props)]},
+             {<<"type">>,      longstr, list_to_binary(pget(type, Props))}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn).
+
+
+pget(K, P, D) ->
+    proplists:get_value(K, P, D).
+
+pget(K, P) ->
+    case proplists:get_value(K, P) of
+        undefined -> exit({error, "Key missing in exchange definition", K, P});
+        V         -> V
+    end.

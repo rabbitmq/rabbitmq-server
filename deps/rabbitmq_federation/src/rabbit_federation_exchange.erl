@@ -67,6 +67,7 @@ validate(X) ->
     with_module(X, fun (M) -> M:validate(X) end).
 
 create(?TX, X = #exchange{ name = Downstream, arguments = Args }) ->
+    %% TODO remove upstream bindings when creating transient exchange
     {array, UpstreamURIs0} =
         rabbit_misc:table_lookup(Args, <<"upstreams">>),
     UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],

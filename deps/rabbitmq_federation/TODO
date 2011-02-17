@@ -3,10 +3,8 @@ Necessary
 
 Cycle detection / log route
 Exponential(?) backoff
-Allow downstream exchange to be durable
 Close remaining channels on shutdown
 Validate args
-Change downstream spec to (local) URL or otherwise handle vhosts
 Test / fix with alternate PLAIN creds
 Be smarter about bind / unbind
 Deal with downstream channel going down
@@ -17,6 +15,7 @@ Useful
 Deal with upstream exchange going away / coming back?
 Remove that ETS table
 Allow use of EXTERNAL etc
+Allow args passthrough to support e.g. headers type.
 
 Later
 -----
