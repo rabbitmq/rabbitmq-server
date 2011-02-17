@@ -1,8 +1,8 @@
 UNKNOWN_REPR = '<span class="unknown">?</span>';
 FD_THRESHOLDS=[[0.95, 'red'],
-	       [0.9, 'yellow']];
+	       [0.8, 'yellow']];
 SOCKETS_THRESHOLDS=[[1.0, 'red'],
-		    [0.9, 'yellow']];
+		    [0.8, 'yellow']];
 PROCESS_THRESHOLDS=[[0.75, 'red'],
 		    [0.5, 'yellow']];
 MEMORY_THRESHOLDS=[[1.0, 'red']];
