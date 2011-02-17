@@ -409,9 +409,23 @@ dropwhile(Pred, S) ->
 
 fetch(AckRequired, S) ->
     % rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
+    %
+    % TODO: This dropwhile is to help the testPublishAndGetWithExpiry
+    % functional test pass. Although msg expiration is asynchronous by
+    % design, that test depends on very quick expiration. That test is
+    % therefore nondeterministic (sometimes passing, sometimes
+    % failing) and should be rewritten, at which point this dropwhile
+    % could be, well, dropped.
+    Now = timer:now_diff(now(), {0,0,0}),
+    S1 = dropwhile(
+           fun (#message_properties{expiry = Expiry}) ->
+                   % rabbit_log:info("inside fetch, Now = ~p, Expiry = ~p, decision = ~p", [Now, Expiry, Expiry < Now]),
+                   Expiry < Now
+           end,
+           S),
     {atomic, FR} =
-        mnesia:transaction(fun () -> internal_fetch(AckRequired, S) end),
-    Result = {FR, S},
+        mnesia:transaction(fun () -> internal_fetch(AckRequired, S1) end),
+    Result = {FR, S1},
     % rabbit_log:info("fetch ->~n ~p", [Result]),
     callback([]),
     Result.
@@ -914,19 +928,24 @@ erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-%% callback/1 calls into the broker to confirm msgs, and expire msgs,
-%% and quite possibly to perform yet other side-effects.
+%% callback/1 calls back into the broker to confirm msgs, and expire
+%% msgs, and quite possibly to perform yet other side-effects. It's
+%% black magic.
 
 -spec callback([{rabbit_types:basic_message(),
                  rabbit_types:basic_message_properties()}]) -> ok.
 
 callback(Pubs) ->
-    Guids = lists:map(fun ({#basic_message { guid = Guid },
-                            #message_properties { needs_confirming = true }})
-                           -> [Guid];
-                          (_) -> []
-                      end,
-                      Pubs),
+    rabbit_log:info("callback(~n ~p)", [Pubs]),
+    Guids =
+        lists:append(
+          lists:map(fun ({#basic_message { guid = Guid },
+                          #message_properties { needs_confirming = true }})
+                        -> [Guid];
+                        (_) -> []
+                    end,
+                    Pubs)),
+    rabbit_log:info("Guids = ~p)", [Guids]),
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
       self(), fun (S) -> {Guids, S} end),
     ok.
