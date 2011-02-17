@@ -109,7 +109,7 @@ maybe_upgrade_mnesia() ->
             case Nodes of
                 [_] -> ok;
                 _   -> die("Cluster upgrade needed but upgrading from "
-                           "< 2.1.1.~n   Unfortunately you will need to "
+                           "< 2.1.1.~nUnfortunately you will need to "
                            "rebuild the cluster.", [])
             end;
         [] ->
@@ -132,15 +132,19 @@ upgrade_mode(Nodes) ->
                 {true, _}  ->
                     Filename = rabbit_mnesia:running_nodes_filename(),
                     die("Cluster upgrade needed but other disc nodes shut "
-                        "down after this one.~n   Please start one of the "
-                        "disc nodes: ~p first.~n~n   Note: if several disc "
-                        "nodes were shut down simultaneously they may all "
-                        "show this message. In which case, remove ~s on one "
-                        "of them and start that.", [AfterUs, Filename]);
+                        "down after this one.~nPlease first start the last "
+                        "disc node to shut down.~nThe disc nodes that were "
+                        "still running when this one shut down are:~n~n"
+                        " ~p~n~nNote: if several disc nodes were shut down "
+                        "simultaneously they may all~nshow this message. "
+                        "In which case, remove the lock file on one of them "
+                        "and~nstart that node. The lock file on this node "
+                        "is:~n~n ~s ",
+                        [AfterUs, Filename]);
                 {false, _} ->
-                    die("Cluster upgrade needed but this is a ram "
-                        "node.~n   Please start one of the disc nodes: "
-                        "~p first.", [AfterUs])
+                    die("Cluster upgrade needed but this is a ram node.~n"
+                        "Please first start the last disc node to shut down.",
+                        [])
             end;
         [Another|_] ->
             ClusterVersion =
@@ -176,7 +180,7 @@ die(Msg, Args) ->
     %% straight out into do_boot, generating an erl_crash.dump
     %% and displaying any error message in a confusing way.
     error_logger:error_msg(Msg, Args),
-    io:format("~n~n** " ++ Msg ++ " **~n~n~n", Args),
+    io:format("~n~n****~n~n" ++ Msg ++ "~n~n****~n~n~n", Args),
     error_logger:logfile(close),
     halt(1).
 
