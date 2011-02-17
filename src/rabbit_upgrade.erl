@@ -103,10 +103,11 @@
 %% -------------------------------------------------------------------
 
 maybe_upgrade_mnesia() ->
-    Nodes = rabbit_mnesia:all_clustered_nodes(),
+    AllNodes = rabbit_mnesia:all_clustered_nodes(),
+    KnownDiscNodes = rabbit_mnesia:read_cluster_nodes_config(),
     case upgrades_required(mnesia) of
         version_not_available ->
-            case Nodes of
+            case AllNodes of
                 [_] -> ok;
                 _   -> die("Cluster upgrade needed but upgrading from "
                            "< 2.1.1.~nUnfortunately you will need to "
@@ -115,18 +116,18 @@ maybe_upgrade_mnesia() ->
         [] ->
             ok;
         Upgrades ->
-            case upgrade_mode(Nodes) of
-                primary   -> primary_upgrade(Upgrades, Nodes);
-                secondary -> non_primary_upgrade(Nodes)
+            case upgrade_mode(AllNodes, KnownDiscNodes) of
+                primary   -> primary_upgrade(Upgrades, AllNodes);
+                secondary -> secondary_upgrade(KnownDiscNodes)
             end
     end,
     ok = rabbit_mnesia:delete_previous_run_disc_nodes().
 
-upgrade_mode(Nodes) ->
-    case nodes_running(Nodes) of
+upgrade_mode(AllNodes, KnownDiscNodes) ->
+    case nodes_running(AllNodes) of
         [] ->
             AfterUs = rabbit_mnesia:read_previous_run_disc_nodes(),
-            case {am_i_disc_node(), AfterUs} of
+            case {am_i_disc_node(KnownDiscNodes), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
@@ -167,10 +168,10 @@ upgrade_mode(Nodes) ->
             end
     end.
 
-am_i_disc_node() ->
+am_i_disc_node(KnownDiscNodes) ->
     %% The cluster config does not list all disc nodes, but it will list us
     %% if we're one.
-    case rabbit_mnesia:read_cluster_nodes_config() of
+    case KnownDiscNodes of
         []        -> true;
         DiscNodes -> lists:member(node(), DiscNodes)
     end.
@@ -204,10 +205,10 @@ primary_upgrade(Upgrades, Nodes) ->
 force_tables() ->
     [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
 
-non_primary_upgrade(Nodes) ->
+secondary_upgrade(KnownDiscNodes) ->
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
-    ok = rabbit_mnesia:create_cluster_nodes_config(Nodes),
+    ok = rabbit_mnesia:create_cluster_nodes_config(KnownDiscNodes),
     write_version(mnesia),
     ok.
 
