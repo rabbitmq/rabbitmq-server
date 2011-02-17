@@ -109,7 +109,7 @@ function fmt_rate0(obj, name, fmt, show_total) {
     return res;
 }
 
-function fmt_empty(obj, name) {
+function is_col_empty(obj, name) {
     if (obj == undefined
 	|| obj[name] == undefined
 	|| obj[name + '_details'] == undefined
