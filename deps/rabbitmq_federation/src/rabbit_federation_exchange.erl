@@ -62,9 +62,17 @@ description() ->
 route(X, Delivery) ->
     with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(X) ->
-    %% TODO validate args
-    %% remember not to allow args[type] = x-federation
+validate(X = #exchange{arguments = Args}) ->
+    validate_arg(<<"upstreams">>, array,   Args),
+    validate_arg(<<"type">>,      longstr, Args),
+    {array, Upstreams} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
+    [validate_upstream(U) || U <- Upstreams],
+    {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
+    Type = rabbit_exchange:check_type(TypeBin),
+    case Type of
+        'x-federation' -> fail("Type argument must not be x-federation.", []);
+        _              -> ok
+    end,
     with_module(X, fun (M) -> M:validate(X) end).
 
 create(?TX, X = #exchange{ name = Downstream, durable = Durable,
@@ -342,16 +350,50 @@ remove_delivery_tags(Seq, true, Unacked) ->
              end
     end.
 
+%%----------------------------------------------------------------------------
+
+validate_arg(Name, Type, Args) ->
+    case rabbit_misc:table_lookup(Args, Name) of
+        {Type, _} -> ok;
+        undefined -> fail("Argument ~s missing", [Name]);
+        _         -> fail("Argument ~s must be of type ~s", [Name, Type])
+    end.
+
+validate_upstream({longstr, URI}) ->
+    case parse_uri(URI) of
+        {error, E} ->
+            fail("URI ~s could not be parsed, error: ~p", [URI, E]);
+        Props ->
+            case proplists:get_value(scheme, Props) of
+                "amqp" -> ok;
+                S      -> fail("Scheme ~s not supported", [S])
+            end
+    end;
+validate_upstream({Type, URI}) ->
+    fail("URI ~w was of type ~s, not longstr", [URI, Type]).
+
+fail(Fmt, Args) ->
+    rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
+
+%%----------------------------------------------------------------------------
+
 parse_uri(URI) ->
-    Props = uri_parser:parse(
-              binary_to_list(URI), [{host, undefined}, {path, "/"},
-                                    {port, 5672},      {'query', []}]),
-    [VHostEnc, XEnc] = string:tokens(
-                         proplists:get_value(path, Props), "/"),
-    VHost = httpd_util:decode_hex(VHostEnc),
-    X = httpd_util:decode_hex(XEnc),
-    [{vhost,    list_to_binary(VHost)},
-     {exchange, list_to_binary(X)}] ++ Props.
+    case uri_parser:parse(
+           binary_to_list(URI), [{host, undefined}, {path, "/"},
+                                 {port, 5672},      {'query', []}]) of
+        {error, _} = E ->
+            E;
+        Props ->
+            case string:tokens(proplists:get_value(path, Props), "/") of
+                [VHostEnc, XEnc] ->
+                    VHost = httpd_util:decode_hex(VHostEnc),
+                    X = httpd_util:decode_hex(XEnc),
+                    [{vhost,    list_to_binary(VHost)},
+                     {exchange, list_to_binary(X)}] ++ Props;
+                _ ->
+                    {error, path_must_have_two_components}
+            end
+    end.
 
 %%----------------------------------------------------------------------------
 

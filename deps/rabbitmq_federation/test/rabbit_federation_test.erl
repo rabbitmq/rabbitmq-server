@@ -98,6 +98,27 @@ e2e_test() ->
               delete_exchange(Ch, <<"upstream">>)
       end).
 
+validation_test() ->
+    URI     = <<"amqp://localhost/%2f/upstream">>,
+    HttpURI = <<"http://localhost/%2f/upstream">>,
+    Upstreams = {<<"upstreams">>, array,   [{longstr, URI}]},
+    Type      = {<<"type">>,      longstr, <<"direct">>},
+    U = <<"upstreams">>,
+
+    assert_bad([Upstreams]),
+    assert_bad([Upstreams, {<<"type">>, long,    42}]),
+    assert_bad([Upstreams, {<<"type">>, longstr, <<"x-federation">>}]),
+
+    assert_bad([Type]),
+    assert_bad([{U, array,   [{longstr, <<"foo">>}]},                  Type]),
+    assert_bad([{U, array,   [{longstr, <<"amqp://localhost/%2f">>}]}, Type]),
+    assert_bad([{U, array,   [{longstr, <<"amqp://localhost/">>}]},    Type]),
+    assert_bad([{U, array,   [{longstr, HttpURI}]},                    Type]),
+    assert_bad([{U, array,   [{long, 42}]},                            Type]),
+    assert_bad([{U, longstr, URI},                                     Type]),
+
+    assert_good([Upstreams, Type]).
+
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
 
@@ -220,3 +241,24 @@ publish_expect(Ch, X, Key, Q, Payload) ->
     expect(Ch, Q, [Payload]).
 
 %%----------------------------------------------------------------------------
+
+assert_good(Args) ->
+    with_ch(fun (Ch) -> test_args(Ch, Args) end).
+
+assert_bad(Args) ->
+    with_ch(fun (Ch) ->
+                    try
+                        test_args(Ch, Args),
+                        exit({exception_not_thrown, Args})
+                    catch exit:{{server_initiated_close, ?PRECONDITION_FAILED,
+                                 _}, _} ->
+                            ok
+                    end
+            end).
+
+test_args(Ch, Args) ->
+    amqp_channel:call(Ch, #'exchange.declare'{
+                        exchange  = <<"test">>,
+                        type      = <<"x-federation">>,
+                        arguments = Args}),
+    delete_exchange(Ch, <<"test">>).

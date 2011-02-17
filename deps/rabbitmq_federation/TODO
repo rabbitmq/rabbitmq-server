@@ -4,7 +4,6 @@ Necessary
 Cycle detection / log route
 Exponential(?) backoff
 Close remaining channels on shutdown
-Validate args
 Test / fix with alternate PLAIN creds
 Be smarter about bind / unbind
 Deal with downstream channel going down
