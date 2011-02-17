@@ -176,7 +176,7 @@ init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
                 publish_seqno           = 1,
                 unconfirmed_mq          = gb_trees:empty(),
                 confirmed               = [],
-                unconfirmed_qm          = dict:new()},
+                unconfirmed_qm          = gb_trees:empty()},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -281,14 +281,14 @@ handle_info(timeout, State) ->
 
 handle_info({'DOWN', _MRef, process, QPid, Reason},
             State = #ch{unconfirmed_qm = UQM}) ->
-    MsgSeqNos = case dict:find(QPid, UQM) of
-                    {ok, MsgSet} -> gb_sets:to_list(MsgSet);                                    
-                    error        -> []
+    MsgSeqNos = case gb_trees:lookup(QPid, UQM) of
+                    {value, MsgSet} -> gb_sets:to_list(MsgSet);
+                    none        -> []
                 end,
     %% We remove the MsgSeqNos from UQM before calling process_confirms to
     %% prevent each MsgSeqNo being removed from the set one by one which
     %% which would be inefficient
-    State1 = State#ch{unconfirmed_qm = dict:erase(QPid, UQM)},
+    State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM)},
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, State1),
     erase_queue_stats(QPid),
     State3 = (case Reason of
@@ -515,17 +515,19 @@ remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM}, State) ->
     %% should be fine, since the queue stats get erased immediately
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     UQM1 = 
-        case dict:find(QPid, UQM) of
-            {ok, Msgs} -> Msgs1 = gb_sets:delete(MsgSeqNo, Msgs),
-                          case gb_sets:is_empty(Msgs1) of
-                              true  -> dict:erase(QPid, UQM);
-                              false -> dict:store(QPid, Msgs1, UQM)
-                          end;                        
-            error         -> UQM
+        case gb_trees:lookup(QPid, UQM) of
+            {value, Msgs} ->
+                Msgs1 = gb_sets:delete(MsgSeqNo, Msgs),
+                        case gb_sets:is_empty(Msgs1) of
+                            true  -> gb_trees:delete(QPid, UQM);
+                            false -> gb_trees:update(QPid, Msgs1, UQM)
+                        end;
+            none          -> UQM
         end,  
     Qs1 = gb_sets:del_element(QPid, Qs),
     case gb_sets:is_empty(Qs1) of
-        true -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UMQ), UQM1};
+        true -> {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UMQ),
+                 UQM1};
         false -> {MXs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UMQ), UQM1}
     end.
 
@@ -1267,10 +1269,14 @@ process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
     UMQ1 = gb_trees:insert(MsgSeqNo, {XName, gb_sets:from_list(QPids)}, UMQ),
     SingletonSet = gb_sets:singleton(MsgSeqNo),
     UQM1 = lists:foldl(fun (QPid, UQM2) -> 
-                        maybe_monitor(QPid),
-                        dict:update(QPid, fun (Msgs)-> gb_sets:add(MsgSeqNo,
-                                                                   Msgs) end,
-                                   SingletonSet, UQM2)
+                         maybe_monitor(QPid),
+                            case gb_trees:lookup(QPid, UQM2) of
+                                {value, Msgs} ->
+                                    Msgs1 = gb_sets:insert(MsgSeqNo, Msgs),
+                                    gb_trees:update(QPid, Msgs1, UQM2);
+                                none -> gb_trees:insert(QPid, SingletonSet,
+                                                        UQM2)
+                            end
                       end, UQM, QPids),
     State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}.
 
