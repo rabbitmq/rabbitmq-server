@@ -360,7 +360,7 @@ running_nodes_filename() ->
 
 record_running_disc_nodes() ->
     FileName = running_nodes_filename(),
-    Nodes = rabbit_mnesia:nodes_of_type(disc_copies) -- [node()],
+    Nodes = nodes_of_type(disc_copies) -- [node()],
     %% Don't check the result: we're shutting down anyway and this is
     %% a best-effort-basis.
     rabbit_misc:write_term_file(FileName, [Nodes]).
