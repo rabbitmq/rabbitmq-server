@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/7, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/8, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([emit_stats/1]).
@@ -35,7 +35,7 @@
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, queue_collector_pid, stats_timer,
              confirm_enabled, publish_seqno, unconfirmed_mq, unconfirmed_qm,
-             confirmed}).
+             confirmed, capabilities}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -67,9 +67,9 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/7 ::
+-spec(start_link/8 ::
       (channel_number(), pid(), pid(), rabbit_types:user(),
-       rabbit_types:vhost(), pid(),
+       rabbit_types:vhost(), rabbit_framing:amqp_table(), pid(),
        fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -95,10 +95,11 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
-           StartLimiterFun) ->
-    gen_server2:start_link(?MODULE, [Channel, ReaderPid, WriterPid, User,
-                                     VHost, CollectorPid, StartLimiterFun], []).
+start_link(Channel, ReaderPid, WriterPid, User, VHost, Capabilities,
+           CollectorPid, StartLimiterFun) ->
+    gen_server2:start_link(?MODULE,
+                           [Channel, ReaderPid, WriterPid, User, VHost,
+                            Capabilities, CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -149,7 +150,7 @@ emit_stats(Pid) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
+init([Channel, ReaderPid, WriterPid, User, VHost, Capabilities, CollectorPid,
       StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
@@ -175,8 +176,9 @@ init([Channel, ReaderPid, WriterPid, User, VHost, CollectorPid,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed_mq          = gb_trees:empty(),
+                unconfirmed_qm          = gb_trees:empty(),
                 confirmed               = [],
-                unconfirmed_qm          = gb_trees:empty()},
+                capabilities            = Capabilities},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
