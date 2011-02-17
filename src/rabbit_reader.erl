@@ -719,9 +719,9 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                             sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism),
     Capabilities =
-        case lists:keyfind(<<"capabilities">>, 1, ClientProperties) of
-            {<<"capabilities">>, table, Capabilities1} -> Capabilities1;
-            _                                          -> []
+        case rabbit_misc:table_lookup(ClientProperties, <<"capabilities">>) of
+            {table, Capabilities1} -> Capabilities1;
+            _                      -> []
         end,
     State = State0#v1{auth_mechanism   = AuthMechanism,
                       auth_state       = AuthMechanism:init(Sock),
