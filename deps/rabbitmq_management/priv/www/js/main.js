@@ -689,7 +689,7 @@ function fill_path_template(template, params) {
 }
 
 // Better suggestions appreciated
-var INTEGER_ARGUMENTS = map(['x-expires']);
+var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
 var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
 
 function params_magic(params) {
