@@ -101,6 +101,16 @@ rotate_logs_rabbitmq() {
     set -e
 }
 
+restart_running_rabbitmq () {
+    status_rabbitmq quiet
+    if [ $RETVAL = 0 ] ; then
+        restart_rabbitmq
+    else
+        echo RabbitMQ is not runnning
+        RETVAL=0
+    fi
+}
+
 restart_rabbitmq() {
     stop_rabbitmq
     start_rabbitmq
@@ -124,9 +134,14 @@ case "$1" in
         echo -n "Rotating log files for $DESC: "
         rotate_logs_rabbitmq
         ;;
-    force-reload|reload|restart|condrestart|try-restart)
+    force-reload|reload|restart)
         echo -n "Restarting $DESC: "
         restart_rabbitmq
+        echo "$NAME."
+        ;;
+    condrestart|try-restart)
+        echo -n "Restarting $DESC: "
+        restart_running_rabbitmq
         echo "$NAME."
         ;;
     *)
