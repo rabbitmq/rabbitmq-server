@@ -517,11 +517,11 @@ remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM}, State) ->
     %% should be fine, since the queue stats get erased immediately
     maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
     UQM1 = case gb_trees:lookup(QPid, UQM) of
-               {value, Msgs} ->
-                   Msgs1 = gb_sets:delete(MsgSeqNo, Msgs),
-                   case gb_sets:is_empty(Msgs1) of
+               {value, MsgSeqNos} ->
+                   MsgSeqNos1 = gb_sets:delete(MsgSeqNo, MsgSeqNos),
+                   case gb_sets:is_empty(MsgSeqNos1) of
                        true  -> gb_trees:delete(QPid, UQM);
-                       false -> gb_trees:update(QPid, Msgs1, UQM)
+                       false -> gb_trees:update(QPid, MsgSeqNos1, UQM)
                    end;
                none ->
                    UQM
@@ -1271,16 +1271,17 @@ process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
     #ch{unconfirmed_mq = UMQ, unconfirmed_qm = UQM} = State,
     UMQ1 = gb_trees:insert(MsgSeqNo, {XName, gb_sets:from_list(QPids)}, UMQ),
     SingletonSet = gb_sets:singleton(MsgSeqNo),
-    UQM1 = lists:foldl(fun (QPid, UQM2) ->
-                               maybe_monitor(QPid),
-                               case gb_trees:lookup(QPid, UQM2) of
-                                   {value, Msgs} ->
-                                       Msgs1 = gb_sets:insert(MsgSeqNo, Msgs),
-                                       gb_trees:update(QPid, Msgs1, UQM2);
-                                   none ->
-                                       gb_trees:insert(QPid, SingletonSet, UQM2)
-                               end
-                       end, UQM, QPids),
+    UQM1 = lists:foldl(
+             fun (QPid, UQM2) ->
+                     maybe_monitor(QPid),
+                     case gb_trees:lookup(QPid, UQM2) of
+                         {value, MsgSeqNos} ->
+                             MsgSeqNos1 = gb_sets:insert(MsgSeqNo, MsgSeqNos),
+                             gb_trees:update(QPid, MsgSeqNos1, UQM2);
+                         none ->
+                             gb_trees:insert(QPid, SingletonSet, UQM2)
+                     end
+             end, UQM, QPids),
     State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}.
 
 lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
