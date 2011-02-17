@@ -1,6 +1,7 @@
 Cycle detection
 Exponential(?) backoff
 Allow downstream exchange to be durable
+Close remaining channels on shutdown
 Validate args
 Change downstream spec to (local) URL or otherwise handle vhosts
 Test / fix with alternate PLAIN creds
