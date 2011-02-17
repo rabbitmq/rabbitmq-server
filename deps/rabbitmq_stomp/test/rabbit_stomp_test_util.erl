@@ -36,7 +36,7 @@ message_properties_test() ->
     Headers = [
                 {"content-type", "text/plain"},
                 {"content-encoding", "UTF-8"},
-                {"delivery-mode", "2"},
+                {"persistent", "true"},
                 {"priority", "1"},
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
@@ -86,7 +86,7 @@ message_headers_test() ->
                 {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},
                 {"content-type", "text/plain"},
                 {"content-encoding", "UTF-8"},
-                {"delivery-mode", "2"},
+                {"persistent", "true"},
                 {"priority", "1"},
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
