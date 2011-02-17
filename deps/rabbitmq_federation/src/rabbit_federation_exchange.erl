@@ -36,7 +36,7 @@
 -export([validate/1, create/2, recover/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
--export([start_link/2]).
+-export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -64,14 +64,15 @@ route(X, Delivery) ->
 
 validate(X) ->
     %% TODO validate args
+    %% remember not to allow args[type] = x-federation
     with_module(X, fun (M) -> M:validate(X) end).
 
-create(?TX, X = #exchange{ name = Downstream, arguments = Args }) ->
-    %% TODO remove upstream bindings when creating transient exchange
+create(?TX, X = #exchange{ name = Downstream, durable = Durable,
+                           arguments = Args }) ->
     {array, UpstreamURIs0} =
         rabbit_misc:table_lookup(Args, <<"upstreams">>),
     UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],
-    rabbit_federation_sup:start_child(Downstream, UpstreamURIs),
+    rabbit_federation_sup:start_child({Downstream, Durable, UpstreamURIs}),
     with_module(X, fun (M) -> M:create(?TX, X) end);
 create(Tx, X) ->
     with_module(X, fun (M) -> M:create(Tx, X) end).
@@ -80,6 +81,7 @@ recover(X, Bs) ->
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
 delete(?TX, X, Bs) ->
+    %% TODO delete upstream queues
     call(X, stop),
     with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
 delete(Tx, X, Bs) ->
@@ -120,13 +122,12 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 
 %%----------------------------------------------------------------------------
 
-start_link(Downstream, UpstreamURIs) ->
-    gen_server:start_link(?MODULE, {Downstream, UpstreamURIs},
-                          [{timeout, infinity}]).
+start_link(Args) ->
+    gen_server:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({DownstreamX, UpstreamURIs}) ->
+init({DownstreamX, Durable, UpstreamURIs}) ->
     {ok, DConn} = amqp_connection:start(direct),
     {ok, DCh} = amqp_connection:open_channel(DConn),
     #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
@@ -137,7 +138,7 @@ init({DownstreamX, UpstreamURIs}) ->
                     downstream_exchange = DownstreamX, upstreams = [],
                     next_publish_id = 1},
     {ok, lists:foldl(fun (UpstreamURI, State) ->
-                             connect_upstream(UpstreamURI, State)
+                             connect_upstream(UpstreamURI, not Durable, State)
                      end, State0, UpstreamURIs)}.
 
 handle_call({add_binding, #binding{key = Key, args = Args} }, _From,
@@ -196,8 +197,8 @@ handle_info({'DOWN', _Ref, process, Ch, _Reason},
             {noreply, restart_upstream_channel(Ch, State)}
     end;
 
-handle_info({connect_upstream, URI}, State) ->
-    {noreply, connect_upstream(URI, State)};
+handle_info({connect_upstream, URI, ResetUpstreamQueue}, State) ->
+    {noreply, connect_upstream(URI, ResetUpstreamQueue, State)};
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -217,7 +218,7 @@ terminate(_Reason, #state { downstream_channel = DCh,
 
 %%----------------------------------------------------------------------------
 
-connect_upstream(UpstreamURI,
+connect_upstream(UpstreamURI, ResetUpstreamQueue,
                  State = #state{ upstreams = Upstreams,
                                  downstream_exchange = DownstreamX}) ->
     %%io:format("Connecting to ~s...~n", [UpstreamURI]),
@@ -232,6 +233,16 @@ connect_upstream(UpstreamURI,
             erlang:monitor(process, Ch),
             Q = upstream_queue_name(Props, DownstreamX),
             %% TODO: The x-expires should be configurable.
+            case ResetUpstreamQueue of
+                true ->
+                    with_disposable_channel(
+                      Conn,
+                      fun (Ch2) ->
+                              amqp_channel:call(Ch2, #'queue.delete'{queue = Q})
+                      end);
+                _ ->
+                    ok
+            end,
             amqp_channel:call(
               Ch, #'queue.declare'{
                 queue     = Q,
@@ -251,7 +262,9 @@ connect_upstream(UpstreamURI,
                                          unacked      = gb_trees:empty()}
                               | Upstreams]};
         _E ->
-            erlang:send_after(1000, self(), {connect_upstream, UpstreamURI}),
+            erlang:send_after(
+              1000, self(),
+              {connect_upstream, UpstreamURI, ResetUpstreamQueue}),
             State
     end.
 
@@ -267,7 +280,7 @@ restart_upstream_channel(OldPid, State = #state{ upstreams = Upstreams }) ->
         lists:partition(fun (#upstream{ channel = Ch }) ->
                                 OldPid == Ch
                         end, Upstreams),
-    connect_upstream(URI, State#state{ upstreams = Rest }).
+    connect_upstream(URI, false, State#state{ upstreams = Rest }).
 
 bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
               Key, Args) ->
@@ -340,10 +353,24 @@ parse_uri(URI) ->
     [{vhost,    list_to_binary(VHost)},
      {exchange, list_to_binary(X)}] ++ Props.
 
-ensure_closed(Conn, Ch) ->
-    try amqp_channel:close(Ch)
-    catch exit:{noproc, _} -> ok
+%%----------------------------------------------------------------------------
+
+with_disposable_channel(Conn, Fun) ->
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    try
+        Fun(Ch)
+    catch exit:{{server_initiated_close, _, _}, _} ->
+            ok
     end,
+    ensure_closed(Ch).
+
+ensure_closed(Conn, Ch) ->
+    ensure_closed(Ch),
     try amqp_connection:close(Conn)
+    catch exit:{noproc, _} -> ok
+    end.
+
+ensure_closed(Ch) ->
+    try amqp_channel:close(Ch)
     catch exit:{noproc, _} -> ok
     end.

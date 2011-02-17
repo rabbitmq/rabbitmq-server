@@ -98,7 +98,6 @@ e2e_test() ->
               delete_exchange(Ch, <<"upstream">>)
       end).
 
-
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
 
@@ -152,9 +151,13 @@ stop_other_node() ->
     timer:sleep(1000).
 
 declare_fed_exchange(Ch, X, Upstreams, Type) ->
+    declare_fed_exchange(Ch, X, Upstreams, Type, false).
+
+declare_fed_exchange(Ch, X, Upstreams, Type, D) ->
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange  = X,
+        durable   = D,
         type      = <<"x-federation">>,
         arguments = [{<<"upstreams">>, array, [{longstr, U} || U <- Upstreams]},
                      {<<"type">>,      longstr, Type}]
