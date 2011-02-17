@@ -31,9 +31,8 @@
 -export([call/2, call/3, cast/2, cast/3]).
 -export([subscribe/3]).
 -export([close/1, close/3]).
--export([register_return_handler/2]).
--export([register_flow_handler/2]).
--export([register_confirm_handler/2]).
+-export([register_return_handler/2, register_flow_handler/2,
+         register_confirm_handler/2, register_consumer_death_handler/2]).
 -export([next_publish_seqno/1]).
 -export([register_default_consumer/2]).
 
@@ -43,18 +42,19 @@
 -record(state, {number,
                 sup,
                 driver,
-                rpc_requests        = queue:new(),
-                anon_sub_requests   = queue:new(),
-                tagged_sub_requests = dict:new(),
-                closing             = false,
+                rpc_requests               = queue:new(),
+                anon_sub_requests          = queue:new(),
+                tagged_sub_requests        = dict:new(),
+                closing                    = false,
                 writer,
-                return_handler_pid  = none,
-                confirm_handler_pid = none,
-                next_pub_seqno      = 0,
-                flow_active         = true,
-                flow_handler_pid    = none,
-                consumers           = dict:new(),
-                default_consumer    = none,
+                return_handler_pid         = none,
+                confirm_handler_pid        = none,
+                next_pub_seqno             = 0,
+                flow_active                = true,
+                flow_handler_pid           = none,
+                consumers                  = dict:new(),
+                default_consumer           = none,
+                consumer_death_handler_pid = none,
                 start_writer_fun
                }).
 
@@ -195,6 +195,18 @@ register_return_handler(Channel, ReturnHandler) ->
 register_confirm_handler(Channel, ConfirmHandler) ->
     gen_server:cast(Channel, {register_confirm_handler, ConfirmHandler} ).
 
+%% @spec (Channel, ConsumerDeathHandler) -> ok
+%% where
+%%      Channel = pid()
+%%      ConsumerDeathHandler = pid()
+
+%% @doc This registers a handler to deal with consumer death
+%% notification messages. The registered process will receive
+%% #basic.cancel{} commands.
+register_consumer_death_handler(Channel, ConsumerDeathHandler) ->
+    gen_server:cast(Channel, {register_consumer_death_handler,
+                              ConsumerDeathHandler} ).
+
 %% @spec (Channel, FlowHandler) -> ok
 %% where
 %%      Channel = pid()
@@ -311,6 +323,11 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
 handle_cast({register_default_consumer, Consumer}, State) ->
     erlang:monitor(process, Consumer),
     {noreply, State#state{default_consumer = Consumer}};
+%% Registers a handler to process consumer deaths
+%% @private
+handle_cast({register_consumer_death_handler, ConsumerDeathHandler}, State) ->
+    erlang:monitor(process, ConsumerDeathHandler),
+    {noreply, State#state{consumer_death_handler_pid = ConsumerDeathHandler}};
 %% Received from channels manager
 %% @private
 handle_cast({method, Method, Content}, State) ->
@@ -605,6 +622,15 @@ handle_method_from_server1(
                           [self(), BasicReturn, AmqpMsg]);
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
+    {noreply, State};
+handle_method_from_server1(#'basic.cancel'{nowait = true} = Death, none,
+                           #state{consumer_death_handler_pid = none} = State) ->
+    ?LOG_WARN("Channel (~p): received ~p but there is no "
+              "consumer death handler registered~n", [self(), Death]),
+    {noreply, State};
+handle_method_from_server1(#'basic.cancel'{nowait = true} = Death, none,
+                           #state{consumer_death_handler_pid = Handler} = State) ->
+    Handler ! Death,
     {noreply, State};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = none} = State) ->

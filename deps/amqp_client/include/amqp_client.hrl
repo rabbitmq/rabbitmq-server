@@ -43,6 +43,7 @@
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
 -define(LOG_WARN(Format, Args), error_logger:warning_msg(Format, Args)).
--define(CLIENT_CAPABILITIES, [{<<"publisher_confirms">>,         bool, true},
-                              {<<"exchange_exchange_bindings">>, bool, true},
-                              {<<"basic.nack">>,                 bool, true}]).
+-define(CLIENT_CAPABILITIES, [{<<"publisher_confirms">>,          bool, true},
+                              {<<"exchange_exchange_bindings">>,  bool, true},
+                              {<<"basic.nack">>,                  bool, true},
+                              {<<"consumer_death_notification">>, bool, true}]).
