@@ -45,6 +45,17 @@ HELP = {
         <dt><acronym title="Transactional">T</acronym> &ndash; transactional</dt> \
         <dd>Channel is transactional.</dd> \
       <dl>',
+    'file-descriptors':
+      'File descriptor count and limit, as reported by the operating system. \
+      The count includes network sockets and file handlers.<br/> \
+      To optimize disk access RabbitMQ utilizes free descriptors, so \
+      don\'t be worried if the count will occasionally be high. On the \
+      other hand, if the file descriptors limit is exhausted bad things can \
+      happen.',
+    'socket-descriptors':
+      'The network sockets count and limit managed by RabbitMQ.<br/> \
+      When the limit is exhausted RabbitMQ will stop accepting new \
+      network connections.',
 
     'foo': 'foo' // No comma.
 };
