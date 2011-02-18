@@ -8,6 +8,7 @@ Test / fix with alternate PLAIN creds
 Deal with downstream channel going down
 Think about when we forward - connected graph of brokers/exchanges.
    Cycle detection is not enough.
+   Introduce outgoing federation exchange at the upstream end to do filtering.
 
 Useful
 ------
