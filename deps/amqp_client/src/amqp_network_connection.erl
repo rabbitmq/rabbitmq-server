@@ -230,7 +230,8 @@ client_properties(UserProperties) ->
                 <<"Copyright (c) 2007-2011 VMware, Inc.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
-                  "See http://www.rabbitmq.com/">>}],
+                  "See http://www.rabbitmq.com/">>},
+               {<<"capabilities">>, table, ?CLIENT_CAPABILITIES}],
     lists:foldl(fun({K, _, _} = Tuple, Acc) ->
                     lists:keystore(K, 1, Acc, Tuple)
                 end, Default, UserProperties).
