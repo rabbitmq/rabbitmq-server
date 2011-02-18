@@ -33,7 +33,7 @@
 
 -include("rabbit_msg_store.hrl").
 
--define(SYNC_INTERVAL,  5).   %% milliseconds
+-define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 

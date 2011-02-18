@@ -58,6 +58,15 @@
 %% hibernate the process immediately, as it would if backoff wasn't
 %% being used. Instead it'll wait for the current timeout as described
 %% above.
+%%
+%% 7) The callback module can return from any of the handle_*
+%% functions, a {become, Module, State} triple, or a {become, Module,
+%% State, Timeout} quadruple. This allows the gen_server to
+%% dynamically change the callback module. The State is the new state
+%% which will be passed into any of the callback functions in the new
+%% module. Note there is no form also encompassing a reply, thus if
+%% you wish to reply in handle_call/3 and change the callback module,
+%% you need to use gen_server2:reply/2 to issue the reply manually.
 
 %% All modifications are (C) 2009-2011 VMware, Inc.
 
@@ -880,6 +889,22 @@ handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
             loop(GS2State #gs2_state { state = NState,
                                        time  = Time1,
                                        debug = Debug1 });
+        {become, Mod, NState} ->
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
+                                  {become, Mod, NState}),
+            loop(find_prioritisers(
+                   GS2State #gs2_state { mod   = Mod,
+                                         state = NState,
+                                         time  = infinity,
+                                         debug = Debug1 }));
+        {become, Mod, NState, Time1} ->
+            Debug1 = common_debug(Debug, fun print_event/3, Name,
+                                  {become, Mod, NState}),
+            loop(find_prioritisers(
+                   GS2State #gs2_state { mod   = Mod,
+                                         state = NState,
+                                         time  = Time1,
+                                         debug = Debug1 }));
         _ ->
             handle_common_termination(Reply, Msg, GS2State)
     end.
