@@ -1,12 +1,13 @@
 Necessary
 ---------
 
-Cycle detection / log route
+Cycle detection
 Exponential(?) backoff
 Close remaining channels on shutdown
 Test / fix with alternate PLAIN creds
-Be smarter about bind(?)
 Deal with downstream channel going down
+Think about when we forward - connected graph of brokers/exchanges.
+   Cycle detection is not enough.
 
 Useful
 ------
@@ -15,6 +16,7 @@ Deal with upstream exchange going away / coming back?
 Remove that ETS table
 Allow use of EXTERNAL etc
 Allow args passthrough to support e.g. headers type.
+Be smarter about bind (for efficiency)
 
 Later
 -----

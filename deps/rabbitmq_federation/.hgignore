@@ -1,6 +1,7 @@
 syntax: regexp
 
 ^build/
+^cover/
 ^dist/
 .*\.beam
 ^ebin/rabbit_federation.app

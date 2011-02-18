@@ -5,7 +5,7 @@ DEPS=rabbitmq-server rabbitmq-erlang-client
 TEST_APPS=amqp_client rabbit_federation
 TEST_ARGS=-rabbit_federation exchanges '[[{exchange, "downstream-conf"}, {vhost, "/"}, {upstreams, ["amqp://localhost/%2f/upstream-conf"]}, {type, "topic"}]]'
 START_RABBIT_IN_TESTS=true
-TEST_COMMANDS=eunit:test(rabbit_federation_test,[verbose])
+TEST_COMMANDS=eunit:test(rabbit_federation_unit_test,[verbose]) eunit:test(rabbit_federation_test,[verbose])
 
 OTHER_NODE=bunny
 OTHER_PORT=5673

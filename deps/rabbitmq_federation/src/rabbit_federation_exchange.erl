@@ -40,10 +40,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([add_routing_to_headers/2]).
+
 %%----------------------------------------------------------------------------
 
 -define(ETS_NAME, ?MODULE).
 -define(TX, false).
+-define(ROUTING_HEADER, <<"x-forwarding">>).
 -record(state, { downstream_connection, downstream_channel,
                  downstream_exchange, next_publish_id, upstreams }).
 -record(upstream, { connection, channel, queue, properties, uri, unacked,
@@ -181,13 +184,19 @@ handle_info({#'basic.deliver'{consumer_tag = CTag,
                               %%redelivered = Redelivered,
                               %%exchange = Exchange,
                               routing_key = Key},
-             Msg}, State = #state{downstream_exchange = #resource {name = X},
-                                  downstream_channel  = DCh,
-                                  upstreams           = Upstreams0,
-                                  next_publish_id     = Seq}) ->
-    Upstreams = record_delivery_tag(DTag, CTag, Seq, Upstreams0),
+             Msg = #amqp_msg{props = Props = #'P_basic'{headers = Headers0}}},
+            State = #state{downstream_exchange = #resource {name = X},
+                           downstream_channel  = DCh,
+                           upstreams           = Upstreams0,
+                           next_publish_id     = Seq}) ->
+    {#upstream{uri = URI}, Upstreams} =
+        record_delivery_tag(DTag, CTag, Seq, Upstreams0),
+    %% TODO add user information here?
+    Headers = add_routing_to_headers(
+                Headers0, [{<<"uri">>, longstr, URI}]),
     amqp_channel:cast(DCh, #'basic.publish'{exchange = X,
-                                            routing_key = Key}, Msg),
+                                            routing_key = Key},
+                      Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}),
     {noreply, State#state{ upstreams       = Upstreams,
                            next_publish_id = Seq + 1}};
 
@@ -324,14 +333,16 @@ delete_upstream(#upstream{ connection = Conn, queue = Q }) ->
 %%----------------------------------------------------------------------------
 
 record_delivery_tag(DTag, CTag, Seq, Upstreams) ->
-    [record_delivery_tag0(DTag, CTag, Seq, U) || U <- Upstreams].
+    Us = [record_delivery_tag0(DTag, CTag, Seq, U) || U <- Upstreams],
+    [Changed] = [U || {changed, U} <- Us],
+    {Changed, [U || {_, U} <- Us]}.
 
 record_delivery_tag0(DTag, CTag, Seq,
                      Upstream = #upstream { consumer_tag = CTag,
                                             unacked      = Unacked }) ->
-    Upstream#upstream { unacked = gb_trees:insert(Seq, DTag, Unacked) };
+    {changed, Upstream#upstream{unacked = gb_trees:insert(Seq, DTag, Unacked)}};
 record_delivery_tag0(_DTag, _CTag, _Seq, Upstream) ->
-    Upstream.
+    {unchanged, Upstream}.
 
 retrieve_delivery_tags(Seq, Multiple, Upstreams) ->
     [retrieve_delivery_tag(Seq, Multiple, U) || U <- Upstreams].
@@ -432,3 +443,27 @@ ensure_closed(Ch) ->
     try amqp_channel:close(Ch)
     catch exit:{noproc, _} -> ok
     end.
+
+%%----------------------------------------------------------------------------
+
+add_routing_to_headers(undefined, Info) ->
+    add_routing_to_headers([], Info);
+add_routing_to_headers(Headers, Info) ->
+    Prior = case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
+                undefined          -> [];
+                {array, Existing}  -> Existing
+            end,
+    set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info}|Prior]).
+
+%% TODO move this to rabbit_misc?
+set_table_value(Table, Key, Type, Value) ->
+    Stripped =
+      case rabbit_misc:table_lookup(Table, Key) of
+          {Type, _}  -> {_, Rest} = lists:partition(fun ({K, _, _}) ->
+                                                            K == Key
+                                                    end, Table),
+                        Rest;
+          {Type2, _} -> exit({type_mismatch_updating_table, Type, Type2});
+          undefined  -> Table
+      end,
+    rabbit_misc:sort_field_table([{Key, Type, Value}|Stripped]).
