@@ -231,18 +231,22 @@ expect(Ch, Q, Payloads) ->
     receive
         #'basic.consume_ok'{ consumer_tag = CTag } -> ok
     end,
-    [expect(Payload) || Payload <- Payloads],
+    expect(Payloads),
     amqp_channel:call(Ch, #'basic.cancel'{ consumer_tag = CTag }).
 
-expect(Expected) ->
+expect([]) ->
+    ok;
+expect(Payloads) ->
     receive
-        {#'basic.deliver'{}, #amqp_msg { payload = Expected }} ->
-            ok;
-        {#'basic.deliver'{}, #amqp_msg { payload = Actual }} ->
-            throw({expected, Expected, actual, Actual})
+        {#'basic.deliver'{}, #amqp_msg { payload = Recved }} ->
+            case lists:member(Recved, Payloads) of
+                true  -> expect(Payloads -- [Recved]);
+                false -> throw({expected, Payloads, actual, Recved})
+            end
     after 5000 ->
-            throw({timeout_waiting_for, Expected})
+            throw({timeout_waiting_for, Payloads})
     end.
+
 
 publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),
