@@ -154,7 +154,7 @@ close(Channel, Code, Text) ->
 %% @doc When in confirm mode, returns the sequence number of the next
 %% message to be published.
 next_publish_seqno(Channel) ->
-    gen_server:call(Channel, next_publish_seqno).
+    gen_server:call(Channel, next_publish_seqno, infinity).
 
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
