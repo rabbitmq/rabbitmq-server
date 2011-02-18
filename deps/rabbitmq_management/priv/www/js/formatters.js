@@ -1,10 +1,10 @@
 UNKNOWN_REPR = '<span class="unknown">?</span>';
 FD_THRESHOLDS=[[0.95, 'red'],
-	       [0.8, 'yellow']];
+               [0.8, 'yellow']];
 SOCKETS_THRESHOLDS=[[1.0, 'red'],
-		    [0.8, 'yellow']];
+                    [0.8, 'yellow']];
 PROCESS_THRESHOLDS=[[0.75, 'red'],
-		    [0.5, 'yellow']];
+                    [0.5, 'yellow']];
 MEMORY_THRESHOLDS=[[1.0, 'red']];
 
 function fmt_string(str) {
@@ -82,12 +82,12 @@ function fmt_color(r, thresholds) {
     if (r == undefined) return '';
 
     for (var i in thresholds) {
-	var threshold = thresholds[i][0];
-	var color = thresholds[i][1];
+        var threshold = thresholds[i][0];
+        var color = thresholds[i][1];
 
-	if (r >= threshold) {
-	    return color;
-	}
+        if (r >= threshold) {
+            return color;
+        }
     }
     return 'green';
 }
