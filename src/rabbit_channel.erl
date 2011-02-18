@@ -108,7 +108,7 @@ do(Pid, Method, Content) ->
     gen_server2:cast(Pid, {method, Method, Content}).
 
 flush(Pid) ->
-    gen_server2:call(Pid, flush).
+    gen_server2:call(Pid, flush, infinity).
 
 shutdown(Pid) ->
     gen_server2:cast(Pid, terminate).
