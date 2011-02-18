@@ -260,9 +260,9 @@
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(info/0 :: () -> rabbit_types:infos()).
--spec(info/1 :: (rabbit_types:info_keys()) -> rabbit_types:infos()).
+-spec(info_keys/0 :: () -> [atom()]).
+-spec(info/0 :: () -> [{atom(), any()}]).
+-spec(info/1 :: ([atom()]) -> [{atom(), any()}]).
 -spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
 
 -endif.
