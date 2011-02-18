@@ -23,9 +23,8 @@ simple_test() ->
     with_ch(
       fun (Ch) ->
               declare_exchange(Ch, <<"upstream">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream">>,
-                                   [<<"amqp://localhost/%2f/upstream">>],
-                                   <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/upstream">>]),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
               delete_exchange(Ch, <<"downstream">>),
@@ -46,10 +45,9 @@ multiple_upstreams_test() ->
       fun (Ch) ->
               declare_exchange(Ch, <<"upstream1">>, <<"direct">>),
               declare_exchange(Ch, <<"upstream2">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream">>,
+              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
                                    [<<"amqp://localhost/%2f/upstream1">>,
-                                    <<"amqp://localhost/%2f/upstream2">>],
-                                   <<"direct">>),
+                                    <<"amqp://localhost/%2f/upstream2">>]),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream1">>, <<"key">>, Q, <<"HELLO1">>),
               publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>),
@@ -63,13 +61,11 @@ multiple_downstreams_test() ->
       fun (Ch) ->
               declare_exchange(Ch, <<"upstream1">>, <<"direct">>),
               declare_exchange(Ch, <<"upstream2">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream1">>,
-                                   [<<"amqp://localhost/%2f/upstream1">>],
-                                   <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream12">>,
+              declare_fed_exchange(Ch, <<"downstream1">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/upstream1">>]),
+              declare_fed_exchange(Ch, <<"downstream12">>, <<"direct">>,
                                    [<<"amqp://localhost/%2f/upstream1">>,
-                                    <<"amqp://localhost/%2f/upstream2">>],
-                                   <<"direct">>),
+                                    <<"amqp://localhost/%2f/upstream2">>]),
               Q1 = bind_queue(Ch, <<"downstream1">>, <<"key">>),
               Q12 = bind_queue(Ch, <<"downstream12">>, <<"key">>),
               publish(Ch, <<"upstream1">>, <<"key">>, <<"HELLO1">>),
@@ -86,9 +82,8 @@ e2e_test() ->
     with_ch(
       fun (Ch) ->
               declare_exchange(Ch, <<"upstream">>, <<"fanout">>),
-              declare_fed_exchange(Ch, <<"downstream1">>,
-                                   [<<"amqp://localhost/%2f/upstream">>],
-                                   <<"fanout">>),
+              declare_fed_exchange(Ch, <<"downstream1">>, <<"fanout">>,
+                                   [<<"amqp://localhost/%2f/upstream">>]),
               declare_exchange(Ch, <<"downstream2">>, <<"direct">>),
               bind_exchange(Ch, <<"downstream2">>, <<"downstream1">>, <<"">>),
               Q = bind_queue(Ch, <<"downstream2">>, <<"key">>),
@@ -122,16 +117,14 @@ validation_test() ->
 delete_upstream_queue_on_delete_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream">>, <<"fanout">>),
-              declare_fed_exchange(Ch, <<"downstream">>,
-                                   [<<"amqp://localhost/%2f/upstream">>],
-                                   <<"fanout">>),
+              declare_exchange(Ch, <<"upstream">>, <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/upstream">>]),
               bind_queue(Ch, <<"downstream">>, <<"key">>),
               delete_exchange(Ch, <<"downstream">>),
               publish(Ch, <<"upstream">>, <<"key">>, <<"lost">>),
-              declare_fed_exchange(Ch, <<"downstream">>,
-                                   [<<"amqp://localhost/%2f/upstream">>],
-                                   <<"fanout">>),
+              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/upstream">>]),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"delivered">>),
               delete_exchange(Ch, <<"downstream">>),
@@ -148,9 +141,8 @@ restart_upstream() ->
     with_2ch(
       fun (Downstream, Upstream) ->
               declare_exchange(Upstream, <<"upstream">>, <<"direct">>),
-              declare_fed_exchange(Downstream, <<"downstream">>,
-                                   [<<"amqp://localhost:5673/%2f/upstream">>],
-                                   <<"direct">>),
+              declare_fed_exchange(Downstream, <<"downstream">>, <<"direct">>,
+                                   [<<"amqp://localhost:5673/%2f/upstream">>]),
               Q = bind_queue(Downstream, <<"downstream">>, <<"key">>),
               stop_other_node(),
               Upstream1 = start_other_node(),
@@ -190,14 +182,11 @@ stop_other_node() ->
     ?assertCmd("make stop-other-node"),
     timer:sleep(1000).
 
-declare_fed_exchange(Ch, X, Upstreams, Type) ->
-    declare_fed_exchange(Ch, X, Upstreams, Type, false).
-
-declare_fed_exchange(Ch, X, Upstreams, Type, D) ->
+declare_fed_exchange(Ch, X, Type, Upstreams) ->
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange  = X,
-        durable   = D,
+        durable   = false,
         type      = <<"x-federation">>,
         arguments = [{<<"upstreams">>, array, [{longstr, U} || U <- Upstreams]},
                      {<<"type">>,      longstr, Type}]
