@@ -64,7 +64,7 @@ class TestParsing(unittest.TestCase):
         while rl > 0:
             buf = self.cd.recv(rl)
             bl = len(buf)
-            if bl==0: return None
+            if bl==0: break
             recvhead.append( buf )
             rl -= bl
         return ''.join(recvhead)
@@ -199,18 +199,20 @@ class TestParsing(unittest.TestCase):
 
     @connect(['cd'])
     def test_message_with_embedded_nulls(self):
-        ''' Test sending/receiving (1MB) message with embedded nulls. '''
+        ''' Test sending/receiving message with embedded nulls. '''
         subscribe=( 'SUBSCRIBE\n'
                     'id:xxx\n'
                     'destination:/exchange/amq.topic/test_embed_nulls_message\n'
                     '\n\0')
         self.cd.sendall(subscribe)
 
-        message = 'xx'
+        boilerplate = '0123456789'*1024 # large enough boilerplate
+        message = '01'
         oldi = 2
-        for i in [5, 90, 1024*256-1, 1024*384-1, 1024*512, 1024*1024]:
-            message = message + '\0' + 'x'*(i-oldi-1)
+        for i in [5, 90, 256-1, 384-1, 512, 1024, 1024+256+64+32]:
+            message = message + '\0' + boilerplate[oldi+1:i]
             oldi = i
+        msg_len = len(message)
 
         self.cd.sendall('SEND\n'
                         'destination:/exchange/amq.topic/test_embed_nulls_message\n'
@@ -224,22 +226,20 @@ class TestParsing(unittest.TestCase):
             'subscription:(.*)\n'           # 14 + subscription
             'destination:/exchange/amq.topic/test_embed_nulls_message\n'    # 57
             'message-id:(.*)\n'             # 12 + message-id
-            'content-length:%i\n'           # 16 + 7==len('1048576')
+            'content-length:%i\n'           # 16 + 4==len('1024')
             '\n'                            # 1
-            '(.*)'                          # prefix of body + null (potentially)
+            '(.*)$'                         # prefix of body + null (potentially)
              % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (7) + 1 + (1)
+        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
 
         headbuf = self.recv_atleast(headlen)
-        self.assertFalse(headbuf == None)
+        self.assertFalse(len(headbuf) == 0)
 
         (sub, msg_id, bodyprefix) = self.match(headresp, headbuf)
-
-        bodyresp=('%s' '\0' % message )
+        bodyresp=( '%s\0' % message )
         bodylen = len(bodyresp);
 
         bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
 
-        print "BODYBUF : <", bodybuf, ">"
-        print "BODYRESP: <", bodyresp, ">"
-        self.assertEqual(bodybuf, bodyresp, "1Mb body with nulls not returned")
+        self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
+        self.assertEqual(bodybuf, bodyresp, "body with nulls not correctly returned")
