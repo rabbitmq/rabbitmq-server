@@ -1076,7 +1076,7 @@ monitor_consumer(ConsumerTag, State = #ch{consumer_mapping = ConsumerMapping,
                          dict:store(ConsumerTag, {Q, MRef}, ConsumerMapping),
                      consumer_monitors =
                          dict:store(MRef, ConsumerTag, ConsumerMonitors)};
-        _X ->
+        _ ->
             %% either already received the cancel or incapable client
             State
     end.
