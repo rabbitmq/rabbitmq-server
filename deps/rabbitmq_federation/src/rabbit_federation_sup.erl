@@ -18,7 +18,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1]).
+-export([start_link/0, start_child/1, delete_child/1]).
 
 -export([init/1]).
 
@@ -33,6 +33,9 @@ start_child(Args) ->
                             {rabbit_federation_exchange, start_link, [Args]},
                             transient, brutal_kill, worker,
                             [rabbit_federation_exchange]}).
+
+delete_child(Args) ->
+    supervisor:delete_child(?SUPERVISOR, id(Args)).
 
 %%----------------------------------------------------------------------------
 

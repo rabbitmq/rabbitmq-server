@@ -119,6 +119,25 @@ validation_test() ->
 
     assert_good([Upstreams, Type]).
 
+delete_upstream_queue_on_delete_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream">>, <<"fanout">>),
+              declare_fed_exchange(Ch, <<"downstream">>,
+                                   [<<"amqp://localhost/%2f/upstream">>],
+                                   <<"fanout">>),
+              bind_queue(Ch, <<"downstream">>, <<"key">>),
+              delete_exchange(Ch, <<"downstream">>),
+              publish(Ch, <<"upstream">>, <<"key">>, <<"lost">>),
+              declare_fed_exchange(Ch, <<"downstream">>,
+                                   [<<"amqp://localhost/%2f/upstream">>],
+                                   <<"fanout">>),
+              Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"delivered">>),
+              delete_exchange(Ch, <<"downstream">>),
+              delete_exchange(Ch, <<"upstream">>)
+      end).
+
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
 

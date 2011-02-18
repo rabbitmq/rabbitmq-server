@@ -75,12 +75,9 @@ validate(X = #exchange{arguments = Args}) ->
     end,
     with_module(X, fun (M) -> M:validate(X) end).
 
-create(?TX, X = #exchange{ name = Downstream, durable = Durable,
-                           arguments = Args }) ->
-    {array, UpstreamURIs0} =
-        rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],
-    rabbit_federation_sup:start_child({Downstream, Durable, UpstreamURIs}),
+create(?TX, X) ->
+    {ok, _} =
+        rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:create(?TX, X) end);
 create(Tx, X) ->
     with_module(X, fun (M) -> M:create(Tx, X) end).
@@ -89,8 +86,8 @@ recover(X, Bs) ->
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
 delete(?TX, X, Bs) ->
-    %% TODO delete upstream queues
     call(X, stop),
+    ok = rabbit_federation_sup:delete_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
 delete(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
@@ -161,7 +158,8 @@ handle_call({remove_bindings, Bs }, _From,
         U                                <- Upstreams],
     {reply, ok, State};
 
-handle_call(stop, _From, State) ->
+handle_call(stop, _From, State = #state{ upstreams = Upstreams }) ->
+    [delete_upstream(U) || U <- Upstreams],
     {stop, normal, ok, State};
 
 handle_call(Msg, _From, State) ->
@@ -312,6 +310,10 @@ unbind_upstream(#upstream{ connection = Conn, queue = Q, properties = Props },
                                                     arguments   = Args})
       end).
 
+delete_upstream(#upstream{ connection = Conn, queue = Q }) ->
+    with_disposable_channel(
+      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end).
+
 %%----------------------------------------------------------------------------
 
 record_delivery_tag(DTag, CTag, Seq, Upstreams) ->
@@ -351,6 +353,13 @@ remove_delivery_tags(Seq, true, Unacked) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+exchange_to_sup_args(#exchange{ name = Downstream, durable = Durable,
+                                arguments = Args }) ->
+    {array, UpstreamURIs0} =
+        rabbit_misc:table_lookup(Args, <<"upstreams">>),
+    UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],
+    {Downstream, Durable, UpstreamURIs}.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
