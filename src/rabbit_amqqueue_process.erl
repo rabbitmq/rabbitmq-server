@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT,          100).
--define(SYNC_INTERVAL,                 5). %% milliseconds
+-define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
 -define(BASE_MESSAGE_PROPERTIES,
@@ -122,6 +122,8 @@ terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
 terminate(_Reason,       State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
+                               rabbit_event:notify(
+                                 queue_deleted, [{pid, self()}]),
                                BQS1 = BQ:delete_and_terminate(BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
@@ -186,7 +188,6 @@ terminate_shutdown(Fun, State) ->
                               end, BQS, all_ch_record()),
                      [emit_consumer_deleted(Ch, CTag)
                       || {Ch, CTag, _} <- consumers(State1)],
-                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
@@ -657,13 +658,13 @@ message_properties(#q{ttl=TTL}) ->
     #message_properties{expiry = calculate_msg_expiry(TTL)}.
 
 calculate_msg_expiry(undefined) -> undefined;
-calculate_msg_expiry(TTL)       -> now_millis() + (TTL * 1000).
+calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
 
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue = BQ}) ->
-    Now = now_millis(),
+    Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) ->
                      Now > Expiry
@@ -684,7 +685,7 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
-now_millis() -> timer:now_diff(now(), {0,0,0}).
+now_micros() -> timer:now_diff(now(), {0,0,0}).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
