@@ -33,8 +33,8 @@
 
 -define(REFRESH_RATIO, 5000).
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
-	       sockets_used, sockets_total, mem_used, mem_limit,
-	       proc_used, proc_total, statistics_level,
+               sockets_used, sockets_total, mem_used, mem_limit,
+               proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications]).
 
