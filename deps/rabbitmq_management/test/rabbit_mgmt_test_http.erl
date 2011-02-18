@@ -312,7 +312,7 @@ bindings_post_test() ->
     http_post("/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/myexchange/q/myqueue", [{a, "b"}], ?BAD_REQUEST),
     Headers = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
-    "/api/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar" =
+    "../../../../%2F/e/myexchange/q/myqueue/routing_foo_bar" =
         pget("location", Headers),
     [{source,<<"myexchange">>},
      {vhost,<<"/">>},
@@ -332,7 +332,7 @@ bindings_e2e_test() ->
     http_post("/bindings/%2f/e/amq.direct/e/badexchange", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/badexchange/e/amq.fanout", BArgs, ?NOT_FOUND),
     Headers = http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
-    "/api/bindings/%2F/e/amq.direct/e/amq.fanout/routing" =
+    "../../../../%2F/e/amq.direct/e/amq.fanout/routing" =
         pget("location", Headers),
     [{source,<<"amq.direct">>},
      {vhost,<<"/">>},
@@ -616,6 +616,19 @@ arguments_test() ->
                           "_foo_bar_x-match_all", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+arguments_table_test() ->
+    Args = [{'upstreams', [<<"amqp://localhost/%2f/upstream1">>,
+                           <<"amqp://localhost/%2f/upstream2">>]}],
+    XArgs = [{type, <<"headers">>},
+             {arguments, Args}],
+    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    AllConfig = http_get("/all-configuration", ?OK),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     ok.
 
 queue_purge_test() ->

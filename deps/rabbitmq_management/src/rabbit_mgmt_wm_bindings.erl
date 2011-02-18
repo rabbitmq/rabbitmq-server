@@ -82,12 +82,14 @@ accept_content(ReqData, {_Mode, Context}) ->
             rabbit_mgmt_util:with_decode(
               [routing_key, arguments], ReqData, Context,
               fun([Key, Args]) ->
-                      Loc = binary_to_list(
-                              rabbit_mgmt_format:url(
-                                "/api/bindings/~s/e/~s/~s/~s/~s",
-                                [VHost, Source, DestType, Dest,
-                                 rabbit_mgmt_format:pack_binding_props(
-                                   Key, rabbit_mgmt_util:args(Args))])),
+                      Loc = rabbit_mgmt_util:relativise(
+                              wrq:path(ReqData),
+                              binary_to_list(
+                                rabbit_mgmt_format:url(
+                                  "/api/bindings/~s/e/~s/~s/~s/~s",
+                                  [VHost, Source, DestType, Dest,
+                                   rabbit_mgmt_format:pack_binding_props(
+                                     Key, rabbit_mgmt_util:args(Args))]))),
                       ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
                       {true, ReqData2, Context2}
               end)
