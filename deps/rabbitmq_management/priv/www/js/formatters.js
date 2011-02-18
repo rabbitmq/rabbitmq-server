@@ -111,9 +111,9 @@ function fmt_rate0(obj, name, fmt, show_total) {
 
 function is_col_empty(obj, name) {
     if (obj == undefined
-	|| obj[name] == undefined
-	|| obj[name + '_details'] == undefined
-	|| obj[name + '_details'].rate < 0.00001) return true;
+        || obj[name] == undefined
+        || obj[name + '_details'] == undefined
+        || obj[name + '_details'].rate < 0.00001) return true;
     return false;
 }
 
