@@ -100,7 +100,6 @@ add_binding(Tx, X, B) ->
     with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
 
 remove_bindings(?TX, X, Bs) ->
-    %% TODO remove bindings only if needed.
     call(X, {remove_bindings, Bs}),
     with_module(X, fun (M) -> M:remove_bindings(?TX, X, Bs) end);
 remove_bindings(Tx, X, Bs) ->
@@ -153,9 +152,7 @@ handle_call({add_binding, #binding{key = Key, args = Args} }, _From,
 
 handle_call({remove_bindings, Bs }, _From,
             State = #state{ upstreams = Upstreams }) ->
-    [unbind_upstream(U, Key, Args) ||
-        #binding{key = Key, args = Args} <- Bs,
-        U                                <- Upstreams],
+    [maybe_unbind_upstreams(Upstreams, B) || B <- Bs],
     {reply, ok, State};
 
 handle_call(stop, _From, State = #state{ upstreams = Upstreams }) ->
@@ -295,6 +292,16 @@ bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
                                         exchange    = X,
                                         routing_key = Key,
                                         arguments   = Args}).
+
+maybe_unbind_upstreams(Upstreams,
+                       #binding{ source = Source, key = Key, args = Args}) ->
+    case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
+                           Key == Key2 andalso Args == Args2
+                   end,
+                   rabbit_binding:list_for_source(Source)) of
+        true  -> ok;
+        false -> [unbind_upstream(U, Key, Args) || U <- Upstreams]
+    end.
 
 unbind_upstream(#upstream{ connection = Conn, queue = Q, properties = Props },
                 Key, Args) ->

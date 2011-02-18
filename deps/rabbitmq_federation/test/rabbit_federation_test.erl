@@ -131,6 +131,20 @@ delete_upstream_queue_on_delete_test() ->
               delete_exchange(Ch, <<"upstream">>)
       end).
 
+smart_unbind_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_exchange(Ch, <<"upstream">>, <<"direct">>),
+              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/upstream">>]),
+              Q1 = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              Q2 = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              delete_queue(Ch, Q2),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
+              delete_exchange(Ch, <<"downstream">>),
+              delete_exchange(Ch, <<"upstream">>)
+      end).
+
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
 
@@ -220,6 +234,9 @@ bind_queue(Ch, X, Key) ->
 delete_exchange(Ch, X) ->
     amqp_channel:call(Ch, #'exchange.delete'{ exchange = X }).
 
+delete_queue(Ch, Q) ->
+    amqp_channel:call(Ch, #'queue.delete'{ queue = Q }).
+
 publish(Ch, X, Key, Payload) ->
     amqp_channel:call(Ch, #'basic.publish'{ exchange    = X,
                                             routing_key = Key },
@@ -243,7 +260,7 @@ expect(Payloads) ->
                 true  -> expect(Payloads -- [Recved]);
                 false -> throw({expected, Payloads, actual, Recved})
             end
-    after 5000 ->
+    after 500 ->
             throw({timeout_waiting_for, Payloads})
     end.
 

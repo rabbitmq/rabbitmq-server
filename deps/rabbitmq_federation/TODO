@@ -5,7 +5,7 @@ Cycle detection / log route
 Exponential(?) backoff
 Close remaining channels on shutdown
 Test / fix with alternate PLAIN creds
-Be smarter about bind / unbind
+Be smarter about bind(?)
 Deal with downstream channel going down
 
 Useful
