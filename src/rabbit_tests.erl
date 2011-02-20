@@ -1233,7 +1233,7 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked, infinity) end,
     BadSender = fun (_Pid) -> exit(exception) end,
 
     Responder = make_responder(fun ({'$gen_call', From, invoked}) ->

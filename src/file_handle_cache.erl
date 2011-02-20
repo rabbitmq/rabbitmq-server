@@ -146,7 +146,8 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
          flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
--export([obtain/0, transfer/1, set_limit/1, get_limit/0]).
+-export([obtain/0, transfer/1, set_limit/1, get_limit/0, info_keys/0, info/0,
+         info/1]).
 -export([ulimit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -259,9 +260,15 @@
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
+-spec(info_keys/0 :: () -> [atom()]).
+-spec(info/0 :: () -> [{atom(), any()}]).
+-spec(info/1 :: ([atom()]) -> [{atom(), any()}]).
 -spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
 
 -endif.
+
+%%----------------------------------------------------------------------------
+-define(INFO_KEYS, [obtain_count, obtain_limit]).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -493,6 +500,11 @@ set_limit(Limit) ->
 
 get_limit() ->
     gen_server:call(?SERVER, get_limit, infinity).
+
+info_keys() -> ?INFO_KEYS.
+
+info() -> info(?INFO_KEYS).
+info(Items) -> gen_server:call(?SERVER, {info, Items}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -789,6 +801,12 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
             {Error, Handle}
     end.
 
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(obtain_count, #fhc_state{obtain_count = Count}) -> Count;
+i(obtain_limit, #fhc_state{obtain_limit = Limit}) -> Limit;
+i(Item, _) -> throw({bad_argument, Item}).
+
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
@@ -877,7 +895,9 @@ handle_call({set_limit, Limit}, _From, State) ->
                                     limit        = Limit,
                                     obtain_limit = obtain_limit(Limit) }))};
 handle_call(get_limit, _From, State = #fhc_state { limit = Limit }) ->
-    {reply, Limit, State}.
+    {reply, Limit, State};
+handle_call({info, Items}, _From, State) ->
+    {reply, infos(Items, State), State}.
 
 handle_cast({register_callback, Pid, MFA},
             State = #fhc_state { clients = Clients }) ->
