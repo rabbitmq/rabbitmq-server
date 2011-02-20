@@ -185,6 +185,17 @@ table_definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
+     {rabbit_topic_trie_edge,
+      [{record_name, topic_trie_edge},
+       {attributes, record_info(fields, topic_trie_edge)},
+       {type, ordered_set},
+       {match, #topic_trie_edge{trie_edge = trie_edge_match(), _='_'}}]},
+     {rabbit_topic_trie_binding,
+      [{record_name, topic_trie_binding},
+       {attributes, record_info(fields, topic_trie_binding)},
+       {type, ordered_set},
+       {match, #topic_trie_binding{trie_binding = trie_binding_match(),
+                                   _='_'}}]},
      %% Consider the implications to nodes_of_type/1 before altering
      %% the next entry.
      {rabbit_durable_exchange,
@@ -216,6 +227,12 @@ reverse_binding_match() ->
                      _='_'}.
 binding_destination_match() ->
     resource_match('_').
+trie_edge_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
+trie_binding_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
@@ -371,7 +388,8 @@ init_db(ClusterNodes, Force) ->
                     %% True single disc node, attempt upgrade
                     ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok                    -> ensure_schema_ok();
+                        ok                    -> ok = wait_for_tables(),
+                                                 ensure_schema_ok();
                         version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
@@ -535,12 +553,15 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
+wait_for_replicated_tables() ->
+    wait_for_tables(replicated_table_names()).
 
-wait_for_tables() -> wait_for_tables(table_names()).
+wait_for_tables() ->
+    wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    case mnesia:wait_for_tables(TableNames, 30000) of
+    Nonexistent = TableNames -- mnesia:system_info(tables),
+    case mnesia:wait_for_tables(TableNames -- Nonexistent, 30000) of
         ok -> ok;
         {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
