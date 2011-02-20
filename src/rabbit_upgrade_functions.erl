@@ -49,6 +49,7 @@
 %% point.
 
 remove_user_scope() ->
+    rabbit_mnesia:wait_for_tables([rabbit_user_permission]),
     transform(
       rabbit_user_permission,
       fun ({user_permission, UV, {permission, _Scope, Conf, Write, Read}}) ->
@@ -57,6 +58,7 @@ remove_user_scope() ->
       [user_vhost, permission]).
 
 hash_passwords() ->
+    rabbit_mnesia:wait_for_tables([rabbit_user]),
     transform(
       rabbit_user,
       fun ({user, Username, Password, IsAdmin}) ->
@@ -66,6 +68,7 @@ hash_passwords() ->
       [username, password_hash, is_admin]).
 
 add_ip_to_listener() ->
+    rabbit_mnesia:wait_for_tables([rabbit_listener]),
     transform(
       rabbit_listener,
       fun ({listener, Node, Protocol, Host, Port}) ->
@@ -75,6 +78,7 @@ add_ip_to_listener() ->
 
 internal_exchanges() ->
     Tables = [rabbit_exchange, rabbit_durable_exchange],
+    rabbit_mnesia:wait_for_tables(Tables),
     AddInternalFun =
         fun ({exchange, Name, Type, Durable, AutoDelete, Args}) ->
                 {exchange, Name, Type, Durable, AutoDelete, false, Args}
@@ -86,6 +90,7 @@ internal_exchanges() ->
     ok.
 
 user_to_internal_user() ->
+    rabbit_mnesia:wait_for_tables([rabbit_user]),
     transform(
       rabbit_user,
       fun({user, Username, PasswordHash, IsAdmin}) ->
