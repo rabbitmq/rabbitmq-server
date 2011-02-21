@@ -26,7 +26,7 @@ makeloop(Dispatch, LogModule) ->
             %% webmachine_mochiweb:loop/1 uses dispatch/3 here;
             %% however, we don't need to dispatch by the host name.
             case webmachine_dispatcher:dispatch(Path, Dispatch) of
-                {no_dispatch_match, PathElements} ->
+                {no_dispatch_match, _Host, _PathElements} ->
                     {ErrorHTML, ReqState1} =
                         webmachine_error_handler:render_error(
                           404, Req, {none, none, []}),
