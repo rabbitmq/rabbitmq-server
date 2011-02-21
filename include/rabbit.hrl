@@ -54,6 +54,12 @@
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
+-record(topic_trie_edge, {trie_edge, node_id}).
+-record(topic_trie_binding, {trie_binding, value = const}).
+
+-record(trie_edge, {exchange_name, node_id, word}).
+-record(trie_binding, {exchange_name, node_id, destination}).
+
 -record(listener, {node, protocol, host, ip_address, port}).
 
 -record(basic_message, {exchange_name, routing_key, content, guid,
