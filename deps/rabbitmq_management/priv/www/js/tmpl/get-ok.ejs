@@ -1,0 +1,32 @@
+<p>
+<% if (msg.payload_encoding == 'string') { %>
+The message contents appear to be <b>valid UTF-8</b>, therefore it is shown as text.
+<% } else { %>
+The message contents do not appear to be valid UTF-8, therefore it is shown as <b>base64</b>.
+<% } %>
+The server reported <b><%= msg.message_count %></b> messages remaining.
+</p>
+<table class="facts">
+  <tr>
+    <th>Exchange</th>
+    <td><%= msg.exchange %></td>
+  </tr>
+  <tr>
+    <th>Routing Key</th>
+    <td><%= msg.routing_key %></td>
+  </tr>
+  <tr>
+    <th>Redelivered</th>
+    <td><%= fmt_boolean(msg.redelivered) %></td>
+  </tr>
+  <tr>
+    <th>Properties</th>
+    <td><%= fmt_table_short(msg.properties) %></td>
+  </tr>
+  <tr>
+    <th>Payload</th>
+    <td>
+      <pre id="msg-payload"><%= fmt_escape_html(msg.payload) %></pre>
+    </td>
+  </tr>
+</table>
