@@ -36,6 +36,7 @@
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 -define(CLI_PREFIX, "cli").
+-define(SETUP_WM_TRACE, true).
 
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
@@ -50,6 +51,10 @@ start(_Type, _StartArgs) ->
     log_startup(),
     Logger = setup_wm_logging(),
     register_contexts(Logger),
+    case ?SETUP_WM_TRACE of
+        true -> setup_wm_trace_app(Logger);
+        _    -> ok
+    end,
     supervisor:start_link({local,?MODULE},?MODULE,[]).
 
 stop(_State) ->
@@ -68,7 +73,8 @@ register_contexts(Logger) ->
               end
       end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
-                                             rabbit_webmachine:makeloop(Dispatch, Logger),
+                                             rabbit_webmachine:makeloop(Dispatch,
+                                                                        Logger),
                                              "Management: HTTP API"),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
@@ -85,6 +91,17 @@ setup_wm_logging() ->
             webmachine_logger
     end.
 
+%% This doesn't *entirely* seem to work. It fails to load a non-existent
+%% image which seems to partly break it, but some stuff is usable.
+setup_wm_trace_app(Logger) ->
+    Loop = rabbit_webmachine:makeloop([{["wmtrace"],
+                                       wmtrace_resource,
+                                       [{trace_dir, "/tmp"}]}], Logger),
+    rabbit_mochiweb:register_static_context(
+      "wmtrace/static", ?MODULE, "deps/webmachine/webmachine/priv/trace", none),
+    rabbit_mochiweb:register_context_handler("wmtrace",
+                                             Loop,
+                                             "Webmachine tracer").
 log_startup() ->
     {ok, Hostname} = inet:gethostname(),
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(get_port()),
