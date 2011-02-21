@@ -40,9 +40,11 @@ description() ->
 
 %% NB: This may return duplicate results in some situations (that's ok)
 route(#exchange{name = X},
-      #delivery{message = #basic_message{routing_key = Key}}) ->
-    Words = split_topic_key(Key),
-    mnesia:async_dirty(fun trie_match/2, [X, Words]).
+      #delivery{message = #basic_message{routing_keys = Routes}}) ->
+    lists:append([begin
+                    Words = split_topic_key(RKey),
+                    mnesia:async_dirty(fun trie_match/2, [X, Words])
+                  end || RKey <- Routes]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.

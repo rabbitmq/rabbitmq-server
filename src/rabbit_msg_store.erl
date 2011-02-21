@@ -26,16 +26,20 @@
 -export([sync/1, set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
 
+-export([transform_dir/3, force_recovery/2]). %% upgrade
+
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
 
 %%----------------------------------------------------------------------------
 
 -include("rabbit_msg_store.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
+-define(TRANSFORM_TMP, "transform_tmp").
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
@@ -160,6 +164,9 @@
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                               deletion_thunk()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
+-spec(force_recovery/2 :: (file:filename(), server()) -> 'ok').
+-spec(transform_dir/3 :: (file:filename(), server(),
+        fun ((binary()) -> ({'ok', msg()} | {error, any()}))) -> 'ok').
 
 -endif.
 
@@ -1523,7 +1530,8 @@ scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
                                      Hdl, filelib:file_size(
-                                            form_filename(Dir, FileName))),
+                                            form_filename(Dir, FileName)),
+                                            fun scan_fun/2, []),
                            %% if something really bad has happened,
                            %% the close could fail, but ignore
                            file_handle_cache:close(Hdl),
@@ -1531,6 +1539,9 @@ scan_file_for_valid_messages(Dir, FileName) ->
         {error, enoent} -> {ok, [], 0};
         {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
+
+scan_fun({Guid, TotalSize, Offset, _Msg}, Acc) ->
+    [{Guid, TotalSize, Offset} | Acc].
 
 %% Takes the list in *ascending* order (i.e. eldest message
 %% first). This is the opposite of what scan_file_for_valid_messages
@@ -1956,3 +1967,57 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {got, FinalOffsetZ},
                         {destination, Destination}]}
     end.
+
+force_recovery(BaseDir, Store) ->
+    Dir = filename:join(BaseDir, atom_to_list(Store)),
+    file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
+    [file:delete(filename:join(Dir, File)) ||
+     File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
+    ok.
+
+for_each_file(D, Fun, Files) ->
+    [Fun(filename:join(D, File)) || File <- Files].
+
+for_each_file(D1, D2, Fun, Files) ->
+    [Fun(filename:join(D1, File), filename:join(D2, File)) || File <- Files].
+
+transform_dir(BaseDir, Store, TransformFun) ->
+    Dir = filename:join(BaseDir, atom_to_list(Store)),
+    TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
+    TransformFile = fun (A, B) -> transform_msg_file(A, B, TransformFun) end,
+    case filelib:is_dir(TmpDir) of
+        true  -> throw({error, transform_failed_previously});
+        false -> OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+                 for_each_file(Dir, TmpDir, TransformFile,     OldFileList),
+                 for_each_file(Dir,         fun file:delete/1, OldFileList),
+                 NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
+                 for_each_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
+                 for_each_file(TmpDir,      fun file:delete/1, NewFileList),
+                 ok = file:del_dir(TmpDir)
+    end.
+
+transform_msg_file(FileOld, FileNew, TransformFun) ->
+    rabbit_misc:ensure_parent_dirs_exist(FileNew),
+    {ok, #file_info{size=Size}} = file:read_file_info(FileOld),
+    {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
+    {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
+                                          [{write_buffer,
+                                            ?HANDLE_CACHE_BUFFER_SIZE}]),
+    {ok, _Acc, _IgnoreSize} =
+        rabbit_msg_file:scan(
+            RefOld, Size,
+            fun({Guid, _Size, _Offset, BinMsg}, ok) ->
+                case TransformFun(BinMsg) of
+                    {ok, MsgNew} ->
+                        {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
+                        ok;
+                    {error, Reason} ->
+                        error_logger:error_msg("Message transform failed: ~p~n",
+                                               [Reason]),
+                        ok
+                end
+            end, ok),
+    file_handle_cache:close(RefOld),
+    file_handle_cache:close(RefNew),
+    ok.
+

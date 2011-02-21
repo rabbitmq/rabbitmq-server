@@ -65,3 +65,4 @@
 -spec(idle_timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
+-spec(multiple_routing_keys/0 :: () -> 'ok').
