@@ -167,7 +167,12 @@ function dispatcher() {
             }
             return false;
         });
-
+    this.post('#/queues/get', function() {
+            var path = fill_path_template('/queues/:vhost/:name/get',
+                                          this.params);
+            get_msg(path);
+            return false;
+        });
     this.post('#/bindings', function() {
             if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
@@ -533,16 +538,30 @@ function toggle_visibility(item) {
     }
 }
 
+function get_msg(path) {
+    with_req('POST', path, function(resp) {
+            var msg = jQuery.parseJSON(resp.responseText);
+            $('#msg-wrapper').slideUp(200);
+            replace_content('msg-wrapper', format('get-ok', {'msg': msg}));
+            $('#msg-wrapper').slideDown(200);
+        }, function(resp) {
+            show_popup('info', 'Queue is empty');
+        });
+}
+
 function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
-        with_req('../api' + reqs[key], function(resp) {
+        with_req('GET', reqs[key], function(resp) {
                 acc[key] = jQuery.parseJSON(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
                     if (k != key) remainder[k] = reqs[k];
                 }
                 with_reqs(remainder, acc, fun);
+            }, function(resp) {
+                var html = format('404', {});
+                replace_content('main', html);
             });
     }
     else {
@@ -583,10 +602,10 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function with_req(path, fun) {
+function with_req(method, path, fun, not_found_fun) {
     var json;
     var req = xmlHttpRequest();
-    req.open( "GET", path, true );
+    req.open(method, '../api' + path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (req.status == 200) {
@@ -603,8 +622,7 @@ function with_req(path, fun) {
                 update_status('error');
             }
             else if (req.status == 404) {
-                var html = format('404', {});
-                replace_content('main', html);
+                not_found_fun(req);
             }
             else {
                 debug("Got response code " + req.status);

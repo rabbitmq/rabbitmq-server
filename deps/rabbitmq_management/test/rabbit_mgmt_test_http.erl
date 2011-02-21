@@ -701,6 +701,32 @@ sorting_test() ->
     http_delete("/vhosts/vh1", ?NO_CONTENT),
     ok.
 
+get_test() ->
+    %% Real world example...
+    Headers = [{<<"x-forwarding">>, array,
+                [{table,
+                  [{<<"uri">>, longstr,
+                    <<"amqp://localhost/%2f/upstream">>}]}]}],
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    {ok, Conn} = amqp_connection:start(network),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:cast(Ch, #'basic.publish'{exchange = <<>>,
+                                           routing_key = <<"myqueue">>},
+                      #amqp_msg{props = #'P_basic'{headers = Headers},
+                                payload = <<"Hello world">>}),
+    amqp_connection:close(Conn),
+    Msg = http_post("/queues/%2f/myqueue/get", [], ?OK),
+
+    false             = pget(redelivered, Msg),
+    <<>>              = pget(exchange,    Msg),
+    <<"myqueue">>     = pget(routing_key, Msg),
+    <<"Hello world">> = pget(payload,     Msg),
+    [{'x-forwarding',
+      [[{uri,<<"amqp://localhost/%2f/upstream">>}]]}] =
+        pget(headers, pget(properties, Msg)),
+    http_post("/queues/%2f/myqueue/get", [], ?NOT_FOUND),
+    ok.
+
 %%---------------------------------------------------------------------------
 http_get(Path) ->
     http_get(Path, ?OK).

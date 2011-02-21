@@ -20,6 +20,7 @@
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1]).
 -export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
+-export([with_amqp_request/4, with_amqp_request/5]).
 -export([props_to_method/2]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
@@ -304,9 +305,19 @@ parse_bool(V)           -> throw({error, {not_boolean, V}}).
 amqp_request(VHost, ReqData, Context, Method) ->
     amqp_request(VHost, ReqData, Context, node(), Method).
 
-amqp_request(VHost, ReqData,
-             Context = #context{ user = #user { username = Username },
-                                 password = Password }, Node, Method) ->
+amqp_request(VHost, ReqData, Context, Node, Method) ->
+    with_amqp_request(VHost, ReqData, Context, Node,
+                      fun (Ch) ->
+                              amqp_channel:call(Ch, Method),
+                              {true, ReqData, Context}
+                      end).
+
+with_amqp_request(VHost, ReqData, Context, Fun) ->
+    with_amqp_request(VHost, ReqData, Context, node(), Fun).
+
+with_amqp_request(VHost, ReqData,
+                  Context = #context{ user = #user { username = Username },
+                                      password = Password }, Node, Fun) ->
     try
         Params = #amqp_params{username     = Username,
                               password     = Password,
@@ -315,10 +326,10 @@ amqp_request(VHost, ReqData,
         case amqp_connection:start(direct, Params) of
             {ok, Conn} ->
                 {ok, Ch} = amqp_connection:open_channel(Conn),
-                amqp_channel:call(Ch, Method),
+                Res = Fun(Ch),
                 amqp_channel:close(Ch),
                 amqp_connection:close(Conn),
-                {true, ReqData, Context};
+                Res;
             {error, auth_failure} ->
                 not_authorised(<<"">>, ReqData, Context);
             {error, {nodedown, N}} ->

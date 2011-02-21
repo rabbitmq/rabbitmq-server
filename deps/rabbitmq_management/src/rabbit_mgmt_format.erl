@@ -20,9 +20,10 @@
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
--export([to_amqp_table/1, listener/1, properties/1]).
+-export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -70,9 +71,10 @@ properties(unknown) -> unknown;
 properties(Table)   -> {struct, [{Name, tuple(Value)} ||
                                     {Name, Value} <- Table]}.
 
-amqp_table(unknown) -> unknown;
-amqp_table(Table)   -> {struct, [{Name, amqp_value(Type, Value)} ||
-                                    {Name, Type, Value} <- Table]}.
+amqp_table(unknown)   -> unknown;
+amqp_table(undefined) -> amqp_table([]);
+amqp_table(Table)     -> {struct, [{Name, amqp_value(Type, Value)} ||
+                                      {Name, Type, Value} <- Table]}.
 
 amqp_value(array, Val) -> [amqp_value(T, V) || {T, V} <- Val];
 amqp_value(table, Val) -> amqp_table(Val);
@@ -247,3 +249,15 @@ binding(#binding{source      = S,
        {properties_key, pack_binding_props(Key, Args)}],
       [{fun (Res) -> resource(source, Res) end, [source]},
        {fun amqp_table/1,                       [arguments]}]).
+
+basic_properties(Props = #'P_basic'{}) ->
+    {Res, _Idx} = lists:foldl(fun (K, {L, Idx}) ->
+                                      V = element(Idx, Props),
+                                      NewL = case V of
+                                                 undefined -> L;
+                                                 _         -> [{K, V}|L]
+                                             end,
+                                      {NewL, Idx + 1}
+                              end, {[], 2},
+                              record_info(fields, 'P_basic')),
+    format(Res, [{fun amqp_table/1, [headers]}]).

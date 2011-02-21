@@ -124,6 +124,23 @@
 <%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
 
 <div class="section-hidden">
+  <h2>Get Messages</h2>
+  <div class="hider">
+    <p>
+      Warning: getting a message from a queue is a destructive action.
+      Clicking "Get Message" will consume a message from the queue.
+    </p>
+    <form action="#/queues/get" method="post">
+      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="submit" value="Get Message" />
+    </form>
+    <div id="msg-wrapper"></div>
+    <span class="br"></span>
+  </div>
+</div>
+
+<div class="section-hidden">
   <h2>Delete / Purge</h2>
   <div class="hider">
     <form action="#/queues" method="delete" class="confirm inline-form">
