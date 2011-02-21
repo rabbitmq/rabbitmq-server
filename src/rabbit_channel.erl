@@ -298,10 +298,8 @@ handle_info({'DOWN', MRef, process, QPid, Reason},
             State = #ch{consumer_monitors = ConsumerMonitors}) ->
     noreply(
       case dict:find(MRef, ConsumerMonitors) of
-          error ->
-              handle_queue_down(QPid, Reason, State);
-          {ok, ConsumerTag} ->
-              handle_consumer_down(MRef, ConsumerTag, State)
+          error             -> handle_queue_down(QPid, Reason, State);
+          {ok, ConsumerTag} -> handle_consumer_down(MRef, ConsumerTag, State)
       end).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
@@ -1091,11 +1089,11 @@ handle_method(_MethodRecord, _Content, _State) ->
 monitor_consumer(ConsumerTag, State = #ch{consumer_mapping = ConsumerMapping,
                                           consumer_monitors = ConsumerMonitors,
                                           capabilities = Capabilities}) ->
-    {#amqqueue{pid = QPid} = Q, undefined} = dict:fetch(ConsumerTag,
-                                                        ConsumerMapping),
     case rabbit_misc:table_lookup(
            Capabilities, <<"consumer_cancel_notify">>) of
         {bool, true} ->
+            {#amqqueue{pid = QPid} = Q, undefined} =
+                dict:fetch(ConsumerTag, ConsumerMapping),
             MRef = erlang:monitor(process, QPid),
             State#ch{consumer_mapping =
                          dict:store(ConsumerTag, {Q, MRef}, ConsumerMapping),
