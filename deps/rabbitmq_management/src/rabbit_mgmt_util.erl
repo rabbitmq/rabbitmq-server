@@ -329,9 +329,9 @@ amqp_request(VHost, ReqData,
         end
     catch
         exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
-            not_found(list_to_binary(Reason), ReqData, Context);
+            not_found(Reason, ReqData, Context);
         exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
-            not_authorised(list_to_binary(Reason), ReqData, Context);
+            not_authorised(Reason, ReqData, Context);
         exit:{{ServerClose, Code, Reason}, _}
           when ServerClose =:= server_initiated_close;
                ServerClose =:= server_initiated_hard_close ->
