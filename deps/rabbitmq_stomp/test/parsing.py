@@ -242,4 +242,54 @@ class TestParsing(unittest.TestCase):
         bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
 
         self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, "body with nulls not correctly returned")
+        self.assertEqual(bodybuf, bodyresp, "body (...'%s') incorrectly returned as (...'%s')" % (bodyresp[-10:], bodybuf[-10:]))
+
+    @connect(['cd'])
+    def test_message_in_packets(self):
+        ''' Test sending/receiving message in packets. '''
+        subscribe=( 'SUBSCRIBE\n'
+                    'id:xxx\n'
+                    'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                    '\n\0')
+        self.cd.sendall(subscribe)
+
+        boilerplate = '0123456789'*1024 # large enough boilerplate
+
+        message = boilerplate[:1024+256+64+32]
+        msg_len = len(message)
+
+        msg_to_send = ('SEND\n'
+                        'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                        '\n'
+                        '%s'
+                        '\0' % (message) )
+        packet_size = 17
+        part_index = 0
+        msg_to_send_len = len(msg_to_send)
+        while part_index < msg_to_send_len:
+            part = msg_to_send[part_index:part_index+packet_size]
+            self.cd.sendall(part)
+            part_index += packet_size
+
+        headresp=('MESSAGE\n'               # 8
+            'content-type:text/plain\n'     # 24
+            'subscription:(.*)\n'           # 14 + subscription
+            'destination:/exchange/amq.topic/test_embed_nulls_message\n'    # 57
+            'message-id:(.*)\n'             # 12 + message-id
+            'content-length:%i\n'           # 16 + 4==len('1024')
+            '\n'                            # 1
+            '(.*)$'                         # prefix of body + null (potentially)
+             % len(message) )
+        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
+
+        headbuf = self.recv_atleast(headlen)
+        self.assertFalse(len(headbuf) == 0)
+
+        (sub, msg_id, bodyprefix) = self.match(headresp, headbuf)
+        bodyresp=( '%s\0' % message )
+        bodylen = len(bodyresp);
+
+        bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
+
+        self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
+        self.assertEqual(bodybuf, bodyresp, "body (...'%s') incorrectly returned as (...'%s')" % (bodyresp[-10:], bodybuf[-10:]))
