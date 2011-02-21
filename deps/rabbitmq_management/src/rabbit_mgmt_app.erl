@@ -94,7 +94,7 @@ setup_wm_logging() ->
 %% This doesn't *entirely* seem to work. It fails to load a non-existent
 %% image which seems to partly break it, but some stuff is usable.
 setup_wm_trace_app(Logger) ->
-    Loop = rabbit_webmachine:makeloop([{["wmtrace"],
+    Loop = rabbit_webmachine:makeloop([{["wmtrace", '*'],
                                        wmtrace_resource,
                                        [{trace_dir, "/tmp"}]}], Logger),
     rabbit_mochiweb:register_static_context(
