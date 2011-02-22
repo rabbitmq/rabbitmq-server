@@ -168,9 +168,7 @@ function dispatcher() {
             return false;
         });
     this.post('#/queues/get', function() {
-            var path = fill_path_template('/queues/:vhost/:name/get',
-                                          this.params);
-            get_msg(path);
+            get_msgs(this.params);
             return false;
         });
     this.post('#/bindings', function() {
@@ -538,30 +536,30 @@ function toggle_visibility(item) {
     }
 }
 
-function get_msg(path) {
-    with_req('POST', path, function(resp) {
-            var msg = jQuery.parseJSON(resp.responseText);
-            $('#msg-wrapper').slideUp(200);
-            replace_content('msg-wrapper', format('get-ok', {'msg': msg}));
-            $('#msg-wrapper').slideDown(200);
-        }, function(resp) {
-            show_popup('info', 'Queue is empty');
+function get_msgs(params) {
+    var path = fill_path_template('/queues/:vhost/:name/get', params);
+    with_req('POST', path, JSON.stringify(params), function(resp) {
+            var msgs = jQuery.parseJSON(resp.responseText);
+            if (msgs.length == 0) {
+                show_popup('info', 'Queue is empty');
+            } else {
+                $('#msg-wrapper').slideUp(200);
+                replace_content('msg-wrapper', format('messages', {'msgs': msgs}));
+                $('#msg-wrapper').slideDown(200);
+            }
         });
 }
 
 function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
-        with_req('GET', reqs[key], function(resp) {
+        with_req('GET', reqs[key], null, function(resp) {
                 acc[key] = jQuery.parseJSON(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
                     if (k != key) remainder[k] = reqs[k];
                 }
                 with_reqs(remainder, acc, fun);
-            }, function(resp) {
-                var html = format('404', {});
-                replace_content('main', html);
             });
     }
     else {
@@ -602,7 +600,7 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function with_req(method, path, fun, not_found_fun) {
+function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
     req.open(method, '../api' + path, true );
@@ -622,7 +620,8 @@ function with_req(method, path, fun, not_found_fun) {
                 update_status('error');
             }
             else if (req.status == 404) {
-                not_found_fun(req);
+                var html = format('404', {});
+                replace_content('main', html);
             }
             else {
                 debug("Got response code " + req.status);
@@ -630,7 +629,7 @@ function with_req(method, path, fun, not_found_fun) {
             }
         }
     };
-    req.send(null);
+    req.send(body);
 }
 
 function sync_get(path) {

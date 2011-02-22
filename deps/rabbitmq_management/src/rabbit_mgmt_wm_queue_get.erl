@@ -40,37 +40,55 @@ post_is_create(ReqData, Context) ->
 process_post(ReqData, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData),
     Q = rabbit_mgmt_util:id(queue, ReqData),
-    rabbit_mgmt_util:with_amqp_request(
-      VHost, ReqData, Context,
-      fun (Ch) ->
-              case amqp_channel:call(Ch, #'basic.get'{queue = Q,
-                                                      no_ack = true}) of
-                  {#'basic.get_ok'{redelivered   = Redelivered,
-                                   exchange      = Exchange,
-                                   routing_key   = RoutingKey,
-                                   message_count = MessageCount},
-                   #amqp_msg{props = Props, payload = Payload}} ->
-                      PayloadPart =
-                          try
-                              xmerl_ucs:from_utf8(Payload),
-                              [{payload,          Payload},
-                               {payload_encoding, string}]
-                          catch exit:{ucs, _} ->
-                                  [{payload,          base64:encode(Payload)},
-                                   {payload_encoding, base64}]
-                          end,
-                      Msg = [{redelivered,   Redelivered},
-                             {exchange,      Exchange},
-                             {routing_key,   RoutingKey},
-                             {message_count, MessageCount},
-                             {properties, rabbit_mgmt_format:basic_properties(
-                                            Props)}] ++
-                          PayloadPart,
-                      post_respond(Msg, ReqData, Context);
-                  #'basic.get_empty'{} ->
-                      {{halt, 404}, ReqData, Context}
-              end
+    rabbit_mgmt_util:with_decode(
+      [requeue, count], ReqData, Context,
+      fun([RequeueBin, CountBin]) ->
+              rabbit_mgmt_util:with_amqp_request(
+                VHost, ReqData, Context,
+                fun (Ch) ->
+                        NoAck = not rabbit_mgmt_util:parse_bool(RequeueBin),
+                        Count = rabbit_mgmt_util:parse_int(CountBin),
+                        post_respond(basic_gets(Count, Ch, Q, NoAck),
+                                     ReqData, Context)
+                end)
       end).
+
+basic_gets(0, _, _, _) ->
+    [];
+
+basic_gets(Count, Ch, Q, NoAck) ->
+    case basic_get(Ch, Q, NoAck) of
+        none -> [];
+        M    -> [M | basic_gets(Count - 1, Ch, Q, NoAck)]
+    end.
+
+basic_get(Ch, Q, NoAck) ->
+    case amqp_channel:call(Ch, #'basic.get'{queue = Q,
+                                            no_ack = NoAck}) of
+        {#'basic.get_ok'{redelivered   = Redelivered,
+                         exchange      = Exchange,
+                         routing_key   = RoutingKey,
+                         message_count = MessageCount},
+         #amqp_msg{props = Props, payload = Payload}} ->
+            PayloadPart =
+                try
+                    %% TODO mochijson does this but is it safe?
+                    xmerl_ucs:from_utf8(Payload),
+                    [{payload,          Payload},
+                     {payload_encoding, string}]
+                catch exit:{ucs, _} ->
+                        [{payload,          base64:encode(Payload)},
+                         {payload_encoding, base64}]
+                end,
+            [{redelivered,   Redelivered},
+             {exchange,      Exchange},
+             {routing_key,   RoutingKey},
+             {message_count, MessageCount},
+             {properties,    rabbit_mgmt_format:basic_properties(Props)}] ++
+                PayloadPart;
+        #'basic.get_empty'{} ->
+            none
+    end.
 
 post_respond(Response, ReqData, Context) ->
     {JSON, _, _} = rabbit_mgmt_util:reply(Response, ReqData, Context),

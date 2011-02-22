@@ -710,21 +710,35 @@ get_test() ->
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     {ok, Conn} = amqp_connection:start(network),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    amqp_channel:cast(Ch, #'basic.publish'{exchange = <<>>,
-                                           routing_key = <<"myqueue">>},
-                      #amqp_msg{props = #'P_basic'{headers = Headers},
-                                payload = <<"Hello world">>}),
+    Publish = fun (Payload) ->
+                      amqp_channel:cast(
+                        Ch, #'basic.publish'{exchange = <<>>,
+                                             routing_key = <<"myqueue">>},
+                        #amqp_msg{props = #'P_basic'{headers = Headers},
+                                  payload = Payload})
+              end,
+    Publish(<<"1">>),
+    Publish(<<"2">>),
+    Publish(<<"3">>),
     amqp_connection:close(Conn),
-    Msg = http_post("/queues/%2f/myqueue/get", [], ?OK),
-
-    false             = pget(redelivered, Msg),
-    <<>>              = pget(exchange,    Msg),
-    <<"myqueue">>     = pget(routing_key, Msg),
-    <<"Hello world">> = pget(payload,     Msg),
+    [Msg] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
+                                                  {count,   1}], ?OK),
+    false         = pget(redelivered, Msg),
+    <<>>          = pget(exchange,    Msg),
+    <<"myqueue">> = pget(routing_key, Msg),
+    <<"1">>       = pget(payload,     Msg),
     [{'x-forwarding',
       [[{uri,<<"amqp://localhost/%2f/upstream">>}]]}] =
         pget(headers, pget(properties, Msg)),
-    http_post("/queues/%2f/myqueue/get", [], ?NOT_FOUND),
+
+    [M2, M3] = http_post("/queues/%2f/myqueue/get", [{requeue, true},
+                                                     {count,   5}], ?OK),
+    <<"2">> = pget(payload, M2),
+    <<"3">> = pget(payload, M3),
+    2 = length(http_post("/queues/%2f/myqueue/get", [{requeue, false},
+                                                     {count,   5}], ?OK)),
+    [] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
+                                               {count,   5}], ?OK),
     ok.
 
 %%---------------------------------------------------------------------------

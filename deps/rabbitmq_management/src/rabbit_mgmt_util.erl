@@ -18,7 +18,7 @@
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
--export([bad_request/3, id/2, parse_bool/1]).
+-export([bad_request/3, id/2, parse_bool/1, parse_int/1]).
 -export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
 -export([with_amqp_request/4, with_amqp_request/5]).
 -export([props_to_method/2]).
@@ -301,6 +301,17 @@ parse_bool(<<"false">>) -> false;
 parse_bool(true)        -> true;
 parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
+
+parse_int(I) when is_integer(I) ->
+    I;
+parse_int(F) when is_number(F) ->
+    trunc(F);
+parse_int(S) ->
+    try
+        list_to_integer(binary_to_list(S))
+    catch error:badarg ->
+        throw({error, {not_integer, S}})
+    end.
 
 amqp_request(VHost, ReqData, Context, Method) ->
     amqp_request(VHost, ReqData, Context, node(), Method).

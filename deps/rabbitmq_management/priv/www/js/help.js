@@ -59,6 +59,12 @@ HELP = {
       When the limit is exhausted RabbitMQ will stop accepting new \
       network connections.',
 
+    'message-get-requeue':
+      'Clicking "Get Message(s)" will consume messages from the queue. \
+      If requeue is set the message will be re-added to the queue, \
+      but ordering will not be preserved and "redelivered" will be set.<br/> \
+      If requeue is not set messages will be removed from the queue.',
+
     'foo': 'foo' // No comma.
 };
 
