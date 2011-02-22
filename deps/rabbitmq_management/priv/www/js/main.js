@@ -143,7 +143,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
+    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts', 'nodes': '/nodes'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': path,
@@ -690,6 +690,7 @@ function fill_path_template(template, params) {
 
 // Better suggestions appreciated
 var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
+var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
 
 function params_magic(params) {
     return maybe_remove_password(
@@ -718,6 +719,8 @@ function collapse_multifields(params0) {
                 var v = params0[name + '_' + id + '_mfvalue'];
                 if (k in INTEGER_ARGUMENTS) {
                     v = parseInt(v);
+                } else if (k in ARRAY_ARGUMENTS) {
+                    v = v.split(" ");
                 }
                 params[name][k] = v;
             }

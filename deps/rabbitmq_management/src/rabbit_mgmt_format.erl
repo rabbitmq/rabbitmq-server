@@ -20,7 +20,7 @@
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
--export([args_type/1, listener/1, properties/1]).
+-export([to_amqp_table/1, listener/1, properties/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -71,8 +71,12 @@ properties(Table)   -> {struct, [{Name, tuple(Value)} ||
                                     {Name, Value} <- Table]}.
 
 amqp_table(unknown) -> unknown;
-amqp_table(Table)   -> {struct, [{Name, tuple(Value)} ||
-                               {Name, _Type, Value} <- Table]}.
+amqp_table(Table)   -> {struct, [{Name, amqp_value(Type, Value)} ||
+                                    {Name, Type, Value} <- Table]}.
+
+amqp_value(array, Val) -> [amqp_value(T, V) || {T, V} <- Val];
+amqp_value(table, Val) -> amqp_table(Val);
+amqp_value(_Type, Val) -> Val.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
@@ -156,7 +160,7 @@ unpack_binding_props(Str) ->
 
 unpack_binding_props0([Key | Args]) ->
     try
-        {unquote_binding(Key), unpack_binding_args(Args)}
+        {unquote_binding(Key), to_amqp_table(unpack_binding_args(Args))}
     catch E -> E
     end;
 unpack_binding_props0([]) ->
@@ -167,8 +171,7 @@ unpack_binding_args([]) ->
 unpack_binding_args([K]) ->
     throw({bad_request, {no_value, K}});
 unpack_binding_args([K, V | Rest]) ->
-    Value = unquote_binding(V),
-    [{unquote_binding(K), args_type(Value), Value} | unpack_binding_args(Rest)].
+    [{unquote_binding(K), unquote_binding(V)} | unpack_binding_args(Rest)].
 
 unquote_binding(Name) ->
     list_to_binary(mochiweb_util:unquote(Name)).
@@ -184,6 +187,14 @@ tokenise(Str) ->
         _     -> [string:sub_string(Str, 1, Count) |
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
+
+to_amqp_table(T) ->
+    [to_amqp_table_row(K, V) || {K, V} <- T].
+
+to_amqp_table_row(K, Vs) when is_list(Vs) ->
+    {K, array, [{args_type(V), V} || V <- Vs]};
+to_amqp_table_row(K, V) ->
+    {K, args_type(V), V}.
 
 args_type(X) when is_binary(X) ->
     longstr;

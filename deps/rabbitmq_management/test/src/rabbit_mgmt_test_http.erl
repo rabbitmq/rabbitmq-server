@@ -618,6 +618,19 @@ arguments_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+arguments_table_test() ->
+    Args = [{'upstreams', [<<"amqp://localhost/%2f/upstream1">>,
+                           <<"amqp://localhost/%2f/upstream2">>]}],
+    XArgs = [{type, <<"headers">>},
+             {arguments, Args}],
+    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    AllConfig = http_get("/all-configuration", ?OK),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    ok.
+
 queue_purge_test() ->
     QArgs = [],
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
