@@ -69,13 +69,6 @@
   </div>
 </div>
 
-<div class="section-hidden">
-  <h2>Consumers</h2>
-  <div class="hider updatable">
-<%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
-  </div>
-</div>
-
 <% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
 <h2>Message Rates</h2>
@@ -104,6 +97,13 @@
 <% } %>
 
 <div class="section-hidden">
+  <h2>Consumers</h2>
+  <div class="hider updatable">
+<%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
+  </div>
+</div>
+
+<div class="section-hidden">
   <h2>Bindings</h2>
   <div class="hider updatable">
     <h3>Incoming to <b><%= queue.name %></b></h3>
@@ -118,10 +118,11 @@
         </td>
       </tr>
     </table>
-  </div>
-</div>
 
 <%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
+
+  </div>
+</div>
 
 <div class="section-hidden">
   <h2>Delete / Purge</h2>
