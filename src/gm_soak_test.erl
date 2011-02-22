@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(gm_test).
+-module(gm_soak_test).
 
 -export([test/0]).
 -export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
@@ -22,6 +22,10 @@
 -behaviour(gm).
 
 -include("gm_specs.hrl").
+
+%% ---------------------------------------------------------------------------
+%% Soak test
+%% ---------------------------------------------------------------------------
 
 get_state() ->
     get(state).
