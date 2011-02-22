@@ -2,18 +2,20 @@ Necessary
 ---------
 
 Exponential(?) backoff
-Close remaining channels on shutdown(?)
 Alternate PLAIN creds than guest/guest
-Deal with downstream channel going down
+Allow use of EXTERNAL etc
+Remove that ETS table
+Test in cluster
+Be smarter about bind (for efficiency)
+Be even smarter about unbind (for efficiency)
+Handle user-id somehow
 
 Useful
 ------
 
+Deal with downstream channel going down
 Deal with upstream exchange going away / coming back?
-Remove that ETS table
-Allow use of EXTERNAL etc
 Allow args passthrough to support e.g. headers type.
-Be smarter about bind (for efficiency)
 Think about when we forward - partly connected graph of brokers/exchanges.
    Cycle detection is not enough (it's certainly a start though).
    Introduce outgoing federation exchange at the upstream end to do filtering.
