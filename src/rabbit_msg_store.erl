@@ -26,7 +26,7 @@
 -export([sync/1, set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
 
--export([multiple_routing_keys/0]). %% upgrade
+-export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -34,9 +34,8 @@
 %%----------------------------------------------------------------------------
 
 -include("rabbit_msg_store.hrl").
--include_lib("kernel/include/file.hrl").
 
--define(SYNC_INTERVAL,  25).   %% milliseconds
+-define(SYNC_INTERVAL,  5).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 -define(TRANSFORM_TMP, "transform_tmp").
@@ -106,8 +105,6 @@
 
 %%----------------------------------------------------------------------------
 
--rabbit_upgrade({multiple_routing_keys, []}).
-
 -ifdef(use_specs).
 
 -export_type([gc_state/0, file_num/0]).
@@ -166,7 +163,9 @@
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                               deletion_thunk()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
--spec(multiple_routing_keys/0 :: () -> 'ok').
+-spec(force_recovery/2 :: (file:filename(), server()) -> 'ok').
+-spec(transform_dir/3 :: (file:filename(), server(),
+        fun ((any()) -> (rabbit_types:ok_or_error2(msg(), any())))) -> 'ok').
 
 -endif.
 
@@ -1968,25 +1967,6 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {destination, Destination}]}
     end.
 
-%%----------------------------------------------------------------------------
-%% upgrade
-%%----------------------------------------------------------------------------
-
-multiple_routing_keys() ->
-    [transform_store(
-         fun ({basic_message, ExchangeName, Routing_Key, Content,
-               Guid, Persistent}) ->
-                 {ok, {basic_message, ExchangeName, [Routing_Key], Content,
-                       Guid, Persistent}};
-             (_) -> {error, corrupt_message}
-         end, Store) || Store <- rabbit_variable_queue:store_names()],
-    ok.
-
-%% Assumes message store is not running
-transform_store(TransformFun, Store) ->
-    force_recovery(rabbit_mnesia:dir(), Store),
-    transform_dir(rabbit_mnesia:dir(), Store, TransformFun).
-
 force_recovery(BaseDir, Store) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
     file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
@@ -2017,14 +1997,13 @@ transform_dir(BaseDir, Store, TransformFun) ->
 
 transform_msg_file(FileOld, FileNew, TransformFun) ->
     rabbit_misc:ensure_parent_dirs_exist(FileNew),
-    {ok, #file_info{size=Size}} = file:read_file_info(FileOld),
     {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
     {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
                                           [{write_buffer,
                                             ?HANDLE_CACHE_BUFFER_SIZE}]),
     {ok, _Acc, _IgnoreSize} =
         rabbit_msg_file:scan(
-            RefOld, Size,
+            RefOld, filelib:file_size(FileOld),
             fun({Guid, _Size, _Offset, BinMsg}, ok) ->
                 case TransformFun(binary_to_term(BinMsg)) of
                     {ok, MsgNew} ->

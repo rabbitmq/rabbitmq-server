@@ -43,8 +43,8 @@
          properties_input(), binary()) -> rabbit_types:message()).
 -spec(message/3 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
-         rabbit_types:decoded_content()) -> {'ok', rabbit_types:message()} |
-                                            {'error', any()}).
+         rabbit_types:decoded_content()) ->
+         rabbit_types:ok_or_error2(rabbit_types:message() | any())).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 ::
