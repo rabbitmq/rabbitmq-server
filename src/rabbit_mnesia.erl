@@ -377,7 +377,6 @@ init_db(ClusterNodes, Force) ->
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
-                    ok = wait_for_tables(),
                     ensure_version_ok(rabbit_upgrade:read_version()),
                     ensure_schema_integrity();
                 {[], false, _} ->
@@ -437,7 +436,6 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables(),
     ok = rabbit_upgrade:write_version().
 
 move_db() ->
