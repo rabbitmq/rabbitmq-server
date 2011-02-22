@@ -1,5 +1,44 @@
+diff --git a/priv/skel/src/skel.app b/priv/skel/src/skel.app
+index fc16aae..2b064dd 100644
+--- a/priv/skel/src/skel.app
++++ b/priv/skel/src/skel.app
+@@ -11,4 +11,4 @@
+   {registered, []},
+   {mod, {skel_app, []}},
+   {env, []},
+-  {applications, [kernel, stdlib, crypto]}]}.
++  {applications, [kernel, stdlib]}]}.
+diff --git a/priv/skel/src/skel.erl b/priv/skel/src/skel.erl
+index 7ac4e2b..9776e02 100644
+--- a/priv/skel/src/skel.erl
++++ b/priv/skel/src/skel.erl
+@@ -19,12 +19,10 @@ ensure_started(App) ->
+ %% @doc Start the skel server.
+ start() ->
+     skel_deps:ensure(),
+-    ensure_started(crypto),
+     application:start(skel).
+ 
+ %% @spec stop() -> ok
+ %% @doc Stop the skel server.
+ stop() ->
+     Res = application:stop(skel),
+-    application:stop(crypto),
+     Res.
+diff --git a/priv/skel/support/run_tests.escript b/priv/skel/support/run_tests.escript
+index ff49c06..6ae812c 100755
+--- a/priv/skel/support/run_tests.escript
++++ b/priv/skel/support/run_tests.escript
+@@ -18,7 +18,6 @@ main([Ebin]) ->
+                          ModuleNames)],
+ 
+ 
+-    crypto:start(),
+     start_cover(Modules),
+     eunit:test(Modules, [verbose,{report,{eunit_surefire,[{dir,"../_test"}]}}]),
+     analyze_cover(Modules);
 diff --git a/src/mochitemp.erl b/src/mochitemp.erl
-index dda7863..f64876d 100644
+index bb23d2a..22e34bc 100644
 --- a/src/mochitemp.erl
 +++ b/src/mochitemp.erl
 @@ -1,7 +1,7 @@
@@ -20,7 +59,7 @@ index dda7863..f64876d 100644
  
  rngchar(C) ->
      element(1 + C, ?SAFE_CHARS).
-@@ -177,7 +177,6 @@ gettempdir_cwd_test() ->
+@@ -176,7 +176,6 @@ gettempdir_cwd_test() ->
      ok.
  
  rngchars_test() ->
@@ -28,7 +67,7 @@ index dda7863..f64876d 100644
      ?assertEqual(
         "",
         rngchars(0)),
-@@ -199,7 +198,6 @@ rngchar_test() ->
+@@ -198,7 +197,6 @@ rngchar_test() ->
      ok.
  
  mkdtemp_n_failonce_test() ->
@@ -36,7 +75,7 @@ index dda7863..f64876d 100644
      D = mkdtemp(),
      Path = filename:join([D, "testdir"]),
      %% Toggle the existence of a dir so that it fails
-@@ -246,7 +244,6 @@ make_dir_fail_test() ->
+@@ -245,7 +243,6 @@ make_dir_fail_test() ->
      ok.
  
  mkdtemp_test() ->
@@ -44,7 +83,7 @@ index dda7863..f64876d 100644
      D = mkdtemp(),
      ?assertEqual(
         true,
-@@ -257,7 +254,6 @@ mkdtemp_test() ->
+@@ -256,7 +253,6 @@ mkdtemp_test() ->
      ok.
  
  rmtempdir_test() ->
@@ -53,7 +92,7 @@ index dda7863..f64876d 100644
      ?assertEqual(
         true,
 diff --git a/src/mochiweb.app.src b/src/mochiweb.app.src
-index 4f4d192..125d375 100644
+index 5664003..a28cde3 100644
 --- a/src/mochiweb.app.src
 +++ b/src/mochiweb.app.src
 @@ -6,4 +6,4 @@
@@ -63,10 +102,10 @@ index 4f4d192..125d375 100644
 -  {applications, [kernel, stdlib, crypto, inets]}]}.
 +  {applications, [kernel, stdlib, inets]}]}.
 diff --git a/src/mochiweb.erl b/src/mochiweb.erl
-index 967d29b..c0eae64 100644
+index 3118028..6302b41 100644
 --- a/src/mochiweb.erl
 +++ b/src/mochiweb.erl
-@@ -13,14 +13,12 @@
+@@ -13,15 +13,12 @@
  %% @spec start() -> ok
  %% @doc Start the MochiWeb server.
  start() ->
@@ -76,12 +115,14 @@ index 967d29b..c0eae64 100644
  %% @spec stop() -> ok
  %% @doc Stop the MochiWeb server.
  stop() ->
-     Res = application:stop(mochiweb),
+-    Res = application:stop(mochiweb),
 -    application:stop(crypto),
-     Res.
+-    Res.
++    application:stop(mochiweb).
  
  reload() ->
-@@ -78,16 +76,6 @@ new_response({Request, Code, Headers}) ->
+     [c:l(Module) || Module <- all_loaded()].
+@@ -78,16 +75,6 @@ new_response({Request, Code, Headers}) ->
                            Code,
                            mochiweb_headers:make(Headers)).
  
@@ -98,17 +139,17 @@ index 967d29b..c0eae64 100644
  
  %%
  %% Tests
-@@ -195,7 +183,7 @@ do_POST(Transport, Size, Times) ->
+@@ -195,7 +182,7 @@ do_POST(Transport, Size, Times) ->
                  end,
      TestReqs = [begin
                      Path = "/stuff/" ++ integer_to_list(N),
 -                    Body = crypto:rand_bytes(Size),
-+                    Body = mochiweb_util:rand_bytes(Size),
++                    Body = mochiweb_util:rand_bytes(Size)),
                      #treq{path=Path, body=Body, xreply=Body}
                  end || N <- lists:seq(1, Times)],
      ClientFun = new_client_fun('POST', TestReqs),
 diff --git a/src/mochiweb_multipart.erl b/src/mochiweb_multipart.erl
-index ebf47ab..3c683af 100644
+index 3069cf4..28e7e8d 100644
 --- a/src/mochiweb_multipart.erl
 +++ b/src/mochiweb_multipart.erl
 @@ -38,7 +38,7 @@ parts_to_body([{Start, End, Body}], ContentType, Size) ->
@@ -120,20 +161,8 @@ index ebf47ab..3c683af 100644
  
  %% @spec parts_to_multipart_body([bodypart()], ContentType::string(),
  %%                               Size::integer(), Boundary::string()) ->
-diff --git a/src/mochiweb_socket_server.erl b/src/mochiweb_socket_server.erl
-index a4d423f..29708e5 100644
---- a/src/mochiweb_socket_server.erl
-+++ b/src/mochiweb_socket_server.erl
-@@ -119,7 +119,6 @@ parse_options([{profile_fun, ProfileFun} | Rest], State) when is_function(Profil
- start_server(State=#mochiweb_socket_server{ssl=Ssl, name=Name}) ->
-     case Ssl of
-         true ->
--            application:start(crypto),
-             application:start(public_key),
-             application:start(ssl);
-         false ->
 diff --git a/src/mochiweb_util.erl b/src/mochiweb_util.erl
-index 82ec7f0..d4e5fdd 100644
+index d1cc59d..b633d26 100644
 --- a/src/mochiweb_util.erl
 +++ b/src/mochiweb_util.erl
 @@ -13,7 +13,7 @@
@@ -145,7 +174,7 @@ index 82ec7f0..d4e5fdd 100644
  
  -define(PERCENT, 37).  % $\%
  -define(FULLSTOP, 46). % $\.
-@@ -575,6 +575,16 @@ make_io(Integer) when is_integer(Integer) ->
+@@ -545,6 +545,12 @@ make_io(Integer) when is_integer(Integer) ->
  make_io(Io) when is_list(Io); is_binary(Io) ->
      Io.
  
@@ -153,34 +182,20 @@ index 82ec7f0..d4e5fdd 100644
 +    list_to_binary([rand_uniform(0, 16#FF + 1) || _ <- lists:seq(1, Count)]).
 +
 +rand_uniform(Lo, Hi) ->
-+    %% This stuff is not called anywhere performance critical,
-+    %% it won't hurt to just initialize it every time.
-+    {A, B, C} = now(),
-+    random:seed(A, B, C),
 +    random:uniform(Hi - Lo) + Lo - 1.
 +
  %%
  %% Tests
  %%
-diff --git a/support/templates/mochiwebapp_skel/src/mochiapp.app.src b/support/templates/mochiwebapp_skel/src/mochiapp.app.src
-index c0bb11f..54e0986 100644
---- a/support/templates/mochiwebapp_skel/src/mochiapp.app.src
-+++ b/support/templates/mochiwebapp_skel/src/mochiapp.app.src
-@@ -6,4 +6,4 @@
-   {registered, []},
-   {mod, {'{{appid}}_app', []}},
-   {env, []},
--  {applications, [kernel, stdlib, crypto]}]}.
-+  {applications, [kernel, stdlib]}]}.
-diff --git a/support/templates/mochiwebapp_skel/src/mochiapp.erl b/support/templates/mochiwebapp_skel/src/mochiapp.erl
-index 9770f2c..79cd71e 100644
---- a/support/templates/mochiwebapp_skel/src/mochiapp.erl
-+++ b/support/templates/mochiwebapp_skel/src/mochiapp.erl
-@@ -20,7 +20,6 @@ ensure_started(App) ->
- %% @doc Start the {{appid}} server.
- start() ->
-     {{appid}}_deps:ensure(),
--    ensure_started(crypto),
-     application:start({{appid}}).
+diff --git a/support/run_tests.escript b/support/run_tests.escript
+index ff49c06..6ae812c 100755
+--- a/support/run_tests.escript
++++ b/support/run_tests.escript
+@@ -18,7 +18,6 @@ main([Ebin]) ->
+                          ModuleNames)],
  
  
+-    crypto:start(),
+     start_cover(Modules),
+     eunit:test(Modules, [verbose,{report,{eunit_surefire,[{dir,"../_test"}]}}]),
+     analyze_cover(Modules);
