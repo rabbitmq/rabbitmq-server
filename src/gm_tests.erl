@@ -27,7 +27,7 @@
 
 -include("gm_specs.hrl").
 
--define(RECEIVE_AFTER(Body, Bool, Error),
+-define(RECEIVE_OR_THROW(Body, Bool, Error),
         receive Body ->
                 true = Bool,
                 passed
@@ -131,24 +131,24 @@ with_two_members(Fun) ->
     end.
 
 receive_or_throw(Pattern, Error) ->
-    ?RECEIVE_AFTER(Pattern, true, Error).
+    ?RECEIVE_OR_THROW(Pattern, true, Error).
 
 receive_birth(From, Born, Error) ->
-    ?RECEIVE_AFTER({members_changed, From, Birth, Death},
-                   ([Born] == Birth) andalso ([] == Death),
-                   Error).
+    ?RECEIVE_OR_THROW({members_changed, From, Birth, Death},
+                      ([Born] == Birth) andalso ([] == Death),
+                      Error).
 
 receive_death(From, Died, Error) ->
-    ?RECEIVE_AFTER({members_changed, From, Birth, Death},
-                   ([] == Birth) andalso ([Died] == Death),
-                   Error).
+    ?RECEIVE_OR_THROW({members_changed, From, Birth, Death},
+                      ([] == Birth) andalso ([Died] == Death),
+                      Error).
 
 receive_joined(From, Members, Error) ->
-    ?RECEIVE_AFTER({joined, From, Members1},
-                   lists:usort(Members) == lists:usort(Members1),
-                   Error).
+    ?RECEIVE_OR_THROW({joined, From, Members1},
+                      lists:usort(Members) == lists:usort(Members1),
+                      Error).
 
 receive_termination(From, Reason, Error) ->
-    ?RECEIVE_AFTER({termination, From, Reason1},
-                   Reason == Reason1,
-                   Error).
+    ?RECEIVE_OR_THROW({termination, From, Reason1},
+                      Reason == Reason1,
+                      Error).
