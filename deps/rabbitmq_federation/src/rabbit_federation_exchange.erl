@@ -49,7 +49,7 @@
 -define(ROUTING_HEADER, <<"x-forwarding">>).
 -record(state, { downstream_connection, downstream_channel,
                  downstream_exchange, next_publish_id, upstreams }).
--record(upstream, { connection, channel, queue, properties, uri, unacked,
+-record(upstream, { connection, channel, queue, exchange, uri, unacked,
                     consumer_tag }).
 
 %%----------------------------------------------------------------------------
@@ -241,7 +241,7 @@ connect_upstream(UpstreamURI, ResetUpstreamQueue,
                  State = #state{ upstreams = Upstreams,
                                  downstream_exchange = DownstreamX}) ->
     %%io:format("Connecting to ~s...~n", [UpstreamURI]),
-    Props = parse_uri(UpstreamURI),
+    {X, Props} = parse_uri(UpstreamURI),
     Params = #amqp_params{host         = proplists:get_value(host, Props),
                           port         = proplists:get_value(port, Props),
                           virtual_host = proplists:get_value(vhost, Props)},
@@ -250,7 +250,7 @@ connect_upstream(UpstreamURI, ResetUpstreamQueue,
             %%io:format("Done!~n", []),
             {ok, Ch} = amqp_connection:open_channel(Conn),
             erlang:monitor(process, Ch),
-            Q = upstream_queue_name(Props, DownstreamX),
+            Q = upstream_queue_name(X, DownstreamX),
             %% TODO: The x-expires should be configurable.
             case ResetUpstreamQueue of
                 true ->
@@ -276,7 +276,7 @@ connect_upstream(UpstreamURI, ResetUpstreamQueue,
                                          connection   = Conn,
                                          channel      = Ch,
                                          queue        = Q,
-                                         properties   = Props,
+                                         exchange     = X,
                                          consumer_tag = CTag,
                                          unacked      = gb_trees:empty()}
                               | Upstreams]};
@@ -287,9 +287,8 @@ connect_upstream(UpstreamURI, ResetUpstreamQueue,
             State
     end.
 
-upstream_queue_name(Props, #resource{ name         = DownstreamName,
-                                      virtual_host = DownstreamVHost }) ->
-    X = proplists:get_value(exchange, Props),
+upstream_queue_name(X, #resource{ name         = DownstreamName,
+                                  virtual_host = DownstreamVHost }) ->
     Node = list_to_binary(atom_to_list(node())),
     <<"federation: ", X/binary, " -> ", Node/binary,
       "-", DownstreamVHost/binary, "-", DownstreamName/binary>>.
@@ -308,9 +307,8 @@ restart_upstream_channel(OldPid, State = #state{ upstreams = Upstreams }) ->
                         end, Upstreams),
     connect_upstream(URI, false, State#state{ upstreams = Rest }).
 
-bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
+bind_upstream(#upstream{ channel = Ch, queue = Q, exchange = X },
               Key, Args) ->
-    X = proplists:get_value(exchange, Props),
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
                                         routing_key = Key,
@@ -329,9 +327,8 @@ maybe_unbind_upstreams(Upstreams, #binding{source = Source, destination = Dest,
                  end
     end.
 
-unbind_upstream(#upstream{ connection = Conn, queue = Q, properties = Props },
+unbind_upstream(#upstream{ connection = Conn, queue = Q, exchange = X },
                 Key, Args) ->
-    X = proplists:get_value(exchange, Props),
     %% We may already be unbound if e.g. someone has deleted the upstream
     %% exchange
     with_disposable_channel(
@@ -407,7 +404,7 @@ validate_upstream({longstr, URI}) ->
     case parse_uri(URI) of
         {error, E} ->
             fail("URI ~s could not be parsed, error: ~p", [URI, E]);
-        Props ->
+        {_X, Props} ->
             case proplists:get_value(scheme, Props) of
                 "amqp" -> ok;
                 S      -> fail("Scheme ~s not supported", [S])
@@ -432,8 +429,8 @@ parse_uri(URI) ->
                 [VHostEnc, XEnc] ->
                     VHost = httpd_util:decode_hex(VHostEnc),
                     X = httpd_util:decode_hex(XEnc),
-                    [{vhost,    list_to_binary(VHost)},
-                     {exchange, list_to_binary(X)}] ++ Props;
+                    {list_to_binary(X),
+                     [{vhost, list_to_binary(VHost)}|Props]};
                 _ ->
                     {error, path_must_have_two_components}
             end
