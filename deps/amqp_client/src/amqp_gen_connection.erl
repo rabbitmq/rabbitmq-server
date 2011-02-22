@@ -288,8 +288,7 @@ server_initiated_close(Close, State) ->
                                        close = Close}, State).
 
 server_misbehaved_close(AmqpError, State) ->
-    {true, 0, Close} =
-        rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
+    {0, Close} = rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
     set_closing_state(abrupt, #closing{reason = server_misbehaved,
                                        close = Close}, State).
 
