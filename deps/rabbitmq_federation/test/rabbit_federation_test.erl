@@ -145,6 +145,25 @@ smart_unbind_test() ->
               delete_exchange(Ch, <<"upstream">>)
       end).
 
+no_loop_test() ->
+    with_ch(
+      fun (Ch) ->
+              declare_fed_exchange(Ch, <<"one">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/two">>]),
+              declare_fed_exchange(Ch, <<"two">>, <<"direct">>,
+                                   [<<"amqp://localhost/%2f/one">>]),
+              Q1 = bind_queue(Ch, <<"one">>, <<"key">>),
+              Q2 = bind_queue(Ch, <<"two">>, <<"key">>),
+              publish(Ch, <<"one">>, <<"key">>, <<"Hello from one">>),
+              publish(Ch, <<"two">>, <<"key">>, <<"Hello from two">>),
+              expect(Ch, Q1, [<<"Hello from one">>, <<"Hello from two">>]),
+              expect(Ch, Q2, [<<"Hello from one">>, <<"Hello from two">>]),
+              expect_empty(Ch, Q1),
+              expect_empty(Ch, Q2),
+              delete_exchange(Ch, <<"one">>),
+              delete_exchange(Ch, <<"two">>)
+      end).
+
 %% Downstream: port 5672, has federation
 %% Upstream:   port 5673, may not have federation
 
@@ -243,8 +262,7 @@ publish(Ch, X, Key, Payload) ->
                       #amqp_msg { payload = Payload }).
 
 expect(Ch, Q, Payloads) ->
-    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q },
-                           self()),
+    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q }, self()),
     receive
         #'basic.consume_ok'{ consumer_tag = CTag } -> ok
     end,
@@ -264,10 +282,13 @@ expect(Payloads) ->
             throw({timeout_waiting_for, Payloads})
     end.
 
-
 publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),
     expect(Ch, Q, [Payload]).
+
+expect_empty(Ch, Q) ->
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
 %%----------------------------------------------------------------------------
 

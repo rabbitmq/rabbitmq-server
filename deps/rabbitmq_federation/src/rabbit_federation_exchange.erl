@@ -96,7 +96,6 @@ delete(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
 add_binding(?TX, X, B) ->
-    %% TODO add bindings only if needed.
     call(X, {add_binding, B}),
     with_module(X, fun (M) -> M:add_binding(?TX, X, B) end);
 add_binding(Tx, X, B) ->
@@ -148,9 +147,13 @@ init({DownstreamX, Durable, UpstreamURIs}) ->
                              connect_upstream(UpstreamURI, not Durable, State)
                      end, State0, UpstreamURIs)}.
 
-handle_call({add_binding, #binding{key = Key, args = Args} }, _From,
-            State = #state{ upstreams = Upstreams }) ->
-    [bind_upstream(U, Key, Args) || U <- Upstreams],
+handle_call({add_binding, #binding{destination = Dest, key = Key, args = Args}},
+            _From, State = #state{upstreams = Upstreams}) ->
+    %% TODO add bindings only if needed.
+    case is_federation_queue(Dest) of
+        true  -> ok;
+        false -> [bind_upstream(U, Key, Args) || U <- Upstreams]
+    end,
     {reply, ok, State};
 
 handle_call({remove_bindings, Bs }, _From,
@@ -181,24 +184,28 @@ handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
 
 handle_info({#'basic.deliver'{consumer_tag = CTag,
                               delivery_tag = DTag,
+                              %% TODO do we care?
                               %%redelivered = Redelivered,
                               %%exchange = Exchange,
-                              routing_key = Key},
-             Msg = #amqp_msg{props = Props = #'P_basic'{headers = Headers0}}},
-            State = #state{downstream_exchange = #resource {name = X},
+                              routing_key = Key}, Msg},
+            State = #state{downstream_exchange = #resource{name = X},
                            downstream_channel  = DCh,
                            upstreams           = Upstreams0,
                            next_publish_id     = Seq}) ->
-    {#upstream{uri = URI}, Upstreams} =
-        record_delivery_tag(DTag, CTag, Seq, Upstreams0),
-    %% TODO add user information here?
-    Headers = add_routing_to_headers(
-                Headers0, [{<<"uri">>, longstr, URI}]),
-    amqp_channel:cast(DCh, #'basic.publish'{exchange = X,
-                                            routing_key = Key},
-                      Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}),
-    {noreply, State#state{ upstreams       = Upstreams,
-                           next_publish_id = Seq + 1}};
+    Headers0 = extract_headers(Msg),
+    case forwarded_before(Headers0) of
+        false -> {#upstream{uri = URI}, Upstreams} =
+                     record_delivery_tag(DTag, CTag, Seq, Upstreams0),
+                 %% TODO add user information here?
+                 Headers = add_routing_to_headers(Headers0,
+                                                  [{<<"uri">>, longstr, URI}]),
+                 amqp_channel:cast(DCh, #'basic.publish'{exchange = X,
+                                                         routing_key = Key},
+                                   update_headers(Headers, Msg)),
+                 {noreply, State#state{upstreams       = Upstreams,
+                                       next_publish_id = Seq + 1}};
+        true  -> {noreply, State}
+    end;
 
 handle_info({'DOWN', _Ref, process, Ch, _Reason},
             State = #state{ downstream_channel = DCh }) ->
@@ -287,6 +294,13 @@ upstream_queue_name(Props, #resource{ name         = DownstreamName,
     <<"federation: ", X/binary, " -> ", Node/binary,
       "-", DownstreamVHost/binary, "-", DownstreamName/binary>>.
 
+
+is_federation_queue(#resource{ name = <<"federation: ", _Rest/binary>>,
+                               kind = queue }) ->
+    true;
+is_federation_queue(_) ->
+    false.
+
 restart_upstream_channel(OldPid, State = #state{ upstreams = Upstreams }) ->
     {[#upstream{ uri = URI }], Rest} =
         lists:partition(fun (#upstream{ channel = Ch }) ->
@@ -302,14 +316,17 @@ bind_upstream(#upstream{ channel = Ch, queue = Q, properties = Props },
                                         routing_key = Key,
                                         arguments   = Args}).
 
-maybe_unbind_upstreams(Upstreams,
-                       #binding{ source = Source, key = Key, args = Args}) ->
-    case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
-                           Key == Key2 andalso Args == Args2
-                   end,
-                   rabbit_binding:list_for_source(Source)) of
+maybe_unbind_upstreams(Upstreams, #binding{source = Source, destination = Dest,
+                                           key = Key, args = Args}) ->
+    case is_federation_queue(Dest) of
         true  -> ok;
-        false -> [unbind_upstream(U, Key, Args) || U <- Upstreams]
+        false -> case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
+                                        Key == Key2 andalso Args == Args2
+                                end,
+                                rabbit_binding:list_for_source(Source)) of
+                     true  -> ok;
+                     false -> [unbind_upstream(U, Key, Args) || U <- Upstreams]
+                 end
     end.
 
 unbind_upstream(#upstream{ connection = Conn, queue = Q, properties = Props },
@@ -445,6 +462,19 @@ ensure_closed(Ch) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+%% For the time being just don't forward anything that's already been
+%% forwarded.
+forwarded_before(undefined) ->
+    false;
+forwarded_before(Headers) ->
+    rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) =/= undefined.
+
+extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
+    Headers.
+
+update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
+    Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
 
 add_routing_to_headers(undefined, Info) ->
     add_routing_to_headers([], Info);

@@ -1,14 +1,10 @@
 Necessary
 ---------
 
-Cycle detection
 Exponential(?) backoff
-Close remaining channels on shutdown
-Test / fix with alternate PLAIN creds
+Close remaining channels on shutdown(?)
+Alternate PLAIN creds than guest/guest
 Deal with downstream channel going down
-Think about when we forward - connected graph of brokers/exchanges.
-   Cycle detection is not enough.
-   Introduce outgoing federation exchange at the upstream end to do filtering.
 
 Useful
 ------
@@ -18,6 +14,9 @@ Remove that ETS table
 Allow use of EXTERNAL etc
 Allow args passthrough to support e.g. headers type.
 Be smarter about bind (for efficiency)
+Think about when we forward - partly connected graph of brokers/exchanges.
+   Cycle detection is not enough (it's certainly a start though).
+   Introduce outgoing federation exchange at the upstream end to do filtering.
 
 Later
 -----
