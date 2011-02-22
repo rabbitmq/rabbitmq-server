@@ -104,7 +104,6 @@
 
 maybe_upgrade_mnesia() ->
     AllNodes = rabbit_mnesia:all_clustered_nodes(),
-    KnownDiscNodes = rabbit_mnesia:read_cluster_nodes_config(),
     case upgrades_required(mnesia) of
         version_not_available ->
             rabbit:prepare(), %% Ensure we have logs for this
@@ -118,18 +117,18 @@ maybe_upgrade_mnesia() ->
             ok;
         Upgrades ->
             rabbit:prepare(), %% Ensure we have logs for this
-            case upgrade_mode(AllNodes, KnownDiscNodes) of
+            case upgrade_mode(AllNodes) of
                 primary   -> primary_upgrade(Upgrades, AllNodes);
-                secondary -> secondary_upgrade(KnownDiscNodes)
+                secondary -> secondary_upgrade(AllNodes)
             end
     end,
     ok = rabbit_mnesia:delete_previous_run_disc_nodes().
 
-upgrade_mode(AllNodes, KnownDiscNodes) ->
+upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
             AfterUs = rabbit_mnesia:read_previous_run_disc_nodes(),
-            case {am_i_disc_node(KnownDiscNodes), AfterUs} of
+            case {am_i_disc_node(), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
@@ -170,13 +169,11 @@ upgrade_mode(AllNodes, KnownDiscNodes) ->
             end
     end.
 
-am_i_disc_node(KnownDiscNodes) ->
-    %% The cluster config does not list all disc nodes, but it will list us
-    %% if we're one.
-    case KnownDiscNodes of
-        []        -> true;
-        DiscNodes -> lists:member(node(), DiscNodes)
-    end.
+am_i_disc_node() ->
+    %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
+    %% we can't look at the config file (may not include us even if we're a
+    %% disc node).
+    filelib:is_regular(rabbit_mnesia:dir() ++ "/rabbit_durable_exchange.DCD").
 
 die(Msg, Args) ->
     %% We don't throw or exit here since that gets thrown
@@ -207,10 +204,18 @@ primary_upgrade(Upgrades, Nodes) ->
 force_tables() ->
     [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
 
-secondary_upgrade(KnownDiscNodes) ->
+secondary_upgrade(AllNodes) ->
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
-    ok = rabbit_mnesia:create_cluster_nodes_config(KnownDiscNodes),
+    %% Note that we cluster with all nodes, rather than all disc nodes
+    %% (as we can't know all disc nodes at this point). This is safe as
+    %% we're not writing the cluster config, just setting up Mnesia.
+    ClusterNodes = case am_i_disc_node() of
+                       true  -> AllNodes;
+                       false -> AllNodes -- [node()]
+                   end,
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    rabbit_mnesia:init_db(ClusterNodes, true),
     write_version(mnesia),
     ok.
 
