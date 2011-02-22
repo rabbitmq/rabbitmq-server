@@ -271,7 +271,7 @@ check_schema_integrity() ->
                               end
                       end) of
         ok     -> ok = wait_for_tables(),
-                  check_tables(fun check_table_integrity/2);
+                  check_tables(fun check_table_content/2);
         Other  -> Other
     end.
 
@@ -282,7 +282,7 @@ check_table_attributes(Tab, TabDef) ->
         Attrs    -> {error, {table_attributes_mismatch, Tab, ExpAttrs, Attrs}}
     end.
 
-check_table_integrity(Tab, TabDef) ->
+check_table_content(Tab, TabDef) ->
     {_, Match} = proplists:lookup(match, TabDef),
     case mnesia:dirty_first(Tab) of
         '$end_of_table' ->
