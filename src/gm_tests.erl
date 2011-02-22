@@ -144,8 +144,8 @@ receive_death(From, Died, Error) ->
                    Error).
 
 receive_joined(From, Members, Error) ->
-    ?RECEIVE_AFTER({joined, From, Members2},
-                   lists:usort(Members) == lists:usort(Members2),
+    ?RECEIVE_AFTER({joined, From, Members1},
+                   lists:usort(Members) == lists:usort(Members1),
                    Error).
 
 receive_termination(From, Reason, Error) ->
