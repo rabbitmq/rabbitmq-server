@@ -51,7 +51,7 @@ class TestParsing(unittest.TestCase):
 
     def match(self, pattern, data):
         ''' helper: try to match 'pattern' regexp with 'data' string.
-            Fail testif they don't match.
+            Fail test if they don't match.
         '''
         matched = re.match(pattern, data)
         if matched:
@@ -242,7 +242,7 @@ class TestParsing(unittest.TestCase):
         bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
 
         self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, "body (...'%s') incorrectly returned as (...'%s')" % (bodyresp[-10:], bodybuf[-10:]))
+        self.assertEqual(bodybuf, bodyresp, "   body (...'%s')\nincorrectly returned as (...'%s')" % (bodyresp[-10:], bodybuf[-10:]))
 
     @connect(['cd'])
     def test_message_in_packets(self):
@@ -255,7 +255,7 @@ class TestParsing(unittest.TestCase):
 
         boilerplate = '0123456789'*1024 # large enough boilerplate
 
-        message = boilerplate[:1024+256+64+32]
+        message = boilerplate[:1024 + 512 + 256 + 32]
         msg_len = len(message)
 
         msg_to_send = ('SEND\n'
@@ -263,11 +263,12 @@ class TestParsing(unittest.TestCase):
                         '\n'
                         '%s'
                         '\0' % (message) )
-        packet_size = 17
+        packet_size = 191
         part_index = 0
         msg_to_send_len = len(msg_to_send)
         while part_index < msg_to_send_len:
             part = msg_to_send[part_index:part_index+packet_size]
+            time.sleep(0.1)
             self.cd.sendall(part)
             part_index += packet_size
 
@@ -292,4 +293,4 @@ class TestParsing(unittest.TestCase):
         bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
 
         self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, "body (...'%s') incorrectly returned as (...'%s')" % (bodyresp[-10:], bodybuf[-10:]))
+        self.assertEqual(bodybuf, bodyresp, "   body ('%s')\nincorrectly returned as ('%s')" % (bodyresp, bodybuf))
