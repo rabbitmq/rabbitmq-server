@@ -54,6 +54,7 @@
 start(_Type, _StartArgs) ->
     log_startup(),
     Logger = setup_wm_logging(),
+    rabbit_webmachine:setup(),
     register_contexts(Logger),
     case ?SETUP_WM_TRACE of
         true -> setup_wm_trace_app(Logger);
