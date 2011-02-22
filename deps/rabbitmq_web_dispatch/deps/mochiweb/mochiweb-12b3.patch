@@ -1,12 +1,495 @@
+diff --git a/src/mochifmt.erl b/src/mochifmt.erl
+index 5bc6b9c..fc95e4f 100644
+--- a/src/mochifmt.erl
++++ b/src/mochifmt.erl
+@@ -369,8 +369,8 @@ parse_std_conversion([Type], Acc) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ tokenize_test() ->
+     {?MODULE, [{raw, "ABC"}]} = tokenize("ABC"),
+diff --git a/src/mochifmt_records.erl b/src/mochifmt_records.erl
+index 2326d1d..760c6b7 100644
+--- a/src/mochifmt_records.erl
++++ b/src/mochifmt_records.erl
+@@ -33,6 +33,6 @@ get_rec_index(Atom, [_ | Rest], Index) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochifmt_std.erl b/src/mochifmt_std.erl
+index d4d74f6..7b28532 100644
+--- a/src/mochifmt_std.erl
++++ b/src/mochifmt_std.erl
+@@ -25,6 +25,6 @@ format_field(Arg, Format) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
 diff --git a/src/mochiglobal.erl b/src/mochiglobal.erl
-index 8db2bae..10e5362 100644
+index c740b87..6c342e2 100644
 --- a/src/mochiglobal.erl
 +++ b/src/mochiglobal.erl
-@@ -33,7 +33,6 @@ put(_K, V, Mod) ->
+@@ -33,7 +33,7 @@ put(_K, V, Mod) ->
      code:load_binary(Mod, atom_to_list(Mod) ++ ".erl", Bin),
      ok.
  
 --spec delete(atom()) -> boolean().
++
  %% @doc Delete term stored at K, no-op if non-existent.
  delete(K) ->
      delete(K, key_to_module(K)).
+@@ -77,8 +77,8 @@ term_to_abstract(Module, Getter, T) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ get_put_delete_test() ->
+     K = '$$test$$mochiglobal',
+     delete(K),
+diff --git a/src/mochihex.erl b/src/mochihex.erl
+index 44a2aa7..0756acf 100644
+--- a/src/mochihex.erl
++++ b/src/mochihex.erl
+@@ -68,8 +68,8 @@ to_bin([C1, C2 | Rest], Acc) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ to_hex_test() ->
+     "ff000ff1" = to_hex([255, 0, 15, 241]),
+diff --git a/src/mochijson.erl b/src/mochijson.erl
+index 2e3d145..2db32c8 100644
+--- a/src/mochijson.erl
++++ b/src/mochijson.erl
+@@ -406,8 +406,8 @@ tokenize(L=[C | _], S) when C >= $0, C =< $9; C == $- ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ %% testing constructs borrowed from the Yaws JSON implementation.
+ 
+diff --git a/src/mochijson2.erl b/src/mochijson2.erl
+index 3ef8924..f1b478f 100644
+--- a/src/mochijson2.erl
++++ b/src/mochijson2.erl
+@@ -513,8 +513,8 @@ tokenize(B, S=#decoder{offset=O}) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ 
+ %% testing constructs borrowed from the Yaws JSON implementation.
+diff --git a/src/mochilists.erl b/src/mochilists.erl
+index 8981e7b..d93b241 100644
+--- a/src/mochilists.erl
++++ b/src/mochilists.erl
+@@ -55,8 +55,8 @@ get_value(Key, Proplist, Default) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ set_defaults_test() ->
+     ?assertEqual(
+diff --git a/src/mochilogfile2.erl b/src/mochilogfile2.erl
+index c34ee73..b4a7e3c 100644
+--- a/src/mochilogfile2.erl
++++ b/src/mochilogfile2.erl
+@@ -57,8 +57,8 @@ find_last_newline(FD, Location) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ name_test() ->
+     D = mochitemp:mkdtemp(),
+     FileName = filename:join(D, "open_close_test.log"),
+diff --git a/src/mochinum.erl b/src/mochinum.erl
+index a7e2bfb..d62040a 100644
+--- a/src/mochinum.erl
++++ b/src/mochinum.erl
+@@ -231,8 +231,8 @@ log2floor(Int, N) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ int_ceil_test() ->
+     1 = int_ceil(0.0001),
+diff --git a/src/mochitemp.erl b/src/mochitemp.erl
+index bb23d2a..b0c5fc2 100644
+--- a/src/mochitemp.erl
++++ b/src/mochitemp.erl
+@@ -135,8 +135,8 @@ normalize_dir(L) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ pushenv(L) ->
+     [{K, os:getenv(K)} || K <- L].
+ popenv(L) ->
+diff --git a/src/mochiutf8.erl b/src/mochiutf8.erl
+index 206e118..a31280e 100644
+--- a/src/mochiutf8.erl
++++ b/src/mochiutf8.erl
+@@ -192,8 +192,8 @@ invalid_utf8_indexes(<<>>, _N, Acc) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ binary_skip_bytes_test() ->
+     ?assertEqual(<<"foo">>,
+diff --git a/src/mochiweb.erl b/src/mochiweb.erl
+index 3118028..967d29b 100644
+--- a/src/mochiweb.erl
++++ b/src/mochiweb.erl
+@@ -92,8 +92,8 @@ ensure_started(App) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ -record(treq, {path, body= <<>>, xreply= <<>>}).
+ 
+diff --git a/src/mochiweb_acceptor.erl b/src/mochiweb_acceptor.erl
+index 79d172c..876d9f4 100644
+--- a/src/mochiweb_acceptor.erl
++++ b/src/mochiweb_acceptor.erl
+@@ -43,6 +43,6 @@ call_loop(Loop, Socket) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_app.erl b/src/mochiweb_app.erl
+index 5d67787..4b87157 100644
+--- a/src/mochiweb_app.erl
++++ b/src/mochiweb_app.erl
+@@ -22,6 +22,6 @@ stop(_State) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_charref.erl b/src/mochiweb_charref.erl
+index 99cd550..d98e016 100644
+--- a/src/mochiweb_charref.erl
++++ b/src/mochiweb_charref.erl
+@@ -287,8 +287,8 @@ entity(_) -> undefined.
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ exhaustive_entity_test() ->
+     T = mochiweb_cover:clause_lookup_table(?MODULE, entity),
+diff --git a/src/mochiweb_cookies.erl b/src/mochiweb_cookies.erl
+index c090b71..133ed3e 100644
+--- a/src/mochiweb_cookies.erl
++++ b/src/mochiweb_cookies.erl
+@@ -203,8 +203,8 @@ any_to_list(V) when is_integer(V) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ quote_test() ->
+     %% ?assertError eunit macro is not compatible with coverage module
+diff --git a/src/mochiweb_cover.erl b/src/mochiweb_cover.erl
+index 6a14ef5..aa075d5 100644
+--- a/src/mochiweb_cover.erl
++++ b/src/mochiweb_cover.erl
+@@ -46,8 +46,8 @@ clause_fold(_, Acc) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ foo_table(a) -> b;
+ foo_table("a") -> <<"b">>;
+ foo_table(123) -> {4, 3, 2};
+diff --git a/src/mochiweb_echo.erl b/src/mochiweb_echo.erl
+index 6f7872b..0388358 100644
+--- a/src/mochiweb_echo.erl
++++ b/src/mochiweb_echo.erl
+@@ -33,6 +33,6 @@ loop(Socket) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_headers.erl b/src/mochiweb_headers.erl
+index 4fce983..a778fa5 100644
+--- a/src/mochiweb_headers.erl
++++ b/src/mochiweb_headers.erl
+@@ -195,8 +195,8 @@ any_to_list(V) when is_integer(V) ->
+ %%
+ %% Tests.
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ make_test() ->
+     Identity = make([{hdr, foo}]),
+diff --git a/src/mochiweb_html.erl b/src/mochiweb_html.erl
+index 2c3cad9..cdd042e 100644
+--- a/src/mochiweb_html.erl
++++ b/src/mochiweb_html.erl
+@@ -705,8 +705,8 @@ tokenize_textarea(Bin, S=#decoder{offset=O}, Start) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ to_html_test() ->
+     ?assertEqual(
+diff --git a/src/mochiweb_http.erl b/src/mochiweb_http.erl
+index 2414099..d1d7f1d 100644
+--- a/src/mochiweb_http.erl
++++ b/src/mochiweb_http.erl
+@@ -203,8 +203,8 @@ range_skip_length(Spec, Size) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ range_test() ->
+     %% valid, single ranges
+diff --git a/src/mochiweb_io.erl b/src/mochiweb_io.erl
+index 6ce57ec..36c5195 100644
+--- a/src/mochiweb_io.erl
++++ b/src/mochiweb_io.erl
+@@ -38,8 +38,8 @@ iodevice_size(IoDevice) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ 
+ 
+diff --git a/src/mochiweb_mime.erl b/src/mochiweb_mime.erl
+index 5344aee..09b79df 100644
+--- a/src/mochiweb_mime.erl
++++ b/src/mochiweb_mime.erl
+@@ -75,8 +75,8 @@ from_extension(_) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ exhaustive_from_extension_test() ->
+     T = mochiweb_cover:clause_lookup_table(?MODULE, from_extension),
+diff --git a/src/mochiweb_multipart.erl b/src/mochiweb_multipart.erl
+index 3069cf4..ebf47ab 100644
+--- a/src/mochiweb_multipart.erl
++++ b/src/mochiweb_multipart.erl
+@@ -295,8 +295,8 @@ find_boundary(Prefix, Data) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ ssl_cert_opts() ->
+     EbinDir = filename:dirname(code:which(?MODULE)),
+diff --git a/src/mochiweb_request.erl b/src/mochiweb_request.erl
+index 1cf9616..ae10d56 100644
+--- a/src/mochiweb_request.erl
++++ b/src/mochiweb_request.erl
+@@ -710,6 +710,6 @@ accepted_encodings(SupportedEncodings) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_response.erl b/src/mochiweb_response.erl
+index ab8ee61..6c31fed 100644
+--- a/src/mochiweb_response.erl
++++ b/src/mochiweb_response.erl
+@@ -59,6 +59,6 @@ write_chunk(Data) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_skel.erl b/src/mochiweb_skel.erl
+index 76eefa6..1cd7235 100644
+--- a/src/mochiweb_skel.erl
++++ b/src/mochiweb_skel.erl
+@@ -81,6 +81,6 @@ ensuredir(Dir) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_socket_server.erl b/src/mochiweb_socket_server.erl
+index 1aae09a..41d6be9 100644
+--- a/src/mochiweb_socket_server.erl
++++ b/src/mochiweb_socket_server.erl
+@@ -267,6 +267,6 @@ handle_info(Info, State) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_sup.erl b/src/mochiweb_sup.erl
+index af7df9b..9c9e39e 100644
+--- a/src/mochiweb_sup.erl
++++ b/src/mochiweb_sup.erl
+@@ -36,6 +36,6 @@ init([]) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/src/mochiweb_util.erl b/src/mochiweb_util.erl
+index d1cc59d..3a97ac6 100644
+--- a/src/mochiweb_util.erl
++++ b/src/mochiweb_util.erl
+@@ -548,8 +548,8 @@ make_io(Io) when is_list(Io); is_binary(Io) ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ 
+ make_io_test() ->
+     ?assertEqual(
+diff --git a/src/reloader.erl b/src/reloader.erl
+index c0f5de8..4cba4b2 100644
+--- a/src/reloader.erl
++++ b/src/reloader.erl
+@@ -156,6 +156,6 @@ stamp() ->
+ %%
+ %% Tests
+ %%
+--include_lib("eunit/include/eunit.hrl").
+ -ifdef(TEST).
++-include_lib("eunit/include/eunit.hrl").
+ -endif.
+diff --git a/support/make_app.escript b/support/make_app.escript
+index 0d0b84b..d7586cb 100755
+--- a/support/make_app.escript
++++ b/support/make_app.escript
+@@ -27,7 +27,7 @@ write_app(F, Comments, TermL, App) ->
+ parse_appsrc(F) ->
+     case file:read_file(F) of
+         {ok, B} ->
+-            case erl_scan:string(binary_to_list(B), 1, [return_comments]) of
++            case erl_scan:string(binary_to_list(B), 1) of
+                 {ok, Toks, _} ->
+                     Comments = lists:takewhile(
+                                  fun({comment,_,_}) -> true;
+@@ -64,22 +64,12 @@ write_term(T, L0, TermL, Fd) ->
+     io:fwrite(Fd, "~p.~n", [T]).
+ 
+ vsn(Vsn, Attrs) when Vsn =:= '' orelse Vsn =:= "" ->
+-    case lists:keyfind(vsn, 1, Attrs) of
+-        false ->
+-            {vsn, "0.00"};
+-        V ->
+-            V
+-    end;
++    {vsn, "1.3"}; %% By inspection
+ vsn(Vsn, _Attrs) ->
+     {vsn, Vsn}.
+ 
+ descr(Attrs) ->
+-    case lists:keyfind(description, 1, Attrs) of
+-        false ->
+-            {description, "auto_generated .app file"};
+-        D ->
+-            D
+-    end.
++    {description, "MochiMedia Web Server"}. %% By inspection
+ 
+ error(E) ->
+     io:fwrite("*** ~p~n", [E]),
+--- a/support/include.mk
++++ b/support/include.mk
+@@ -31,7 +31,7 @@
+ MODULES = $(ERL_SOURCES:%.erl=%)
+
+ ../ebin/%.app: %.app.src
+-	../support/make_app.escript $< $@ "" "$(MODULES)"
++	../support/make_app.escript $< $@ default "$(MODULES)"
+
+
+ $(EBIN_DIR)/%.$(EMULATOR): %.erl
+--- a/support/make_app.escript
++++ b/support/make_app.escript
+@@ -63,7 +63,7 @@
+     end,
+     io:fwrite(Fd, "~p.~n", [T]).
+
+-vsn(Vsn, Attrs) when Vsn =:= '' orelse Vsn =:= "" ->
++vsn(Vsn, Attrs) when Vsn =:= '' orelse Vsn =:= "" orelse Vsn =:= "default" ->
+     {vsn, "1.3"}; %% By inspection
+ vsn(Vsn, _Attrs) ->
+     {vsn, Vsn}.
