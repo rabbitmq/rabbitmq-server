@@ -319,7 +319,6 @@ edges(_Module, Steps, Scope0) ->
     [{Require, StepName} || {StepName, Scope1, Requires} <- Steps,
                             Require <- Requires,
                             Scope0 == Scope1].
-
 unknown_heads(Heads, G) ->
     [H || H <- Heads, digraph:vertex(G, H) =:= false].
 

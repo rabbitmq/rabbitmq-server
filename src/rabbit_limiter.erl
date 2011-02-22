@@ -65,7 +65,7 @@ start_link(ChPid, UnackedMsgCount) ->
 limit(undefined, 0) ->
     ok;
 limit(LimiterPid, PrefetchCount) ->
-    gen_server2:call(LimiterPid, {limit, PrefetchCount}).
+    gen_server2:call(LimiterPid, {limit, PrefetchCount}, infinity).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit

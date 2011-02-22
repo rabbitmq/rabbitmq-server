@@ -20,7 +20,7 @@
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
          is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
-         empty_ram_only_tables/0, copy_db/1,
+         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_disc_nodes/0, read_previous_run_disc_nodes/0,
          delete_previous_run_disc_nodes/0, running_nodes_filename/0]).
@@ -57,6 +57,7 @@
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
+-spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
 -spec(create_cluster_nodes_config/1 :: ([node()]) ->  'ok').
 -spec(read_cluster_nodes_config/0 :: () ->  [node()]).
 -spec(record_running_disc_nodes/0 :: () ->  'ok').
@@ -194,6 +195,17 @@ table_definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
+     {rabbit_topic_trie_edge,
+      [{record_name, topic_trie_edge},
+       {attributes, record_info(fields, topic_trie_edge)},
+       {type, ordered_set},
+       {match, #topic_trie_edge{trie_edge = trie_edge_match(), _='_'}}]},
+     {rabbit_topic_trie_binding,
+      [{record_name, topic_trie_binding},
+       {attributes, record_info(fields, topic_trie_binding)},
+       {type, ordered_set},
+       {match, #topic_trie_binding{trie_binding = trie_binding_match(),
+                                   _='_'}}]},
      %% Consider the implications to nodes_of_type/1 before altering
      %% the next entry.
      {rabbit_durable_exchange,
@@ -225,6 +237,12 @@ reverse_binding_match() ->
                      _='_'}.
 binding_destination_match() ->
     resource_match('_').
+trie_edge_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
+trie_binding_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
@@ -412,9 +430,9 @@ init_db(ClusterNodes, Force) ->
                     ok = create_schema();
                 {[], true} ->
                     %% We're the first node up
-                    ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade(local) of
-                        ok                    -> ensure_schema_ok();
+                        ok                    -> ok = wait_for_tables(),
+                                                 ensure_schema_ok();
                         version_not_available -> schema_ok_or_move()
                     end;
                 {[AnotherNode|_], _} ->
@@ -569,12 +587,15 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
+wait_for_replicated_tables() ->
+    wait_for_tables(replicated_table_names()).
 
-wait_for_tables() -> wait_for_tables(table_names()).
+wait_for_tables() ->
+    wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    case mnesia:wait_for_tables(TableNames, 30000) of
+    Nonexistent = TableNames -- mnesia:system_info(tables),
+    case mnesia:wait_for_tables(TableNames -- Nonexistent, 30000) of
         ok -> ok;
         {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
