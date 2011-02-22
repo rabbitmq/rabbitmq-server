@@ -77,8 +77,8 @@ register_contexts(Logger) ->
               end
       end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
-                                             rabbit_webmachine:makeloop(Dispatch,
-                                                                        Logger),
+                                             rabbit_webmachine:makeloop(
+                                               Dispatch, Logger),
                                              "Management: HTTP API"),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
