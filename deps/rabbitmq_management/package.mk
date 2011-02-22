@@ -1,13 +1,12 @@
 RELEASABLE:=true
 DEPS:=rabbitmq-mochiweb webmachine-wrapper rabbitmq-server rabbitmq-erlang-client rabbitmq-management-agent
 WITH_BROKER_TEST_COMMANDS:=rabbit_mgmt_test_all:all_tests()
-EXTRA_PACKAGE_DIRS:=$(PACKAGE_DIR)/priv
-EXTRA_TARGETS:=$(shell find $(EXTRA_PACKAGE_DIRS) -type f) $(PACKAGE_DIR)/priv/www-cli/rabbitmqadmin
 
-define package_rules
-
-$(PACKAGE_DIR)/priv/www-cli/rabbitmqadmin: $(PACKAGE_DIR)/bin/rabbitmqadmin
-	cp $$< $$@
+CONSTRUCT_APP_PREREQS:=$(shell find $(PACKAGE_DIR)/priv -type f) $(PACKAGE_DIR)/bin/rabbitmqadmin
+define construct_app_commands
+	cp -r $(PACKAGE_DIR)/priv $(APP_DIR)
+	cp $(PACKAGE_DIR)/bin/rabbitmqadmin $(APP_DIR)/priv/www-cli
+endef
 
 # The tests require erlang/OTP R14 (httpc issue)
 $(PACKAGE_DIR)+pre-test::
@@ -15,8 +14,3 @@ $(PACKAGE_DIR)+pre-test::
 	  echo "Need Erlang/OTP R14A or higher" ; \
 	  exit 1 ; \
 	fi
-
-$(PACKAGE_DIR)+clean::
-	rm -f $(PACKAGE_DIR)/priv/www-cli/rabbitmqadmin
-
-endef
