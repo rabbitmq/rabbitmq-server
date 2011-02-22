@@ -27,6 +27,14 @@
 
 -include("gm_specs.hrl").
 
+-define(RECEIVE_AFTER(Body, Bool, Error),
+        receive Body ->
+                true = Bool,
+                passed
+        after 1000 ->
+                throw(Error)
+        end).
+
 joined(Pid, Members) ->
     Pid ! {joined, self(), Members},
     ok.
@@ -123,43 +131,24 @@ with_two_members(Fun) ->
     end.
 
 receive_or_throw(Pattern, Error) ->
-    receive Pattern ->
-            passed
-    after 1000 ->
-            throw(Error)
-    end.
+    ?RECEIVE_AFTER(Pattern, true, Error).
 
 receive_birth(From, Born, Error) ->
-    receive {members_changed, From, Birth, Death} ->
-            [Born] = Birth,
-            [] = Death,
-            passed
-    after 1000 ->
-            throw(Error)
-    end.
+    ?RECEIVE_AFTER({members_changed, From, Birth, Death},
+                   ([Born] == Birth) andalso ([] == Death),
+                   Error).
 
 receive_death(From, Died, Error) ->
-    receive {members_changed, From, Birth, Death} ->
-            [] = Birth,
-            [Died] = Death,
-            passed
-    after 1000 ->
-            throw(Error)
-    end.
+    ?RECEIVE_AFTER({members_changed, From, Birth, Death},
+                   ([] == Birth) andalso ([Died] == Death),
+                   Error).
 
 receive_joined(From, Members, Error) ->
-    Members1 = lists:usort(Members),
-    receive {joined, From, Members2} ->
-            Members1 = lists:usort(Members2),
-            passed
-    after 1000 ->
-            throw(Error)
-    end.
+    ?RECEIVE_AFTER({joined, From, Members2},
+                   lists:usort(Members) == lists:usort(Members2),
+                   Error).
 
 receive_termination(From, Reason, Error) ->
-    receive {termination, From, Reason1} ->
-            Reason = Reason1,
-            passed
-    after 1000 ->
-            throw(Error)
-    end.
+    ?RECEIVE_AFTER({termination, From, Reason1},
+                   Reason == Reason1,
+                   Error).
