@@ -1,9 +1,7 @@
-syntax: regexp
-\.pyc$
+~$
 \.beam$
-\.pyc$
-^dist/
 ^build/
-^ebin/
-^tmp/
+^dist/
 ^cover/
+^erl_crash.dump$
+\.pyc$
