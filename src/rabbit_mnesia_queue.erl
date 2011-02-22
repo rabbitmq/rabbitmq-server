@@ -37,7 +37,7 @@
 %% and pending acks are both stored in Mnesia.
 %%
 %% All queues are durable in this version, and all msgs are treated as
-%% persistent. (This will break some clients and some tests for
+%% persistent. (This may break some clients and some tests for
 %% non-durable queues.)
 %% ----------------------------------------------------------------------------
 
@@ -418,10 +418,7 @@ fetch(AckRequired, S) ->
     % could be, well, dropped.
     Now = timer:now_diff(now(), {0,0,0}),
     S1 = dropwhile(
-           fun (#message_properties{expiry = Expiry}) ->
-                   % rabbit_log:info("inside fetch, Now = ~p, Expiry = ~p, decision = ~p", [Now, Expiry, Expiry < Now]),
-                   Expiry < Now
-           end,
+           fun (#message_properties{expiry = Expiry}) -> Expiry < Now end,
            S),
     {atomic, FR} =
         mnesia:transaction(fun () -> internal_fetch(AckRequired, S1) end),
@@ -590,7 +587,7 @@ requeue(SeqIds, PropsF, S) ->
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
-len(S = #s { q_table = QTable }) ->
+len(#s { q_table = QTable }) ->
     % rabbit_log:info("len(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> length(mnesia:all_keys(QTable)) end),
@@ -605,7 +602,7 @@ len(S = #s { q_table = QTable }) ->
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
-is_empty(S = #s { q_table = QTable }) ->
+is_empty(#s { q_table = QTable }) ->
     % rabbit_log:info("is_empty(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(fun () -> 0 == length(mnesia:all_keys(QTable)) end),
@@ -668,9 +665,9 @@ handle_pre_hibernate(S) -> S.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(S = #s { q_table = QTable,
-                p_table = PTable,
-                next_seq_id = NextSeqId }) ->
+status(#s { q_table = QTable,
+            p_table = PTable,
+            next_seq_id = NextSeqId }) ->
     % rabbit_log:info("status(~n ~p) ->", [S]),
     {atomic, Result} =
         mnesia:transaction(

@@ -36,9 +36,9 @@
 %% additional information. Pending acks are also recorded as Ms. Msgs
 %% and pending acks are both stored in RAM.
 %%
-%% All queues are durable in this version, and all msgs are treated as
-%% persistent. (This will break some clients and some tests for
-%% non-durable queues.)
+%% All queues are non-durable in this version, and all msgs are
+%% treated as non-persistent. (This may break some clients and some
+%% tests for durable queues.)
 %% ----------------------------------------------------------------------------
 
 %% TODO: Need to provide better back-pressure when queue is filling up.
@@ -144,7 +144,7 @@ stop() -> ok.
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
 %%         -> state()).
 
-init(QueueName, IsDurable, Recover) ->
+init(_QueueName, _IsDurable, _Recover) ->
     % rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
     Result = #s { q = queue:new(),
                   p = dict:new(),
@@ -282,12 +282,9 @@ fetch(AckRequired, S) ->
     % could be, well, dropped.
     Now = timer:now_diff(now(), {0,0,0}),
     S1 = dropwhile(
-           fun (#message_properties{expiry = Expiry}) ->
-                   % rabbit_log:info("inside fetch, Now = ~p, Expiry = ~p, decision = ~p", [Now, Expiry, Expiry < Now]),
-                   Expiry < Now
-           end,
+           fun (#message_properties{expiry = Expiry}) -> Expiry < Now end,
            S),
-    Result = internal_fetch(AckRequired, S),
+    Result = internal_fetch(AckRequired, S1),
     % rabbit_log:info("fetch ->~n ~p", [Result]),
     callback([]),
     Result.
@@ -407,7 +404,7 @@ requeue(SeqIds, PropsF, S) ->
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
-len(S = #s { q = Q }) ->
+len(#s { q = Q }) ->
     % rabbit_log:info("len(~n ~p) ->", [S]),
     Result = queue:len(Q),
     % rabbit_log:info("len ->~n ~p", [Result]),
@@ -420,7 +417,7 @@ len(S = #s { q = Q }) ->
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
-is_empty(S = #s { q = Q }) ->
+is_empty(#s { q = Q }) ->
     % rabbit_log:info("is_empty(~n ~p) ->", [S]),
     Result = queue:is_empty(Q),
     % rabbit_log:info("is_empty ->~n ~p", [Result]),
@@ -481,7 +478,7 @@ handle_pre_hibernate(S) -> S.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(S = #s { q = Q, p = P, next_seq_id = NextSeqId }) ->
+status(#s { q = Q, p = P, next_seq_id = NextSeqId }) ->
     % rabbit_log:info("status(~n ~p) ->", [S]),
     Result =
         [{len, queue:len(Q)}, {next_seq_id, NextSeqId}, {acks, dict:size(P)}],
