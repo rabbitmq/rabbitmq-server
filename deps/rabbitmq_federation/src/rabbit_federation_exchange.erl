@@ -241,7 +241,8 @@ connect_upstream(UpstreamURI, ResetUpstreamQueue,
                  State = #state{ upstreams = Upstreams,
                                  downstream_exchange = DownstreamX}) ->
     %%io:format("Connecting to ~s...~n", [UpstreamURI]),
-    {X, Props} = parse_uri(UpstreamURI),
+    Props = parse_uri(UpstreamURI),
+    X = proplists:get_value(exchange, Props),
     Params = #amqp_params{host         = proplists:get_value(host, Props),
                           port         = proplists:get_value(port, Props),
                           virtual_host = proplists:get_value(vhost, Props)},
@@ -404,7 +405,7 @@ validate_upstream({longstr, URI}) ->
     case parse_uri(URI) of
         {error, E} ->
             fail("URI ~s could not be parsed, error: ~p", [URI, E]);
-        {_X, Props} ->
+        Props ->
             case proplists:get_value(scheme, Props) of
                 "amqp" -> ok;
                 S      -> fail("Scheme ~s not supported", [S])
@@ -429,8 +430,8 @@ parse_uri(URI) ->
                 [VHostEnc, XEnc] ->
                     VHost = httpd_util:decode_hex(VHostEnc),
                     X = httpd_util:decode_hex(XEnc),
-                    {list_to_binary(X),
-                     [{vhost, list_to_binary(VHost)}|Props]};
+                    [{exchange, list_to_binary(X)},
+                     {vhost,    list_to_binary(VHost)}] ++ Props;
                 _ ->
                     {error, path_must_have_two_components}
             end
