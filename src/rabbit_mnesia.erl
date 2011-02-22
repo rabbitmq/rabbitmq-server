@@ -264,43 +264,46 @@ ensure_schema_integrity() ->
 
 check_schema_integrity() ->
     Tables = mnesia:system_info(tables),
-    case [Error || {Tab, TabDef} <- table_definitions(),
-                   case lists:member(Tab, Tables) of
-                       false ->
-                           Error = {table_missing, Tab},
-                           true;
-                       true  ->
-                           {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                           Attrs = mnesia:table_info(Tab, attributes),
-                           Error = {table_attributes_mismatch, Tab,
-                                    ExpAttrs, Attrs},
-                           Attrs /= ExpAttrs
-                   end] of
-        []     -> check_table_integrity();
-        Errors -> {error, Errors}
+    case check_tables(fun (Tab, TabDef) ->
+                              case lists:member(Tab, Tables) of
+                                  false -> {error, {table_missing, Tab}};
+                                  true  -> check_table_attributes(Tab, TabDef)
+                              end
+                      end) of
+        ok     -> ok = wait_for_tables(),
+                  check_tables(fun check_table_integrity/2);
+        Other  -> Other
     end.
 
-check_table_integrity() ->
-    ok = wait_for_tables(),
-    case lists:all(fun ({Tab, TabDef}) ->
-                           {_, Match} = proplists:lookup(match, TabDef),
-                           read_test_table(Tab, Match)
-                   end, table_definitions()) of
-        true  -> ok;
-        false -> {error, invalid_table_content}
+check_table_attributes(Tab, TabDef) ->
+    {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+    case mnesia:table_info(Tab, attributes) of
+        ExpAttrs -> ok;
+        Attrs    -> {error, {table_attributes_mismatch, Tab, ExpAttrs, Attrs}}
     end.
 
-read_test_table(Tab, Match) ->
+check_table_integrity(Tab, TabDef) ->
+    {_, Match} = proplists:lookup(match, TabDef),
     case mnesia:dirty_first(Tab) of
         '$end_of_table' ->
-            true;
+            ok;
         Key ->
             ObjList = mnesia:dirty_read(Tab, Key),
             MatchComp = ets:match_spec_compile([{Match, [], ['$_']}]),
             case ets:match_spec_run(ObjList, MatchComp) of
-                ObjList -> true;
-                _       -> false
+                ObjList -> ok;
+                _       -> {error, {table_content_invalid, Tab, Match, ObjList}}
             end
+    end.
+
+check_tables(Fun) ->
+    case [Error || {Tab, TabDef} <- table_definitions(),
+                   case Fun(Tab, TabDef) of
+                       ok             -> Error = none, false;
+                       {error, Error} -> true
+                   end] of
+        []     -> ok;
+        Errors -> {error, Errors}
     end.
 
 %% The cluster node config file contains some or all of the disk nodes
