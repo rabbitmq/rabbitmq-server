@@ -36,7 +36,11 @@
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 -define(CLI_PREFIX, "cli").
+-ifdef(trace).
 -define(SETUP_WM_TRACE, true).
+-else.
+-define(SETUP_WM_TRACE, false).
+-endif.
 
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
