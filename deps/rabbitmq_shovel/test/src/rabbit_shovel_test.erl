@@ -217,7 +217,7 @@ test() ->
     amqp_connection:close(Conn),
 
     ok = application:stop(rabbit_shovel),
-    passed.
+    ok.
 
 test_broken_shovel_configs(Configs) ->
     application:set_env(rabbit_shovel, shovels, Configs),
