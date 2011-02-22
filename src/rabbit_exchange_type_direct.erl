@@ -37,8 +37,7 @@ description() ->
 
 route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    lists:append([rabbit_router:match_routing_key(Name, RKey) ||
-                  RKey <- Routes]).
+    rabbit_router:match_routing_key(Name, Routes).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.

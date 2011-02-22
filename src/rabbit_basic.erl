@@ -31,7 +31,6 @@
 -type(publish_result() ::
         ({ok, rabbit_router:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
--type(msg_or_error() :: {'ok', rabbit_types:message()} | {'error', any()}).
 
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
@@ -41,10 +40,11 @@
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
-         properties_input(), binary()) -> msg_or_error()).
+         properties_input(), binary()) -> rabbit_types:message()).
 -spec(message/3 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
-         rabbit_types:decoded_content()) -> msg_or_error()).
+         rabbit_types:decoded_content()) -> {'ok', rabbit_types:message()} |
+                                            {'error', any()}).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 ::
@@ -98,17 +98,19 @@ from_content(Content) ->
     {Props, list_to_binary(lists:reverse(FragmentsRev))}.
 
 %% This breaks the spec rule forbidding message modification
+strip_header(#content{properties = #'P_basic'{headers = undefined}}
+             = DecodedContent, _Key) ->
+    DecodedContent;
 strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
-             = DecodedContent, Key) when Headers =/= undefined ->
-    case lists:keyfind(Key, 1, Headers) of
-        false -> DecodedContent;
-        Found -> Headers0 = lists:delete(Found, Headers),
-                 rabbit_binary_generator:clear_encoded_content(
-                     DecodedContent#content{
-                         properties = Props#'P_basic'{headers = Headers0}})
-    end;
-strip_header(DecodedContent, _Key) ->
-    DecodedContent.
+             = DecodedContent, Key) ->
+    case lists:keysearch(Key, 1, Headers) of
+        false          -> DecodedContent;
+        {value, Found} -> Headers0 = lists:delete(Found, Headers),
+                          rabbit_binary_generator:clear_encoded_content(
+                              DecodedContent#content{
+                                  properties = Props#'P_basic'{
+                                      headers = Headers0}})
+    end.
 
 message(ExchangeName, RoutingKey,
         #content{properties = Props} = DecodedContent) ->
@@ -170,7 +172,7 @@ is_message_persistent(#content{properties = #'P_basic'{
         1         -> false;
         2         -> true;
         undefined -> false;
-        _         -> false
+        Other     -> throw({error, {delivery_mode_unknown, Other}})
     end.
 
 % Extract CC routes from headers
@@ -185,4 +187,3 @@ header_routes(HeadersTable) ->
                                                Type,
                                                binary_to_list(HeaderKey)}})
          end || HeaderKey <- ?ROUTING_HEADERS]).
-

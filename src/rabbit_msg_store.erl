@@ -26,7 +26,7 @@
 -export([sync/1, set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
 
--export([transform_dir/3, force_recovery/2]). %% upgrade
+-export([multiple_routing_keys/0]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
@@ -106,6 +106,8 @@
 
 %%----------------------------------------------------------------------------
 
+-rabbit_upgrade({multiple_routing_keys, []}).
+
 -ifdef(use_specs).
 
 -export_type([gc_state/0, file_num/0]).
@@ -164,9 +166,7 @@
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                               deletion_thunk()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
--spec(force_recovery/2 :: (file:filename(), server()) -> 'ok').
--spec(transform_dir/3 :: (file:filename(), server(),
-        fun ((binary()) -> ({'ok', msg()} | {error, any()}))) -> 'ok').
+-spec(multiple_routing_keys/0 :: () -> 'ok').
 
 -endif.
 
@@ -1968,6 +1968,25 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {destination, Destination}]}
     end.
 
+%%----------------------------------------------------------------------------
+%% upgrade
+%%----------------------------------------------------------------------------
+
+multiple_routing_keys() ->
+    [transform_store(
+         fun ({basic_message, ExchangeName, Routing_Key, Content,
+               Guid, Persistent}) ->
+                 {ok, {basic_message, ExchangeName, [Routing_Key], Content,
+                       Guid, Persistent}};
+             (_) -> {error, corrupt_message}
+         end, Store) || Store <- rabbit_variable_queue:store_names()],
+    ok.
+
+%% Assumes message store is not running
+transform_store(TransformFun, Store) ->
+    force_recovery(rabbit_mnesia:dir(), Store),
+    transform_dir(rabbit_mnesia:dir(), Store, TransformFun).
+
 force_recovery(BaseDir, Store) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
     file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
@@ -1975,10 +1994,10 @@ force_recovery(BaseDir, Store) ->
      File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
     ok.
 
-for_each_file(D, Fun, Files) ->
+foreach_file(D, Fun, Files) ->
     [Fun(filename:join(D, File)) || File <- Files].
 
-for_each_file(D1, D2, Fun, Files) ->
+foreach_file(D1, D2, Fun, Files) ->
     [Fun(filename:join(D1, File), filename:join(D2, File)) || File <- Files].
 
 transform_dir(BaseDir, Store, TransformFun) ->
@@ -1988,11 +2007,11 @@ transform_dir(BaseDir, Store, TransformFun) ->
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
         false -> OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-                 for_each_file(Dir, TmpDir, TransformFile,     OldFileList),
-                 for_each_file(Dir,         fun file:delete/1, OldFileList),
+                 foreach_file(Dir, TmpDir, TransformFile,     OldFileList),
+                 foreach_file(Dir,         fun file:delete/1, OldFileList),
                  NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
-                 for_each_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
-                 for_each_file(TmpDir,      fun file:delete/1, NewFileList),
+                 foreach_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
+                 foreach_file(TmpDir,      fun file:delete/1, NewFileList),
                  ok = file:del_dir(TmpDir)
     end.
 
@@ -2007,7 +2026,7 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
         rabbit_msg_file:scan(
             RefOld, Size,
             fun({Guid, _Size, _Offset, BinMsg}, ok) ->
-                case TransformFun(BinMsg) of
+                case TransformFun(binary_to_term(BinMsg)) of
                     {ok, MsgNew} ->
                         {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
                         ok;

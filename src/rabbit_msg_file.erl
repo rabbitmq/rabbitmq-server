@@ -80,28 +80,28 @@ read(FileHdl, TotalSize) ->
     end.
 
 scan(FileHdl, FileSize, Fun, Acc) when FileSize >= 0 ->
-    scan(FileHdl, FileSize, <<>>, 0, Acc, 0, Fun).
+    scan(FileHdl, FileSize, <<>>, 0, 0, Fun, Acc).
 
-scan(_FileHdl, FileSize, _Data, FileSize, Acc, ScanOffset, _Fun) ->
+scan(_FileHdl, FileSize, _Data, FileSize, ScanOffset, _Fun, Acc) ->
     {ok, Acc, ScanOffset};
-scan(FileHdl, FileSize, Data, ReadOffset, Acc, ScanOffset, Fun) ->
+scan(FileHdl, FileSize, Data, ReadOffset, ScanOffset, Fun, Acc) ->
     Read = lists:min([?SCAN_BLOCK_SIZE, (FileSize - ReadOffset)]),
     case file_handle_cache:read(FileHdl, Read) of
         {ok, Data1} ->
             {Data2, Acc1, ScanOffset1} =
-                scanner(<<Data/binary, Data1/binary>>, Acc, ScanOffset, Fun),
+                scanner(<<Data/binary, Data1/binary>>, ScanOffset, Fun, Acc),
             ReadOffset1 = ReadOffset + size(Data1),
-            scan(FileHdl, FileSize, Data2, ReadOffset1, Acc1, ScanOffset1, Fun);
+            scan(FileHdl, FileSize, Data2, ReadOffset1, ScanOffset1, Fun, Acc1);
         _KO ->
             {ok, Acc, ScanOffset}
     end.
 
-scanner(<<>>, Acc, Offset, _Fun) ->
+scanner(<<>>, Offset, _Fun, Acc) ->
        {<<>>, Acc, Offset};
-scanner(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Acc, Offset, _Fun) ->
+scanner(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Offset, _Fun, Acc) ->
        {<<>>, Acc, Offset}; %% Nothing to do other than stop.
 scanner(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
-          WriteMarker:?WRITE_OK_SIZE_BITS, Rest/binary>>, Acc, Offset, Fun) ->
+          WriteMarker:?WRITE_OK_SIZE_BITS, Rest/binary>>, Offset, Fun, Acc) ->
        TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
        case WriteMarker of
            ?WRITE_OK_MARKER ->
@@ -113,10 +113,10 @@ scanner(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
                <<GuidNum:?GUID_SIZE_BITS, Msg/binary>> =
                    <<GuidAndMsg:Size/binary>>,
                <<Guid:?GUID_SIZE_BYTES/binary>> = <<GuidNum:?GUID_SIZE_BITS>>,
-               scanner(Rest, Fun({Guid, TotalSize, Offset, Msg}, Acc),
-                       Offset + TotalSize, Fun);
+               scanner(Rest, Offset + TotalSize, Fun,
+                       Fun({Guid, TotalSize, Offset, Msg}, Acc));
            _ ->
-               scanner(Rest, Acc, Offset + TotalSize, Fun)
+               scanner(Rest, Offset + TotalSize, Fun, Acc)
        end;
-scanner(Data, Acc, Offset, _Fun) ->
+scanner(Data, Offset, _Fun, Acc) ->
        {Data, Acc, Offset}.
