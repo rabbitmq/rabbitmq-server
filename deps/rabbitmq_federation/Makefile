@@ -24,6 +24,7 @@ start-other-node:
 	RABBITMQ_NODE_PORT=$(OTHER_PORT) \
 	RABBITMQ_SERVER_ERL_ARGS="-rabbit_mochiweb port 5$(OTHER_PORT)" \
 	../rabbitmq-server/scripts/rabbitmq-server -detached
+	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) wait
 
 stop-other-node:
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop || true

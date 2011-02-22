@@ -205,8 +205,6 @@ with_2ch(Fun) ->
 
 start_other_node() ->
     ?assertCmd("make start-other-node"),
-    %% TODO use rabbitmqctl wait when that's merged
-    timer:sleep(3000),
     {ok, Conn2} = amqp_connection:start(network, #amqp_params {port = 5673}),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
     Ch2.
