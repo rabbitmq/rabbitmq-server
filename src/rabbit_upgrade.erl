@@ -107,6 +107,7 @@ maybe_upgrade_mnesia() ->
     KnownDiscNodes = rabbit_mnesia:read_cluster_nodes_config(),
     case upgrades_required(mnesia) of
         version_not_available ->
+            rabbit:prepare(), %% Ensure we have logs for this
             case AllNodes of
                 [_] -> ok;
                 _   -> die("Cluster upgrade needed but upgrading from "
@@ -116,6 +117,7 @@ maybe_upgrade_mnesia() ->
         [] ->
             ok;
         Upgrades ->
+            rabbit:prepare(), %% Ensure we have logs for this
             case upgrade_mode(AllNodes, KnownDiscNodes) of
                 primary   -> primary_upgrade(Upgrades, AllNodes);
                 secondary -> secondary_upgrade(KnownDiscNodes)
