@@ -14,7 +14,12 @@
 %% We hardwire the "error handler" and use a "logging module" if
 %% supplied.
 
--export([makeloop/1, makeloop/2]).
+-export([makeloop/1, makeloop/2, setup/0]).
+
+setup() ->
+    %% Many internal procedures in webmachine check the application
+    %% env for the error_handler.
+    application:set_env(webmachine, error_handler, webmachine_error_handler).
 
 makeloop(Dispatch) ->
     makeloop(Dispatch, none).
