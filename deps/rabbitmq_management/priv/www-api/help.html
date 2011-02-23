@@ -382,7 +382,13 @@ Content-Length: 0</pre>
         <td class="path">/api/users/<i>name</i></td>
         <td>An individual user. To PUT a user, you will need a body looking something like this:
 <pre>{"password":"secret", "administrator":true}</pre>
-        All keys are mandatory.</td>
+or:
+<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "administrator":true}</pre>
+        The <code>administrator</code> key is mandatory. Either
+        <code>password</code> or <code>password_hash</code>
+        must be set. Setting <code>password_hash</code> to "" will ensure the
+        user cannot use a password to log in.
+        </td>
       </tr>
       <tr>
         <td>X</td>
