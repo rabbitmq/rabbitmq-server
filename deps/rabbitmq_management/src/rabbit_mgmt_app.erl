@@ -53,11 +53,10 @@
 
 start(_Type, _StartArgs) ->
     log_startup(),
-    Logger = setup_wm_logging(),
-    rabbit_webmachine:setup(),
-    register_contexts(Logger),
+    setup_wm_logging(),
+    register_contexts(),
     case ?SETUP_WM_TRACE of
-        true -> setup_wm_trace_app(Logger);
+        true -> setup_wm_trace_app();
         _    -> ok
     end,
     supervisor:start_link({local,?MODULE},?MODULE,[]).
@@ -65,7 +64,7 @@ start(_Type, _StartArgs) ->
 stop(_State) ->
     ok.
 
-register_contexts(Logger) ->
+register_contexts() ->
     Dispatch =
         [{[?PREFIX | Path], F, A} ||
             {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()],
@@ -79,7 +78,7 @@ register_contexts(Logger) ->
       end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
                                              rabbit_webmachine:makeloop(
-                                               Dispatch, Logger),
+                                               Dispatch),
                                              "Management: HTTP API"),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
@@ -88,20 +87,18 @@ setup_wm_logging() ->
     {ok, LogDir} = application:get_env(rabbit_management, http_log_dir),
     case LogDir of
         none ->
-            none;
+            rabbit_webmachine:setup(none);
         _ ->
-            application:set_env(webmachine, webmachine_logger_module,
-                                webmachine_logger),
-            webmachine_sup:start_logger(LogDir),
-            webmachine_logger
+            rabbit_webmachine:setup(webmachine_logger),
+            webmachine_sup:start_logger(LogDir)
     end.
 
 %% This doesn't *entirely* seem to work. It fails to load a non-existent
 %% image which seems to partly break it, but some stuff is usable.
-setup_wm_trace_app(Logger) ->
+setup_wm_trace_app() ->
     Loop = rabbit_webmachine:makeloop([{["wmtrace", '*'],
                                        wmtrace_resource,
-                                       [{trace_dir, "/tmp"}]}], Logger),
+                                       [{trace_dir, "/tmp"}]}]),
     rabbit_mochiweb:register_static_context(
       "wmtrace/static", ?MODULE, "deps/webmachine/webmachine/priv/trace", none),
     rabbit_mochiweb:register_context_handler("wmtrace",
