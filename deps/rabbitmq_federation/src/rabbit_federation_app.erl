@@ -19,14 +19,18 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
+%% This does the same dummy supervisor thing as rabbit_mgmt_app - see the
+%% comment there.
+-behaviour(supervisor).
+-export([init/1]).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 start(_Type, _StartArgs) ->
     {ok, Xs} = application:get_env(exchanges),
-    Sup = rabbit_federation_sup:start_link(),
-    rabbit_federation_exchange:start(),
     [declare_exchange(X) || X <- Xs],
-    Sup.
+    rabbit_federation_sup:go_all(),
+    supervisor:start_link({local,?MODULE},?MODULE,[]).
 
 stop(_State) ->
     ok.
@@ -59,3 +63,8 @@ pget(K, P) ->
         undefined -> exit({error, "Key missing in exchange definition", K, P});
         V         -> V
     end.
+
+%%----------------------------------------------------------------------------
+
+init([]) ->
+    {ok, {{one_for_one,3,10},[]}}.

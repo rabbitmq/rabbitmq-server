@@ -26,11 +26,10 @@
 
 -include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_federation.hrl").
 
 -behaviour(rabbit_exchange_type).
--behaviour(gen_server).
-
--export([start/0]).
+-behaviour(gen_server2).
 
 -export([description/0, route/2]).
 -export([validate/1, create/2, recover/2, delete/3,
@@ -40,23 +39,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([add_routing_to_headers/2]).
+-export([go/1]).
 
 %%----------------------------------------------------------------------------
 
--define(ETS_NAME, ?MODULE).
 -define(TX, false).
--define(ROUTING_HEADER, <<"x-forwarding">>).
--record(state, { downstream_connection, downstream_channel,
-                 downstream_exchange, next_publish_id, upstreams }).
--record(upstream, { connection, channel, queue, exchange, uri, unacked,
-                    consumer_tag }).
 
 %%----------------------------------------------------------------------------
-
-start() ->
-    %% TODO get rid of this ets table when bug 23825 lands.
-    ?ETS_NAME = ets:new(?ETS_NAME, [public, set, named_table]).
 
 description() ->
     [{name, <<"x-federation">>},
@@ -79,18 +68,17 @@ validate(X = #exchange{arguments = Args}) ->
     with_module(X, fun (M) -> M:validate(X) end).
 
 create(?TX, X) ->
-    {ok, _} =
-        rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
+    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:create(?TX, X) end);
 create(Tx, X) ->
     with_module(X, fun (M) -> M:create(Tx, X) end).
 
 recover(X, Bs) ->
+    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
 delete(?TX, X, Bs) ->
-    call(X, stop),
-    ok = rabbit_federation_sup:delete_child(exchange_to_sup_args(X)),
+    ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
 delete(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
@@ -115,9 +103,15 @@ assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
 
 %%----------------------------------------------------------------------------
 
+go(Pid) ->
+    gen_server2:call(Pid, become_real, infinity),
+    gen_server2:cast(Pid, connect_all).
+
+%%----------------------------------------------------------------------------
+
 call(#exchange{ name = Downstream }, Msg) ->
     [{_, Pid}] = ets:lookup(?ETS_NAME, Downstream),
-    gen_server:call(Pid, Msg, infinity).
+    gen_server2:call(Pid, Msg, infinity).
 
 with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.
@@ -129,95 +123,28 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, [{timeout, infinity}]).
+    gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
 init({DownstreamX, Durable, UpstreamURIs}) ->
-    {ok, DConn} = amqp_connection:start(direct),
-    {ok, DCh} = amqp_connection:open_channel(DConn),
-    #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(DCh, self()),
-    %%erlang:monitor(process, DCh),
     true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
-    State0 = #state{downstream_connection = DConn, downstream_channel = DCh,
-                    downstream_exchange = DownstreamX, upstreams = [],
-                    next_publish_id = 1},
-    {ok, lists:foldl(fun (UpstreamURI, State) ->
-                             connect_upstream(UpstreamURI, not Durable, State)
-                     end, State0, UpstreamURIs)}.
+    {ok, #state{downstream_exchange = DownstreamX,
+                downstream_durable = Durable,
+                upstreams = UpstreamURIs}}.
 
-handle_call({add_binding, #binding{destination = Dest, key = Key, args = Args}},
-            _From, State = #state{upstreams = Upstreams}) ->
-    %% TODO add bindings only if needed.
-    case is_federation_queue(Dest) of
-        true  -> ok;
-        false -> [bind_upstream(U, Key, Args) || U <- Upstreams]
-    end,
-    {reply, ok, State};
-
-handle_call({remove_bindings, Bs }, _From,
-            State = #state{ upstreams = Upstreams }) ->
-    [maybe_unbind_upstreams(Upstreams, B) || B <- Bs],
-    {reply, ok, State};
-
-handle_call(stop, _From, State = #state{ upstreams = Upstreams }) ->
-    [delete_upstream(U) || U <- Upstreams],
+handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
-handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, State}.
+handle_call(become_real, From, State) ->
+    gen_server2:reply(From, ok),
+    {become, rabbit_federation_exchange_process, State};
 
-handle_cast(Msg, State) ->
-    {stop, {unexpected_cast, Msg}, State}.
+handle_call(_Msg, _From, State) ->
+    {reply, ok, State}.
 
-handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State};
-
-handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
-            State = #state{ upstreams = Upstreams }) ->
-    DTagUChUs = retrieve_delivery_tags(Seq, Multiple, Upstreams),
-    [amqp_channel:cast(UCh, #'basic.ack'{delivery_tag = DTag,
-                                         multiple = Multiple}) ||
-        {DTag, UCh, _} <- DTagUChUs, DTag =/= none],
-    {noreply, State#state{ upstreams = [U || {_, _, U} <- DTagUChUs] }};
-
-handle_info({#'basic.deliver'{consumer_tag = CTag,
-                              delivery_tag = DTag,
-                              %% TODO do we care?
-                              %%redelivered = Redelivered,
-                              %%exchange = Exchange,
-                              routing_key = Key}, Msg},
-            State = #state{downstream_exchange = #resource{name = X},
-                           downstream_channel  = DCh,
-                           upstreams           = Upstreams0,
-                           next_publish_id     = Seq}) ->
-    Headers0 = extract_headers(Msg),
-    case forwarded_before(Headers0) of
-        false -> {#upstream{uri = URI}, Upstreams} =
-                     record_delivery_tag(DTag, CTag, Seq, Upstreams0),
-                 %% TODO add user information here?
-                 Headers = add_routing_to_headers(Headers0,
-                                                  [{<<"uri">>, longstr, URI}]),
-                 amqp_channel:cast(DCh, #'basic.publish'{exchange = X,
-                                                         routing_key = Key},
-                                   update_headers(Headers, Msg)),
-                 {noreply, State#state{upstreams       = Upstreams,
-                                       next_publish_id = Seq + 1}};
-        true  -> {noreply, State}
-    end;
-
-handle_info({'DOWN', _Ref, process, Ch, _Reason},
-            State = #state{ downstream_channel = DCh }) ->
-    case Ch of
-        DCh ->
-            exit(todo_handle_downstream_channel_death);
-        _ ->
-            {noreply, restart_upstream_channel(Ch, State)}
-    end;
-
-handle_info({connect_upstream, URI, ResetUpstreamQueue}, State) ->
-    {noreply, connect_upstream(URI, ResetUpstreamQueue, State)};
+handle_cast(_Msg, State) ->
+    {noreply, State}.
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -225,165 +152,8 @@ handle_info(Msg, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(_Reason, #state { downstream_channel = DCh,
-                            downstream_connection = DConn,
-                            downstream_exchange = DownstreamX,
-                            upstreams = Upstreams }) ->
-    ensure_closed(DConn, DCh),
-    [ensure_closed(C, Ch) ||
-        #upstream{ connection = C, channel = Ch } <- Upstreams],
-    true = ets:delete(?ETS_NAME, DownstreamX),
+terminate(_Reason, _State) ->
     ok.
-
-%%----------------------------------------------------------------------------
-
-connect_upstream(UpstreamURI, ResetUpstreamQueue,
-                 State = #state{ upstreams = Upstreams,
-                                 downstream_exchange = DownstreamX}) ->
-    %%io:format("Connecting to ~s...~n", [UpstreamURI]),
-    Props = parse_uri(UpstreamURI),
-    X = proplists:get_value(exchange, Props),
-    Params = #amqp_params{host         = proplists:get_value(host, Props),
-                          port         = proplists:get_value(port, Props),
-                          virtual_host = proplists:get_value(vhost, Props)},
-    case amqp_connection:start(network, Params) of
-        {ok, Conn} ->
-            %%io:format("Done!~n", []),
-            {ok, Ch} = amqp_connection:open_channel(Conn),
-            erlang:monitor(process, Ch),
-            Q = upstream_queue_name(X, DownstreamX),
-            %% TODO: The x-expires should be configurable.
-            case ResetUpstreamQueue of
-                true ->
-                    with_disposable_channel(
-                      Conn,
-                      fun (Ch2) ->
-                              amqp_channel:call(Ch2, #'queue.delete'{queue = Q})
-                      end);
-                _ ->
-                    ok
-            end,
-            amqp_channel:call(
-              Ch, #'queue.declare'{
-                queue     = Q,
-                durable   = true,
-                arguments = [{<<"x-expires">>, long, 86400000}] }),
-            #'basic.consume_ok'{ consumer_tag = CTag } =
-                amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
-                                                             no_ack = false },
-                                       self()),
-            State#state{ upstreams =
-                             [#upstream{ uri          = UpstreamURI,
-                                         connection   = Conn,
-                                         channel      = Ch,
-                                         queue        = Q,
-                                         exchange     = X,
-                                         consumer_tag = CTag,
-                                         unacked      = gb_trees:empty()}
-                              | Upstreams]};
-        _E ->
-            erlang:send_after(
-              1000, self(),
-              {connect_upstream, UpstreamURI, ResetUpstreamQueue}),
-            State
-    end.
-
-upstream_queue_name(X, #resource{ name         = DownstreamName,
-                                  virtual_host = DownstreamVHost }) ->
-    Node = list_to_binary(atom_to_list(node())),
-    <<"federation: ", X/binary, " -> ", Node/binary,
-      "-", DownstreamVHost/binary, "-", DownstreamName/binary>>.
-
-
-is_federation_queue(#resource{ name = <<"federation: ", _Rest/binary>>,
-                               kind = queue }) ->
-    true;
-is_federation_queue(_) ->
-    false.
-
-restart_upstream_channel(OldPid, State = #state{ upstreams = Upstreams }) ->
-    {[#upstream{ uri = URI }], Rest} =
-        lists:partition(fun (#upstream{ channel = Ch }) ->
-                                OldPid == Ch
-                        end, Upstreams),
-    connect_upstream(URI, false, State#state{ upstreams = Rest }).
-
-bind_upstream(#upstream{ channel = Ch, queue = Q, exchange = X },
-              Key, Args) ->
-    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
-                                        exchange    = X,
-                                        routing_key = Key,
-                                        arguments   = Args}).
-
-maybe_unbind_upstreams(Upstreams, #binding{source = Source, destination = Dest,
-                                           key = Key, args = Args}) ->
-    case is_federation_queue(Dest) of
-        true  -> ok;
-        false -> case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
-                                        Key == Key2 andalso Args == Args2
-                                end,
-                                rabbit_binding:list_for_source(Source)) of
-                     true  -> ok;
-                     false -> [unbind_upstream(U, Key, Args) || U <- Upstreams]
-                 end
-    end.
-
-unbind_upstream(#upstream{ connection = Conn, queue = Q, exchange = X },
-                Key, Args) ->
-    %% We may already be unbound if e.g. someone has deleted the upstream
-    %% exchange
-    with_disposable_channel(
-      Conn,
-      fun (Ch) ->
-              amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
-                                                    exchange    = X,
-                                                    routing_key = Key,
-                                                    arguments   = Args})
-      end).
-
-delete_upstream(#upstream{ connection = Conn, queue = Q }) ->
-    with_disposable_channel(
-      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end).
-
-%%----------------------------------------------------------------------------
-
-record_delivery_tag(DTag, CTag, Seq, Upstreams) ->
-    Us = [record_delivery_tag0(DTag, CTag, Seq, U) || U <- Upstreams],
-    [Changed] = [U || {changed, U} <- Us],
-    {Changed, [U || {_, U} <- Us]}.
-
-record_delivery_tag0(DTag, CTag, Seq,
-                     Upstream = #upstream { consumer_tag = CTag,
-                                            unacked      = Unacked }) ->
-    {changed, Upstream#upstream{unacked = gb_trees:insert(Seq, DTag, Unacked)}};
-record_delivery_tag0(_DTag, _CTag, _Seq, Upstream) ->
-    {unchanged, Upstream}.
-
-retrieve_delivery_tags(Seq, Multiple, Upstreams) ->
-    [retrieve_delivery_tag(Seq, Multiple, U) || U <- Upstreams].
-
-retrieve_delivery_tag(Seq, Multiple,
-                      Upstream = #upstream { channel = UCh,
-                                             unacked = Unacked0 }) ->
-    Unacked = remove_delivery_tags(Seq, Multiple, Unacked0),
-    DTag = case gb_trees:lookup(Seq, Unacked0) of
-               {value, V} -> V;
-               none       -> none
-           end,
-    {DTag, UCh, Upstream#upstream{ unacked = Unacked }}.
-
-remove_delivery_tags(Seq, false, Unacked) ->
-    gb_trees:delete_any(Seq, Unacked);
-remove_delivery_tags(Seq, true, Unacked) ->
-    case gb_trees:size(Unacked) of
-        0 -> Unacked;
-        _ -> Smallest = gb_trees:smallest(Unacked),
-             case Smallest > Seq of
-                 true  -> Unacked;
-                 false -> remove_delivery_tags(
-                            Seq, true, gb_trees:delete(Smallest, Unacked))
-             end
-    end.
 
 %%----------------------------------------------------------------------------
 
@@ -402,7 +172,7 @@ validate_arg(Name, Type, Args) ->
     end.
 
 validate_upstream({longstr, URI}) ->
-    case parse_uri(URI) of
+    case rabbit_federation_util:parse_uri(URI) of
         {error, E} ->
             fail("URI ~s could not be parsed, error: ~p", [URI, E]);
         Props ->
@@ -417,81 +187,4 @@ validate_upstream({Type, URI}) ->
 fail(Fmt, Args) ->
     rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
 
-%%----------------------------------------------------------------------------
 
-parse_uri(URI) ->
-    case uri_parser:parse(
-           binary_to_list(URI), [{host, undefined}, {path, "/"},
-                                 {port, 5672},      {'query', []}]) of
-        {error, _} = E ->
-            E;
-        Props ->
-            case string:tokens(proplists:get_value(path, Props), "/") of
-                [VHostEnc, XEnc] ->
-                    VHost = httpd_util:decode_hex(VHostEnc),
-                    X = httpd_util:decode_hex(XEnc),
-                    [{exchange, list_to_binary(X)},
-                     {vhost,    list_to_binary(VHost)}] ++ Props;
-                _ ->
-                    {error, path_must_have_two_components}
-            end
-    end.
-
-%%----------------------------------------------------------------------------
-
-with_disposable_channel(Conn, Fun) ->
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    try
-        Fun(Ch)
-    catch exit:{{server_initiated_close, _, _}, _} ->
-            ok
-    end,
-    ensure_closed(Ch).
-
-ensure_closed(Conn, Ch) ->
-    ensure_closed(Ch),
-    try amqp_connection:close(Conn)
-    catch exit:{noproc, _} -> ok
-    end.
-
-ensure_closed(Ch) ->
-    try amqp_channel:close(Ch)
-    catch exit:{noproc, _} -> ok
-    end.
-
-%%----------------------------------------------------------------------------
-
-%% For the time being just don't forward anything that's already been
-%% forwarded.
-forwarded_before(undefined) ->
-    false;
-forwarded_before(Headers) ->
-    rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) =/= undefined.
-
-extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
-    Headers.
-
-update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
-    Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
-
-add_routing_to_headers(undefined, Info) ->
-    add_routing_to_headers([], Info);
-add_routing_to_headers(Headers, Info) ->
-    Prior = case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-                undefined          -> [];
-                {array, Existing}  -> Existing
-            end,
-    set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info}|Prior]).
-
-%% TODO move this to rabbit_misc?
-set_table_value(Table, Key, Type, Value) ->
-    Stripped =
-      case rabbit_misc:table_lookup(Table, Key) of
-          {Type, _}  -> {_, Rest} = lists:partition(fun ({K, _, _}) ->
-                                                            K == Key
-                                                    end, Table),
-                        Rest;
-          {Type2, _} -> exit({type_mismatch_updating_table, Type, Type2});
-          undefined  -> Table
-      end,
-    rabbit_misc:sort_field_table([{Key, Type, Value}|Stripped]).

@@ -18,26 +18,56 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, delete_child/1]).
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_federation.hrl").
+
+-export([start_link/0, start_child/1, stop_child/1, go_all/0]).
 
 -export([init/1]).
 
 -define(SUPERVISOR, ?MODULE).
 
+%% This supervisor needs to be part of the rabbit application since
+%% a) it needs to be in place when exchange recovery takes place
+%% b) it needs to go up and down with rabbit
+
+-rabbit_boot_step({rabbit_federation_supervisor,
+                   [{description, "federation"},
+                    {mfa,         {rabbit_sup, start_child, [?MODULE]}},
+                    {requires,    kernel_ready},
+                    {enables,     rabbit_federation_exchange}]}).
+
 start_link() ->
+    %% TODO get rid of this ets table when bug 23825 lands.
+    ?ETS_NAME = ets:new(?ETS_NAME, [public, set, named_table]),
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 start_child(Args) ->
-    supervisor:start_child(?SUPERVISOR,
-                           {id(Args),
-                            {rabbit_federation_exchange, start_link, [Args]},
-                            transient, brutal_kill, worker,
-                            [rabbit_federation_exchange]}).
+    {ok, Pid} = supervisor:start_child(
+                  ?SUPERVISOR,
+                  {id(Args), {rabbit_federation_exchange, start_link, [Args]},
+                   transient, ?MAX_WAIT, worker,
+                   [rabbit_federation_exchange]}),
+    case federation_up() of
+        true  -> rabbit_federation_exchange:go(Pid);
+        false -> ok
+    end,
+    {ok, Pid}.
 
-delete_child(Args) ->
-    supervisor:delete_child(?SUPERVISOR, id(Args)).
+stop_child(Args) ->
+    ok = supervisor:terminate_child(?SUPERVISOR, id(Args)),
+    ok = supervisor:delete_child(?SUPERVISOR, id(Args)),
+    ok.
+
+go_all() ->
+    [rabbit_federation_exchange:go(Pid) ||
+     {_, Pid, _, _} <- supervisor:which_children(?SUPERVISOR)].
 
 %%----------------------------------------------------------------------------
+
+federation_up() ->
+    lists:keysearch(rabbit_federation, 1,
+                    application:which_applications(infinity)) =/= false.
 
 id(Args) ->
     Args.

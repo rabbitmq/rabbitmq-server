@@ -3,6 +3,7 @@ Necessary
 
 Exponential(?) backoff
 Alternate PLAIN creds than guest/guest
+Reset bindings on connect
 Allow use of EXTERNAL etc
 Remove that ETS table
 Test in cluster
