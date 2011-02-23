@@ -551,7 +551,7 @@ wait_for_tables(TableNames) ->
     case mnesia:wait_for_tables(TableNames, 30000) of
         ok ->
             ok;
-                {timeout, BadTabs} ->
+        {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
         {error, Reason} ->
             throw({error, {failed_waiting_for_tables, Reason}})
