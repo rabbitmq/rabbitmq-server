@@ -388,8 +388,7 @@ init_db(ClusterNodes, Force) ->
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok                    -> ok = wait_for_tables(),
-                                                 ensure_schema_integrity();
+                        ok                    -> ensure_schema_integrity();
                         version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
@@ -544,17 +543,15 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-wait_for_replicated_tables() ->
-    wait_for_tables(replicated_table_names()).
+wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 
-wait_for_tables() ->
-    wait_for_tables(table_names()).
+wait_for_tables() -> wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    Nonexistent = TableNames -- mnesia:system_info(tables),
-    case mnesia:wait_for_tables(TableNames -- Nonexistent, 30000) of
-        ok -> ok;
-        {timeout, BadTabs} ->
+    case mnesia:wait_for_tables(TableNames, 30000) of
+        ok ->
+            ok;
+                {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
         {error, Reason} ->
             throw({error, {failed_waiting_for_tables, Reason}})
