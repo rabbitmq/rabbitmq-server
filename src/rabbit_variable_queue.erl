@@ -281,12 +281,11 @@
 -record(sync, { acks_persistent, acks_all, pubs, funs }).
 
 %% When we discover, on publish, that we should write some indices to
-%% disk for some betas, the RAM_INDEX_BATCH_SIZE sets the number of
-%% betas that we must be due to write indices for before we do any
-%% work at all. This is both a minimum and a maximum - we don't write
-%% fewer than RAM_INDEX_BATCH_SIZE indices out in one go, and we don't
-%% write more - we can always come back on the next publish to do
-%% more.
+%% disk for some betas, the IO_BATCH_SIZE sets the number of betas
+%% that we must be due to write indices for before we do any work at
+%% all. This is both a minimum and a maximum - we don't write fewer
+%% than IO_BATCH_SIZE indices out in one go, and we don't write more -
+%% we can always come back on the next publish to do more.
 -define(IO_BATCH_SIZE, 64).
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
@@ -299,7 +298,7 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id() | 'blank_ack').
+-type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -509,7 +508,7 @@ publish(Msg, MsgProps, State) ->
 publish_delivered(false, #basic_message { guid = Guid },
                   _MsgProps, State = #vqstate { len = 0 }) ->
     blind_confirm(self(), gb_sets:singleton(Guid)),
-    {blank_ack, a(State)};
+    {undefined, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
                   MsgProps = #message_properties {
@@ -628,7 +627,7 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                                             MsgStatus #msg_status {
                                               is_delivered = true }, State),
                                  {SeqId, StateN};
-                        false -> {blank_ack, State}
+                        false -> {undefined, State}
                     end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
@@ -897,7 +896,7 @@ cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
-%% when requeueing, we re-add a guid to the unconfimred set
+%% when requeueing, we re-add a guid to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = Guid },

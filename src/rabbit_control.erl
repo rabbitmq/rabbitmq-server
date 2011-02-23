@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -44,22 +45,18 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    FullCommand = init:get_plain_arguments(),
-    case FullCommand of
-        [] -> usage();
-        _ -> ok
-    end,
     {[Command0 | Args], Opts} =
-        rabbit_misc:get_options(
-          [{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
-           {option, ?VHOST_OPT, "/"}],
-          FullCommand),
-    Opts1 = lists:map(fun({K, V}) ->
-                              case K of
-                                  ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
-                                  _    -> {K, V}
-                              end
-                      end, Opts),
+        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
+                                      {option, ?NODE_OPT, NodeStr},
+                                      {option, ?VHOST_OPT, "/"}],
+                                     init:get_plain_arguments()) of
+            {[], _Opts}    -> usage();
+            CmdArgsAndOpts -> CmdArgsAndOpts
+        end,
+    Opts1 = [case K of
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 _         -> {K, V}
+             end || {K, V} <- Opts],
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
@@ -77,24 +74,24 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            halt();
+            quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            halt(2);
+            quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
-            halt(2);
+            quit(2);
         Other ->
             print_error("~p", [Other]),
-            halt(2)
+            quit(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
@@ -130,7 +127,7 @@ stop() ->
 
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
-    halt(1).
+    quit(1).
 
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -297,7 +294,30 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]})).
+                             list_vhost_permissions, [VHost]}));
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
+
+wait_for_application(Node, Attempts) ->
+    case rpc_call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} = E -> NewAttempts = Attempts - 1,
+                           case NewAttempts of
+                               0 -> E;
+                               _ -> wait_for_application0(Node, NewAttempts)
+                           end;
+        Apps            -> case proplists:is_defined(rabbit, Apps) of
+                               %% We've seen the node up; if it goes down
+                               %% die immediately.
+                               true  -> ok;
+                               false -> wait_for_application0(Node, 0)
+                           end
+    end.
+
+wait_for_application0(Node, Attempts) ->
+    timer:sleep(1000),
+    wait_for_application(Node, Attempts).
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] ->
@@ -327,11 +347,11 @@ format_info_item(#resource{name = Name}) ->
     escape(Name);
 format_info_item({N1, N2, N3, N4} = Value) when
       ?IS_U8(N1), ?IS_U8(N2), ?IS_U8(N3), ?IS_U8(N4) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value) when
       ?IS_U16(K1), ?IS_U16(K2), ?IS_U16(K3), ?IS_U16(K4),
       ?IS_U16(K5), ?IS_U16(K6), ?IS_U16(K7), ?IS_U16(K8) ->
-    inet_parse:ntoa(Value);
+    rabbit_misc:ntoa(Value);
 format_info_item(Value) when is_pid(Value) ->
     rabbit_misc:pid_to_string(Value);
 format_info_item(Value) when is_binary(Value) ->
@@ -392,4 +412,13 @@ prettify_typed_amqp_value(Type, Value) ->
         table   -> prettify_amqp_table(Value);
         array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
         _       -> Value
+    end.
+
+% the slower shutdown on windows required to flush stdout
+quit(Status) ->
+    case os:type() of
+        {unix, _} ->
+            halt(Status);
+        {win32, _} ->
+            init:stop(Status)
     end.

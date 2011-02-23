@@ -50,8 +50,9 @@ init({IPAddress, Port, SocketOpts,
                           end,
                           lists:duplicate(ConcurrentAcceptorCount, dummy)),
             {ok, {LIPAddress, LPort}} = inet:sockname(LSock),
-            error_logger:info_msg("started ~s on ~s:~p~n",
-                                  [Label, inet_parse:ntoa(LIPAddress), LPort]),
+            error_logger:info_msg(
+              "started ~s on ~s:~p~n",
+              [Label, rabbit_misc:ntoab(LIPAddress), LPort]),
             apply(M, F, A ++ [IPAddress, Port]),
             {ok, #state{sock = LSock,
                         on_startup = OnStartup, on_shutdown = OnShutdown,
@@ -59,7 +60,7 @@ init({IPAddress, Port, SocketOpts,
         {error, Reason} ->
             error_logger:error_msg(
               "failed to start ~s on ~s:~p - ~p~n",
-              [Label, inet_parse:ntoa(IPAddress), Port, Reason]),
+              [Label, rabbit_misc:ntoab(IPAddress), Port, Reason]),
             {stop, {cannot_listen, IPAddress, Port, Reason}}
     end.
 
@@ -76,7 +77,7 @@ terminate(_Reason, #state{sock=LSock, on_shutdown = {M,F,A}, label=Label}) ->
     {ok, {IPAddress, Port}} = inet:sockname(LSock),
     gen_tcp:close(LSock),
     error_logger:info_msg("stopped ~s on ~s:~p~n",
-                          [Label, inet_parse:ntoa(IPAddress), Port]),
+                          [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]).
 
 code_change(_OldVsn, State, _Extra) ->

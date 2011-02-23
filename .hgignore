@@ -25,6 +25,9 @@ syntax: regexp
 ^packaging/macports/macports$
 ^packaging/generic-unix/rabbitmq-server-generic-unix-.*\.tar\.gz$
 ^packaging/windows/rabbitmq-server-windows-.*\.zip$
+^packaging/windows-exe/rabbitmq_server-.*$
+^packaging/windows-exe/rabbitmq-.*\.nsi$
+^packaging/windows-exe/rabbitmq-server-.*\.exe$
 
 ^docs/.*\.[15]\.gz$
 ^docs/.*\.man\.xml$

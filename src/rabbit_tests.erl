@@ -26,6 +26,7 @@
 
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
+-define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
@@ -81,20 +82,24 @@ run_cluster_dependent_tests(SecondaryNode) ->
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
+    passed = test_queue_cleanup(SecondaryNode),
+    passed = test_declare_on_dead_queue(SecondaryNode),
 
     %% we now run the tests remotely, so that code coverage on the
     %% local node picks up more of the delegate
     Node = node(),
     Self = self(),
     Remote = spawn(SecondaryNode,
-                   fun () -> A = test_delegates_async(Node),
-                             B = test_delegates_sync(Node),
-                             Self ! {self(), {A, B}}
+                   fun () -> Rs = [ test_delegates_async(Node),
+                                    test_delegates_sync(Node),
+                                    test_queue_cleanup(Node),
+                                    test_declare_on_dead_queue(Node) ],
+                             Self ! {self(), Rs}
                    end),
     receive
         {Remote, Result} ->
-            Result = {passed, passed}
-    after 2000 ->
+            Result = lists:duplicate(length(Result), passed)
+    after 30000 ->
             throw(timeout)
     end,
 
@@ -1015,9 +1020,9 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         user(<<"user">>), <<"/">>, self(),
-                                         fun (_) -> {ok, self()} end),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, self(), Writer, rabbit_framing_amqp_0_9_1, user(<<"user">>),
+                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1075,9 +1080,9 @@ test_server_status() ->
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
-                                         user(<<"guest">>), <<"/">>, self(),
-                                         fun (_) -> {ok, self()} end),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, Me, Writer, rabbit_framing_amqp_0_9_1, user(<<"guest">>),
+                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
@@ -1229,7 +1234,7 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked, infinity) end,
     BadSender = fun (_Pid) -> exit(exception) end,
 
     Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
@@ -1278,6 +1283,61 @@ test_delegates_sync(SecondaryNode) ->
     Magical = lists:usort(BadNodesPids),
 
     passed.
+
+test_queue_cleanup_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, Method} ->
+            Pid ! Method,
+            test_queue_cleanup_receiver(Pid)
+    end.
+
+
+test_queue_cleanup(_SecondaryNode) ->
+    {_Writer, Ch} = test_spawn(fun test_queue_cleanup_receiver/1),
+    rabbit_channel:do(Ch, #'queue.declare'{ queue = ?CLEANUP_QUEUE_NAME }),
+    receive #'queue.declare_ok'{queue = ?CLEANUP_QUEUE_NAME} ->
+            ok
+    after 1000 -> throw(failed_to_receive_queue_declare_ok)
+    end,
+    rabbit:stop(),
+    rabbit:start(),
+    rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
+                                            queue   = ?CLEANUP_QUEUE_NAME }),
+    receive
+        #'channel.close'{reply_code = 404} ->
+            ok
+    after 2000 ->
+            throw(failed_to_receive_channel_exit)
+    end,
+    passed.
+
+test_declare_on_dead_queue(SecondaryNode) ->
+    QueueName = rabbit_misc:r(<<"/">>, queue, ?CLEANUP_QUEUE_NAME),
+    Self = self(),
+    Pid = spawn(SecondaryNode,
+                fun () ->
+                        {new, #amqqueue{name = QueueName, pid = QPid}} =
+                            rabbit_amqqueue:declare(QueueName, false, false, [],
+                                                    none),
+                        exit(QPid, kill),
+                        Self ! {self(), killed, QPid}
+                end),
+    receive
+        {Pid, killed, QPid} ->
+            {existing, #amqqueue{name = QueueName,
+                                 pid = QPid}} =
+                rabbit_amqqueue:declare(QueueName, false, false, [], none),
+            false = rabbit_misc:is_process_alive(QPid),
+            {new, Q} = rabbit_amqqueue:declare(QueueName, false, false, [],
+                                               none),
+            true = rabbit_misc:is_process_alive(Q#amqqueue.pid),
+            {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
+            passed
+    after 2000 ->
+            throw(failed_to_create_and_kill_queue)
+    end.
 
 %---------------------------------------------------------------------
 
@@ -2142,9 +2202,11 @@ test_configurable_server_properties() ->
     BuiltInPropNames = [<<"product">>, <<"version">>, <<"platform">>,
                         <<"copyright">>, <<"information">>],
 
+    Protocol = rabbit_framing_amqp_0_9_1,
+
     %% Verify that the built-in properties are initially present
-    ActualPropNames = [Key ||
-                         {Key, longstr, _} <- rabbit_reader:server_properties()],
+    ActualPropNames = [Key || {Key, longstr, _} <-
+                                  rabbit_reader:server_properties(Protocol)],
     true = lists:all(fun (X) -> lists:member(X, ActualPropNames) end,
                      BuiltInPropNames),
 
@@ -2155,9 +2217,10 @@ test_configurable_server_properties() ->
     ConsProp = fun (X) -> application:set_env(rabbit,
                                               server_properties,
                                               [X | ServerProperties]) end,
-    IsPropPresent = fun (X) -> lists:member(X,
-                                            rabbit_reader:server_properties())
-                    end,
+    IsPropPresent =
+        fun (X) ->
+                lists:member(X, rabbit_reader:server_properties(Protocol))
+        end,
 
     %% Add a wholly new property of the simplified {KeyAtom, StringValue} form
     NewSimplifiedProperty = {NewHareKey, NewHareVal} = {hare, "soup"},
@@ -2180,7 +2243,7 @@ test_configurable_server_properties() ->
     {BinNewVerKey, BinNewVerVal} = {list_to_binary(atom_to_list(NewVerKey)),
                                     list_to_binary(NewVerVal)},
     ConsProp(NewVersion),
-    ClobberedServerProps = rabbit_reader:server_properties(),
+    ClobberedServerProps = rabbit_reader:server_properties(Protocol),
     %% Is the clobbering insert present?
     true = IsPropPresent({BinNewVerKey, longstr, BinNewVerVal}),
     %% Is the clobbering insert the only thing with the clobbering key?
