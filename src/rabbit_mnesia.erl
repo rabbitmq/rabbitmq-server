@@ -389,15 +389,14 @@ init_db(ClusterNodes, Force) ->
                     %% True single disc node, attempt upgrade
                     case rabbit_upgrade:maybe_upgrade() of
                         ok                    -> ok = wait_for_tables(),
-                                                 ensure_schema_ok();
+                                                 ensure_schema_integrity();
                         version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
-                    ok = wait_for_tables(),
                     ensure_version_ok(rabbit_upgrade:read_version()),
-                    ensure_schema_ok();
+                    ensure_schema_integrity();
                 {[], false, _} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
@@ -414,7 +413,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ensure_schema_ok()
+                    ensure_schema_integrity()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -447,12 +446,6 @@ ensure_version_ok({ok, DiscVersion}) ->
 ensure_version_ok({error, _}) ->
     ok = rabbit_upgrade:write_version().
 
-ensure_schema_ok() ->
-    case check_schema_integrity() of
-        ok              -> ok;
-        {error, Reason} -> throw({error, {schema_invalid, Reason}})
-    end.
-
 create_schema() ->
     mnesia:stop(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
@@ -461,7 +454,6 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables(),
     ok = rabbit_upgrade:write_version().
 
 move_db() ->
