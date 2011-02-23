@@ -158,6 +158,28 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>wait</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Wait for the RabbitMQ application to start.
+            </para>
+            <para>
+              This command will wait for the RabbitMQ application to
+              start at the node. As long as the Erlang node is up but
+              the RabbitMQ application is down it will wait
+              indefinitely. If the node itself goes down, or takes
+              more than five seconds to come up, it will fail.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl wait</screen>
+            <para role="example">
+              This command will return when the RabbitMQ node has
+              started up.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
           <listitem>
             <para>
@@ -398,7 +420,12 @@
 
     <refsect2>
       <title>User management</title>
-
+      <para>
+        Note that <command>rabbitmqctl</command> manages the RabbitMQ
+        internal user database. Users from any alternative
+        authentication backend will not be visible
+        to <command>rabbitmqctl</command>.
+      </para>
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>add_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
@@ -466,6 +493,25 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>clear_password</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user whose password is to be cleared.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_password tonyg</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to clear the
+              password for the user named
+              <command>tonyg</command>. This user now cannot log in with a password (but may be able to through e.g. SASL EXTERNAL if configured).
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -525,7 +571,12 @@
 
     <refsect2>
       <title>Access control</title>
-
+      <para>
+        Note that <command>rabbitmqctl</command> manages the RabbitMQ
+        internal user database. Permissions for users from any
+        alternative authorisation backend will not be visible
+        to <command>rabbitmqctl</command>.
+      </para>
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
@@ -847,6 +898,10 @@
                 <listitem><para>Whether the exchange will be deleted automatically when no longer used.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>internal</term>
+                <listitem><para>Whether the exchange is internal, i.e. cannot be directly published to by a client.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Exchange arguments.</para></listitem>
               </varlistentry>
@@ -977,6 +1032,26 @@
                 connection is secured with SSL.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>ssl_protocol</term>
+                <listitem><para>SSL protocol
+                (e.g. tlsv1)</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_key_exchange</term>
+                <listitem><para>SSL key exchange algorithm
+                (e.g. rsa)</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_cipher</term>
+                <listitem><para>SSL cipher algorithm
+                (e.g. aes_256_cbc)</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>ssl_hash</term>
+                <listitem><para>SSL hash function
+                (e.g. sha)</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>peer_cert_subject</term>
                 <listitem><para>The subject of the peer's SSL
                 certificate, in RFC4514 form.</para></listitem>
@@ -1003,6 +1078,10 @@
               <varlistentry>
                 <term>protocol</term>
                 <listitem><para>Version of the AMQP protocol in use (currently one of <command>{0,9,1}</command> or <command>{0,8,0}</command>). Note that if a client requests an AMQP 0-9 connection, we treat it as AMQP 0-9-1.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>auth_mechanism</term>
+                <listitem><para>SASL authentication mechanism used, such as <command>PLAIN</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>user</term>
@@ -1054,7 +1133,7 @@
             <para role="example-prefix">
               For example:
             </para>
-            <screen role="example">rabbitmqctl list_connections send_pend server_port</screen>
+            <screen role="example">rabbitmqctl list_connections send_pend port</screen>
             <para role="example">
               This command displays the send queue size and server port for each
               connection.
@@ -1133,6 +1212,16 @@
                     command, blocking the server from delivering
                     messages to the channel's consumers.
                     </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>confirm</term>
+                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unconfirmed</term>
+                <listitem><para>Number of published messages not yet
+                confirmed.  On channels not in confirm mode, this
+                remains 0.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
