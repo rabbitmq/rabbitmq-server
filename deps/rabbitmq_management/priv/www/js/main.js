@@ -142,6 +142,10 @@ function dispatcher() {
                 go_to('#/exchanges');
             return false;
         });
+    this.post('#/exchanges/publish', function() {
+            publish_msg(this.params);
+            return false;
+        });
 
     path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts', 'nodes': '/nodes'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
@@ -534,6 +538,18 @@ function toggle_visibility(item) {
         all.removeClass('section-invisible');
         all.addClass('section-visible');
     }
+}
+
+function publish_msg(params) {
+    var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
+    with_req('POST', path, JSON.stringify(params), function(resp) {
+            var result = jQuery.parseJSON(resp.responseText);
+            if (result.routed) {
+                show_popup('info', 'Message published.');
+            } else {
+                show_popup('warn', 'Message published, but not routed.');
+            }
+        });
 }
 
 function get_msgs(params) {

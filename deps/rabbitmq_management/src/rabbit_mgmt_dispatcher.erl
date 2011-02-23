@@ -30,6 +30,7 @@ dispatcher() ->
      {["exchanges"],                                               rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost],                                        rabbit_mgmt_wm_exchanges, []},
      {["exchanges", vhost, exchange],                              rabbit_mgmt_wm_exchange, []},
+     {["exchanges", vhost, exchange, "publish"],                   rabbit_mgmt_wm_exchange_publish, []},
      {["exchanges", vhost, exchange, "bindings", "source"],        rabbit_mgmt_wm_bindings, [exchange_source]},
      {["exchanges", vhost, exchange, "bindings", "destination"],   rabbit_mgmt_wm_bindings, [exchange_destination]},
      {["queues"],                                                  rabbit_mgmt_wm_queues, []},

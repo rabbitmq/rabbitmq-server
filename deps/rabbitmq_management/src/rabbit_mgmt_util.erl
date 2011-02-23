@@ -20,12 +20,12 @@
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1, parse_int/1]).
 -export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
--export([with_amqp_request/4, with_amqp_request/5]).
+-export([with_channel/4, with_channel/5]).
 -export([props_to_method/2]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([relativise/2]).
+-export([relativise/2, post_respond/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -317,18 +317,18 @@ amqp_request(VHost, ReqData, Context, Method) ->
     amqp_request(VHost, ReqData, Context, node(), Method).
 
 amqp_request(VHost, ReqData, Context, Node, Method) ->
-    with_amqp_request(VHost, ReqData, Context, Node,
+    with_channel(VHost, ReqData, Context, Node,
                       fun (Ch) ->
                               amqp_channel:call(Ch, Method),
                               {true, ReqData, Context}
                       end).
 
-with_amqp_request(VHost, ReqData, Context, Fun) ->
-    with_amqp_request(VHost, ReqData, Context, node(), Fun).
+with_channel(VHost, ReqData, Context, Fun) ->
+    with_channel(VHost, ReqData, Context, node(), Fun).
 
-with_amqp_request(VHost, ReqData,
-                  Context = #context{ user = #user { username = Username },
-                                      password = Password }, Node, Fun) ->
+with_channel(VHost, ReqData,
+             Context = #context{ user = #user { username = Username },
+                                 password = Password }, Node, Fun) ->
     try
         Params = #amqp_params{username     = Username,
                               password     = Password,
@@ -404,4 +404,8 @@ relativise0(From, To) ->
 relativise(From, To, Diff) ->
     string:join(lists:duplicate(length(From) - Diff, "..") ++ To, "/").
 
-
+post_respond(Response, ReqData, Context) ->
+    {JSON, _, _} = reply(Response, ReqData, Context),
+    {true, wrq:set_resp_header(
+             "content-type", "application/json",
+             wrq:append_to_response_body(JSON, ReqData)), Context}.

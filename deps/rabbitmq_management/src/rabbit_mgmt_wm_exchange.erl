@@ -17,7 +17,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, exchange/2]).
+         delete_resource/2, exchange/1, exchange/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").

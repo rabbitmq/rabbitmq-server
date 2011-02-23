@@ -94,6 +94,30 @@
   </div>
 </div>
 
+<div class="section-hidden">
+  <h2>Publish Message</h2>
+  <div class="hider">
+    <form action="#/exchanges/publish" method="post">
+      <input type="hidden" name="vhost" value="<%= exchange.vhost %>"/>
+      <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
+      <input type="hidden" name="properties" value=""/>
+      <table class="form">
+        <tr>
+          <th><label>Routing key:</label></th>
+          <td><input type="text" name="routing_key" value=""/></td>
+        </tr>
+        <tr>
+          <th><label>Payload:</label></th>
+          <td><textarea name="payload"></textarea></td>
+        </tr>
+      </table>
+      <input type="submit" value="Publish Message" />
+    </form>
+    <div id="msg-wrapper"></div>
+    <span class="br"></span>
+  </div>
+</div>
+
 <% if (exchange.name != "") { %>
 <div class="section-hidden">
   <h2>Delete This Exchange</h2>

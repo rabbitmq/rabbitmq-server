@@ -43,13 +43,13 @@ process_post(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [requeue, count], ReqData, Context,
       fun([RequeueBin, CountBin]) ->
-              rabbit_mgmt_util:with_amqp_request(
+              rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
                         NoAck = not rabbit_mgmt_util:parse_bool(RequeueBin),
                         Count = rabbit_mgmt_util:parse_int(CountBin),
-                        post_respond(basic_gets(Count, Ch, Q, NoAck),
-                                     ReqData, Context)
+                        rabbit_mgmt_util:post_respond(
+                          basic_gets(Count, Ch, Q, NoAck), ReqData, Context)
                 end)
       end).
 
@@ -89,12 +89,6 @@ basic_get(Ch, Q, NoAck) ->
         #'basic.get_empty'{} ->
             none
     end.
-
-post_respond(Response, ReqData, Context) ->
-    {JSON, _, _} = rabbit_mgmt_util:reply(Response, ReqData, Context),
-    {true, wrq:set_resp_header(
-             "content-type", "application/json",
-             wrq:append_to_response_body(JSON, ReqData)), Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

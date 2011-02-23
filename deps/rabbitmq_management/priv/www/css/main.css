@@ -95,6 +95,7 @@ form.inline-form-right { float: right; }
 input, select { padding: 0.2em; }
 input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; }
 input[type=text].wide { width: 300px; }
+textarea { width: 600px; height: 200px; }
 .mand { color: #f88; padding: 0 5px;}
 
 table.form { margin-bottom: 0.5em; }
