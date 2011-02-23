@@ -232,8 +232,8 @@ trie_edge_match() ->
     #trie_edge{exchange_name = exchange_name_match(),
                _='_'}.
 trie_binding_match() ->
-    #trie_edge{exchange_name = exchange_name_match(),
-               _='_'}.
+    #trie_binding{exchange_name = exchange_name_match(),
+                  _='_'}.
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
