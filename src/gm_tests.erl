@@ -20,6 +20,7 @@
          test_broadcast/0,
          test_confirmed_broadcast/0,
          test_member_death/0,
+         test_receive_in_order/0,
          all_tests/0]).
 -export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
 
@@ -60,6 +61,7 @@ all_tests() ->
     passed = test_broadcast(),
     passed = test_confirmed_broadcast(),
     passed = test_member_death(),
+    passed = test_receive_in_order(),
     passed.
 
 test_join_leave() ->
@@ -83,12 +85,31 @@ test_member_death() ->
               unlink(Pid3),
               exit(Pid3, kill),
 
+              %% Have to do some broadcasts to ensure that all members
+              %% find out about the death.
               passed = (test_broadcast_fun(fun gm:confirmed_broadcast/2))(
                          Pid, Pid2),
 
               passed = receive_death(Pid, Pid3, timeout_waiting_for_death_3_1),
               passed = receive_death(Pid2, Pid3, timeout_waiting_for_death_3_2),
 
+              passed
+      end).
+
+test_receive_in_order() ->
+    with_two_members(
+      fun (Pid, Pid2) ->
+              Numbers = lists:seq(1,1000),
+              [begin ok = gm:broadcast(Pid, N), ok = gm:broadcast(Pid2, N) end
+               || N <- Numbers],
+              passed = receive_numbers(
+                         Pid, Pid, {timeout_for_msgs, Pid, Pid}, Numbers),
+              passed = receive_numbers(
+                         Pid, Pid2, {timeout_for_msgs, Pid, Pid2}, Numbers),
+              passed = receive_numbers(
+                         Pid2, Pid, {timeout_for_msgs, Pid2, Pid}, Numbers),
+              passed = receive_numbers(
+                         Pid2, Pid2, {timeout_for_msgs, Pid2, Pid2}, Numbers),
               passed
       end).
 
@@ -112,7 +133,6 @@ with_two_members(Fun) ->
 
     {ok, Pid2} = gm:start_link(?MODULE, ?MODULE, self()),
     passed = receive_joined(Pid2, [Pid, Pid2], timeout_joining_gm_group_2),
-
     passed = receive_birth(Pid, Pid2, timeout_waiting_for_birth_2),
 
     passed = Fun(Pid, Pid2),
@@ -152,3 +172,11 @@ receive_termination(From, Reason, Error) ->
     ?RECEIVE_OR_THROW({termination, From, Reason1},
                       Reason == Reason1,
                       Error).
+
+receive_numbers(_Pid, _Sender, _Error, []) ->
+    passed;
+receive_numbers(Pid, Sender, Error, [N | Numbers]) ->
+    ?RECEIVE_OR_THROW({msg, Pid, Sender, M},
+                      M == N,
+                      Error),
+    receive_numbers(Pid, Sender, Error, Numbers).
