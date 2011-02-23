@@ -35,6 +35,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = gm_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_file_handle_cache(),
@@ -1019,9 +1020,9 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         user(<<"user">>), <<"/">>, self(),
-                                         fun (_) -> {ok, self()} end),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, self(), Writer, rabbit_framing_amqp_0_9_1, user(<<"user">>),
+                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1079,9 +1080,9 @@ test_server_status() ->
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer,
-                                         user(<<"guest">>), <<"/">>, self(),
-                                         fun (_) -> {ok, self()} end),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, Me, Writer, rabbit_framing_amqp_0_9_1, user(<<"guest">>),
+                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
@@ -1233,7 +1234,7 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked, infinity) end,
     BadSender = fun (_Pid) -> exit(exception) end,
 
     Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
@@ -1305,7 +1306,7 @@ test_queue_cleanup(_SecondaryNode) ->
     rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
                                             queue   = ?CLEANUP_QUEUE_NAME }),
     receive
-        {channel_exit, 1, {amqp_error, not_found, _, _}} ->
+        #'channel.close'{reply_code = 404} ->
             ok
     after 2000 ->
             throw(failed_to_receive_channel_exit)
@@ -2206,9 +2207,11 @@ test_configurable_server_properties() ->
     BuiltInPropNames = [<<"product">>, <<"version">>, <<"platform">>,
                         <<"copyright">>, <<"information">>],
 
+    Protocol = rabbit_framing_amqp_0_9_1,
+
     %% Verify that the built-in properties are initially present
-    ActualPropNames = [Key ||
-                         {Key, longstr, _} <- rabbit_reader:server_properties()],
+    ActualPropNames = [Key || {Key, longstr, _} <-
+                                  rabbit_reader:server_properties(Protocol)],
     true = lists:all(fun (X) -> lists:member(X, ActualPropNames) end,
                      BuiltInPropNames),
 
@@ -2219,9 +2222,10 @@ test_configurable_server_properties() ->
     ConsProp = fun (X) -> application:set_env(rabbit,
                                               server_properties,
                                               [X | ServerProperties]) end,
-    IsPropPresent = fun (X) -> lists:member(X,
-                                            rabbit_reader:server_properties())
-                    end,
+    IsPropPresent =
+        fun (X) ->
+                lists:member(X, rabbit_reader:server_properties(Protocol))
+        end,
 
     %% Add a wholly new property of the simplified {KeyAtom, StringValue} form
     NewSimplifiedProperty = {NewHareKey, NewHareVal} = {hare, "soup"},
@@ -2244,7 +2248,7 @@ test_configurable_server_properties() ->
     {BinNewVerKey, BinNewVerVal} = {list_to_binary(atom_to_list(NewVerKey)),
                                     list_to_binary(NewVerVal)},
     ConsProp(NewVersion),
-    ClobberedServerProps = rabbit_reader:server_properties(),
+    ClobberedServerProps = rabbit_reader:server_properties(Protocol),
     %% Is the clobbering insert present?
     true = IsPropPresent({BinNewVerKey, longstr, BinNewVerVal}),
     %% Is the clobbering insert the only thing with the clobbering key?

@@ -53,13 +53,12 @@
 %% to create the tables required.
 %%
 %% start_link/3
-%% Provide the group name, the callback module name, and a list of any
-%% arguments you wish to be passed into the callback module's
-%% functions. The joined/1 will be called when we have joined the
-%% group, and the list of arguments will have appended to it a list of
-%% the current members of the group. See the comments in
-%% behaviour_info/1 below for further details of the callback
-%% functions.
+%% Provide the group name, the callback module name, and any arguments
+%% you wish to be passed into the callback module's functions. The
+%% joined/1 will be called when we have joined the group, and the list
+%% of arguments will have appended to it a list of the current members
+%% of the group. See the comments in behaviour_info/1 below for
+%% further details of the callback functions.
 %%
 %% leave/1
 %% Provide the Pid. Removes the Pid from the group. The callback
@@ -421,7 +420,7 @@
 -type(group_name() :: any()).
 
 -spec(create_tables/0 :: () -> 'ok').
--spec(start_link/3 :: (group_name(), atom(), [any()]) ->
+-spec(start_link/3 :: (group_name(), atom(), any()) ->
                            {'ok', pid()} | {'error', any()}).
 -spec(leave/1 :: (pid()) -> 'ok').
 -spec(broadcast/2 :: (pid(), any()) -> 'ok').
