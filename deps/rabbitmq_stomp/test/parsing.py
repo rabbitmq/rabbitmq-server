@@ -224,11 +224,11 @@ class TestParsing(unittest.TestCase):
         headresp=('MESSAGE\n'               # 8
             'content-type:text/plain\n'     # 24
             'subscription:(.*)\n'           # 14 + subscription
-            'destination:/exchange/amq.topic/test_embed_nulls_message\n'    # 57
+            'destination:/exchange/amq.topic/test_embed_nulls_message\n' # 57
             'message-id:(.*)\n'             # 12 + message-id
             'content-length:%i\n'           # 16 + 4==len('1024')
             '\n'                            # 1
-            '(.*)$'                         # prefix of body + null (potentially)
+            '(.*)$'                         # prefix of body+null (potentially)
              % len(message) )
         headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
 
@@ -239,10 +239,14 @@ class TestParsing(unittest.TestCase):
         bodyresp=( '%s\0' % message )
         bodylen = len(bodyresp);
 
-        bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
+        bodybuf = 
+            ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
 
-        self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, "   body (...'%s')\nincorrectly returned as (...'%s')" % (bodyresp[-10:], bodybuf[-10:]))
+        self.assertEqual(len(bodybuf), msg_len+1, 
+            "body received not the same length as message sent")
+        self.assertEqual(bodybuf, bodyresp, 
+            "   body (...'%s')\nincorrectly returned as (...'%s')" 
+            % (bodyresp[-10:], bodybuf[-10:]))
 
     @connect(['cd'])
     def test_message_in_packets(self):
@@ -259,10 +263,10 @@ class TestParsing(unittest.TestCase):
         msg_len = len(message)
 
         msg_to_send = ('SEND\n'
-                        'destination:/exchange/amq.topic/test_embed_nulls_message\n'
-                        '\n'
-                        '%s'
-                        '\0' % (message) )
+                       'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                       '\n'
+                       '%s'
+                       '\0' % (message) )
         packet_size = 191
         part_index = 0
         msg_to_send_len = len(msg_to_send)
@@ -275,11 +279,11 @@ class TestParsing(unittest.TestCase):
         headresp=('MESSAGE\n'               # 8
             'content-type:text/plain\n'     # 24
             'subscription:(.*)\n'           # 14 + subscription
-            'destination:/exchange/amq.topic/test_embed_nulls_message\n'    # 57
+            'destination:/exchange/amq.topic/test_embed_nulls_message\n' # 57
             'message-id:(.*)\n'             # 12 + message-id
             'content-length:%i\n'           # 16 + 4==len('1024')
             '\n'                            # 1
-            '(.*)$'                         # prefix of body + null (potentially)
+            '(.*)$'                         # prefix of body+null (potentially)
              % len(message) )
         headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
 
@@ -290,7 +294,11 @@ class TestParsing(unittest.TestCase):
         bodyresp=( '%s\0' % message )
         bodylen = len(bodyresp);
 
-        bodybuf = ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
+        bodybuf = 
+            ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
 
-        self.assertEqual(len(bodybuf), msg_len+1, "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, "   body ('%s')\nincorrectly returned as ('%s')" % (bodyresp, bodybuf))
+        self.assertEqual(len(bodybuf), msg_len+1, 
+            "body received not the same length as message sent")
+        self.assertEqual(bodybuf, bodyresp, 
+            "   body ('%s')\nincorrectly returned as ('%s')" 
+            % (bodyresp, bodybuf))
