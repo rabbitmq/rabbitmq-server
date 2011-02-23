@@ -31,8 +31,9 @@ class TestExchange(base.BaseTest):
         self.assertEquals(1, len(self.listener.errors))
         err = self.listener.errors[0]
         self.assertEquals("not_found", err['headers']['message'])
-        self.assertEquals("no exchange 'does.not.exist' in vhost '/'\n",
-                          err['message'])
+        self.assertEquals(
+            "NOT_FOUND - no exchange 'does.not.exist' in vhost '/'\n",
+            err['message'])
         time.sleep(1)
         self.assertFalse(self.conn.is_connected())
 
