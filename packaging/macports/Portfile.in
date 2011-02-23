@@ -83,28 +83,25 @@ post-destroot {
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq):${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
-    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
+    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE} {
         reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
-            ${realsbin}/rabbitmq-multi \
             ${realsbin}/rabbitmq-server \
             ${realsbin}/rabbitmqctl
     }
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
-                ${wrappersbin}/rabbitmq-multi
+                ${wrappersbin}/rabbitmq-server
 
     reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:" \
-                ${wrappersbin}/rabbitmq-multi
+                ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
-                ${wrappersbin}/rabbitmq-multi
+                ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
-                ${wrappersbin}/rabbitmq-multi
-    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
-    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
+                ${wrappersbin}/rabbitmq-server
+    file copy ${wrappersbin}/rabbitmq-server ${wrappersbin}/rabbitmqctl
 
-    file copy ${mansrc}/man1/rabbitmq-multi.1.gz    ${mandest}/man1/
-    file copy ${mansrc}/man1/rabbitmq-server.1.gz   ${mandest}/man1/
-    file copy ${mansrc}/man1/rabbitmqctl.1.gz       ${mandest}/man1/
+    file copy ${mansrc}/man1/rabbitmq-server.1.gz ${mandest}/man1/
+    file copy ${mansrc}/man1/rabbitmqctl.1.gz     ${mandest}/man1/
     file copy ${mansrc}/man5/rabbitmq-env.conf.5.gz ${mandest}/man5/
 }
 
