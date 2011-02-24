@@ -239,13 +239,13 @@ class TestParsing(unittest.TestCase):
         bodyresp=( '%s\0' % message )
         bodylen = len(bodyresp);
 
-        bodybuf = 
-            ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
+        bodybuf = ''.join([bodyprefix,
+                           self.recv_atleast(bodylen - len(bodyprefix))])
 
-        self.assertEqual(len(bodybuf), msg_len+1, 
+        self.assertEqual(len(bodybuf), msg_len+1,
             "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, 
-            "   body (...'%s')\nincorrectly returned as (...'%s')" 
+        self.assertEqual(bodybuf, bodyresp,
+            "   body (...'%s')\nincorrectly returned as (...'%s')"
             % (bodyresp[-10:], bodybuf[-10:]))
 
     @connect(['cd'])
@@ -294,11 +294,11 @@ class TestParsing(unittest.TestCase):
         bodyresp=( '%s\0' % message )
         bodylen = len(bodyresp);
 
-        bodybuf = 
-            ''.join([bodyprefix, self.recv_atleast(bodylen - len(bodyprefix))])
+        bodybuf = ''.join([bodyprefix,
+                           self.recv_atleast(bodylen - len(bodyprefix))])
 
-        self.assertEqual(len(bodybuf), msg_len+1, 
+        self.assertEqual(len(bodybuf), msg_len+1,
             "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp, 
-            "   body ('%s')\nincorrectly returned as ('%s')" 
+        self.assertEqual(bodybuf, bodyresp,
+            "   body ('%s')\nincorrectly returned as ('%s')"
             % (bodyresp, bodybuf))
