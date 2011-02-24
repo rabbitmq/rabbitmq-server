@@ -132,6 +132,78 @@ class TestQueue(base.BaseTest):
 
         self.__test_send_receipt(d, before, after, {'transaction': tx})
 
+    def test_interleaved_receipt_no_receipt(self):
+        ''' Test interleaved receipt/no receipt where the no receipt
+            is bracketed by receipts '''
+
+        d = '/queue/ir'
+
+        self.listener.reset(5)
+
+        self.conn.subscribe(destination=d)
+        self.conn.send('first', destination=d, receipt='a')
+        self.conn.send('second', destination=d)
+        self.conn.send('third', destination=d, receipt='b')
+
+        self.assertTrue(self.listener.await(3))
+
+        self.assertEquals(set(['a','b']), self.__gather_receipts())
+        self.assertEquals(3, len(self.listener.messages))
+
+    def test_interleaved_receipt_no_receipt_tx(self):
+        ''' Test interleaved receipt/no receipt where the no receipt
+            is bracketed by receipts with transactions'''
+
+        d = '/queue/ir'
+        tx = 'tx.ir'
+
+        prime_count = 100
+
+        # one receipt and message per prime send.
+        # then three messages and two receipts
+        self.listener.reset((prime_count * 2) + 5)
+
+        self.conn.subscribe(destination=d)
+        self.conn.begin(transaction=tx)
+
+        expected = set(['a', 'b'])
+
+        # make this a large transaction to trigger multi-confirm
+        for i in range(1, prime_count + 1):
+            expected.add(str(i))
+            self.conn.send('prime', destination=d, receipt=str(i),
+                           transaction=tx)
+
+        self.conn.send('first', destination=d, receipt='a', transaction=tx)
+        self.conn.send('second', destination=d, transaction=tx)
+        self.conn.send('third', destination=d, receipt='b', transaction=tx)
+        self.conn.commit(transaction=tx)
+
+        self.assertTrue(self.listener.await(10))
+
+        missing = expected.difference(self.__gather_receipts())
+
+        self.assertEquals(set(), missing, "Missing receipts: " + str(missing))
+        self.assertEquals(prime_count + 3, len(self.listener.messages))
+
+    def test_interleaved_receipt_no_receipt_inverse(self):
+        ''' Test interleaved receipt/no receipt where the receipt
+            is bracketed by no receipts '''
+
+        d = '/queue/ir'
+
+        self.listener.reset(4)
+
+        self.conn.subscribe(destination=d)
+        self.conn.send('first', destination=d)
+        self.conn.send('second', destination=d, receipt='a')
+        self.conn.send('third', destination=d)
+
+        self.assertTrue(self.listener.await(3))
+
+        self.assertEquals(set(['a']), self.__gather_receipts())
+        self.assertEquals(3, len(self.listener.messages))
+
     def __test_send_receipt(self, destination, before, after, headers = {}):
         count = 50
         self.listener.reset(count)
@@ -148,11 +220,17 @@ class TestQueue(base.BaseTest):
 
         self.assertTrue(self.listener.await(5))
 
-        for r in self.listener.receipts:
-            expected_receipts.remove(r['headers']['receipt-id'])
+        missing_receipts = expected_receipts.difference(
+                    self.__gather_receipts())
 
-        self.assertEquals(set(), expected_receipts,
-                          "missing receipts: " + str(expected_receipts))
+        self.assertEquals(set(), missing_receipts,
+                          "missing receipts: " + str(missing_receipts))
+
+    def __gather_receipts(self):
+        result = set()
+        for r in self.listener.receipts:
+            result.add(r['headers']['receipt-id'])
+        return result
 
 class TestTopic(base.BaseTest):
 

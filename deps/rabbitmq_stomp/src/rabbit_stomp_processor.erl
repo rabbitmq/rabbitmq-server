@@ -527,10 +527,17 @@ flush_pending_receipts(DeliveryTag, IsMulti,
     State1#state{pending_receipts = PR1}.
 
 accumulate_receipts(DeliveryTag, false, PR) ->
-    ReceiptId = gb_trees:get(DeliveryTag, PR),
-    {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
+    case gb_trees:lookup(DeliveryTag, PR) of
+        {value, ReceiptId} -> {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
+        none               -> {[], PR}
+    end;
 accumulate_receipts(DeliveryTag, true, PR) ->
-    accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), []).
+
+    {Key, Value, PR1} = gb_trees:take_smallest(PR),
+    case DeliveryTag >= Key of
+        true  -> accumulate_receipts1(DeliveryTag, {Key, Value, PR1}, []);
+        false -> {[], PR}
+    end.
 
 accumulate_receipts1(DeliveryTag, {DeliveryTag, Value, PR}, Acc) ->
     {lists:reverse([Value | Acc]), PR};
