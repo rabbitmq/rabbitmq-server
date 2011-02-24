@@ -254,7 +254,7 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({deliver, ConsumerTag, AckRequired,
              Msg = {_QName, QPid, _MsgId, Redelivered,
                     #basic_message{exchange_name = ExchangeName,
-                                   routing_key = RoutingKey,
+                                   routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
@@ -593,32 +593,33 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(DecodedContent#content.properties, State),
-    IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1} =
         case ConfirmEnabled of
             false -> {undefined, State};
             true  -> SeqNo = State#ch.publish_seqno,
                      {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
-    Message = #basic_message{exchange_name = ExchangeName,
-                             routing_key   = RoutingKey,
-                             content       = DecodedContent,
-                             guid          = rabbit_guid:guid(),
-                             is_persistent = IsPersistent},
-    {RoutingRes, DeliveredQPids} =
-        rabbit_exchange:publish(
-          Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
-                                MsgSeqNo)),
-    State2 = process_routing_result(RoutingRes, DeliveredQPids, ExchangeName,
-                                    MsgSeqNo, Message, State1),
-    maybe_incr_stats([{ExchangeName, 1} |
-                      [{{QPid, ExchangeName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State2),
-    {noreply, case TxnKey of
-                  none -> State2;
-                  _    -> add_tx_participants(DeliveredQPids, State2)
-              end};
+    case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
+        {ok, Message} ->
+            {RoutingRes, DeliveredQPids} =
+                rabbit_exchange:publish(
+                  Exchange,
+                  rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
+                                        MsgSeqNo)),
+            State2 = process_routing_result(RoutingRes, DeliveredQPids,
+                                            ExchangeName, MsgSeqNo, Message,
+                                            State1),
+            maybe_incr_stats([{ExchangeName, 1} |
+                              [{{QPid, ExchangeName}, 1} ||
+                                  QPid <- DeliveredQPids]], publish, State2),
+            {noreply, case TxnKey of
+                          none -> State2;
+                          _    -> add_tx_participants(DeliveredQPids, State2)
+                      end};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(precondition_failed,
+                                       "invalid message: ~p", [Reason])
+    end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
@@ -658,7 +659,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
         {ok, MessageCount,
          Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
-                               routing_key = RoutingKey,
+                               routing_keys = [RoutingKey | _CcRoutes],
                                content = Content}}} ->
             State1 = lock_message(not(NoAck),
                                   ack_record(DeliveryTag, none, Msg),
@@ -1123,7 +1124,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     end.
 
 basic_return(#basic_message{exchange_name = ExchangeName,
-                            routing_key   = RoutingKey,
+                            routing_keys  = [RoutingKey | _CcRoutes],
                             content       = Content},
              #ch{protocol = Protocol, writer_pid = WriterPid}, Reason) ->
     {_Close, ReplyCode, ReplyText} = Protocol:lookup_amqp_exception(Reason),
@@ -1272,17 +1273,6 @@ notify_limiter(LimiterPid, Acked) ->
                                 end, 0, Acked) of
         0     -> ok;
         Count -> rabbit_limiter:ack(LimiterPid, Count)
-    end.
-
-is_message_persistent(Content) ->
-    case rabbit_basic:is_message_persistent(Content) of
-        {invalid, Other} ->
-            rabbit_log:warning("Unknown delivery mode ~p - "
-                               "treating as 1, non-persistent~n",
-                               [Other]),
-            false;
-        IsPersistent when is_boolean(IsPersistent) ->
-            IsPersistent
     end.
 
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
