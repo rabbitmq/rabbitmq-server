@@ -40,7 +40,7 @@
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
-                start_heartbeat_fun}).
+                start_heartbeat_fun, pending_receipts}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -71,7 +71,8 @@ init([Sock, StartHeartbeatFun]) ->
        connection          = none,
        subscriptions       = dict:new(),
        version             = none,
-       start_heartbeat_fun = StartHeartbeatFun},
+       start_heartbeat_fun = StartHeartbeatFun,
+       pending_receipts    = undefined},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -132,6 +133,8 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
 handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State, hibernate};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
@@ -394,10 +397,14 @@ do_send(Destination, _DestHdr,
     case transactional(Frame) of
         {yes, Transaction} ->
             extend_transaction(Transaction,
+                               fun(StateN) ->
+                                       maybe_record_receipt(Frame, StateN)
+                               end,
                                {Method, Props, BodyFragments},
                                State);
         no ->
-            ok(send_method(Method, Props, BodyFragments, State))
+            ok(send_method(Method, Props, BodyFragments,
+                           maybe_record_receipt(Frame, State)))
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
@@ -415,11 +422,6 @@ negotiate_version(Frame) ->
                    [{return, list}]),
     rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
 
-ensure_receipt(Frame, State) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
-        {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
-        not_found -> State
-    end.
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
@@ -481,6 +483,62 @@ default_prefetch(_) ->
     undefined.
 
 %%----------------------------------------------------------------------------
+%% Receipt Handling
+%%----------------------------------------------------------------------------
+
+ensure_receipt(Frame = #stomp_frame{command = Command}, State) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id}  -> do_receipt(Command, Id, State);
+        not_found -> State
+    end.
+
+do_receipt("SEND", _, State) ->
+    %% SEND frame receipts are handled when messages are confirmed
+    State;
+do_receipt(_Frame, ReceiptId, State) ->
+    send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
+
+maybe_record_receipt(Frame, State = #state{channel          = Channel,
+                                           pending_receipts = PR}) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id} ->
+            PR1 = case PR of
+                      undefined ->
+                          amqp_channel:register_confirm_handler(
+                            Channel, self()),
+                          #'confirm.select_ok'{} =
+                              amqp_channel:call(Channel, #'confirm.select'{}),
+                          gb_trees:empty();
+                      _ ->
+                          PR
+                  end,
+            SeqNo = amqp_channel:next_publish_seqno(Channel),
+            State#state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
+        not_found ->
+            State
+    end.
+
+flush_pending_receipts(DeliveryTag, IsMulti,
+                       State = #state{pending_receipts = PR}) ->
+    {Receipts, PR1} = accumulate_receipts(DeliveryTag, IsMulti, PR),
+    State1 = lists:foldl(fun(ReceiptId, StateN) ->
+                                 do_receipt(none, ReceiptId, StateN)
+                         end, State, Receipts),
+    State1#state{pending_receipts = PR1}.
+
+accumulate_receipts(DeliveryTag, false, PR) ->
+    ReceiptId = gb_trees:get(DeliveryTag, PR),
+    {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
+accumulate_receipts(DeliveryTag, true, PR) ->
+    accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), []).
+
+accumulate_receipts1(DeliveryTag, {DeliveryTag, Value, PR}, Acc) ->
+    {lists:reverse([Value | Acc]), PR};
+accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
+    accumulate_receipts1(DeliveryTag,
+                         gb_trees:take_smallest(PR), [Value | Acc]).
+
+%%----------------------------------------------------------------------------
 %% Transaction Support
 %%----------------------------------------------------------------------------
 
@@ -517,6 +575,9 @@ begin_transaction(Transaction, State) ->
     put({transaction, Transaction}, []),
     ok(State).
 
+extend_transaction(Transaction, Callback, Action, State) ->
+    extend_transaction(Transaction, {callback, Callback, Action}, State).
+
 extend_transaction(Transaction, Action, State0) ->
     with_transaction(
       Transaction, State0,
@@ -544,6 +605,8 @@ abort_transaction(Transaction, State0) ->
               ok(State)
       end).
 
+perform_transaction_action({callback, Callback, Action}, State) ->
+    perform_transaction_action(Action, Callback(State));
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
