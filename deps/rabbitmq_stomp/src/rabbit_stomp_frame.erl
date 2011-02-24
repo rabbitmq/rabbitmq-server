@@ -43,8 +43,6 @@
          binary_header/2, binary_header/3]).
 -export([serialize/1]).
 
--define(CHUNK_SIZE_LIMIT, 32768).
-
 initial_state() ->
     none.
 
@@ -98,18 +96,26 @@ parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
                                     HeaderAcc]
                  end,
     parse_headers(Rest, Frame, NewHeaders, []);
-parse_header_value(<<$\\, Ch:8,  Rest/binary>>, Frame,
+parse_header_value(<<$\\, Rest/binary>>, Frame,
                    HeaderAcc, KeyAcc, ValAcc) ->
+    parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
+parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
+                   ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+
+parse_header_value_escape(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    more(fun(Rest) ->
+           parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
+         end);
+parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
+                          HeaderAcc, KeyAcc, ValAcc) ->
     case unescape(Ch) of
         {ok, EscCh} ->
             parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
                                [EscCh | ValAcc]);
         error ->
             {error, {bad_escape, Ch}}
-    end;
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
-                   ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+    end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
     case binary:split(Content, <<0>>) of
@@ -134,7 +140,7 @@ parse_body(Content, Frame, Chunks, Remaining) ->
                          parse_body(Rest, Frame,
                                     finalize_chunk(Content, Chunks),
                                     Left)
-                 end, Left);
+                 end, Left+1);  %% expect a trailing null, too
         false ->
             <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
             {ok,
