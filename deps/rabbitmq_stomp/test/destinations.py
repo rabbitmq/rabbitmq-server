@@ -115,37 +115,43 @@ class TestQueue(base.BaseTest):
 
     def test_send_with_receipt(self):
         d = '/queue/test-receipt'
-
-        count = 50
-
-        self.listener.reset(count)
-
-        for x in range(0, count):
-            self.conn.send("test receipt", destination=d,
-                           receipt="test" + str(x))
-
-        self.assertTrue(self.listener.await(5))
-        self.assertEquals(count, len(self.listener.receipts), "no receipts")
+        def noop(): pass
+        self.__test_send_receipt(d, noop, noop)
 
     def test_send_with_receipt_tx(self):
         d = '/queue/test-receipt-tx'
-        count = 20
         tx = 'receipt.tx'
 
+        def before():
+            self.conn.begin(transaction=tx)
+
+        def after():
+            self.assertFalse(self.listener.await(1))
+            self.conn.commit(transaction=tx)
+
+        self.__test_send_receipt(d, before, after, {'transaction': tx})
+
+    def __test_send_receipt(self, destination, before, after, headers = {}):
+        count = 50
         self.listener.reset(count)
 
-        self.conn.begin(transaction=tx)
+        before()
+        expected_receipts = set()
+
         for x in range(0, count):
-            self.conn.send("tx receipt", destination=d,
-                           receipt="test" + str(x),
-                           transaction=tx)
+            receipt = "test" + str(x)
+            expected_receipts.add(receipt)
+            self.conn.send("test receipt", destination=destination,
+                           receipt=receipt, headers=headers)
+        after()
 
-        self.assertFalse(self.listener.await(1))
-
-        self.conn.commit(transaction=tx)
         self.assertTrue(self.listener.await(5))
-        self.assertEquals(count, len(self.listener.receipts),
-                          "no receipts from transaction")
+
+        for r in self.listener.receipts:
+            expected_receipts.remove(r['headers']['receipt-id'])
+
+        self.assertEquals(set(), expected_receipts,
+                          "missing receipts: " + str(expected_receipts))
 
 class TestTopic(base.BaseTest):
 
