@@ -33,7 +33,7 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, init/1, handle_response/2]).
+-export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_auth_mechanism_spec.hrl").
@@ -55,6 +55,13 @@
 description() ->
     [{name, <<"EXTERNAL">>},
      {description, <<"SSL authentication mechanism using SASL EXTERNAL">>}].
+
+should_offer(Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl                -> false;
+        {error, no_peercert} -> false;
+        {ok, _}              -> true
+    end.
 
 init(Sock) ->
     Username = case rabbit_net:peercert(Sock) of
@@ -84,7 +91,6 @@ handle_response(_Response, #state{username = Username}) ->
     end.
 
 %%--------------------------------------------------------------------------
-
 config_sane() ->
     {ok, Opts} = application:get_env(ssl_options),
     case {proplists:get_value(fail_if_no_peer_cert, Opts),
