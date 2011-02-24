@@ -6,5 +6,7 @@
              rabbit_federation_sup]},
   {registered, []},
   {mod, {rabbit_federation_app, []}},
-  {env, [{exchanges, []}]},
+  {env, [{exchanges,   []},
+         {brokers,     []},
+         {ssl_options, []}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.

@@ -9,8 +9,20 @@ Static configuration might look like:
                    {durable,     true},
                    {auto_delete, false},
                    {internal,    false},
-                   {upstreams,   ["amqp://localhost/%2f/upstream"]}]
-                 ]}
+                   {upstreams,   ["amqps://upstream-server/%2f/upstream"]}]
+                 ]},
+     {brokers, [[{host,     "upstream-server"},
+                 {scheme,   "amqps"},
+                 {username, "alternate"},
+                 {password, "alternate"}]
+               ]},
+     {ssl_options,
+      [{cacertfile,           "/path/to/cacert.pem"},
+       {certfile,             "/path/to/cert.pem"},
+       {keyfile,              "/path/to/key.pem"},
+       {verify,               verify_peer},
+       {fail_if_no_peer_cert, true}
+     ]}
    ]
   }
 
@@ -22,3 +34,13 @@ like a regular exchange).
 Most of the rest looks like an exchange.declare, but note that the
 type parameter must match the type of the upstream exchanges for
 routing to work at all sensibly.
+
+The brokers list provides information on how to connect. If the broker
+referenced in a URI cannot be found in the brokers list, a non-SSL
+connection with guest/guest login is assumed.
+
+The ssl_options parameter specifies how to make client SSL connections.
+
+An entry in the brokers list can specify {mechanism, 'EXTERNAL'}
+rather than username and password if the upstream broker has
+rabbitmq-auth-mechanism-ssl installed and working.

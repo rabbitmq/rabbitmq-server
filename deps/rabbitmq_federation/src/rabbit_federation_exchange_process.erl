@@ -151,11 +151,9 @@ connect_upstream(UpstreamURI, ResetUpstreamQueue,
                  State = #state{ upstreams = Upstreams,
                                  downstream_exchange = DownstreamX}) ->
     %%io:format("Connecting to ~s...~n", [UpstreamURI]),
-    Props = rabbit_federation_util:parse_uri(UpstreamURI),
-    X = proplists:get_value(exchange, Props),
-    Params = #amqp_params{host         = proplists:get_value(host, Props),
-                          port         = proplists:get_value(port, Props),
-                          virtual_host = proplists:get_value(vhost, Props)},
+    X = proplists:get_value(exchange,
+                            rabbit_federation_util:parse_uri(UpstreamURI)),
+    Params = params_from_uri(UpstreamURI),
     case amqp_connection:start(network, Params) of
         {ok, Conn} ->
             %%io:format("Done!~n", []),
@@ -254,6 +252,58 @@ unbind_upstream(#upstream{ connection = Conn, queue = Q, exchange = X },
 delete_upstream(#upstream{ connection = Conn, queue = Q }) ->
     with_disposable_channel(
       Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end).
+
+%%----------------------------------------------------------------------------
+
+params_from_uri(ExchangeURI) ->
+    Props = rabbit_federation_util:parse_uri(ExchangeURI),
+    Params = #amqp_params{host         = proplists:get_value(host, Props),
+                          port         = proplists:get_value(port, Props),
+                          virtual_host = proplists:get_value(vhost, Props)},
+    {ok, Brokers} = application:get_env(rabbit_federation, brokers),
+    Usable = [Merged || Broker <- Brokers,
+                        Merged <- [merge(Broker, Props)],
+                        all_match(Broker, Merged)],
+    case Usable of
+        []    -> Params;
+        [B|_] -> params_from_broker(Params, B)
+    end.
+
+params_from_broker(P, B) ->
+    P1 = P#amqp_params{
+           username = list_to_binary(proplists:get_value(username, B, "guest")),
+           password = list_to_binary(proplists:get_value(password, B, "guest"))
+          },
+    P2 = case proplists:get_value(scheme, B, "amqp") of
+             "amqp"  -> P1;
+             "amqps" -> {ok, Opts} = application:get_env(
+                                       rabbit_federation, ssl_options),
+                        P1#amqp_params{ssl_options = Opts,
+                                       port        = 5671}
+         end,
+    case proplists:get_value(mechanism, B, 'PLAIN') of
+        'PLAIN'    -> P2;
+        %% TODO it would be nice to support arbitrary mechanisms here.
+        'EXTERNAL' -> P2#amqp_params{auth_mechanisms =
+                                         [fun amqp_auth_mechanisms:external/3]};
+        M          -> exit({unsupported_mechanism, M})
+    end.
+
+%% For all the props in Props1, does Props2 match?
+all_match(Props1, Props2) ->
+    lists:all(fun ({K, V}) ->
+                      proplists:get_value(K, Props2) == V
+              end, [KV || KV <- Props1]).
+
+%% Add elements of Props1 which are not in Props2 - i.e. Props2 wins in event
+%% of a clash
+merge(Props1, Props2) ->
+    lists:foldl(fun({K, V}, P) ->
+                        case proplists:is_defined(K, Props2) of
+                            true  -> P;
+                            false -> [{K, V}|P]
+                        end
+                end, Props2, Props1).
 
 %%----------------------------------------------------------------------------
 

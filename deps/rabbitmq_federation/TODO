@@ -2,14 +2,13 @@ Necessary
 ---------
 
 Exponential(?) backoff
-Alternate PLAIN creds than guest/guest
 Reset bindings on connect
-Allow use of EXTERNAL etc
 Remove that ETS table
 Test in cluster
 Be smarter about bind (for efficiency)
 Be even smarter about unbind (for efficiency)
 Handle user-id somehow
+Configurable queue lifetime / prefetch count / heartbeat(?)
 
 Useful
 ------

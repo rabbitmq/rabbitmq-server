@@ -177,8 +177,9 @@ validate_upstream({longstr, URI}) ->
             fail("URI ~s could not be parsed, error: ~p", [URI, E]);
         Props ->
             case proplists:get_value(scheme, Props) of
-                "amqp" -> ok;
-                S      -> fail("Scheme ~s not supported", [S])
+                "amqp"  -> ok;
+                "amqps" -> ok;
+                S       -> fail("Scheme ~s not supported", [S])
             end
     end;
 validate_upstream({Type, URI}) ->
