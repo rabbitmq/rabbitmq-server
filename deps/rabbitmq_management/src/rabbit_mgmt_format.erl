@@ -271,7 +271,7 @@ to_basic_properties({struct, P}) ->
 
 to_basic_properties(Props) ->
     Fmt = fun (headers, H) -> to_amqp_table(H);
-              (K      , V) -> V
+              (_K     , V) -> V
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->
