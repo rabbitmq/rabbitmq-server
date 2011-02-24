@@ -200,9 +200,10 @@ class TestParsing(unittest.TestCase):
     @connect(['cd'])
     def test_message_with_embedded_nulls(self):
         ''' Test sending/receiving message with embedded nulls. '''
+        dest='destination:/exchange/amq.topic/test_embed_nulls_message\n'
         subscribe=( 'SUBSCRIBE\n'
                     'id:xxx\n'
-                    'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                    +dest+
                     '\n\0')
         self.cd.sendall(subscribe)
 
@@ -215,20 +216,20 @@ class TestParsing(unittest.TestCase):
         msg_len = len(message)
 
         self.cd.sendall('SEND\n'
-                        'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                        +dest+
                         'content-length:%i\n'
                         '\n'
                         '%s'
                         '\0' % (len(message), message) )
 
-        headresp=('MESSAGE\n'               # 8
-            'content-type:text/plain\n'     # 24
-            'subscription:(.*)\n'           # 14 + subscription
-            'destination:/exchange/amq.topic/test_embed_nulls_message\n' # 57
-            'message-id:(.*)\n'             # 12 + message-id
-            'content-length:%i\n'           # 16 + 4==len('1024')
-            '\n'                            # 1
-            '(.*)$'                         # prefix of body+null (potentially)
+        headresp=('MESSAGE\n'            # 8
+            'content-type:text/plain\n'  # 24
+            'subscription:(.*)\n'        # 14 + subscription
+            +dest+                       # 57
+            'message-id:(.*)\n'          # 12 + message-id
+            'content-length:%i\n'        # 16 + 4==len('1024')
+            '\n'                         # 1
+            '(.*)$'                      # prefix of body+null (potentially)
              % len(message) )
         headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
 
@@ -251,9 +252,10 @@ class TestParsing(unittest.TestCase):
     @connect(['cd'])
     def test_message_in_packets(self):
         ''' Test sending/receiving message in packets. '''
+        dest='destination:/exchange/amq.topic/test_embed_nulls_message\n'
         subscribe=( 'SUBSCRIBE\n'
                     'id:xxx\n'
-                    'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                    +dest+
                     '\n\0')
         self.cd.sendall(subscribe)
 
@@ -263,7 +265,7 @@ class TestParsing(unittest.TestCase):
         msg_len = len(message)
 
         msg_to_send = ('SEND\n'
-                       'destination:/exchange/amq.topic/test_embed_nulls_message\n'
+                       +dest+
                        '\n'
                        '%s'
                        '\0' % (message) )
@@ -276,14 +278,14 @@ class TestParsing(unittest.TestCase):
             self.cd.sendall(part)
             part_index += packet_size
 
-        headresp=('MESSAGE\n'               # 8
-            'content-type:text/plain\n'     # 24
-            'subscription:(.*)\n'           # 14 + subscription
-            'destination:/exchange/amq.topic/test_embed_nulls_message\n' # 57
-            'message-id:(.*)\n'             # 12 + message-id
-            'content-length:%i\n'           # 16 + 4==len('1024')
-            '\n'                            # 1
-            '(.*)$'                         # prefix of body+null (potentially)
+        headresp=('MESSAGE\n'           # 8
+            'content-type:text/plain\n' # 24
+            'subscription:(.*)\n'       # 14 + subscription
+            +dest+                      # 57
+            'message-id:(.*)\n'         # 12 + message-id
+            'content-length:%i\n'       # 16 + 4==len('1024')
+            '\n'                        # 1
+            '(.*)$'                     # prefix of body+null (potentially)
              % len(message) )
         headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
 
