@@ -158,7 +158,7 @@ server_properties(Protocol) ->
                       {copyright,   ?COPYRIGHT_MESSAGE},
                       {information, ?INFORMATION_MESSAGE}]]],
 
-    %% Filter duplicated properties in favor of config file provided values
+    %% Filter duplicated properties in favour of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
 
