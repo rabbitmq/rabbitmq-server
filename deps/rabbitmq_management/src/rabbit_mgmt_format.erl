@@ -21,6 +21,7 @@
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
+-export([to_basic_properties/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -190,20 +191,23 @@ tokenise(Str) ->
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 
+to_amqp_table({struct, T}) ->
+    to_amqp_table(T);
 to_amqp_table(T) ->
     [to_amqp_table_row(K, V) || {K, V} <- T].
 
-to_amqp_table_row(K, Vs) when is_list(Vs) ->
-    {K, array, [{args_type(V), V} || V <- Vs]};
 to_amqp_table_row(K, V) ->
-    {K, args_type(V), V}.
+    {T, V2} = type_val(V),
+    {K, T, V2}.
 
-args_type(X) when is_binary(X) ->
-    longstr;
-args_type(X) when is_number(X) ->
-    long;
-args_type(X) ->
-    throw({unhandled_type, X}).
+to_amqp_array(L) ->
+    [type_val(I) || I <- L].
+
+type_val({struct, M})         -> {table,   to_amqp_table(M)};
+type_val(L) when is_list(L)   -> {array,   to_amqp_array(L)};
+type_val(X) when is_binary(X) -> {longstr, X};
+type_val(X) when is_number(X) -> {long,    X};
+type_val(X)                   -> throw({unhandled_type, X}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
@@ -251,13 +255,34 @@ binding(#binding{source      = S,
        {fun amqp_table/1,                       [arguments]}]).
 
 basic_properties(Props = #'P_basic'{}) ->
-    {Res, _Idx} = lists:foldl(fun (K, {L, Idx}) ->
-                                      V = element(Idx, Props),
-                                      NewL = case V of
-                                                 undefined -> L;
-                                                 _         -> [{K, V}|L]
-                                             end,
-                                      {NewL, Idx + 1}
-                              end, {[], 2},
-                              record_info(fields, 'P_basic')),
+    {Res, _Ix} = lists:foldl(fun (K, {L, Ix}) ->
+                                     V = element(Ix, Props),
+                                     NewL = case V of
+                                                undefined -> L;
+                                                _         -> [{K, V}|L]
+                                            end,
+                                     {NewL, Ix + 1}
+                             end, {[], 2},
+                             record_info(fields, 'P_basic')),
     format(Res, [{fun amqp_table/1, [headers]}]).
+
+to_basic_properties({struct, P}) ->
+    to_basic_properties(P);
+
+to_basic_properties(Props) ->
+    Fmt = fun (headers, H) -> to_amqp_table(H);
+              (K      , V) -> V
+          end,
+    {Res, _Ix} = lists:foldl(
+                   fun (K, {P, Ix}) ->
+                           NewP = case proplists:get_value(a2b(K), Props) of
+                                      undefined -> P;
+                                      V         -> setelement(Ix, P, Fmt(K, V))
+                                  end,
+                           {NewP, Ix + 1}
+                   end, {#'P_basic'{}, 2},
+                   record_info(fields, 'P_basic')),
+    Res.
+
+a2b(A) ->
+    list_to_binary(atom_to_list(A)).

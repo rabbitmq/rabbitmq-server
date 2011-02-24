@@ -57,6 +57,22 @@ relativise_test() ->
     "bar/baz"    = rabbit_mgmt_util:relativise("/foo/bar",      "/foo/bar/baz"),
     ok.
 
+amqp_table_test() ->
+    assert_table({struct, []}, []),
+    assert_table({struct, [{<<"x-expires">>, 1000}]},
+                 [{<<"x-expires">>, long, 1000}]),
+    assert_table({struct,
+                  [{<<"x-forwarding">>,
+                    [{struct,
+                      [{<<"uri">>, <<"amqp://localhost/%2f/upstream">>}]}]}]},
+                 [{<<"x-forwarding">>, array,
+                   [{table, [{<<"uri">>, longstr,
+                              <<"amqp://localhost/%2f/upstream">>}]}]}]).
+
+assert_table(JSON, AMQP) ->
+    ?assertEqual(JSON, rabbit_mgmt_format:amqp_table(AMQP)),
+    ?assertEqual(AMQP, rabbit_mgmt_format:to_amqp_table(JSON)).
+
 %%--------------------------------------------------------------------
 
 assert_binding(Packed, Routing, Args) ->

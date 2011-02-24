@@ -739,7 +739,52 @@ get_test() ->
                                                      {count,   5}], ?OK)),
     [] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
                                                {count,   5}], ?OK),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
+
+publish_test() ->
+    Headers = [{'x-forwarding', [[{uri,<<"amqp://localhost/%2f/upstream">>}]]}],
+    Msg = [{exchange,         <<"">>},
+           {routing_key,      <<"myqueue">>},
+           {properties,       [{delivery_mode, 2},
+                               {headers,       Headers}]},
+           {payload,          <<"Hello world">>},
+           {payload_encoding, <<"string">>}],
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    ?assertEqual([{routed, true}],
+                 http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)),
+    [Msg2] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
+                                                   {count,   1}], ?OK),
+    assert_item(Msg, Msg2),
+    http_post("/exchanges/%2f/amq.default/publish", Msg2, ?OK),
+    [Msg3] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
+                                                   {count,   1}], ?OK),
+    assert_item(Msg, Msg3),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+publish_base64_test() ->
+    Msg = [{exchange,         <<"">>},
+           {routing_key,      <<"myqueue">>},
+           {properties,       []},
+           {payload,          <<"YWJjZA==">>},
+           {payload_encoding, <<"base64">>}],
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
+    [Msg2] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
+                                                   {count,   1}], ?OK),
+    ?assertEqual(<<"abcd">>, pget(payload, Msg2)),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+publish_unrouted_test() ->
+    Msg = [{exchange,         <<"">>},
+           {routing_key,      <<"hmmmm">>},
+           {properties,       []},
+           {payload,          <<"Hello world">>},
+           {payload_encoding, <<"string">>}],
+    ?assertEqual([{routed, false}],
+                 http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)).
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->

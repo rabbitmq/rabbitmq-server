@@ -40,15 +40,19 @@ process_post(ReqData, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData),
     X = rabbit_mgmt_util:id(exchange, ReqData),
     rabbit_mgmt_util:with_decode(
-      [routing_key, properties, payload], ReqData, Context,
-      fun([RoutingKey, Properties, Payload]) ->
+      [routing_key, properties, payload, payload_encoding], ReqData, Context,
+      fun([RoutingKey, Props0, Payload0, Enc]) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
                         amqp_channel:register_confirm_handler(Ch, self()),
                         amqp_channel:register_return_handler(Ch, self()),
                         amqp_channel:call(Ch, #'confirm.select'{}),
-                        Props = rabbit_mgmt_format:to_amqp_table(Properties),
+                        Props = rabbit_mgmt_format:to_basic_properties(Props0),
+                        Payload = case Enc of
+                                      <<"string">> -> Payload0;
+                                      <<"base64">> -> base64:decode(Payload0)
+                                  end,
                         amqp_channel:cast(Ch, #'basic.publish'{
                                             exchange    = X,
                                             routing_key = RoutingKey,
