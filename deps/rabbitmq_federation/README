@@ -43,4 +43,4 @@ The ssl_options parameter specifies how to make client SSL connections.
 
 An entry in the brokers list can specify {mechanism, 'EXTERNAL'}
 rather than username and password if the upstream broker has
-rabbitmq-auth-mechanism-ssl installed and working.
+EXTERNAL SASL authentication support (e.g. rabbitmq-auth-mechanism-ssl).
