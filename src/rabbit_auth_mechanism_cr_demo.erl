@@ -19,7 +19,7 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, init/1, handle_response/2]).
+-export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include("rabbit_auth_mechanism_spec.hrl").
 
@@ -42,6 +42,9 @@ description() ->
     [{name, <<"RABBIT-CR-DEMO">>},
      {description, <<"RabbitMQ Demo challenge-response authentication "
                      "mechanism">>}].
+
+should_offer(_Sock) ->
+    true.
 
 init(_Sock) ->
     #state{}.

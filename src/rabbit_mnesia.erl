@@ -20,7 +20,7 @@
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
          cluster/1, force_cluster/1, reset/0, force_reset/0,
          is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
-         empty_ram_only_tables/0, copy_db/1]).
+         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1]).
 
 -export([table_names/0]).
 
@@ -54,6 +54,7 @@
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
+-spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
 
 -endif.
 
@@ -185,6 +186,17 @@ table_definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
+     {rabbit_topic_trie_edge,
+      [{record_name, topic_trie_edge},
+       {attributes, record_info(fields, topic_trie_edge)},
+       {type, ordered_set},
+       {match, #topic_trie_edge{trie_edge = trie_edge_match(), _='_'}}]},
+     {rabbit_topic_trie_binding,
+      [{record_name, topic_trie_binding},
+       {attributes, record_info(fields, topic_trie_binding)},
+       {type, ordered_set},
+       {match, #topic_trie_binding{trie_binding = trie_binding_match(),
+                                   _='_'}}]},
      %% Consider the implications to nodes_of_type/1 before altering
      %% the next entry.
      {rabbit_durable_exchange,
@@ -216,6 +228,12 @@ reverse_binding_match() ->
                      _='_'}.
 binding_destination_match() ->
     resource_match('_').
+trie_edge_match() ->
+    #trie_edge{exchange_name = exchange_name_match(),
+               _='_'}.
+trie_binding_match() ->
+    #trie_binding{exchange_name = exchange_name_match(),
+                  _='_'}.
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
@@ -264,43 +282,46 @@ ensure_schema_integrity() ->
 
 check_schema_integrity() ->
     Tables = mnesia:system_info(tables),
-    case [Error || {Tab, TabDef} <- table_definitions(),
-                   case lists:member(Tab, Tables) of
-                       false ->
-                           Error = {table_missing, Tab},
-                           true;
-                       true  ->
-                           {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-                           Attrs = mnesia:table_info(Tab, attributes),
-                           Error = {table_attributes_mismatch, Tab,
-                                    ExpAttrs, Attrs},
-                           Attrs /= ExpAttrs
-                   end] of
-        []     -> check_table_integrity();
-        Errors -> {error, Errors}
+    case check_tables(fun (Tab, TabDef) ->
+                              case lists:member(Tab, Tables) of
+                                  false -> {error, {table_missing, Tab}};
+                                  true  -> check_table_attributes(Tab, TabDef)
+                              end
+                      end) of
+        ok     -> ok = wait_for_tables(),
+                  check_tables(fun check_table_content/2);
+        Other  -> Other
     end.
 
-check_table_integrity() ->
-    ok = wait_for_tables(),
-    case lists:all(fun ({Tab, TabDef}) ->
-                           {_, Match} = proplists:lookup(match, TabDef),
-                           read_test_table(Tab, Match)
-                   end, table_definitions()) of
-        true  -> ok;
-        false -> {error, invalid_table_content}
+check_table_attributes(Tab, TabDef) ->
+    {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
+    case mnesia:table_info(Tab, attributes) of
+        ExpAttrs -> ok;
+        Attrs    -> {error, {table_attributes_mismatch, Tab, ExpAttrs, Attrs}}
     end.
 
-read_test_table(Tab, Match) ->
+check_table_content(Tab, TabDef) ->
+    {_, Match} = proplists:lookup(match, TabDef),
     case mnesia:dirty_first(Tab) of
         '$end_of_table' ->
-            true;
+            ok;
         Key ->
             ObjList = mnesia:dirty_read(Tab, Key),
             MatchComp = ets:match_spec_compile([{Match, [], ['$_']}]),
             case ets:match_spec_run(ObjList, MatchComp) of
-                ObjList -> true;
-                _       -> false
+                ObjList -> ok;
+                _       -> {error, {table_content_invalid, Tab, Match, ObjList}}
             end
+    end.
+
+check_tables(Fun) ->
+    case [Error || {Tab, TabDef} <- table_definitions(),
+                   case Fun(Tab, TabDef) of
+                       ok             -> Error = none, false;
+                       {error, Error} -> true
+                   end] of
+        []     -> ok;
+        Errors -> {error, Errors}
     end.
 
 %% The cluster node config file contains some or all of the disk nodes
@@ -369,17 +390,15 @@ init_db(ClusterNodes, Force) ->
             case {Nodes, mnesia:system_info(use_dir), all_clustered_nodes()} of
                 {[], true, [_]} ->
                     %% True single disc node, attempt upgrade
-                    ok = wait_for_tables(),
                     case rabbit_upgrade:maybe_upgrade() of
-                        ok                    -> ensure_schema_ok();
+                        ok                    -> ensure_schema_integrity();
                         version_not_available -> schema_ok_or_move()
                     end;
                 {[], true, _} ->
                     %% "Master" (i.e. without config) disc node in cluster,
                     %% verify schema
-                    ok = wait_for_tables(),
                     ensure_version_ok(rabbit_upgrade:read_version()),
-                    ensure_schema_ok();
+                    ensure_schema_integrity();
                 {[], false, _} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
@@ -396,7 +415,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    ensure_schema_ok()
+                    ensure_schema_integrity()
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
@@ -429,12 +448,6 @@ ensure_version_ok({ok, DiscVersion}) ->
 ensure_version_ok({error, _}) ->
     ok = rabbit_upgrade:write_version().
 
-ensure_schema_ok() ->
-    case check_schema_integrity() of
-        ok              -> ok;
-        {error, Reason} -> throw({error, {schema_invalid, Reason}})
-    end.
-
 create_schema() ->
     mnesia:stop(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
@@ -443,7 +456,6 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = wait_for_tables(),
     ok = rabbit_upgrade:write_version().
 
 move_db() ->
@@ -472,8 +484,7 @@ copy_db(Destination) ->
     mnesia:stop(),
     case rabbit_misc:recursive_copy(dir(), Destination) of
         ok ->
-            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-            ok = wait_for_tables();
+            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia);
         {error, E} ->
             {error, E}
     end.
@@ -541,7 +552,8 @@ wait_for_tables() -> wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
     case mnesia:wait_for_tables(TableNames, 30000) of
-        ok -> ok;
+        ok ->
+            ok;
         {timeout, BadTabs} ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
         {error, Reason} ->

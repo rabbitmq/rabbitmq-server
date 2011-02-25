@@ -18,7 +18,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/1, count/1]).
 
 -export([init/1]).
 
@@ -28,20 +28,32 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start_link/1 :: (integer()) -> {'ok', pid()} | {'error', any()}).
+-spec(count/1 :: ([node()]) -> integer()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link(Count) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [Count]).
+
+count([]) ->
+    1;
+count([Node | Nodes]) ->
+    try
+        length(supervisor:which_children({?SERVER, Node}))
+    catch exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
+            count(Nodes);
+          exit:{R, _}      when R =:= noproc; R =:= normal; R =:= shutdown;
+                                R =:= nodedown ->
+            count(Nodes)
+    end.
 
 %%----------------------------------------------------------------------------
 
-init(_Args) ->
-    DCount = delegate:delegate_count([node()]),
+init([Count]) ->
     {ok, {{one_for_one, 10, 10},
           [{Num, {delegate, start_link, [Num]},
             transient, 16#ffffffff, worker, [delegate]} ||
-              Num <- lists:seq(0, DCount - 1)]}}.
+              Num <- lists:seq(0, Count - 1)]}}.
