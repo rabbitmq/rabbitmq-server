@@ -75,7 +75,6 @@ HELP = {
       <ul>\
       <li>content_type</li>\
       <li>content_encoding</li>\
-      <li>delivery_mode</li>\
       <li>priority</li>\
       <li>correlation_id</li>\
       <li>reply_to</li>\

@@ -544,11 +544,11 @@ function publish_msg(params0) {
     var params = params_magic(params0);
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
     params['payload_encoding'] = 'string';
-    params['delivery_mode'] = parseInt(params['delivery_mode']);
     params['properties'] = {};
+    params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
     if (params['headers'] != '')
         params['properties']['headers'] = params['headers'];
-    var props = ['content_type', 'content_encoding', 'delivery_mode', 'priority', 'correlation_id', 'reply_to', 'expiration', 'message_id', 'timestamp', 'type', 'user_id', 'app_id', 'cluster_id'];
+    var props = ['content_type', 'content_encoding', 'priority', 'correlation_id', 'reply_to', 'expiration', 'message_id', 'timestamp', 'type', 'user_id', 'app_id', 'cluster_id'];
     for (var i in props) {
         var p = props[i];
         if (params['props'][p] != '')
