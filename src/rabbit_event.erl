@@ -130,15 +130,8 @@ notify_if(true,   Type,  Props) -> notify(Type, Props);
 notify_if(false, _Type, _Props) -> ok.
 
 notify(Type, Props) ->
-    try
-        %% TODO: switch to os:timestamp() when we drop support for
-        %% Erlang/OTP < R13B01
-        gen_event:notify(rabbit_event, #event{type = Type,
-                                              props = Props,
-                                              timestamp = now()})
-    catch error:badarg ->
-            %% badarg means rabbit_event is no longer registered. We never
-            %% unregister it so the great likelihood is that we're shutting
-            %% down the broker but some events were backed up. Ignore it.
-            ok
-    end.
+    %% TODO: switch to os:timestamp() when we drop support for
+    %% Erlang/OTP < R13B01
+    gen_event:notify(rabbit_event, #event{type = Type,
+                                          props = Props,
+                                          timestamp = now()}).

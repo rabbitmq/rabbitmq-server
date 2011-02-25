@@ -410,27 +410,22 @@ confirm_messages(Guids, State = #q{guid_to_channel = GTC}) ->
           fun(Guid, {CMs, GTC0}) ->
                   case dict:find(Guid, GTC0) of
                       {ok, {ChPid, MsgSeqNo}} ->
-                          {[{ChPid, MsgSeqNo} | CMs], dict:erase(Guid, GTC0)};
+                          {gb_trees_cons(ChPid, MsgSeqNo, CMs),
+                           dict:erase(Guid, GTC0)};
                       _ ->
                           {CMs, GTC0}
                   end
-          end, {[], GTC}, Guids),
-    case lists:usort(CMs) of
-        [{Ch, MsgSeqNo} | CMs1] ->
-            [rabbit_channel:confirm(ChPid, MsgSeqNos) ||
-                {ChPid, MsgSeqNos} <- group_confirms_by_channel(
-                                        CMs1, [{Ch, [MsgSeqNo]}])];
-        [] ->
-            ok
-    end,
+          end, {gb_trees:empty(), GTC}, Guids),
+    gb_trees:map(fun(ChPid, MsgSeqNos) ->
+                         rabbit_channel:confirm(ChPid, MsgSeqNos)
+                 end, CMs),
     State#q{guid_to_channel = GTC1}.
 
-group_confirms_by_channel([], Acc) ->
-    Acc;
-group_confirms_by_channel([{Ch, Msg1} | CMs], [{Ch, Msgs} | Acc]) ->
-    group_confirms_by_channel(CMs, [{Ch, [Msg1 | Msgs]} | Acc]);
-group_confirms_by_channel([{Ch, Msg1} | CMs], Acc) ->
-    group_confirms_by_channel(CMs, [{Ch, [Msg1]} | Acc]).
+gb_trees_cons(Key, Value, Tree) ->
+    case gb_trees:lookup(Key, Tree) of
+        {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
+        none            -> gb_trees:insert(Key, [Value], Tree)
+    end.
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     {no_confirm, State};
