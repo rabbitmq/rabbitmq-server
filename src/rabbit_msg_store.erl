@@ -1970,8 +1970,7 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
 force_recovery(BaseDir, Store) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
     file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
-    [file:delete(filename:join(Dir, File)) ||
-     File <- list_sorted_file_names(Dir, ?FILE_EXTENSION_TMP)],
+    recover_crashed_compactions(BaseDir),
     ok.
 
 foreach_file(D, Fun, Files) ->
@@ -1986,12 +1985,11 @@ transform_dir(BaseDir, Store, TransformFun) ->
     TransformFile = fun (A, B) -> transform_msg_file(A, B, TransformFun) end,
     case filelib:is_dir(TmpDir) of
         true  -> throw({error, transform_failed_previously});
-        false -> OldFileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
-                 foreach_file(Dir, TmpDir, TransformFile,     OldFileList),
-                 foreach_file(Dir,         fun file:delete/1, OldFileList),
-                 NewFileList = list_sorted_file_names(TmpDir, ?FILE_EXTENSION),
-                 foreach_file(TmpDir, Dir, fun file:copy/2,   NewFileList),
-                 foreach_file(TmpDir,      fun file:delete/1, NewFileList),
+        false -> FileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+                 foreach_file(Dir, TmpDir, TransformFile,     FileList),
+                 foreach_file(Dir,         fun file:delete/1, FileList),
+                 foreach_file(TmpDir, Dir, fun file:copy/2,   FileList),
+                 foreach_file(TmpDir,      fun file:delete/1, FileList),
                  ok = file:del_dir(TmpDir)
     end.
 
@@ -2005,15 +2003,9 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
         rabbit_msg_file:scan(
             RefOld, filelib:file_size(FileOld),
             fun({Guid, _Size, _Offset, BinMsg}, ok) ->
-                case TransformFun(binary_to_term(BinMsg)) of
-                    {ok, MsgNew} ->
-                        {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
-                        ok;
-                    {error, Reason} ->
-                        error_logger:error_msg("Message transform failed: ~p~n",
-                                               [Reason]),
-                        ok
-                end
+                {ok, MsgNew} = TransformFun(binary_to_term(BinMsg)),
+                {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
+                ok
             end, ok),
     file_handle_cache:close(RefOld),
     file_handle_cache:close(RefNew),
