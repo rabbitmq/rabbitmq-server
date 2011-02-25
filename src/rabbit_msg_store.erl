@@ -2018,4 +2018,3 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
     file_handle_cache:close(RefOld),
     file_handle_cache:close(RefNew),
     ok.
-
