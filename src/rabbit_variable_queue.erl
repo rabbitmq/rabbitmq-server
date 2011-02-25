@@ -353,6 +353,8 @@
 
 -include("rabbit_backing_queue_spec.hrl").
 
+-spec(multiple_routing_keys/0 :: () -> 'ok').
+
 -endif.
 
 -define(BLANK_DELTA, #delta { start_seq_id = undefined,
