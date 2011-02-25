@@ -1,7 +1,7 @@
 <h3><%= label %></h3>
 <%
-     var col_return_unroutable = !is_col_empty(totals, 'return_unroutable');
-     var col_return_not_delivered = !is_col_empty(totals, 'return_not_delivered');
+     var col_return_unroutable = !is_stat_empty(totals, 'return_unroutable');
+     var col_return_not_delivered = !is_stat_empty(totals, 'return_not_delivered');
 %>
 <% if (object && object.length > 0) { %>
 <table class="list list-with-total">
