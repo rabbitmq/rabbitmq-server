@@ -25,7 +25,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([relativise/2, post_respond/3]).
+-export([relativise/2, post_respond/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -338,8 +338,8 @@ with_channel(VHost, ReqData,
             {ok, Conn} ->
                 {ok, Ch} = amqp_connection:open_channel(Conn),
                 Res = Fun(Ch),
-                amqp_channel:close(Ch),
-                amqp_connection:close(Conn),
+                catch amqp_channel:close(Ch),
+                catch amqp_connection:close(Conn),
                 Res;
             {error, auth_failure} ->
                 not_authorised(<<"">>, ReqData, Context);
@@ -404,8 +404,10 @@ relativise0(From, To) ->
 relativise(From, To, Diff) ->
     string:join(lists:duplicate(length(From) - Diff, "..") ++ To, "/").
 
-post_respond(Response, ReqData, Context) ->
-    {JSON, _, _} = reply(Response, ReqData, Context),
+%% Make replying to a post look like anything else...
+post_respond({{halt, Code}, ReqData, Context}) ->
+    {{halt, Code}, ReqData, Context};
+post_respond({JSON, ReqData, Context}) ->
     {true, wrq:set_resp_header(
              "content-type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.

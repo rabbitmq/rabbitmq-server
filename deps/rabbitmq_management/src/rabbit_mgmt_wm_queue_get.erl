@@ -38,6 +38,9 @@ post_is_create(ReqData, Context) ->
     {false, ReqData, Context}.
 
 process_post(ReqData, Context) ->
+    rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
+
+do_it(ReqData, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData),
     Q = rabbit_mgmt_util:id(queue, ReqData),
     rabbit_mgmt_util:with_decode(
@@ -48,7 +51,7 @@ process_post(ReqData, Context) ->
                 fun (Ch) ->
                         NoAck = not rabbit_mgmt_util:parse_bool(RequeueBin),
                         Count = rabbit_mgmt_util:parse_int(CountBin),
-                        rabbit_mgmt_util:post_respond(
+                        rabbit_mgmt_util:reply(
                           basic_gets(Count, Ch, Q, NoAck), ReqData, Context)
                 end)
       end).

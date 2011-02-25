@@ -37,6 +37,9 @@ post_is_create(ReqData, Context) ->
     {false, ReqData, Context}.
 
 process_post(ReqData, Context) ->
+    rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
+
+do_it(ReqData, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData),
     X = rabbit_mgmt_util:id(exchange, ReqData),
     rabbit_mgmt_util:with_decode(
@@ -45,6 +48,7 @@ process_post(ReqData, Context) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
+                        MRef = erlang:monitor(process, Ch),
                         amqp_channel:register_confirm_handler(Ch, self()),
                         amqp_channel:register_return_handler(Ch, self()),
                         amqp_channel:call(Ch, #'confirm.select'{}),
@@ -59,14 +63,28 @@ process_post(ReqData, Context) ->
                                             mandatory   = true},
                                           #amqp_msg{props   = Props,
                                                     payload = Payload}),
-                        Routed = receive
-                                     {#'basic.return'{}, _} -> false;
-                                     #'basic.ack'{}         -> true
-                                 end,
-                        rabbit_mgmt_util:post_respond(
-                          [{routed, Routed}], ReqData, Context)
+                        receive
+                            {#'basic.return'{}, _} ->
+                                receive
+                                    #'basic.ack'{} -> ok
+                                end,
+                                good(MRef, false, ReqData, Context);
+                            #'basic.ack'{} ->
+                                good(MRef, true, ReqData, Context);
+                            {'DOWN', _, _, _, Err} ->
+                                bad(Err, ReqData, Context)
+                        end
                 end)
       end).
+
+good(MRef, Routed, ReqData, Context) ->
+    erlang:demonitor(MRef),
+    rabbit_mgmt_util:reply([{routed, Routed}], ReqData, Context).
+
+bad({server_initiated_close, Code, Reason}, ReqData, Context) ->
+    rabbit_mgmt_util:bad_request(
+      list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

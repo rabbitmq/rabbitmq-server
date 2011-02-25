@@ -742,14 +742,20 @@ get_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+get_fail_test() ->
+    http_put("/users/myuser", [{password, <<"password">>},
+                               {administrator, false}], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_post("/queues/%2f/myqueue/get",
+              [{requeue, false},
+               {count,   1}], "myuser", "password", ?NOT_AUTHORISED),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    http_delete("/users/myuser", ?NO_CONTENT),
+    ok.
+
 publish_test() ->
     Headers = [{'x-forwarding', [[{uri,<<"amqp://localhost/%2f/upstream">>}]]}],
-    Msg = [{exchange,         <<"">>},
-           {routing_key,      <<"myqueue">>},
-           {properties,       [{delivery_mode, 2},
-                               {headers,       Headers}]},
-           {payload,          <<"Hello world">>},
-           {payload_encoding, <<"string">>}],
+    Msg = msg(<<"myqueue">>, Headers, <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     ?assertEqual([{routed, true}],
                  http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)),
@@ -763,12 +769,24 @@ publish_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+publish_fail_test() ->
+    Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, <<"password">>},
+                               {administrator, false}], ?NO_CONTENT),
+    http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
+              ?NOT_AUTHORISED),
+    Msg2 = [{exchange,         <<"">>},
+            {routing_key,      <<"myqueue">>},
+            {properties,       [{user_id, <<"foo">>}]},
+            {payload,          <<"Hello world">>},
+            {payload_encoding, <<"string">>}],
+    http_post("/exchanges/%2f/amq.default/publish", Msg2, ?BAD_REQUEST),
+    http_delete("/users/myuser", ?NO_CONTENT),
+    ok.
+
 publish_base64_test() ->
-    Msg = [{exchange,         <<"">>},
-           {routing_key,      <<"myqueue">>},
-           {properties,       []},
-           {payload,          <<"YWJjZA==">>},
-           {payload_encoding, <<"base64">>}],
+    Msg = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
     [Msg2] = http_post("/queues/%2f/myqueue/get", [{requeue, false},
@@ -778,13 +796,22 @@ publish_base64_test() ->
     ok.
 
 publish_unrouted_test() ->
-    Msg = [{exchange,         <<"">>},
-           {routing_key,      <<"hmmmm">>},
-           {properties,       []},
-           {payload,          <<"Hello world">>},
-           {payload_encoding, <<"string">>}],
+    Msg = msg(<<"hmmm">>, [], <<"Hello world">>),
     ?assertEqual([{routed, false}],
                  http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)).
+
+%%---------------------------------------------------------------------------
+
+msg(Key, Headers, Body) ->
+    msg(Key, Headers, Body, <<"string">>).
+
+msg(Key, Headers, Body, Enc) ->
+    [{exchange,         <<"">>},
+     {routing_key,      Key},
+     {properties,       [{delivery_mode, 2},
+                         {headers,       Headers}]},
+     {payload,          Body},
+     {payload_encoding, Enc}].
 
 %%---------------------------------------------------------------------------
 http_get(Path) ->
@@ -808,6 +835,9 @@ http_put(Path, List, User, Pass, CodeExp) ->
 http_post(Path, List, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), CodeExp).
 
+http_post(Path, List, User, Pass, CodeExp) ->
+    http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp).
+
 format_for_upload(List) ->
     iolist_to_binary(mochijson2:encode({struct, List})).
 
@@ -819,6 +849,9 @@ http_put_raw(Path, Body, User, Pass, CodeExp) ->
 
 http_post_raw(Path, Body, CodeExp) ->
     http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
+
+http_post_raw(Path, Body, User, Pass, CodeExp) ->
+    http_upload_raw(post, Path, Body, User, Pass, CodeExp).
 
 http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
