@@ -55,10 +55,10 @@
 %% start_link/3
 %% Provide the group name, the callback module name, and any arguments
 %% you wish to be passed into the callback module's functions. The
-%% joined/2 will be called when we have joined the group, with the
-%% arguments passed to start_link and a list of the current members of
-%% the group. See the comments in behaviour_info/1 below for further
-%% details of the callback functions.
+%% joined/2 function will be called when we have joined the group,
+%% with the arguments passed to start_link and a list of the current
+%% members of the group. See the comments in behaviour_info/1 below
+%% for further details of the callback functions.
 %%
 %% leave/1
 %% Provide the Pid. Removes the Pid from the group. The callback
