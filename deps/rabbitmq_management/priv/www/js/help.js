@@ -65,6 +65,29 @@ HELP = {
       but ordering will not be preserved and "redelivered" will be set.<br/> \
       If requeue is not set messages will be removed from the queue.',
 
+    'message-publish-headers':
+      'Headers can have any name. Only long string headers can be set here.',
+
+    'message-publish-properties':
+      '<p>You can set other message properties here (delivery mode and headers \
+      are pulled out as the most common cases).</p>\
+      <p>Invalid properties will be ignored. Valid properties are:</p>\
+      <ul>\
+      <li>content_type</li>\
+      <li>content_encoding</li>\
+      <li>delivery_mode</li>\
+      <li>priority</li>\
+      <li>correlation_id</li>\
+      <li>reply_to</li>\
+      <li>expiration</li>\
+      <li>message_id</li>\
+      <li>timestamp</li>\
+      <li>type</li>\
+      <li>user_id</li>\
+      <li>app_id</li>\
+      <li>cluster_id</li>\
+      </ul>',
+
     'foo': 'foo' // No comma.
 };
 

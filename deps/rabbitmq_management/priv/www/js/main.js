@@ -470,7 +470,7 @@ function update_multifields() {
             var largest_id = 0;
             var empty_found = false;
             var name = $(this).attr('id');
-            $('input[name$="_mfkey"]').each(function(index) {
+            $('#' + name + ' input[name$="_mfkey"]').each(function(index) {
                     var match = $(this).attr('name').
                         match(/[a-z]*_([0-9]*)_mfkey/);
                     var id = parseInt(match[1]);
@@ -540,8 +540,20 @@ function toggle_visibility(item) {
     }
 }
 
-function publish_msg(params) {
+function publish_msg(params0) {
+    var params = params_magic(params0);
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
+    params['payload_encoding'] = 'string';
+    params['delivery_mode'] = parseInt(params['delivery_mode']);
+    params['properties'] = {};
+    if (params['headers'] != '')
+        params['properties']['headers'] = params['headers'];
+    var props = ['content_type', 'content_encoding', 'delivery_mode', 'priority', 'correlation_id', 'reply_to', 'expiration', 'message_id', 'timestamp', 'type', 'user_id', 'app_id', 'cluster_id'];
+    for (var i in props) {
+        var p = props[i];
+        if (params['props'][p] != '')
+            params['properties'][p] = params['props'][p];
+    }
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var result = jQuery.parseJSON(resp.responseText);
             if (result.routed) {

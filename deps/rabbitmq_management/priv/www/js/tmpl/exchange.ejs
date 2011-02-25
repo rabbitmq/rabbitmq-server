@@ -107,13 +107,39 @@
           <td><input type="text" name="routing_key" value=""/></td>
         </tr>
         <tr>
+          <th><label>Delivery mode:</label></th>
+          <td>
+            <select name="delivery_mode">
+              <option value="1">1 - Non-persistent</option>
+              <option value="2">2 - Persistent</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>Headers:</label>
+            <span class="help" id="message-publish-headers"></span>
+          </th>
+          <td>
+            <span class="multifield" id="headers"></span>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>Properties:</label>
+            <span class="help" id="message-publish-properties"></span>
+          </th>
+          <td>
+            <span class="multifield" id="props"></span>
+          </td>
+        </tr>
+        <tr>
           <th><label>Payload:</label></th>
           <td><textarea name="payload"></textarea></td>
         </tr>
       </table>
       <input type="submit" value="Publish Message" />
     </form>
-    <div id="msg-wrapper"></div>
     <span class="br"></span>
   </div>
 </div>
