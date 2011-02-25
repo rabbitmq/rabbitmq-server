@@ -889,13 +889,16 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
         false ->
             {noreply, run_pending_item(Item, State)}
     end;
+
 handle_call({set_limit, Limit}, _From, State) ->
     {reply, ok, maybe_reduce(
                   process_pending(State #fhc_state {
                                     limit        = Limit,
                                     obtain_limit = obtain_limit(Limit) }))};
+
 handle_call(get_limit, _From, State = #fhc_state { limit = Limit }) ->
     {reply, Limit, State};
+
 handle_call({info, Items}, _From, State) ->
     {reply, infos(Items, State), State}.
 
