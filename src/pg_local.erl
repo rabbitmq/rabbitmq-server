@@ -83,7 +83,7 @@ get_members(Name) ->
 
 sync() ->
     ensure_started(),
-    gen_server:call(?MODULE, sync).
+    gen_server:call(?MODULE, sync, infinity).
 
 %%%
 %%% Callback functions from gen_server

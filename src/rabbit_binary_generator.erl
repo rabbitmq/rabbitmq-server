@@ -61,8 +61,7 @@
 -spec(map_exception/3 :: (rabbit_channel:channel_number(),
                           rabbit_types:amqp_error() | any(),
                           rabbit_types:protocol()) ->
-                              {boolean(),
-                               rabbit_channel:channel_number(),
+                              {rabbit_channel:channel_number(),
                                rabbit_framing:amqp_method_record()}).
 
 -endif.
@@ -301,24 +300,21 @@ clear_encoded_content(Content = #content{}) ->
 map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
         lookup_amqp_exception(Reason, Protocol),
-    ShouldClose = SuggestedClose orelse (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none   -> {0, 0};
                               _      -> Protocol:method_id(FailedMethod)
                           end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true  -> {0, #'connection.close'{reply_code = ReplyCode,
-                                             reply_text = ReplyText,
-                                             class_id = ClassId,
-                                             method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
+    case SuggestedClose orelse (Channel == 0) of
+        true  -> {0, #'connection.close'{reply_code = ReplyCode,
+                                         reply_text = ReplyText,
+                                         class_id   = ClassId,
+                                         method_id  = MethodId}};
+        false -> {Channel, #'channel.close'{reply_code = ReplyCode,
+                                            reply_text = ReplyText,
+                                            class_id   = ClassId,
+                                            method_id  = MethodId}}
+    end.
 
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
