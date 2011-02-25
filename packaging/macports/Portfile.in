@@ -104,7 +104,7 @@ post-destroot {
 
     xinstall -m 644 -W ${mansrc}/man1 rabbitmq-server.1.gz rabbitmqctl.1.gz \
         ${mandest}/man1/
-    xinstall -m 644 -W ${mansrc}/man5 rabbitmq.conf.5.gz ${mandest}/man5/
+    xinstall -m 644 -W ${mansrc}/man5 rabbitmq-env.conf.5.gz ${mandest}/man5/
 }
 
 pre-install {
