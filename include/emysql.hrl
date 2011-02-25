@@ -1,0 +1,1 @@
+/Users/jerryk/co/rabbitmq-public-umbrella/rabbitmq-mysql-queues/deps/emysql/include/emysql.hrl
