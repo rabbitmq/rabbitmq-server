@@ -103,8 +103,11 @@ where cmd is one of:
     usage += fmt_usage_stanza(CLOSABLE,   'close')
     usage += fmt_usage_stanza(PURGABLE,   'purge')
     usage += """
-  export FILE
-  import FILE"""
+  export <file>
+  import <file>
+
+  publish exchange=... routing_key=... payload=...
+  get queue=... count=... requeue=..."""
     return usage
 
 def fmt_usage_stanza(root, verb):
@@ -226,6 +229,26 @@ class Management:
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
         return self.args[0]
 
+    def invoke_publish(self):
+        (uri, payload) = self.parse_args(self.args,
+                                         ['routing_key', 'payload'],
+                                         {'exchange': 'amq.default'},
+                                         '/exchanges/{vhost}/{exchange}/publish')
+        payload['payload_encoding'] = 'string'
+        payload['properties'] = {} # TODO do we care here?
+        resp = json.loads(self.post(uri, json.dumps(payload)))
+        if resp['routed']:
+            self.verbose("Message published")
+        else:
+            self.verbose("Message published but NOT routed")
+
+    def invoke_get(self):
+        (uri, payload) = self.parse_args(self.args,
+                                         ['queue'],
+                                         {'count': '1', 'requeue': 'true'},
+                                         '/queues/{vhost}/{queue}/get')
+        format_list(self.post(uri, json.dumps(payload)), [], self.options)
+
     def invoke_export(self):
         path = self.get_arg()
         config = self.get("/all-configuration")
@@ -287,10 +310,12 @@ class Management:
         obj_type = self.args[0]
         assert_usage(obj_type in root,
                      'Type {0} not recognised'.format(obj_type))
-        args = self.args[1:]
-        mandatory = root[obj_type]['mandatory']
-        optional = root[obj_type]['optional']
-        args = self.args[1:]
+        obj = root[obj_type]
+        (uri, payload) = self.parse_args(self.args[1:], obj['mandatory'],
+                                         obj['optional'], obj['uri'])
+        return (obj_type, uri, payload)
+
+    def parse_args(self, args, mandatory, optional, uri_template):
         payload = {}
         for k in optional.keys():
             payload[k] = optional[k]
@@ -311,8 +336,8 @@ class Management:
             uri_args[k] = urllib.quote_plus(payload[k])
             if k == 'destination_type':
                 uri_args['destination_char'] = payload[k][0]
-        uri = root[obj_type]['uri'].format(**uri_args)
-        return (obj_type, uri, payload)
+        uri = uri_template.format(**uri_args)
+        return (uri, payload)
 
 def format_list(json_list, columns, options):
     format = options.format
@@ -509,7 +534,7 @@ _rabbitmqadmin()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="list show declare delete close purge import export"
+    opts="list show declare delete close purge import export get publish"
     fargs="--help --host --port --vhost --username --password --format --depth"
 
     case "${prev}" in
