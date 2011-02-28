@@ -2,6 +2,7 @@
 <%
      var col_return_unroutable = !is_col_empty(channels, 'return_unroutable');
      var col_return_not_delivered = !is_col_empty(channels, 'return_not_delivered');
+     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0);
 %>
 <table class="list">
  <thead>
@@ -14,7 +15,7 @@
    <th colspan="5">Details</th>
 <% } %>
 <% if (statistics_level == 'fine') { %>
-   <th colspan="999">Message rates</th>
+   <th colspan="<%= ratesWidth %>">Message rates</th>
 <% } %>
   </tr>
   <tr>
