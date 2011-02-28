@@ -105,17 +105,14 @@ rem Log management (rotation, filtering based on size...) is left as an exercise
 
 set BACKUP_EXTENSION=.1
 
-set LOGS=!RABBITMQ_BASE!\log\!RABBITMQ_NODENAME!.log
-set SASL_LOGS=!RABBITMQ_BASE!\log\!RABBITMQ_NODENAME!-sasl.log
-
-set LOGS_BACKUP=!RABBITMQ_BASE!\log\!RABBITMQ_NODENAME!.log!BACKUP_EXTENSION!
-set SASL_LOGS_BACKUP=!RABBITMQ_BASE!\log\!RABBITMQ_NODENAME!-sasl.log!BACKUP_EXTENSION!
+set LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
+set SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
 
 if exist "!LOGS!" (
-	type "!LOGS!" >> "!LOGS_BACKUP!"
+    type "!LOGS!" >> "!LOGS!!BACKUP_EXTENSION!"
 )
 if exist "!SASL_LOGS!" (
-	type "!SASL_LOGS!" >> "!SASL_LOGS_BACKUP!"
+    type "!SASL_LOGS!" >> "!SASL_LOGS!!BACKUP_EXTENSION!"
 )
 
 rem End of log management
@@ -209,10 +206,10 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 +A30 ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
--kernel error_logger {file,\""!RABBITMQ_LOG_BASE!/!RABBITMQ_NODENAME!.log"\"} ^
+-kernel error_logger {file,\""!LOGS:\=/!"\"} ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 -sasl errlog_type error ^
--sasl sasl_error_logger {file,\""!RABBITMQ_LOG_BASE!/!RABBITMQ_NODENAME!-sasl.log"\"} ^
+-sasl sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^

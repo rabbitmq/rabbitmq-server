@@ -35,6 +35,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = gm_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_file_handle_cache(),
@@ -700,8 +701,8 @@ test_topic_expect_match(X, List) ->
         fun ({Key, Expected}) ->
                 BinKey = list_to_binary(Key),
                 Res = rabbit_exchange_type_topic:route(
-                        X, #delivery{message = #basic_message{routing_key =
-                                                                BinKey}}),
+                        X, #delivery{message = #basic_message{routing_keys =
+                                                                [BinKey]}}),
                 ExpectedRes = lists:map(
                                 fun (Q) -> #resource{virtual_host = <<"/">>,
                                                      kind = queue,
