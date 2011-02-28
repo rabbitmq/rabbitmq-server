@@ -328,7 +328,7 @@ record_confirm_or_confirm(
     dict:store(Guid, {ChPid, MsgSeqNo}, GTC);
 record_confirm_or_confirm(#delivery { sender = ChPid, msg_seq_no = MsgSeqNo },
                           _Q, GTC) ->
-    ok = rabbit_channel:confirm(ChPid, MsgSeqNo),
+    ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
     GTC.
 
 confirm_messages(Guids, State = #state { guid_to_channel = GTC }) ->
@@ -502,14 +502,13 @@ process_instruction(
          {true, AckRequired} ->
              {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
                                                    ChPid, BQS),
-             {GA1, GTC3} =
-                 case AckRequired of
-                     true  -> {dict:store(Guid, AckTag, GA), GTC1};
-                     false -> {GA, confirm_messages([Guid], GTC1)}
-                 end,
+             GA1 = case AckRequired of
+                       true  -> dict:store(Guid, AckTag, GA);
+                       false -> GA
+                   end,
              State1 #state { backing_queue_state = BQS1,
                              guid_ack            = GA1,
-                             guid_to_channel     = GTC3 }
+                             guid_to_channel     = GTC1 }
      end};
 process_instruction({set_length, Length},
                     State = #state { backing_queue       = BQ,
