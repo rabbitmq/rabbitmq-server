@@ -102,6 +102,18 @@
             </select>
           </td>
         </tr>
+<% if (nodes_interesting) { %>
+        <tr>
+          <th><label>On node:</label></th>
+          <td>
+            <select name="node">
+              <% for (var i = 0; i < nodes.length; i++) { %>
+              <option value="<%= nodes[i].name %>"><%= nodes[i].name %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } %>
         <tr>
           <th><label>Auto delete:</label></th>
           <td>

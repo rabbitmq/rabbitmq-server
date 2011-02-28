@@ -24,6 +24,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
+-export([relativise/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -256,10 +257,15 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
             case decode(wrq:req_body(ReqData)) of
                 {ok, Props} ->
                     try
-                        rabbit_mgmt_util:amqp_request(
-                          VHost, ReqData, Context,
-                          props_to_method(
-                            MethodName, Props, Transformers, Extra))
+                        Node =
+                            case proplists:get_value(<<"node">>, Props) of
+                                undefined -> node();
+                                N         -> rabbit_misc:makenode(
+                                               binary_to_list(N))
+                            end,
+                        amqp_request(VHost, ReqData, Context, Node,
+                                     props_to_method(
+                                       MethodName, Props, Transformers, Extra))
                     catch {error, Error} ->
                             bad_request(Error, ReqData, Context)
                     end;
@@ -295,12 +301,16 @@ parse_bool(true)        -> true;
 parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
+amqp_request(VHost, ReqData, Context, Method) ->
+    amqp_request(VHost, ReqData, Context, node(), Method).
+
 amqp_request(VHost, ReqData,
              Context = #context{ user = #user { username = Username },
-                                 password = Password }, Method) ->
+                                 password = Password }, Node, Method) ->
     try
-        Params = #amqp_params{username = Username,
-                              password = Password,
+        Params = #amqp_params{username     = Username,
+                              password     = Password,
+                              node         = Node,
                               virtual_host = VHost},
         case amqp_connection:start(direct, Params) of
             {ok, Conn} ->
@@ -310,19 +320,23 @@ amqp_request(VHost, ReqData,
                 amqp_connection:close(Conn),
                 {true, ReqData, Context};
             {error, auth_failure} ->
-                not_authorised(<<"">>, ReqData, Context)
+                not_authorised(<<"">>, ReqData, Context);
+            {error, {nodedown, N}} ->
+                bad_request(
+                  list_to_binary(
+                    io_lib:format("Node ~s could not be contacted", [N])),
+                 ReqData, Context)
         end
     catch
         exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
-            not_found(list_to_binary(Reason), ReqData, Context);
+            not_found(Reason, ReqData, Context);
         exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
-            not_authorised(list_to_binary(Reason), ReqData, Context);
+            not_authorised(Reason, ReqData, Context);
         exit:{{ServerClose, Code, Reason}, _}
           when ServerClose =:= server_initiated_close;
                ServerClose =:= server_initiated_hard_close ->
             bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
-                        ReqData, Context);
-        E:R -> io:format("~p~n", [{E,R}])
+                        ReqData, Context)
     end.
 
 all_or_one_vhost(ReqData, Fun) ->
@@ -349,4 +363,23 @@ redirect(Location, ReqData) ->
 args({struct, L}) ->
     args(L);
 args(L) ->
-    [{K, rabbit_mgmt_format:args_type(V), V} || {K, V} <- L].
+    rabbit_mgmt_format:to_amqp_table(L).
+
+relativise("/" ++ F, "/" ++ T) ->
+    From = string:tokens(F, "/"),
+    To = string:tokens(T, "/"),
+    relativise0(From, To).
+
+relativise0([H], [H|_] = To) ->
+    string:join(To, "/");
+relativise0([H|From], [H|To]) ->
+    relativise0(From, To);
+relativise0(From, []) ->
+    relativise(From, [], 0);
+relativise0(From, To) ->
+    relativise(From, To, 1).
+
+relativise(From, To, Diff) ->
+    string:join(lists:duplicate(length(From) - Diff, "..") ++ To, "/").
+
+

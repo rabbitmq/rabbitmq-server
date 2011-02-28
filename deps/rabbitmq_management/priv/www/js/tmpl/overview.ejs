@@ -34,7 +34,11 @@
   <tr>
     <th>Name</th>
     <th>
-      File Descriptors
+      File Descriptors <span class="help" id="file-descriptors"></span>
+      <sub>(used / available)</sub>
+    </th>
+    <th>
+      Socket Descriptors <span class="help" id="socket-descriptors"></span>
       <sub>(used / available)</sub>
     </th>
     <th>
@@ -74,12 +78,20 @@
      </td>
 <% } else { %>
      <td class="status">
-       <div class="<%= fmt_color(node.fd_used / node.fd_total) %>">
+       <div class="<%= fmt_color(node.fd_used / node.fd_total,
+                                 FD_THRESHOLDS) %>">
          <%= node.fd_used %> / <%= node.fd_total %>
        </div>
      </td>
      <td class="status">
-       <div class="<%= fmt_color(node.proc_used / node.proc_total) %>">
+       <div class="<%= fmt_color(node.sockets_used / node.sockets_total,
+                                 SOCKETS_THRESHOLDS) %>">
+         <%= node.sockets_used %> / <%= node.sockets_total %>
+       </div>
+     </td>
+     <td class="status">
+       <div class="<%= fmt_color(node.proc_used / node.proc_total,
+                                 PROCESS_THRESHOLDS) %>">
          <%= node.proc_used %> / <%= node.proc_total %>
        </div>
      </td>
@@ -148,7 +160,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 <div class="section-hidden administrator-only">
 <h2>Import / Export Configuration</h2>
 <div class="hider">
-  <form action="/api/all-configuration" method="post" enctype="multipart/form-data">
+  <form action="../api/all-configuration" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>

@@ -1,6 +1,10 @@
 UNKNOWN_REPR = '<span class="unknown">?</span>';
-DESCRIPTOR_THRESHOLDS=[[0.75, 'red'],
-		       [0.5, 'yellow']];
+FD_THRESHOLDS=[[0.95, 'red'],
+               [0.8, 'yellow']];
+SOCKETS_THRESHOLDS=[[1.0, 'red'],
+                    [0.8, 'yellow']];
+PROCESS_THRESHOLDS=[[0.75, 'red'],
+                    [0.5, 'yellow']];
 MEMORY_THRESHOLDS=[[1.0, 'red']];
 
 function fmt_string(str) {
@@ -57,7 +61,7 @@ function fmt_parameters(obj) {
     }
     var args = fmt_table_short(obj.arguments);
     if (args != '') {
-        res += '<p>' + args + '</p>';
+        res += args;
     }
     return res;
 }
@@ -76,15 +80,14 @@ function fmt_channel_mode(ch) {
 
 function fmt_color(r, thresholds) {
     if (r == undefined) return '';
-    if (thresholds == undefined) thresholds = DESCRIPTOR_THRESHOLDS;
 
     for (var i in thresholds) {
-	var threshold = thresholds[i][0];
-	var color = thresholds[i][1];
+        var threshold = thresholds[i][0];
+        var color = thresholds[i][1];
 
-	if (r > threshold) {
-	    return color;
-	}
+        if (r >= threshold) {
+            return color;
+        }
     }
     return 'green';
 }
@@ -142,19 +145,31 @@ function fmt_download_filename(host) {
 }
 
 function fmt_table_short(table) {
+    return '<table class="mini">' + fmt_table_body(table, ':') + '</table>';
+}
+
+function fmt_table_long(table) {
+    return '<table class="facts">' + fmt_table_body(table, '') +
+        '</table><span class="br"></span>';
+}
+
+function fmt_table_body(table, x) {
     var res = '';
     for (k in table) {
-        res += k + '=' + table[k] + '<br/>';
+        res += '<tr><th>' + k + x + '</th><td>' + fmt_amqp_value(table[k]) +
+            '</td>';
     }
     return res;
 }
 
-function fmt_table_long(table) {
-    var res = '<table class="facts">';
-    for (k in table) {
-        res += '<tr><th>' + k + '</th><td>' + table[k] + '</td>';
+function fmt_amqp_value(val) {
+    if (val instanceof Array) {
+        return val.join("<br/>");
+    } else if (val instanceof Object) {
+        return fmt_table_short(val);
+    } else {
+        return val;
     }
-    return res + '</table><span class="br"></span>';
 }
 
 function fmt_uptime(u) {
