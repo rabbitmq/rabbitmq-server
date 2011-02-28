@@ -232,8 +232,8 @@ ram_duration(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
 needs_idle_timeout(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
     BQ:needs_idle_timeout(BQS).
 
-idle_timeout(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
-    BQ:idle_timeout(BQS).
+idle_timeout(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
+    State #state { backing_queue_state = BQ:idle_timeout(BQS) }.
 
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS}) ->
