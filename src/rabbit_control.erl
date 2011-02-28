@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -44,22 +45,18 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    FullCommand = init:get_plain_arguments(),
-    case FullCommand of
-        [] -> usage();
-        _ -> ok
-    end,
     {[Command0 | Args], Opts} =
-        rabbit_misc:get_options(
-          [{flag, ?QUIET_OPT}, {option, ?NODE_OPT, NodeStr},
-           {option, ?VHOST_OPT, "/"}],
-          FullCommand),
-    Opts1 = lists:map(fun({K, V}) ->
-                              case K of
-                                  ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
-                                  _    -> {K, V}
-                              end
-                      end, Opts),
+        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
+                                      {option, ?NODE_OPT, NodeStr},
+                                      {option, ?VHOST_OPT, "/"}],
+                                     init:get_plain_arguments()) of
+            {[], _Opts}    -> usage();
+            CmdArgsAndOpts -> CmdArgsAndOpts
+        end,
+    Opts1 = [case K of
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 _         -> {K, V}
+             end || {K, V} <- Opts],
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
@@ -297,7 +294,30 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]})).
+                             list_vhost_permissions, [VHost]}));
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
+
+wait_for_application(Node, Attempts) ->
+    case rpc_call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} = E -> NewAttempts = Attempts - 1,
+                           case NewAttempts of
+                               0 -> E;
+                               _ -> wait_for_application0(Node, NewAttempts)
+                           end;
+        Apps            -> case proplists:is_defined(rabbit, Apps) of
+                               %% We've seen the node up; if it goes down
+                               %% die immediately.
+                               true  -> ok;
+                               false -> wait_for_application0(Node, 0)
+                           end
+    end.
+
+wait_for_application0(Node, Attempts) ->
+    timer:sleep(1000),
+    wait_for_application(Node, Attempts).
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] ->

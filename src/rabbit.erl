@@ -27,7 +27,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0]).
 
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
@@ -101,8 +101,7 @@
 
 -rabbit_boot_step({delegate_sup,
                    [{description, "cluster delegate"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [delegate_sup]}},
+                    {mfa,         {rabbit, boot_delegate, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
@@ -153,6 +152,11 @@
                    [{mfa,         {rabbit_networking, boot, []}},
                     {requires,    log_relay}]}).
 
+-rabbit_boot_step({notify_cluster,
+                   [{description, "notify cluster nodes"},
+                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {requires,    networking}]}).
+
 %%---------------------------------------------------------------------------
 
 -include("rabbit_framing.hrl").
@@ -178,6 +182,9 @@
                {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(boot_delegate/0 :: () -> 'ok').
 
 -endif.
 
@@ -207,7 +214,8 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{running_applications, application:which_applications()}] ++
+    [{pid, list_to_integer(os:getpid())},
+     {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
 rotate_logs(BinarySuffix) ->
@@ -225,11 +233,11 @@ start(normal, []) ->
     case erts_version_check() of
         ok ->
             {ok, SupPid} = rabbit_sup:start_link(),
+            true = register(rabbit, self()),
 
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
-
             {ok, SupPid};
         Error ->
             Error
@@ -447,6 +455,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                                   end
                      end
     end.
+
+boot_delegate() ->
+    {ok, Count} = application:get_env(rabbit, delegate_count),
+    rabbit_sup:start_child(delegate_sup, [Count]).
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of
