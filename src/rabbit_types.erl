@@ -64,7 +64,7 @@
 -type(content() :: undecoded_content() | decoded_content()).
 -type(basic_message() ::
       #basic_message{exchange_name  :: rabbit_exchange:name(),
-                     routing_key    :: rabbit_router:routing_key(),
+                     routing_keys   :: [rabbit_router:routing_key()],
                      content        :: content(),
                      guid           :: rabbit_guid:guid(),
                      is_persistent  :: boolean()}).
