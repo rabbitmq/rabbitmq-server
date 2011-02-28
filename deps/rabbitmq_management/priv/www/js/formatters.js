@@ -92,8 +92,14 @@ function fmt_color(r, thresholds) {
     return 'green';
 }
 
-function fmt_rate(obj, name, show_total) {
-    return fmt_rate0(obj, name, fmt_num, show_total);
+function fmt_rate(obj, name, show_total, cssClass) {
+    var res = fmt_rate0(obj, name, fmt_num, show_total);
+    if (cssClass == undefined || res == '') {
+        return res;
+    }
+    else {
+        return '<span class="' + cssClass + '">' + res + '</span>';
+    }
 }
 
 function fmt_rate_bytes(obj, name) {
