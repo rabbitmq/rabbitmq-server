@@ -18,6 +18,8 @@
 
 -behaviour(supervisor).
 
+%% Supervises everything. There is just one of these.
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_federation.hrl").
 
@@ -45,11 +47,12 @@ start_link() ->
 start_child(Args) ->
     {ok, Pid} = supervisor:start_child(
                   ?SUPERVISOR,
-                  {id(Args), {rabbit_federation_exchange, start_link, [Args]},
-                   transient, ?MAX_WAIT, worker,
-                   [rabbit_federation_exchange]}),
+                  {id(Args), {rabbit_federation_exchange_sup, start_link,
+                              [Args]},
+                   transient, ?MAX_WAIT, supervisor,
+                   [rabbit_federation_exchange_sup]}),
     case federation_up() of
-        true  -> rabbit_federation_exchange:go(Pid);
+        true  -> rabbit_federation_exchange_sup:go(Pid);
         false -> ok
     end,
     {ok, Pid}.
@@ -60,7 +63,7 @@ stop_child(Args) ->
     ok.
 
 go_all() ->
-    [rabbit_federation_exchange:go(Pid) ||
+    [{ok, _} = rabbit_federation_exchange_sup:go(Pid) ||
      {_, Pid, _, _} <- supervisor:which_children(?SUPERVISOR)].
 
 %%----------------------------------------------------------------------------
@@ -73,4 +76,4 @@ id(Args) ->
     Args.
 
 init([]) ->
-    {ok, {{one_for_one,3,10},[]}}.
+    {ok, {{one_for_one, 3, 10},[]}}.

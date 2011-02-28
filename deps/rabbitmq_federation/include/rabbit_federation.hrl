@@ -14,11 +14,4 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--record(state, { downstream_connection,
-                 downstream_channel,
-                 downstream_exchange,
-                 downstream_durable,
-                 next_publish_id = 1,
-                 upstreams }).
-
 -define(ETS_NAME, rabbit_federation_exchange).

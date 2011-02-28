@@ -29,17 +29,10 @@
 -include("rabbit_federation.hrl").
 
 -behaviour(rabbit_exchange_type).
--behaviour(gen_server2).
 
 -export([description/0, route/2]).
 -export([validate/1, create/2, recover/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
-
--export([start_link/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
-
--export([go/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -83,14 +76,18 @@ delete(?TX, X, Bs) ->
 delete(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
-add_binding(?TX, X, B) ->
-    call(X, {add_binding, B}),
+add_binding(?TX, X, B = #binding{destination = Dest}) ->
+    %% TODO add bindings only if needed.
+    case is_federation_queue(Dest) of
+        true  -> ok;
+        false -> call(X, {add_binding, B})
+    end,
     with_module(X, fun (M) -> M:add_binding(?TX, X, B) end);
 add_binding(Tx, X, B) ->
     with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
 
 remove_bindings(?TX, X, Bs) ->
-    call(X, {remove_bindings, Bs}),
+    [maybe_unbind_upstreams(X, B) || B <- Bs],
     with_module(X, fun (M) -> M:remove_bindings(?TX, X, Bs) end);
 remove_bindings(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(Tx, X, Bs) end).
@@ -103,15 +100,9 @@ assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
 
 %%----------------------------------------------------------------------------
 
-go(Pid) ->
-    gen_server2:call(Pid, become_real, infinity),
-    gen_server2:cast(Pid, connect_all).
-
-%%----------------------------------------------------------------------------
-
 call(#exchange{ name = Downstream }, Msg) ->
-    [{_, Pid}] = ets:lookup(?ETS_NAME, Downstream),
-    gen_server2:call(Pid, Msg, infinity).
+    [{_, SupPid}] = ets:lookup(?ETS_NAME, Downstream),
+    rabbit_federation_exchange_upstream_sup:call_all(SupPid, Msg).
 
 with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.
@@ -122,38 +113,26 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 
 %%----------------------------------------------------------------------------
 
-start_link(Args) ->
-    gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
+is_federation_queue(#resource{ name = <<"federation: ", _Rest/binary>>,
+                               kind = queue }) ->
+    true;
+is_federation_queue(_) ->
+    false.
 
-%%----------------------------------------------------------------------------
-
-init({DownstreamX, Durable, UpstreamURIs}) ->
-    true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
-    {ok, #state{downstream_exchange = DownstreamX,
-                downstream_durable = Durable,
-                upstreams = UpstreamURIs}}.
-
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State};
-
-handle_call(become_real, From, State) ->
-    gen_server2:reply(From, ok),
-    {become, rabbit_federation_exchange_process, State};
-
-handle_call(_Msg, _From, State) ->
-    {reply, ok, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_info(Msg, State) ->
-    {stop, {unexpected_info, Msg}, State}.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-terminate(_Reason, _State) ->
-    ok.
+maybe_unbind_upstreams(X, Binding = #binding{source      = Source,
+                                             destination = Dest,
+                                             key         = Key,
+                                             args        = Args}) ->
+    case is_federation_queue(Dest) of
+        true  -> ok;
+        false -> case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
+                                        Key == Key2 andalso Args == Args2
+                                end,
+                                rabbit_binding:list_for_source(Source)) of
+                     true  -> ok;
+                     false -> call(X, {remove_binding, Binding})
+                 end
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -162,7 +141,7 @@ exchange_to_sup_args(#exchange{ name = Downstream, durable = Durable,
     {array, UpstreamURIs0} =
         rabbit_misc:table_lookup(Args, <<"upstreams">>),
     UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],
-    {Downstream, Durable, UpstreamURIs}.
+    {UpstreamURIs, Downstream, Durable}.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
