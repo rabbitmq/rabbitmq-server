@@ -1288,12 +1288,12 @@ is_message_persistent(Content) ->
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
     maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
-		     return_unroutable, State),
+                     return_unroutable, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_consumers),
     maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
-		     return_not_delivered, State),
+                     return_not_delivered, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);
