@@ -10,6 +10,12 @@ requiring clustering. This is useful for the following reasons:
 1) Federated brokers may be in different administrative
    domains. Clustered brokers form a single administrative domain.
 
+   a) Federated brokers may have different users and vhosts. Federated
+      brokers only need to partially trust each other.
+
+   b) Federated brokers may run different versions of RabbitMQ and
+      Erlang.
+
 2) Federated brokers only speak AMQP to each other, and the federation
    mechanism is designed to deal with intermittent connectivity.
    Federation is therefore much more WAN-friendly.
