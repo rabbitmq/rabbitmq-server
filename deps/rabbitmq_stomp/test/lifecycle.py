@@ -98,6 +98,9 @@ class TestLifecycle(base.BaseTest):
         self.conn.send_frame("DISCONNECT", {"receipt": "test"})
         self.assertTrue(self.listener.await())
         self.assertEquals(1, len(self.listener.receipts))
+        receiptReceived = self.listener.receipts[0]['headers']['receipt-id']
+        self.assertEquals("test", receiptReceived
+                         , "Wrong receipt received: '" + receiptReceived + "'")
 
     def unsub_test(self, dest, verbs, numRcts=0):
         def afterfun():
