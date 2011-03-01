@@ -69,7 +69,7 @@ add_binding(false, _Exchange, _Binding) ->
 
 remove_bindings(true, _X, Bs) ->
     ToDelete =
-       lists:foldr(fun(B = #binding{source = X, destination = D}, Acc) ->
+       lists:foldl(fun(B = #binding{source = X, destination = D}, Acc) ->
                            [{FinalNode, _} | _] = binding_path(B),
                            [{X, FinalNode, D} | Acc]
                    end, [], Bs),
