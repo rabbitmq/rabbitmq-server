@@ -701,8 +701,8 @@ test_topic_expect_match(X, List) ->
         fun ({Key, Expected}) ->
                 BinKey = list_to_binary(Key),
                 Res = rabbit_exchange_type_topic:route(
-                        X, #delivery{message = #basic_message{routing_key =
-                                                                BinKey}}),
+                        X, #delivery{message = #basic_message{routing_keys =
+                                                                [BinKey]}}),
                 ExpectedRes = lists:map(
                                 fun (Q) -> #resource{virtual_host = <<"/">>,
                                                      kind = queue,
