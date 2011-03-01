@@ -42,7 +42,6 @@
 ensure_connection_pool() ->
     rabbit_log:info("Ensuring connection pool ~p exists~n",
                     [?RABBIT_DB_POOL_NAME]),
-    %% TODO:  Args 2 through 7 (or 8?) should be config options w/ defaults
     try emysql:add_pool(?RABBIT_DB_POOL_NAME,
                         ?RABBIT_DB_POOL_SIZE,
                         ?RABBIT_DB_USERNAME,
@@ -62,15 +61,24 @@ prepare_mysql_statements() ->
     %%        are parametrizable, and thus prone to injection attacks and the
     %%        like do seem to be there.
     Statements = [{insert_q_stmt,<<"INSERT INTO q(queue_name, m) VALUES(?,?)">>},
-                  {insert_p_stmt,<<"INSERT INTO p() VALUES()">>},
-                  {insert_n_stmt,<<"INSERT INTO n() VALUES()">>}],
+                  {insert_p_stmt,
+                   <<"INSERT INTO p(seq_id, queue_name, m) VALUES(?,?,?)">>},
+                  {insert_n_stmt,
+                   <<"INSERT INTO n(queue_name, next_seq_id) VALUES(?,?)">>},
+                  {delete_q_stmt,<<"DELETE FROM q WHERE queue_name = ?">>},
+                  {delete_p_stmt,<<"DELETE FROM p WHERE queue_name = ?">>},
+                  {delete_n_stmt,<<"DELETE FROM n WHERE queue_name = ?">>}],
     [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
 
 delete_queue_data(QueueName) ->
+    %% TODO:  Error checking...
     emysql:execute(?RABBIT_DB_POOL_NAME,
                    <<"START TRANSACTION">>),
-    %% TODO [jerryk]:  Implement table flush transaction ops to clear queue.
-    rabbit_log:info("NOT YET IMPLEMENTED!"),
+    [ emysql:execute(?RABBIT_DB_POOL_NAME,
+                     Stmt,
+                     [QueueName]) || Stmt <- [delete_q_stmt,
+                                              delete_p_stmt,
+                                              delete_n_stmt] ],
     emysql:execute(?RABBIT_DB_POOL_NAME,
                    <<"COMMIT">>),
     ok.

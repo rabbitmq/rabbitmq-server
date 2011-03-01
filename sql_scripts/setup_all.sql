@@ -29,7 +29,7 @@ CREATE INDEX q_name_index ON q(queue_name);
 -- state, so that they can be recovered after a crash.  They are updated
 -- on all MySQL transactions that update them in the in-RAM state.
 CREATE TABLE IF NOT EXISTS
-             n (queue_name VARCHAR(256) NOT NULL, -- Maybe FK this later?
+             n (queue_name VARCHAR(256) NOT NULL,
                 next_seq_id BIGINT UNSIGNED NOT NULL, -- next seq_id to gen
                 PRIMARY KEY(queue_name))
              ENGINE=InnoDB;
@@ -40,7 +40,10 @@ CREATE TABLE IF NOT EXISTS
 -- the former if an ack is pending.
 CREATE TABLE IF NOT EXISTS
              p (seq_id BIGINT UNSIGNED NOT NULL,
+                queue_name VARCHAR(256) NOT NULL, -- (BUGBUG: max size?)
                 m MEDIUMBLOB,
                 PRIMARY KEY(seq_id))
              ENGINE=InnoDB;
 CREATE INDEX p_seq_id_index ON p(seq_id);
+CREATE INDEX p_queue_name_index ON p(queue_name);
+
