@@ -103,9 +103,11 @@
                   props :: rabbit_types:message_properties(),
                   is_delivered :: boolean() }).
 
--type(tx() :: #tx { to_pub :: [{rabbit_types:basic_message(),
-                                rabbit_types:message_properties()}],
+-type(tx() :: #tx { to_pub :: [pub()],
                     to_ack :: [seq_id()] }).
+
+-type(pub() :: { rabbit_types:basic_message(),
+                 rabbit_types:message_properties() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -117,9 +119,9 @@
 %% Specs are in rabbit_backing_queue_spec.hrl but are repeated here.
 
 %%----------------------------------------------------------------------------
-%% start/1 promises that a list of (durable) queue names will be
-%% started in the near future. This lets us perform early checking of
-%% the consistency of those queues, and initialize other shared
+%% start/1 promises that a list of (durable) queues will be started in
+%% the near future. This lets us perform early checking of the
+%% consistency of those queues, and initialize other shared
 %% resources. It is ignored in this implementation.
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
@@ -501,8 +503,7 @@ internal_fetch(AckRequired, S) ->
         {{just, M}, S1} -> post_pop(AckRequired, M, S1)
     end.
 
--spec tx_commit_state([{rabbit_types:basic_message(),
-                        rabbit_types:message_properties()}],
+-spec tx_commit_state([pub()],
                       [seq_id()],
                       message_properties_transformer(),
                       s()) ->
@@ -643,8 +644,7 @@ erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
 %% msgs, and quite possibly to perform yet other side-effects. It's
 %% black magic.
 
--spec callback([{rabbit_types:basic_message(),
-                 rabbit_types:basic_message_properties()}]) -> ok.
+-spec callback([pub()]) -> ok.
 
 callback(Pubs) ->
     Guids =

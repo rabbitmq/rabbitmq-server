@@ -152,9 +152,11 @@
                   props :: rabbit_types:message_properties(),
                   is_delivered :: boolean() }).
 
--type(tx() :: #tx { to_pub :: [{rabbit_types:basic_message(),
-                                rabbit_types:message_properties()}],
+-type(tx() :: #tx { to_pub :: [pub()],
                     to_ack :: [seq_id()] }).
+
+-type(pub() :: { rabbit_types:basic_message(),
+                 rabbit_types:message_properties() }).
 
 -type(q_record() :: #q_record { out_id :: non_neg_integer(),
                                 m :: m() }).
@@ -176,9 +178,9 @@
 %% Specs are in rabbit_backing_queue_spec.hrl but are repeated here.
 
 %%----------------------------------------------------------------------------
-%% start/1 promises that a list of (durable) queue names will be
-%% started in the near future. This lets us perform early checking of
-%% the consistency of those queues, and initialize other shared
+%% start/1 promises that a list of (durable) queues will be started in
+%% the near future. This lets us perform early checking of the
+%% consistency of those queues, and initialize other shared
 %% resources. It is ignored in this implementation.
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
@@ -291,8 +293,8 @@ delete_and_terminate(S = #s { q_table = QTable,
     Result.
 
 %%----------------------------------------------------------------------------
-%% purge/1 deletes all of queue's enqueued msgs, generating pending
-%% acks as required, and returning the count of msgs purged.
+%% purge/1 deletes all of queue's enqueued msgs, returning the count
+%% of msgs purged.
 %%
 %% purge/1 creates an Mnesia transaction to run in, and therefore may
 %% not be called from inside another Mnesia transaction.
@@ -489,10 +491,8 @@ tx_ack(Txn, SeqIds, S) ->
     {atomic, Result} =
         mnesia:transaction(
           fun () -> Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S),
-                    RS = store_tx(Txn,
-                                  Tx #tx {
-                                    to_ack = lists:append(SeqIds, SeqIds0) },
-                                S),
+                    RS = store_tx(
+                           Txn, Tx #tx { to_ack = SeqIds ++ SeqIds0 }, S),
                     save(RS),
                     RS
           end),
@@ -739,7 +739,7 @@ internal_fetch(AckRequired, S) ->
         {just, M} -> post_pop(AckRequired, M, S)
     end.
 
--spec tx_commit_state([rabbit_types:basic_message()],
+-spec tx_commit_state([pub()],
                       [seq_id()],
                       message_properties_transformer(),
                       s()) ->
@@ -880,9 +880,9 @@ save(#s { n_table = NTable,
 %% TODO: Import correct argument type.
 
 %% BUG: Mnesia has undocumented restrictions on table names. Names
-%% with slashes fail some operations, so we replace replace slashes
-%% with the string SLASH. We should extend this as necessary, and
-%% perhaps make it a little prettier.
+%% with slashes fail some operations, so we eliminate slashes. We
+%% should extend this as necessary, and perhaps make it a little
+%% prettier.
 
 -spec tables({resource, binary(), queue, binary()}) ->
                     {atom(), atom(), atom()}.
@@ -890,10 +890,10 @@ save(#s { n_table = NTable,
 tables({resource, VHost, queue, Name}) ->
     VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
     Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
-    Str = lists:flatten(io_lib:format("~p ~p", [VHost2, Name2])),
-    {list_to_atom(lists:append("q: ", Str)),
-     list_to_atom(lists:append("p: ", Str)),
-     list_to_atom(lists:append("n: ", Str))}.
+    Str = lists:flatten(io_lib:format("~999999999p", [{VHost2, Name2}])),
+    {list_to_atom("q" ++ Str),
+     list_to_atom("p" ++ Str),
+     list_to_atom("n" ++ Str)}.
 
 -spec m(rabbit_types:basic_message(),
         seq_id(),
@@ -929,8 +929,7 @@ erase_tx(Txn, S = #s { txn_dict = TxnDict }) ->
 %% msgs, and quite possibly to perform yet other side-effects. It's
 %% black magic.
 
--spec callback([{rabbit_types:basic_message(),
-                 rabbit_types:basic_message_properties()}]) -> ok.
+-spec callback([pub()]) -> ok.
 
 callback(Pubs) ->
     rabbit_log:info("callback(~n ~p)", [Pubs]),
