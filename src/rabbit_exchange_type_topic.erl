@@ -66,16 +66,21 @@ add_binding(false, _Exchange, _Binding) ->
     ok.
 
 remove_bindings(true, _X, Bs) ->
-    lists:foreach(fun remove_binding/1, Bs),
+    ToDelete =
+       lists:foldr(fun(B = #binding{source = X, destination = D}, Acc) ->
+                           [{FinalNode, _} | _] = binding_path(B),
+                           [{X, FinalNode, D} | Acc]
+                   end, [], Bs),
+    [trie_remove_binding(X, FinalNode, D) || {X, FinalNode, D} <- ToDelete],
     ok;
-remove_bindings(false, _X, _Bs) ->
+remove_bindings(false, _X, Bs) ->
+    [rabbit_misc:execute_mnesia_transaction(
+       fun() -> remove_path_if_empty(X, binding_path(B)) end)
+                    || B = #binding{source = X} <- Bs],
     ok.
 
-remove_binding(#binding{source = X, key = K, destination = D}) ->
-    Path = [{FinalNode, _} | _] = follow_down_get_path(X, split_topic_key(K)),
-    trie_remove_binding(X, FinalNode, D),
-    remove_path_if_empty(X, Path),
-    ok.
+binding_path(#binding{source = X, key = K}) ->
+    follow_down_get_path(X, split_topic_key(K)).
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
