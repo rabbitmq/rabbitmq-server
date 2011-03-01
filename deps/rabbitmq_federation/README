@@ -1,15 +1,54 @@
 This is all very experimental. You have been warned.
 
+
+Purpose
+=======
+
+For the time being, the purpose is to provide a federated exchange
+type. Other purposes might appear in the future.
+
+A federated exchange has type 'x-federation'. However, this type does
+not provide any routing logic. The routing logic is implemented by a
+backing type, provided to the exchange as an argument. Messages can
+therefore be published to a federated exchange like any
+other. However, a federated exchange will also receive messages from
+one or more "upstream" exchanges, located on remote brokers.
+
+(Well, you don't need to have upstream exchanges, and they don't need
+to be remote. But then you don't get anything very useful.)
+
+Inter-broker communication is implemented entirely using AMQP
+(optionally secured with SSL). The federation plugin will ensure that
+only messages that will be received from the downstream exchange are
+sent over the wire.
+
+A typical use would be to have the same "logical" exchange distributed
+over many brokers. This would be achieved by having the exchange
+declared as a federated exchange in each broker, with upstreams
+corresponding to all the other brokers.
+
+Other topologies are possible; however one notable current limitation
+is that the federation plugin will not forward the same message more
+than once. Therefore your inter-broker topology needs to be fully
+connected. We intend to remove this limitation in future.
+
+Federated exchanges can be set up statically via broker configuration,
+or declared dynamically over AMQP.
+
+
+Static Configuration
+====================
+
 Static configuration might look like:
 
   {rabbit_federation,
-   [ {exchanges, [[{exchange,    "local"},
+   [ {exchanges, [[{exchange,    "my-exchange"},
                    {vhost,       "/"},
                    {type,        "topic"},
                    {durable,     true},
                    {auto_delete, false},
                    {internal,    false},
-                   {upstreams,   ["amqps://upstream-server/%2f/upstream"]}]
+                   {upstreams,   ["amqps://upstream-server/%2f/my-exchange"]}]
                  ]},
      {brokers, [[{host,     "upstream-server"},
                  {scheme,   "amqps"},
@@ -27,13 +66,11 @@ Static configuration might look like:
   }
 
 The upstreams parameter is a list of remote exchanges whose messages
-should be federated to the local exchange. Messages can also be
-published to the local exchage directly (in which case it just acts
-like a regular exchange).
+should be federated to the local exchange.
 
-Most of the rest looks like an exchange.declare, but note that the
+Most of the rest looks like an exchange.declare, but note that *the
 type parameter must match the type of the upstream exchanges for
-routing to work at all sensibly.
+routing to work at all sensibly*.
 
 The brokers list provides information on how to connect. If the broker
 referenced in a URI cannot be found in the brokers list, a non-SSL
@@ -44,3 +81,24 @@ The ssl_options parameter specifies how to make client SSL connections.
 An entry in the brokers list can specify {mechanism, 'EXTERNAL'}
 rather than username and password if the upstream broker has
 EXTERNAL SASL authentication support (e.g. rabbitmq-auth-mechanism-ssl).
+
+
+Declaring Over AMQP
+===================
+
+This is less common, but in case you want to do this:
+
+ * Declare it with type "x-federation".
+
+ * Give it arguments "type" and "upstreams". "type" should refer to
+   its backing type; the type of the upstream exchanges. "upstreams"
+   should be an array of URIs.
+
+ * Authentication and SSL information will still be taken from the
+   static configuration.
+
+
+Limitations
+===========
+
+See TODO for a bunch of stuff that's not yet done.

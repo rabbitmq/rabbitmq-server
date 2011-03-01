@@ -1,10 +1,15 @@
-Necessary
+Critical
+--------
+
+Reset bindings on connect
+
+
+Important
 ---------
 
 Configurable backoff
-Reset bindings on connect
 Remove that ETS table
-Test in cluster
+  Fix in cluster
 Be smarter about bind (for efficiency)
 Be even smarter about unbind (for efficiency)
 Handle user-id somehow
