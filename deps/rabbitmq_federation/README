@@ -5,7 +5,7 @@ Purpose
 =======
 
 The high level goal is to transmit messages between brokers without
-using clustering. This is useful for the following reasons:
+requiring clustering. This is useful for the following reasons:
 
 1) Federated brokers may be in different administrative
    domains. Clustered brokers form a single administrative domain.
