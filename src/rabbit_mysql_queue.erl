@@ -60,17 +60,6 @@
 
 -behaviour(rabbit_backing_queue).
 
-%% TODO: Eventually have config setting support for changing database
-%% parameters...
--define(RABBIT_DB_POOL_NAME, rabbit_mysql_pool).
--define(RABBIT_DB_POOL_SIZE, 1).
--define(RABBIT_DB_USERNAME, "rabbitmq").
--define(RABBIT_DB_PASSWORD, "passw0rd").
--define(RABBIT_DB_HOSTNAME, "localhost").
--define(RABBIT_DB_PORT, 3306).
--define(RABBIT_DB_DBNAME, "rabbit_mysql_queues").
--define(RABBIT_DB_ENCODING, utf8).
-
 -define(WHEREAMI, case process_info(self(), current_function) of {_,
 {M,F,A}} -> [M,F,A] end).
 -define(LOGENTER, rabbit_log:info("Entering ~p:~p/~p...~n", ?WHEREAMI)).
@@ -201,7 +190,10 @@
 %%
 %% -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 
-start(_DurableQueues) -> ok.
+start(_DurableQueues) ->
+    ok = ensure_app_running(crypto),
+    ok = ensure_app_running(emysql),
+    ok.
 
 %%----------------------------------------------------------------------------
 %% stop/0 tears down all state/resources upon shutdown. It might not
@@ -234,7 +226,7 @@ stop() -> ok.
 %% Mnesia transaction!
 
 init(QueueName, IsDurable, Recover) ->
-    % rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
+    rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
     {QTable, PTable, NTable} = tables(QueueName),
     case Recover of
         false -> _ = mnesia:delete_table(QTable),
@@ -274,6 +266,11 @@ init(QueueName, IsDurable, Recover) ->
     % rabbit_log:info("init ->~n ~p", [Result]),
     callback([]),
     Result.
+
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
+
 
 %%----------------------------------------------------------------------------
 %% terminate/1 deletes all of a queue's pending acks, prior to
@@ -985,42 +982,5 @@ ensure_app_running(App) ->
         {error, {already_started,App}} -> ok;
         {Result, {Description, App}} -> {Result, {Description, App}}
     end.
-
-%% ensure_connection_pool(PoolAtom) ->
-%%     rabbit_log:info("Ensuring connection pool ~p exists~n", [PoolAtom]),
-%%     %% TODO:  Args 2 through 7 (or 8?) should be config options w/ defaults
-%%     Result = try emysql:add_pool(PoolAtom,
-%%                                  ?RABBIT_DB_POOL_SIZE,
-%%                                  ?RABBIT_DB_USERNAME,
-%%                                  ?RABBIT_DB_PASSWORD,
-%%                                  ?RABBIT_DB_HOSTNAME,
-%%                                  ?RABBIT_DB_PORT,
-%%                                  ?RABBIT_DB_DBNAME,
-%%                                  ?RABBIT_DB_ENCODING)
-%%              catch
-%%                  exit:pool_already_exists -> ok
-%%              end.
-
-%% verify_queue_table_exists(QueueName) ->
-%%     %% TODO:  Graceful handling of #error_packet{} return case...
-%%     #ok_packet{} = emysql:execute(?RABBIT_DB_POOL_NAME,
-%%                                   create_queue_table_statement(QueueName)).
-
-%% prepare_statements() ->
-%%     %% TODO:  Prepare SQL statements here where they're preparable...
-%%     ok.
-
-%% create_queue_table_statement(TableName) ->
-%%     %% TODO: This will also need to create appropriate indexes...
-%%     "CREATE TABLE IF NOT EXISTS "
-%%     "RMQ_" ++ TableName ++
-%%         "(id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
-%%         "guid VARCHAR(64) NOT NULL,"
-%%         "MsgProps BLOB,"
-%%         "is_persistent BOOL NOT NULL,"
-%%         "delivered BOOL NOT NULL,"
-%%         "acked BOOL NOT NULL,"
-%%         "fq_queuename VARCHAR(256) NOT NULL,"
-%%         "last_modified TIMESTAMP(8)) ENGINE InnoDB;".
 
 
