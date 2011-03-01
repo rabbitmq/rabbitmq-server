@@ -4,8 +4,28 @@ This is all very experimental. You have been warned.
 Purpose
 =======
 
-For the time being, the purpose is to provide a federated exchange
-type. Other purposes might appear in the future.
+The high level goal is to transmit messages between brokers without
+using clustering. This is useful for the following reasons:
+
+1) Federated brokers may be in different administrative
+   domains. Clustered brokers form a single administrative domain.
+
+2) Federated brokers only speak AMQP to each other, and the federation
+   mechanism is designed to deal with intermittent connectivity.
+   Federation is therefore much more WAN-friendly.
+
+3) Brokers can contain federated and local-only components - you don't
+   need to federate everything if you don't want to.
+
+4) Ultimately, greater scalability should be possible.
+
+For the time being, the plugin provides a federated exchange
+type. Other features might appear in the future. In particular this
+means that federation is primarily useful for pub/sub use cases.
+
+
+HOWTO
+=====
 
 A federated exchange has type 'x-federation'. However, this type does
 not provide any routing logic. The routing logic is implemented by a
