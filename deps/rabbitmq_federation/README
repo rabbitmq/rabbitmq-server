@@ -21,7 +21,7 @@ using clustering. This is useful for the following reasons:
 
 For the time being, the plugin provides a federated exchange
 type. Other features might appear in the future. In particular this
-means that federation is primarily useful for pub/sub use cases.
+means that federation is primarily useful in pub/sub scenarios.
 
 
 HOWTO
