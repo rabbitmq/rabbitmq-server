@@ -26,7 +26,7 @@
 -define(RABBIT_DB_POOL_NAME, rabbit_mysql_pool).
 -define(RABBIT_DB_POOL_SIZE, 1).
 -define(RABBIT_DB_USERNAME, "rabbitmq").
--define(RABBIT_DB_PASSWORD, "passw0rd").
+-define(RABBIT_DB_PASSWORD, "password").
 -define(RABBIT_DB_HOSTNAME, "localhost").
 -define(RABBIT_DB_PORT, 3306).
 -define(RABBIT_DB_DBNAME, "rabbit_mysql_queues").
@@ -39,41 +39,38 @@
 %%--------------------------------------------------------------------
 %% Verify a MySQL connection pool exists; create the pool if it doesn't.
 %%--------------------------------------------------------------------
-ensure_connection_pool(PoolAtom) ->
-    rabbit_log:info("Ensuring connection pool ~p exists~n", [PoolAtom]),
+ensure_connection_pool() ->
+    rabbit_log:info("Ensuring connection pool ~p exists~n",
+                    [?RABBIT_DB_POOL_NAME]),
     %% TODO:  Args 2 through 7 (or 8?) should be config options w/ defaults
-    Result = try emysql:add_pool(PoolAtom,
-                                 ?RABBIT_DB_POOL_SIZE,
-                                 ?RABBIT_DB_USERNAME,
-                                 ?RABBIT_DB_PASSWORD,
-                                 ?RABBIT_DB_HOSTNAME,
-                                 ?RABBIT_DB_PORT,
-                                 ?RABBIT_DB_DBNAME,
-                                 ?RABBIT_DB_ENCODING)
-             catch
-                 exit:pool_already_exists -> ok
-             end.
+    try emysql:add_pool(?RABBIT_DB_POOL_NAME,
+                        ?RABBIT_DB_POOL_SIZE,
+                        ?RABBIT_DB_USERNAME,
+                        ?RABBIT_DB_PASSWORD,
+                        ?RABBIT_DB_HOSTNAME,
+                        ?RABBIT_DB_PORT,
+                        ?RABBIT_DB_DBNAME,
+                        ?RABBIT_DB_ENCODING)
+    catch
+        exit:pool_already_exists -> ok
+    end.
 
-verify_queue_table_exists(QueueName) ->
-    %% TODO:  Graceful handling of #error_packet{} return case...
-    #ok_packet{} = emysql:execute(?RABBIT_DB_POOL_NAME,
-                                  create_queue_table_statement(QueueName)).
+prepare_mysql_statements() ->
+    %% NOTE:  What the MySQL protocol actually supports in prepared statements
+    %%        seems a bit non-uniform.  For example, 'COMMIT' is in, but
+    %%        'START TRANSACTION' isn't.  Fortunately, most of the things that
+    %%        are parametrizable, and thus prone to injection attacks and the
+    %%        like do seem to be there.
+    Statements = [{insert_q_stmt,<<"INSERT INTO q(queue_name, m) VALUES(?,?)">>},
+                  {insert_p_stmt,<<"INSERT INTO p() VALUES()">>},
+                  {insert_n_stmt,<<"INSERT INTO n() VALUES()">>}],
+    [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
 
-prepare_statements() ->
-    %% TODO:  Prepare SQL statements here where they're preparable...
+delete_queue_data(QueueName) ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   <<"START TRANSACTION">>),
+    %% TODO [jerryk]:  Implement table flush transaction ops to clear queue.
+    rabbit_log:info("NOT YET IMPLEMENTED!"),
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   <<"COMMIT">>),
     ok.
-
-create_queue_table_statement(TableName) ->
-    %% TODO: This will also need to create appropriate indexes...
-    "CREATE TABLE IF NOT EXISTS "
-    "RMQ_" ++ TableName ++
-        "(id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
-        "guid VARCHAR(64) NOT NULL,"
-        "MsgProps BLOB,"
-        "is_persistent BOOL NOT NULL,"
-        "delivered BOOL NOT NULL,"
-        "acked BOOL NOT NULL,"
-        "fq_queuename VARCHAR(256) NOT NULL,"
-        "last_modified TIMESTAMP(8)) ENGINE InnoDB;".
-
-

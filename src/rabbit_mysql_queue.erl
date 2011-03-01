@@ -193,6 +193,8 @@
 start(_DurableQueues) ->
     ok = ensure_app_running(crypto),
     ok = ensure_app_running(emysql),
+    mysql_helper:prepare_mysql_statements(),
+    ok = mysql_helper:ensure_connection_pool(),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -204,10 +206,10 @@ start(_DurableQueues) ->
 stop() -> ok.
 
 
+
 %%#############################################################################
 %%                            THE RUBICON...
 %%#############################################################################
-
 
 %%----------------------------------------------------------------------------
 %% init/3 creates one backing queue, returning its state. Names are
@@ -227,45 +229,45 @@ stop() -> ok.
 
 init(QueueName, IsDurable, Recover) ->
     rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
-    {QTable, PTable, NTable} = tables(QueueName),
+
+    DbQueueName  = canonicalize_queue_name(QueueName),
     case Recover of
-        false -> _ = mnesia:delete_table(QTable),
-                 _ = mnesia:delete_table(PTable),
-                 _ = mnesia:delete_table(NTable);
+        false -> _ = mysql_helper:delete_queue_data(DbQueueName);
         true -> ok
     end,
-    create_table(QTable, 'q_record', 'ordered_set', record_info(fields,
-                                                                q_record)),
-    create_table(PTable, 'p_record', 'set', record_info(fields, p_record)),
-    create_table(NTable, 'n_record', 'set', record_info(fields, n_record)),
-    {atomic, Result} =
-        mnesia:transaction(
-          fun () ->
-                  case IsDurable of
-                      false -> clear_table(QTable),
-                               clear_table(PTable),
-                               clear_table(NTable);
-                      true -> delete_nonpersistent_msgs(QTable)
-                  end,
-                  {NextSeqId, NextOutId} =
-                      case mnesia:read(NTable, 'n', 'read') of
-                          [] -> {0, 0};
-                          [#n_record { next_seq_id = NextSeqId0,
-                                       next_out_id = NextOutId0 }] ->
-                              {NextSeqId0, NextOutId0}
-                      end,
-                  RS = #s { q_table = QTable,
-                            p_table = PTable,
-                            n_table = NTable,
-                            next_seq_id = NextSeqId,
-                            next_out_id = NextOutId,
-                            txn_dict = dict:new() },
-                  save(RS),
-                  RS
-          end),
-    % rabbit_log:info("init ->~n ~p", [Result]),
+    %% BOOKMARK
+    %% create_table(QTable, 'q_record', 'ordered_set', record_info(fields,
+    %%                                                             q_record)),
+    %% create_table(PTable, 'p_record', 'set', record_info(fields, p_record)),
+    %% create_table(NTable, 'n_record', 'set', record_info(fields, n_record)),
+    %% {atomic, Result} =
+    %%     mnesia:transaction(
+    %%       fun () ->
+    %%               case IsDurable of
+    %%                   false -> clear_table(QTable),
+    %%                            clear_table(PTable),
+    %%                            clear_table(NTable);
+    %%                   true -> delete_nonpersistent_msgs(QTable)
+    %%               end,
+    %%               {NextSeqId, NextOutId} =
+    %%                   case mnesia:read(NTable, 'n', 'read') of
+    %%                       [] -> {0, 0};
+    %%                       [#n_record { next_seq_id = NextSeqId0,
+    %%                                    next_out_id = NextOutId0 }] ->
+    %%                           {NextSeqId0, NextOutId0}
+    %%                   end,
+    %%               RS = #s { q_table = QTable,
+    %%                         p_table = PTable,
+    %%                         n_table = NTable,
+    %%                         next_seq_id = NextSeqId,
+    %%                         next_out_id = NextOutId,
+    %%                         txn_dict = dict:new() },
+    %%               save(RS),
+    %%               RS
+    %%       end),
+    %% % rabbit_log:info("init ->~n ~p", [Result]),
     callback([]),
-    Result.
+    Result = yo_mama_i_am_a_placeholder.
 
 %%#############################################################################
 %%                       OTHER SIDE OF THE RUBICON...
@@ -896,25 +898,12 @@ save(#s { n_table = NTable,
 %% Pure helper functions.
 %% ----------------------------------------------------------------------------
 
-%% Convert a queue name (a record) into an Mnesia table name (an atom).
+%% Canonicalize queue names for use in MySQL.
+-spec canonicalize_queue_name({resource, binary(), queue, binary()}) ->
+                                     string().
 
-%% TODO: Import correct argument type.
-
-%% BUG: Mnesia has undocumented restrictions on table names. Names
-%% with slashes fail some operations, so we replace replace slashes
-%% with the string SLASH. We should extend this as necessary, and
-%% perhaps make it a little prettier.
-
--spec tables({resource, binary(), queue, binary()}) ->
-                    {atom(), atom(), atom()}.
-
-tables({resource, VHost, queue, Name}) ->
-    VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
-    Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
-    Str = lists:flatten(io_lib:format("~p ~p", [VHost2, Name2])),
-    {list_to_atom(lists:append("q: ", Str)),
-     list_to_atom(lists:append("p: ", Str)),
-     list_to_atom(lists:append("n: ", Str))}.
+canonicalize_queue_name({resource, VHost, queue, Name}) ->
+    lists:flatten(io_lib:format("~p ~p", [VHost, Name])).
 
 -spec m(rabbit_types:basic_message(),
         seq_id(),
@@ -982,5 +971,4 @@ ensure_app_running(App) ->
         {error, {already_started,App}} -> ok;
         {Result, {Description, App}} -> {Result, {Description, App}}
     end.
-
 
