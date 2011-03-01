@@ -36,6 +36,33 @@ parse_simple_frame_test() ->
     #stomp_frame{body_iolist = Body} = Frame,
     ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
 
+parse_simple_frame_with_null_test() ->
+    Headers = [{"header1", "value1"}, {"header2", "value2"},
+               {"content-length", "12"}],
+    Content = frame_string("COMMAND",
+                           Headers,
+                           "Body\0Content"),
+    {"COMMAND", Frame, _State} = parse_complete(Content),
+    [?assertEqual({ok, Value},
+                  rabbit_stomp_frame:header(Frame, Key)) ||
+        {Key, Value} <- Headers],
+    #stomp_frame{body_iolist = Body} = Frame,
+    ?assertEqual(<<"Body\0Content">>, iolist_to_binary(Body)).
+
+parse_large_content_frame_with_nulls_test() ->
+    BodyContent = string:copies("012345678\0", 1024),
+    Headers = [{"header1", "value1"}, {"header2", "value2"},
+               {"content-length", integer_to_list(string:len(BodyContent))}],
+    Content = frame_string("COMMAND",
+                           Headers,
+                           BodyContent),
+    {"COMMAND", Frame, _State} = parse_complete(Content),
+    [?assertEqual({ok, Value},
+                  rabbit_stomp_frame:header(Frame, Key)) ||
+        {Key, Value} <- Headers],
+    #stomp_frame{body_iolist = Body} = Frame,
+    ?assertEqual(list_to_binary(BodyContent), iolist_to_binary(Body)).
+
 parse_command_only_test() ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
 

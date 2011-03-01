@@ -36,7 +36,7 @@ message_properties_test() ->
     Headers = [
                 {"content-type", "text/plain"},
                 {"content-encoding", "UTF-8"},
-                {"delivery-mode", "2"},
+                {"persistent", "true"},
                 {"priority", "1"},
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
@@ -86,13 +86,35 @@ message_headers_test() ->
                 {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},
                 {"content-type", "text/plain"},
                 {"content-encoding", "UTF-8"},
-                {"delivery-mode", "2"},
+                {"persistent", "true"},
                 {"priority", "1"},
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
                 {"amqp-message-id", "M123"},
                 {"str", "foo"},
                 {"int", "123"}
+               ],
+
+    [] = lists:subtract(Headers, Expected).
+
+minimal_message_headers_with_no_custom_test() ->
+    Destination = "/queue/foo",
+    SessionId = "1234567",
+
+    Delivery = #'basic.deliver'{
+      consumer_tag = <<"Q_123">>,
+      delivery_tag = 123},
+
+    Properties = #'P_basic'{},
+
+    Headers = rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+    Expected = [
+                {"destination", Destination},
+                {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},
+                {"content-type", "text/plain"},
+                {"content-encoding", "UTF-8"},
+                {"amqp-message-id", "M123"}
                ],
 
     [] = lists:subtract(Headers, Expected).
