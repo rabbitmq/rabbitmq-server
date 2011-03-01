@@ -1,7 +1,7 @@
 Necessary
 ---------
 
-Exponential(?) backoff
+Configurable backoff
 Reset bindings on connect
 Remove that ETS table
 Test in cluster
@@ -13,7 +13,6 @@ Configurable queue lifetime / prefetch count / heartbeat(?)
 Useful
 ------
 
-Deal with downstream channel going down
 Deal with upstream exchange going away / coming back?
 Allow args passthrough to support e.g. headers type.
 Think about when we forward - partly connected graph of brokers/exchanges.

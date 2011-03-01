@@ -90,7 +90,7 @@ handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
     {ok, DCh} = amqp_connection:open_channel(DConn),
     #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(DCh, self()),
-    %%erlang:monitor(process, DCh),
+    erlang:monitor(process, DCh),
     X = proplists:get_value(exchange, rabbit_federation_util:parse_uri(URI)),
     Params = params_from_uri(URI),
     {ok, Conn} = amqp_connection:start(network, Params),
@@ -166,7 +166,7 @@ handle_info({#'basic.deliver'{delivery_tag = DTag,
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ downstream_channel = DCh }) ->
     case Ch of
-        DCh -> exit(todo_handle_downstream_channel_death);
+        DCh -> {stop, {downstream_channel_down, Reason}, State};
         _   -> {stop, {upstream_channel_down, Reason}, State}
     end;
 
