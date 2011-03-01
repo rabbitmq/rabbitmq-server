@@ -43,9 +43,8 @@ init({URIs, DownstreamX, Durable}) ->
     Specs = [{URI,
               {rabbit_federation_exchange_upstream, start_link,
                [{URI, DownstreamX, Durable}]},
-              temporary, %% TODO making this transient or {transient, N}
-                         %% breaks shutdown
+              {transient, 1},
               ?MAX_WAIT, worker,
               [rabbit_federation_exchange_upstream]} ||
                 URI <- URIs],
-    {ok, {{one_for_one, 3, 10}, Specs}}.
+    {ok, {{one_for_one, 2, 2}, Specs}}.

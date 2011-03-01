@@ -55,6 +55,5 @@ code_change(_OldVsn, Args, _Extra) ->
     {ok, Args}.
 
 terminate(_Reason, {_URIs, DownstreamX, _Durable}) ->
-    io:format("info terminate~n", []),
     true = ets:delete(?ETS_NAME, DownstreamX),
     ok.

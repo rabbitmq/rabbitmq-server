@@ -51,7 +51,7 @@ info(Pid) ->
 %%----------------------------------------------------------------------------
 
 init(Args) ->
-    {ok, {{one_for_one, 3, 10},
+    {ok, {{one_for_all, 3, 10},
           [{info, {rabbit_federation_exchange_info, start_link, Args},
             transient, ?MAX_WAIT, worker,
             [rabbit_federation_exchange_info]}]}}.

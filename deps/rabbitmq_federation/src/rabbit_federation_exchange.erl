@@ -71,6 +71,7 @@ recover(X, Bs) ->
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
 delete(?TX, X, Bs) ->
+    call(X, stop),
     ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
 delete(Tx, X, Bs) ->

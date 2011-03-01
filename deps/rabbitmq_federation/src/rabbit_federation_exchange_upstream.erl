@@ -42,6 +42,7 @@
                 downstream_exchange,
                 downstream_durable,
                 next_publish_id = 1}).
+
 %%----------------------------------------------------------------------------
 
 start_link({URI, DownstreamX, Durable}) ->
@@ -50,48 +51,9 @@ start_link({URI, DownstreamX, Durable}) ->
 
 %%----------------------------------------------------------------------------
 
-init({URI, DownstreamX, Durable}) ->
-    {ok, DConn} = amqp_connection:start(direct),
-    {ok, DCh} = amqp_connection:open_channel(DConn),
-    #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(DCh, self()),
-    %%erlang:monitor(process, DCh),
-    X = proplists:get_value(exchange, rabbit_federation_util:parse_uri(URI)),
-    Params = params_from_uri(URI),
-    {ok, Conn} = amqp_connection:start(network, Params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    erlang:monitor(process, Ch),
-    Q = upstream_queue_name(X, DownstreamX),
-    %% TODO: The x-expires should be configurable.
-    case not Durable of
-        true ->
-            with_disposable_channel(
-              Conn,
-              fun (Ch2) ->
-                      amqp_channel:call(Ch2, #'queue.delete'{queue = Q})
-              end);
-        _ ->
-            ok
-    end,
-    amqp_channel:call(
-      Ch, #'queue.declare'{
-        queue     = Q,
-        durable   = true,
-        arguments = [{<<"x-expires">>, long, 86400000}] }),
-    #'basic.consume_ok'{ consumer_tag = CTag } =
-        amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q,
-                                                     no_ack = false },
-                               self()),
-    {ok, #state{downstream_connection = DConn,
-                downstream_channel    = DCh,
-                downstream_exchange   = DownstreamX,
-                uri                   = URI,
-                connection            = Conn,
-                channel               = Ch,
-                queue                 = Q,
-                exchange              = X,
-                consumer_tag          = CTag,
-                unacked               = gb_trees:empty()}}.
+init(Args) ->
+    gen_server2:cast(self(), {init, Args}),
+    {ok, not_started}.
 
 handle_call({add_binding, #binding{key = Key, args = Args}},
             _From, State = #state{channel = Ch, queue = Q, exchange = X}) ->
@@ -122,6 +84,46 @@ handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
+
+handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
+    {ok, DConn} = amqp_connection:start(direct),
+    {ok, DCh} = amqp_connection:open_channel(DConn),
+    #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(DCh, self()),
+    %%erlang:monitor(process, DCh),
+    X = proplists:get_value(exchange, rabbit_federation_util:parse_uri(URI)),
+    Params = params_from_uri(URI),
+    {ok, Conn} = amqp_connection:start(network, Params),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    erlang:monitor(process, Ch),
+    Q = upstream_queue_name(X, DownstreamX),
+    %% TODO: The x-expires should be configurable.
+    case Durable of
+        false -> with_disposable_channel(
+                   Conn,
+                   fun (Ch2) ->
+                           amqp_channel:call(Ch2, #'queue.delete'{queue = Q})
+                   end);
+        _     -> ok
+    end,
+    amqp_channel:call(
+      Ch, #'queue.declare'{
+        queue     = Q,
+        durable   = true,
+        arguments = [{<<"x-expires">>, long, 86400000}] }),
+    #'basic.consume_ok'{ consumer_tag = CTag } =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q,
+                                                    no_ack = false}, self()),
+    {noreply, #state{downstream_connection = DConn,
+                     downstream_channel    = DCh,
+                     downstream_exchange   = DownstreamX,
+                     uri                   = URI,
+                     connection            = Conn,
+                     channel               = Ch,
+                     queue                 = Q,
+                     exchange              = X,
+                     consumer_tag          = CTag,
+                     unacked               = gb_trees:empty()}};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
