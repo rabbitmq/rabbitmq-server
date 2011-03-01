@@ -2,13 +2,14 @@ Critical
 --------
 
 Reset bindings on connect
+Do something about uri_parser clash with shovel
 
 
 Important
 ---------
 
 Configurable backoff
-Remove that ETS table
+Remove that DETS table
   Fix in cluster
 Be smarter about bind (for efficiency)
 Be even smarter about unbind (for efficiency)

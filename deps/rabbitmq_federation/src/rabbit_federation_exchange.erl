@@ -26,7 +26,6 @@
 
 -include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("rabbit_federation.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -102,7 +101,7 @@ assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
 %%----------------------------------------------------------------------------
 
 call(#exchange{ name = Downstream }, Msg) ->
-    [{_, SupPid}] = ets:lookup(?ETS_NAME, Downstream),
+    SupPid = rabbit_federation_db:sup_for_exchange(Downstream),
     rabbit_federation_exchange_upstream_sup:call_all(SupPid, Msg).
 
 with_module(#exchange{ arguments = Args }, Fun) ->

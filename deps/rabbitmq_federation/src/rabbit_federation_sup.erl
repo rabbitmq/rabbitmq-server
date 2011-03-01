@@ -21,7 +21,6 @@
 %% Supervises everything. There is just one of these.
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("rabbit_federation.hrl").
 
 -export([start_link/0, start_child/1, stop_child/1, go_all/0]).
 
@@ -40,8 +39,7 @@
                     {enables,     rabbit_federation_exchange}]}).
 
 start_link() ->
-    %% TODO get rid of this ets table when bug 23825 lands.
-    ?ETS_NAME = ets:new(?ETS_NAME, [public, set, named_table]),
+    rabbit_federation_db:init(),
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 start_child(Args) ->

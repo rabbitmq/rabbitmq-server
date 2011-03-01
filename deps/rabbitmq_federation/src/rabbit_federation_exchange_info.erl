@@ -19,7 +19,6 @@
 -behaviour(gen_server2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("rabbit_federation.hrl").
 
 -export([start_link/1]).
 
@@ -55,5 +54,5 @@ code_change(_OldVsn, Args, _Extra) ->
     {ok, Args}.
 
 terminate(_Reason, {_URIs, DownstreamX, _Durable}) ->
-    true = ets:delete(?ETS_NAME, DownstreamX),
+    rabbit_federation_db:forget_exchange(DownstreamX),
     ok.

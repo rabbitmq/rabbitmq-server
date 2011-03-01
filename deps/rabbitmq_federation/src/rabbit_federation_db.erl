@@ -14,4 +14,29 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--define(ETS_NAME, rabbit_federation_exchange).
+-module(rabbit_federation_db).
+
+-export([init/0, sup_for_exchange/1, set_sup_for_exchange/2,
+         forget_exchange/1]).
+
+%% TODO get rid of this dets table, use mnesia
+-define(DETS_NAME, rabbit_federation_exchange).
+
+init() ->
+    F = file(),
+    {ok, F} = dets:open_file(F, [{type, set}]).
+
+sup_for_exchange(X) ->
+    [{_, Pid}] = dets:lookup(file(), X),
+    Pid.
+
+set_sup_for_exchange(X, Pid) ->
+    ok = dets:insert(file(), {X, Pid}).
+
+forget_exchange(X) ->
+    true = dets:delete(file(), X).
+
+%%----------------------------------------------------------------------------
+
+file() ->
+    rabbit_mnesia:dir() ++ "/" ++ ?DETS_NAME.

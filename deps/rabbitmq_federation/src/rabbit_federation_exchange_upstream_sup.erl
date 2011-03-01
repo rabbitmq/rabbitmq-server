@@ -19,7 +19,6 @@
 -behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("rabbit_federation.hrl").
 
 %% Supervises the upstreams for an exchange.
 
@@ -39,7 +38,7 @@ call_all(Sup, Msg) ->
 %%----------------------------------------------------------------------------
 
 init({URIs, DownstreamX, Durable}) ->
-    true = ets:insert(?ETS_NAME, {DownstreamX, self()}),
+    rabbit_federation_db:set_sup_for_exchange(DownstreamX, self()),
     Specs = [{URI,
               {rabbit_federation_exchange_upstream, start_link,
                [{URI, DownstreamX, Durable}]},

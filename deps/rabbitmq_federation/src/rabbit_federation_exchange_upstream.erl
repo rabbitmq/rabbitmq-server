@@ -17,7 +17,6 @@
 -module(rabbit_federation_exchange_upstream).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("rabbit_federation.hrl").
 
 -behaviour(gen_server2).
 
