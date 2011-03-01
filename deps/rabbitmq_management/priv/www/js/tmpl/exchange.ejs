@@ -94,6 +94,7 @@
   </div>
 </div>
 
+<% if (!exchange.internal) { %>
 <div class="section-hidden">
   <h2>Publish Message</h2>
   <div class="hider">
@@ -143,6 +144,7 @@
     <span class="br"></span>
   </div>
 </div>
+<% } %>
 
 <% if (exchange.name != "") { %>
 <div class="section-hidden">
