@@ -282,12 +282,11 @@ delete_and_terminate(S = #s { queue_name = DbQueueName }) ->
     mysql_helper:commit_mysql_transaction(),
     rabbit_log:info("delete_and_terminate ->~n ~p", [S]).
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
 
 %%----------------------------------------------------------------------------
 %% purge/1 deletes all of queue's enqueued msgs, generating pending
+%% [ BUGBUG:  Does it really?  Where do the pending acks get generated
+%%            in Mnesia queue? ]
 %% acks as required, and returning the count of msgs purged.
 %%
 %% purge/1 creates an Mnesia transaction to run in, and therefore may
@@ -296,21 +295,19 @@ delete_and_terminate(S = #s { queue_name = DbQueueName }) ->
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
 purge(S = #s { queue_name = DbQueueName }) ->
-    % rabbit_log:info("purge(~n ~p) ->", [S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(fun () -> LQ = length(mnesia:all_keys(QTable)),
-    %%                                  clear_table(QTable),
-    %%                                  {LQ, S}
-    %%                        end),
-    %% % rabbit_log:info("purge ->~n ~p", [Result]),
-    %% Result.
-    yo_mama_bogus_result.
+    rabbit_log:info("purge(~n ~p) ->", [S]),
+    mysql_helper:begin_mysql_transaction(),
+    NumQRecords = mysql_helper:count_rows_for_queue(q, DbQueueName),
+    mysql_helper:clear_table(q, DbQueueName),
+    mysql_helper:commit_mysql_transaction(),
+    Result = {NumQRecords, S},
+    rabbit_log:info("purge ->~n ~p", [Result]),
+    Result.
+
 
 %%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
+%%                            THE RUBICON...
 %%#############################################################################
-
-
 
 %%----------------------------------------------------------------------------
 %% publish/3 publishes a msg.
@@ -334,6 +331,11 @@ publish(Msg, Props, S) ->
     % rabbit_log:info("publish ->~n ~p", [Result]),
     callback([{Msg, Props}]),
     Result.
+
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
+
 
 %%----------------------------------------------------------------------------
 %% publish_delivered/4 is called after a msg has been passed straight
@@ -591,13 +593,13 @@ requeue(SeqIds, PropsF, S) ->
 %%
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
-len(#s { queue_name = DbQueueName }) ->
-    %% % rabbit_log:info("len(~n ~p) ->", [S]),
+len(S = #s { queue_name = DbQueueName }) ->
+    rabbit_log:info("len(~n ~p) ->", [S]),
     %% {atomic, Result} =
     %%     mnesia:transaction(fun () -> length(mnesia:all_keys(QTable)) end),
-    %% % rabbit_log:info("len ->~n ~p", [Result]),
-    %% Result.
-    yo_mama_bogus_result.
+    MsgCount = 137,
+    rabbit_log:info("len ->~n ~p", [MsgCount]),
+    MsgCount.
 
 %%----------------------------------------------------------------------------
 %% is_empty/1 returns true iff the queue is empty.

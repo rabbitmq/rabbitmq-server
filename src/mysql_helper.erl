@@ -76,7 +76,13 @@ prepare_mysql_statements() ->
                   {clear_p_stmt,
                    <<"DELETE FROM p WHERE queue_name = ?">>},
                   {clear_q_stmt,
-                   <<"DELETE FROM q WHERE queue_name = ?">>}],
+                   <<"DELETE FROM q WHERE queue_name = ?">>},
+                  {count_p_stmt,
+                   <<"SELECT COUNT(*) FROM p WHERE queue_name = ?">>},
+                  {count_q_stmt,
+                   <<"SELECT COUNT(*) FROM q WHERE queue_name = ?">>},
+                  {count_n_stmt,
+                   <<"SELECT COUNT(*) FROM n WHERE queue_name = ?">>} ],
     [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
 
 begin_mysql_transaction() ->
@@ -140,6 +146,23 @@ clear_table(TableType, DbQueueName) ->
                             [DbQueueName])
     end,
     ok.
+
+-spec count_rows_for_queue(atom(), string()) -> non_neg_integer().
+
+count_rows_for_queue(TableType, DbQueueName) ->
+    QueryResult = case TableType of
+                      p -> emysql:execute(?RABBIT_DB_POOL_NAME,
+                                          count_p_stmt,
+                                          [DbQueueName]);
+                      q -> emysql:execute(?RABBIT_DB_POOL_NAME,
+                                          count_q_stmt,
+                                          [DbQueueName]);
+                      n -> emysql:execute(?RABBIT_DB_POOL_NAME,
+                                          count_n_stmt,
+                                          [DbQueueName])
+                  end,
+    {result_packet, _,_,[[Val]],_} = QueryResult,
+    Val.
 
 %% This is only for convenience in REPL debugging.  Get rid of it later.
 wake_up() ->
