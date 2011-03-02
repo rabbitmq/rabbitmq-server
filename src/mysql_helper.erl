@@ -82,7 +82,9 @@ prepare_mysql_statements() ->
                   {count_q_stmt,
                    <<"SELECT COUNT(*) FROM q WHERE queue_name = ?">>},
                   {count_n_stmt,
-                   <<"SELECT COUNT(*) FROM n WHERE queue_name = ?">>} ],
+                   <<"SELECT COUNT(*) FROM n WHERE queue_name = ?">>},
+                  {write_msg_to_q_stmt,
+                   <<"INSERT INTO q(queue_name, m, is_persistent) VALUES (?,?,?)">>} ],
     [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
 
 begin_mysql_transaction() ->
@@ -163,6 +165,12 @@ count_rows_for_queue(TableType, DbQueueName) ->
                   end,
     {result_packet, _,_,[[Val]],_} = QueryResult,
     Val.
+
+write_message_to_q(DbQueueName, Msg, IsPersistent) ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   write_msg_to_q_stmt,
+                   [DbQueueName, term_to_binary(Msg), IsPersistent]),
+    ok.
 
 %% This is only for convenience in REPL debugging.  Get rid of it later.
 wake_up() ->

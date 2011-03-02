@@ -305,15 +305,11 @@ purge(S = #s { queue_name = DbQueueName }) ->
     Result.
 
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
-
 %%----------------------------------------------------------------------------
 %% publish/3 publishes a msg.
 %%
-%% publish/3 creates an Mnesia transaction to run in, and therefore
-%% may not be called from inside another Mnesia transaction.
+%% publish/3 creates a MySQL transaction to run in, and therefore
+%% may not be called from inside another MySQL transaction.
 %%
 %% -spec(publish/3 ::
 %%         (rabbit_types:basic_message(),
@@ -322,28 +318,27 @@ purge(S = #s { queue_name = DbQueueName }) ->
 %%         -> state()).
 
 publish(Msg, Props, S) ->
-    % rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
-    {atomic, Result} =
-        mnesia:transaction(fun () -> RS = publish_state(Msg, Props, false, S),
-                                     save(RS),
-                                     RS
-                           end),
-    % rabbit_log:info("publish ->~n ~p", [Result]),
+    rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    mysql_helper:begin_mysql_transaction(),
+    RS = publish_state(Msg, Props, false, S),
+    save(RS),
+    mysql_helper:commit_mysql_transaction(),
+    rabbit_log:info("publish ->~n ~p", [RS]),
     callback([{Msg, Props}]),
-    Result.
+    RS.
+
 
 %%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
+%%                            THE RUBICON...
 %%#############################################################################
-
 
 %%----------------------------------------------------------------------------
 %% publish_delivered/4 is called after a msg has been passed straight
 %% out to a client because the queue is empty. We update all state
 %% (e.g., next_seq_id) as if we had in fact handled the msg.
 %%
-%% publish_delivered/4 creates an Mnesia transaction to run in, and
-%% therefore may not be called from inside another Mnesia transaction.
+%% publish_delivered/4 creates a MySQL transaction to run in, and
+%% therefore may not be called from inside another MySQL transaction.
 %%
 %% -spec(publish_delivered/4 :: (true, rabbit_types:basic_message(),
 %%                               rabbit_types:message_properties(), state())
@@ -353,16 +348,17 @@ publish(Msg, Props, S) ->
 %%                              -> {undefined, state()}).
 
 publish_delivered(false, Msg, Props, S) ->
-    % rabbit_log:info("publish_delivered(false,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    rabbit_log:info("publish_delivered(false,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     Result = {undefined, S},
-    % rabbit_log:info("publish_delivered ->~n ~p", [Result]),
+    rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     callback([{Msg, Props}]),
     Result;
 publish_delivered(true,
                   Msg,
                   Props,
                   S = #s { next_seq_id = SeqId }) ->
-    % rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->",
+                    [Msg, Props, S]),
     %% {atomic, Result} =
     %%     mnesia:transaction(
     %%       fun () ->
@@ -376,6 +372,12 @@ publish_delivered(true,
     %% callback([{Msg, Props}]),
     %% Result.
     yo_mama_bogus_result.
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
+
+
+
 
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops msgs from the head of the queue while there are
@@ -757,10 +759,10 @@ publish_state(Msg,
               IsDelivered,
               S = #s { queue_name = DbQueueName,
                        next_seq_id = SeqId }) ->
-    %% M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
-    %% mnesia:write(QTable, #q_record { out_id = OutId, m = M }, 'write'),
-    %% S #s { next_seq_id = SeqId + 1, next_out_id = OutId + 1 }.
-    yo_mama_bogus_result.
+    IsPersistent = Msg#'basic_message'.is_persistent,
+    M = (m(Msg, SeqId, Props)) #m { is_delivered = IsDelivered },
+    mysql_helper:write_message_to_q(DbQueueName, M, IsPersistent),
+    S #s { next_seq_id = SeqId + 1}.
 
 -spec(internal_ack/2 :: ([seq_id()], s()) -> s()).
 
