@@ -602,13 +602,12 @@ len(S = #s { queue_name = DbQueueName }) ->
 %%
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
-is_empty(#s { queue_name = DbQueueName }) ->
-    %% % rabbit_log:info("is_empty(~n ~p) ->", [S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(fun () -> 0 == length(mnesia:all_keys(QTable)) end),
-    %% % rabbit_log:info("is_empty ->~n ~p", [Result]),
-    %% Result.
-    yo_mama_bogus_result.
+is_empty(S = #s { queue_name = DbQueueName }) ->
+    rabbit_log:info("is_empty(~n ~p) ->", [S]),
+    Result = (0 == mysql_helper:count_rows_for_queue(q, DbQueueName)),
+    rabbit_log:info("is_empty ->~n ~p", [Result]),
+    Result.
+
 
 %%----------------------------------------------------------------------------
 %% set_ram_duration_target informs us that the target is to have no
