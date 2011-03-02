@@ -21,8 +21,8 @@ b { color: black; font-weight: normal; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
-table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 5em; width: auto; }
-table.list th, table.list td { vertical-align: top; }
+table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
+table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto; }
 
 table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1em; }
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
