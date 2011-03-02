@@ -682,35 +682,6 @@ status(#s { queue_name = DbQueueName,
 %% Monadic helper functions for inside transactions.
 %% ----------------------------------------------------------------------------
 
--spec create_table(atom(), atom(), atom(), [atom()]) -> ok.
-
-create_table(Table, RecordName, Type, Attributes) ->
-    case mnesia:create_table(Table, [{record_name, RecordName},
-                                     {type, Type},
-                                     {attributes, Attributes},
-                                     {ram_copies, [node()]}]) of
-        {atomic, ok} -> ok;
-        {aborted, {already_exists, Table}} ->
-            RecordName = mnesia:table_info(Table, record_name),
-            Type = mnesia:table_info(Table, type),
-            Attributes = mnesia:table_info(Table, attributes),
-            ok
-    end.
-
-%% Like mnesia:clear_table, but within an Mnesia transaction.
-
-%% BUG: The write-set of the transaction may be huge if the table is
-%% huge. Then again, this might not bother Mnesia.
-
--spec clear_table(atom()) -> ok.
-
-clear_table(Table) ->
-    case mnesia:first(Table) of
-        '$end_of_table' -> ok;
-        Key -> mnesia:delete(Table, Key, 'write'),
-               clear_table(Table)
-        end.
-
 %% internal_fetch/2 fetches the next msg, if any, inside an Mnesia
 %% transaction, generating a pending ack as necessary.
 
