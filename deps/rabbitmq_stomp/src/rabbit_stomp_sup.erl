@@ -100,6 +100,6 @@ start_client(Sock, SockTransform) ->
 start_client(Sock) ->
     start_client(Sock, fun(S) -> {ok, S} end).
 
-start_ssl_client(Sock, SslOpts) ->
+start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, rabbit_networking:ssl_transform_fun(SslOpts)).
 
