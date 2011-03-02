@@ -14,6 +14,7 @@ Be smarter about bind (for efficiency)
 Be even smarter about unbind (for efficiency)
 Handle user-id somehow
 Configurable queue lifetime / prefetch count / heartbeat(?)
+Status reporting ala shovel
 
 Useful
 ------
@@ -23,11 +24,11 @@ Allow args passthrough to support e.g. headers type.
 Think about when we forward - partly connected graph of brokers/exchanges.
    Cycle detection is not enough (it's certainly a start though).
    Introduce outgoing federation exchange at the upstream end to do filtering.
+Plug in to mgmt somehow
 
 Later
 -----
 
-Message transformation (e.g. transient to persistent)?
 Add / remove upstreams dynamically
 Automated federate-all-exchanges mode
 Figure out if there's a more efficient way to make e2e work with this.

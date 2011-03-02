@@ -1,4 +1,11 @@
+WARNING
+=======
+
 This is all very experimental. You have been warned.
+
+Significant limitation: rabbitmq-federation is not compatible with
+clustering. *Do not deploy it in a cluster*. Obviously we'll fix this
+at some point.
 
 
 Purpose
