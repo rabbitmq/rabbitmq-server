@@ -38,7 +38,8 @@ stop(_State) ->
 %%----------------------------------------------------------------------------
 
 declare_exchange(Props) ->
-    {ok, Conn} = amqp_connection:start(direct),
+    {ok, Conn} = amqp_connection:start(direct,
+                                       rabbit_federation_util:local_params()),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(
       Ch, #'exchange.declare'{

@@ -19,7 +19,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([parse_uri/1, purpose_arg/0, has_purpose_arg/1, params_from_uri/1]).
+-export([parse_uri/1, purpose_arg/0, has_purpose_arg/1, params_from_uri/1,
+         local_params/0]).
 
 parse_uri(URI) ->
     case uri_parser:parse(
@@ -46,6 +47,14 @@ has_purpose_arg(X) ->
     #exchange{arguments = Args} = rabbit_exchange:lookup_or_die(X),
     rabbit_misc:table_lookup(Args, <<"x-purpose">>) ==
         {longstr, <<"federation">>}.
+
+%%----------------------------------------------------------------------------
+
+local_params() ->
+    {ok, U} = application:get_env(rabbit_federation, local_username),
+    {ok, P} = application:get_env(rabbit_federation, local_password),
+    #amqp_params{username = list_to_binary(U),
+                 password = list_to_binary(P)}.
 
 %%----------------------------------------------------------------------------
 

@@ -83,7 +83,8 @@ handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
-    {ok, DConn} = amqp_connection:start(direct),
+    {ok, DConn} = amqp_connection:start(direct,
+                                        rabbit_federation_util:local_params()),
     {ok, DCh} = amqp_connection:open_channel(DConn),
     #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(DCh, self()),

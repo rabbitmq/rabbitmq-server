@@ -103,7 +103,9 @@ A reasonably verbose static configuration might look like:
        {keyfile,              "/path/to/key.pem"},
        {verify,               verify_peer},
        {fail_if_no_peer_cert, true}
-     ]}
+     ]},
+     {local_username, "myusername"},
+     {local_password, "secret"}
    ]
   }
 
@@ -159,6 +161,8 @@ queue_expires
 The ssl_options parameter specifies how to make client SSL
 connections. See the Erlang client documentation for more details.
 
+The local_username and local_password parameters specify how to
+connect to the local broker. Both are mandatory.
 
 Declaring Over AMQP
 ===================
