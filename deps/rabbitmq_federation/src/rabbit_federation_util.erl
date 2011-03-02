@@ -21,7 +21,7 @@
 -export([parse_uri/1, purpose_arg/0, has_purpose_arg/1]).
 
 parse_uri(URI) ->
-    case rabbit_federation_uri_parser:parse(
+    case uri_parser:parse(
            binary_to_list(URI), [{host, undefined}, {path, "/"},
                                  {port, 5672},      {'query', []}]) of
         {error, _} = E ->

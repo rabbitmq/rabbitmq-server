@@ -3,6 +3,11 @@ WARNING
 
 This is all very experimental. You have been warned.
 
+You need branch bug22953 of rabbitmq-server.
+
+Generic build instructions are at:
+        http://www.rabbitmq.com/plugin-development.html
+
 Significant limitation: rabbitmq-federation is not compatible with
 clustering. *Do not deploy it in a cluster*. Obviously we'll fix this
 at some point.
