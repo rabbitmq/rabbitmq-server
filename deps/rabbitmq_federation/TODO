@@ -1,7 +1,12 @@
+Critical
+--------
+
+Remove URIs from configuration
+Handle non-guest connections locally
+
 Important
 ---------
 
-Remove URIs from configuration
 Remove that DETS table
   Fix in cluster
 Be smarter about bind (for efficiency)
