@@ -238,8 +238,8 @@ init(QueueName, IsDurable, Recover) ->
                                  n_record,
                                  record_info(fields, n_record)),
     NextSeqId = case NRecs of
-                    []                                      -> 0;
-                    [#n_record{ next_seq_id = NextSeqId0 }] -> NextSeqId0
+                    []                                  -> 0;
+                    [#n_record{next_seq_id=NextSeqId0}] -> NextSeqId0
                 end,
     RS = #s { queue_name  = DbQueueName,
               next_seq_id = NextSeqId,

@@ -69,6 +69,8 @@ prepare_mysql_statements() ->
                   {delete_q_stmt,<<"DELETE FROM q WHERE queue_name = ?">>},
                   {delete_p_stmt,<<"DELETE FROM p WHERE queue_name = ?">>},
                   {delete_n_stmt,<<"DELETE FROM n WHERE queue_name = ?">>},
+                  {delete_non_persistent_msgs_stmt,
+                   <<"DELETE FROM q WHERE queue_name = ? AND is_persistent = FALSE">>},
                   {read_n_stmt,  <<"SELECT * FROM n WHERE queue_name = ?">>},
                   {put_n_stmt,   <<"REPLACE INTO n(queue_name, next_seq_id) VALUES(?,?)">>} ],
 
@@ -115,5 +117,7 @@ write_n_record(DbQueueName, NextSeqId) ->
 -spec delete_nonpersistent_msgs(string()) -> ok.
 
 delete_nonpersistent_msgs(DbQueueName) ->
-    
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   delete_non_persistent_msgs_stmt,
+                   [DbQueueName]),
     ok.

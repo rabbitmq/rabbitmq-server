@@ -11,6 +11,8 @@ USE rabbit_mysql_queues;
 -- Create Tables and Indices...
 -- =============================================================================
 
+
+
 -- Records in the 'q' table are messages, indexed by 'id', which corresponds
 -- to the 'out_id' notion in rabbit_mnesia_queue.  We push new messages with
 -- a new auto-incrementing id, and pop the message with the lowest id.  We
@@ -20,6 +22,7 @@ CREATE TABLE IF NOT EXISTS
              q (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 queue_name VARCHAR(256) NOT NULL,-- (BUGBUG: max size?)
                 m MEDIUMBLOB NOT NULL, -- Max size L+3 bytes w/ L<2^(24)
+                is_persistent BOOLEAN NOT NULL, -- Pushes work into MySQL
                 PRIMARY KEY(id))
              ENGINE=InnoDB;
 CREATE INDEX q_name_index ON q(queue_name);
