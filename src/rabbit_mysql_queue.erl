@@ -247,54 +247,44 @@ init(QueueName, IsDurable, Recover) ->
     Result.
 
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
-
 %%----------------------------------------------------------------------------
 %% terminate/1 deletes all of a queue's pending acks, prior to
 %% shutdown.
 %%
-%%
-%% BUGBUG: [Wrong comment]terminate/1 creates a Mnesia transaction to
-%% run in, and therefore may not be called from inside another Mnesia
-%% transaction.
+%% terminate/1 creates a MySQL transaction to run in, and therefore
+%% may not be called from inside another MySQL transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S = #s { queue_name = DbQueueName}) ->
     rabbit_log:info("terminate(~n ~p) ->", [S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(fun () -> clear_table(PTable), S end),
-    %% mnesia:dump_tables([QTable, PTable, NTable]),
-    % rabbit_log:info("terminate ->~n ~p", [Result]),
-    %% Result.
-    yo_mama_bogus_result.
+    mysql_helper:begin_mysql_transaction(),
+    mysql_helper:clear_table(p, DbQueueName),
+    mysql_helper:commit_mysql_transaction(),
+    rabbit_log:info("terminate ->~n ~p", [S]),
+    S.
 
-%%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
-%%#############################################################################
 
 %%----------------------------------------------------------------------------
 %% delete_and_terminate/1 deletes all of a queue's enqueued msgs and
 %% pending acks, prior to shutdown.
 %%
-%% delete_and_terminate/1 creates an Mnesia transaction to run in, and
-%% therefore may not be called from inside another Mnesia transaction.
+%% delete_and_terminate/1 creates a MySQL transaction to run in, and
+%% therefore may not be called from inside another MySQL transaction.
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
 delete_and_terminate(S = #s { queue_name = DbQueueName }) ->
-    % rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(fun () -> clear_table(QTable),
-    %%                                  clear_table(PTable),
-    %%                                  S
-    %%                        end),
-    %% mnesia:dump_tables([QTable, PTable, NTable]),
-    %% % rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
-    %% Result.
-    yo_mama_bogus_result.
+    rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
+    mysql_helper:begin_mysql_transaction(),
+    mysql_helper:clear_table(q, DbQueueName),
+    mysql_helper:clear_table(p, DbQueueName),
+    mysql_helper:commit_mysql_transaction(),
+    rabbit_log:info("delete_and_terminate ->~n ~p", [S]).
+
+%%#############################################################################
+%%                            THE RUBICON...
+%%#############################################################################
 
 %%----------------------------------------------------------------------------
 %% purge/1 deletes all of queue's enqueued msgs, generating pending
@@ -315,6 +305,12 @@ purge(S = #s { queue_name = DbQueueName }) ->
     %% % rabbit_log:info("purge ->~n ~p", [Result]),
     %% Result.
     yo_mama_bogus_result.
+
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
+
+
 
 %%----------------------------------------------------------------------------
 %% publish/3 publishes a msg.

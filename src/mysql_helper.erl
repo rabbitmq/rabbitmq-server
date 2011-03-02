@@ -72,8 +72,11 @@ prepare_mysql_statements() ->
                   {delete_non_persistent_msgs_stmt,
                    <<"DELETE FROM q WHERE queue_name = ? AND is_persistent = FALSE">>},
                   {read_n_stmt,  <<"SELECT * FROM n WHERE queue_name = ?">>},
-                  {put_n_stmt,   <<"REPLACE INTO n(queue_name, next_seq_id) VALUES(?,?)">>} ],
-
+                  {put_n_stmt,   <<"REPLACE INTO n(queue_name, next_seq_id) VALUES(?,?)">>},
+                  {clear_p_stmt,
+                   <<"DELETE FROM p WHERE queue_name = ?">>},
+                  {clear_q_stmt,
+                   <<"DELETE FROM q WHERE queue_name = ?">>}],
     [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
 
 begin_mysql_transaction() ->
@@ -122,3 +125,23 @@ delete_nonpersistent_msgs(DbQueueName) ->
                    delete_non_persistent_msgs_stmt,
                    [DbQueueName]),
     ok.
+
+%% Clear the pending acks table of pending acks associated with the
+%% indicated queue.  May be called inside a MySQL transaction.
+-spec clear_table(atom(), string()) -> ok.
+
+clear_table(TableType, DbQueueName) ->
+    case TableType of
+        p -> emysql:execute(?RABBIT_DB_POOL_NAME,
+                            clear_p_stmt,
+                            [DbQueueName]);
+        q -> emysql:execute(?RABBIT_DB_POOL_NAME,
+                            clear_q_stmt,
+                            [DbQueueName])
+    end,
+    ok.
+
+%% This is only for convenience in REPL debugging.  Get rid of it later.
+wake_up() ->
+    ensure_connection_pool(),
+    prepare_mysql_statements().
