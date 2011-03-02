@@ -29,7 +29,8 @@
 
 -define(ROUTING_HEADER, <<"x-forwarding">>).
 
--record(state, {connection,
+-record(state, {vhost,
+                connection,
                 channel,
                 queue,
                 exchange,
@@ -86,7 +87,9 @@ handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
     #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(DCh, self()),
     erlang:monitor(process, DCh),
-    X = proplists:get_value(exchange, rabbit_federation_util:parse_uri(URI)),
+    Props = rabbit_federation_util:parse_uri(URI),
+    X = proplists:get_value(exchange, Props),
+    VHost = proplists:get_value(vhost, Props),
     Params = params_from_uri(URI),
     {ok, Conn} = amqp_connection:start(network, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -96,6 +99,7 @@ handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
                    downstream_exchange   = DownstreamX,
                    downstream_durable    = Durable,
                    uri                   = URI,
+                   vhost                 = VHost,
                    connection            = Conn,
                    channel               = Ch,
                    exchange              = X,
@@ -178,9 +182,10 @@ add_binding(#binding{key = Key, args = Args},
 consume_from_upstream_queue(State = #state{connection          = Conn,
                                            channel             = Ch,
                                            exchange            = X,
+                                           vhost               = VHost,
                                            downstream_exchange = DownstreamX,
                                            downstream_durable  = Durable}) ->
-    Q = upstream_queue_name(X, DownstreamX),
+    Q = upstream_queue_name(X, VHost, DownstreamX),
     case Durable of
         false -> delete_upstream_queue(Conn, Q);
         _     -> ok
@@ -190,13 +195,15 @@ consume_from_upstream_queue(State = #state{connection          = Conn,
         queue     = Q,
         durable   = true,
         %% TODO: The x-expires should be configurable.
-        arguments = [{<<"x-expires">>, long, 86400000}] }),
+        arguments = [{<<"x-expires">>, long, 86400000},
+                     rabbit_federation_util:purpose_arg()]}),
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),
     State#state{queue = Q}.
 
-ensure_upstream_bindings(State = #state{connection          = Conn,
+ensure_upstream_bindings(State = #state{vhost               = VHost,
+                                        connection          = Conn,
                                         channel             = Ch,
                                         uri                 = URI,
                                         exchange            = X,
@@ -207,7 +214,7 @@ ensure_upstream_bindings(State = #state{connection          = Conn,
                  <<"A">> -> <<"B">>;
                  <<"B">> -> <<"A">>
              end,
-    InternalX = upstream_exchange_name(X, DownstreamX, Suffix),
+    InternalX = upstream_exchange_name(X, VHost, DownstreamX, Suffix),
     delete_upstream_exchange(Conn, InternalX),
     amqp_channel:call(
       Ch, #'exchange.declare'{
@@ -216,24 +223,31 @@ ensure_upstream_bindings(State = #state{connection          = Conn,
         durable     = true,
         internal    = true,
         auto_delete = true,
-        arguments   = []}),
+        arguments   = [rabbit_federation_util:purpose_arg()]}),
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
     State1 = State#state{queue = Q, internal_exchange = InternalX},
     [add_binding(B, State1) ||
         B <- rabbit_binding:list_for_source(DownstreamX)],
     rabbit_federation_db:set_active_suffix(DownstreamX, URI, Suffix),
-    OldInternalX = upstream_exchange_name(X, DownstreamX, OldSuffix),
+    OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
     State1.
 
-upstream_queue_name(X, #resource{name         = DownstreamName,
-                                 virtual_host = DownstreamVHost}) ->
+upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
+                                        virtual_host = DownstreamVHost}) ->
     Node = list_to_binary(atom_to_list(node())),
-    <<"federation: ", X/binary, " -> ", Node/binary,
-      "-", DownstreamVHost/binary, "-", DownstreamName/binary>>.
+    DownstreamPart = case DownstreamVHost of
+                         VHost -> case DownstreamName of
+                                      X -> <<"">>;
+                                      _ -> <<":", DownstreamName/binary>>
+                                  end;
+                         _     -> <<":", DownstreamVHost/binary,
+                                    ":", DownstreamName/binary>>
+                     end,
+    <<X/binary, " ⇨ ", Node/binary, DownstreamPart/binary>>.
 
-upstream_exchange_name(X, DownstreamX, Suffix) ->
-    Name = upstream_queue_name(X, DownstreamX),
+upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
+    Name = upstream_queue_name(X, VHost, DownstreamX),
     <<Name/binary, " ", Suffix/binary>>.
 
 delete_upstream_queue(Conn, Q) ->

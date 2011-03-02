@@ -113,9 +113,8 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 
 %%----------------------------------------------------------------------------
 
-is_federation_exchange(#resource{ name = <<"federation: ", _Rest/binary>>,
-                                  kind = exchange }) ->
-    true;
+is_federation_exchange(Name = #resource{kind = exchange}) ->
+    rabbit_federation_util:has_purpose_arg(Name);
 is_federation_exchange(_) ->
     false.
 

@@ -16,7 +16,9 @@
 
 -module(rabbit_federation_util).
 
--export([parse_uri/1]).
+-include_lib("rabbit_common/include/rabbit.hrl").
+
+-export([parse_uri/1, purpose_arg/0, has_purpose_arg/1]).
 
 parse_uri(URI) ->
     case uri_parser:parse(
@@ -35,3 +37,11 @@ parse_uri(URI) ->
                     {error, path_must_have_two_components}
             end
     end.
+
+purpose_arg() ->
+    {<<"x-purpose">>, longstr, <<"federation">>}.
+
+has_purpose_arg(X) ->
+    #exchange{arguments = Args} = rabbit_exchange:lookup_or_die(X),
+    rabbit_misc:table_lookup(Args, <<"x-purpose">>) ==
+        {longstr, <<"federation">>}.
