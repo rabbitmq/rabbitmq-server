@@ -201,11 +201,6 @@ start(_DurableQueues) ->
 stop() -> ok.
 
 
-
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
-
 %%----------------------------------------------------------------------------
 %% init/3 creates one backing queue, returning its state. Names are
 %% local to the vhost, and must be unique.
@@ -217,7 +212,7 @@ stop() -> ok.
 %%         (rabbit_amqqueue:name(), is_durable(), attempt_recovery())
 %%         -> state()).
 %%
-%% BUGBUG:  Error checking...
+%% BUGBUG:  Error checking needs to be treated coherently.
 init(QueueName, IsDurable, Recover) ->
     rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->",
                     [QueueName, IsDurable, Recover]),
@@ -251,28 +246,34 @@ init(QueueName, IsDurable, Recover) ->
     callback([]),
     Result.
 
-%%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
-%%#############################################################################
 
+%%#############################################################################
+%%                            THE RUBICON...
+%%#############################################################################
 
 %%----------------------------------------------------------------------------
 %% terminate/1 deletes all of a queue's pending acks, prior to
 %% shutdown.
 %%
-%% terminate/1 creates an Mnesia transaction to run in, and therefore
-%% may not be called from inside another Mnesia transaction.
+%%
+%% BUGBUG: [Wrong comment]terminate/1 creates a Mnesia transaction to
+%% run in, and therefore may not be called from inside another Mnesia
+%% transaction.
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S = #s { queue_name = DbQueueName}) ->
-    %% % rabbit_log:info("terminate(~n ~p) ->", [S]),
+    rabbit_log:info("terminate(~n ~p) ->", [S]),
     %% {atomic, Result} =
     %%     mnesia:transaction(fun () -> clear_table(PTable), S end),
     %% mnesia:dump_tables([QTable, PTable, NTable]),
-    %% % rabbit_log:info("terminate ->~n ~p", [Result]),
+    % rabbit_log:info("terminate ->~n ~p", [Result]),
     %% Result.
     yo_mama_bogus_result.
+
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
 
 %%----------------------------------------------------------------------------
 %% delete_and_terminate/1 deletes all of a queue's enqueued msgs and
@@ -720,23 +721,6 @@ clear_table(Table) ->
                clear_table(Table)
         end.
 
-%% Delete non-persistent msgs after a restart.
-
--spec delete_nonpersistent_msgs(atom()) -> ok.
-
-delete_nonpersistent_msgs(QTable) ->
-    %% lists:foreach(
-    %%   fun (Key) ->
-    %%           [#q_record { out_id = Key, m = M }] =
-    %%               mnesia:read(QTable, Key, 'read'),
-    %%           case M of
-    %%               #m { msg = #basic_message { is_persistent = true }} -> ok;
-    %%               _ -> mnesia:delete(QTable, Key, 'write')
-    %%           end
-    %%   end,
-    %% mnesia:all_keys(QTable)).
-    yo_mama_bogus_result.
-
 %% internal_fetch/2 fetches the next msg, if any, inside an Mnesia
 %% transaction, generating a pending ack as necessary.
 
@@ -949,8 +933,6 @@ callback(Pubs) ->
 
 
 
-
-
 %%-----------------------------------------------------------------------------
 %% Sub-basement of sub-helper functions...
 %%-----------------------------------------------------------------------------
@@ -961,4 +943,3 @@ ensure_app_running(App) ->
         {error, {already_started,App}} -> ok;
         {Result, {Description, App}} -> {Result, {Description, App}}
     end.
-

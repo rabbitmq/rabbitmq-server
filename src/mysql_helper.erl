@@ -113,7 +113,8 @@ write_n_record(DbQueueName, NextSeqId) ->
                                             [DbQueueName, NextSeqId])
     end.
 
-%% Delete non-persistent msgs after a restart.
+%% Delete non-persistent msgs after a restart.  Maybe used within a
+%% MySQL transaction.
 -spec delete_nonpersistent_msgs(string()) -> ok.
 
 delete_nonpersistent_msgs(DbQueueName) ->
