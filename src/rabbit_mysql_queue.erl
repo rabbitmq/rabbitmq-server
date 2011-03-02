@@ -328,10 +328,6 @@ publish(Msg, Props, S) ->
     RS.
 
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
-
 %%----------------------------------------------------------------------------
 %% publish_delivered/4 is called after a msg has been passed straight
 %% out to a client because the queue is empty. We update all state
@@ -356,28 +352,21 @@ publish_delivered(false, Msg, Props, S) ->
 publish_delivered(true,
                   Msg,
                   Props,
-                  S = #s { next_seq_id = SeqId }) ->
+                  S = #s { next_seq_id = SeqId, queue_name = DbQueueName}) ->
     rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->",
                     [Msg, Props, S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(
-    %%       fun () ->
-    %%               add_p((m(Msg, SeqId, Props)) #m { is_delivered = true }, S),
-    %%               RS = S #s { next_seq_id = SeqId + 1,
-    %%                           next_out_id = OutId + 1 },
-    %%               save(RS),
-    %%               {SeqId, RS}
-    %%       end),
-    %% % rabbit_log:info("publish_delivered ->~n ~p", [Result]),
-    %% callback([{Msg, Props}]),
-    %% Result.
-    yo_mama_bogus_result.
+    mysql_helper:begin_mysql_transaction(),
+    mysql_helper:write_message_to_p(DbQueueName, SeqId, Msg),
+    RS = S #s { next_seq_id = SeqId + 1 },
+    save(RS),
+    mysql_helper:commit_mysql_transaction(),
+    callback([{Msg, Props}]),
+    {SeqId,RS}.
+
+
 %%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
+%%                            THE RUBICON...
 %%#############################################################################
-
-
-
 
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops msgs from the head of the queue while there are
@@ -405,6 +394,10 @@ dropwhile(Pred, S) ->
                            end),
     % rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
+
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
 
 %%----------------------------------------------------------------------------
 %% fetch/2 produces the next msg, if any.
@@ -597,9 +590,7 @@ requeue(SeqIds, PropsF, S) ->
 
 len(S = #s { queue_name = DbQueueName }) ->
     rabbit_log:info("len(~n ~p) ->", [S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(fun () -> length(mnesia:all_keys(QTable)) end),
-    MsgCount = 137,
+    MsgCount = mysql_helper:count_rows_for_queue(q, DbQueueName),
     rabbit_log:info("len ->~n ~p", [MsgCount]),
     MsgCount.
 
@@ -835,9 +826,8 @@ post_pop(true,
 -spec add_p(m(), s()) -> ok.
 
 add_p(M = #m { seq_id = SeqId }, #s { queue_name = DbQueueName }) ->
-    %% mnesia:write(PTable, #p_record { seq_id = SeqId, m = M }, 'write'),
-    %% ok.
-    yo_mama_bogus_result.
+    mysql_helper:write_message_to_p(DbQueueName, SeqId, M),
+    ok.
 
 %% del_ps deletes some number of pending acks from the P table in
 %% Mnesia, applying a (Mnesia transactional) function F after each msg

@@ -172,6 +172,14 @@ write_message_to_q(DbQueueName, Msg, IsPersistent) ->
                    [DbQueueName, term_to_binary(Msg), IsPersistent]),
     ok.
 
+%% BUGBUG:  Since the q table shadows is_persistent for convenience, will
+%%          the pending acks table need to as well?
+write_message_to_p(DbQueueName, SeqId, Msg) ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   insert_p_stmt,
+                   [SeqId, DbQueueName, term_to_binary(Msg)]),
+    ok.
+
 %% This is only for convenience in REPL debugging.  Get rid of it later.
 wake_up() ->
     ensure_connection_pool(),
