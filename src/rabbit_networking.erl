@@ -139,7 +139,7 @@ resolve_family(_,                 F)    -> F.
 
 ensure_ssl() ->
     ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
-    {ok, SslOptsConfig} = application:get_env(ssl_options),
+    {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
 
     % unknown_ca errors are silently ignored prior to R14B unless we
     % supply this verify_fun - remove when at least R14B is required
