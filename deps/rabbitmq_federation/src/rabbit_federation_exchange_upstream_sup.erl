@@ -19,6 +19,7 @@
 -behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_federation.hrl").
 
 %% Supervises the upstreams for an exchange.
 
@@ -39,11 +40,14 @@ call_all(Sup, Msg) ->
 
 init({URIs, DownstreamX, Durable}) ->
     rabbit_federation_db:set_sup_for_exchange(DownstreamX, self()),
-    Specs = [{URI,
-              {rabbit_federation_exchange_upstream, start_link,
-               [{URI, DownstreamX, Durable}]},
-              {transient, 1},
-              ?MAX_WAIT, worker,
-              [rabbit_federation_exchange_upstream]} ||
-                URI <- URIs],
+    Specs = [spec(URI, DownstreamX, Durable) || URI <- URIs],
     {ok, {{one_for_one, 2, 2}, Specs}}.
+
+spec(URI, DownstreamX, Durable) ->
+    #params{reconnect_delay = Delay} =
+        rabbit_federation_util:params_from_uri(URI),
+    {URI, {rabbit_federation_exchange_upstream, start_link,
+           [{URI, DownstreamX, Durable}]},
+     {transient, Delay},
+     ?MAX_WAIT, worker,
+     [rabbit_federation_exchange_upstream]}.

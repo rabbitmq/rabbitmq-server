@@ -77,7 +77,7 @@ or declared dynamically over AMQP.
 Static Configuration
 ====================
 
-Static configuration might look like:
+A reasonably verbose static configuration might look like:
 
   {rabbit_federation,
    [ {exchanges, [[{exchange,    "my-exchange"},
@@ -88,10 +88,14 @@ Static configuration might look like:
                    {internal,    false},
                    {upstreams,   ["amqps://upstream-server/%2f/my-exchange"]}]
                  ]},
-     {brokers, [[{host,     "upstream-server"},
-                 {scheme,   "amqps"},
-                 {username, "alternate"},
-                 {password, "alternate"}]
+     {brokers, [[{host,            "upstream-server"},
+                 {scheme,          "amqps"},
+                 {username,        "myusername"},
+                 {password,        "secret"},
+                 {prefetch_count,  10},
+                 {reconnect_delay, 5},
+                 {heartbeat,       10},
+                 {queue_expires,   30}]
                ]},
      {ssl_options,
       [{cacertfile,           "/path/to/cacert.pem"},
@@ -110,15 +114,50 @@ Most of the rest looks like an exchange.declare, but note that *the
 type parameter must match the type of the upstream exchanges for
 routing to work at all sensibly*.
 
-The brokers list provides information on how to connect. If the broker
-referenced in a URI cannot be found in the brokers list, a non-SSL
-connection with guest/guest login is assumed.
+The brokers list provides information on how to connect to brokers
+mentioned in the upstreams list. It can match on the following properties:
 
-The ssl_options parameter specifies how to make client SSL connections.
+host
+  - hostname to connect to
 
-An entry in the brokers list can specify {mechanism, 'EXTERNAL'}
-rather than username and password if the upstream broker has
-EXTERNAL SASL authentication support (e.g. rabbitmq-auth-mechanism-ssl).
+scheme
+  - "amqp" or "amqps"
+
+vhost
+  - if present, distinguish between different sets of broker
+    properties for different virtual hosts on the same broker
+
+And can contain the following options:
+
+username
+  - user to connect as. Default is "guest".
+
+password
+  - password to use. Default is "guest".
+
+mechanism
+  - SASL mechanism to use. Either default (to use by default PLAIN or
+    AMQPLAIN), or 'EXTERNAL' to use SASL EXTERNAL authentication
+    (e.g. rabbitmq-auth-mechanism-ssl)
+
+prefetch_count
+  - maximum number of unacknowledged messages in flight per link. Default
+    is 100.
+
+reconnect_delay
+  - time in seconds to wait to reconnect to the broker after being
+    disconnected. Default is 1.
+
+heartbeat
+  - AMQP heartbeat interval (in seconds) on the connection, or none. Default
+    is none.
+
+queue_expires
+  - How long to keep the upstream queue around (and collecting
+    messages) when disconnected, in seconds. Default is 1800 (half an hour).
+
+The ssl_options parameter specifies how to make client SSL
+connections. See the Erlang client documentation for more details.
 
 
 Declaring Over AMQP
@@ -126,13 +165,13 @@ Declaring Over AMQP
 
 This is less common, but in case you want to do this:
 
- * Declare it with type "x-federation".
+ * Declare the downstream with type "x-federation".
 
  * Give it arguments "type" and "upstreams". "type" should refer to
    its backing type; the type of the upstream exchanges. "upstreams"
    should be an array of URIs.
 
- * Authentication and SSL information will still be taken from the
+ * Connection information and SSL parameters will still be taken from the
    static configuration.
 
 

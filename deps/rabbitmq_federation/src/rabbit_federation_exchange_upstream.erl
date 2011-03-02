@@ -17,6 +17,7 @@
 -module(rabbit_federation_exchange_upstream).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_federation.hrl").
 
 -behaviour(gen_server2).
 
@@ -90,8 +91,8 @@ handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
     Props = rabbit_federation_util:parse_uri(URI),
     X = proplists:get_value(exchange, Props),
     VHost = proplists:get_value(vhost, Props),
-    Params = params_from_uri(URI),
-    {ok, Conn} = amqp_connection:start(network, Params),
+    Params = rabbit_federation_util:params_from_uri(URI),
+    {ok, Conn} = amqp_connection:start(network, Params#params.connection),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     erlang:monitor(process, Ch),
     State = #state{downstream_connection = DConn,
@@ -104,7 +105,7 @@ handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
                    channel               = Ch,
                    exchange              = X,
                    unacked               = gb_trees:empty()},
-    State1 = consume_from_upstream_queue(State),
+    State1 = consume_from_upstream_queue(Params, State),
     State2 = ensure_upstream_bindings(State1),
     {noreply, State2};
 
@@ -179,7 +180,9 @@ add_binding(#binding{key = Key, args = Args},
 
 %%----------------------------------------------------------------------------
 
-consume_from_upstream_queue(State = #state{connection          = Conn,
+consume_from_upstream_queue(#params{prefetch_count = PrefetchCount,
+                                    queue_expires  = Expiry},
+                            State = #state{connection          = Conn,
                                            channel             = Ch,
                                            exchange            = X,
                                            vhost               = VHost,
@@ -194,9 +197,9 @@ consume_from_upstream_queue(State = #state{connection          = Conn,
       Ch, #'queue.declare'{
         queue     = Q,
         durable   = true,
-        %% TODO: The x-expires should be configurable.
-        arguments = [{<<"x-expires">>, long, 86400000},
+        arguments = [{<<"x-expires">>, long, Expiry * 1000},
                      rabbit_federation_util:purpose_arg()]}),
+    amqp_channel:call(Ch, #'basic.qos'{prefetch_count = PrefetchCount}),
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),
@@ -304,58 +307,6 @@ ensure_closed(Conn, Ch) ->
 
 ensure_closed(Ch) ->
     catch amqp_channel:close(Ch).
-
-%%----------------------------------------------------------------------------
-
-params_from_uri(ExchangeURI) ->
-    Props = rabbit_federation_util:parse_uri(ExchangeURI),
-    Params = #amqp_params{host         = proplists:get_value(host, Props),
-                          port         = proplists:get_value(port, Props),
-                          virtual_host = proplists:get_value(vhost, Props)},
-    {ok, Brokers} = application:get_env(rabbit_federation, brokers),
-    Usable = [Merged || Broker <- Brokers,
-                        Merged <- [merge(Broker, Props)],
-                        all_match(Broker, Merged)],
-    case Usable of
-        []    -> Params;
-        [B|_] -> params_from_broker(Params, B)
-    end.
-
-params_from_broker(P, B) ->
-    P1 = P#amqp_params{
-           username = list_to_binary(proplists:get_value(username, B, "guest")),
-           password = list_to_binary(proplists:get_value(password, B, "guest"))
-          },
-    P2 = case proplists:get_value(scheme, B, "amqp") of
-             "amqp"  -> P1;
-             "amqps" -> {ok, Opts} = application:get_env(
-                                       rabbit_federation, ssl_options),
-                        P1#amqp_params{ssl_options = Opts,
-                                       port        = 5671}
-         end,
-    case proplists:get_value(mechanism, B, 'PLAIN') of
-        'PLAIN'    -> P2;
-        %% TODO it would be nice to support arbitrary mechanisms here.
-        'EXTERNAL' -> P2#amqp_params{auth_mechanisms =
-                                         [fun amqp_auth_mechanisms:external/3]};
-        M          -> exit({unsupported_mechanism, M})
-    end.
-
-%% For all the props in Props1, does Props2 match?
-all_match(Props1, Props2) ->
-    lists:all(fun ({K, V}) ->
-                      proplists:get_value(K, Props2) == V
-              end, [KV || KV <- Props1]).
-
-%% Add elements of Props1 which are not in Props2 - i.e. Props2 wins in event
-%% of a clash
-merge(Props1, Props2) ->
-    lists:foldl(fun({K, V}, P) ->
-                        case proplists:is_defined(K, Props2) of
-                            true  -> P;
-                            false -> [{K, V}|P]
-                        end
-                end, Props2, Props1).
 
 %%----------------------------------------------------------------------------
 
