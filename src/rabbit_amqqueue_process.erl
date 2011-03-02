@@ -33,7 +33,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
--export([init_with_backing_queue_state/6]).
+-export([init_with_backing_queue_state/7]).
 
 % Queue's state
 -record(q, {q,
@@ -118,7 +118,7 @@ init(Q) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
-                              RateTRef, AckTags, Deliveries) ->
+                              RateTRef, AckTags, Deliveries, GTC) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     case Owner of
         none -> ok;
@@ -140,7 +140,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                    expiry_timer_ref    = undefined,
                    ttl                 = undefined,
                    stats_timer         = rabbit_event:init_stats_timer(),
-                   guid_to_channel     = dict:new()})),
+                   guid_to_channel     = GTC})),
     lists:foldl(
       fun (Delivery, StateN) ->
               {_Delivered, StateN1} = deliver_or_enqueue(Delivery, StateN),

@@ -133,6 +133,8 @@ handle_call({gm_deaths, Deaths}, From,
                              master_node = MNode }) ->
     rabbit_log:info("Slave ~p saw deaths ~p for ~s~n",
                     [self(), Deaths, rabbit_misc:rs(QueueName)]),
+    %% The GM has told us about deaths, which means we're not going to
+    %% receive any more messages from GM
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
         {ok, Pid} when node(Pid) =:= MNode ->
             reply(ok, State);
@@ -332,28 +334,31 @@ promote_me(From, #state { q                   = Q,
                           backing_queue_state = BQS,
                           rate_timer_ref      = RateTRef,
                           sender_queues       = SQ,
-                          guid_ack            = GA }) ->
+                          guid_ack            = GA,
+                          guid_status         = GS }) ->
     rabbit_log:info("Promoting slave ~p for ~s~n",
                     [self(), rabbit_misc:rs(Q #amqqueue.name)]),
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, GM),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
     ok = gm:confirmed_broadcast(GM, heartbeat),
-    %% TODO fix up seen
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, sets:new()),
+                    CPid, BQ, BQS, GM, GS),
     %% We have to do the requeue via this init because otherwise we
     %% don't have access to the relevent MsgPropsFun. Also, we are
     %% already in mnesia as the master queue pid. Thus we cannot just
     %% publish stuff by sending it to ourself - we must pass it
     %% through to this init, otherwise we can violate ordering
     %% constraints.
+    GTC = dict:from_list(
+            [{Guid, {ChPid, MsgSeqNo}} ||
+                {Guid, {published, ChPid, MsgSeqNo}} <- dict:to_list(GS)]),
     AckTags = [AckTag || {_Guid, AckTag} <- dict:to_list(GA)],
     Deliveries = lists:append([queue:to_list(PubQ)
                                || {_ChPid, PubQ} <- dict:to_list(SQ)]),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q, rabbit_mirror_queue_master, MasterState, RateTRef,
-                   AckTags, Deliveries),
+                   AckTags, Deliveries, GTC),
     {become, rabbit_amqqueue_process, QueueState, hibernate}.
 
 noreply(State) ->
