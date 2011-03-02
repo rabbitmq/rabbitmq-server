@@ -23,7 +23,6 @@ package: clean
 	cp -r debian $(UNPACKED_DIR)
 	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
 	sed -i \
-	    -e 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/default/rabbitmq|' \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-server.init
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \

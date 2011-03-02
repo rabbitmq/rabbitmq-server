@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT,          100).
--define(SYNC_INTERVAL,                 5). %% milliseconds
+-define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
 -define(BASE_MESSAGE_PROPERTIES,
@@ -122,6 +122,8 @@ terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
 terminate(_Reason,       State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
+                               rabbit_event:notify(
+                                 queue_deleted, [{pid, self()}]),
                                BQS1 = BQ:delete_and_terminate(BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
@@ -186,7 +188,6 @@ terminate_shutdown(Fun, State) ->
                               end, BQS, all_ch_record()),
                      [emit_consumer_deleted(Ch, CTag)
                       || {Ch, CTag, _} <- consumers(State1)],
-                     rabbit_event:notify(queue_deleted, [{pid, self()}]),
                      State1#q{backing_queue_state = Fun(BQS1)}
     end.
 
@@ -409,27 +410,22 @@ confirm_messages(Guids, State = #q{guid_to_channel = GTC}) ->
           fun(Guid, {CMs, GTC0}) ->
                   case dict:find(Guid, GTC0) of
                       {ok, {ChPid, MsgSeqNo}} ->
-                          {[{ChPid, MsgSeqNo} | CMs], dict:erase(Guid, GTC0)};
+                          {gb_trees_cons(ChPid, MsgSeqNo, CMs),
+                           dict:erase(Guid, GTC0)};
                       _ ->
                           {CMs, GTC0}
                   end
-          end, {[], GTC}, Guids),
-    case lists:usort(CMs) of
-        [{Ch, MsgSeqNo} | CMs1] ->
-            [rabbit_channel:confirm(ChPid, MsgSeqNos) ||
-                {ChPid, MsgSeqNos} <- group_confirms_by_channel(
-                                        CMs1, [{Ch, [MsgSeqNo]}])];
-        [] ->
-            ok
-    end,
+          end, {gb_trees:empty(), GTC}, Guids),
+    gb_trees:map(fun(ChPid, MsgSeqNos) ->
+                         rabbit_channel:confirm(ChPid, MsgSeqNos)
+                 end, CMs),
     State#q{guid_to_channel = GTC1}.
 
-group_confirms_by_channel([], Acc) ->
-    Acc;
-group_confirms_by_channel([{Ch, Msg1} | CMs], [{Ch, Msgs} | Acc]) ->
-    group_confirms_by_channel(CMs, [{Ch, [Msg1 | Msgs]} | Acc]);
-group_confirms_by_channel([{Ch, Msg1} | CMs], Acc) ->
-    group_confirms_by_channel(CMs, [{Ch, [Msg1]} | Acc]).
+gb_trees_cons(Key, Value, Tree) ->
+    case gb_trees:lookup(Key, Tree) of
+        {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
+        none            -> gb_trees:insert(Key, [Value], Tree)
+    end.
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
     {no_confirm, State};
@@ -657,13 +653,13 @@ message_properties(#q{ttl=TTL}) ->
     #message_properties{expiry = calculate_msg_expiry(TTL)}.
 
 calculate_msg_expiry(undefined) -> undefined;
-calculate_msg_expiry(TTL)       -> now_millis() + (TTL * 1000).
+calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
 
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue = BQ}) ->
-    Now = now_millis(),
+    Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) ->
                      Now > Expiry
@@ -684,7 +680,7 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
-now_millis() -> timer:now_diff(now(), {0,0,0}).
+now_micros() -> timer:now_diff(now(), {0,0,0}).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 

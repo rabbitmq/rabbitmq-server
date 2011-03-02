@@ -28,7 +28,7 @@
 -record(vhost, {virtual_host, dummy}).
 
 -record(connection, {protocol, user, timeout_sec, frame_max, vhost,
-                     client_properties}).
+                     client_properties, capabilities}).
 
 -record(content,
         {class_id,
@@ -54,9 +54,15 @@
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
+-record(topic_trie_edge, {trie_edge, node_id}).
+-record(topic_trie_binding, {trie_binding, value = const}).
+
+-record(trie_edge, {exchange_name, node_id, word}).
+-record(trie_binding, {exchange_name, node_id, destination}).
+
 -record(listener, {node, protocol, host, ip_address, port}).
 
--record(basic_message, {exchange_name, routing_key, content, guid,
+-record(basic_message, {exchange_name, routing_keys = [], content, guid,
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
@@ -80,6 +86,9 @@
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(STATS_INTERVAL,             5000).
+
+-define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
+-define(DELETED_HEADER, <<"BCC">>).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).
