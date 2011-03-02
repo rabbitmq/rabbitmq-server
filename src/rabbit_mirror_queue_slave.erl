@@ -29,40 +29,6 @@
 %%
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
-%%
-%% Thus, we need a queue per sender, and a queue for GM instructions.
-%%
-%% On receipt of a GM group instruction, three things are possible:
-%% 1. The queue of publisher messages is empty. Thus store the GM
-%%    instruction to the instrQ.
-%% 2. The head of the queue of publisher messages has a message that
-%%    matches the GUID of the GM instruction. Remove the message, and
-%%    route appropriately.
-%% 3. The head of the queue of publisher messages has a message that
-%%    does not match the GUID of the GM instruction. Throw away the GM
-%%    instruction: the GM instruction must correspond to a message
-%%    that we'll never receive. If it did not, then before the current
-%%    instruction, we would have received an instruction for the
-%%    message at the head of this queue, thus the head of the queue
-%%    would have been removed and processed.
-%%
-%% On receipt of a publisher message, three things are possible:
-%% 1. The queue of GM group instructions is empty. Add the message to
-%%    the relevant queue and await instructions from the GM.
-%% 2. The head of the queue of GM group instructions has an
-%%    instruction matching the GUID of the message. Remove that
-%%    instruction and act on it. Attempt to process the rest of the
-%%    instrQ.
-%% 3. The head of the queue of GM group instructions has an
-%%    instruction that does not match the GUID of the message. If the
-%%    message is from the same publisher as is referred to by the
-%%    instruction then throw away the GM group instruction and repeat
-%%    - attempt to match against the next instruction if there is one:
-%%    The instruction thrown away was for a message we'll never
-%%    receive.
-%%
-%% In all cases, we are relying heavily on order preserving messaging
-%% both from the GM group and from the publishers.
 
 -export([start_link/1, set_maximum_since_use/2]).
 
