@@ -78,7 +78,7 @@ delete(Tx, X, Bs) ->
 
 add_binding(?TX, X, B = #binding{destination = Dest}) ->
     %% TODO add bindings only if needed.
-    case is_federation_queue(Dest) of
+    case is_federation_exchange(Dest) of
         true  -> ok;
         false -> call(X, {add_binding, B})
     end,
@@ -113,17 +113,17 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 
 %%----------------------------------------------------------------------------
 
-is_federation_queue(#resource{ name = <<"federation: ", _Rest/binary>>,
-                               kind = queue }) ->
+is_federation_exchange(#resource{ name = <<"federation: ", _Rest/binary>>,
+                                  kind = exchange }) ->
     true;
-is_federation_queue(_) ->
+is_federation_exchange(_) ->
     false.
 
 maybe_unbind_upstreams(X, Binding = #binding{source      = Source,
                                              destination = Dest,
                                              key         = Key,
                                              args        = Args}) ->
-    case is_federation_queue(Dest) of
+    case is_federation_exchange(Dest) of
         true  -> ok;
         false -> case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
                                         Key == Key2 andalso Args == Args2

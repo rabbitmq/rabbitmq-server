@@ -176,11 +176,21 @@ restart_upstream() ->
               declare_exchange(Upstream, <<"upstream">>, <<"direct">>),
               declare_fed_exchange(Downstream, <<"downstream">>, <<"direct">>,
                                    [<<"amqp://localhost:5673/%2f/upstream">>]),
-              Q = bind_queue(Downstream, <<"downstream">>, <<"key">>),
+              Qstays = bind_queue(Downstream, <<"downstream">>, <<"stays">>),
+              Qgoes = bind_queue(Downstream, <<"downstream">>, <<"goes">>),
               stop_other_node(),
+              Qcomes = bind_queue(Downstream, <<"downstream">>, <<"comes">>),
+              unbind_queue(Downstream, Qgoes, <<"downstream">>, <<"goes">>),
               Upstream1 = start_other_node(),
-              publish(Upstream1, <<"upstream">>, <<"key">>, <<"HELLO">>),
-              expect(Downstream, Q, [<<"HELLO">>]),
+              publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
+              publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
+              %% Give the link a chance to come up and for this binding
+              %% to be transferred
+              timer:sleep(1000),
+              publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
+              expect(Downstream, Qstays, [<<"STAYS">>]),
+              expect(Downstream, Qcomes, [<<"COMES">>]),
+              expect_empty(Downstream, Qgoes),
               delete_exchange(Downstream, <<"downstream">>),
               delete_exchange(Upstream1, <<"upstream">>)
       end).
@@ -237,6 +247,11 @@ bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{ queue       = Q,
                                          exchange    = X,
                                          routing_key = Key }).
+
+unbind_queue(Ch, Q, X, Key) ->
+    amqp_channel:call(Ch, #'queue.unbind'{ queue       = Q,
+                                           exchange    = X,
+                                           routing_key = Key }).
 
 bind_exchange(Ch, D, S, Key) ->
     amqp_channel:call(Ch, #'exchange.bind'{ destination = D,

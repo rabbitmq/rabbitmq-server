@@ -19,6 +19,8 @@
 -export([init/0, sup_for_exchange/1, set_sup_for_exchange/2,
          forget_exchange/1]).
 
+-export([get_active_suffix/2, set_active_suffix/3]).
+
 %% TODO get rid of this dets table, use mnesia
 -define(DETS_NAME, rabbit_federation_exchange).
 
@@ -27,14 +29,25 @@ init() ->
     {ok, F} = dets:open_file(F, [{type, set}]).
 
 sup_for_exchange(X) ->
-    [{_, Pid}] = dets:lookup(file(), X),
+    [{_, Pid}] = dets:lookup(file(), {pid, X}),
     Pid.
 
 set_sup_for_exchange(X, Pid) ->
-    ok = dets:insert(file(), {X, Pid}).
+    ok = dets:insert(file(), {{pid, X}, Pid}).
 
 forget_exchange(X) ->
-    true = dets:delete(file(), X).
+    true = dets:delete(file(), {pid, X}).
+
+%%----------------------------------------------------------------------------
+
+get_active_suffix(X, URI) ->
+    case dets:lookup(file(), {suffix, X, URI}) of
+        []       -> <<"A">>;
+        [{_, S}] -> S
+    end.
+
+set_active_suffix(X, URI, Suffix) ->
+    ok = dets:insert(file(), {{suffix, X, URI}, Suffix}).
 
 %%----------------------------------------------------------------------------
 

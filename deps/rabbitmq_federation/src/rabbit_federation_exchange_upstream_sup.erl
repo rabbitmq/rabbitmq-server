@@ -33,7 +33,7 @@ start_link(Args) ->
 
 call_all(Sup, Msg) ->
     [gen_server2:call(Pid, Msg, infinity) ||
-        {_, Pid, _, _} <- supervisor2:which_children(Sup)].
+        {_, Pid, _, _} <- supervisor2:which_children(Sup), Pid =/= undefined].
 
 %%----------------------------------------------------------------------------
 

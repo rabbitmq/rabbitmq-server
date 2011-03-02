@@ -33,9 +33,9 @@
                 channel,
                 queue,
                 exchange,
+                internal_exchange,
                 uri,
                 unacked,
-                consumer_tag,
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange,
@@ -54,12 +54,8 @@ init(Args) ->
     gen_server2:cast(self(), {init, Args}),
     {ok, not_started}.
 
-handle_call({add_binding, #binding{key = Key, args = Args}},
-            _From, State = #state{channel = Ch, queue = Q, exchange = X}) ->
-    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
-                                        exchange    = X,
-                                        routing_key = Key,
-                                        arguments   = Args}),
+handle_call({add_binding, Binding}, _From, State) ->
+    add_binding(Binding, State),
     {reply, ok, State};
 
 handle_call({remove_binding, #binding{key = Key, args = Args}}, _From,
@@ -69,10 +65,10 @@ handle_call({remove_binding, #binding{key = Key, args = Args}}, _From,
     with_disposable_channel(
       Conn,
       fun (Ch) ->
-              amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
-                                                    exchange    = X,
-                                                    routing_key = Key,
-                                                    arguments   = Args})
+              amqp_channel:call(Ch, #'exchange.unbind'{destination = Q,
+                                                       source      = X,
+                                                       routing_key = Key,
+                                                       arguments   = Args})
       end),
     {reply, ok, State};
 
@@ -95,34 +91,18 @@ handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
     {ok, Conn} = amqp_connection:start(network, Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     erlang:monitor(process, Ch),
-    Q = upstream_queue_name(X, DownstreamX),
-    %% TODO: The x-expires should be configurable.
-    case Durable of
-        false -> with_disposable_channel(
-                   Conn,
-                   fun (Ch2) ->
-                           amqp_channel:call(Ch2, #'queue.delete'{queue = Q})
-                   end);
-        _     -> ok
-    end,
-    amqp_channel:call(
-      Ch, #'queue.declare'{
-        queue     = Q,
-        durable   = true,
-        arguments = [{<<"x-expires">>, long, 86400000}] }),
-    #'basic.consume_ok'{ consumer_tag = CTag } =
-        amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q,
-                                                    no_ack = false}, self()),
-    {noreply, #state{downstream_connection = DConn,
-                     downstream_channel    = DCh,
-                     downstream_exchange   = DownstreamX,
-                     uri                   = URI,
-                     connection            = Conn,
-                     channel               = Ch,
-                     queue                 = Q,
-                     exchange              = X,
-                     consumer_tag          = CTag,
-                     unacked               = gb_trees:empty()}};
+    State = #state{downstream_connection = DConn,
+                   downstream_channel    = DCh,
+                   downstream_exchange   = DownstreamX,
+                   downstream_durable    = Durable,
+                   uri                   = URI,
+                   connection            = Conn,
+                   channel               = Ch,
+                   exchange              = X,
+                   unacked               = gb_trees:empty()},
+    State1 = consume_from_upstream_queue(State),
+    State2 = ensure_upstream_bindings(State1),
+    {noreply, State2};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -185,11 +165,86 @@ terminate(_Reason, #state{downstream_channel    = DCh,
 
 %%----------------------------------------------------------------------------
 
-upstream_queue_name(X, #resource{ name         = DownstreamName,
-                                  virtual_host = DownstreamVHost }) ->
+add_binding(#binding{key = Key, args = Args},
+            #state{channel = Ch, exchange = X,
+                   internal_exchange = InternalX}) ->
+    amqp_channel:call(Ch, #'exchange.bind'{destination = InternalX,
+                                           source      = X,
+                                           routing_key = Key,
+                                           arguments   = Args}).
+
+%%----------------------------------------------------------------------------
+
+consume_from_upstream_queue(State = #state{connection          = Conn,
+                                           channel             = Ch,
+                                           exchange            = X,
+                                           downstream_exchange = DownstreamX,
+                                           downstream_durable  = Durable}) ->
+    Q = upstream_queue_name(X, DownstreamX),
+    case Durable of
+        false -> delete_upstream_queue(Conn, Q);
+        _     -> ok
+    end,
+    amqp_channel:call(
+      Ch, #'queue.declare'{
+        queue     = Q,
+        durable   = true,
+        %% TODO: The x-expires should be configurable.
+        arguments = [{<<"x-expires">>, long, 86400000}] }),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
+                                                    no_ack = false}, self()),
+    State#state{queue = Q}.
+
+ensure_upstream_bindings(State = #state{connection          = Conn,
+                                        channel             = Ch,
+                                        uri                 = URI,
+                                        exchange            = X,
+                                        downstream_exchange = DownstreamX,
+                                        queue               = Q}) ->
+    OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, URI),
+    Suffix = case OldSuffix of
+                 <<"A">> -> <<"B">>;
+                 <<"B">> -> <<"A">>
+             end,
+    InternalX = upstream_exchange_name(X, DownstreamX, Suffix),
+    delete_upstream_exchange(Conn, InternalX),
+    amqp_channel:call(
+      Ch, #'exchange.declare'{
+        exchange    = InternalX,
+        type        = <<"fanout">>,
+        durable     = true,
+        internal    = true,
+        auto_delete = true,
+        arguments   = []}),
+    amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
+    State1 = State#state{queue = Q, internal_exchange = InternalX},
+    [add_binding(B, State1) ||
+        B <- rabbit_binding:list_for_source(DownstreamX)],
+    rabbit_federation_db:set_active_suffix(DownstreamX, URI, Suffix),
+    OldInternalX = upstream_exchange_name(X, DownstreamX, OldSuffix),
+    delete_upstream_exchange(Conn, OldInternalX),
+    State1.
+
+upstream_queue_name(X, #resource{name         = DownstreamName,
+                                 virtual_host = DownstreamVHost}) ->
     Node = list_to_binary(atom_to_list(node())),
     <<"federation: ", X/binary, " -> ", Node/binary,
       "-", DownstreamVHost/binary, "-", DownstreamName/binary>>.
+
+upstream_exchange_name(X, DownstreamX, Suffix) ->
+    Name = upstream_queue_name(X, DownstreamX),
+    <<Name/binary, " ", Suffix/binary>>.
+
+delete_upstream_queue(Conn, Q) ->
+    with_disposable_channel(
+      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end).
+
+delete_upstream_exchange(Conn, X) ->
+    with_disposable_channel(
+      Conn, fun (Ch) ->
+                    amqp_channel:call(Ch, #'exchange.delete'{exchange = X})
+            end).
 
 %%----------------------------------------------------------------------------
 
@@ -231,14 +286,10 @@ with_disposable_channel(Conn, Fun) ->
 
 ensure_closed(Conn, Ch) ->
     ensure_closed(Ch),
-    try amqp_connection:close(Conn)
-    catch exit:{noproc, _} -> ok
-    end.
+    catch amqp_connection:close(Conn).
 
 ensure_closed(Ch) ->
-    try amqp_channel:close(Ch)
-    catch exit:{noproc, _} -> ok
-    end.
+    catch amqp_channel:close(Ch).
 
 %%----------------------------------------------------------------------------
 
