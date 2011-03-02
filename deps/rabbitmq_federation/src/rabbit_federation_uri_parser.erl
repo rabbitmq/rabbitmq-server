@@ -1,4 +1,4 @@
-%% TODO unfork this!
+%% TODO unfork this from the one in rabbitmq-shovel(?)
 
 %% This file is a copy of http_uri.erl from the R13B-1 Erlang/OTP
 %% distribution with several modifications.
@@ -22,7 +22,7 @@
 
 %% See http://tools.ietf.org/html/rfc3986
 
--module(uri_parser).
+-module(rabbit_federation_uri_parser).
 
 -export([parse/2]).
 
