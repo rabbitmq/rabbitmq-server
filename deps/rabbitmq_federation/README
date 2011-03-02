@@ -162,7 +162,7 @@ The ssl_options parameter specifies how to make client SSL
 connections. See the Erlang client documentation for more details.
 
 The local_username and local_password parameters specify how to
-connect to the local broker. Both are mandatory.
+connect to the local broker. The default for both is "guest".
 
 Declaring Over AMQP
 ===================
