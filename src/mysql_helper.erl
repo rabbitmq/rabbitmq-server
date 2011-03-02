@@ -54,12 +54,13 @@ ensure_connection_pool() ->
         exit:pool_already_exists -> ok
     end.
 
+
+%% NOTE:  What the MySQL protocol actually supports in prepared statements
+%%        seems a bit non-uniform.  For example, 'COMMIT' is in, but
+%%        'START TRANSACTION' isn't.  Fortunately, most of the things that
+%%        are parametrizable, and thus prone to injection attacks and the
+%%        like do seem to be there.
 prepare_mysql_statements() ->
-    %% NOTE:  What the MySQL protocol actually supports in prepared statements
-    %%        seems a bit non-uniform.  For example, 'COMMIT' is in, but
-    %%        'START TRANSACTION' isn't.  Fortunately, most of the things that
-    %%        are parametrizable, and thus prone to injection attacks and the
-    %%        like do seem to be there.
     Statements = [{insert_q_stmt,<<"INSERT INTO q(queue_name, m) VALUES(?,?)">>},
                   {insert_p_stmt,
                    <<"INSERT INTO p(seq_id, queue_name, m) VALUES(?,?,?)">>},
@@ -67,18 +68,52 @@ prepare_mysql_statements() ->
                    <<"INSERT INTO n(queue_name, next_seq_id) VALUES(?,?)">>},
                   {delete_q_stmt,<<"DELETE FROM q WHERE queue_name = ?">>},
                   {delete_p_stmt,<<"DELETE FROM p WHERE queue_name = ?">>},
-                  {delete_n_stmt,<<"DELETE FROM n WHERE queue_name = ?">>}],
+                  {delete_n_stmt,<<"DELETE FROM n WHERE queue_name = ?">>},
+                  {read_n_stmt,  <<"SELECT * FROM n WHERE queue_name = ?">>},
+                  {put_n_stmt,   <<"REPLACE INTO n(queue_name, next_seq_id) VALUES(?,?)">>} ],
+
     [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
+
+begin_mysql_transaction() ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   <<"START TRANSACTION">>).
+
+commit_mysql_transaction() ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   <<"COMMIT">>).
 
 delete_queue_data(QueueName) ->
     %% TODO:  Error checking...
-    emysql:execute(?RABBIT_DB_POOL_NAME,
-                   <<"START TRANSACTION">>),
     [ emysql:execute(?RABBIT_DB_POOL_NAME,
                      Stmt,
                      [QueueName]) || Stmt <- [delete_q_stmt,
                                               delete_p_stmt,
                                               delete_n_stmt] ],
+    ok.
+
+read_n_record(QueueName) ->
+    %% BUGBUG:  Ugly.  We really should convert the result to Erlang records
+    %%          here and isolate rabbit_mysql_queue from any direct touching
+    %%          of the emysql library, but we need to split some records out
+    %%          to an include file first...
     emysql:execute(?RABBIT_DB_POOL_NAME,
-                   <<"COMMIT">>),
+                   read_n_stmt,
+                   [QueueName]).
+
+%% TODO:  Consistent error handling...
+write_n_record(DbQueueName, NextSeqId) ->
+    Result = emysql:execute(?RABBIT_DB_POOL_NAME,
+                            put_n_stmt,
+                            [DbQueueName, NextSeqId]),
+    case Result of
+        #ok_packet{}    -> ok;
+        #error_packet{} -> rabbit_log:error("Failed REPLACE on n Table (~p,~p)",
+                                            [DbQueueName, NextSeqId])
+    end.
+
+%% Delete non-persistent msgs after a restart.
+-spec delete_nonpersistent_msgs(string()) -> ok.
+
+delete_nonpersistent_msgs(DbQueueName) ->
+    
     ok.
