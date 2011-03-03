@@ -53,6 +53,6 @@ handle_info(_Msg, Args) ->
 code_change(_OldVsn, Args, _Extra) ->
     {ok, Args}.
 
-terminate(_Reason, {_URIs, DownstreamX, _Durable}) ->
+terminate(_Reason, {_Upstreams, DownstreamX, _Durable}) ->
     rabbit_federation_db:forget_exchange(DownstreamX),
     ok.

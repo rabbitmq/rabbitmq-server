@@ -137,10 +137,11 @@ maybe_unbind_upstreams(X, Binding = #binding{source      = Source,
 
 exchange_to_sup_args(#exchange{ name = Downstream, durable = Durable,
                                 arguments = Args }) ->
-    {array, UpstreamURIs0} =
+    {array, UpstreamURIs} =
         rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    UpstreamURIs = [U || {longstr, U} <- UpstreamURIs0],
-    {UpstreamURIs, Downstream, Durable}.
+    Upstreams = [rabbit_federation_util:upstream_from_uri(U) ||
+                    {longstr, U} <- UpstreamURIs],
+    {Upstreams, Downstream, Durable}.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of

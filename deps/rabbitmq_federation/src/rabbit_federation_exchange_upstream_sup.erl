@@ -38,14 +38,12 @@ call_all(Sup, Msg) ->
 
 %%----------------------------------------------------------------------------
 
-init({URIs, DownstreamX, Durable}) ->
+init({Upstreams, DownstreamX, Durable}) ->
     rabbit_federation_db:set_sup_for_exchange(DownstreamX, self()),
-    Specs = [spec(URI, DownstreamX, Durable) || URI <- URIs],
+    Specs = [spec(Upstream, DownstreamX, Durable) || Upstream <- Upstreams],
     {ok, {{one_for_one, 2, 2}, Specs}}.
 
-spec(URI, DownstreamX, Durable) ->
-    Upstream = #upstream{reconnect_delay = Delay} =
-        rabbit_federation_util:upstream_from_uri(URI),
+spec(Upstream = #upstream{reconnect_delay = Delay}, DownstreamX, Durable) ->
     {Upstream, {rabbit_federation_exchange_upstream, start_link,
                 [{Upstream, DownstreamX, Durable}]},
      {transient, Delay},
