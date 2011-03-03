@@ -372,27 +372,39 @@ publish_delivered(true,
 %% dropwhile/2 drops msgs from the head of the queue while there are
 %% msgs and while the supplied predicate returns true.
 %%
-%% dropwhile/2 creates an Mnesia transaction to run in, and therefore
-%% may not be called from inside another Mnesia transaction. The
+%% dropwhile/2 creates a MySQL transaction to run in, and therefore
+%% may not be called from inside another MySQL transaction. The
 %% supplied Pred is called from inside the transaction, and therefore
-%% may not call another function that creates an Mnesia transaction.
+%% may not call another function that creates a MySQL transaction.
 %%
 %% dropwhile/2 cannot call callback/1 because callback/1 ultimately
 %% calls rabbit_amqqueue_process:maybe_run_queue_via_backing_queue/2,
 %% which calls dropwhile/2.
+%%
+%% BUGBUG: AFAICT dropwhile/2 is only used in expiring messages in
+%% Rabbit itself, although there may be uses with predicates that
+%% don't involve expiring messages in the Rabbit tests.  Going forward
+%% it might make sense to change this part of the interface to expose
+%% a drop_expired function, since that removes the passing around of
+%% an Erlang anonymous function that's going to work term by term on
+%% the backing store, something that might be less than ideal with
+%% other stores such as MySQL.
 %%
 %% -spec(dropwhile/2 ::
 %%         (fun ((rabbit_types:message_properties()) -> boolean()), state())
 %%         -> state()).
 
 dropwhile(Pred, S) ->
-    % rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
-    {atomic, {_, Result}} =
-        mnesia:transaction(fun () -> {Atom, RS} = internal_dropwhile(Pred, S),
-                                     save(RS),
-                                     {Atom, RS}
-                           end),
-    % rabbit_log:info("dropwhile ->~n ~p", [Result]),
+    rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
+    %% {atomic, {_, Result}} =
+    %%     mnesia:transaction(fun () -> {Atom, RS} = internal_dropwhile(Pred, S),
+    %%                                  save(RS),
+    %%                                  {Atom, RS}
+    %%                        end),
+    mysql_helper:begin_mysql_transaction(),
+    
+    mysql_helper:commit_mysql_transaction(),
+    rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
 
 %%#############################################################################
@@ -665,18 +677,16 @@ handle_pre_hibernate(S) -> S.
 %%
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
-status(#s { queue_name = DbQueueName,
-            next_seq_id = NextSeqId }) ->
-    %% % rabbit_log:info("status(~n ~p) ->", [S]),
-    %% {atomic, Result} =
-    %%     mnesia:transaction(
-    %%       fun () -> LQ = length(mnesia:all_keys(QTable)),
-    %%                 LP = length(mnesia:all_keys(PTable)),
-    %%                 [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}]
-    %%       end),
-    %% % rabbit_log:info("status ->~n ~p", [Result]),
-    %% Result.
-    yo_mama_bogus_result.
+status(S = #s { queue_name = DbQueueName,
+                next_seq_id = NextSeqId }) ->
+    rabbit_log:info("status(~n ~p) ->", [S]),
+    mysql_helper:begin_mysql_transaction(),
+    LQ = mysql_helper:count_rows_for_queue(q, DbQueueName),
+    LP = mysql_helper:count_rows_for_queue(p, DbQueueName),
+    Result = [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}],
+    mysql_helper:commit_mysql_transaction(),
+    rabbit_log:info("status ->~n ~p", [Result]),
+    Result.
 
 %%----------------------------------------------------------------------------
 %% Monadic helper functions for inside transactions.
