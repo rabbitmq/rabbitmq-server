@@ -87,15 +87,17 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {{vm_memory_high_watermark, Node}, []}},
-             State = #alarms{alarmed_nodes = AN}) ->
+             State = #alarms{alarmed_nodes = AN,
+                             alertees      = Alertees}) ->
     AN1 = sets:add_element(Node, AN),
-    ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, true),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node, true),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({clear_alarm, {vm_memory_high_watermark, Node}},
-             State = #alarms{alarmed_nodes = AN}) ->
+             State = #alarms{alarmed_nodes = AN,
+                             alertees      = Alertees}) ->
     AN1 = sets:del_element(Node, AN),
-    ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, false),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node, false),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({node_up, Node}, State) ->
@@ -105,9 +107,10 @@ handle_event({node_up, Node}, State) ->
            {register, self(), {?MODULE, remote_conserve_memory, []}}),
     {ok, State};
 
-handle_event({node_down, Node}, State = #alarms{alarmed_nodes = AN}) ->
+handle_event({node_down, Node}, State = #alarms{alarmed_nodes = AN,
+                                                alertees      = Alertees}) ->
     AN1 = sets:del_element(Node, AN),
-    ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, false),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node, false),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({register, Pid, HighMemMFA}, State) ->
@@ -117,8 +120,8 @@ handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
-            State = #alarms{alertees = Alertess}) ->
-    {ok, State#alarms{alertees = dict:erase(Pid, Alertess)}};
+            State = #alarms{alertees = Alertees}) ->
+    {ok, State#alarms{alertees = dict:erase(Pid, Alertees)}};
 
 handle_info(_Info, State) ->
     {ok, State}.
@@ -131,26 +134,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_alert(Before, After, Alertees, AlarmNode, Action)
-  when AlarmNode =:= node() ->
-    %% If we have changed our alarm state, always inform the remotes.
-    case {sets:is_element(AlarmNode, Before), sets:is_element(AlarmNode, After),
-          Action} of
-        {false, true,  true}  -> alert_remote(Action, Alertees);
-        {true,  false, false} -> alert_remote(Action, Alertees);
-        _                     -> ok
-    end,
-    maybe_alert_local(Before, After, Alertees, Action);
-maybe_alert(Before, After, Alertees, _AlarmNode, Action) ->
-    maybe_alert_local(Before, After, Alertees, Action).
+maybe_alert(BeforeSize, AfterSize, Alertees, AlarmNode, Action) ->
+    ok = maybe_alert_remote(BeforeSize, AfterSize, Alertees,
+                            AlarmNode =:= node(), Action),
+    ok = maybe_alert_local(BeforeSize, AfterSize, Alertees, Action).
 
-maybe_alert_local(Before, After, Alertees, Action) ->
-    %% If the overall alarm state has changed, inform the locals.
-    case {sets:size(Before), sets:size(After), Action} of
-        {0, 1, true}  -> alert_local(Action, Alertees);
-        {1, 0, false} -> alert_local(Action, Alertees);
-        _             -> ok
-    end.
+%% If we have changed our alarm state, always inform the remotes.
+maybe_alert_remote(BeforeSize, AfterSize, Alertees, true, true)
+  when BeforeSize < AfterSize -> alert_remote(true, Alertees);
+maybe_alert_remote(BeforeSize, AfterSize, Alertees, true, false)
+  when BeforeSize > AfterSize -> alert_remote(false, Alertees);
+maybe_alert_remote(_BeforeSize, _AfterSize, _Alertees, _IsLocalNode, _Action) ->
+    ok.
+
+%% If the overall alarm state has changed, inform the locals.
+maybe_alert_local(0, 1, Alertees,  true   ) -> alert_local(true, Alertees);
+maybe_alert_local(1, 0, Alertees,  false  ) -> alert_local(false, Alertees);
+maybe_alert_local(_, _, _Alertees, _Action) -> ok.
 
 alert_local(Alert, Alertees) ->
     alert(Alert, Alertees, fun erlang:'=:='/2).
