@@ -86,7 +86,9 @@ prepare_mysql_statements() ->
                   {write_msg_to_q_stmt,
                    <<"INSERT INTO q(queue_name, m, is_persistent) VALUES (?,?,?)">>},
                   {q_peek_stmt,
-                  <<"SELECT * FROM q WHERE queue_name = ? ORDER BY id LIMIT 1">>} ],
+                  <<"SELECT * FROM q WHERE queue_name = ? ORDER BY id LIMIT 1">>},
+                  {q_delete_stmt,
+                  <<"DELETE FROM q WHERE queue_name = ? and id = ?">>} ],
     [ emysql:prepare(StmtAtom, StmtBody) || {StmtAtom, StmtBody} <- Statements ].
 
 begin_mysql_transaction() ->
@@ -186,6 +188,13 @@ q_peek(DbQueueName) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,
                    q_peek_stmt,
                    [DbQueueName]).
+
+delete_from_q(DbQueueName, DbId) ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   q_delete_stmt,
+                   [DbQueueName, DbId]),
+    ok.
+
 
 %% This is only for convenience in REPL debugging.  Get rid of it later.
 wake_up() ->
