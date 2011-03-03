@@ -64,18 +64,14 @@ on_node_up(Node) -> gen_event:notify(alarm_handler, {node_up, Node}).
 
 on_node_down(Node) -> gen_event:notify(alarm_handler, {node_down, Node}).
 
-remote_conserve_memory(Pid, Conserve) ->
-    RemoteNode = node(Pid),
-    %% Can't use alarm_handler:{set,clear}_alarm because that doesn't
-    %% permit notifying a remote node.
-    case Conserve of
-        true  -> gen_event:notify(
-                   {alarm_handler, RemoteNode},
-                   {set_alarm, {{vm_memory_high_watermark, node()}, []}});
-        false -> gen_event:notify(
-                   {alarm_handler, RemoteNode},
-                   {clear_alarm, {vm_memory_high_watermark, node()}})
-    end.
+%% Can't use alarm_handler:{set,clear}_alarm because that doesn't
+%% permit notifying a remote node.
+remote_conserve_memory(Pid, true) ->
+    gen_event:notify({alarm_handler, node(Pid)},
+                     {set_alarm, {{vm_memory_high_watermark, node()}, []}});
+remote_conserve_memory(Pid, false) ->
+    gen_event:notify({alarm_handler, node(Pid)},
+                     {clear_alarm, {vm_memory_high_watermark, node()}}).
 
 %%----------------------------------------------------------------------------
 
