@@ -18,7 +18,7 @@
 
 -behaviour(gen_event).
 
--export([start/0, stop/0, register/2, on_node/2]).
+-export([start/0, stop/0, register/2, on_node_up/1, on_node_down/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,7 +35,8 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), mfa_tuple()) -> boolean()).
--spec(on_node/2 :: ('up'|'down', node()) -> 'ok').
+-spec(on_node_up/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (node()) -> 'ok').
 
 -endif.
 
@@ -59,8 +60,9 @@ register(Pid, HighMemMFA) ->
                    {register, Pid, HighMemMFA},
                    infinity).
 
-on_node(Action, Node) ->
-    gen_event:notify(alarm_handler, {node, Action, Node}).
+on_node_up(Node) -> gen_event:notify(alarm_handler, {node_up, Node}).
+
+on_node_down(Node) -> gen_event:notify(alarm_handler, {node_down, Node}).
 
 remote_conserve_memory(Pid, Conserve) ->
     RemoteNode = node(Pid),
@@ -100,14 +102,14 @@ handle_event({clear_alarm, {vm_memory_high_watermark, Node}},
     ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, false),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
-handle_event({node, up, Node}, State) ->
+handle_event({node_up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
     ok = gen_event:notify(
            {alarm_handler, Node},
            {register, self(), {?MODULE, remote_conserve_memory, []}}),
     {ok, State};
 
-handle_event({node, down, Node}, State = #alarms{alarmed_nodes = AN}) ->
+handle_event({node_down, Node}, State = #alarms{alarmed_nodes = AN}) ->
     AN1 = sets:del_element(Node, AN),
     ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, false),
     {ok, State#alarms{alarmed_nodes = AN1}};
