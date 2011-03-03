@@ -203,7 +203,11 @@ consume_from_upstream_queue(State = #state{upstream            = Upstream,
         durable   = true,
         arguments = [{<<"x-expires">>, long, Expiry * 1000},
                      rabbit_federation_util:purpose_arg()]}),
-    amqp_channel:call(Ch, #'basic.qos'{prefetch_count = PrefetchCount}),
+    case PrefetchCount of
+        none -> ok;
+        _    -> amqp_channel:call(Ch,
+                                  #'basic.qos'{prefetch_count = PrefetchCount})
+    end,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),

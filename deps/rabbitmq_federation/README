@@ -146,8 +146,8 @@ mechanism
     (e.g. rabbitmq-auth-mechanism-ssl)
 
 prefetch_count
-  - maximum number of unacknowledged messages in flight per link. Default
-    is 100.
+  - limit on the maximum number of unacknowledged messages in flight
+    per link. Default is none.
 
 reconnect_delay
   - time in seconds to wait to reconnect to the broker after being

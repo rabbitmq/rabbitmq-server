@@ -79,7 +79,7 @@ binaryise0(X)                 -> X.
 upstream_from_properties(P, DX, DVHost) ->
     #upstream{params          = amqp_params_from_properties(P, DVHost),
               exchange        = proplists:get_value(exchange,        P, DX),
-              prefetch_count  = proplists:get_value(prefetch_count,  P, 100),
+              prefetch_count  = proplists:get_value(prefetch_count,  P, none),
               reconnect_delay = proplists:get_value(reconnect_delay, P, 1),
               queue_expires   = proplists:get_value(queue_expires,   P, 1800)}.
 
