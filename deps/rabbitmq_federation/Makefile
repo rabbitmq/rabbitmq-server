@@ -18,10 +18,12 @@ cleantest:
 	rm -rf tmp /tmp/rabbitmq-$(OTHER_NODE)-mnesia
 
 start-other-node:
+	echo "[]." > /tmp/rabbit-null.config
 	RABBITMQ_MNESIA_BASE=/tmp/rabbitmq-$(OTHER_NODE)-mnesia \
 	RABBITMQ_LOG_BASE=/tmp \
 	RABBITMQ_NODENAME=$(OTHER_NODE) \
 	RABBITMQ_NODE_PORT=$(OTHER_PORT) \
+	RABBITMQ_CONFIG_FILE=/tmp/rabbit-null \
 	RABBITMQ_SERVER_ERL_ARGS="-rabbit_mochiweb port 5$(OTHER_PORT)" \
 	../rabbitmq-server/scripts/rabbitmq-server -detached
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) wait
