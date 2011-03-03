@@ -328,9 +328,15 @@ add_routing_to_headers(Headers, Info) ->
 
 upstream_info(#upstream{params   = #amqp_params{host         = H,
                                                 port         = P,
-                                                virtual_host = V},
+                                                virtual_host = V,
+                                                ssl_options  = SSL},
                         exchange = X}) ->
-    [{<<"host">>,         longstr, H},
+    Protocol = case SSL of
+                   none -> <<"amqp">>;
+                   _    -> <<"amqps">>
+               end,
+    [{<<"host">>,         longstr, list_to_binary(H)},
+     {<<"protocol">>,     longstr, Protocol},
      {<<"port">>,         long,    P},
      {<<"virtual_host">>, longstr, V},
      {<<"exchange">>,     longstr, X}].
