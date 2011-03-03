@@ -40,6 +40,7 @@ $(CHECKOUT_DIR):
 	rm -rf $(INCLUDE_DIR)/mochiweb
 	zip $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/
 	zip -r $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/$(EBIN_DIR)/
+	zip -r $(LIB_PACKAGE_NAME) $(LIB_PACKAGE_DIR)/$(INCLUDE_DIR)/
 
 echo-revision:
 	@echo $(REVISION)
