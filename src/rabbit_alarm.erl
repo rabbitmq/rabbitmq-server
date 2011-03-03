@@ -90,14 +90,14 @@ handle_event({set_alarm, {{vm_memory_high_watermark, Node}, []}},
              State = #alarms{alarmed_nodes = AN,
                              alertees      = Alertees}) ->
     AN1 = sets:add_element(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node, true),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({clear_alarm, {vm_memory_high_watermark, Node}},
              State = #alarms{alarmed_nodes = AN,
                              alertees      = Alertees}) ->
     AN1 = sets:del_element(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node, false),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({node_up, Node}, State) ->
@@ -110,7 +110,7 @@ handle_event({node_up, Node}, State) ->
 handle_event({node_down, Node}, State = #alarms{alarmed_nodes = AN,
                                                 alertees      = Alertees}) ->
     AN1 = sets:del_element(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node, false),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
     {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({register, Pid, HighMemMFA}, State) ->
@@ -134,23 +134,22 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_alert(BeforeSize, AfterSize, Alertees, AlarmNode, Action) ->
-    ok = maybe_alert_remote(BeforeSize, AfterSize, Alertees,
-                            AlarmNode =:= node(), Action),
-    ok = maybe_alert_local(BeforeSize, AfterSize, Alertees, Action).
+maybe_alert(BeforeSize, AfterSize, Alertees, AlmNde) ->
+    ok = maybe_alert_remote(BeforeSize, AfterSize, Alertees, AlmNde =:= node()),
+    ok = maybe_alert_local(BeforeSize, AfterSize, Alertees).
 
 %% If we have changed our alarm state, always inform the remotes.
-maybe_alert_remote(BeforeSize, AfterSize, Alertees, true, true)
+maybe_alert_remote(BeforeSize, AfterSize, Alertees, true)
   when BeforeSize < AfterSize -> alert_remote(true, Alertees);
-maybe_alert_remote(BeforeSize, AfterSize, Alertees, true, false)
+maybe_alert_remote(BeforeSize, AfterSize, Alertees, true)
   when BeforeSize > AfterSize -> alert_remote(false, Alertees);
-maybe_alert_remote(_BeforeSize, _AfterSize, _Alertees, _IsLocalNode, _Action) ->
+maybe_alert_remote(_BeforeSize, _AfterSize, _Alertees, _IsLocalNode) ->
     ok.
 
 %% If the overall alarm state has changed, inform the locals.
-maybe_alert_local(0, 1, Alertees,  true   ) -> alert_local(true, Alertees);
-maybe_alert_local(1, 0, Alertees,  false  ) -> alert_local(false, Alertees);
-maybe_alert_local(_, _, _Alertees, _Action) -> ok.
+maybe_alert_local(0, 1, Alertees)  -> alert_local(true, Alertees);
+maybe_alert_local(1, 0, Alertees)  -> alert_local(false, Alertees);
+maybe_alert_local(_, _, _Alertees) -> ok.
 
 alert_local(Alert, Alertees) ->
     alert(Alert, Alertees, fun erlang:'=:='/2).
