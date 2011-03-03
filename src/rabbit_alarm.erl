@@ -25,7 +25,7 @@
 
 -export([remote_conserve_memory/2]). %% Internal use only
 
--record(alarms, {alertees, high_watermarks}).
+-record(alarms, {alertees, alarmed_nodes}).
 
 %%----------------------------------------------------------------------------
 
@@ -78,27 +78,27 @@ remote_conserve_memory(Pid, Conserve) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{alertees        = dict:new(),
-                 high_watermarks = sets:new()}}.
+    {ok, #alarms{alertees      = dict:new(),
+                 alarmed_nodes = sets:new()}}.
 
 handle_call({register, Pid, HighMemMFA}, State) ->
-    {ok, 0 < sets:size(State#alarms.high_watermarks),
+    {ok, 0 < sets:size(State#alarms.alarmed_nodes),
      internal_register(Pid, HighMemMFA, State)};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {{vm_memory_high_watermark, Node}, []}},
-             State = #alarms{high_watermarks = Highs}) ->
-    Highs1 = sets:add_element(Node, Highs),
-    ok = maybe_alert(Highs, Highs1, State#alarms.alertees, Node, true),
-    {ok, State#alarms{high_watermarks = Highs1}};
+             State = #alarms{alarmed_nodes = AN}) ->
+    AN1 = sets:add_element(Node, AN),
+    ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, true),
+    {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({clear_alarm, {vm_memory_high_watermark, Node}},
-             State = #alarms{high_watermarks = Highs}) ->
-    Highs1 = sets:del_element(Node, Highs),
-    ok = maybe_alert(Highs, Highs1, State#alarms.alertees, Node, false),
-    {ok, State#alarms{high_watermarks = Highs1}};
+             State = #alarms{alarmed_nodes = AN}) ->
+    AN1 = sets:del_element(Node, AN),
+    ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, false),
+    {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({node, up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
@@ -107,10 +107,10 @@ handle_event({node, up, Node}, State) ->
            {register, self(), {?MODULE, remote_conserve_memory, []}}),
     {ok, State};
 
-handle_event({node, down, Node}, State = #alarms{high_watermarks = Highs}) ->
-    Highs1 = sets:del_element(Node, Highs),
-    ok = maybe_alert(Highs, Highs1, State#alarms.alertees, Node, false),
-    {ok, State#alarms{high_watermarks = Highs1}};
+handle_event({node, down, Node}, State = #alarms{alarmed_nodes = AN}) ->
+    AN1 = sets:del_element(Node, AN),
+    ok = maybe_alert(AN, AN1, State#alarms.alertees, Node, false),
+    {ok, State#alarms{alarmed_nodes = AN1}};
 
 handle_event({register, Pid, HighMemMFA}, State) ->
     {ok, internal_register(Pid, HighMemMFA, State)};
@@ -173,7 +173,7 @@ alert(Alert, Alertees, NodeComparator) ->
 internal_register(Pid, {M, F, A} = HighMemMFA,
                   State = #alarms{alertees = Alertees}) ->
     _MRef = erlang:monitor(process, Pid),
-    ok = case sets:is_element(node(), State#alarms.high_watermarks) of
+    ok = case sets:is_element(node(), State#alarms.alarmed_nodes) of
              true  -> apply(M, F, A ++ [Pid, true]);
              false -> ok
          end,
