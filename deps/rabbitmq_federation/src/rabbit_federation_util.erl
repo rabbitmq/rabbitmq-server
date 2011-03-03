@@ -42,60 +42,18 @@ local_params() ->
 
 %%----------------------------------------------------------------------------
 
-%% TODO this all badly needs a rewrite
 upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
-    Props = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
-    AMQPParams = #amqp_params{
-      host         = binary_to_list(proplists:get_value(host, Props)),
-      port         = proplists:get_value(port,         Props),
-      virtual_host = proplists:get_value(virtual_host, Props, DVHost)},
+    TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
     {ok, Brokers} = application:get_env(rabbit_federation, brokers),
-    Usable = [Merged || Broker <- Brokers,
-                        Merged <- [merge(Broker, Props)],
-                        all_match(Broker, Merged)],
-    case Usable of
-        []    -> P = upstream_from_broker([], Props, DX),
-                 P#upstream{params = amqp_params_from_broker(AMQPParams, [])};
-        [B|_] -> P = upstream_from_broker(B, Props, DX),
-                 P#upstream{params = amqp_params_from_broker(AMQPParams, B)}
-    end.
-
-upstream_from_broker(B, Props, DX) ->
-    #upstream{exchange        = proplists:get_value(exchange, Props,    DX),
-              prefetch_count  = proplists:get_value(prefetch_count,  B, 100),
-              reconnect_delay = proplists:get_value(reconnect_delay, B, 1),
-              queue_expires   = proplists:get_value(queue_expires,   B, 1800)}.
-
-amqp_params_from_broker(P, B) ->
-    P1 = P#amqp_params{
-           username = list_to_binary(proplists:get_value(username, B, "guest")),
-           password = list_to_binary(proplists:get_value(password, B, "guest"))
-          },
-    P2 = case proplists:get_value(protocol, B, "amqp") of
-             "amqp"  -> P1;
-             "amqps" -> {ok, Opts} = application:get_env(
-                                       rabbit_federation, ssl_options),
-                        P1#amqp_params{ssl_options = Opts}
-         end,
-    P3 = case P2#amqp_params.port of
-             undefined  -> Port = case P2#amqp_params.ssl_options of
-                                      none -> 5672;
-                                      _    -> 5671
-                                  end,
-                           P2#amqp_params{port = Port};
-             _          -> P2
-         end,
-    P4 = case proplists:get_value(heartbeat, B, none) of
-             none -> P3;
-             H    -> P3#amqp_params{heartbeat = H}
-         end,
-    case proplists:get_value(mechanism, B, default) of
-        default    -> P4;
-        %% TODO it would be nice to support arbitrary mechanisms here.
-        'EXTERNAL' -> P4#amqp_params{auth_mechanisms =
-                                         [fun amqp_auth_mechanisms:external/3]};
-        M          -> exit({unsupported_mechanism, M})
-    end.
+    UsableProps = [Merged ||
+                      BrokerProps <- binaryise_all(Brokers),
+                      Merged <- [merge(BrokerProps, TableProps)],
+                      all_match(BrokerProps, Merged)],
+    Props = case UsableProps of
+                []    -> TableProps;
+                [P|_] -> P
+            end,
+    upstream_from_properties(Props, DX, DVHost).
 
 %% For all the props in Props1, does Props2 match?
 all_match(Props1, Props2) ->
@@ -112,4 +70,66 @@ merge(Props1, Props2) ->
                             false -> [{K, V}|P]
                         end
                 end, Props2, Props1).
+
+binaryise_all(Items) -> [binaryise(I) || I <- Items].
+binaryise(Props) -> [{K, binaryise0(V)} || {K, V} <- Props].
+binaryise0(L) when is_list(L) -> list_to_binary(L);
+binaryise0(X)                 -> X.
+
+upstream_from_properties(P, DX, DVHost) ->
+    #upstream{params          = amqp_params_from_properties(P, DVHost),
+              exchange        = proplists:get_value(exchange,        P, DX),
+              prefetch_count  = proplists:get_value(prefetch_count,  P, 100),
+              reconnect_delay = proplists:get_value(reconnect_delay, P, 1),
+              queue_expires   = proplists:get_value(queue_expires,   P, 1800)}.
+
+amqp_params_from_properties(P, DVHost) ->
+    Params = #amqp_params{
+      host         = binary_to_list(proplists:get_value(host, P)),
+      port         = proplists:get_value(port,         P),
+      virtual_host = proplists:get_value(virtual_host, P, DVHost),
+      username     = proplists:get_value(username, P, <<"guest">>),
+      password     = proplists:get_value(password, P, <<"guest">>)
+     },
+    lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, P) end, Params,
+                [fun set_ssl_options/2,
+                 fun set_default_port/2,
+                 fun set_heartbeat/2,
+                 fun set_mechanisms/2]).
+
+set_ssl_options(Params, Props) ->
+    case proplists:get_value(protocol, Props, <<"amqp">>) of
+        <<"amqp">>  -> Params;
+        <<"amqps">> -> {ok, Opts} = application:get_env(
+                                      rabbit_federation, ssl_options),
+                       Params#amqp_params{ssl_options = Opts}
+    end.
+
+set_default_port(Params, _Props) ->
+    case Params#amqp_params.port of
+        undefined  -> Port = case Params#amqp_params.ssl_options of
+                                 none -> 5672;
+                                 _    -> 5671
+                             end,
+                      Params#amqp_params{port = Port};
+        _          -> Params
+    end.
+
+set_heartbeat(Params, Props) ->
+    case proplists:get_value(heartbeat, Props, none) of
+        none -> Params;
+        H    -> Params#amqp_params{heartbeat = H}
+    end.
+
+%% TODO it would be nice to support arbitrary mechanisms here.
+set_mechanisms(Params, Props) ->
+    case proplists:get_value(mechanism, Props, default) of
+        default ->
+            Params;
+        'EXTERNAL' ->
+            Params#amqp_params{
+              auth_mechanisms = [fun amqp_auth_mechanisms:external/3]};
+        M ->
+            exit({unsupported_mechanism, M})
+    end.
 
