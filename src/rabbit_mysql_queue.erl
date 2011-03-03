@@ -774,12 +774,6 @@ q_pop(#s { queue_name = DbQueueName }) ->
 -spec q_peek(s()) -> maybe(m()).
 
 q_peek(#s { queue_name = DbQueueName }) ->
-    %% case mnesia:first(QTable) of
-    %%     '$end_of_table' -> nothing;
-    %%     OutId -> [#q_record { out_id = OutId, m = M }] =
-    %%                  mnesia:read(QTable, OutId, 'read'),
-    %%              {just, M}
-    %% end.
     RecList = mysql_helper:q_peek(DbQueueName),
     MList = emysql_util:as_record(RecList,
                                   q_record,
