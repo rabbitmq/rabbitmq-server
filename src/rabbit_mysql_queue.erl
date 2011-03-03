@@ -402,7 +402,7 @@ dropwhile(Pred, S) ->
     %%                                  {Atom, RS}
     %%                        end),
     mysql_helper:begin_mysql_transaction(),
-    
+    Result = utterly_bogus_placeholder_result,
     mysql_helper:commit_mysql_transaction(),
     rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
@@ -769,8 +769,7 @@ q_pop(#s { queue_name = DbQueueName }) ->
     %% end.
     yo_mama_bogus_result.
 
-%% q_peek returns the first msg, if any, from the Q table in
-%% Mnesia.
+%% q_peek returns the first msg, if any, from the Q table in MySQL.
 
 -spec q_peek(s()) -> maybe(m()).
 
@@ -781,7 +780,15 @@ q_peek(#s { queue_name = DbQueueName }) ->
     %%                  mnesia:read(QTable, OutId, 'read'),
     %%              {just, M}
     %% end.
-    yo_mama_bogus_result.
+    RecList = mysql_helper:q_peek(DbQueueName),
+    MList = emysql_util:as_record(RecList,
+                                  q_record,
+                                  record_info(fields,
+                                              q_record)),
+    case MList of
+        []  -> nothing;
+        [M] -> {just, M}
+    end.
 
 %% post_pop operates after q_pop, calling add_p if necessary.
 
