@@ -30,13 +30,11 @@
 
 -define(ROUTING_HEADER, <<"x-forwarding">>).
 
--record(state, {vhost,
+-record(state, {upstream,
                 connection,
                 channel,
                 queue,
-                exchange,
                 internal_exchange,
-                uri,
                 unacked,
                 downstream_connection,
                 downstream_channel,
@@ -46,9 +44,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link({URI, DownstreamX, Durable}) ->
-    gen_server2:start_link(?MODULE, {URI, DownstreamX, Durable},
-                           [{timeout, infinity}]).
+start_link(Args) ->
+    gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
@@ -61,7 +58,8 @@ handle_call({add_binding, Binding}, _From, State) ->
     {reply, ok, State};
 
 handle_call({remove_binding, #binding{key = Key, args = Args}}, _From,
-            State = #state{connection = Conn, queue = Q, exchange = X}) ->
+            State = #state{connection = Conn, queue = Q,
+                           upstream = #upstream{exchange = X}}) ->
     %% We may already be unbound if e.g. someone has deleted the upstream
     %% exchange
     with_disposable_channel(
@@ -82,31 +80,25 @@ handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast({init, {URI, DownstreamX, Durable}}, not_started) ->
+handle_cast({init, {Upstream, DownstreamX, Durable}}, not_started) ->
     {ok, DConn} = amqp_connection:start(direct,
                                         rabbit_federation_util:local_params()),
     {ok, DCh} = amqp_connection:open_channel(DConn),
     #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(DCh, self()),
     erlang:monitor(process, DCh),
-    Props = rabbit_federation_util:parse_uri(URI),
-    X = proplists:get_value(exchange, Props),
-    VHost = proplists:get_value(vhost, Props),
-    Params = rabbit_federation_util:params_from_uri(URI),
-    {ok, Conn} = amqp_connection:start(network, Params#params.connection),
+    {ok, Conn} = amqp_connection:start(network, Upstream#upstream.params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     erlang:monitor(process, Ch),
     State = #state{downstream_connection = DConn,
                    downstream_channel    = DCh,
                    downstream_exchange   = DownstreamX,
                    downstream_durable    = Durable,
-                   uri                   = URI,
-                   vhost                 = VHost,
+                   upstream              = Upstream,
                    connection            = Conn,
                    channel               = Ch,
-                   exchange              = X,
                    unacked               = gb_trees:empty()},
-    State1 = consume_from_upstream_queue(Params, State),
+    State1 = consume_from_upstream_queue(State),
     State2 = ensure_upstream_bindings(State1),
     {noreply, State2};
 
@@ -131,7 +123,7 @@ handle_info({#'basic.deliver'{delivery_tag = DTag,
                               %%redelivered = Redelivered,
                               %%exchange = Exchange,
                               routing_key = Key}, Msg},
-            State = #state{uri                 = URI,
+            State = #state{upstream            = Upstream,
                            downstream_exchange = #resource{name = X},
                            downstream_channel  = DCh,
                            next_publish_id     = Seq}) ->
@@ -139,8 +131,8 @@ handle_info({#'basic.deliver'{delivery_tag = DTag,
     case forwarded_before(Headers0) of
         false -> State1 = record_delivery_tag(DTag, Seq, State),
                  %% TODO add user information here?
-                 Headers = add_routing_to_headers(Headers0,
-                                                  [{<<"uri">>, longstr, URI}]),
+                 Info = upstream_info(Upstream),
+                 Headers = add_routing_to_headers(Headers0, Info),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
@@ -172,8 +164,8 @@ terminate(_Reason, #state{downstream_channel    = DCh,
 %%----------------------------------------------------------------------------
 
 add_binding(#binding{key = Key, args = Args},
-            #state{channel = Ch, exchange = X,
-                   internal_exchange = InternalX}) ->
+            #state{channel = Ch, internal_exchange = InternalX,
+                   upstream = #upstream{exchange = X}}) ->
     amqp_channel:call(Ch, #'exchange.bind'{destination = InternalX,
                                            source      = X,
                                            routing_key = Key,
@@ -181,14 +173,15 @@ add_binding(#binding{key = Key, args = Args},
 
 %%----------------------------------------------------------------------------
 
-consume_from_upstream_queue(#params{prefetch_count = PrefetchCount,
-                                    queue_expires  = Expiry},
-                            State = #state{connection          = Conn,
+consume_from_upstream_queue(State = #state{upstream            = Upstream,
+                                           connection          = Conn,
                                            channel             = Ch,
-                                           exchange            = X,
-                                           vhost               = VHost,
                                            downstream_exchange = DownstreamX,
                                            downstream_durable  = Durable}) ->
+    #upstream{exchange       = X,
+              prefetch_count = PrefetchCount,
+              queue_expires  = Expiry,
+              params         = #amqp_params{virtual_host = VHost}} = Upstream,
     Q = upstream_queue_name(X, VHost, DownstreamX),
     case Durable of
         false -> delete_upstream_queue(Conn, Q);
@@ -206,14 +199,14 @@ consume_from_upstream_queue(#params{prefetch_count = PrefetchCount,
                                                     no_ack = false}, self()),
     State#state{queue = Q}.
 
-ensure_upstream_bindings(State = #state{vhost               = VHost,
+ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         connection          = Conn,
                                         channel             = Ch,
-                                        uri                 = URI,
-                                        exchange            = X,
                                         downstream_exchange = DownstreamX,
                                         queue               = Q}) ->
-    OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, URI),
+    #upstream{exchange       = X,
+              params         = #amqp_params{virtual_host = VHost}} = Upstream,
+    OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream),
     Suffix = case OldSuffix of
                  <<"A">> -> <<"B">>;
                  <<"B">> -> <<"A">>
@@ -232,7 +225,7 @@ ensure_upstream_bindings(State = #state{vhost               = VHost,
     State1 = State#state{queue = Q, internal_exchange = InternalX},
     [add_binding(B, State1) ||
         B <- rabbit_binding:list_for_source(DownstreamX)],
-    rabbit_federation_db:set_active_suffix(DownstreamX, URI, Suffix),
+    rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
     State1.
@@ -332,6 +325,15 @@ add_routing_to_headers(Headers, Info) ->
                 {array, Existing}  -> Existing
             end,
     set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info}|Prior]).
+
+upstream_info(#upstream{params   = #amqp_params{host         = H,
+                                                port         = P,
+                                                virtual_host = V},
+                        exchange = X}) ->
+    [{<<"host">>,         longstr, H},
+     {<<"port">>,         long,    P},
+     {<<"virtual_host">>, longstr, V},
+     {<<"exchange">>,     longstr, X}].
 
 %% TODO move this to rabbit_misc?
 set_table_value(Table, Key, Type, Value) ->

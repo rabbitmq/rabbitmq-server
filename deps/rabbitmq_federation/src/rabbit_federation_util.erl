@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([parse_uri/1, purpose_arg/0, has_purpose_arg/1, params_from_uri/1,
+-export([parse_uri/1, purpose_arg/0, has_purpose_arg/1, upstream_from_uri/1,
          local_params/0]).
 
 parse_uri(URI) ->
@@ -58,8 +58,8 @@ local_params() ->
 
 %%----------------------------------------------------------------------------
 
-params_from_uri(ExchangeURI) ->
-    Props = rabbit_federation_util:parse_uri(ExchangeURI),
+upstream_from_uri(ExchangeURI) ->
+    Props = parse_uri(ExchangeURI),
     AMQPParams = #amqp_params{host         = proplists:get_value(host, Props),
                               port         = proplists:get_value(port, Props),
                               virtual_host = proplists:get_value(vhost, Props)},
@@ -68,16 +68,17 @@ params_from_uri(ExchangeURI) ->
                         Merged <- [merge(Broker, Props)],
                         all_match(Broker, Merged)],
     case Usable of
-        []    -> P = params_from_broker([]),
-                 P#params{connection = AMQPParams};
-        [B|_] -> P = params_from_broker(B),
-                 P#params{connection = amqp_params_from_broker(AMQPParams, B)}
+        []    -> P = upstream_from_broker([], Props),
+                 P#upstream{params = AMQPParams};
+        [B|_] -> P = upstream_from_broker(B, Props),
+                 P#upstream{params = amqp_params_from_broker(AMQPParams, B)}
     end.
 
-params_from_broker(B) ->
-    #params{prefetch_count  = proplists:get_value(prefetch_count,  B, 100),
-            reconnect_delay = proplists:get_value(reconnect_delay, B, 1),
-            queue_expires   = proplists:get_value(queue_expires,   B, 1800)}.
+upstream_from_broker(B, Props) ->
+    #upstream{exchange        = proplists:get_value(exchange, Props),
+              prefetch_count  = proplists:get_value(prefetch_count,  B, 100),
+              reconnect_delay = proplists:get_value(reconnect_delay, B, 1),
+              queue_expires   = proplists:get_value(queue_expires,   B, 1800)}.
 
 amqp_params_from_broker(P, B) ->
     P1 = P#amqp_params{

@@ -14,7 +14,8 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--record(params, {connection,
-                 prefetch_count,
-                 reconnect_delay,
-                 queue_expires}).
+-record(upstream, {params,
+                   exchange,
+                   prefetch_count,
+                   reconnect_delay,
+                   queue_expires}).

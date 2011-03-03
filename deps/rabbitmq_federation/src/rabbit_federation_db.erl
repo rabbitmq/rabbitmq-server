@@ -40,14 +40,14 @@ forget_exchange(X) ->
 
 %%----------------------------------------------------------------------------
 
-get_active_suffix(X, URI) ->
-    case dets:lookup(file(), {suffix, X, URI}) of
+get_active_suffix(X, Upstream) ->
+    case dets:lookup(file(), {suffix, X, Upstream}) of
         []       -> <<"A">>;
         [{_, S}] -> S
     end.
 
-set_active_suffix(X, URI, Suffix) ->
-    ok = dets:insert(file(), {{suffix, X, URI}, Suffix}).
+set_active_suffix(X, Upstream, Suffix) ->
+    ok = dets:insert(file(), {{suffix, X, Upstream}, Suffix}).
 
 %%----------------------------------------------------------------------------
 

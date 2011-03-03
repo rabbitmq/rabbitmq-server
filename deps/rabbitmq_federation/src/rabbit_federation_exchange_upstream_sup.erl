@@ -44,10 +44,10 @@ init({URIs, DownstreamX, Durable}) ->
     {ok, {{one_for_one, 2, 2}, Specs}}.
 
 spec(URI, DownstreamX, Durable) ->
-    #params{reconnect_delay = Delay} =
-        rabbit_federation_util:params_from_uri(URI),
-    {URI, {rabbit_federation_exchange_upstream, start_link,
-           [{URI, DownstreamX, Durable}]},
+    Upstream = #upstream{reconnect_delay = Delay} =
+        rabbit_federation_util:upstream_from_uri(URI),
+    {Upstream, {rabbit_federation_exchange_upstream, start_link,
+                [{Upstream, DownstreamX, Durable}]},
      {transient, Delay},
      ?MAX_WAIT, worker,
      [rabbit_federation_exchange_upstream]}.
