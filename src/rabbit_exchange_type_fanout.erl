@@ -36,7 +36,7 @@ description() ->
      {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
 
 route(#exchange{name = Name}, _Delivery) ->
-    rabbit_router:match_routing_key(Name, '_').
+    rabbit_router:match_routing_key(Name, ['_']).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
