@@ -35,12 +35,10 @@
                 channel,
                 queue,
                 internal_exchange,
-                unacked = gb_trees:empty(),
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange,
-                downstream_durable,
-                next_publish_id = 1}).
+                downstream_durable}).
 
 %%----------------------------------------------------------------------------
 
@@ -114,35 +112,29 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
             State = #state{channel = Ch}) ->
-    {DTag, State1} = retrieve_delivery_tag(Seq, Multiple, State),
-    case DTag of
-        none -> ok;
-        _    -> amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag,
-                                                   multiple     = Multiple})
-    end,
-    {noreply, State1};
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq,
+                                       multiple     = Multiple}),
+    {noreply, State};
 
-handle_info({#'basic.deliver'{delivery_tag = DTag,
-                              %% TODO do we care?
+handle_info({#'basic.deliver'{%% TODO do we care?
                               %%redelivered = Redelivered,
                               %%exchange = Exchange,
                               routing_key = Key}, Msg},
             State = #state{upstream            = Upstream,
                            downstream_exchange = #resource{name = X},
-                           downstream_channel  = DCh,
-                           next_publish_id     = Seq}) ->
+                           downstream_channel  = DCh}) ->
     Headers0 = extract_headers(Msg),
+    %% TODO add user information here?
     case forwarded_before(Headers0) of
-        false -> State1 = record_delivery_tag(DTag, Seq, State),
-                 %% TODO add user information here?
-                 Info = upstream_info(Upstream),
+        false -> Info = upstream_info(Upstream),
                  Headers = add_routing_to_headers(Headers0, Info),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
-                 {noreply, State1#state{next_publish_id = Seq + 1}};
-        true  -> {noreply, State}
-    end;
+                 ok;
+        true  -> ok
+    end,
+    {noreply, State};
 
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ downstream_channel = DCh }) ->
@@ -156,6 +148,9 @@ handle_info(Msg, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+terminate(_Reason, not_started) ->
+    ok;
 
 terminate(_Reason, #state{downstream_channel    = DCh,
                           downstream_connection = DConn,
@@ -271,33 +266,6 @@ delete_upstream_exchange(Conn, X) ->
       Conn, fun (Ch) ->
                     amqp_channel:call(Ch, #'exchange.delete'{exchange = X})
             end).
-
-%%----------------------------------------------------------------------------
-
-record_delivery_tag(DTag, Seq, State = #state{unacked = Unacked}) ->
-    State#state{unacked = gb_trees:insert(Seq, DTag, Unacked)}.
-
-retrieve_delivery_tag(Seq, Multiple,
-                      State = #state {unacked = Unacked0}) ->
-    Unacked = remove_delivery_tags(Seq, Multiple, Unacked0),
-    DTag = case gb_trees:lookup(Seq, Unacked0) of
-               {value, V} -> V;
-               none       -> none
-           end,
-    {DTag, State#state{unacked = Unacked}}.
-
-remove_delivery_tags(Seq, false, Unacked) ->
-    gb_trees:delete_any(Seq, Unacked);
-remove_delivery_tags(Seq, true, Unacked) ->
-    case gb_trees:size(Unacked) of
-        0 -> Unacked;
-        _ -> Smallest = gb_trees:smallest(Unacked),
-             case Smallest > Seq of
-                 true  -> Unacked;
-                 false -> remove_delivery_tags(
-                            Seq, true, gb_trees:delete(Smallest, Unacked))
-             end
-    end.
 
 %%----------------------------------------------------------------------------
 
