@@ -16,7 +16,7 @@
 
 -module(rabbit_federation_unit_test).
 
--define(INFO, [{<<"uri">>, longstr, <<"amqp://localhost/%2f/foo">>}]).
+-define(INFO, [{<<"baz">>, longstr, <<"bam">>}]).
 -define(H, <<"x-forwarding">>).
 
 -include_lib("eunit/include/eunit.hrl").

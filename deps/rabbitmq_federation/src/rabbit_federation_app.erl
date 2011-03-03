@@ -38,8 +38,12 @@ stop(_State) ->
 %%----------------------------------------------------------------------------
 
 declare_exchange(Props) ->
-    {ok, Conn} = amqp_connection:start(direct,
-                                       rabbit_federation_util:local_params()),
+    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
+    VHost = list_to_binary(
+              pget(virtual_host, Props, binary_to_list(DefaultVHost))),
+    Params = rabbit_federation_util:local_params(),
+    Params1 = Params#amqp_params{virtual_host = VHost},
+    {ok, Conn} = amqp_connection:start(direct, Params1),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(
       Ch, #'exchange.declare'{
@@ -49,19 +53,34 @@ declare_exchange(Props) ->
         auto_delete = pget(auto_delete, Props, false),
         internal    = pget(internal,    Props, false),
         arguments   =
-            [{<<"upstreams">>, array,  [{longstr, list_to_binary(U)} ||
+            [{<<"upstreams">>, array,  [{table, to_table(U)} ||
                                            U <- pget(upstreams, Props)]},
              {<<"type">>,      longstr, list_to_binary(pget(type, Props))}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn).
 
+to_table(U) ->
+    Args = [{host,         longstr},
+            {protocol,     longstr},
+            {port,         long},
+            {virtual_host, longstr},
+            {exchange,     longstr}],
+    [Row || {K, T} <- Args, Row <- [to_table_row(U, K, T)], Row =/= none].
+
+to_table_row(U, Key, Type) ->
+    case {Type, proplists:get_value(Key, U)} of
+        {_,    undefined} -> none;
+        {long, Value}     -> {list_to_binary(atom_to_list(Key)), Type, Value};
+        {_,    Value}     -> {list_to_binary(atom_to_list(Key)), Type,
+                              list_to_binary(Value)}
+    end.
 
 pget(K, P, D) ->
     proplists:get_value(K, P, D).
 
 pget(K, P) ->
     case proplists:get_value(K, P) of
-        undefined -> exit({error, "Key missing in exchange definition", K, P});
+        undefined -> exit({error, key_missing, K});
         V         -> V
     end.
 

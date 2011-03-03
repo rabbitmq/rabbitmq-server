@@ -3,13 +3,11 @@ WARNING
 
 This is all very experimental. You have been warned.
 
-You need branch bug22953 of rabbitmq-server.
-
 Generic build instructions are at:
         http://www.rabbitmq.com/plugin-development.html
 
 Significant limitation: rabbitmq-federation is not compatible with
-clustering. *Do not deploy it in a cluster*. Obviously we'll fix this
+clustering. *Do not deploy it in a cluster*. We intend to fix this
 at some point.
 
 
@@ -22,8 +20,8 @@ requiring clustering. This is useful for the following reasons:
 1) Federated brokers may be in different administrative
    domains. Clustered brokers form a single administrative domain.
 
-   a) Federated brokers may have different users and vhosts. Federated
-      brokers only need to partially trust each other.
+   a) Federated brokers may have different users and virtual hosts.
+      Federated brokers only need to partially trust each other.
 
    b) Federated brokers may run different versions of RabbitMQ and
       Erlang.
@@ -80,16 +78,17 @@ Static Configuration
 A reasonably verbose static configuration might look like:
 
   {rabbit_federation,
-   [ {exchanges, [[{exchange,    "my-exchange"},
-                   {vhost,       "/"},
-                   {type,        "topic"},
-                   {durable,     true},
-                   {auto_delete, false},
-                   {internal,    false},
-                   {upstreams,   ["amqps://upstream-server/%2f/my-exchange"]}]
+   [ {exchanges, [[{exchange,     "my-exchange"},
+                   {virtual_host, "/"},
+                   {type,         "topic"},
+                   {durable,      true},
+                   {auto_delete,  false},
+                   {internal,     false},
+                   {upstreams,    [[{host,     "upstream-server"},
+                                    {protocol, "amqps"}]]}]
                  ]},
      {brokers, [[{host,            "upstream-server"},
-                 {scheme,          "amqps"},
+                 {protocol,        "amqps"},
                  {username,        "myusername"},
                  {password,        "secret"},
                  {prefetch_count,  10},
@@ -110,7 +109,11 @@ A reasonably verbose static configuration might look like:
   }
 
 The upstreams parameter is a list of remote exchanges whose messages
-should be federated to the local exchange.
+should be federated to the local exchange. You can specify host, port,
+protocol, virtual_host and exchange here. Only host is mandatory; if
+protocol is omitted the protocol is taken as "amqp", and if
+virtual_host or exchange are omitted the default is the same as the
+downstream exchange.
 
 Most of the rest looks like an exchange.declare, but note that *the
 type parameter must match the type of the upstream exchanges for
@@ -125,7 +128,7 @@ host
 scheme
   - "amqp" or "amqps"
 
-vhost
+virtual_host
   - if present, distinguish between different sets of broker
     properties for different virtual hosts on the same broker
 
@@ -173,7 +176,9 @@ This is less common, but in case you want to do this:
 
  * Give it arguments "type" and "upstreams". "type" should refer to
    its backing type; the type of the upstream exchanges. "upstreams"
-   should be an array of URIs.
+   should be an array of tables. Each table must have a "host" fields,
+   and may also have "protocol", "port", "virtual_host" and "exchange"
+   fields. TODO example.
 
  * Connection information and SSL parameters will still be taken from the
    static configuration.

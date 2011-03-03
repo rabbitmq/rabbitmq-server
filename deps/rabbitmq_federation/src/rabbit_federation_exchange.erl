@@ -137,10 +137,10 @@ maybe_unbind_upstreams(X, Binding = #binding{source      = Source,
 
 exchange_to_sup_args(#exchange{ name = Downstream, durable = Durable,
                                 arguments = Args }) ->
-    {array, UpstreamURIs} =
+    {array, UpstreamTables} =
         rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    Upstreams = [rabbit_federation_util:upstream_from_uri(U) ||
-                    {longstr, U} <- UpstreamURIs],
+    Upstreams = [rabbit_federation_util:upstream_from_table(U, Downstream) ||
+                    {table, U} <- UpstreamTables],
     {Upstreams, Downstream, Durable}.
 
 validate_arg(Name, Type, Args) ->
@@ -150,19 +150,24 @@ validate_arg(Name, Type, Args) ->
         _         -> fail("Argument ~s must be of type ~s", [Name, Type])
     end.
 
-validate_upstream({longstr, URI}) ->
-    case rabbit_federation_util:parse_uri(URI) of
-        {error, E} ->
-            fail("URI ~s could not be parsed, error: ~p", [URI, E]);
-        Props ->
-            case proplists:get_value(scheme, Props) of
-                "amqp"  -> ok;
-                "amqps" -> ok;
-                S       -> fail("Scheme ~s not supported", [S])
-            end
-    end;
-validate_upstream({Type, URI}) ->
-    fail("URI ~w was of type ~s, not longstr", [URI, Type]).
+validate_upstream({table, Table}) ->
+    Args = [{<<"host">>,         longstr, true},
+            {<<"protocol">>,     longstr, false},
+            {<<"port">>,         long,    false},
+            {<<"virtual_host">>, longstr, false},
+            {<<"exchange">>,     longstr, false}],
+    [check_arg(Table, K, T, M) || {K, T, M} <- Args];
+validate_upstream({Type, Obj}) ->
+    fail("Upstream ~w was of type ~s, not table", [Obj, Type]).
+
+check_arg(Table, K, T, Mandatory) ->
+    case {rabbit_misc:table_lookup(Table, K), Mandatory} of
+        {{T,  _}, _}     -> ok;
+        {{T2, _}, _}     -> fail("~s is of type ~s, but ~s was received",
+                                 [K, T, T2]);
+        {_,       true}  -> fail("~s is mandatory", [K]);
+        {_,       false} -> ok
+    end.
 
 fail(Fmt, Args) ->
     rabbit_misc:protocol_error(precondition_failed, Fmt, Args).

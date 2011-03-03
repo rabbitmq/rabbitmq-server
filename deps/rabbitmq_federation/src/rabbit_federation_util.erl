@@ -19,26 +19,10 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([parse_uri/1, purpose_arg/0, has_purpose_arg/1, upstream_from_uri/1,
+-export([purpose_arg/0, has_purpose_arg/1, upstream_from_table/2,
          local_params/0]).
 
-parse_uri(URI) ->
-    case uri_parser:parse(
-           binary_to_list(URI), [{host, undefined}, {path, "/"},
-                                 {port, 5672},      {'query', []}]) of
-        {error, _} = E ->
-            E;
-        Props ->
-            case string:tokens(proplists:get_value(path, Props), "/") of
-                [VHostEnc, XEnc] ->
-                    VHost = httpd_util:decode_hex(VHostEnc),
-                    X = httpd_util:decode_hex(XEnc),
-                    [{exchange, list_to_binary(X)},
-                     {vhost,    list_to_binary(VHost)}] ++ Props;
-                _ ->
-                    {error, path_must_have_two_components}
-            end
-    end.
+%%----------------------------------------------------------------------------
 
 purpose_arg() ->
     {<<"x-purpose">>, longstr, <<"federation">>}.
@@ -58,24 +42,26 @@ local_params() ->
 
 %%----------------------------------------------------------------------------
 
-upstream_from_uri(ExchangeURI) ->
-    Props = parse_uri(ExchangeURI),
-    AMQPParams = #amqp_params{host         = proplists:get_value(host, Props),
-                              port         = proplists:get_value(port, Props),
-                              virtual_host = proplists:get_value(vhost, Props)},
+%% TODO this all badly needs a rewrite
+upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
+    Props = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
+    AMQPParams = #amqp_params{
+      host         = binary_to_list(proplists:get_value(host, Props)),
+      port         = proplists:get_value(port,         Props),
+      virtual_host = proplists:get_value(virtual_host, Props, DVHost)},
     {ok, Brokers} = application:get_env(rabbit_federation, brokers),
     Usable = [Merged || Broker <- Brokers,
                         Merged <- [merge(Broker, Props)],
                         all_match(Broker, Merged)],
     case Usable of
-        []    -> P = upstream_from_broker([], Props),
-                 P#upstream{params = AMQPParams};
-        [B|_] -> P = upstream_from_broker(B, Props),
+        []    -> P = upstream_from_broker([], Props, DX),
+                 P#upstream{params = amqp_params_from_broker(AMQPParams, [])};
+        [B|_] -> P = upstream_from_broker(B, Props, DX),
                  P#upstream{params = amqp_params_from_broker(AMQPParams, B)}
     end.
 
-upstream_from_broker(B, Props) ->
-    #upstream{exchange        = proplists:get_value(exchange, Props),
+upstream_from_broker(B, Props, DX) ->
+    #upstream{exchange        = proplists:get_value(exchange, Props,    DX),
               prefetch_count  = proplists:get_value(prefetch_count,  B, 100),
               reconnect_delay = proplists:get_value(reconnect_delay, B, 1),
               queue_expires   = proplists:get_value(queue_expires,   B, 1800)}.
@@ -85,21 +71,28 @@ amqp_params_from_broker(P, B) ->
            username = list_to_binary(proplists:get_value(username, B, "guest")),
            password = list_to_binary(proplists:get_value(password, B, "guest"))
           },
-    P2 = case proplists:get_value(scheme, B, "amqp") of
+    P2 = case proplists:get_value(protocol, B, "amqp") of
              "amqp"  -> P1;
              "amqps" -> {ok, Opts} = application:get_env(
                                        rabbit_federation, ssl_options),
-                        P1#amqp_params{ssl_options = Opts,
-                                       port        = 5671}
+                        P1#amqp_params{ssl_options = Opts}
          end,
-    P3 = case proplists:get_value(heartbeat, B, none) of
-             none -> P2;
-             H    -> P2#amqp_params{heartbeat = H}
+    P3 = case P2#amqp_params.port of
+             undefined  -> Port = case P2#amqp_params.ssl_options of
+                                      none -> 5672;
+                                      _    -> 5671
+                                  end,
+                           P2#amqp_params{port = Port};
+             _          -> P2
+         end,
+    P4 = case proplists:get_value(heartbeat, B, none) of
+             none -> P3;
+             H    -> P3#amqp_params{heartbeat = H}
          end,
     case proplists:get_value(mechanism, B, default) of
-        default    -> P3;
+        default    -> P4;
         %% TODO it would be nice to support arbitrary mechanisms here.
-        'EXTERNAL' -> P3#amqp_params{auth_mechanisms =
+        'EXTERNAL' -> P4#amqp_params{auth_mechanisms =
                                          [fun amqp_auth_mechanisms:external/3]};
         M          -> exit({unsupported_mechanism, M})
     end.
