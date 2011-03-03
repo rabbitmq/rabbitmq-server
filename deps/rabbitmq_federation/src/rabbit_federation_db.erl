@@ -22,11 +22,18 @@
 -export([get_active_suffix/2, set_active_suffix/3]).
 
 %% TODO get rid of this dets table, use mnesia
--define(DETS_NAME, rabbit_federation_exchange).
+-define(DETS_NAME, "rabbit_federation_exchange").
 
 init() ->
     F = file(),
-    {ok, F} = dets:open_file(F, [{type, set}]).
+    Args = [{type, set}],
+    case dets:open_file(F, Args) of
+        {ok, F} -> ok;
+        Error   -> rabbit_log:error("Federation state file ~s could "
+                                    "not be opened - ~p.", [F, Error]),
+                   ok = file:delete(F),
+                   {ok, F} = dets:open_file(F, Args)
+    end.
 
 sup_for_exchange(X) ->
     [{_, Pid}] = dets:lookup(file(), {pid, X}),
