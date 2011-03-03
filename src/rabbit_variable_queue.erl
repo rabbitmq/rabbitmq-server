@@ -510,7 +510,7 @@ publish(Msg, MsgProps, State) ->
     a(reduce_memory_use(State1)).
 
 publish_delivered(false, #basic_message { guid = Guid },
-                  MsgProps = #message_properties {
+                  #message_properties {
                     needs_confirming = NeedsConfirming },
                   State = #vqstate { len = 0 }) ->
     case NeedsConfirming of
