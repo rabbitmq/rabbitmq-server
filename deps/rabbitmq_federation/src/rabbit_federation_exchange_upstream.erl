@@ -35,7 +35,7 @@
                 channel,
                 queue,
                 internal_exchange,
-                unacked,
+                unacked = gb_trees:empty(),
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange,
@@ -80,27 +80,31 @@ handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast({init, {Upstream, DownstreamX, Durable}}, not_started) ->
-    {ok, DConn} = amqp_connection:start(direct,
-                                        rabbit_federation_util:local_params()),
-    {ok, DCh} = amqp_connection:open_channel(DConn),
-    #'confirm.select_ok'{} = amqp_channel:call(DCh, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(DCh, self()),
-    erlang:monitor(process, DCh),
-    {ok, Conn} = amqp_connection:start(network, Upstream#upstream.params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    erlang:monitor(process, Ch),
-    State = #state{downstream_connection = DConn,
-                   downstream_channel    = DCh,
-                   downstream_exchange   = DownstreamX,
-                   downstream_durable    = Durable,
-                   upstream              = Upstream,
-                   connection            = Conn,
-                   channel               = Ch,
-                   unacked               = gb_trees:empty()},
-    State1 = consume_from_upstream_queue(State),
-    State2 = ensure_upstream_bindings(State1),
-    {noreply, State2};
+handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
+    case open(direct, rabbit_federation_util:local_params()) of
+        {ok, DConn, DCh} ->
+            #'confirm.select_ok'{} =
+                amqp_channel:call(DCh, #'confirm.select'{}),
+            amqp_channel:register_confirm_handler(DCh, self()),
+            case open(network, Upstream#upstream.params) of
+                {ok, Conn, Ch} ->
+                    State = #state{downstream_connection = DConn,
+                                   downstream_channel    = DCh,
+                                   downstream_exchange   = DownstreamX,
+                                   downstream_durable    = Durable,
+                                   upstream              = Upstream,
+                                   connection            = Conn,
+                                   channel               = Ch},
+                    State1 = consume_from_upstream_queue(State),
+                    State2 = ensure_upstream_bindings(State1),
+                    {noreply, State2};
+                E ->
+                    ensure_closed(DConn, DCh),
+                    {stop, E, S0}
+            end;
+        E ->
+            {stop, E, S0}
+    end;
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -162,6 +166,17 @@ terminate(_Reason, #state{downstream_channel    = DCh,
     ok.
 
 %%----------------------------------------------------------------------------
+
+open(Type, Params) ->
+    case amqp_connection:start(Type, Params) of
+        {ok, Conn} -> case amqp_connection:open_channel(Conn) of
+                          {ok, Ch} -> erlang:monitor(process, Ch),
+                                      {ok, Conn, Ch};
+                          E        -> catch amqp_connection:close(Conn),
+                                      E
+                      end;
+        E -> E
+    end.
 
 add_binding(#binding{key = Key, args = Args},
             #state{channel = Ch, internal_exchange = InternalX,
