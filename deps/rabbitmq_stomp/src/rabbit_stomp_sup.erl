@@ -90,16 +90,15 @@ listener_started(Protocol, IPAddress, Port) ->
 listener_stopped(Protocol, IPAddress, Port) ->
     rabbit_networking:tcp_listener_stopped(Protocol, IPAddress, Port).
 
-start_client(Sock, SockTransform) ->
+start_client(Sock) ->
     {ok, SupPid, ReaderPid} =
         supervisor:start_child(rabbit_stomp_client_sup_sup, [Sock]),
-    ok = gen_tcp:controlling_process(Sock, ReaderPid),
-    ReaderPid ! {go, Sock, SockTransform},
+    ok = rabbit_net:controlling_process(Sock, ReaderPid),
+    ReaderPid ! {go, Sock},
     SupPid.
 
-start_client(Sock) ->
-    start_client(Sock, fun(S) -> {ok, S} end).
-
 start_ssl_client(SslOpts, Sock) ->
-    start_client(Sock, rabbit_networking:ssl_transform_fun(SslOpts)).
+    Transform = rabbit_networking:ssl_transform_fun(SslOpts),
+    {ok, SslSock} = Transform(Sock),
+    start_client(SslSock).
 
