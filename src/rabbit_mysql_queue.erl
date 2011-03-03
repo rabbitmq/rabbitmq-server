@@ -795,15 +795,14 @@ q_peek(#s { queue_name = DbQueueName }) ->
 post_pop(true,
          M = #m { seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
          S = #s { queue_name = DbQueueName }) ->
-%%     LQ = length(mnesia:all_keys(QTable)),
-%%     add_p(M #m { is_delivered = true }, S),
-%%     {Msg, IsDelivered, SeqId, LQ};
-%% post_pop(false,
-%%          #m { msg = Msg, is_delivered = IsDelivered },
-%%          #s { q_table = QTable }) ->
-%%     LQ = length(mnesia:all_keys(QTable)),
-%%     {Msg, IsDelivered, undefined, LQ}.
-    yo_mama_bogus_result.
+    LQ = mysql_helper:count_rows_for_queue(q, DbQueueName),
+    add_p(M # m { is_delivered = true}, S),
+    {Msg, IsDelivered, SeqId, LQ};
+post_pop(false,
+         #m { msg = Msg, is_delivered = IsDelivered },
+         #s { queue_name = DbQueueName }) ->
+    LQ = mysql_helper:count_rows_for_queue(q, DbQueueName),
+    {Msg, IsDelivered, undefined, LQ}.
 
 %% add_p adds a pending ack to the P table in Mnesia.
 
