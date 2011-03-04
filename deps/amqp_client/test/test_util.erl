@@ -340,6 +340,20 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
     receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     Parent ! finished.
 
+consume_notification_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Q = uuid(),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    #'basic.consume_ok'{consumer_tag = CTag} = ConsumeOk =
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
+    receive ConsumeOk -> ok end,
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = Q}),
+    receive #'basic.cancel'{consumer_tag = CTag} -> ok end,
+    amqp_channel:close(Channel),
+    ok.
+
 basic_recover_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q} =

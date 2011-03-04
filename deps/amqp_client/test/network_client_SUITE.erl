@@ -38,6 +38,9 @@ basic_recover_test() ->
 basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
 
+consume_notification_test() ->
+    test_util:consume_notification_test(new_connection()).
+
 basic_nack_test() ->
     test_util:basic_nack_test(new_connection()).
 
