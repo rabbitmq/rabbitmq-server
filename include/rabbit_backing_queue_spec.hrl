@@ -25,11 +25,13 @@
 -type(message_properties_transformer() ::
         fun ((rabbit_types:message_properties())
              -> rabbit_types:message_properties())).
+-type(async_callback() :: fun ((fun ((state()) -> state())) -> 'ok')).
+-type(sync_callback() :: fun ((fun ((state()) -> state())) -> 'ok' | 'error')).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(init/3 :: (rabbit_amqqueue:name(), is_durable(), attempt_recovery()) ->
-                     state()).
+-spec(init/5 :: (rabbit_amqqueue:name(), is_durable(), attempt_recovery(),
+                 async_callback(), sync_callback()) -> state()).
 -spec(terminate/1 :: (state()) -> state()).
 -spec(delete_and_terminate/1 :: (state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).

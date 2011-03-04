@@ -2003,6 +2003,10 @@ test_queue_index() ->
 
     passed.
 
+variable_queue_init(QName, IsDurable, Recover) ->
+    rabbit_variable_queue:init(QName, IsDurable, Recover,
+                               fun nop/1, fun nop/1, fun nop/2, fun nop/1).
+
 variable_queue_publish(IsPersistent, Count, VQ) ->
     lists:foldl(
       fun (_N, VQN) ->
@@ -2033,8 +2037,7 @@ assert_props(List, PropVals) ->
 
 with_fresh_variable_queue(Fun) ->
     ok = empty_test_queue(),
-    VQ = rabbit_variable_queue:init(test_queue(), true, false,
-                                    fun nop/2, fun nop/1),
+    VQ = variable_queue_init(test_queue(), true, false),
     S0 = rabbit_variable_queue:status(VQ),
     assert_props(S0, [{q1, 0}, {q2, 0},
                       {delta, {delta, undefined, 0, undefined}},
@@ -2209,8 +2212,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
-                                     fun nop/2, fun nop/1),
+    VQ7 = variable_queue_init(test_queue(), true, true),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
     VQ9 = variable_queue_publish(false, 1, VQ8),
@@ -2226,8 +2228,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ4 = rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
     VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = rabbit_variable_queue:init(test_queue(), true, true,
-                                     fun nop/2, fun nop/1),
+    VQ7 = variable_queue_init(test_queue(), true, true),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
 
@@ -2258,8 +2259,7 @@ test_queue_recover() ->
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false),
               exit(QPid1, shutdown),
-              VQ1 = rabbit_variable_queue:init(QName, true, true,
-                                               fun nop/2, fun nop/1),
+              VQ1 = variable_queue_init(QName, true, true),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),

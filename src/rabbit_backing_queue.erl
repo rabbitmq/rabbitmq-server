@@ -33,7 +33,7 @@ behaviour_info(callbacks) ->
      {stop, 0},
 
      %% Initialise the backing queue and its state.
-     {init, 3},
+     {init, 5},
 
      %% Called on queue shutdown when queue isn't being deleted.
      {terminate, 1},

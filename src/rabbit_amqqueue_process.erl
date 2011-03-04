@@ -149,7 +149,7 @@ declare(Recover, From,
                      ok = rabbit_memory_monitor:register(
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
-                     BQS = BQ:init(QName, IsDurable, Recover),
+                     BQS = bq_init(BQ, QName, IsDurable, Recover),
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
@@ -158,6 +158,20 @@ declare(Recover, From,
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
+
+bq_init(BQ, QName, IsDurable, Recover) ->
+    Self = self(),
+    BQ:init(QName, IsDurable, Recover,
+            fun (Fun) ->
+                    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
+                      Self, Fun)
+            end,
+            fun (Fun) ->
+                    rabbit_misc:with_exit_handler(
+                      fun () -> error end,
+                      fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
+                                  Self, Fun) end)
+            end).
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     lists:foldl(fun({Arg, Fun}, State1) ->
@@ -797,7 +811,7 @@ handle_call({init, Recover}, From,
                      _    -> rabbit_log:warning(
                                "Queue ~p exclusive owner went away~n", [QName])
                  end,
-                 BQS = BQ:init(QName, IsDurable, Recover),
+                 BQS = bq_init(BQ, QName, IsDurable, Recover),
                  %% Rely on terminate to delete the queue.
                  {stop, normal, State#q{backing_queue_state = BQS}}
     end;
