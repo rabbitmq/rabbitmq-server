@@ -1602,50 +1602,50 @@ restart_msg_store_empty() ->
     ok = rabbit_variable_queue:start_msg_store(
            undefined, {fun (ok) -> finished end, ok}).
 
-guid_bin(X) ->
+msg_id_bin(X) ->
     erlang:md5(term_to_binary(X)).
 
 msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
-msg_store_contains(Atom, Guids, MSCState) ->
+msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
-             fun (Guid, Atom1) when Atom1 =:= Atom ->
-                     rabbit_msg_store:contains(Guid, MSCState) end,
-             Atom, Guids).
+             fun (MsgId, Atom1) when Atom1 =:= Atom ->
+                     rabbit_msg_store:contains(MsgId, MSCState) end,
+             Atom, MsgIds).
 
-msg_store_sync(Guids, MSCState) ->
+msg_store_sync(MsgIds, MSCState) ->
     Ref = make_ref(),
     Self = self(),
-    ok = rabbit_msg_store:sync(Guids, fun () -> Self ! {sync, Ref} end,
+    ok = rabbit_msg_store:sync(MsgIds, fun () -> Self ! {sync, Ref} end,
                                MSCState),
     receive
         {sync, Ref} -> ok
     after
         10000 ->
-            io:format("Sync from msg_store missing for guids ~p~n", [Guids]),
+            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
             throw(timeout)
     end.
 
-msg_store_read(Guids, MSCState) ->
-    lists:foldl(fun (Guid, MSCStateM) ->
-                        {{ok, Guid}, MSCStateN} = rabbit_msg_store:read(
-                                                    Guid, MSCStateM),
+msg_store_read(MsgIds, MSCState) ->
+    lists:foldl(fun (MsgId, MSCStateM) ->
+                        {{ok, MsgId}, MSCStateN} = rabbit_msg_store:read(
+                                                     MsgId, MSCStateM),
                         MSCStateN
-                end, MSCState, Guids).
+                end, MSCState, MsgIds).
 
-msg_store_write(Guids, MSCState) ->
-    ok = lists:foldl(
-           fun (Guid, ok) -> rabbit_msg_store:write(Guid, Guid, MSCState) end,
-           ok, Guids).
+msg_store_write(MsgIds, MSCState) ->
+    ok = lists:foldl(fun (MsgId, ok) ->
+                             rabbit_msg_store:write(MsgId, MsgId, MSCState)
+                     end, ok, MsgIds).
 
-msg_store_remove(Guids, MSCState) ->
-    rabbit_msg_store:remove(Guids, MSCState).
+msg_store_remove(MsgIds, MSCState) ->
+    rabbit_msg_store:remove(MsgIds, MSCState).
 
-msg_store_remove(MsgStore, Ref, Guids) ->
+msg_store_remove(MsgStore, Ref, MsgIds) ->
     with_msg_store_client(MsgStore, Ref,
                           fun (MSCStateM) ->
-                                  ok = msg_store_remove(Guids, MSCStateM),
+                                  ok = msg_store_remove(MsgIds, MSCStateM),
                                   MSCStateM
                           end).
 
@@ -1655,140 +1655,140 @@ with_msg_store_client(MsgStore, Ref, Fun) ->
 
 foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
     rabbit_msg_store:client_terminate(
-      lists:foldl(fun (Guid, MSCState) -> Fun(Guid, MSCState) end,
+      lists:foldl(fun (MsgId, MSCState) -> Fun(MsgId, MSCState) end,
                   msg_store_client_init(MsgStore, Ref), L)).
 
 test_msg_store() ->
     restart_msg_store_empty(),
     Self = self(),
-    Guids = [guid_bin(M) || M <- lists:seq(1,100)],
-    {Guids1stHalf, Guids2ndHalf} = lists:split(50, Guids),
+    MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
+    {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     Ref = rabbit_guid:guid(),
     MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs we're about to publish
-    false = msg_store_contains(false, Guids, MSCState),
+    false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
-    ok = msg_store_write(Guids1stHalf, MSCState),
+    ok = msg_store_write(MsgIds1stHalf, MSCState),
     %% sync on the first half
-    ok = msg_store_sync(Guids1stHalf, MSCState),
+    ok = msg_store_sync(MsgIds1stHalf, MSCState),
     %% publish the second half
-    ok = msg_store_write(Guids2ndHalf, MSCState),
+    ok = msg_store_write(MsgIds2ndHalf, MSCState),
     %% sync on the first half again - the msg_store will be dirty, but
     %% we won't need the fsync
-    ok = msg_store_sync(Guids1stHalf, MSCState),
+    ok = msg_store_sync(MsgIds1stHalf, MSCState),
     %% check they're all in there
-    true = msg_store_contains(true, Guids, MSCState),
+    true = msg_store_contains(true, MsgIds, MSCState),
     %% publish the latter half twice so we hit the caching and ref count code
-    ok = msg_store_write(Guids2ndHalf, MSCState),
+    ok = msg_store_write(MsgIds2ndHalf, MSCState),
     %% check they're still all in there
-    true = msg_store_contains(true, Guids, MSCState),
+    true = msg_store_contains(true, MsgIds, MSCState),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
     ok = lists:foldl(
-           fun (Guid, ok) -> rabbit_msg_store:sync(
-                               [Guid], fun () -> Self ! {sync, Guid} end,
-                               MSCState)
-           end, ok, Guids2ndHalf),
+           fun (MsgId, ok) -> rabbit_msg_store:sync(
+                                [MsgId], fun () -> Self ! {sync, MsgId} end,
+                                MSCState)
+           end, ok, MsgIds2ndHalf),
     lists:foldl(
-      fun(Guid, ok) ->
+      fun(MsgId, ok) ->
               receive
-                  {sync, Guid} -> ok
+                  {sync, MsgId} -> ok
               after
                   10000 ->
-                      io:format("Sync from msg_store missing (guid: ~p)~n",
-                                [Guid]),
+                      io:format("Sync from msg_store missing (msg_id: ~p)~n",
+                                [MsgId]),
                       throw(timeout)
               end
-      end, ok, Guids2ndHalf),
+      end, ok, MsgIds2ndHalf),
     %% it's very likely we're not dirty here, so the 1st half sync
     %% should hit a different code path
-    ok = msg_store_sync(Guids1stHalf, MSCState),
+    ok = msg_store_sync(MsgIds1stHalf, MSCState),
     %% read them all
-    MSCState1 = msg_store_read(Guids, MSCState),
+    MSCState1 = msg_store_read(MsgIds, MSCState),
     %% read them all again - this will hit the cache, not disk
-    MSCState2 = msg_store_read(Guids, MSCState1),
+    MSCState2 = msg_store_read(MsgIds, MSCState1),
     %% remove them all
-    ok = rabbit_msg_store:remove(Guids, MSCState2),
+    ok = rabbit_msg_store:remove(MsgIds, MSCState2),
     %% check first half doesn't exist
-    false = msg_store_contains(false, Guids1stHalf, MSCState2),
+    false = msg_store_contains(false, MsgIds1stHalf, MSCState2),
     %% check second half does exist
-    true = msg_store_contains(true, Guids2ndHalf, MSCState2),
+    true = msg_store_contains(true, MsgIds2ndHalf, MSCState2),
     %% read the second half again
-    MSCState3 = msg_store_read(Guids2ndHalf, MSCState2),
+    MSCState3 = msg_store_read(MsgIds2ndHalf, MSCState2),
     %% release the second half, just for fun (aka code coverage)
-    ok = rabbit_msg_store:release(Guids2ndHalf, MSCState3),
+    ok = rabbit_msg_store:release(MsgIds2ndHalf, MSCState3),
     %% read the second half again, just for fun (aka code coverage)
-    MSCState4 = msg_store_read(Guids2ndHalf, MSCState3),
+    MSCState4 = msg_store_read(MsgIds2ndHalf, MSCState3),
     ok = rabbit_msg_store:client_terminate(MSCState4),
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
            [], {fun ([]) -> finished;
-                    ([Guid|GuidsTail])
-                      when length(GuidsTail) rem 2 == 0 ->
-                        {Guid, 1, GuidsTail};
-                    ([Guid|GuidsTail]) ->
-                        {Guid, 0, GuidsTail}
-                end, Guids2ndHalf}),
+                    ([MsgId|MsgIdsTail])
+                      when length(MsgIdsTail) rem 2 == 0 ->
+                        {MsgId, 1, MsgIdsTail};
+                    ([MsgId|MsgIdsTail]) ->
+                        {MsgId, 0, MsgIdsTail}
+                end, MsgIds2ndHalf}),
     MSCState5 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we have the right msgs left
     lists:foldl(
-      fun (Guid, Bool) ->
-              not(Bool = rabbit_msg_store:contains(Guid, MSCState5))
-      end, false, Guids2ndHalf),
+      fun (MsgId, Bool) ->
+              not(Bool = rabbit_msg_store:contains(MsgId, MSCState5))
+      end, false, MsgIds2ndHalf),
     ok = rabbit_msg_store:client_terminate(MSCState5),
     %% restart empty
     restart_msg_store_empty(),
     MSCState6 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs
-    false = msg_store_contains(false, Guids, MSCState6),
+    false = msg_store_contains(false, MsgIds, MSCState6),
     %% publish the first half again
-    ok = msg_store_write(Guids1stHalf, MSCState6),
+    ok = msg_store_write(MsgIds1stHalf, MSCState6),
     %% this should force some sort of sync internally otherwise misread
     ok = rabbit_msg_store:client_terminate(
-           msg_store_read(Guids1stHalf, MSCState6)),
+           msg_store_read(MsgIds1stHalf, MSCState6)),
     MSCState7 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
-    ok = rabbit_msg_store:remove(Guids1stHalf, MSCState7),
+    ok = rabbit_msg_store:remove(MsgIds1stHalf, MSCState7),
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
-    restart_msg_store_empty(), %% now safe to reuse guids
+    restart_msg_store_empty(), %% now safe to reuse msg_ids
     %% push a lot of msgs in... at least 100 files worth
     {ok, FileSize} = application:get_env(rabbit, msg_store_file_size_limit),
     PayloadSizeBits = 65536,
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
-    GuidsBig = [guid_bin(X) || X <- lists:seq(1, BigCount)],
+    MsgIdsBig = [msg_id_bin(X) || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
            fun (MSCStateM) ->
-                   [ok = rabbit_msg_store:write(Guid, Payload, MSCStateM) ||
-                       Guid <- GuidsBig],
+                   [ok = rabbit_msg_store:write(MsgId, Payload, MSCStateM) ||
+                       MsgId <- MsgIdsBig],
                    MSCStateM
            end),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (Guid, MSCStateM) ->
+           fun (MsgId, MSCStateM) ->
                    {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
-                                                  Guid, MSCStateM),
+                                                  MsgId, MSCStateM),
                    MSCStateN
-           end, GuidsBig),
+           end, MsgIdsBig),
     %% .., then 3s by 1...
     ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [guid_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
+                          [msg_id_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
     %% .., then remove 3s by 2, from the young end first. This hits
     %% GC (under 50% good data left, but no empty files. Must GC).
     ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [guid_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
+                          [msg_id_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
     %% .., then remove 3s by 3, from the young end first. This hits
     %% GC...
     ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [guid_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
+                          [msg_id_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
     %% ensure empty
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
            fun (MSCStateM) ->
-                   false = msg_store_contains(false, GuidsBig, MSCStateM),
+                   false = msg_store_contains(false, MsgIdsBig, MSCStateM),
                    MSCStateM
            end),
     %% restart empty
@@ -1808,8 +1808,8 @@ init_test_queue() ->
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
             TestQueue, Terms, false,
-            fun (Guid) ->
-                    rabbit_msg_store:contains(Guid, PersistentClient)
+            fun (MsgId) ->
+                    rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
             fun nop/1),
     ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
@@ -1840,25 +1840,25 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                    false -> ?TRANSIENT_MSG_STORE
                end,
     MSCState = msg_store_client_init(MsgStore, Ref),
-    {A, B = [{_SeqId, LastGuidWritten} | _]} =
+    {A, B = [{_SeqId, LastMsgIdWritten} | _]} =
         lists:foldl(
-          fun (SeqId, {QiN, SeqIdsGuidsAcc}) ->
-                  Guid = rabbit_guid:guid(),
+          fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
+                  MsgId = rabbit_guid:guid(),
                   QiM = rabbit_queue_index:publish(
-                          Guid, SeqId, #message_properties{}, Persistent, QiN),
-                  ok = rabbit_msg_store:write(Guid, Guid, MSCState),
-                  {QiM, [{SeqId, Guid} | SeqIdsGuidsAcc]}
+                          MsgId, SeqId, #message_properties{}, Persistent, QiN),
+                  ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
+                  {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
     %% do this just to force all of the publishes through to the msg_store:
-    true = rabbit_msg_store:contains(LastGuidWritten, MSCState),
+    true = rabbit_msg_store:contains(LastMsgIdWritten, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
 
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{Guid, SeqId, _Props, Persistent, Delivered}|Read],
-                           [{SeqId, Guid}|Published]) ->
+                           [{MsgId, SeqId, _Props, Persistent, Delivered}|Read],
+                           [{SeqId, MsgId}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
@@ -1866,10 +1866,10 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
 test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
-              Guid = rabbit_guid:guid(),
+              MsgId = rabbit_guid:guid(),
               Props = #message_properties{expiry=12345},
-              Qi1 = rabbit_queue_index:publish(Guid, 1, Props, true, Qi0),
-              {[{Guid, 1, Props, _, _}], Qi2} =
+              Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
+              {[{MsgId, 1, Props, _, _}], Qi2} =
                   rabbit_queue_index:read(1, 2, Qi1),
               Qi2
       end),
@@ -1891,19 +1891,19 @@ test_queue_index() ->
     with_empty_test_queue(
       fun (Qi0) ->
               {0, 0, Qi1} = rabbit_queue_index:bounds(Qi0),
-              {Qi2, SeqIdsGuidsA} = queue_index_publish(SeqIdsA, false, Qi1),
+              {Qi2, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
               {0, SegmentSize, Qi3} = rabbit_queue_index:bounds(Qi2),
               {ReadA, Qi4} = rabbit_queue_index:read(0, SegmentSize, Qi3),
               ok = verify_read_with_published(false, false, ReadA,
-                                              lists:reverse(SeqIdsGuidsA)),
+                                              lists:reverse(SeqIdsMsgIdsA)),
               %% should get length back as 0, as all the msgs were transient
               {0, Qi6} = restart_test_queue(Qi4),
               {0, 0, Qi7} = rabbit_queue_index:bounds(Qi6),
-              {Qi8, SeqIdsGuidsB} = queue_index_publish(SeqIdsB, true, Qi7),
+              {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = rabbit_queue_index:bounds(Qi8),
               {ReadB, Qi10} = rabbit_queue_index:read(0, SegmentSize, Qi9),
               ok = verify_read_with_published(false, true, ReadB,
-                                              lists:reverse(SeqIdsGuidsB)),
+                                              lists:reverse(SeqIdsMsgIdsB)),
               %% should get length back as MostOfASegment
               LenB = length(SeqIdsB),
               {LenB, Qi12} = restart_test_queue(Qi10),
@@ -1911,7 +1911,7 @@ test_queue_index() ->
               Qi14 = rabbit_queue_index:deliver(SeqIdsB, Qi13),
               {ReadC, Qi15} = rabbit_queue_index:read(0, SegmentSize, Qi14),
               ok = verify_read_with_published(true, true, ReadC,
-                                              lists:reverse(SeqIdsGuidsB)),
+                                              lists:reverse(SeqIdsMsgIdsB)),
               Qi16 = rabbit_queue_index:ack(SeqIdsB, Qi15),
               Qi17 = rabbit_queue_index:flush(Qi16),
               %% Everything will have gone now because #pubs == #acks
@@ -1927,12 +1927,12 @@ test_queue_index() ->
     %% a) partial pub+del+ack, then move to new segment
     with_empty_test_queue(
       fun (Qi0) ->
-              {Qi1, _SeqIdsGuidsC} = queue_index_publish(SeqIdsC,
+              {Qi1, _SeqIdsMsgIdsC} = queue_index_publish(SeqIdsC,
                                                          false, Qi0),
               Qi2 = rabbit_queue_index:deliver(SeqIdsC, Qi1),
               Qi3 = rabbit_queue_index:ack(SeqIdsC, Qi2),
               Qi4 = rabbit_queue_index:flush(Qi3),
-              {Qi5, _SeqIdsGuidsC1} = queue_index_publish([SegmentSize],
+              {Qi5, _SeqIdsMsgIdsC1} = queue_index_publish([SegmentSize],
                                                           false, Qi4),
               Qi5
       end),
@@ -1940,10 +1940,10 @@ test_queue_index() ->
     %% b) partial pub+del, then move to new segment, then ack all in old segment
     with_empty_test_queue(
       fun (Qi0) ->
-              {Qi1, _SeqIdsGuidsC2} = queue_index_publish(SeqIdsC,
+              {Qi1, _SeqIdsMsgIdsC2} = queue_index_publish(SeqIdsC,
                                                           false, Qi0),
               Qi2 = rabbit_queue_index:deliver(SeqIdsC, Qi1),
-              {Qi3, _SeqIdsGuidsC3} = queue_index_publish([SegmentSize],
+              {Qi3, _SeqIdsMsgIdsC3} = queue_index_publish([SegmentSize],
                                                           false, Qi2),
               Qi4 = rabbit_queue_index:ack(SeqIdsC, Qi3),
               rabbit_queue_index:flush(Qi4)
@@ -1952,7 +1952,7 @@ test_queue_index() ->
     %% c) just fill up several segments of all pubs, then +dels, then +acks
     with_empty_test_queue(
       fun (Qi0) ->
-              {Qi1, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD,
+              {Qi1, _SeqIdsMsgIdsD} = queue_index_publish(SeqIdsD,
                                                           false, Qi0),
               Qi2 = rabbit_queue_index:deliver(SeqIdsD, Qi1),
               Qi3 = rabbit_queue_index:ack(SeqIdsD, Qi2),
@@ -1986,12 +1986,12 @@ test_queue_index() ->
     %% exercise journal_minus_segment, not segment_plus_journal.
     with_empty_test_queue(
       fun (Qi0) ->
-              {Qi1, _SeqIdsGuidsE} = queue_index_publish([0,1,2,4,5,7],
+              {Qi1, _SeqIdsMsgIdsE} = queue_index_publish([0,1,2,4,5,7],
                                                          true, Qi0),
               Qi2 = rabbit_queue_index:deliver([0,1,4], Qi1),
               Qi3 = rabbit_queue_index:ack([0], Qi2),
               {5, Qi4} = restart_test_queue(Qi3),
-              {Qi5, _SeqIdsGuidsF} = queue_index_publish([3,6,8], true, Qi4),
+              {Qi5, _SeqIdsMsgIdsF} = queue_index_publish([3,6,8], true, Qi4),
               Qi6 = rabbit_queue_index:deliver([2,3,5,6], Qi5),
               Qi7 = rabbit_queue_index:ack([1,2,3], Qi6),
               {5, Qi8} = restart_test_queue(Qi7),
