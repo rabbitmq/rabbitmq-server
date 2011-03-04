@@ -86,19 +86,11 @@ handle_call({register, Pid, HighMemMFA}, State) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event({set_alarm, {{vm_memory_high_watermark, Node}, []}},
-             State = #alarms{alarmed_nodes = AN,
-                             alertees      = Alertees}) ->
-    AN1 = sets:add_element(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
-    {ok, State#alarms{alarmed_nodes = AN1}};
+handle_event({set_alarm, {{vm_memory_high_watermark, Node}, []}}, State) ->
+    {ok, maybe_alert(fun sets:add_element/2, Node, State)};
 
-handle_event({clear_alarm, {vm_memory_high_watermark, Node}},
-             State = #alarms{alarmed_nodes = AN,
-                             alertees      = Alertees}) ->
-    AN1 = sets:del_element(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
-    {ok, State#alarms{alarmed_nodes = AN1}};
+handle_event({clear_alarm, {vm_memory_high_watermark, Node}}, State) ->
+    {ok, maybe_alert(fun sets:del_element/2, Node, State)};
 
 handle_event({node_up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
@@ -107,11 +99,8 @@ handle_event({node_up, Node}, State) ->
            {register, self(), {?MODULE, remote_conserve_memory, []}}),
     {ok, State};
 
-handle_event({node_down, Node}, State = #alarms{alarmed_nodes = AN,
-                                                alertees      = Alertees}) ->
-    AN1 = sets:del_element(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
-    {ok, State#alarms{alarmed_nodes = AN1}};
+handle_event({node_down, Node}, State) ->
+    {ok, maybe_alert(fun sets:del_element/2, Node, State)};
 
 handle_event({register, Pid, HighMemMFA}, State) ->
     {ok, internal_register(Pid, HighMemMFA, State)};
@@ -133,6 +122,12 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
+
+maybe_alert(SetFun, Node, State = #alarms{alarmed_nodes = AN,
+                                          alertees      = Alertees}) ->
+    AN1 = SetFun(Node, AN),
+    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
+    State#alarms{alarmed_nodes = AN1}.
 
 maybe_alert(BeforeSize, AfterSize, Alertees, AlmNde) ->
     ok = maybe_alert_remote(BeforeSize, AfterSize, Alertees, AlmNde =:= node()),
