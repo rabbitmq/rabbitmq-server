@@ -187,21 +187,21 @@
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
-                              unsynced_guids      :: [rabbit_guid:guid()]
-                             }).
--type(startup_fun_state() ::
-        {fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A}),
-         A}).
+                              unsynced_guids      :: [rabbit_types:msg_id()]
+                            }).
+-type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
+-type(walker(A) :: fun ((A) -> 'finished' |
+                               {rabbit_types:msg_id(), non_neg_integer(), A})).
 -type(shutdown_terms() :: [any()]).
 
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
 -spec(shutdown_terms/1 :: (rabbit_amqqueue:name()) -> shutdown_terms()).
 -spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
-                    fun ((rabbit_guid:guid()) -> boolean()), on_sync_fun()) ->
-             {'undefined' | non_neg_integer(), qistate()}).
+                    contains_predicate(), on_sync_fun()) ->
+                        {'undefined' | non_neg_integer(), qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/5 :: (rabbit_guid:guid(), seq_id(),
+-spec(publish/5 :: (rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(), qistate())
                    -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
@@ -209,14 +209,13 @@
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-                     {[{rabbit_guid:guid(), seq_id(),
+                     {[{rabbit_types:msg_id(), seq_id(),
                         rabbit_types:message_properties(),
                         boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
              {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 :: ([rabbit_amqqueue:name()]) ->
-                        {[[any()]], startup_fun_state()}).
+-spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 

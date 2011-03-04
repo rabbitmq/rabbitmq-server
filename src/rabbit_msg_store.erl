@@ -132,30 +132,30 @@
                       file_summary_ets   :: ets:tid(),
                       dedup_cache_ets    :: ets:tid(),
                       cur_file_cache_ets :: ets:tid()}).
--type(startup_fun_state() ::
-        {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
-         A}).
+-type(msg_ref_delta_gen(A) ::
+        fun ((A) -> 'finished' |
+                    {rabbit_types:msg_id(), non_neg_integer(), A})).
 -type(maybe_guid_fun() :: 'undefined' | fun ((gb_set()) -> any())).
 -type(maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok')).
 -type(deletion_thunk() :: fun (() -> boolean())).
 
 -spec(start_link/4 ::
         (atom(), file:filename(), [binary()] | 'undefined',
-         startup_fun_state()) -> rabbit_types:ok_pid_or_error()).
+         {msg_ref_delta_gen(A), A}) -> rabbit_types:ok_pid_or_error()).
 -spec(successfully_recovered_state/1 :: (server()) -> boolean()).
 -spec(client_init/4 :: (server(), client_ref(), maybe_guid_fun(),
                         maybe_close_fds_fun()) -> client_msstate()).
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_ref/1 :: (client_msstate()) -> client_ref()).
--spec(write/3 :: (rabbit_guid:guid(), msg(), client_msstate()) -> 'ok').
--spec(read/2 :: (rabbit_guid:guid(), client_msstate()) ->
+-spec(write/3 :: (rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok').
+-spec(read/2 :: (rabbit_types:msg_id(), client_msstate()) ->
              {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
--spec(contains/2 :: (rabbit_guid:guid(), client_msstate()) -> boolean()).
--spec(remove/2 :: ([rabbit_guid:guid()], client_msstate()) -> 'ok').
--spec(release/2 :: ([rabbit_guid:guid()], client_msstate()) -> 'ok').
--spec(sync/3 :: ([rabbit_guid:guid()], fun (() -> any()), client_msstate()) ->
-             'ok').
+-spec(contains/2 :: (rabbit_types:msg_id(), client_msstate()) -> boolean()).
+-spec(remove/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
+-spec(release/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
+-spec(sync/3 ::
+        ([rabbit_types:msg_id()], fun (() -> any()), client_msstate()) -> 'ok').
 
 -spec(sync/1 :: (server()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').

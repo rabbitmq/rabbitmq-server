@@ -39,15 +39,17 @@
 -type(position() :: non_neg_integer()).
 -type(msg_size() :: non_neg_integer()).
 -type(file_size() :: non_neg_integer()).
+-type(message_accumulator(A) ::
+        fun (({rabbit_types:msg_id(), msg_size(), position(), binary()}, A) ->
+                    A)).
 
--spec(append/3 :: (io_device(), rabbit_guid:guid(), msg()) ->
+-spec(append/3 :: (io_device(), rabbit_types:msg_id(), msg()) ->
                        rabbit_types:ok_or_error2(msg_size(), any())).
 -spec(read/2 :: (io_device(), msg_size()) ->
-                     rabbit_types:ok_or_error2({rabbit_guid:guid(), msg()},
+                     rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
                                                any())).
--spec(scan/4 :: (io_device(), file_size(),
-       fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
-       A) -> {'ok', A, position()}).
+-spec(scan/4 :: (io_device(), file_size(), message_accumulator(A), A) ->
+                     {'ok', A, position()}).
 
 -endif.
 
