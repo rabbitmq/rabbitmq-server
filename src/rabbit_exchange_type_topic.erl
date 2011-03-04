@@ -42,8 +42,8 @@ description() ->
 route(#exchange{name = X},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
     lists:append([begin
-                    Words = split_topic_key(RKey),
-                    mnesia:async_dirty(fun trie_match/2, [X, Words])
+                      Words = split_topic_key(RKey),
+                      mnesia:async_dirty(fun trie_match/2, [X, Words])
                   end || RKey <- Routes]).
 
 validate(_X) -> ok.
@@ -51,9 +51,9 @@ create(_Tx, _X) -> ok.
 
 recover(_Exchange, Bs) ->
     rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-                lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
-        end).
+      fun () ->
+              lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
+      end).
 
 delete(true, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
@@ -166,9 +166,9 @@ trie_child(X, Node, Word) ->
 
 trie_bindings(X, Node) ->
     MatchHead = #topic_trie_binding{
-                    trie_binding = #trie_binding{exchange_name = X,
-                                                 node_id       = Node,
-                                                 destination   = '$1'}},
+      trie_binding = #trie_binding{exchange_name = X,
+                                   node_id       = Node,
+                                   destination   = '$1'}},
     mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$1']}]).
 
 trie_add_edge(X, FromNode, ToNode, W) ->
@@ -194,9 +194,9 @@ trie_remove_binding(X, Node, D) ->
 trie_binding_op(X, Node, D, Op) ->
     ok = Op(rabbit_topic_trie_binding,
             #topic_trie_binding{
-                trie_binding = #trie_binding{exchange_name = X,
-                                             node_id       = Node,
-                                             destination   = D}},
+              trie_binding = #trie_binding{exchange_name = X,
+                                           node_id       = Node,
+                                           destination   = D}},
             write).
 
 trie_has_any_children(X, Node) ->
@@ -209,10 +209,10 @@ trie_has_any_children(X, Node) ->
 trie_has_any_bindings(X, Node) ->
     has_any(rabbit_topic_trie_binding,
             #topic_trie_binding{
-                trie_binding = #trie_binding{exchange_name = X,
-                                             node_id       = Node,
-                                             _             = '_'},
-                _            = '_'}).
+              trie_binding = #trie_binding{exchange_name = X,
+                                           node_id       = Node,
+                                           _             = '_'},
+              _            = '_'}).
 
 trie_remove_all_edges(X) ->
     remove_all(rabbit_topic_trie_edge,
@@ -223,8 +223,8 @@ trie_remove_all_edges(X) ->
 trie_remove_all_bindings(X) ->
     remove_all(rabbit_topic_trie_binding,
                #topic_trie_binding{
-                   trie_binding = #trie_binding{exchange_name = X, _ = '_'},
-                   _            = '_'}).
+                 trie_binding = #trie_binding{exchange_name = X, _ = '_'},
+                 _            = '_'}).
 
 has_any(Table, MatchHead) ->
     Select = mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read),

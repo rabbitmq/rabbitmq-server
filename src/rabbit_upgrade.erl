@@ -106,9 +106,9 @@ upgrades_to_apply(Heads, G) ->
     %% everything we've already applied. Subtract that from all
     %% vertices: that's what we have to apply.
     Unsorted = sets:to_list(
-                sets:subtract(
-                  sets:from_list(digraph:vertices(G)),
-                  sets:from_list(digraph_utils:reaching(Heads, G)))),
+                 sets:subtract(
+                   sets:from_list(digraph:vertices(G)),
+                   sets:from_list(digraph_utils:reaching(Heads, G)))),
     %% Form a subgraph from that list and find a topological ordering
     %% so we can invoke them in order.
     [element(2, digraph:vertex(G, StepName)) ||

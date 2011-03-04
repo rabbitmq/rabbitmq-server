@@ -117,13 +117,13 @@ test_broadcast(Fun) ->
     with_two_members(test_broadcast_fun(Fun)).
 
 test_broadcast_fun(Fun) ->
-      fun (Pid, Pid2) ->
-              ok = Fun(Pid, magic_message),
-              passed = receive_or_throw({msg, Pid, Pid, magic_message},
-                                        timeout_waiting_for_msg),
-              passed = receive_or_throw({msg, Pid2, Pid, magic_message},
-                                        timeout_waiting_for_msg)
-      end.
+    fun (Pid, Pid2) ->
+            ok = Fun(Pid, magic_message),
+            passed = receive_or_throw({msg, Pid, Pid, magic_message},
+                                      timeout_waiting_for_msg),
+            passed = receive_or_throw({msg, Pid2, Pid, magic_message},
+                                      timeout_waiting_for_msg)
+    end.
 
 with_two_members(Fun) ->
     ok = gm:create_tables(),

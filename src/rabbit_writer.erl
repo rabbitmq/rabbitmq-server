@@ -28,7 +28,7 @@
 
 -define(HIBERNATE_AFTER, 5000).
 
-%%----------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
@@ -69,7 +69,7 @@
 
 -endif.
 
-%%----------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
     {ok,
@@ -133,7 +133,7 @@ handle_message({inet_reply, _, Status}, _State) ->
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 send_command(W, MethodRecord) ->
     W ! {send_command, MethodRecord},
@@ -157,13 +157,13 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
     ok.
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 call(Pid, Msg) ->
     {ok, Res} = gen:call(Pid, '$gen_call', Msg, infinity),
     Res.
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 assemble_frame(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),

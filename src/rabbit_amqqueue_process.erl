@@ -33,7 +33,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
-% Queue's state
+%% Queue's state
 -record(q, {q,
             exclusive_consumer,
             has_had_consumers,
@@ -485,7 +485,7 @@ attempt_delivery(#delivery{txn = Txn,
                            message = Message},
                  {NeedsConfirming,
                   State = #q{backing_queue = BQ,
-                            backing_queue_state = BQS}}) ->
+                             backing_queue_state = BQS}}) ->
     store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
     {true,
      NeedsConfirming,
@@ -722,10 +722,10 @@ i(Item, _) ->
 consumers(#q{active_consumers = ActiveConsumers,
              blocked_consumers = BlockedConsumers}) ->
     rabbit_misc:queue_fold(
-            fun ({ChPid, #consumer{tag = ConsumerTag,
-                                   ack_required = AckRequired}}, Acc) ->
-                    [{ChPid, ConsumerTag, AckRequired} | Acc]
-            end, [], queue:join(ActiveConsumers, BlockedConsumers)).
+      fun ({ChPid, #consumer{tag = ConsumerTag,
+                             ack_required = AckRequired}}, Acc) ->
+              [{ChPid, ConsumerTag, AckRequired} | Acc]
+      end, [], queue:join(ActiveConsumers, BlockedConsumers)).
 
 emit_stats(State) ->
     emit_stats(State, []).
@@ -747,7 +747,7 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
                          {channel,      ChPid},
                          {queue,        self()}]).
 
-%---------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
@@ -906,15 +906,15 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                 case is_ch_blocked(C) of
                     true  -> State1#q{
                                blocked_consumers =
-                               add_consumer(
-                                 ChPid, Consumer,
-                                 State1#q.blocked_consumers)};
+                                   add_consumer(
+                                     ChPid, Consumer,
+                                     State1#q.blocked_consumers)};
                     false -> run_message_queue(
                                State1#q{
                                  active_consumers =
-                                 add_consumer(
-                                   ChPid, Consumer,
-                                   State1#q.active_consumers)})
+                                     add_consumer(
+                                       ChPid, Consumer,
+                                       State1#q.active_consumers)})
                 end,
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   not NoAck),

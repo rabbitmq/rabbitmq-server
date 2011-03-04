@@ -44,7 +44,7 @@
 -spec(message/3 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          rabbit_types:decoded_content()) ->
-         rabbit_types:ok_or_error2(rabbit_types:message(), any())).
+                        rabbit_types:ok_or_error2(rabbit_types:message(), any())).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 ::
@@ -107,9 +107,9 @@ strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
         false          -> DecodedContent;
         {value, Found} -> Headers0 = lists:delete(Found, Headers),
                           rabbit_binary_generator:clear_encoded_content(
-                              DecodedContent#content{
-                                  properties = Props#'P_basic'{
-                                      headers = Headers0}})
+                            DecodedContent#content{
+                              properties = Props#'P_basic'{
+                                             headers = Headers0}})
     end.
 
 message(ExchangeName, RoutingKey,
@@ -175,15 +175,15 @@ is_message_persistent(#content{properties = #'P_basic'{
         Other     -> throw({error, {delivery_mode_unknown, Other}})
     end.
 
-% Extract CC routes from headers
+%% Extract CC routes from headers
 header_routes(undefined) ->
     [];
 header_routes(HeadersTable) ->
     lists:append(
-        [case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
-             {array, Routes} -> [Route || {longstr, Route} <- Routes];
-             undefined       -> [];
-             {Type, _Val}    -> throw({error, {unacceptable_type_in_header,
-                                               Type,
-                                               binary_to_list(HeaderKey)}})
-         end || HeaderKey <- ?ROUTING_HEADERS]).
+      [case rabbit_misc:table_lookup(HeadersTable, HeaderKey) of
+           {array, Routes} -> [Route || {longstr, Route} <- Routes];
+           undefined       -> [];
+           {Type, _Val}    -> throw({error, {unacceptable_type_in_header,
+                                             Type,
+                                             binary_to_list(HeaderKey)}})
+       end || HeaderKey <- ?ROUTING_HEADERS]).
