@@ -68,18 +68,55 @@ add_binding(false, _Exchange, _Binding) ->
     ok.
 
 remove_bindings(true, _X, Bs) ->
-    ToDelete =
-       lists:foldl(fun(B = #binding{source = X, destination = D}, Acc) ->
-                           [{FinalNode, _} | _] = binding_path(B),
-                           [{X, FinalNode, D} | Acc]
-                   end, [], Bs),
+    {ToDelete, Paths} =
+       lists:foldl(
+         fun(B = #binding{source = X, destination = D}, {Acc, PathAcc}) ->
+                 Path = [{FinalNode, _} | _] = binding_path(B),
+                 PathAcc1 = decrement_bindings(X, Path, maybe_add_path(
+                                                          X, Path, PathAcc)),
+                 {[{X, FinalNode, D} | Acc], PathAcc1}
+         end, {[], gb_trees:empty()}, Bs),
+
     [trie_remove_binding(X, FinalNode, D) || {X, FinalNode, D} <- ToDelete],
+    [trie_remove_edge(X, Parent, Node, W) ||
+        {{X, [{Node, W}, {Parent, _} | _ ]}, {0, 0}}
+            <- gb_trees:to_list(Paths)],
     ok;
-remove_bindings(false, _X, Bs) ->
-    [rabbit_misc:execute_mnesia_transaction(
-       fun() -> remove_path_if_empty(X, binding_path(B)) end)
-                    || B = #binding{source = X} <- Bs],
+remove_bindings(false, _X, _Bs) ->
     ok.
+
+maybe_add_path(_X, [{root, none}], PathAcc) ->
+    PathAcc;
+maybe_add_path(X, Path, PathAcc) ->
+    case gb_trees:is_defined({X, Path}, PathAcc) of
+        true  -> PathAcc;
+        false -> gb_trees:insert({X, Path}, counts(X, Path), PathAcc)
+    end.
+
+decrement_bindings(X, Path, PathAcc) ->
+    with_path_acc(fun({Bindings, Edges}) -> {Bindings - 1, Edges} end,
+                  X, Path, PathAcc).
+
+decrement_edges(X, Path, PathAcc) ->
+    with_path_acc(fun({Bindings, Edges}) -> {Bindings, Edges - 1} end,
+                  X, Path, PathAcc).
+
+with_path_acc(_Fun, _X, [{root, none}], PathAcc) ->
+    PathAcc;
+with_path_acc(Fun, X, Path, PathAcc) ->
+    NewVal = Fun(gb_trees:get({X, Path}, PathAcc)),
+    NewPathAcc = gb_trees:update({X, Path}, NewVal, PathAcc),
+    case NewVal of
+        {0, 0} ->
+            [_ | ParentPath] = Path,
+            decrement_edges(X, ParentPath,
+                            maybe_add_path(X, ParentPath, NewPathAcc));
+        _ ->
+            NewPathAcc
+    end.
+
+counts(X, [{FinalNode, _} | _]) ->
+    {trie_binding_count(X, FinalNode), trie_child_count(X, FinalNode)}.
 
 binding_path(#binding{source = X, key = K}) ->
     follow_down_get_path(X, split_topic_key(K)).
@@ -151,15 +188,6 @@ follow_down(X, CurNode, AccFun, Acc, Words = [W | RestW]) ->
         error          -> {error, Acc, Words}
     end.
 
-remove_path_if_empty(_, [{root, none}]) ->
-    ok;
-remove_path_if_empty(X, [{Node, W} | [{Parent, _} | _] = RestPath]) ->
-    case trie_has_any_bindings(X, Node) orelse trie_has_any_children(X, Node) of
-        true  -> ok;
-        false -> trie_remove_edge(X, Parent, Node, W),
-                 remove_path_if_empty(X, RestPath)
-    end.
-
 trie_child(X, Node, Word) ->
     case mnesia:read(rabbit_topic_trie_edge,
                      #trie_edge{exchange_name = X,
@@ -204,20 +232,23 @@ trie_binding_op(X, Node, D, Op) ->
                                              destination   = D}},
             write).
 
-trie_has_any_children(X, Node) ->
-    has_any(rabbit_topic_trie_edge,
+trie_child_count(X, Node) ->
+    count(rabbit_topic_trie_edge,
             #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
                                                     node_id       = Node,
                                                     _             = '_'},
                              _         = '_'}).
 
-trie_has_any_bindings(X, Node) ->
-    has_any(rabbit_topic_trie_binding,
+trie_binding_count(X, Node) ->
+    count(rabbit_topic_trie_binding,
             #topic_trie_binding{
                 trie_binding = #trie_binding{exchange_name = X,
                                              node_id       = Node,
                                              _             = '_'},
                 _            = '_'}).
+
+count(Table, Match) ->
+    length(mnesia:match_object(Table, Match, read)).
 
 trie_remove_all_edges(X) ->
     remove_all(rabbit_topic_trie_edge,
@@ -230,15 +261,6 @@ trie_remove_all_bindings(X) ->
                #topic_trie_binding{
                    trie_binding = #trie_binding{exchange_name = X, _ = '_'},
                    _            = '_'}).
-
-has_any(Table, MatchHead) ->
-    Select = mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read),
-    select_while_no_result(Select) /= '$end_of_table'.
-
-select_while_no_result({[], Cont}) ->
-    select_while_no_result(mnesia:select(Cont));
-select_while_no_result(Other) ->
-    Other.
 
 remove_all(Table, Pattern) ->
     lists:foreach(fun (R) -> mnesia:delete_object(Table, R, write) end,
