@@ -150,7 +150,7 @@
 -spec(client_ref/1 :: (client_msstate()) -> client_ref()).
 -spec(write/3 :: (rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok').
 -spec(read/2 :: (rabbit_types:msg_id(), client_msstate()) ->
-             {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
+                     {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (rabbit_types:msg_id(), client_msstate()) -> boolean()).
 -spec(remove/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
 -spec(release/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').

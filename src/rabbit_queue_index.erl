@@ -214,7 +214,7 @@
                         boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
-             {non_neg_integer(), non_neg_integer(), qistate()}).
+                       {non_neg_integer(), non_neg_integer(), qistate()}).
 -spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
