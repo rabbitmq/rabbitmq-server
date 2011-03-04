@@ -510,8 +510,7 @@ publish(Msg, MsgProps, State) ->
     a(reduce_memory_use(State1)).
 
 publish_delivered(false, #basic_message { id = MsgId },
-                  #message_properties {
-                    needs_confirming = NeedsConfirming },
+                  #message_properties { needs_confirming = NeedsConfirming },
                   State = #vqstate { len = 0 }) ->
     case NeedsConfirming of
         true  -> blind_confirm(self(), gb_sets:singleton(MsgId));
@@ -632,12 +631,12 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 
     %% 3. If an ack is required, add something sensible to PA
     {AckTag, State1} = case AckRequired of
-                        true  -> StateN = record_pending_ack(
-                                            MsgStatus #msg_status {
-                                              is_delivered = true }, State),
-                                 {SeqId, StateN};
-                        false -> {undefined, State}
-                    end,
+                           true  -> StateN = record_pending_ack(
+                                               MsgStatus #msg_status {
+                                                 is_delivered = true }, State),
+                                    {SeqId, StateN};
+                           false -> {undefined, State}
+                       end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
     Len1 = Len - 1,
@@ -778,8 +777,8 @@ ram_duration(State = #vqstate {
     RamAckCount = gb_trees:size(RamAckIndex),
 
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
-        case AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
-             AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0 of
+        case (AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
+              AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0) of
             true  -> infinity;
             false -> (RamMsgCountPrev + RamMsgCount +
                           RamAckCount + RamAckCountPrev) /
@@ -1394,7 +1393,7 @@ accumulate_ack_init() -> {[], orddict:new()}.
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
                                      index_on_disk = false },
-              {PersistentSeqIdsAcc, MsgIdsByStore}) ->
+               {PersistentSeqIdsAcc, MsgIdsByStore}) ->
     {PersistentSeqIdsAcc, MsgIdsByStore};
 accumulate_ack(SeqId, {IsPersistent, MsgId, _MsgProps},
                {PersistentSeqIdsAcc, MsgIdsByStore}) ->
@@ -1817,12 +1816,12 @@ push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
 
 multiple_routing_keys() ->
     transform_storage(
-        fun ({basic_message, ExchangeName, Routing_Key, Content,
-              MsgId, Persistent}) ->
-                {ok, {basic_message, ExchangeName, [Routing_Key], Content,
-                      MsgId, Persistent}};
-            (_) -> {error, corrupt_message}
-        end),
+      fun ({basic_message, ExchangeName, Routing_Key, Content,
+            MsgId, Persistent}) ->
+              {ok, {basic_message, ExchangeName, [Routing_Key], Content,
+                    MsgId, Persistent}};
+          (_) -> {error, corrupt_message}
+      end),
     ok.
 
 

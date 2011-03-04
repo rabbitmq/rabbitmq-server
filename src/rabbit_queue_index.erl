@@ -271,7 +271,7 @@ publish(MsgId, SeqId, MsgProps, IsPersistent,
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS>>,
-                          create_pub_record_body(MsgId, MsgProps)]),
+                        create_pub_record_body(MsgId, MsgProps)]),
     maybe_flush_journal(
       add_to_journal(SeqId, {MsgId, MsgProps, IsPersistent}, State1)).
 
@@ -666,8 +666,8 @@ recover_journal(State) ->
                       journal_minus_segment(JEntries, SegEntries),
                   Segment #segment { journal_entries = JEntries1,
                                      unacked = (UnackedCountInJournal +
-                                                UnackedCountInSeg -
-                                                UnackedCountDuplicates) }
+                                                    UnackedCountInSeg -
+                                                    UnackedCountDuplicates) }
           end, Segments),
     State1 #qistate { segments = Segments1 }.
 
@@ -799,16 +799,16 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
              {MsgId, MsgProps, IsPersistent} ->
                  file_handle_cache:append(
                    Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-                          (bool_to_int(IsPersistent)):1,
-                          RelSeq:?REL_SEQ_BITS>>,
-                          create_pub_record_body(MsgId, MsgProps)])
+                           (bool_to_int(IsPersistent)):1,
+                           RelSeq:?REL_SEQ_BITS>>,
+                         create_pub_record_body(MsgId, MsgProps)])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
                  ok;
              _ ->
                  Binary = <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                           RelSeq:?REL_SEQ_BITS>>,
+                            RelSeq:?REL_SEQ_BITS>>,
                  file_handle_cache:append(
                    Hdl, case {Del, Ack} of
                             {del, ack} -> [Binary, Binary];
@@ -853,14 +853,14 @@ load_segment(KeepAcked, #segment { path = Path }) ->
 load_segment_entries(KeepAcked, Hdl, SegEntries, UnackedCount) ->
     case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
         {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-              IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
+               IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
             {MsgId, MsgProps} = read_pub_record_body(Hdl),
             Obj = {{MsgId, MsgProps, 1 == IsPersistentNum}, no_del, no_ack},
             SegEntries1 = array:set(RelSeq, Obj, SegEntries),
             load_segment_entries(KeepAcked, Hdl, SegEntries1,
                                  UnackedCount + 1);
         {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-              RelSeq:?REL_SEQ_BITS>>} ->
+               RelSeq:?REL_SEQ_BITS>>} ->
             {UnackedCountDelta, SegEntries1} =
                 case array:get(RelSeq, SegEntries) of
                     {Pub, no_del, no_ack} ->
