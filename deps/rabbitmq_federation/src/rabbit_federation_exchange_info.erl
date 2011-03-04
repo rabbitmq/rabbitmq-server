@@ -36,6 +36,7 @@ args(Pid) ->
 %%----------------------------------------------------------------------------
 
 init(Args) ->
+    process_flag(trap_exit, true),
     {ok, Args}.
 
 handle_call(args, _From, Args) ->
