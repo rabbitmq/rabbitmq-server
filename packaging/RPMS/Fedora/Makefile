@@ -31,7 +31,6 @@ prepare:
 
 	cp ${COMMON_DIR}/* SOURCES/
 	sed -i \
-	    -e 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/sysconfig/rabbitmq|' \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
 	    SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"

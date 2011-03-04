@@ -20,16 +20,16 @@
 
 -behaviour(gen_server2).
 
--export([start_link/8, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/9, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1]).
+-export([emit_stats/1, ready_for_close/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2]).
 
--record(ch, {state, channel, reader_pid, writer_pid, limiter_pid,
+-record(ch, {state, protocol, channel, reader_pid, writer_pid, limiter_pid,
              start_limiter_fun, transaction_id, tx_participants, next_tag,
              uncommitted_ack_q, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
@@ -67,10 +67,10 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/8 ::
-      (channel_number(), pid(), pid(), rabbit_types:user(),
-       rabbit_types:vhost(), rabbit_framing:amqp_table(), pid(),
-       fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
+-spec(start_link/9 ::
+      (channel_number(), pid(), pid(), rabbit_types:protocol(),
+       rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+       pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
@@ -90,16 +90,17 @@
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
+-spec(ready_for_close/1 :: (pid()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, User, VHost, Capabilities,
+start_link(Channel, ReaderPid, WriterPid, Protocol, User, VHost, Capabilities,
            CollectorPid, StartLimiterFun) ->
-    gen_server2:start_link(?MODULE,
-                           [Channel, ReaderPid, WriterPid, User, VHost,
-                            Capabilities, CollectorPid, StartLimiterFun], []).
+    gen_server2:start_link(
+      ?MODULE, [Channel, ReaderPid, WriterPid, Protocol, User, VHost,
+                Capabilities, CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -148,14 +149,18 @@ info_all(Items) ->
 emit_stats(Pid) ->
     gen_server2:cast(Pid, emit_stats).
 
+ready_for_close(Pid) ->
+    gen_server2:cast(Pid, ready_for_close).
+
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, User, VHost, Capabilities, CollectorPid,
-      StartLimiterFun]) ->
+init([Channel, ReaderPid, WriterPid, Protocol, User, VHost, Capabilities,
+      CollectorPid, StartLimiterFun]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
+                protocol                = Protocol,
                 channel                 = Channel,
                 reader_pid              = ReaderPid,
                 writer_pid              = WriterPid,
@@ -222,20 +227,22 @@ handle_cast({method, Method, Content}, State) ->
         {noreply, NewState} ->
             noreply(NewState);
         stop ->
-            {stop, normal, State#ch{state = terminating}}
+            {stop, normal, State}
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            {stop, normal, terminating(Reason#amqp_error{method = MethodName},
-                                       State)};
-        exit:normal ->
-            {stop, normal, State};
+            send_exception(Reason#amqp_error{method = MethodName}, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
 
 handle_cast({flushed, QPid}, State) ->
     {noreply, queue_blocked(QPid, State), hibernate};
+
+handle_cast(ready_for_close, State = #ch{state      = closing,
+                                         writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+    {stop, normal, State};
 
 handle_cast(terminate, State) ->
     {stop, normal, State};
@@ -247,7 +254,7 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({deliver, ConsumerTag, AckRequired,
              Msg = {_QName, QPid, _MsgId, Redelivered,
                     #basic_message{exchange_name = ExchangeName,
-                                   routing_key = RoutingKey,
+                                   routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
@@ -309,18 +316,16 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
-terminate(_Reason, State = #ch{state = terminating}) ->
-    terminate(State);
-
 terminate(Reason, State) ->
-    Res = rollback_and_notify(State),
+    {Res, _State1} = rollback_and_notify(State),
     case Reason of
         normal            -> ok = Res;
         shutdown          -> ok = Res;
         {shutdown, _Term} -> ok = Res;
         _                 -> ok
     end,
-    terminate(State).
+    pg_local:leave(rabbit_channels, self()),
+    rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -358,10 +363,22 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-terminating(Reason, State = #ch{channel = Channel, reader_pid = Reader}) ->
-    ok = rollback_and_notify(State),
-    Reader ! {channel_exit, Channel, Reason},
-    State#ch{state = terminating}.
+send_exception(Reason, State = #ch{protocol   = Protocol,
+                                   channel    = Channel,
+                                   writer_pid = WriterPid,
+                                   reader_pid = ReaderPid}) ->
+    {CloseChannel, CloseMethod} =
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+    rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
+                     [ReaderPid, Channel, Reason]),
+    %% something bad's happened: rollback_and_notify may not be 'ok'
+    {_Result, State1} = rollback_and_notify(State),
+    case CloseChannel of
+        Channel -> ok = rabbit_writer:send_command(WriterPid, CloseMethod),
+                   {noreply, State1};
+        _       -> ReaderPid ! {channel_exit, Channel, Reason},
+                   {stop, normal, State1}
+    end.
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
@@ -544,10 +561,19 @@ handle_method(#'channel.open'{}, _, _State) ->
 handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
 
-handle_method(#'channel.close'{}, _, State = #ch{writer_pid = WriterPid}) ->
-    ok = rollback_and_notify(State),
-    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+handle_method(#'channel.close_ok'{}, _, #ch{state = closing}) ->
     stop;
+
+handle_method(#'channel.close'{}, _, State = #ch{state = closing}) ->
+    {reply, #'channel.close_ok'{}, State};
+
+handle_method(_Method, _, State = #ch{state = closing}) ->
+    {noreply, State};
+
+handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
+    {ok, State1} = rollback_and_notify(State),
+    ReaderPid ! {channel_closing, self()},
+    {noreply, State1};
 
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
@@ -567,32 +593,33 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(DecodedContent#content.properties, State),
-    IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1} =
         case ConfirmEnabled of
             false -> {undefined, State};
             true  -> SeqNo = State#ch.publish_seqno,
                      {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
-    Message = #basic_message{exchange_name = ExchangeName,
-                             routing_key   = RoutingKey,
-                             content       = DecodedContent,
-                             guid          = rabbit_guid:guid(),
-                             is_persistent = IsPersistent},
-    {RoutingRes, DeliveredQPids} =
-        rabbit_exchange:publish(
-          Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
-                                MsgSeqNo)),
-    State2 = process_routing_result(RoutingRes, DeliveredQPids, ExchangeName,
-                                    MsgSeqNo, Message, State1),
-    maybe_incr_stats([{ExchangeName, 1} |
-                      [{{QPid, ExchangeName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State2),
-    {noreply, case TxnKey of
-                  none -> State2;
-                  _    -> add_tx_participants(DeliveredQPids, State2)
-              end};
+    case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
+        {ok, Message} ->
+            {RoutingRes, DeliveredQPids} =
+                rabbit_exchange:publish(
+                  Exchange,
+                  rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
+                                        MsgSeqNo)),
+            State2 = process_routing_result(RoutingRes, DeliveredQPids,
+                                            ExchangeName, MsgSeqNo, Message,
+                                            State1),
+            maybe_incr_stats([{ExchangeName, 1} |
+                              [{{QPid, ExchangeName}, 1} ||
+                                  QPid <- DeliveredQPids]], publish, State2),
+            {noreply, case TxnKey of
+                          none -> State2;
+                          _    -> add_tx_participants(DeliveredQPids, State2)
+                      end};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(precondition_failed,
+                                       "invalid message: ~p", [Reason])
+    end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
@@ -632,7 +659,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
         {ok, MessageCount,
          Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
-                               routing_key = RoutingKey,
+                               routing_keys = [RoutingKey | _CcRoutes],
                                content = Content}}} ->
             State1 = lock_message(not(NoAck),
                                   ack_record(DeliveryTag, none, Msg),
@@ -1097,11 +1124,10 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     end.
 
 basic_return(#basic_message{exchange_name = ExchangeName,
-                            routing_key   = RoutingKey,
+                            routing_keys  = [RoutingKey | _CcRoutes],
                             content       = Content},
-             WriterPid, Reason) ->
-    {_Close, ReplyCode, ReplyText} =
-        rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Reason),
+             #ch{protocol = Protocol, writer_pid = WriterPid}, Reason) ->
+    {_Close, ReplyCode, ReplyText} = Protocol:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.return'{reply_code  = ReplyCode,
@@ -1188,10 +1214,13 @@ internal_rollback(State = #ch{transaction_id = TxnKey,
     NewUAMQ = queue:join(UAQ, UAMQ),
     new_tx(State#ch{unacked_message_q = NewUAMQ}).
 
+rollback_and_notify(State = #ch{state = closing}) ->
+    {ok, State};
 rollback_and_notify(State = #ch{transaction_id = none}) ->
-    notify_queues(State);
+    {notify_queues(State), State#ch{state = closing}};
 rollback_and_notify(State) ->
-    notify_queues(internal_rollback(State)).
+    State1 = internal_rollback(State),
+    {notify_queues(State1), State1#ch{state = closing}}.
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = rabbit_misc:queue_fold(
@@ -1246,22 +1275,15 @@ notify_limiter(LimiterPid, Acked) ->
         Count -> rabbit_limiter:ack(LimiterPid, Count)
     end.
 
-is_message_persistent(Content) ->
-    case rabbit_basic:is_message_persistent(Content) of
-        {invalid, Other} ->
-            rabbit_log:warning("Unknown delivery mode ~p - "
-                               "treating as 1, non-persistent~n",
-                               [Other]),
-            false;
-        IsPersistent when is_boolean(IsPersistent) ->
-            IsPersistent
-    end.
-
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
-    ok = basic_return(Msg, State#ch.writer_pid, no_route),
+    ok = basic_return(Msg, State, no_route),
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+                     return_unroutable, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
-    ok = basic_return(Msg, State#ch.writer_pid, no_consumers),
+    ok = basic_return(Msg, State, no_consumers),
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+                     return_not_delivered, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);
@@ -1333,10 +1355,6 @@ coalesce_and_send(MsgSeqNos, MkMsgFun,
     [ok = rabbit_writer:send_command(
             WriterPid, MkMsgFun(SeqNo, false)) || SeqNo <- Ss],
     State.
-
-terminate(_State) ->
-    pg_local:leave(rabbit_channels, self()),
-    rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 

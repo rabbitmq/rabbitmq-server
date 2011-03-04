@@ -35,6 +35,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = gm_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_file_handle_cache(),
@@ -585,31 +586,130 @@ sequence_with_content(Sequence) ->
                   rabbit_framing_amqp_0_9_1),
                 Sequence).
 
-test_topic_match(P, R) ->
-    test_topic_match(P, R, true).
-
-test_topic_match(P, R, Expected) ->
-    case rabbit_exchange_type_topic:topic_matches(list_to_binary(P),
-                                                  list_to_binary(R)) of
-        Expected ->
-            passed;
-        _ ->
-            {topic_match_failure, P, R}
-    end.
-
 test_topic_matching() ->
-    passed = test_topic_match("#", "test.test"),
-    passed = test_topic_match("#", ""),
-    passed = test_topic_match("#.T.R", "T.T.R"),
-    passed = test_topic_match("#.T.R", "T.R.T.R"),
-    passed = test_topic_match("#.Y.Z", "X.Y.Z.X.Y.Z"),
-    passed = test_topic_match("#.test", "test"),
-    passed = test_topic_match("#.test", "test.test"),
-    passed = test_topic_match("#.test", "ignored.test"),
-    passed = test_topic_match("#.test", "more.ignored.test"),
-    passed = test_topic_match("#.test", "notmatched", false),
-    passed = test_topic_match("#.z", "one.two.three.four", false),
+    XName = #resource{virtual_host = <<"/">>,
+                      kind = exchange,
+                      name = <<"test_exchange">>},
+    X = #exchange{name = XName, type = topic, durable = false,
+                  auto_delete = false, arguments = []},
+    %% create
+    rabbit_exchange_type_topic:validate(X),
+    exchange_op_callback(X, create, []),
+
+    %% add some bindings
+    Bindings = lists:map(
+        fun ({Key, Q}) ->
+                #binding{source = XName,
+                         key = list_to_binary(Key),
+                         destination = #resource{virtual_host = <<"/">>,
+                                                 kind = queue,
+                                                 name = list_to_binary(Q)}}
+        end, [{"a.b.c",         "t1"},
+              {"a.*.c",         "t2"},
+              {"a.#.b",         "t3"},
+              {"a.b.b.c",       "t4"},
+              {"#",             "t5"},
+              {"#.#",           "t6"},
+              {"#.b",           "t7"},
+              {"*.*",           "t8"},
+              {"a.*",           "t9"},
+              {"*.b.c",         "t10"},
+              {"a.#",           "t11"},
+              {"a.#.#",         "t12"},
+              {"b.b.c",         "t13"},
+              {"a.b.b",         "t14"},
+              {"a.b",           "t15"},
+              {"b.c",           "t16"},
+              {"",              "t17"},
+              {"*.*.*",         "t18"},
+              {"vodka.martini", "t19"},
+              {"a.b.c",         "t20"},
+              {"*.#",           "t21"},
+              {"#.*.#",         "t22"},
+              {"*.#.#",         "t23"},
+              {"#.#.#",         "t24"},
+              {"*",             "t25"},
+              {"#.b.#",         "t26"}]),
+    lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
+                  Bindings),
+
+    %% test some matches
+    test_topic_expect_match(X,
+        [{"a.b.c",               ["t1", "t2", "t5", "t6", "t10", "t11", "t12",
+                                  "t18", "t20", "t21", "t22", "t23", "t24",
+                                  "t26"]},
+         {"a.b",                 ["t3", "t5", "t6", "t7", "t8", "t9", "t11",
+                                  "t12", "t15", "t21", "t22", "t23", "t24",
+                                  "t26"]},
+         {"a.b.b",               ["t3", "t5", "t6", "t7", "t11", "t12", "t14",
+                                  "t18", "t21", "t22", "t23", "t24", "t26"]},
+         {"",                    ["t5", "t6", "t17", "t24"]},
+         {"b.c.c",               ["t5", "t6", "t18", "t21", "t22", "t23", "t24",
+                                  "t26"]},
+         {"a.a.a.a.a",           ["t5", "t6", "t11", "t12", "t21", "t22", "t23",
+                                 "t24"]},
+         {"vodka.gin",           ["t5", "t6", "t8", "t21", "t22", "t23",
+                                  "t24"]},
+         {"vodka.martini",       ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
+                                  "t24"]},
+         {"b.b.c",               ["t5", "t6", "t10", "t13", "t18", "t21", "t22",
+                                  "t23", "t24", "t26"]},
+         {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
+         {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
+                                  "t25"]}]),
+
+    %% remove some bindings
+    RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
+                       lists:nth(11, Bindings), lists:nth(19, Bindings),
+                       lists:nth(21, Bindings)],
+    exchange_op_callback(X, remove_bindings, [RemovedBindings]),
+    RemainingBindings = ordsets:to_list(
+                          ordsets:subtract(ordsets:from_list(Bindings),
+                                           ordsets:from_list(RemovedBindings))),
+
+    %% test some matches
+    test_topic_expect_match(X,
+        [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
+                                  "t23", "t24", "t26"]},
+         {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
+                                  "t22", "t23", "t24", "t26"]},
+         {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
+                                  "t23", "t24", "t26"]},
+         {"",                    ["t6", "t17", "t24"]},
+         {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
+         {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
+         {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
+         {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
+         {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
+                                  "t24", "t26"]},
+         {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
+         {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
+
+    %% remove the entire exchange
+    exchange_op_callback(X, delete, [RemainingBindings]),
+    %% none should match now
+    test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
+
+exchange_op_callback(X, Fun, ExtraArgs) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
+    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+
+test_topic_expect_match(X, List) ->
+    lists:foreach(
+        fun ({Key, Expected}) ->
+                BinKey = list_to_binary(Key),
+                Res = rabbit_exchange_type_topic:route(
+                        X, #delivery{message = #basic_message{routing_keys =
+                                                                [BinKey]}}),
+                ExpectedRes = lists:map(
+                                fun (Q) -> #resource{virtual_host = <<"/">>,
+                                                     kind = queue,
+                                                     name = list_to_binary(Q)}
+                                end, Expected),
+                true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
+        end, List).
 
 test_app_management() ->
     %% starting, stopping, status
@@ -1019,9 +1119,9 @@ test_user_management() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
-    {ok, Ch} = rabbit_channel:start_link(1, self(), Writer,
-                                         user(<<"user">>), <<"/">>, [], self(),
-                                         fun (_) -> {ok, self()} end),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, self(), Writer, rabbit_framing_amqp_0_9_1, user(<<"user">>),
+                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1079,9 +1179,9 @@ test_server_status() ->
 test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
-    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer, user(<<"guest">>),
-                                         <<"/">>, [], self(),
-                                         fun (_) -> {ok, self()} end),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, Me, Writer, rabbit_framing_amqp_0_9_1, user(<<"guest">>),
+                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
@@ -1305,7 +1405,7 @@ test_queue_cleanup(_SecondaryNode) ->
     rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
                                             queue   = ?CLEANUP_QUEUE_NAME }),
     receive
-        {channel_exit, 1, {amqp_error, not_found, _, _}} ->
+        #'channel.close'{reply_code = 404} ->
             ok
     after 2000 ->
             throw(failed_to_receive_channel_exit)

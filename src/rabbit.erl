@@ -38,6 +38,7 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
+                    {requires,    file_handle_cache},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({file_handle_cache,
@@ -214,7 +215,8 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{running_applications, application:which_applications()}] ++
+    [{pid, list_to_integer(os:getpid())},
+     {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
 rotate_logs(BinarySuffix) ->
