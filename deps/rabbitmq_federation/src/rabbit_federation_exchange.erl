@@ -137,8 +137,7 @@ maybe_unbind_upstreams(X, Binding = #binding{source      = Source,
 
 exchange_to_sup_args(#exchange{ name = Downstream, durable = Durable,
                                 arguments = Args }) ->
-    {array, UpstreamTables} =
-        rabbit_misc:table_lookup(Args, <<"upstreams">>),
+    {array, UpstreamTables} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
     Upstreams = [rabbit_federation_util:upstream_from_table(U, Downstream) ||
                     {table, U} <- UpstreamTables],
     {Upstreams, Downstream, Durable}.
@@ -174,5 +173,3 @@ check_arg(Table, K, Ts, Mandatory) ->
 
 fail(Fmt, Args) ->
     rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
-
-

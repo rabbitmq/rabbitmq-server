@@ -51,33 +51,6 @@ init(Args) ->
     gen_server2:cast(self(), {init, Args}),
     {ok, not_started}.
 
-handle_call({add_binding, Binding}, _From, State) ->
-    add_binding(Binding, State),
-    {reply, ok, State};
-
-handle_call({remove_binding, #binding{key = Key, args = Args}}, _From,
-            State = #state{connection = Conn, queue = Q,
-                           upstream = #upstream{exchange = X}}) ->
-    %% We may already be unbound if e.g. someone has deleted the upstream
-    %% exchange
-    with_disposable_channel(
-      Conn,
-      fun (Ch) ->
-              amqp_channel:call(Ch, #'exchange.unbind'{destination = Q,
-                                                       source      = X,
-                                                       routing_key = Key,
-                                                       arguments   = Args})
-      end),
-    {reply, ok, State};
-
-handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
-    with_disposable_channel(
-      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end),
-    {stop, normal, ok, State};
-
-handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, State}.
-
 handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
     case open(direct, rabbit_federation_util:local_params()) of
         {ok, DConn, DCh} ->
@@ -107,11 +80,43 @@ handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
+handle_call({add_binding, Binding}, _From, State) ->
+    add_binding(Binding, State),
+    {reply, ok, State};
+
+handle_call({remove_binding, #binding{key = Key, args = Args}}, _From,
+            State = #state{connection = Conn, queue = Q,
+                           upstream = #upstream{exchange = X}}) ->
+    %% We may already be unbound if e.g. someone has deleted the upstream
+    %% exchange
+    with_disposable_channel(
+      Conn,
+      fun (Ch) ->
+              amqp_channel:call(Ch, #'exchange.unbind'{destination = Q,
+                                                       source      = X,
+                                                       routing_key = Key,
+                                                       arguments   = Args})
+      end),
+    {reply, ok, State};
+
+handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
+    with_disposable_channel(
+      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end),
+    {stop, normal, ok, State};
+
+handle_call(Msg, _From, State) ->
+    {stop, {unexpected_call, Msg}, State}.
+
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
 handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
             State = #state{channel = Ch}) ->
+    %% We rely on the fact that the delivery tags allocated by the
+    %% consuming side will always be increasing from 1, the same as
+    %% the publish sequence numbers are. This behaviour is not
+    %% guaranteed by the spec, but it's what Rabbit does. Assuming
+    %% this allows us to cut out a bunch of bookkeeping.
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq,
                                        multiple     = Multiple}),
     {noreply, State};
@@ -218,8 +223,8 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         channel             = Ch,
                                         downstream_exchange = DownstreamX,
                                         queue               = Q}) ->
-    #upstream{exchange       = X,
-              params         = #amqp_params{virtual_host = VHost}} = Upstream,
+    #upstream{exchange = X,
+              params   = #amqp_params{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream),
     Suffix = case OldSuffix of
                  <<"A">> -> <<"B">>;
