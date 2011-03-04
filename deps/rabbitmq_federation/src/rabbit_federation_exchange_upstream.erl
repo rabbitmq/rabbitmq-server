@@ -37,8 +37,7 @@
                 internal_exchange,
                 downstream_connection,
                 downstream_channel,
-                downstream_exchange,
-                downstream_durable}).
+                downstream_exchange}).
 
 %%----------------------------------------------------------------------------
 
@@ -62,11 +61,10 @@ handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
                     State = #state{downstream_connection = DConn,
                                    downstream_channel    = DCh,
                                    downstream_exchange   = DownstreamX,
-                                   downstream_durable    = Durable,
                                    upstream              = Upstream,
                                    connection            = Conn,
                                    channel               = Ch},
-                    State1 = consume_from_upstream_queue(State),
+                    State1 = consume_from_upstream_queue(State, Durable),
                     State2 = ensure_upstream_bindings(State1),
                     {noreply, State2};
                 E ->
@@ -191,8 +189,8 @@ add_binding(#binding{key = Key, args = Args},
 consume_from_upstream_queue(State = #state{upstream            = Upstream,
                                            connection          = Conn,
                                            channel             = Ch,
-                                           downstream_exchange = DownstreamX,
-                                           downstream_durable  = Durable}) ->
+                                           downstream_exchange = DownstreamX},
+                            Durable) ->
     #upstream{exchange       = X,
               prefetch_count = PrefetchCount,
               queue_expires  = Expiry,
