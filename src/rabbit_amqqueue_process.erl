@@ -33,7 +33,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
-% Queue's state
+%% Queue's state
 -record(q, {q,
             exclusive_consumer,
             has_had_consumers,
@@ -747,7 +747,7 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
                          {channel,      ChPid},
                          {queue,        self()}]).
 
-%---------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of

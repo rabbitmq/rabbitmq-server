@@ -425,35 +425,35 @@ test_content_properties() ->
                                            [{<<"one">>, signedint, 1},
                                             {<<"two">>, signedint, 2}]}]}],
                                 <<
-                                 % property-flags
-                                 16#8000:16,
+                                  %% property-flags
+                                  16#8000:16,
 
-                                 % property-list:
+                                  %% property-list:
 
-                                 % table
-                                 117:32,                % table length in bytes
+                                  %% table
+                                  117:32,                % table length in bytes
 
-                                 11,"a signedint",        % name
-                                 "I",12345678:32,        % type and value
+                                  11,"a signedint",      % name
+                                  "I",12345678:32,       % type and value
 
-                                 9,"a longstr",
-                                 "S",10:32,"yes please",
+                                  9,"a longstr",
+                                  "S",10:32,"yes please",
 
-                                 9,"a decimal",
-                                 "D",123,12345678:32,
+                                  9,"a decimal",
+                                  "D",123,12345678:32,
 
-                                 11,"a timestamp",
-                                 "T", 123456789012345:64,
+                                  11,"a timestamp",
+                                  "T", 123456789012345:64,
 
-                                 14,"a nested table",
-                                 "F",
-                                        18:32,
+                                  14,"a nested table",
+                                  "F",
+                                  18:32,
 
-                                        3,"one",
-                                        "I",1:32,
+                                  3,"one",
+                                  "I",1:32,
 
-                                        3,"two",
-                                        "I",2:32 >>),
+                                  3,"two",
+                                  "I",2:32 >>),
     case catch rabbit_binary_parser:parse_properties([bit, bit, bit, bit], <<16#A0,0,1>>) of
         {'EXIT', content_properties_binary_overflow} -> passed;
         V -> exit({got_success_but_expected_failure, V})
@@ -480,28 +480,28 @@ test_field_values() ->
 
                ]}],
       <<
-       % property-flags
-       16#8000:16,
-       % table length in bytes
-       228:32,
+        %% property-flags
+        16#8000:16,
+        %% table length in bytes
+        228:32,
 
-       7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
-       9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
-       7,"decimal",   "D", 3, 123456:32,                        % + 14 = 63
-       9,"timestamp", "T", 109876543209876:64,                  % + 19 = 82
-       5,"table",     "F", 31:32, % length of table             % + 11 = 93
-                           3,"one", "I", 54321:32,              % +  9 = 102
-                           3,"two", "S", 13:32, "A long string",% + 22 = 124
-       4,"byte",      "b", 255:8,                               % +  7 = 131
-       4,"long",      "l", 1234567890:64,                       % + 14 = 145
-       5,"short",     "s", 655:16,                              % +  9 = 154
-       4,"bool",      "t", 1,                                   % +  7 = 161
-       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188
-       4,"void",      "V",                                      % +  6 = 194
-       5,"array",     "A", 23:32,                               % + 11 = 205
-                           "I", 54321:32,                       % +  5 = 210
-                           "S", 13:32, "A long string"          % + 18 = 228
-       >>),
+        7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
+        9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
+        7,"decimal",   "D", 3, 123456:32,                        % + 14 = 63
+        9,"timestamp", "T", 109876543209876:64,                  % + 19 = 82
+        5,"table",     "F", 31:32, % length of table             % + 11 = 93
+        3,"one", "I", 54321:32,                                  % +  9 = 102
+        3,"two", "S", 13:32, "A long string",                    % + 22 = 124
+        4,"byte",      "b", 255:8,                               % +  7 = 131
+        4,"long",      "l", 1234567890:64,                       % + 14 = 145
+        5,"short",     "s", 655:16,                              % +  9 = 154
+        4,"bool",      "t", 1,                                   % +  7 = 161
+        6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188
+        4,"void",      "V",                                      % +  6 = 194
+        5,"array",     "A", 23:32,                               % + 11 = 205
+        "I", 54321:32,                                           % +  5 = 210
+        "S", 13:32, "A long string"                              % + 18 = 228
+      >>),
     passed.
 
 %% Test that content frames don't exceed frame-max
@@ -598,65 +598,65 @@ test_topic_matching() ->
 
     %% add some bindings
     Bindings = lists:map(
-        fun ({Key, Q}) ->
-                #binding{source = XName,
-                         key = list_to_binary(Key),
-                         destination = #resource{virtual_host = <<"/">>,
-                                                 kind = queue,
-                                                 name = list_to_binary(Q)}}
-        end, [{"a.b.c",         "t1"},
-              {"a.*.c",         "t2"},
-              {"a.#.b",         "t3"},
-              {"a.b.b.c",       "t4"},
-              {"#",             "t5"},
-              {"#.#",           "t6"},
-              {"#.b",           "t7"},
-              {"*.*",           "t8"},
-              {"a.*",           "t9"},
-              {"*.b.c",         "t10"},
-              {"a.#",           "t11"},
-              {"a.#.#",         "t12"},
-              {"b.b.c",         "t13"},
-              {"a.b.b",         "t14"},
-              {"a.b",           "t15"},
-              {"b.c",           "t16"},
-              {"",              "t17"},
-              {"*.*.*",         "t18"},
-              {"vodka.martini", "t19"},
-              {"a.b.c",         "t20"},
-              {"*.#",           "t21"},
-              {"#.*.#",         "t22"},
-              {"*.#.#",         "t23"},
-              {"#.#.#",         "t24"},
-              {"*",             "t25"},
-              {"#.b.#",         "t26"}]),
+                 fun ({Key, Q}) ->
+                         #binding{source = XName,
+                                  key = list_to_binary(Key),
+                                  destination = #resource{virtual_host = <<"/">>,
+                                                          kind = queue,
+                                                          name = list_to_binary(Q)}}
+                 end, [{"a.b.c",         "t1"},
+                       {"a.*.c",         "t2"},
+                       {"a.#.b",         "t3"},
+                       {"a.b.b.c",       "t4"},
+                       {"#",             "t5"},
+                       {"#.#",           "t6"},
+                       {"#.b",           "t7"},
+                       {"*.*",           "t8"},
+                       {"a.*",           "t9"},
+                       {"*.b.c",         "t10"},
+                       {"a.#",           "t11"},
+                       {"a.#.#",         "t12"},
+                       {"b.b.c",         "t13"},
+                       {"a.b.b",         "t14"},
+                       {"a.b",           "t15"},
+                       {"b.c",           "t16"},
+                       {"",              "t17"},
+                       {"*.*.*",         "t18"},
+                       {"vodka.martini", "t19"},
+                       {"a.b.c",         "t20"},
+                       {"*.#",           "t21"},
+                       {"#.*.#",         "t22"},
+                       {"*.#.#",         "t23"},
+                       {"#.#.#",         "t24"},
+                       {"*",             "t25"},
+                       {"#.b.#",         "t26"}]),
     lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
                   Bindings),
 
     %% test some matches
-    test_topic_expect_match(X,
-        [{"a.b.c",               ["t1", "t2", "t5", "t6", "t10", "t11", "t12",
-                                  "t18", "t20", "t21", "t22", "t23", "t24",
-                                  "t26"]},
-         {"a.b",                 ["t3", "t5", "t6", "t7", "t8", "t9", "t11",
-                                  "t12", "t15", "t21", "t22", "t23", "t24",
-                                  "t26"]},
-         {"a.b.b",               ["t3", "t5", "t6", "t7", "t11", "t12", "t14",
-                                  "t18", "t21", "t22", "t23", "t24", "t26"]},
-         {"",                    ["t5", "t6", "t17", "t24"]},
-         {"b.c.c",               ["t5", "t6", "t18", "t21", "t22", "t23", "t24",
-                                  "t26"]},
-         {"a.a.a.a.a",           ["t5", "t6", "t11", "t12", "t21", "t22", "t23",
-                                 "t24"]},
-         {"vodka.gin",           ["t5", "t6", "t8", "t21", "t22", "t23",
-                                  "t24"]},
-         {"vodka.martini",       ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
-                                  "t24"]},
-         {"b.b.c",               ["t5", "t6", "t10", "t13", "t18", "t21", "t22",
-                                  "t23", "t24", "t26"]},
-         {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
-         {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
-                                  "t25"]}]),
+    test_topic_expect_match(
+      X, [{"a.b.c",               ["t1", "t2", "t5", "t6", "t10", "t11", "t12",
+                                   "t18", "t20", "t21", "t22", "t23", "t24",
+                                   "t26"]},
+          {"a.b",                 ["t3", "t5", "t6", "t7", "t8", "t9", "t11",
+                                   "t12", "t15", "t21", "t22", "t23", "t24",
+                                   "t26"]},
+          {"a.b.b",               ["t3", "t5", "t6", "t7", "t11", "t12", "t14",
+                                   "t18", "t21", "t22", "t23", "t24", "t26"]},
+          {"",                    ["t5", "t6", "t17", "t24"]},
+          {"b.c.c",               ["t5", "t6", "t18", "t21", "t22", "t23",
+                                   "t24", "t26"]},
+          {"a.a.a.a.a",           ["t5", "t6", "t11", "t12", "t21", "t22",
+                                   "t23", "t24"]},
+          {"vodka.gin",           ["t5", "t6", "t8", "t21", "t22", "t23",
+                                   "t24"]},
+          {"vodka.martini",       ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
+                                   "t24"]},
+          {"b.b.c",               ["t5", "t6", "t10", "t13", "t18", "t21",
+                                   "t22", "t23", "t24", "t26"]},
+          {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
+          {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
+                                   "t25"]}]),
 
     %% remove some bindings
     RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
@@ -669,21 +669,21 @@ test_topic_matching() ->
 
     %% test some matches
     test_topic_expect_match(X,
-        [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
-                                  "t23", "t24", "t26"]},
-         {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
-                                  "t22", "t23", "t24", "t26"]},
-         {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
-                                  "t23", "t24", "t26"]},
-         {"",                    ["t6", "t17", "t24"]},
-         {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
-         {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
-         {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
-         {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
-         {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
-                                  "t24", "t26"]},
-         {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
-         {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
+                            [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
+                                                      "t23", "t24", "t26"]},
+                             {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
+                                                      "t22", "t23", "t24", "t26"]},
+                             {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
+                                                      "t23", "t24", "t26"]},
+                             {"",                    ["t6", "t17", "t24"]},
+                             {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
+                             {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
+                             {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
+                             {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
+                             {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
+                                                      "t24", "t26"]},
+                             {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
+                             {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
 
     %% remove the entire exchange
     exchange_op_callback(X, delete, [RemainingBindings]),
@@ -876,22 +876,22 @@ test_log_management_during_startup() ->
     passed.
 
 test_option_parser() ->
-    % command and arguments should just pass through
+    %% command and arguments should just pass through
     ok = check_get_options({["mock_command", "arg1", "arg2"], []},
                            [], ["mock_command", "arg1", "arg2"]),
 
-    % get flags
+    %% get flags
     ok = check_get_options(
            {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
            [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
 
-    % get options
+    %% get options
     ok = check_get_options(
            {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
            [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
            ["mock_command", "-foo", "bar"]),
 
-    % shuffled and interleaved arguments and options
+    %% shuffled and interleaved arguments and options
     ok = check_get_options(
            {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
            [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
@@ -1438,7 +1438,7 @@ test_declare_on_dead_queue(SecondaryNode) ->
             throw(failed_to_create_and_kill_queue)
     end.
 
-%---------------------------------------------------------------------
+%%---------------------------------------------------------------------
 
 control_action(Command, Args) ->
     control_action(Command, node(), Args, default_options()).

@@ -175,7 +175,7 @@ is_message_persistent(#content{properties = #'P_basic'{
         Other     -> throw({error, {delivery_mode_unknown, Other}})
     end.
 
-% Extract CC routes from headers
+%% Extract CC routes from headers
 header_routes(undefined) ->
     [];
 header_routes(HeadersTable) ->
