@@ -298,8 +298,10 @@ handle_info({'DOWN', MRef, process, QPid, Reason},
             State = #ch{consumer_monitors = ConsumerMonitors}) ->
     noreply(
       case dict:find(MRef, ConsumerMonitors) of
-          error             -> handle_queue_down(QPid, Reason, State);
-          {ok, ConsumerTag} -> handle_consumer_down(MRef, ConsumerTag, State)
+          error ->
+              handle_publishing_queue_down(QPid, Reason, State);
+          {ok, ConsumerTag} ->
+              handle_consuming_queue_down(MRef, ConsumerTag, State)
       end).
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
@@ -1103,7 +1105,7 @@ monitor_consumer(ConsumerTag, State = #ch{consumer_mapping = ConsumerMapping,
             State
     end.
 
-handle_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
+handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     MsgSeqNos = case gb_trees:lookup(QPid, UQM) of
                     {value, MsgSet} -> gb_sets:to_list(MsgSet);
                     none            -> []
@@ -1120,10 +1122,10 @@ handle_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
               end)(MXs, State2),
     queue_blocked(QPid, State3).
 
-handle_consumer_down(MRef, ConsumerTag,
-                     State = #ch{consumer_mapping  = ConsumerMapping,
-                                 consumer_monitors = ConsumerMonitors,
-                                 writer_pid        = WriterPid}) ->
+handle_consuming_queue_down(MRef, ConsumerTag,
+                            State = #ch{consumer_mapping  = ConsumerMapping,
+                                        consumer_monitors = ConsumerMonitors,
+                                        writer_pid        = WriterPid}) ->
     ConsumerMapping1 = dict:erase(ConsumerTag, ConsumerMapping),
     ConsumerMonitors1 = dict:erase(MRef, ConsumerMonitors),
     Cancel = #'basic.cancel'{consumer_tag = ConsumerTag,
