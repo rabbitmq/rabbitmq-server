@@ -510,8 +510,13 @@ publish(Msg, MsgProps, State) ->
     a(reduce_memory_use(State1)).
 
 publish_delivered(false, #basic_message { guid = Guid },
-                  _MsgProps, State = #vqstate { len = 0 }) ->
-    blind_confirm(self(), gb_sets:singleton(Guid)),
+                  #message_properties {
+                    needs_confirming = NeedsConfirming },
+                  State = #vqstate { len = 0 }) ->
+    case NeedsConfirming of
+        true  -> blind_confirm(self(), gb_sets:singleton(Guid));
+        false -> ok
+    end,
     {undefined, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
