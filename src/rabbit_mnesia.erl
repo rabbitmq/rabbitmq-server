@@ -129,10 +129,10 @@ empty_ram_only_tables() ->
     Node = node(),
     lists:foreach(
       fun (TabName) ->
-          case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
-              true  -> {atomic, ok} = mnesia:clear_table(TabName);
-              false -> ok
-          end
+              case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
+                  true  -> {atomic, ok} = mnesia:clear_table(TabName);
+                  false -> ok
+              end
       end, table_names()),
     ok.
 

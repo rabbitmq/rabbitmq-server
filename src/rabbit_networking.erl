@@ -67,7 +67,7 @@
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/2 :: (atom(), listener_config())
-        -> [{inet:ip_address(), ip_port(), family(), atom()}]).
+                                      -> [{inet:ip_address(), ip_port(), family(), atom()}]).
 
 -endif.
 
@@ -98,7 +98,7 @@ boot_ssl() ->
                     verify_peer -> [{verify_fun, fun([])    -> true;
                                                     ([_|_]) -> false
                                                  end}
-                                   | SslOptsConfig]
+                                    | SslOptsConfig]
                 end,
             [start_ssl_listener(Listener, SslOpts) || Listener <- SslListeners],
             ok

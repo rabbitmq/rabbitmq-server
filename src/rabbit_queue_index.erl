@@ -145,8 +145,8 @@
 
 %% 1 publish, 1 deliver, 1 ack per msg
 -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
-        (?PUBLISH_RECORD_LENGTH_BYTES +
-         (2 * ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES))).
+            (?PUBLISH_RECORD_LENGTH_BYTES +
+                 (2 * ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES))).
 
 %% ---- misc ----
 
@@ -177,7 +177,7 @@
                                path            :: file:filename(),
                                journal_entries :: array(),
                                unacked         :: non_neg_integer()
-                              })).
+                             })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
 -type(on_sync_fun() :: fun ((gb_set()) -> ok)).
@@ -188,10 +188,10 @@
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
                               unsynced_guids      :: [rabbit_guid:guid()]
-                             }).
+                            }).
 -type(startup_fun_state() ::
         {fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A}),
-         A}).
+             A}).
 -type(shutdown_terms() :: [any()]).
 
 -spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).

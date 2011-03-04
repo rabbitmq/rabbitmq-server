@@ -52,7 +52,7 @@
 -type(qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit_types:message()}).
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
-      'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+        'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
@@ -100,13 +100,13 @@
 -spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
-      (rabbit_types:amqqueue(), 'false', 'false')
+        (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
-      (rabbit_types:amqqueue(), 'true' , 'false')
+        (rabbit_types:amqqueue(), 'true' , 'false')
         -> qlen() | rabbit_types:error('in_use');
-      (rabbit_types:amqqueue(), 'false', 'true' )
+        (rabbit_types:amqqueue(), 'false', 'true' )
         -> qlen() | rabbit_types:error('not_empty');
-      (rabbit_types:amqqueue(), 'true' , 'true' )
+        (rabbit_types:amqqueue(), 'true' , 'true' )
         -> qlen() |
            rabbit_types:error('in_use') |
            rabbit_types:error('not_empty')).
@@ -122,10 +122,10 @@
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
-             {'ok', non_neg_integer(), qmsg()} | 'empty').
+                          {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
-      (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
-       rabbit_types:ctag(), boolean(), any())
+        (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
+         rabbit_types:ctag(), boolean(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').

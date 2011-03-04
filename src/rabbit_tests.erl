@@ -693,23 +693,23 @@ test_topic_matching() ->
 
 exchange_op_callback(X, Fun, ExtraArgs) ->
     rabbit_misc:execute_mnesia_transaction(
-        fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
+      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
     rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
-        fun ({Key, Expected}) ->
-                BinKey = list_to_binary(Key),
-                Res = rabbit_exchange_type_topic:route(
-                        X, #delivery{message = #basic_message{routing_keys =
+      fun ({Key, Expected}) ->
+              BinKey = list_to_binary(Key),
+              Res = rabbit_exchange_type_topic:route(
+                      X, #delivery{message = #basic_message{routing_keys =
                                                                 [BinKey]}}),
-                ExpectedRes = lists:map(
-                                fun (Q) -> #resource{virtual_host = <<"/">>,
-                                                     kind = queue,
-                                                     name = list_to_binary(Q)}
-                                end, Expected),
-                true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
-        end, List).
+              ExpectedRes = lists:map(
+                              fun (Q) -> #resource{virtual_host = <<"/">>,
+                                                   kind = queue,
+                                                   name = list_to_binary(Q)}
+                              end, Expected),
+              true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
+      end, List).
 
 test_app_management() ->
     %% starting, stopping, status
@@ -818,7 +818,7 @@ test_log_management_during_startup() ->
     ok = delete_log_handlers([sasl_report_tty_h]),
     ok = case catch control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotation_tty_no_handlers_test});
+                         log_rotation_tty_no_handlers_test});
              {error, {cannot_log_to_tty, _, _}} -> ok
          end,
 
@@ -843,8 +843,8 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotation_no_write_permission_dir_test});
-            {error, {cannot_log_to_file, _, _}} -> ok
+                         log_rotation_no_write_permission_dir_test});
+             {error, {cannot_log_to_file, _, _}} -> ok
          end,
 
     %% start application with logging to a subdirectory which
@@ -854,9 +854,9 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotatation_parent_dirs_test});
+                         log_rotatation_parent_dirs_test});
              {error, {cannot_log_to_file, _,
-               {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+                      {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
          end,
     ok = set_permissions(TmpDir, 8#00700),
     ok = set_permissions(TmpLog, 8#00600),
@@ -1143,7 +1143,7 @@ test_server_status() ->
     [_|_] = rabbit_binding:list_for_source(
               rabbit_misc:r(<<"/">>, exchange, <<"">>)),
     [_] = rabbit_binding:list_for_destination(
-              rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
+            rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
     [_] = rabbit_binding:list_for_source_and_destination(
             rabbit_misc:r(<<"/">>, exchange, <<"">>),
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
@@ -1305,9 +1305,9 @@ test_delegates_async(SecondaryNode) ->
 make_responder(FMsg) -> make_responder(FMsg, timeout).
 make_responder(FMsg, Throw) ->
     fun () ->
-        receive Msg -> FMsg(Msg)
-        after 1000 -> throw(Throw)
-        end
+            receive Msg -> FMsg(Msg)
+            after 1000 -> throw(Throw)
+            end
     end.
 
 spawn_responders(Node, Responder, Count) ->
@@ -1318,10 +1318,10 @@ await_response(0) ->
 await_response(Count) ->
     receive
         response -> ok,
-        await_response(Count - 1)
+                    await_response(Count - 1)
     after 1000 ->
-        io:format("Async reply not received~n"),
-        throw(timeout)
+            io:format("Async reply not received~n"),
+            throw(timeout)
     end.
 
 must_exit(Fun) ->
@@ -1337,7 +1337,7 @@ test_delegates_sync(SecondaryNode) ->
     BadSender = fun (_Pid) -> exit(exception) end,
 
     Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
-                                   gen_server:reply(From, response)
+                                       gen_server:reply(From, response)
                                end),
 
     BadResponder = make_responder(fun ({'$gen_call', From, invoked}) ->
@@ -1349,7 +1349,7 @@ test_delegates_sync(SecondaryNode) ->
 
     must_exit(fun () -> delegate:invoke(spawn(BadResponder), BadSender) end),
     must_exit(fun () ->
-        delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
+                      delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
     RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
@@ -1953,7 +1953,7 @@ test_queue_index() ->
     with_empty_test_queue(
       fun (Qi0) ->
               {Qi1, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD,
-                                                          false, Qi0),
+                                                         false, Qi0),
               Qi2 = rabbit_queue_index:deliver(SeqIdsD, Qi1),
               Qi3 = rabbit_queue_index:ack(SeqIdsD, Qi2),
               rabbit_queue_index:flush(Qi3)
@@ -2195,7 +2195,7 @@ check_variable_queue_status(VQ0, Props) ->
 variable_queue_wait_for_shuffling_end(VQ) ->
     case rabbit_variable_queue:needs_idle_timeout(VQ) of
         true  -> variable_queue_wait_for_shuffling_end(
-                  rabbit_variable_queue:idle_timeout(VQ));
+                   rabbit_variable_queue:idle_timeout(VQ));
         false -> VQ
     end.
 

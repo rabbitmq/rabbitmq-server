@@ -46,8 +46,8 @@
                      rabbit_types:ok_or_error2({rabbit_guid:guid(), msg()},
                                                any())).
 -spec(scan/4 :: (io_device(), file_size(),
-       fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
-       A) -> {'ok', A, position()}).
+                 fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
+                     A) -> {'ok', A, position()}).
 
 -endif.
 

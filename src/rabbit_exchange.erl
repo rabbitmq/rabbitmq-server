@@ -62,7 +62,7 @@
         -> rabbit_types:infos()).
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
-                    -> [rabbit_types:infos()]).
+                   -> [rabbit_types:infos()]).
 -spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                    -> {rabbit_router:routing_result(), [pid()]}).
 -spec(delete/2 ::
@@ -266,9 +266,9 @@ process_route(#resource{kind = queue} = QName,
 call_with_exchange(XName, Fun, PrePostCommitFun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> case mnesia:read({rabbit_exchange, XName}) of
-                   []  -> {error, not_found};
-                   [X] -> Fun(X)
-               end
+                    []  -> {error, not_found};
+                    [X] -> Fun(X)
+                end
       end, PrePostCommitFun).
 
 delete(XName, IfUnused) ->

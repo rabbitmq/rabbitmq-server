@@ -268,13 +268,13 @@
           msg_on_disk,
           index_on_disk,
           msg_props
-         }).
+        }).
 
 -record(delta,
         { start_seq_id, %% start_seq_id is inclusive
           count,
           end_seq_id    %% end_seq_id is exclusive
-         }).
+        }).
 
 -record(tx, { pending_messages, pending_acks }).
 

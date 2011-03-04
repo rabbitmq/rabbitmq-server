@@ -75,7 +75,7 @@
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
           cref_to_guids           %% client ref to synced messages mapping
-         }).
+        }).
 
 -record(client_msstate,
         { server,
@@ -89,7 +89,7 @@
           file_summary_ets,
           dedup_cache_ets,
           cur_file_cache_ets
-         }).
+        }).
 
 -record(file_summary,
         {file, valid_total_size, left, right, file_size, locked, readers}).

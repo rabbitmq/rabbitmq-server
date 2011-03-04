@@ -105,7 +105,7 @@
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
         (rabbit_framing:amqp_table(), binary())
-         -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
+        -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
