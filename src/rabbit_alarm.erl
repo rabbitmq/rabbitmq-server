@@ -126,31 +126,25 @@ code_change(_OldVsn, State, _Extra) ->
 maybe_alert(SetFun, Node, State = #alarms{alarmed_nodes = AN,
                                           alertees      = Alertees}) ->
     AN1 = SetFun(Node, AN),
-    ok = maybe_alert(sets:size(AN), sets:size(AN1), Alertees, Node),
+    BeforeSz = sets:size(AN),
+    AfterSz  = sets:size(AN1),
+    %% If we have changed our alarm state, inform the remotes.
+    IsLocal = Node =:= node(),
+    if IsLocal andalso BeforeSz < AfterSz -> ok = alert_remote(true,  Alertees);
+       IsLocal andalso BeforeSz > AfterSz -> ok = alert_remote(false, Alertees);
+       true                               -> ok
+    end,
+    %% If the overall alarm state has changed, inform the locals.
+    case {BeforeSz, AfterSz} of
+        {0, 1} -> ok = alert_local(true,  Alertees);
+        {1, 0} -> ok = alert_local(false, Alertees);
+        {_, _} -> ok
+    end,
     State#alarms{alarmed_nodes = AN1}.
 
-maybe_alert(BeforeSize, AfterSize, Alertees, AlmNde) ->
-    ok = maybe_alert_remote(BeforeSize, AfterSize, Alertees, AlmNde =:= node()),
-    ok = maybe_alert_local(BeforeSize, AfterSize, Alertees).
+alert_local(Alert, Alertees)  -> alert(Alert, Alertees, fun erlang:'=:='/2).
 
-%% If we have changed our alarm state, always inform the remotes.
-maybe_alert_remote(BeforeSize, AfterSize, Alertees, true)
-  when BeforeSize < AfterSize -> alert_remote(true, Alertees);
-maybe_alert_remote(BeforeSize, AfterSize, Alertees, true)
-  when BeforeSize > AfterSize -> alert_remote(false, Alertees);
-maybe_alert_remote(_BeforeSize, _AfterSize, _Alertees, _IsLocalNode) ->
-    ok.
-
-%% If the overall alarm state has changed, inform the locals.
-maybe_alert_local(0, 1, Alertees)  -> alert_local(true, Alertees);
-maybe_alert_local(1, 0, Alertees)  -> alert_local(false, Alertees);
-maybe_alert_local(_, _, _Alertees) -> ok.
-
-alert_local(Alert, Alertees) ->
-    alert(Alert, Alertees, fun erlang:'=:='/2).
-
-alert_remote(Alert, Alertees) ->
-    alert(Alert, Alertees, fun erlang:'=/='/2).
+alert_remote(Alert, Alertees) -> alert(Alert, Alertees, fun erlang:'=/='/2).
 
 alert(Alert, Alertees, NodeComparator) ->
     Node = node(),
