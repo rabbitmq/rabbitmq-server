@@ -214,8 +214,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           []  -> ok = store_queue(Q),
                                  B = add_default_binding(Q),
                                  fun (Tx) -> B(Tx), Q end;
-                          [_] -> %% Q exists on stopped node
-                                 rabbit_misc:const(not_found)
+                          %% Q exists on stopped node
+                          [_] -> rabbit_misc:const(not_found)
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
@@ -288,7 +288,7 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
-                       RequiredArgs) ->
+                        RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [<<"x-expires">>]).
 
