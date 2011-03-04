@@ -46,8 +46,8 @@
                      rabbit_types:ok_or_error2({rabbit_guid:guid(), msg()},
                                                any())).
 -spec(scan/4 :: (io_device(), file_size(),
-       fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
-       A) -> {'ok', A, position()}).
+                 fun (({rabbit_guid:guid(), msg_size(), position(), binary()}, A) -> A),
+                     A) -> {'ok', A, position()}).
 
 -endif.
 
@@ -60,9 +60,9 @@ append(FileHdl, Guid, MsgBody)
     Size = MsgBodyBinSize + ?GUID_SIZE_BYTES,
     case file_handle_cache:append(FileHdl,
                                   <<Size:?INTEGER_SIZE_BITS,
-                                   Guid:?GUID_SIZE_BYTES/binary,
-                                   MsgBodyBin:MsgBodyBinSize/binary,
-                                   ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
+                                    Guid:?GUID_SIZE_BYTES/binary,
+                                    MsgBodyBin:MsgBodyBinSize/binary,
+                                    ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
         KO -> KO
     end.
@@ -72,9 +72,9 @@ read(FileHdl, TotalSize) ->
     BodyBinSize = Size - ?GUID_SIZE_BYTES,
     case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-              Guid:?GUID_SIZE_BYTES/binary,
-              MsgBodyBin:BodyBinSize/binary,
-              ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
+               Guid:?GUID_SIZE_BYTES/binary,
+               MsgBodyBin:BodyBinSize/binary,
+               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
             {ok, {Guid, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
@@ -97,26 +97,26 @@ scan(FileHdl, FileSize, Data, ReadOffset, ScanOffset, Fun, Acc) ->
     end.
 
 scanner(<<>>, Offset, _Fun, Acc) ->
-       {<<>>, Acc, Offset};
+    {<<>>, Acc, Offset};
 scanner(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Offset, _Fun, Acc) ->
-       {<<>>, Acc, Offset}; %% Nothing to do other than stop.
+    {<<>>, Acc, Offset}; %% Nothing to do other than stop.
 scanner(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
           WriteMarker:?WRITE_OK_SIZE_BITS, Rest/binary>>, Offset, Fun, Acc) ->
-       TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
-       case WriteMarker of
-           ?WRITE_OK_MARKER ->
-               %% Here we take option 5 from
-               %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in
-               %% which we read the Guid as a number, and then convert it
-               %% back to a binary in order to work around bugs in
-               %% Erlang's GC.
-               <<GuidNum:?GUID_SIZE_BITS, Msg/binary>> =
-                   <<GuidAndMsg:Size/binary>>,
-               <<Guid:?GUID_SIZE_BYTES/binary>> = <<GuidNum:?GUID_SIZE_BITS>>,
-               scanner(Rest, Offset + TotalSize, Fun,
-                       Fun({Guid, TotalSize, Offset, Msg}, Acc));
-           _ ->
-               scanner(Rest, Offset + TotalSize, Fun, Acc)
-       end;
+    TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
+    case WriteMarker of
+        ?WRITE_OK_MARKER ->
+            %% Here we take option 5 from
+            %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in
+            %% which we read the Guid as a number, and then convert it
+            %% back to a binary in order to work around bugs in
+            %% Erlang's GC.
+            <<GuidNum:?GUID_SIZE_BITS, Msg/binary>> =
+                <<GuidAndMsg:Size/binary>>,
+            <<Guid:?GUID_SIZE_BYTES/binary>> = <<GuidNum:?GUID_SIZE_BITS>>,
+            scanner(Rest, Offset + TotalSize, Fun,
+                    Fun({Guid, TotalSize, Offset, Msg}, Acc));
+        _ ->
+            scanner(Rest, Offset + TotalSize, Fun, Acc)
+    end;
 scanner(Data, Offset, _Fun, Acc) ->
-       {Data, Acc, Offset}.
+    {Data, Acc, Offset}.

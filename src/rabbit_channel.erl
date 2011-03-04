@@ -68,9 +68,9 @@
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/9 ::
-      (channel_number(), pid(), pid(), rabbit_types:protocol(),
-       rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-       pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
+        (channel_number(), pid(), pid(), rabbit_types:protocol(),
+         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
@@ -301,8 +301,8 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, State1),
     erase_queue_stats(QPid),
     State3 = (case Reason of
-                 normal -> fun record_confirms/2;
-                 _      -> fun send_nacks/2
+                  normal -> fun record_confirms/2;
+                  _      -> fun send_nacks/2
               end)(MXs, State2),
     noreply(queue_blocked(QPid, State3)).
 
@@ -715,9 +715,9 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                    end) of
                 ok ->
                     {noreply, State#ch{consumer_mapping =
-                                       dict:store(ActualConsumerTag,
-                                                  QueueName,
-                                                  ConsumerMapping)}};
+                                           dict:store(ActualConsumerTag,
+                                                      QueueName,
+                                                      ConsumerMapping)}};
                 {error, exclusive_consume_unavailable} ->
                     rabbit_misc:protocol_error(
                       access_refused, "~s in exclusive use",
@@ -739,8 +739,8 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
             return_ok(State, NoWait, OkMsg);
         {ok, QueueName} ->
             NewState = State#ch{consumer_mapping =
-                                dict:erase(ConsumerTag,
-                                           ConsumerMapping)},
+                                    dict:erase(ConsumerTag,
+                                               ConsumerMapping)},
             case rabbit_amqqueue:with(
                    QueueName,
                    fun (Q) ->

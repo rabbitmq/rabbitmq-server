@@ -129,10 +129,10 @@ empty_ram_only_tables() ->
     Node = node(),
     lists:foreach(
       fun (TabName) ->
-          case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
-              true  -> {atomic, ok} = mnesia:clear_table(TabName);
-              false -> ok
-          end
+              case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
+                  true  -> {atomic, ok} = mnesia:clear_table(TabName);
+                  false -> ok
+              end
       end, table_names()),
     ok.
 
@@ -519,13 +519,13 @@ create_local_table_copies(Type) ->
                               HasDiscOnlyCopies -> disc_only_copies;
                               true              -> ram_copies
                           end;
-%% unused code - commented out to keep dialyzer happy
-%%                      Type =:= disc_only ->
-%%                          if
-%%                              HasDiscCopies or HasDiscOnlyCopies ->
-%%                                  disc_only_copies;
-%%                              true -> ram_copies
-%%                          end;
+%%% unused code - commented out to keep dialyzer happy
+%%%                      Type =:= disc_only ->
+%%%                          if
+%%%                              HasDiscCopies or HasDiscOnlyCopies ->
+%%%                                  disc_only_copies;
+%%%                              true -> ram_copies
+%%%                          end;
                       Type =:= ram ->
                           ram_copies
                   end,

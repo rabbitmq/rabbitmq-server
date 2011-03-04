@@ -68,12 +68,12 @@ start_link({direct, Channel, ClientChannelPid, Protocol, User, VHost,
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, ChannelPid} =
         supervisor2:start_child(
-            SupPid,
-            {channel, {rabbit_channel, start_link,
-                       [Channel, ClientChannelPid, ClientChannelPid, Protocol,
-                        User, VHost, Capabilities, Collector,
-                        start_limiter_fun(SupPid)]},
-             intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
+          SupPid,
+          {channel, {rabbit_channel, start_link,
+                     [Channel, ClientChannelPid, ClientChannelPid, Protocol,
+                      User, VHost, Capabilities, Collector,
+                      start_limiter_fun(SupPid)]},
+           intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 
 %%----------------------------------------------------------------------------

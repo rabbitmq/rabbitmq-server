@@ -54,5 +54,5 @@ handle_response(Response, _State) ->
         _ ->
             {protocol_error,
              "AMQPLAIN auth info ~w is missing LOGIN or PASSWORD field",
-              [LoginTable]}
+             [LoginTable]}
     end.

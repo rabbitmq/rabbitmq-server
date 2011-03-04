@@ -852,9 +852,9 @@ alive_view_members({_Ver, View}) ->
 
 all_known_members({_Ver, View}) ->
     ?DICT:fold(
-      fun (Member, #view_member { aliases = Aliases }, Acc) ->
-              ?SETS:to_list(Aliases) ++ [Member | Acc]
-      end, [], View).
+       fun (Member, #view_member { aliases = Aliases }, Acc) ->
+               ?SETS:to_list(Aliases) ++ [Member | Acc]
+       end, [], View).
 
 group_to_view(#gm_group { members = Members, version = Ver }) ->
     Alive = lists:filter(fun is_member_alive/1, Members),
@@ -1037,15 +1037,15 @@ maybe_erase_aliases(State = #state { self          = Self,
     #view_member { aliases = Aliases } = fetch_view_member(Self, View),
     {Erasable, MembersState1}
         = ?SETS:fold(
-            fun (Id, {ErasableAcc, MembersStateAcc} = Acc) ->
-                    #member { last_pub = LP, last_ack = LA } =
-                        find_member_or_blank(Id, MembersState),
-                    case can_erase_view_member(Self, Id, LA, LP) of
-                        true  -> {[Id | ErasableAcc],
-                                  erase_member(Id, MembersStateAcc)};
-                        false -> Acc
-                    end
-            end, {[], MembersState}, Aliases),
+             fun (Id, {ErasableAcc, MembersStateAcc} = Acc) ->
+                     #member { last_pub = LP, last_ack = LA } =
+                         find_member_or_blank(Id, MembersState),
+                     case can_erase_view_member(Self, Id, LA, LP) of
+                         true  -> {[Id | ErasableAcc],
+                                   erase_member(Id, MembersStateAcc)};
+                         false -> Acc
+                     end
+             end, {[], MembersState}, Aliases),
     State1 = State #state { members_state = MembersState1 },
     case Erasable of
         [] -> {ok, State1};
