@@ -37,7 +37,7 @@
 -define(SILENT_CLOSE_DELAY, 3).
 -define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_length, recv_ref,
              connection_state, queue_collector, heartbeater, stats_timer,
@@ -62,7 +62,7 @@
          State#v1.connection_state =:= blocking orelse
          State#v1.connection_state =:= blocked)).
 
-%%----------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
 

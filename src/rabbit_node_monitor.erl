@@ -76,7 +76,7 @@ handle_cast(_Msg, State) ->
 handle_info({nodedown, Node}, State) ->
     rabbit_log:info("node ~p down~n", [Node]),
     ok = handle_dead_rabbit(Node),
-     {noreply, State};
+    {noreply, State};
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
     rabbit_log:info("node ~p lost 'rabbit'~n", [Node]),
     ok = handle_dead_rabbit(Node),

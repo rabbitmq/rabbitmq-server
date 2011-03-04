@@ -68,9 +68,9 @@
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/9 ::
-      (channel_number(), pid(), pid(), rabbit_types:protocol(),
-       rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-       pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
+        (channel_number(), pid(), pid(), rabbit_types:protocol(),
+         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),

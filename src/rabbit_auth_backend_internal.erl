@@ -52,8 +52,8 @@
 -spec(clear_admin/1 :: (rabbit_types:username()) -> 'ok').
 -spec(list_users/0 :: () -> [{rabbit_types:username(), boolean()}]).
 -spec(lookup_user/1 :: (rabbit_types:username())
-        -> rabbit_types:ok(rabbit_types:internal_user())
-               | rabbit_types:error('not_found')).
+                       -> rabbit_types:ok(rabbit_types:internal_user())
+                              | rabbit_types:error('not_found')).
 -spec(set_permissions/5 ::(rabbit_types:username(), rabbit_types:vhost(),
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
