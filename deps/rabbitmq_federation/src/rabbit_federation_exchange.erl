@@ -151,20 +151,23 @@ validate_arg(Name, Type, Args) ->
     end.
 
 validate_upstream({table, Table}) ->
-    Args = [{<<"host">>,         longstr, true},
-            {<<"protocol">>,     longstr, false},
-            {<<"port">>,         long,    false},
-            {<<"virtual_host">>, longstr, false},
-            {<<"exchange">>,     longstr, false}],
-    [check_arg(Table, K, T, M) || {K, T, M} <- Args];
+    Args = [{<<"host">>,         [longstr],                      true},
+            {<<"protocol">>,     [longstr],                      false},
+            {<<"port">>,         [byte, short, signedint, long], false},
+            {<<"virtual_host">>, [longstr],                      false},
+            {<<"exchange">>,     [longstr],                      false}],
+    [check_arg(Table, K, Ts, M) || {K, Ts, M} <- Args];
 validate_upstream({Type, Obj}) ->
     fail("Upstream ~w was of type ~s, not table", [Obj, Type]).
 
-check_arg(Table, K, T, Mandatory) ->
+check_arg(Table, K, Ts, Mandatory) ->
     case {rabbit_misc:table_lookup(Table, K), Mandatory} of
-        {{T,  _}, _}     -> ok;
-        {{T2, _}, _}     -> fail("~s is of type ~s, but ~s was received",
-                                 [K, T, T2]);
+        {{T,  _}, _}     -> case lists:member(T, Ts) of
+                                true  -> ok;
+                                false -> fail("~s should have type in ~p, "
+                                              "but ~s was received",
+                                              [K, Ts, T])
+                            end;
         {_,       true}  -> fail("~s is mandatory", [K]);
         {_,       false} -> ok
     end.
