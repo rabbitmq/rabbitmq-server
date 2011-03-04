@@ -258,7 +258,7 @@ upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
                          _     -> <<":", DownstreamVHost/binary,
                                     ":", DownstreamName/binary>>
                      end,
-    <<X/binary, " ⇨ ", Node/binary, DownstreamPart/binary>>.
+    <<X/binary, " -> ", Node/binary, DownstreamPart/binary>>.
 
 upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
     Name = upstream_queue_name(X, VHost, DownstreamX),
