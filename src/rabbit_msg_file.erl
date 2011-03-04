@@ -27,8 +27,8 @@
 -define(WRITE_OK_SIZE_BITS,      8).
 -define(WRITE_OK_MARKER,         255).
 -define(FILE_PACKING_ADJUSTMENT, (1 + ?INTEGER_SIZE_BYTES)).
--define(GUID_SIZE_BYTES,         16).
--define(GUID_SIZE_BITS,          (8 * ?GUID_SIZE_BYTES)).
+-define(MSG_ID_SIZE_BYTES,       16).
+-define(MSG_ID_SIZE_BITS,        (8 * ?MSG_ID_SIZE_BYTES)).
 -define(SCAN_BLOCK_SIZE,         4194304). %% 4MB
 
 %%----------------------------------------------------------------------------
@@ -55,14 +55,14 @@
 
 %%----------------------------------------------------------------------------
 
-append(FileHdl, Guid, MsgBody)
-  when is_binary(Guid) andalso size(Guid) =:= ?GUID_SIZE_BYTES ->
+append(FileHdl, MsgId, MsgBody)
+  when is_binary(MsgId) andalso size(MsgId) =:= ?MSG_ID_SIZE_BYTES ->
     MsgBodyBin  = term_to_binary(MsgBody),
     MsgBodyBinSize = size(MsgBodyBin),
-    Size = MsgBodyBinSize + ?GUID_SIZE_BYTES,
+    Size = MsgBodyBinSize + ?MSG_ID_SIZE_BYTES,
     case file_handle_cache:append(FileHdl,
                                   <<Size:?INTEGER_SIZE_BITS,
-                                   Guid:?GUID_SIZE_BYTES/binary,
+                                   MsgId:?MSG_ID_SIZE_BYTES/binary,
                                    MsgBodyBin:MsgBodyBinSize/binary,
                                    ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
         ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
@@ -71,13 +71,13 @@ append(FileHdl, Guid, MsgBody)
 
 read(FileHdl, TotalSize) ->
     Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
-    BodyBinSize = Size - ?GUID_SIZE_BYTES,
+    BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
     case file_handle_cache:read(FileHdl, TotalSize) of
         {ok, <<Size:?INTEGER_SIZE_BITS,
-              Guid:?GUID_SIZE_BYTES/binary,
+              MsgId:?MSG_ID_SIZE_BYTES/binary,
               MsgBodyBin:BodyBinSize/binary,
               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
-            {ok, {Guid, binary_to_term(MsgBodyBin)}};
+            {ok, {MsgId, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
 
@@ -102,21 +102,22 @@ scanner(<<>>, Offset, _Fun, Acc) ->
        {<<>>, Acc, Offset};
 scanner(<<0:?INTEGER_SIZE_BITS, _Rest/binary>>, Offset, _Fun, Acc) ->
        {<<>>, Acc, Offset}; %% Nothing to do other than stop.
-scanner(<<Size:?INTEGER_SIZE_BITS, GuidAndMsg:Size/binary,
+scanner(<<Size:?INTEGER_SIZE_BITS, MsgIdAndMsg:Size/binary,
           WriteMarker:?WRITE_OK_SIZE_BITS, Rest/binary>>, Offset, Fun, Acc) ->
        TotalSize = Size + ?FILE_PACKING_ADJUSTMENT,
        case WriteMarker of
            ?WRITE_OK_MARKER ->
                %% Here we take option 5 from
                %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in
-               %% which we read the Guid as a number, and then convert it
+               %% which we read the MsgId as a number, and then convert it
                %% back to a binary in order to work around bugs in
                %% Erlang's GC.
-               <<GuidNum:?GUID_SIZE_BITS, Msg/binary>> =
-                   <<GuidAndMsg:Size/binary>>,
-               <<Guid:?GUID_SIZE_BYTES/binary>> = <<GuidNum:?GUID_SIZE_BITS>>,
+               <<MsgIdNum:?MSG_ID_SIZE_BITS, Msg/binary>> =
+                   <<MsgIdAndMsg:Size/binary>>,
+               <<MsgId:?MSG_ID_SIZE_BYTES/binary>> =
+                   <<MsgIdNum:?MSG_ID_SIZE_BITS>>,
                scanner(Rest, Offset + TotalSize, Fun,
-                       Fun({Guid, TotalSize, Offset, Msg}, Acc));
+                       Fun({MsgId, TotalSize, Offset, Msg}, Acc));
            _ ->
                scanner(Rest, Offset + TotalSize, Fun, Acc)
        end;

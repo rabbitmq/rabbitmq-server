@@ -31,7 +31,7 @@
 
 new(Dir) ->
     file:delete(filename:join(Dir, ?FILENAME)),
-    Tid = ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.guid}]),
+    Tid = ets:new(?MSG_LOC_NAME, [set, public, {keypos, #msg_location.msg_id}]),
     #state { table = Tid, dir = Dir }.
 
 recover(Dir) ->
