@@ -6,9 +6,16 @@ This is all very experimental. You have been warned.
 Generic build instructions are at:
         http://www.rabbitmq.com/plugin-development.html
 
+
+Limitations
+===========
+
 Significant limitation: rabbitmq-federation is not compatible with
 clustering. *Do not deploy it in a cluster*. We intend to fix this
 at some point.
+
+Other limitations: you can't federate headers exchanges, there's no
+status reporting, lots of (harmless) errors get written to the logs.
 
 
 Purpose
@@ -45,18 +52,24 @@ HOWTO
 
 A federated exchange has type 'x-federation'. However, this type does
 not provide any routing logic. The routing logic is implemented by a
-backing type, provided to the exchange as an argument. Messages can
-therefore be published to a federated exchange like any
+backing type, provided to the exchange as an argument.
+
+Messages can be published to a federated exchange like any
 other. However, a federated exchange will also receive messages from
 one or more "upstream" exchanges, located on remote brokers.
 
 (Well, you don't need to have upstream exchanges, and they don't need
 to be remote. But then you don't get anything very useful.)
 
-Inter-broker communication is implemented entirely using AMQP
-(optionally secured with SSL). The federation plugin will ensure that
-only messages that will be received from the downstream exchange are
-sent over the wire.
+An upstream exchange can be a regular exchange or a federation
+exchange. It is expected that upstream and downstream exchanges will
+have the same type (or backing type). Mixing types will lead to
+strange routing behaviour.
+
+Inter-broker communication is implemented using AMQP (optionally
+secured with SSL). The federation plugin will ensure that only
+messages that will be received from the downstream exchange are sent
+over the wire.
 
 A typical use would be to have the same "logical" exchange distributed
 over many brokers. This would be achieved by having the exchange
@@ -91,7 +104,7 @@ A reasonably verbose static configuration might look like:
                  {protocol,        "amqps"},
                  {username,        "myusername"},
                  {password,        "secret"},
-                 {prefetch_count,  10},
+                 {prefetch_count,  1000},
                  {reconnect_delay, 5},
                  {heartbeat,       10},
                  {queue_expires,   30}]
@@ -108,16 +121,16 @@ A reasonably verbose static configuration might look like:
    ]
   }
 
-The upstreams parameter is a list of remote exchanges whose messages
-should be federated to the local exchange. You can specify host, port,
-protocol, virtual_host and exchange here. Only host is mandatory; if
-protocol is omitted the protocol is taken as "amqp", and if
-virtual_host or exchange are omitted the default is the same as the
-downstream exchange.
+Within the list of exchanges, the upstreams parameter is a list of
+remote exchanges whose messages should be federated to the local
+exchange. You can specify host, port, protocol, virtual_host and
+exchange here. Only host is mandatory; if protocol is omitted the
+protocol is taken as "amqp", and if virtual_host or exchange are
+omitted the default is the same as the downstream exchange.
 
-Most of the rest looks like an exchange.declare, but note that *the
-type parameter must match the type of the upstream exchanges for
-routing to work at all sensibly*.
+Most of the rest of the list of exchanges looks like a set of
+exchange.declares, but note that the type parameter must match the
+type of the upstream exchanges for routing to work at all sensibly.
 
 The brokers list provides information on how to connect to brokers
 mentioned in the upstreams list. It can match on the following properties:
@@ -125,7 +138,7 @@ mentioned in the upstreams list. It can match on the following properties:
 host
   - hostname to connect to
 
-scheme
+protocol
   - "amqp" or "amqps"
 
 virtual_host
@@ -167,12 +180,12 @@ connections. See the Erlang client documentation for more details.
 The local_username and local_password parameters specify how to
 connect to the local broker. The default for both is "guest".
 
-Declaring Over AMQP
-===================
+Declaring Federation Exchanges Over AMQP
+========================================
 
-This is less common, but in case you want to do this:
+This is a less common case, but in case you want to do this:
 
- * Declare the downstream with type "x-federation".
+ * Declare the downstream exchange with type "x-federation".
 
  * Give it arguments "type" and "upstreams". "type" should refer to
    its backing type; the type of the upstream exchanges. "upstreams"
@@ -183,8 +196,18 @@ This is less common, but in case you want to do this:
  * Connection information and SSL parameters will still be taken from the
    static configuration.
 
+Example using the Java API:
 
-Limitations
-===========
+Map<String, Object> upstream = new HashMap<String, Object>();
+upstream.put("host", "remote-server");
+upstream.put("exchange", "upstream-exchange");
 
-See TODO for a bunch of stuff that's not yet done.
+ArrayList<Map<String, Object>> upstreams = new ArrayList<Map<String, Object>>();
+upstreams.add(upstream);
+
+Map<String, Object> args = new HashMap<String, Object>();
+args.put("type", "topic");
+args.put("upstreams", upstreams);
+
+Channel ch = ...;
+ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
