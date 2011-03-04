@@ -433,7 +433,7 @@ record_confirm_message(#delivery{sender     = ChPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
-                                   guid          = Guid}},
+                                   id            = Guid}},
                        State =
                            #q{guid_to_channel = GTC,
                               q               = #amqqueue{durable = true}}) ->

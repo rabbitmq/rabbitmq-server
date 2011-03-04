@@ -509,7 +509,7 @@ publish(Msg, MsgProps, State) ->
     {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
     a(reduce_memory_use(State1)).
 
-publish_delivered(false, #basic_message { guid = MsgId },
+publish_delivered(false, #basic_message { id = MsgId },
                   #message_properties {
                     needs_confirming = NeedsConfirming },
                   State = #vqstate { len = 0 }) ->
@@ -519,7 +519,7 @@ publish_delivered(false, #basic_message { guid = MsgId },
     end,
     {undefined, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
-                                               guid = MsgId },
+                                               id = MsgId },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
                   State = #vqstate { len              = 0,
@@ -909,7 +909,7 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 %% when requeueing, we re-add a msg_id to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
-msg_status(IsPersistent, SeqId, Msg = #basic_message { guid = MsgId },
+msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
            MsgProps) ->
     #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
                   is_persistent = IsPersistent, is_delivered = false,
@@ -996,7 +996,7 @@ store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
 erase_tx(Txn) -> erase({txn, Txn}).
 
 persistent_msg_ids(Pubs) ->
-    [MsgId || {#basic_message { guid          = MsgId,
+    [MsgId || {#basic_message { id            = MsgId,
                                 is_persistent = true }, _MsgProps} <- Pubs].
 
 betas_from_index_entries(List, TransientThreshold, IndexState) ->
@@ -1247,7 +1247,7 @@ sum_msg_ids_by_store_to_len(LensByStore, MsgIdsByStore) ->
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
-publish(Msg = #basic_message { is_persistent = IsPersistent, guid = MsgId },
+publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
         IsDelivered, MsgOnDisk,
         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
