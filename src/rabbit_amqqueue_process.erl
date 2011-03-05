@@ -163,14 +163,14 @@ bq_init(BQ, QName, IsDurable, Recover) ->
     Self = self(),
     BQ:init(QName, IsDurable, Recover,
             fun (Fun) ->
-                    rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-                      Self, Fun)
+                    rabbit_amqqueue:run_backing_queue_async(Self, Fun)
             end,
             fun (Fun) ->
                     rabbit_misc:with_exit_handler(
                       fun () -> error end,
-                      fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                                  Self, Fun) end)
+                      fun () ->
+                              rabbit_amqqueue:run_backing_queue(Self, Fun)
+                      end)
             end).
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
@@ -517,7 +517,7 @@ deliver_or_enqueue(Delivery, State) ->
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
-    maybe_run_queue_via_backing_queue(
+    run_backing_queue(
       fun (BQS) -> BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS) end,
       State).
 
@@ -622,10 +622,9 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
-    maybe_run_queue_via_backing_queue(fun (BQS) -> BQ:idle_timeout(BQS) end,
-                                      State).
+    run_backing_queue(fun (BQS) -> BQ:idle_timeout(BQS) end, State).
 
-maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
+run_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
     run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
 
 commit_transaction(Txn, From, C = #cr{acktags = ChAckTags},
@@ -756,29 +755,29 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        info                                      -> 9;
-        {info, _Items}                            -> 9;
-        consumers                                 -> 9;
-        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
-        _                                         -> 0
+        info                      -> 9;
+        {info, _Items}            -> 9;
+        consumers                 -> 9;
+        {run_backing_queue, _Fun} -> 6;
+        _                         -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                       -> 8;
-        delete_immediately                        -> 8;
-        {set_ram_duration_target, _Duration}      -> 8;
-        {set_maximum_since_use, _Age}             -> 8;
-        maybe_expire                              -> 8;
-        drop_expired                              -> 8;
-        emit_stats                                -> 7;
-        {ack, _Txn, _MsgIds, _ChPid}              -> 7;
-        {reject, _MsgIds, _Requeue, _ChPid}       -> 7;
-        {notify_sent, _ChPid}                     -> 7;
-        {unblock, _ChPid}                         -> 7;
-        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
-        sync_timeout                              -> 6;
-        _                                         -> 0
+        update_ram_duration                  -> 8;
+        delete_immediately                   -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        maybe_expire                         -> 8;
+        drop_expired                         -> 8;
+        emit_stats                           -> 7;
+        {ack, _Txn, _MsgIds, _ChPid}         -> 7;
+        {reject, _MsgIds, _Requeue, _ChPid}  -> 7;
+        {notify_sent, _ChPid}                -> 7;
+        {unblock, _ChPid}                    -> 7;
+        {run_backing_queue, _Fun}            -> 6;
+        sync_timeout                         -> 6;
+        _                                    -> 0
     end.
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
@@ -991,12 +990,12 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
             noreply(requeue_and_run(AckTags, State))
     end;
 
-handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
-    reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
+handle_call({run_backing_queue, Fun}, _From, State) ->
+    reply(ok, run_backing_queue(Fun, State)).
 
 
-handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
-    noreply(maybe_run_queue_via_backing_queue(Fun, State));
+handle_cast({run_backing_queue, Fun}, State) ->
+    noreply(run_backing_queue(Fun, State));
 
 handle_cast(sync_timeout, State) ->
     noreply(backing_queue_idle_timeout(State#q{sync_timer_ref = undefined}));

@@ -17,22 +17,23 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
--export([internal_declare/2, internal_delete/1,
-         maybe_run_queue_via_backing_queue/2,
-         maybe_run_queue_via_backing_queue_async/2,
-         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/4, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
--export([emit_stats/1]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
+
+%% internal
+-export([internal_declare/2, internal_delete/1,
+         run_backing_queue/2, run_backing_queue_async/2,
+         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
+         set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
+         emit_stats/1]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -140,9 +141,9 @@
                     rabbit_types:connection_exit() |
                     fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
                                         rabbit_types:connection_exit())).
--spec(maybe_run_queue_via_backing_queue/2 ::
+-spec(run_backing_queue/2 ::
         (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
--spec(maybe_run_queue_via_backing_queue_async/2 ::
+-spec(run_backing_queue_async/2 ::
         (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
@@ -438,11 +439,11 @@ internal_delete(QueueName) ->
               end
       end).
 
-maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
+run_backing_queue(QPid, Fun) ->
+    gen_server2:call(QPid, {run_backing_queue, Fun}, infinity).
 
-maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
-    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
+run_backing_queue_async(QPid, Fun) ->
+    gen_server2:cast(QPid, {run_backing_queue, Fun}).
 
 sync_timeout(QPid) ->
     gen_server2:cast(QPid, sync_timeout).
