@@ -525,8 +525,7 @@ process_confirms(MsgSeqNos, QPid, Nack, State = #ch{unconfirmed_mq = UMQ,
                   case gb_trees:lookup(MsgSeqNo, UMQ0) of
                       {value, XQ} -> remove_unconfirmed(MsgSeqNo, QPid, XQ,
                                                         Acc, Nack, State);
-                      none        ->
-                          Acc
+                      none        -> Acc
                   end
           end, {[], UMQ, UQM}, MsgSeqNos),
     {MXs, State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}}.
