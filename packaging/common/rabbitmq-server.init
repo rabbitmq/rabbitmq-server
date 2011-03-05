@@ -10,8 +10,8 @@
 # Provides:          rabbitmq-server
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
-# Default-Start:
-# Default-Stop:
+# Default-Start:     3 4 5
+# Default-Stop:      0 1 2 6
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO

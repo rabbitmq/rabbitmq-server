@@ -101,7 +101,7 @@ ensure_stats_timer(State = #state{level = none}, _Fun) ->
     State;
 ensure_stats_timer(State = #state{timer = undefined}, Fun) ->
     {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                      erlang, apply, [Fun, []]),
+                                   erlang, apply, [Fun, []]),
     State#state{timer = TRef};
 ensure_stats_timer(State, _Fun) ->
     State.
