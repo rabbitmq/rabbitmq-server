@@ -544,7 +544,7 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
 
 dropwhile(Pred, State) ->
     {_OkOrEmpty, State1} = dropwhile1(Pred, State),
-    State1.
+    a(State1).
 
 dropwhile1(Pred, State) ->
     internal_queue_out(
