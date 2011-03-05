@@ -706,11 +706,13 @@ tx_commit(Txn, Fun, MsgPropsFun,
     HasPersistentPubs = PersistentGuids =/= [],
     {AckTags1,
      a(case IsDurable andalso HasPersistentPubs of
-           true  -> ok = msg_store_sync(
-                           MSCState, true, PersistentGuids,
-                           msg_store_callback(PersistentGuids, Pubs, AckTags1,
-                                              Fun, MsgPropsFun,
-                                              AsyncCallback, SyncCallback)),
+           true  -> MsgStoreCallback =
+                        fun () -> msg_store_callback(
+                                    PersistentGuids, Pubs, AckTags1, Fun,
+                                    MsgPropsFun, AsyncCallback, SyncCallback)
+                        end,
+                    ok = msg_store_sync(MSCState, true, PersistentGuids,
+                                        fun () -> spawn(MsgStoreCallback) end),
                     State;
            false -> tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags1,
                                              Fun, MsgPropsFun, State)
@@ -947,9 +949,9 @@ msg_store_client_init(MsgStore, MsgOnDiskFun, Callback) ->
     msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun, Callback).
 
 msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
+    CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
     rabbit_msg_store:client_init(
-      MsgStore, Ref, MsgOnDiskFun,
-      msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE, Callback)).
+      MsgStore, Ref, MsgOnDiskFun, fun () -> Callback(CloseFDsFun) end).
 
 msg_store_write(MSCState, IsPersistent, Guid, Msg) ->
     with_immutable_msg_store_state(
@@ -981,13 +983,10 @@ msg_store_close_fds(MSCState, IsPersistent) ->
       MSCState, IsPersistent,
       fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
 
-msg_store_close_fds_fun(IsPersistent, Callback) ->
-    fun () -> Callback(
-                fun (State = #vqstate { msg_store_clients = MSCState }) ->
-                        {ok, MSCState1} =
-                            msg_store_close_fds(MSCState, IsPersistent),
-                        State #vqstate { msg_store_clients = MSCState1 }
-                end)
+msg_store_close_fds_fun(IsPersistent) ->
+    fun (State = #vqstate { msg_store_clients = MSCState }) ->
+            {ok, MSCState1} = msg_store_close_fds(MSCState, IsPersistent),
+            State #vqstate { msg_store_clients = MSCState1 }
     end.
 
 maybe_write_delivered(false, _SeqId, IndexState) ->
@@ -1131,17 +1130,12 @@ blank_rate(Timestamp, IngressLength) ->
 
 msg_store_callback(PersistentGuids, Pubs, AckTags, Fun, MsgPropsFun,
                    AsyncCallback, SyncCallback) ->
-    fun () -> spawn(fun () -> case SyncCallback(
-                                     fun (StateN) ->
-                                             tx_commit_post_msg_store(
-                                               true, Pubs, AckTags,
-                                               Fun, MsgPropsFun, StateN)
-                                     end) of
-                                  ok    -> ok;
-                                  error -> remove_persistent_messages(
-                                             PersistentGuids, AsyncCallback)
-                              end
-                    end)
+    case SyncCallback(fun (StateN) ->
+                              tx_commit_post_msg_store(true, Pubs, AckTags,
+                                                       Fun, MsgPropsFun, StateN)
+                      end) of
+        ok    -> ok;
+        error -> remove_persistent_messages(PersistentGuids, AsyncCallback)
     end.
 
 remove_persistent_messages(Guids, AsyncCallback) ->
