@@ -592,14 +592,14 @@ handle_method0(MethodName, FieldsBin,
                State = #v1{connection = #connection{protocol = Protocol}}) ->
     HandleException =
         fun(R) ->
-            case ?IS_RUNNING(State) of
-                true  -> send_exception(State, 0, R);
-                %% We don't trust the client at this point - force
-                %% them to wait for a bit so they can't DOS us with
-                %% repeated failed logins etc.
-                false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-                         throw({channel0_error, State#v1.connection_state, R})
-            end
+                case ?IS_RUNNING(State) of
+                    true  -> send_exception(State, 0, R);
+                    %% We don't trust the client at this point - force
+                    %% them to wait for a bit so they can't DOS us with
+                    %% repeated failed logins etc.
+                    false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+                             throw({channel0_error, State#v1.connection_state, R})
+                end
         end,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
@@ -734,8 +734,7 @@ auth_mechanisms(Sock) ->
 
 auth_mechanisms_binary(Sock) ->
     list_to_binary(
-            string:join(
-              [atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
+      string:join([atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
 
 auth_phase(Response,
            State = #v1{auth_mechanism = AuthMechanism,
