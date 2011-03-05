@@ -43,6 +43,7 @@
                              (false, rabbit_types:basic_message(),
                               rabbit_types:message_properties(), state())
                              -> {undefined, state()}).
+-spec(drain_confirmed/1 :: (state()) -> {[rabbit_guid:guid()], state()}).
 -spec(dropwhile/2 ::
         (fun ((rabbit_types:message_properties()) -> boolean()), state())
         -> state()).

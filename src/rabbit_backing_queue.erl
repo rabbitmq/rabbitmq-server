@@ -54,6 +54,10 @@ behaviour_info(callbacks) ->
      %% (i.e. saves the round trip through the backing queue).
      {publish_delivered, 4},
 
+     %% Return ids of messages which have been confirmed since
+     %% the last invocation of this function (or initialisation).
+     {drain_confirmed, 1},
+
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
      {dropwhile, 2},

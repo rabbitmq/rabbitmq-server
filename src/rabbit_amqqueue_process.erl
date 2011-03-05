@@ -215,13 +215,15 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, NewState1, Timeout}.
 
-next_state(State) ->
-    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        ensure_rate_timer(State),
-    State2 = ensure_stats_timer(State1),
-    case BQ:needs_idle_timeout(BQS) of
-        true  -> {ensure_sync_timer(State2), 0};
-        false -> {stop_sync_timer(State2), hibernate}
+next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    {Guids, BQS1} = BQ:drain_confirmed(BQS),
+    BQNeedsSync = BQ:needs_idle_timeout(BQS1),
+    State1 = ensure_stats_timer(
+               ensure_rate_timer(
+                 confirm_messages(Guids, State#q{backing_queue_state = BQS1}))),
+    case BQNeedsSync of
+        true  -> {ensure_sync_timer(State1), 0};
+        false -> {stop_sync_timer(State1), hibernate}
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
@@ -418,6 +420,8 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
+confirm_messages([], State) ->
+    State;
 confirm_messages(Guids, State = #q{guid_to_channel = GTC}) ->
     {CMs, GTC1} =
         lists:foldl(
@@ -523,9 +527,8 @@ deliver_or_enqueue(Delivery, State) ->
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
     maybe_run_queue_via_backing_queue(
-      fun (BQS) ->
-              {[], BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS)}
-      end, State).
+      fun (BQS) -> BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS) end,
+      State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,
                               backing_queue       = BQ}) ->
@@ -628,13 +631,11 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
-    maybe_run_queue_via_backing_queue(
-      fun (BQS) -> {[], BQ:idle_timeout(BQS)} end, State).
+    maybe_run_queue_via_backing_queue(fun (BQS) -> BQ:idle_timeout(BQS) end,
+                                      State).
 
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
-    {Guids, BQS1} = Fun(BQS),
-    run_message_queue(
-      confirm_messages(Guids, State#q{backing_queue_state = BQS1})).
+    run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
 
 commit_transaction(Txn, From, C = #cr{acktags = ChAckTags},
                    State = #q{backing_queue       = BQ,
