@@ -57,6 +57,7 @@ all_tests() ->
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_server_status(),
+    passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
     passed = test_configurable_server_properties(),
     passed.
@@ -1224,6 +1225,79 @@ test_statistics_receive_event1(Ch, Matcher) ->
             end
     after 1000 -> throw(failed_to_receive_event)
     end.
+
+test_confirms_receiver(Pid) ->
+    receive
+        shutdown ->
+            ok;
+        {send_command, Method} ->
+            Pid ! Method,
+            test_confirms_receiver(Pid)
+    end.
+
+test_confirms() ->
+    {_Writer, Ch} = test_spawn(fun test_confirms_receiver/1),
+    DeclareBindDurableQueue =
+        fun() ->
+                rabbit_channel:do(Ch, #'queue.declare'{durable = true}),
+                receive #'queue.declare_ok'{queue = Q0} ->
+                        rabbit_channel:do(Ch, #'queue.bind'{
+                                            queue = Q0,
+                                            exchange = <<"amq.direct">>,
+                                            routing_key = "magic" }),
+                        receive #'queue.bind_ok'{} ->
+                                Q0
+                        after 1000 ->
+                                throw(failed_to_bind_queue)
+                        end
+                after 1000 ->
+                        throw(failed_to_declare_queue)
+                end
+        end,
+    %% Declare and bind two queues
+    QName1 = DeclareBindDurableQueue(),
+    QName2 = DeclareBindDurableQueue(),
+    %% Get the first one's pid (we'll crash it later)
+    {ok, Q1} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName1)),
+    QPid1 = Q1#amqqueue.pid,
+    %% Enable confirms
+    rabbit_channel:do(Ch, #'confirm.select'{}),
+    receive #'confirm.select_ok'{} ->
+            ok
+    after 1000 ->
+            throw(failed_to_enable_confirms)
+    end,
+    %% Publish a message
+    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
+                                           routing_key = "magic"
+                                          },
+                      rabbit_basic:build_content(
+                        #'P_basic'{delivery_mode = 2}, <<"">>)),
+    %% Crash the queue
+    QPid1 ! boom,
+    %% Wait for a nack
+    receive
+        #'basic.nack'{} ->
+            ok;
+        #'basic.ack'{} ->
+            throw(received_ack_instead_of_nack)
+    after 2000 ->
+            throw(did_not_receive_nack)
+    end,
+    receive
+        #'basic.ack'{} ->
+            throw(received_ack_when_none_expected)
+    after 1000 ->
+            ok
+    end,
+    %% Delete queue
+    rabbit_channel:do(Ch, #'queue.delete'{queue = QName2}),
+    receive #'queue.delete_ok'{} ->
+            ok
+    after 1000 ->
+            throw(failed_to_cleanup_queue)
+    end,
+    passed.
 
 test_statistics() ->
     application:set_env(rabbit, collect_statistics, fine),
