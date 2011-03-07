@@ -122,12 +122,12 @@ maybe_upgrade_mnesia() ->
                 secondary -> secondary_upgrade(AllNodes)
             end
     end,
-    ok = rabbit_mnesia:delete_previous_run_disc_nodes().
+    ok = rabbit_mnesia:delete_previously_running_disc_nodes().
 
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:read_previous_run_disc_nodes(),
+            AfterUs = rabbit_mnesia:read_previously_running_disc_nodes(),
             case {is_disc_node(), AfterUs} of
                 {true, []}  ->
                     primary;

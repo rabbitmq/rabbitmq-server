@@ -22,8 +22,8 @@
          is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
-         record_running_disc_nodes/0, read_previous_run_disc_nodes/0,
-         delete_previous_run_disc_nodes/0, running_nodes_filename/0]).
+         record_running_disc_nodes/0, read_previously_running_disc_nodes/0,
+         delete_previously_running_disc_nodes/0, running_nodes_filename/0]).
 
 -export([table_names/0]).
 
@@ -45,6 +45,7 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
+-spec(init_db/2 :: ([node()], boolean()) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(force_cluster/1 :: ([node()]) -> 'ok').
@@ -61,8 +62,8 @@
 -spec(create_cluster_nodes_config/1 :: ([node()]) ->  'ok').
 -spec(read_cluster_nodes_config/0 :: () ->  [node()]).
 -spec(record_running_disc_nodes/0 :: () ->  'ok').
--spec(read_previous_run_disc_nodes/0 :: () ->  [node()]).
--spec(delete_previous_run_disc_nodes/0 :: () ->  'ok').
+-spec(read_previously_running_disc_nodes/0 :: () ->  [node()]).
+-spec(delete_previously_running_disc_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
 
 -endif.
@@ -390,7 +391,7 @@ record_running_disc_nodes() ->
     rabbit_misc:write_term_file(FileName, [Nodes]),
     ok.
 
-read_previous_run_disc_nodes() ->
+read_previously_running_disc_nodes() ->
     FileName = running_nodes_filename(),
     case rabbit_misc:read_term_file(FileName) of
         {ok, [Nodes]}   -> Nodes;
@@ -399,7 +400,7 @@ read_previous_run_disc_nodes() ->
                                           FileName, Reason}})
     end.
 
-delete_previous_run_disc_nodes() ->
+delete_previously_running_disc_nodes() ->
     FileName = running_nodes_filename(),
     case file:delete(FileName) of
         ok              -> ok;
