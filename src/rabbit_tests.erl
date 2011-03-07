@@ -35,6 +35,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
+    passed = gm_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_file_handle_cache(),
@@ -424,35 +425,35 @@ test_content_properties() ->
                                            [{<<"one">>, signedint, 1},
                                             {<<"two">>, signedint, 2}]}]}],
                                 <<
-                                 % property-flags
-                                 16#8000:16,
+                                  %% property-flags
+                                  16#8000:16,
 
-                                 % property-list:
+                                  %% property-list:
 
-                                 % table
-                                 117:32,                % table length in bytes
+                                  %% table
+                                  117:32,                % table length in bytes
 
-                                 11,"a signedint",        % name
-                                 "I",12345678:32,        % type and value
+                                  11,"a signedint",      % name
+                                  "I",12345678:32,       % type and value
 
-                                 9,"a longstr",
-                                 "S",10:32,"yes please",
+                                  9,"a longstr",
+                                  "S",10:32,"yes please",
 
-                                 9,"a decimal",
-                                 "D",123,12345678:32,
+                                  9,"a decimal",
+                                  "D",123,12345678:32,
 
-                                 11,"a timestamp",
-                                 "T", 123456789012345:64,
+                                  11,"a timestamp",
+                                  "T", 123456789012345:64,
 
-                                 14,"a nested table",
-                                 "F",
-                                        18:32,
+                                  14,"a nested table",
+                                  "F",
+                                  18:32,
 
-                                        3,"one",
-                                        "I",1:32,
+                                  3,"one",
+                                  "I",1:32,
 
-                                        3,"two",
-                                        "I",2:32 >>),
+                                  3,"two",
+                                  "I",2:32 >>),
     case catch rabbit_binary_parser:parse_properties([bit, bit, bit, bit], <<16#A0,0,1>>) of
         {'EXIT', content_properties_binary_overflow} -> passed;
         V -> exit({got_success_but_expected_failure, V})
@@ -479,28 +480,28 @@ test_field_values() ->
 
                ]}],
       <<
-       % property-flags
-       16#8000:16,
-       % table length in bytes
-       228:32,
+        %% property-flags
+        16#8000:16,
+        %% table length in bytes
+        228:32,
 
-       7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
-       9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
-       7,"decimal",   "D", 3, 123456:32,                        % + 14 = 63
-       9,"timestamp", "T", 109876543209876:64,                  % + 19 = 82
-       5,"table",     "F", 31:32, % length of table             % + 11 = 93
-                           3,"one", "I", 54321:32,              % +  9 = 102
-                           3,"two", "S", 13:32, "A long string",% + 22 = 124
-       4,"byte",      "b", 255:8,                               % +  7 = 131
-       4,"long",      "l", 1234567890:64,                       % + 14 = 145
-       5,"short",     "s", 655:16,                              % +  9 = 154
-       4,"bool",      "t", 1,                                   % +  7 = 161
-       6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188
-       4,"void",      "V",                                      % +  6 = 194
-       5,"array",     "A", 23:32,                               % + 11 = 205
-                           "I", 54321:32,                       % +  5 = 210
-                           "S", 13:32, "A long string"          % + 18 = 228
-       >>),
+        7,"longstr",   "S", 21:32, "Here is a long string",      %      = 34
+        9,"signedint", "I", 12345:32/signed,                     % + 15 = 49
+        7,"decimal",   "D", 3, 123456:32,                        % + 14 = 63
+        9,"timestamp", "T", 109876543209876:64,                  % + 19 = 82
+        5,"table",     "F", 31:32, % length of table             % + 11 = 93
+        3,"one", "I", 54321:32,                                  % +  9 = 102
+        3,"two", "S", 13:32, "A long string",                    % + 22 = 124
+        4,"byte",      "b", 255:8,                               % +  7 = 131
+        4,"long",      "l", 1234567890:64,                       % + 14 = 145
+        5,"short",     "s", 655:16,                              % +  9 = 154
+        4,"bool",      "t", 1,                                   % +  7 = 161
+        6,"binary",    "x", 15:32, "a binary string",            % + 27 = 188
+        4,"void",      "V",                                      % +  6 = 194
+        5,"array",     "A", 23:32,                               % + 11 = 205
+        "I", 54321:32,                                           % +  5 = 210
+        "S", 13:32, "A long string"                              % + 18 = 228
+      >>),
     passed.
 
 %% Test that content frames don't exceed frame-max
@@ -585,31 +586,130 @@ sequence_with_content(Sequence) ->
                   rabbit_framing_amqp_0_9_1),
                 Sequence).
 
-test_topic_match(P, R) ->
-    test_topic_match(P, R, true).
-
-test_topic_match(P, R, Expected) ->
-    case rabbit_exchange_type_topic:topic_matches(list_to_binary(P),
-                                                  list_to_binary(R)) of
-        Expected ->
-            passed;
-        _ ->
-            {topic_match_failure, P, R}
-    end.
-
 test_topic_matching() ->
-    passed = test_topic_match("#", "test.test"),
-    passed = test_topic_match("#", ""),
-    passed = test_topic_match("#.T.R", "T.T.R"),
-    passed = test_topic_match("#.T.R", "T.R.T.R"),
-    passed = test_topic_match("#.Y.Z", "X.Y.Z.X.Y.Z"),
-    passed = test_topic_match("#.test", "test"),
-    passed = test_topic_match("#.test", "test.test"),
-    passed = test_topic_match("#.test", "ignored.test"),
-    passed = test_topic_match("#.test", "more.ignored.test"),
-    passed = test_topic_match("#.test", "notmatched", false),
-    passed = test_topic_match("#.z", "one.two.three.four", false),
+    XName = #resource{virtual_host = <<"/">>,
+                      kind = exchange,
+                      name = <<"test_exchange">>},
+    X = #exchange{name = XName, type = topic, durable = false,
+                  auto_delete = false, arguments = []},
+    %% create
+    rabbit_exchange_type_topic:validate(X),
+    exchange_op_callback(X, create, []),
+
+    %% add some bindings
+    Bindings = lists:map(
+                 fun ({Key, Q}) ->
+                         #binding{source = XName,
+                                  key = list_to_binary(Key),
+                                  destination = #resource{virtual_host = <<"/">>,
+                                                          kind = queue,
+                                                          name = list_to_binary(Q)}}
+                 end, [{"a.b.c",         "t1"},
+                       {"a.*.c",         "t2"},
+                       {"a.#.b",         "t3"},
+                       {"a.b.b.c",       "t4"},
+                       {"#",             "t5"},
+                       {"#.#",           "t6"},
+                       {"#.b",           "t7"},
+                       {"*.*",           "t8"},
+                       {"a.*",           "t9"},
+                       {"*.b.c",         "t10"},
+                       {"a.#",           "t11"},
+                       {"a.#.#",         "t12"},
+                       {"b.b.c",         "t13"},
+                       {"a.b.b",         "t14"},
+                       {"a.b",           "t15"},
+                       {"b.c",           "t16"},
+                       {"",              "t17"},
+                       {"*.*.*",         "t18"},
+                       {"vodka.martini", "t19"},
+                       {"a.b.c",         "t20"},
+                       {"*.#",           "t21"},
+                       {"#.*.#",         "t22"},
+                       {"*.#.#",         "t23"},
+                       {"#.#.#",         "t24"},
+                       {"*",             "t25"},
+                       {"#.b.#",         "t26"}]),
+    lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
+                  Bindings),
+
+    %% test some matches
+    test_topic_expect_match(
+      X, [{"a.b.c",               ["t1", "t2", "t5", "t6", "t10", "t11", "t12",
+                                   "t18", "t20", "t21", "t22", "t23", "t24",
+                                   "t26"]},
+          {"a.b",                 ["t3", "t5", "t6", "t7", "t8", "t9", "t11",
+                                   "t12", "t15", "t21", "t22", "t23", "t24",
+                                   "t26"]},
+          {"a.b.b",               ["t3", "t5", "t6", "t7", "t11", "t12", "t14",
+                                   "t18", "t21", "t22", "t23", "t24", "t26"]},
+          {"",                    ["t5", "t6", "t17", "t24"]},
+          {"b.c.c",               ["t5", "t6", "t18", "t21", "t22", "t23",
+                                   "t24", "t26"]},
+          {"a.a.a.a.a",           ["t5", "t6", "t11", "t12", "t21", "t22",
+                                   "t23", "t24"]},
+          {"vodka.gin",           ["t5", "t6", "t8", "t21", "t22", "t23",
+                                   "t24"]},
+          {"vodka.martini",       ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
+                                   "t24"]},
+          {"b.b.c",               ["t5", "t6", "t10", "t13", "t18", "t21",
+                                   "t22", "t23", "t24", "t26"]},
+          {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
+          {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
+                                   "t25"]}]),
+
+    %% remove some bindings
+    RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
+                       lists:nth(11, Bindings), lists:nth(19, Bindings),
+                       lists:nth(21, Bindings)],
+    exchange_op_callback(X, remove_bindings, [RemovedBindings]),
+    RemainingBindings = ordsets:to_list(
+                          ordsets:subtract(ordsets:from_list(Bindings),
+                                           ordsets:from_list(RemovedBindings))),
+
+    %% test some matches
+    test_topic_expect_match(X,
+                            [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
+                                                      "t23", "t24", "t26"]},
+                             {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
+                                                      "t22", "t23", "t24", "t26"]},
+                             {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
+                                                      "t23", "t24", "t26"]},
+                             {"",                    ["t6", "t17", "t24"]},
+                             {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
+                             {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
+                             {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
+                             {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
+                             {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
+                                                      "t24", "t26"]},
+                             {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
+                             {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
+
+    %% remove the entire exchange
+    exchange_op_callback(X, delete, [RemainingBindings]),
+    %% none should match now
+    test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
+
+exchange_op_callback(X, Fun, ExtraArgs) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
+    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+
+test_topic_expect_match(X, List) ->
+    lists:foreach(
+      fun ({Key, Expected}) ->
+              BinKey = list_to_binary(Key),
+              Res = rabbit_exchange_type_topic:route(
+                      X, #delivery{message = #basic_message{routing_keys =
+                                                                [BinKey]}}),
+              ExpectedRes = lists:map(
+                              fun (Q) -> #resource{virtual_host = <<"/">>,
+                                                   kind = queue,
+                                                   name = list_to_binary(Q)}
+                              end, Expected),
+              true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
+      end, List).
 
 test_app_management() ->
     %% starting, stopping, status
@@ -718,7 +818,7 @@ test_log_management_during_startup() ->
     ok = delete_log_handlers([sasl_report_tty_h]),
     ok = case catch control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotation_tty_no_handlers_test});
+                         log_rotation_tty_no_handlers_test});
              {error, {cannot_log_to_tty, _, _}} -> ok
          end,
 
@@ -743,8 +843,8 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotation_no_write_permission_dir_test});
-            {error, {cannot_log_to_file, _, _}} -> ok
+                         log_rotation_no_write_permission_dir_test});
+             {error, {cannot_log_to_file, _, _}} -> ok
          end,
 
     %% start application with logging to a subdirectory which
@@ -754,9 +854,9 @@ test_log_management_during_startup() ->
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
-                        log_rotatation_parent_dirs_test});
+                         log_rotatation_parent_dirs_test});
              {error, {cannot_log_to_file, _,
-               {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
+                      {error, {cannot_create_parent_dirs, _, eacces}}}} -> ok
          end,
     ok = set_permissions(TmpDir, 8#00700),
     ok = set_permissions(TmpLog, 8#00600),
@@ -776,22 +876,22 @@ test_log_management_during_startup() ->
     passed.
 
 test_option_parser() ->
-    % command and arguments should just pass through
+    %% command and arguments should just pass through
     ok = check_get_options({["mock_command", "arg1", "arg2"], []},
                            [], ["mock_command", "arg1", "arg2"]),
 
-    % get flags
+    %% get flags
     ok = check_get_options(
            {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
            [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
 
-    % get options
+    %% get options
     ok = check_get_options(
            {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
            [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
            ["mock_command", "-foo", "bar"]),
 
-    % shuffled and interleaved arguments and options
+    %% shuffled and interleaved arguments and options
     ok = check_get_options(
            {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
            [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
@@ -1043,7 +1143,7 @@ test_server_status() ->
     [_|_] = rabbit_binding:list_for_source(
               rabbit_misc:r(<<"/">>, exchange, <<"">>)),
     [_] = rabbit_binding:list_for_destination(
-              rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
+            rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
     [_] = rabbit_binding:list_for_source_and_destination(
             rabbit_misc:r(<<"/">>, exchange, <<"">>),
             rabbit_misc:r(<<"/">>, queue, <<"foo">>)),
@@ -1205,9 +1305,9 @@ test_delegates_async(SecondaryNode) ->
 make_responder(FMsg) -> make_responder(FMsg, timeout).
 make_responder(FMsg, Throw) ->
     fun () ->
-        receive Msg -> FMsg(Msg)
-        after 1000 -> throw(Throw)
-        end
+            receive Msg -> FMsg(Msg)
+            after 1000 -> throw(Throw)
+            end
     end.
 
 spawn_responders(Node, Responder, Count) ->
@@ -1218,10 +1318,10 @@ await_response(0) ->
 await_response(Count) ->
     receive
         response -> ok,
-        await_response(Count - 1)
+                    await_response(Count - 1)
     after 1000 ->
-        io:format("Async reply not received~n"),
-        throw(timeout)
+            io:format("Async reply not received~n"),
+            throw(timeout)
     end.
 
 must_exit(Fun) ->
@@ -1233,11 +1333,11 @@ must_exit(Fun) ->
     end.
 
 test_delegates_sync(SecondaryNode) ->
-    Sender = fun (Pid) -> gen_server:call(Pid, invoked) end,
+    Sender = fun (Pid) -> gen_server:call(Pid, invoked, infinity) end,
     BadSender = fun (_Pid) -> exit(exception) end,
 
     Responder = make_responder(fun ({'$gen_call', From, invoked}) ->
-                                   gen_server:reply(From, response)
+                                       gen_server:reply(From, response)
                                end),
 
     BadResponder = make_responder(fun ({'$gen_call', From, invoked}) ->
@@ -1249,7 +1349,7 @@ test_delegates_sync(SecondaryNode) ->
 
     must_exit(fun () -> delegate:invoke(spawn(BadResponder), BadSender) end),
     must_exit(fun () ->
-        delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
+                      delegate:invoke(spawn(SecondaryNode, BadResponder), BadSender) end),
 
     LocalGoodPids = spawn_responders(node(), Responder, 2),
     RemoteGoodPids = spawn_responders(SecondaryNode, Responder, 2),
@@ -1338,7 +1438,7 @@ test_declare_on_dead_queue(SecondaryNode) ->
             throw(failed_to_create_and_kill_queue)
     end.
 
-%---------------------------------------------------------------------
+%%---------------------------------------------------------------------
 
 control_action(Command, Args) ->
     control_action(Command, node(), Args, default_options()).
@@ -1853,7 +1953,7 @@ test_queue_index() ->
     with_empty_test_queue(
       fun (Qi0) ->
               {Qi1, _SeqIdsGuidsD} = queue_index_publish(SeqIdsD,
-                                                          false, Qi0),
+                                                         false, Qi0),
               Qi2 = rabbit_queue_index:deliver(SeqIdsD, Qi1),
               Qi3 = rabbit_queue_index:ack(SeqIdsD, Qi2),
               rabbit_queue_index:flush(Qi3)
@@ -2095,7 +2195,7 @@ check_variable_queue_status(VQ0, Props) ->
 variable_queue_wait_for_shuffling_end(VQ) ->
     case rabbit_variable_queue:needs_idle_timeout(VQ) of
         true  -> variable_queue_wait_for_shuffling_end(
-                  rabbit_variable_queue:idle_timeout(VQ));
+                   rabbit_variable_queue:idle_timeout(VQ));
         false -> VQ
     end.
 

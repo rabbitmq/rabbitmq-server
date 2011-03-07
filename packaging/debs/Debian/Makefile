@@ -22,9 +22,12 @@ package: clean
 	tar -zxvf $(DEBIAN_ORIG_TARBALL)
 	cp -r debian $(UNPACKED_DIR)
 	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
+# Debian and descendants differ from most other distros in that
+# runlevel 2 should start network services.
 	sed -i \
-	    -e 's|^DEFAULTS_FILE=.*$$|DEFAULTS_FILE=/etc/default/rabbitmq|' \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=|' \
+	    -e 's|^\(# Default-Start:\).*$$|\1 2 3 4 5|' \
+	    -e 's|^\(# Default-Stop:\).*$$|\1 0 1 6|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-server.init
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper

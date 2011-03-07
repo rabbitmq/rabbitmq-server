@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1]).
+         status/1, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -268,13 +268,13 @@
           msg_on_disk,
           index_on_disk,
           msg_props
-         }).
+        }).
 
 -record(delta,
         { start_seq_id, %% start_seq_id is inclusive
           count,
           end_seq_id    %% end_seq_id is exclusive
-         }).
+        }).
 
 -record(tx, { pending_messages, pending_acks }).
 
@@ -293,6 +293,8 @@
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
+
+-rabbit_upgrade({multiple_routing_keys, []}).
 
 -ifdef(use_specs).
 
@@ -350,6 +352,8 @@
              ack_rates             :: rates() }).
 
 -include("rabbit_backing_queue_spec.hrl").
+
+-spec(multiple_routing_keys/0 :: () -> 'ok').
 
 -endif.
 
@@ -506,8 +510,12 @@ publish(Msg, MsgProps, State) ->
     a(reduce_memory_use(State1)).
 
 publish_delivered(false, #basic_message { guid = Guid },
-                  _MsgProps, State = #vqstate { len = 0 }) ->
-    blind_confirm(self(), gb_sets:singleton(Guid)),
+                  #message_properties { needs_confirming = NeedsConfirming },
+                  State = #vqstate { len = 0 }) ->
+    case NeedsConfirming of
+        true  -> blind_confirm(self(), gb_sets:singleton(Guid));
+        false -> ok
+    end,
     {undefined, a(State)};
 publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                guid = Guid },
@@ -536,7 +544,7 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
 
 dropwhile(Pred, State) ->
     {_OkOrEmpty, State1} = dropwhile1(Pred, State),
-    State1.
+    a(State1).
 
 dropwhile1(Pred, State) ->
     internal_queue_out(
@@ -623,12 +631,12 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 
     %% 3. If an ack is required, add something sensible to PA
     {AckTag, State1} = case AckRequired of
-                        true  -> StateN = record_pending_ack(
-                                            MsgStatus #msg_status {
-                                              is_delivered = true }, State),
-                                 {SeqId, StateN};
-                        false -> {undefined, State}
-                    end,
+                           true  -> StateN = record_pending_ack(
+                                               MsgStatus #msg_status {
+                                                 is_delivered = true }, State),
+                                    {SeqId, StateN};
+                           false -> {undefined, State}
+                       end,
 
     PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
     Len1 = Len - 1,
@@ -768,8 +776,8 @@ ram_duration(State = #vqstate {
     RamAckCount = gb_trees:size(RamAckIndex),
 
     Duration = %% msgs+acks / (msgs+acks/sec) == sec
-        case AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
-             AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0 of
+        case (AvgEgressRate == 0 andalso AvgIngressRate == 0 andalso
+              AvgAckEgressRate == 0 andalso AvgAckIngressRate == 0) of
             true  -> infinity;
             false -> (RamMsgCountPrev + RamMsgCount +
                           RamAckCount + RamAckCountPrev) /
@@ -1384,7 +1392,7 @@ accumulate_ack_init() -> {[], orddict:new()}.
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
                                      index_on_disk = false },
-              {PersistentSeqIdsAcc, GuidsByStore}) ->
+               {PersistentSeqIdsAcc, GuidsByStore}) ->
     {PersistentSeqIdsAcc, GuidsByStore};
 accumulate_ack(SeqId, {IsPersistent, Guid, _MsgProps},
                {PersistentSeqIdsAcc, GuidsByStore}) ->
@@ -1447,8 +1455,8 @@ msgs_written_to_disk(QPid, GuidSet, written) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MIOD),
                                    State #vqstate {
                                      msgs_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MOD, GuidSet), UC) })
+                                         gb_sets:union(
+                                           MOD, gb_sets:intersection(UC, GuidSet)) })
             end).
 
 msg_indices_written_to_disk(QPid, GuidSet) ->
@@ -1459,8 +1467,8 @@ msg_indices_written_to_disk(QPid, GuidSet) ->
                     msgs_confirmed(gb_sets:intersection(GuidSet, MOD),
                                    State #vqstate {
                                      msg_indices_on_disk =
-                                         gb_sets:intersection(
-                                           gb_sets:union(MIOD, GuidSet), UC) })
+                                         gb_sets:union(
+                                           MIOD, gb_sets:intersection(UC, GuidSet)) })
             end).
 
 %%----------------------------------------------------------------------------
@@ -1801,3 +1809,27 @@ push_betas_to_deltas(Generator, Limit, Q, Count, RamIndexCount, IndexState) ->
             push_betas_to_deltas(
               Generator, Limit, Qa, Count + 1, RamIndexCount1, IndexState1)
     end.
+
+%%----------------------------------------------------------------------------
+%% Upgrading
+%%----------------------------------------------------------------------------
+
+multiple_routing_keys() ->
+    transform_storage(
+      fun ({basic_message, ExchangeName, Routing_Key, Content,
+            Guid, Persistent}) ->
+              {ok, {basic_message, ExchangeName, [Routing_Key], Content,
+                    Guid, Persistent}};
+          (_) -> {error, corrupt_message}
+      end),
+    ok.
+
+
+%% Assumes message store is not running
+transform_storage(TransformFun) ->
+    transform_store(?PERSISTENT_MSG_STORE, TransformFun),
+    transform_store(?TRANSIENT_MSG_STORE, TransformFun).
+
+transform_store(Store, TransformFun) ->
+    rabbit_msg_store:force_recovery(rabbit_mnesia:dir(), Store),
+    rabbit_msg_store:transform_dir(rabbit_mnesia:dir(), Store, TransformFun).

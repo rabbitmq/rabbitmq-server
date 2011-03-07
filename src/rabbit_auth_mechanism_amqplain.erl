@@ -19,7 +19,7 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, init/1, handle_response/2]).
+-export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include("rabbit_auth_mechanism_spec.hrl").
 
@@ -38,6 +38,9 @@ description() ->
     [{name, <<"AMQPLAIN">>},
      {description, <<"QPid AMQPLAIN mechanism">>}].
 
+should_offer(_Sock) ->
+    true.
+
 init(_Sock) ->
     [].
 
@@ -51,5 +54,5 @@ handle_response(Response, _State) ->
         _ ->
             {protocol_error,
              "AMQPLAIN auth info ~w is missing LOGIN or PASSWORD field",
-              [LoginTable]}
+             [LoginTable]}
     end.

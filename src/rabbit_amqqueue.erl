@@ -52,7 +52,7 @@
 -type(qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit_types:message()}).
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
-      'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+        'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
@@ -100,13 +100,13 @@
 -spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
-      (rabbit_types:amqqueue(), 'false', 'false')
+        (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
-      (rabbit_types:amqqueue(), 'true' , 'false')
+        (rabbit_types:amqqueue(), 'true' , 'false')
         -> qlen() | rabbit_types:error('in_use');
-      (rabbit_types:amqqueue(), 'false', 'true' )
+        (rabbit_types:amqqueue(), 'false', 'true' )
         -> qlen() | rabbit_types:error('not_empty');
-      (rabbit_types:amqqueue(), 'true' , 'true' )
+        (rabbit_types:amqqueue(), 'true' , 'true' )
         -> qlen() |
            rabbit_types:error('in_use') |
            rabbit_types:error('not_empty')).
@@ -122,10 +122,10 @@
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
-             {'ok', non_neg_integer(), qmsg()} | 'empty').
+                          {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
-      (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
-       rabbit_types:ctag(), boolean(), any())
+        (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
+         rabbit_types:ctag(), boolean(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -197,7 +197,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       arguments = Args,
                                       exclusive_owner = Owner,
                                       pid = none}),
-    case gen_server2:call(Q#amqqueue.pid, {init, false}) of
+    case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
         Q1        -> Q1
     end.
@@ -214,8 +214,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           []  -> ok = store_queue(Q),
                                  B = add_default_binding(Q),
                                  fun (Tx) -> B(Tx), Q end;
-                          [_] -> %% Q exists on stopped node
-                                 rabbit_misc:const(not_found)
+                          %% Q exists on stopped node
+                          [_] -> rabbit_misc:const(not_found)
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
@@ -288,7 +288,7 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
-                       RequiredArgs) ->
+                        RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [<<"x-expires">>]).
 
@@ -324,10 +324,10 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 map(VHostPath, F) -> rabbit_misc:filter_exit_map(F, list(VHostPath)).
 
 info(#amqqueue{ pid = QPid }) ->
-    delegate_call(QPid, info, infinity).
+    delegate_call(QPid, info).
 
 info(#amqqueue{ pid = QPid }, Items) ->
-    case delegate_call(QPid, {info, Items}, infinity) of
+    case delegate_call(QPid, {info, Items}) of
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
@@ -337,7 +337,7 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 consumers(#amqqueue{ pid = QPid }) ->
-    delegate_call(QPid, consumers, infinity).
+    delegate_call(QPid, consumers).
 
 consumers_all(VHostPath) ->
     lists:append(
@@ -347,7 +347,7 @@ consumers_all(VHostPath) ->
           end)).
 
 stat(#amqqueue{pid = QPid}) ->
-    delegate_call(QPid, stat, infinity).
+    delegate_call(QPid, stat).
 
 emit_stats(#amqqueue{pid = QPid}) ->
     delegate_cast(QPid, emit_stats).
@@ -356,9 +356,9 @@ delete_immediately(#amqqueue{ pid = QPid }) ->
     gen_server2:cast(QPid, delete_immediately).
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate_call(QPid, {delete, IfUnused, IfEmpty}, infinity).
+    delegate_call(QPid, {delete, IfUnused, IfEmpty}).
 
-purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge, infinity).
+purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge).
 
 deliver(QPid, Delivery = #delivery{immediate = true}) ->
     gen_server2:call(QPid, {deliver_immediately, Delivery}, infinity);
@@ -370,7 +370,7 @@ deliver(QPid, Delivery) ->
     true.
 
 requeue(QPid, MsgIds, ChPid) ->
-    delegate_call(QPid, {requeue, MsgIds, ChPid}, infinity).
+    delegate_call(QPid, {requeue, MsgIds, ChPid}).
 
 ack(QPid, Txn, MsgIds, ChPid) ->
     delegate_cast(QPid, {ack, Txn, MsgIds, ChPid}).
@@ -399,17 +399,15 @@ limit_all(QPids, ChPid, LimiterPid) ->
              end).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
-    delegate_call(QPid, {basic_get, ChPid, NoAck}, infinity).
+    delegate_call(QPid, {basic_get, ChPid, NoAck}).
 
 basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
     delegate_call(QPid, {basic_consume, NoAck, ChPid,
-                         LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg},
-                  infinity).
+                         LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg},
-                       infinity).
+    ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
 
 notify_sent(QPid, ChPid) ->
     gen_server2:cast(QPid, {notify_sent, ChPid}).
@@ -500,8 +498,8 @@ safe_delegate_call_ok(F, Pids) ->
         {_, Bad} -> {error, Bad}
     end.
 
-delegate_call(Pid, Msg, Timeout) ->
-    delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, Timeout) end).
+delegate_call(Pid, Msg) ->
+    delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, infinity) end).
 
 delegate_cast(Pid, Msg) ->
     delegate:invoke_no_result(Pid, fun (P) -> gen_server2:cast(P, Msg) end).

@@ -68,9 +68,9 @@
 -type(channel_number() :: non_neg_integer()).
 
 -spec(start_link/9 ::
-      (channel_number(), pid(), pid(), rabbit_types:protocol(),
-       rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-       pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
+        (channel_number(), pid(), pid(), rabbit_types:protocol(),
+         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
@@ -109,7 +109,7 @@ do(Pid, Method, Content) ->
     gen_server2:cast(Pid, {method, Method, Content}).
 
 flush(Pid) ->
-    gen_server2:call(Pid, flush).
+    gen_server2:call(Pid, flush, infinity).
 
 shutdown(Pid) ->
     gen_server2:cast(Pid, terminate).
@@ -254,7 +254,7 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({deliver, ConsumerTag, AckRequired,
              Msg = {_QName, QPid, _MsgId, Redelivered,
                     #basic_message{exchange_name = ExchangeName,
-                                   routing_key = RoutingKey,
+                                   routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
             State = #ch{writer_pid = WriterPid,
                         next_tag = DeliveryTag}) ->
@@ -301,8 +301,8 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, State1),
     erase_queue_stats(QPid),
     State3 = (case Reason of
-                 normal -> fun record_confirms/2;
-                 _      -> fun send_nacks/2
+                  normal -> fun record_confirms/2;
+                  _      -> fun send_nacks/2
               end)(MXs, State2),
     noreply(queue_blocked(QPid, State3)).
 
@@ -593,32 +593,33 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(DecodedContent#content.properties, State),
-    IsPersistent = is_message_persistent(DecodedContent),
     {MsgSeqNo, State1} =
         case ConfirmEnabled of
             false -> {undefined, State};
             true  -> SeqNo = State#ch.publish_seqno,
                      {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
-    Message = #basic_message{exchange_name = ExchangeName,
-                             routing_key   = RoutingKey,
-                             content       = DecodedContent,
-                             guid          = rabbit_guid:guid(),
-                             is_persistent = IsPersistent},
-    {RoutingRes, DeliveredQPids} =
-        rabbit_exchange:publish(
-          Exchange,
-          rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
-                                MsgSeqNo)),
-    State2 = process_routing_result(RoutingRes, DeliveredQPids, ExchangeName,
-                                    MsgSeqNo, Message, State1),
-    maybe_incr_stats([{ExchangeName, 1} |
-                      [{{QPid, ExchangeName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State2),
-    {noreply, case TxnKey of
-                  none -> State2;
-                  _    -> add_tx_participants(DeliveredQPids, State2)
-              end};
+    case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
+        {ok, Message} ->
+            {RoutingRes, DeliveredQPids} =
+                rabbit_exchange:publish(
+                  Exchange,
+                  rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
+                                        MsgSeqNo)),
+            State2 = process_routing_result(RoutingRes, DeliveredQPids,
+                                            ExchangeName, MsgSeqNo, Message,
+                                            State1),
+            maybe_incr_stats([{ExchangeName, 1} |
+                              [{{QPid, ExchangeName}, 1} ||
+                                  QPid <- DeliveredQPids]], publish, State2),
+            {noreply, case TxnKey of
+                          none -> State2;
+                          _    -> add_tx_participants(DeliveredQPids, State2)
+                      end};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(precondition_failed,
+                                       "invalid message: ~p", [Reason])
+    end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
@@ -658,7 +659,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
         {ok, MessageCount,
          Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
-                               routing_key = RoutingKey,
+                               routing_keys = [RoutingKey | _CcRoutes],
                                content = Content}}} ->
             State1 = lock_message(not(NoAck),
                                   ack_record(DeliveryTag, none, Msg),
@@ -714,9 +715,9 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                    end) of
                 ok ->
                     {noreply, State#ch{consumer_mapping =
-                                       dict:store(ActualConsumerTag,
-                                                  QueueName,
-                                                  ConsumerMapping)}};
+                                           dict:store(ActualConsumerTag,
+                                                      QueueName,
+                                                      ConsumerMapping)}};
                 {error, exclusive_consume_unavailable} ->
                     rabbit_misc:protocol_error(
                       access_refused, "~s in exclusive use",
@@ -738,8 +739,8 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
             return_ok(State, NoWait, OkMsg);
         {ok, QueueName} ->
             NewState = State#ch{consumer_mapping =
-                                dict:erase(ConsumerTag,
-                                           ConsumerMapping)},
+                                    dict:erase(ConsumerTag,
+                                               ConsumerMapping)},
             case rabbit_amqqueue:with(
                    QueueName,
                    fun (Q) ->
@@ -1123,7 +1124,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     end.
 
 basic_return(#basic_message{exchange_name = ExchangeName,
-                            routing_key   = RoutingKey,
+                            routing_keys  = [RoutingKey | _CcRoutes],
                             content       = Content},
              #ch{protocol = Protocol, writer_pid = WriterPid}, Reason) ->
     {_Close, ReplyCode, ReplyText} = Protocol:lookup_amqp_exception(Reason),
@@ -1274,22 +1275,15 @@ notify_limiter(LimiterPid, Acked) ->
         Count -> rabbit_limiter:ack(LimiterPid, Count)
     end.
 
-is_message_persistent(Content) ->
-    case rabbit_basic:is_message_persistent(Content) of
-        {invalid, Other} ->
-            rabbit_log:warning("Unknown delivery mode ~p - "
-                               "treating as 1, non-persistent~n",
-                               [Other]),
-            false;
-        IsPersistent when is_boolean(IsPersistent) ->
-            IsPersistent
-    end.
-
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+                     return_unroutable, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_consumers),
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+                     return_not_delivered, State),
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);

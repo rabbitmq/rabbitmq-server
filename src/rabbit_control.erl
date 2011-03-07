@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -102,24 +103,22 @@ print_badrpc_diagnostics(Node) ->
 
 diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    [
-        {"diagnostics:", []},
-        case net_adm:names(NodeHost) of
-            {error, EpmdReason} ->
-                {"- unable to connect to epmd on ~s: ~w",
-                    [NodeHost, EpmdReason]};
-            {ok, NamePorts} ->
-                {"- nodes and their ports on ~s: ~p",
-                              [NodeHost, [{list_to_atom(Name), Port} ||
-                                          {Name, Port} <- NamePorts]]}
-        end,
-        {"- current node: ~w", [node()]},
-        case init:get_argument(home) of
-            {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
-            Other          -> {"- no current node home dir: ~p", [Other]}
-        end,
-        {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}
-    ].
+    [{"diagnostics:", []},
+     case net_adm:names(NodeHost) of
+         {error, EpmdReason} ->
+             {"- unable to connect to epmd on ~s: ~w",
+              [NodeHost, EpmdReason]};
+         {ok, NamePorts} ->
+             {"- nodes and their ports on ~s: ~p",
+              [NodeHost, [{list_to_atom(Name), Port} ||
+                             {Name, Port} <- NamePorts]]}
+     end,
+     {"- current node: ~w", [node()]},
+     case init:get_argument(home) of
+         {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+         Other          -> {"- no current node home dir: ~p", [Other]}
+     end,
+     {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
 
 stop() ->
     ok.
@@ -151,13 +150,13 @@ action(force_reset, Node, [], _Opts, Inform) ->
 action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Clustering node ~p with ~p",
-              [Node, ClusterNodes]),
+           [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
 action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-              [Node, ClusterNodes]),
+           [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
 action(status, Node, [], _Opts, Inform) ->
@@ -293,13 +292,34 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]})).
+                             list_vhost_permissions, [VHost]}));
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
+
+wait_for_application(Node, Attempts) ->
+    case rpc_call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} = E -> NewAttempts = Attempts - 1,
+                           case NewAttempts of
+                               0 -> E;
+                               _ -> wait_for_application0(Node, NewAttempts)
+                           end;
+        Apps            -> case proplists:is_defined(rabbit, Apps) of
+                               %% We've seen the node up; if it goes down
+                               %% die immediately.
+                               true  -> ok;
+                               false -> wait_for_application0(Node, 0)
+                           end
+    end.
+
+wait_for_application0(Node, Attempts) ->
+    timer:sleep(1000),
+    wait_for_application(Node, Attempts).
 
 default_if_empty(List, Default) when is_list(List) ->
-    if List == [] ->
-        Default;
-       true ->
-        [list_to_atom(X) || X <- List]
+    if List == [] -> Default;
+       true       -> [list_to_atom(X) || X <- List]
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
@@ -390,7 +410,7 @@ prettify_typed_amqp_value(Type, Value) ->
         _       -> Value
     end.
 
-% the slower shutdown on windows required to flush stdout
+%% the slower shutdown on windows required to flush stdout
 quit(Status) ->
     case os:type() of
         {unix, _} ->

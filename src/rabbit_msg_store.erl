@@ -26,6 +26,8 @@
 -export([sync/1, set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
 
+-export([transform_dir/3, force_recovery/2]). %% upgrade
+
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
 
@@ -33,9 +35,10 @@
 
 -include("rabbit_msg_store.hrl").
 
--define(SYNC_INTERVAL,  25).   %% milliseconds
+-define(SYNC_INTERVAL,  5).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
+-define(TRANSFORM_TMP, "transform_tmp").
 
 -define(BINARY_MODE,     [raw, binary]).
 -define(READ_MODE,       [read]).
@@ -72,7 +75,7 @@
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
           cref_to_guids           %% client ref to synced messages mapping
-         }).
+        }).
 
 -record(client_msstate,
         { server,
@@ -86,7 +89,7 @@
           file_summary_ets,
           dedup_cache_ets,
           cur_file_cache_ets
-         }).
+        }).
 
 -record(file_summary,
         {file, valid_total_size, left, right, file_size, locked, readers}).
@@ -160,6 +163,9 @@
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
                               deletion_thunk()).
 -spec(delete_file/2 :: (non_neg_integer(), gc_state()) -> deletion_thunk()).
+-spec(force_recovery/2 :: (file:filename(), server()) -> 'ok').
+-spec(transform_dir/3 :: (file:filename(), server(),
+        fun ((any()) -> (rabbit_types:ok_or_error2(msg(), any())))) -> 'ok').
 
 -endif.
 
@@ -543,7 +549,7 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
             %% GC ends, we +1 readers, msg_store ets:deletes (and
             %% unlocks the dest)
             try Release(),
-                Defer()
+                 Defer()
             catch error:badarg -> read(Guid, CState)
             end;
         [#file_summary { locked = false }] ->
@@ -661,7 +667,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
                        cref_to_guids          = dict:new()
-                      },
+                     },
 
     %% If we didn't recover the msg location index then we need to
     %% rebuild it now.
@@ -1250,7 +1256,7 @@ safe_file_delete(File, Dir, FileHandlesEts) ->
 
 close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
                                       client_ref       = Ref } =
-                    CState) ->
+                        CState) ->
     Objs = ets:match_object(FileHandlesEts, {{Ref, '_'}, close}),
     {ok, lists:foldl(fun ({Key = {_Ref, File}, close}, CStateM) ->
                              true = ets:delete(FileHandlesEts, Key),
@@ -1459,7 +1465,7 @@ recover_file_summary(true, Dir) ->
     Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
     case ets:file2tab(Path) of
         {ok, Tid}       -> file:delete(Path),
-                          {true, Tid};
+                           {true, Tid};
         {error, _Error} -> recover_file_summary(false, Dir)
     end.
 
@@ -1523,7 +1529,8 @@ scan_file_for_valid_messages(Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
                                      Hdl, filelib:file_size(
-                                            form_filename(Dir, FileName))),
+                                            form_filename(Dir, FileName)),
+                                     fun scan_fun/2, []),
                            %% if something really bad has happened,
                            %% the close could fail, but ignore
                            file_handle_cache:close(Hdl),
@@ -1531,6 +1538,9 @@ scan_file_for_valid_messages(Dir, FileName) ->
         {error, enoent} -> {ok, [], 0};
         {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
+
+scan_fun({Guid, TotalSize, Offset, _Msg}, Acc) ->
+    [{Guid, TotalSize, Offset} | Acc].
 
 %% Takes the list in *ascending* order (i.e. eldest message
 %% first). This is the opposite of what scan_file_for_valid_messages
@@ -1683,8 +1693,8 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
                                  pending_gc_completion = Pending,
                                  file_summary_ets      = FileSummaryEts,
                                  file_size_limit       = FileSizeLimit })
-  when (SumFileSize > 2 * FileSizeLimit andalso
-        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION) ->
+  when SumFileSize > 2 * FileSizeLimit andalso
+       (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% TODO: the algorithm here is sub-optimal - it may result in a
     %% complete traversal of FileSummaryEts.
     case ets:first(FileSummaryEts) of
@@ -1747,10 +1757,10 @@ delete_file_if_empty(File, State = #msstate {
                      locked           = false }] =
         ets:lookup(FileSummaryEts, File),
     case ValidData of
-        0 -> %% don't delete the file_summary_ets entry for File here
-             %% because we could have readers which need to be able to
-             %% decrement the readers count.
-             true = ets:update_element(FileSummaryEts, File,
+        %% don't delete the file_summary_ets entry for File here
+        %% because we could have readers which need to be able to
+        %% decrement the readers count.
+        0 -> true = ets:update_element(FileSummaryEts, File,
                                        {#file_summary.locked, true}),
              ok = rabbit_msg_store_gc:delete(GCPid, File),
              Pending1 = orddict_store(File, [], Pending),
@@ -1803,17 +1813,17 @@ combine_files(Source, Destination,
                                   dir              = Dir,
                                   msg_store        = Server }) ->
     [#file_summary {
-       readers          = 0,
-       left             = Destination,
-       valid_total_size = SourceValid,
-       file_size        = SourceFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, Source),
+        readers          = 0,
+        left             = Destination,
+        valid_total_size = SourceValid,
+        file_size        = SourceFileSize,
+        locked           = true }] = ets:lookup(FileSummaryEts, Source),
     [#file_summary {
-       readers          = 0,
-       right            = Source,
-       valid_total_size = DestinationValid,
-       file_size        = DestinationFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, Destination),
+        readers          = 0,
+        right            = Source,
+        valid_total_size = DestinationValid,
+        file_size        = DestinationFileSize,
+        locked           = true }] = ets:lookup(FileSummaryEts, Destination),
 
     SourceName           = filenum_to_name(Source),
     DestinationName      = filenum_to_name(Destination),
@@ -1956,3 +1966,47 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {got, FinalOffsetZ},
                         {destination, Destination}]}
     end.
+
+force_recovery(BaseDir, Store) ->
+    Dir = filename:join(BaseDir, atom_to_list(Store)),
+    file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
+    recover_crashed_compactions(BaseDir),
+    ok.
+
+foreach_file(D, Fun, Files) ->
+    [Fun(filename:join(D, File)) || File <- Files].
+
+foreach_file(D1, D2, Fun, Files) ->
+    [Fun(filename:join(D1, File), filename:join(D2, File)) || File <- Files].
+
+transform_dir(BaseDir, Store, TransformFun) ->
+    Dir = filename:join(BaseDir, atom_to_list(Store)),
+    TmpDir = filename:join(Dir, ?TRANSFORM_TMP),
+    TransformFile = fun (A, B) -> transform_msg_file(A, B, TransformFun) end,
+    case filelib:is_dir(TmpDir) of
+        true  -> throw({error, transform_failed_previously});
+        false -> FileList = list_sorted_file_names(Dir, ?FILE_EXTENSION),
+                 foreach_file(Dir, TmpDir, TransformFile,     FileList),
+                 foreach_file(Dir,         fun file:delete/1, FileList),
+                 foreach_file(TmpDir, Dir, fun file:copy/2,   FileList),
+                 foreach_file(TmpDir,      fun file:delete/1, FileList),
+                 ok = file:del_dir(TmpDir)
+    end.
+
+transform_msg_file(FileOld, FileNew, TransformFun) ->
+    rabbit_misc:ensure_parent_dirs_exist(FileNew),
+    {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
+    {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
+                                          [{write_buffer,
+                                            ?HANDLE_CACHE_BUFFER_SIZE}]),
+    {ok, _Acc, _IgnoreSize} =
+        rabbit_msg_file:scan(
+          RefOld, filelib:file_size(FileOld),
+          fun({Guid, _Size, _Offset, BinMsg}, ok) ->
+                  {ok, MsgNew} = TransformFun(binary_to_term(BinMsg)),
+                  {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
+                  ok
+          end, ok),
+    file_handle_cache:close(RefOld),
+    file_handle_cache:close(RefNew),
+    ok.

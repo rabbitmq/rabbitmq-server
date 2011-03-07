@@ -105,7 +105,7 @@
         ({atom(), any()}) -> rabbit_types:ok_or_error2(any(), 'not_found')).
 -spec(table_lookup/2 ::
         (rabbit_framing:amqp_table(), binary())
-         -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
+        -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
@@ -469,11 +469,11 @@ map_in_order(F, L) ->
 table_fold(F, Acc0, TableName) ->
     lists:foldl(
       fun (E, Acc) -> execute_mnesia_transaction(
-                   fun () -> case mnesia:match_object(TableName, E, read) of
-                                 [] -> Acc;
-                                 _  -> F(E, Acc)
-                             end
-                   end)
+                        fun () -> case mnesia:match_object(TableName, E, read) of
+                                      [] -> Acc;
+                                      _  -> F(E, Acc)
+                                  end
+                        end)
       end, Acc0, dirty_read_all(TableName)).
 
 dirty_read_all(TableName) ->
@@ -755,12 +755,12 @@ unlink_and_capture_exit(Pid) ->
     after 0 -> ok
     end.
 
-% Separate flags and options from arguments.
-% get_options([{flag, "-q"}, {option, "-p", "/"}],
-%             ["set_permissions","-p","/","guest",
-%              "-q",".*",".*",".*"])
-% == {["set_permissions","guest",".*",".*",".*"],
-%     [{"-q",true},{"-p","/"}]}
+%% Separate flags and options from arguments.
+%% get_options([{flag, "-q"}, {option, "-p", "/"}],
+%%             ["set_permissions","-p","/","guest",
+%%              "-q",".*",".*",".*"])
+%% == {["set_permissions","guest",".*",".*",".*"],
+%%     [{"-q",true},{"-p","/"}]}
 get_options(Defs, As) ->
     lists:foldl(fun(Def, {AsIn, RsIn}) ->
                         {AsOut, Value} = case Def of
