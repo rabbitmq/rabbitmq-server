@@ -33,6 +33,18 @@ behaviour_info(callbacks) ->
      {stop, 0},
 
      %% Initialise the backing queue and its state.
+     %%
+     %% Takes
+     %% 1. the queue name
+     %% 2. a boolean indicating whether the queue is durable
+     %% 3. a boolean indicating whether the queue is an existing queue
+     %%    that should be recovered
+     %% 4. an asynchronous callback which can be invoked by the
+     %%    backing queue when an event has occured that requires a
+     %%    state transition. The callback accepts a function from
+     %%    state to state.
+     %% 5. a synchronous callback. Same as the asynchronous callback
+     %%    but waits for completion and returns 'error' on error.
      {init, 5},
 
      %% Called on queue shutdown when queue isn't being deleted.
