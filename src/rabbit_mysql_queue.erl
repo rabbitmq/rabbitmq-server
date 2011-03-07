@@ -364,10 +364,6 @@ publish_delivered(true,
     {SeqId,RS}.
 
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
-
 %%----------------------------------------------------------------------------
 %% dropwhile/2 drops msgs from the head of the queue while there are
 %% msgs and while the supplied predicate returns true.
@@ -404,7 +400,7 @@ dropwhile(Pred, S) ->
     Result.
 
 %%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
+%%                            THE RUBICON...
 %%#############################################################################
 
 %%----------------------------------------------------------------------------
@@ -425,16 +421,21 @@ fetch(AckRequired, S) ->
     % therefore nondeterministic (sometimes passing, sometimes
     % failing) and should be rewritten, at which point this dropwhile
     % could be, well, dropped.
-    Now = timer:now_diff(now(), {0,0,0}),
-    S1 = dropwhile(
-           fun (#message_properties{expiry = Expiry}) -> Expiry < Now end,
-           S),
+    %% Now = timer:now_diff(now(), {0,0,0}),
+    %% S1 = dropwhile(
+    %%        fun (#message_properties{expiry = Expiry}) -> Expiry < Now end,
+    %%        S),
     {atomic, FR} =
         mnesia:transaction(fun () -> internal_fetch(AckRequired, S1) end),
     Result = {FR, S1},
     % rabbit_log:info("fetch ->~n ~p", [Result]),
     callback([]),
     Result.
+
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
+
 
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges msgs named by SeqIds.
