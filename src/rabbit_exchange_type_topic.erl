@@ -67,56 +67,56 @@ add_binding(true, _Exchange, Binding) ->
 add_binding(false, _Exchange, _Binding) ->
     ok.
 
-remove_bindings(true, _X, Bs) ->
+remove_bindings(true, X, Bs) ->
     {ToDelete, Paths} =
        lists:foldl(
-         fun(B = #binding{source = X, destination = D}, {Acc, PathAcc}) ->
+         fun(B = #binding{destination = D}, {Acc, PathAcc}) ->
                  Path = [{FinalNode, _} | _] = binding_path(B),
-                 PathAcc1 = decrement_bindings(X, Path, maybe_add_path(
-                                                          X, Path, PathAcc)),
-                 {[{X, FinalNode, D} | Acc], PathAcc1}
+                 PathAcc1 = decrement_bindings(Path,
+                                               maybe_add_path(Path, PathAcc)),
+                 {[{FinalNode, D} | Acc], PathAcc1}
          end, {[], gb_trees:empty()}, Bs),
 
-    [trie_remove_binding(X, FinalNode, D) || {X, FinalNode, D} <- ToDelete],
+    [trie_remove_binding(X, FinalNode, D) || {FinalNode, D} <- ToDelete],
     [trie_remove_edge(X, Parent, Node, W) ||
-        {{X, [{Node, W}, {Parent, _} | _ ]}, {0, 0}}
+        {[{Node, W}, {Parent, _} | _ ], {0, 0}}
             <- gb_trees:to_list(Paths)],
     ok;
 remove_bindings(false, _X, _Bs) ->
     ok.
 
-maybe_add_path(_X, [{root, none}], PathAcc) ->
+maybe_add_path([{root, none}], PathAcc) ->
     PathAcc;
-maybe_add_path(X, Path, PathAcc) ->
-    case gb_trees:is_defined({X, Path}, PathAcc) of
+maybe_add_path(Path, PathAcc) ->
+    case gb_trees:is_defined(Path, PathAcc) of
         true  -> PathAcc;
-        false -> gb_trees:insert({X, Path}, counts(X, Path), PathAcc)
+        false -> gb_trees:insert(Path, counts(Path), PathAcc)
     end.
 
-decrement_bindings(X, Path, PathAcc) ->
+decrement_bindings(Path, PathAcc) ->
     with_path_acc(fun({Bindings, Edges}) -> {Bindings - 1, Edges} end,
-                  X, Path, PathAcc).
+                  Path, PathAcc).
 
-decrement_edges(X, Path, PathAcc) ->
+decrement_edges(Path, PathAcc) ->
     with_path_acc(fun({Bindings, Edges}) -> {Bindings, Edges - 1} end,
-                  X, Path, PathAcc).
+                  Path, PathAcc).
 
-with_path_acc(_Fun, _X, [{root, none}], PathAcc) ->
+with_path_acc(_Fun, [{root, none}], PathAcc) ->
     PathAcc;
-with_path_acc(Fun, X, Path, PathAcc) ->
-    NewVal = Fun(gb_trees:get({X, Path}, PathAcc)),
-    NewPathAcc = gb_trees:update({X, Path}, NewVal, PathAcc),
+with_path_acc(Fun, Path, PathAcc) ->
+    NewVal = Fun(gb_trees:get(Path, PathAcc)),
+    NewPathAcc = gb_trees:update(Path, NewVal, PathAcc),
     case NewVal of
         {0, 0} ->
             [_ | ParentPath] = Path,
-            decrement_edges(X, ParentPath,
-                            maybe_add_path(X, ParentPath, NewPathAcc));
+            decrement_edges(ParentPath,
+                            maybe_add_path(ParentPath, NewPathAcc));
         _ ->
             NewPathAcc
     end.
 
-counts(X, [{FinalNode, _} | _]) ->
-    {trie_binding_count(X, FinalNode), trie_child_count(X, FinalNode)}.
+counts([{FinalNode, _} | _]) ->
+    {trie_binding_count(FinalNode), trie_child_count(FinalNode)}.
 
 binding_path(#binding{source = X, key = K}) ->
     follow_down_get_path(X, split_topic_key(K)).
@@ -232,19 +232,17 @@ trie_binding_op(X, Node, D, Op) ->
                                            destination   = D}},
             write).
 
-trie_child_count(X, Node) ->
+trie_child_count(Node) ->
     count(rabbit_topic_trie_edge,
-            #topic_trie_edge{trie_edge = #trie_edge{exchange_name = X,
-                                                    node_id       = Node,
-                                                    _             = '_'},
+            #topic_trie_edge{trie_edge = #trie_edge{node_id = Node,
+                                                    _       = '_'},
                              _         = '_'}).
 
-trie_binding_count(X, Node) ->
+trie_binding_count(Node) ->
     count(rabbit_topic_trie_binding,
             #topic_trie_binding{
-              trie_binding = #trie_binding{exchange_name = X,
-                                           node_id       = Node,
-                                           _             = '_'},
+              trie_binding = #trie_binding{node_id = Node,
+                                           _       = '_'},
               _            = '_'}).
 
 count(Table, Match) ->
