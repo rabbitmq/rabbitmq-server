@@ -396,15 +396,11 @@ publish_delivered(true,
 
 dropwhile(Pred, S) ->
     rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
-    %% {atomic, {_, Result}} =
-    %%     mnesia:transaction(fun () -> {Atom, RS} = internal_dropwhile(Pred, S),
-    %%                                  save(RS),
-    %%                                  {Atom, RS}
-    %%                        end),
     mysql_helper:begin_mysql_transaction(),
-    Result = utterly_bogus_placeholder_result,
+    {_, RS} = internal_dropwhile(Pred, S),
+    save(RS),
     mysql_helper:commit_mysql_transaction(),
-    rabbit_log:info("dropwhile ->~n ~p", [Result]),
+    rabbit_log:info("dropwhile ->~n ~p", [RS]),
     Result.
 
 %%#############################################################################
