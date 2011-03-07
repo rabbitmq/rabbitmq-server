@@ -68,6 +68,11 @@ add_binding(false, _Exchange, _Binding) ->
     ok.
 
 remove_bindings(true, X, Bs) ->
+    %% The remove process is split into two distinct phases. In the
+    %% first phase, we first gather the lists of bindings and edges to
+    %% delete, then in the second phase we process all the
+    %% deletions. This is to prevent interleaving of read/write
+    %% operations in mnesia that can adversely affect performance.
     {ToDelete, Paths} =
        lists:foldl(
          fun(B = #binding{destination = D}, {Acc, PathAcc}) ->
