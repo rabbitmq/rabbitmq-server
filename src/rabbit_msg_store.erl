@@ -75,7 +75,7 @@
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
           cref_to_guids           %% client ref to synced messages mapping
-         }).
+        }).
 
 -record(client_msstate,
         { server,
@@ -89,7 +89,7 @@
           file_summary_ets,
           dedup_cache_ets,
           cur_file_cache_ets
-         }).
+        }).
 
 -record(file_summary,
         {file, valid_total_size, left, right, file_size, locked, readers}).
@@ -549,7 +549,7 @@ client_read3(#msg_location { guid = Guid, file = File }, Defer,
             %% GC ends, we +1 readers, msg_store ets:deletes (and
             %% unlocks the dest)
             try Release(),
-                Defer()
+                 Defer()
             catch error:badarg -> read(Guid, CState)
             end;
         [#file_summary { locked = false }] ->
@@ -667,7 +667,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
                        cref_to_guids          = dict:new()
-                      },
+                     },
 
     %% If we didn't recover the msg location index then we need to
     %% rebuild it now.
@@ -1256,7 +1256,7 @@ safe_file_delete(File, Dir, FileHandlesEts) ->
 
 close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
                                       client_ref       = Ref } =
-                    CState) ->
+                        CState) ->
     Objs = ets:match_object(FileHandlesEts, {{Ref, '_'}, close}),
     {ok, lists:foldl(fun ({Key = {_Ref, File}, close}, CStateM) ->
                              true = ets:delete(FileHandlesEts, Key),
@@ -1465,7 +1465,7 @@ recover_file_summary(true, Dir) ->
     Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
     case ets:file2tab(Path) of
         {ok, Tid}       -> file:delete(Path),
-                          {true, Tid};
+                           {true, Tid};
         {error, _Error} -> recover_file_summary(false, Dir)
     end.
 
@@ -1530,7 +1530,7 @@ scan_file_for_valid_messages(Dir, FileName) ->
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
                                      Hdl, filelib:file_size(
                                             form_filename(Dir, FileName)),
-                                            fun scan_fun/2, []),
+                                     fun scan_fun/2, []),
                            %% if something really bad has happened,
                            %% the close could fail, but ignore
                            file_handle_cache:close(Hdl),
@@ -1693,8 +1693,8 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
                                  pending_gc_completion = Pending,
                                  file_summary_ets      = FileSummaryEts,
                                  file_size_limit       = FileSizeLimit })
-  when (SumFileSize > 2 * FileSizeLimit andalso
-        (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION) ->
+  when SumFileSize > 2 * FileSizeLimit andalso
+       (SumFileSize - SumValid) / SumFileSize > ?GARBAGE_FRACTION ->
     %% TODO: the algorithm here is sub-optimal - it may result in a
     %% complete traversal of FileSummaryEts.
     case ets:first(FileSummaryEts) of
@@ -1757,10 +1757,10 @@ delete_file_if_empty(File, State = #msstate {
                      locked           = false }] =
         ets:lookup(FileSummaryEts, File),
     case ValidData of
-        0 -> %% don't delete the file_summary_ets entry for File here
-             %% because we could have readers which need to be able to
-             %% decrement the readers count.
-             true = ets:update_element(FileSummaryEts, File,
+        %% don't delete the file_summary_ets entry for File here
+        %% because we could have readers which need to be able to
+        %% decrement the readers count.
+        0 -> true = ets:update_element(FileSummaryEts, File,
                                        {#file_summary.locked, true}),
              ok = rabbit_msg_store_gc:delete(GCPid, File),
              Pending1 = orddict_store(File, [], Pending),
@@ -1813,17 +1813,17 @@ combine_files(Source, Destination,
                                   dir              = Dir,
                                   msg_store        = Server }) ->
     [#file_summary {
-       readers          = 0,
-       left             = Destination,
-       valid_total_size = SourceValid,
-       file_size        = SourceFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, Source),
+        readers          = 0,
+        left             = Destination,
+        valid_total_size = SourceValid,
+        file_size        = SourceFileSize,
+        locked           = true }] = ets:lookup(FileSummaryEts, Source),
     [#file_summary {
-       readers          = 0,
-       right            = Source,
-       valid_total_size = DestinationValid,
-       file_size        = DestinationFileSize,
-       locked           = true }] = ets:lookup(FileSummaryEts, Destination),
+        readers          = 0,
+        right            = Source,
+        valid_total_size = DestinationValid,
+        file_size        = DestinationFileSize,
+        locked           = true }] = ets:lookup(FileSummaryEts, Destination),
 
     SourceName           = filenum_to_name(Source),
     DestinationName      = filenum_to_name(Destination),
@@ -2001,12 +2001,12 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
                                             ?HANDLE_CACHE_BUFFER_SIZE}]),
     {ok, _Acc, _IgnoreSize} =
         rabbit_msg_file:scan(
-            RefOld, filelib:file_size(FileOld),
-            fun({Guid, _Size, _Offset, BinMsg}, ok) ->
-                {ok, MsgNew} = TransformFun(binary_to_term(BinMsg)),
-                {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
-                ok
-            end, ok),
+          RefOld, filelib:file_size(FileOld),
+          fun({Guid, _Size, _Offset, BinMsg}, ok) ->
+                  {ok, MsgNew} = TransformFun(binary_to_term(BinMsg)),
+                  {ok, _} = rabbit_msg_file:append(RefNew, Guid, MsgNew),
+                  ok
+          end, ok),
     file_handle_cache:close(RefOld),
     file_handle_cache:close(RefNew),
     ok.

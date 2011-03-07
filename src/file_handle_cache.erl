@@ -242,7 +242,7 @@
         -> val_or_error(ref())).
 -spec(close/1 :: (ref()) -> ok_or_error()).
 -spec(read/2 :: (ref(), non_neg_integer()) ->
-             val_or_error([char()] | binary()) | 'eof').
+                     val_or_error([char()] | binary()) | 'eof').
 -spec(append/2 :: (ref(), iodata()) -> ok_or_error()).
 -spec(sync/1 :: (ref()) ->  ok_or_error()).
 -spec(position/2 :: (ref(), position()) -> val_or_error(offset())).
@@ -252,7 +252,7 @@
 -spec(current_raw_offset/1     :: (ref()) -> val_or_error(offset())).
 -spec(flush/1 :: (ref()) -> ok_or_error()).
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
-             val_or_error(non_neg_integer())).
+                     val_or_error(non_neg_integer())).
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
@@ -867,34 +867,35 @@ handle_call({open, Pid, Requested, EldestUnusedSince}, From,
         false -> {noreply, run_pending_item(Item, State1)}
     end;
 
-handle_call({obtain, Pid}, From, State = #fhc_state { obtain_limit   = Limit,
-                                                      obtain_count   = Count,
-                                                      obtain_pending = Pending,
-                                                      clients = Clients })
-  when Limit =/= infinity andalso Count >= Limit ->
-    ok = track_client(Pid, Clients),
-    true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
-    Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
-    {noreply, State #fhc_state { obtain_pending = pending_in(Item, Pending) }};
 handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
                                                       obtain_pending = Pending,
                                                       clients = Clients }) ->
-    Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
     ok = track_client(Pid, Clients),
-    case needs_reduce(State #fhc_state { obtain_count = Count + 1 }) of
-        true ->
-            true = ets:update_element(Clients, Pid, {#cstate.blocked, true}),
-            {noreply, reduce(State #fhc_state {
-                               obtain_pending = pending_in(Item, Pending) })};
-        false ->
-            {noreply, run_pending_item(Item, State)}
-    end;
+    Item = #pending { kind = obtain, pid = Pid, requested = 1, from = From },
+    Enqueue = fun () ->
+                      true = ets:update_element(Clients, Pid,
+                                                {#cstate.blocked, true}),
+                      State #fhc_state {
+                        obtain_pending = pending_in(Item, Pending) }
+              end,
+    {noreply,
+        case obtain_limit_reached(State) of
+            true  -> Enqueue();
+            false -> case needs_reduce(State #fhc_state {
+                                      obtain_count = Count + 1 }) of
+                         true  -> reduce(Enqueue());
+                         false -> adjust_alarm(
+                                      State, run_pending_item(Item, State))
+                     end
+        end};
 
 handle_call({set_limit, Limit}, _From, State) ->
-    {reply, ok, maybe_reduce(
-                  process_pending(State #fhc_state {
-                                    limit        = Limit,
-                                    obtain_limit = obtain_limit(Limit) }))};
+    {reply, ok, adjust_alarm(
+                  State, maybe_reduce(
+                           process_pending(
+                             State #fhc_state {
+                               limit        = Limit,
+                               obtain_limit = obtain_limit(Limit) })))};
 
 handle_call(get_limit, _From, State = #fhc_state { limit = Limit }) ->
     {reply, Limit, State};
@@ -923,9 +924,9 @@ handle_cast({close, Pid, EldestUnusedSince},
                   _         -> dict:store(Pid, EldestUnusedSince, Elders)
               end,
     ets:update_counter(Clients, Pid, {#cstate.pending_closes, -1, 0, 0}),
-    {noreply, process_pending(
+    {noreply, adjust_alarm(State, process_pending(
                 update_counts(open, Pid, -1,
-                              State #fhc_state { elders = Elders1 }))};
+                              State #fhc_state { elders = Elders1 })))};
 
 handle_cast({transfer, FromPid, ToPid}, State) ->
     ok = track_client(ToPid, State#fhc_state.clients),
@@ -947,13 +948,15 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
         ets:lookup(Clients, Pid),
     true = ets:delete(Clients, Pid),
     FilterFun = fun (#pending { pid = Pid1 }) -> Pid1 =/= Pid end,
-    {noreply, process_pending(
-                State #fhc_state {
-                  open_count     = OpenCount - Opened,
-                  open_pending   = filter_pending(FilterFun, OpenPending),
-                  obtain_count   = ObtainCount - Obtained,
-                  obtain_pending = filter_pending(FilterFun, ObtainPending),
-                  elders         = dict:erase(Pid, Elders) })}.
+    {noreply, adjust_alarm(
+                State,
+                process_pending(
+                  State #fhc_state {
+                    open_count     = OpenCount - Opened,
+                    open_pending   = filter_pending(FilterFun, OpenPending),
+                    obtain_count   = ObtainCount - Obtained,
+                    obtain_pending = filter_pending(FilterFun, ObtainPending),
+                    elders         = dict:erase(Pid, Elders) }))}.
 
 terminate(_Reason, State = #fhc_state { clients = Clients }) ->
     ets:delete(Clients),
@@ -1012,6 +1015,18 @@ obtain_limit(Limit)    -> case ?OBTAIN_LIMIT(Limit) of
                               OLimit when OLimit < 0 -> 0;
                               OLimit                 -> OLimit
                           end.
+
+obtain_limit_reached(#fhc_state { obtain_limit = Limit,
+                                  obtain_count = Count}) ->
+    Limit =/= infinity andalso Count >= Limit.
+
+adjust_alarm(OldState, NewState) ->
+    case {obtain_limit_reached(OldState), obtain_limit_reached(NewState)} of
+        {false, true} -> alarm_handler:set_alarm({file_descriptor_limit, []});
+        {true, false} -> alarm_handler:clear_alarm(file_descriptor_limit);
+        _             -> ok
+    end,
+    NewState.
 
 requested({_Kind, _Pid, Requested, _From}) ->
     Requested.
@@ -1117,7 +1132,7 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
     case CStates of
         [] -> ok;
         _  -> case (Sum / ClientCount) -
-                       (1000 * ?FILE_HANDLES_CHECK_INTERVAL) of
+                  (1000 * ?FILE_HANDLES_CHECK_INTERVAL) of
                   AverageAge when AverageAge > 0 ->
                       notify_age(CStates, AverageAge);
                   _ ->
