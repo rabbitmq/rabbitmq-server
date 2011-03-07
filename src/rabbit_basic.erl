@@ -118,7 +118,7 @@ message(ExchangeName, RoutingKey,
         {ok, #basic_message{
            exchange_name = ExchangeName,
            content       = strip_header(DecodedContent, ?DELETED_HEADER),
-           guid          = rabbit_guid:guid(),
+           id            = rabbit_guid:guid(),
            is_persistent = is_message_persistent(DecodedContent),
            routing_keys  = [RoutingKey |
                             header_routes(Props#'P_basic'.headers)]}}
