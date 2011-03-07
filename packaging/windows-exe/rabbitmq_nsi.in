@@ -122,6 +122,9 @@ Section "Start Menu" RabbitStartMenu
   CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Start Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "start" "$INSTDIR\rabbitmq.ico"
   CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Stop Service.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "stop" "$INSTDIR\rabbitmq.ico"
 
+  SetOutPath "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\Command Prompt (sbin dir).lnk" "$WINDIR\system32\cmd.exe" "" "$WINDIR\system32\cmd.exe"
+  SetOutPath $INSTDIR
 SectionEnd
 
 ;--------------------------------
