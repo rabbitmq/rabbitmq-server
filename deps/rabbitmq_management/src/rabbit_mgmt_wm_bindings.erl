@@ -82,7 +82,7 @@ accept_content(ReqData, {_Mode, Context}) ->
             rabbit_mgmt_util:with_decode(
               [routing_key, arguments], ReqData, Context,
               fun([Key, Args]) ->
-                      Loc = rabbit_mgmt_util:relativise(
+                      Loc = rabbit_mochiweb_util:relativise(
                               wrq:path(ReqData),
                               binary_to_list(
                                 rabbit_mgmt_format:url(
