@@ -387,7 +387,8 @@ record_running_disc_nodes() ->
                 sets:from_list(running_clustered_nodes()))) -- [node()],
     %% Don't check the result: we're shutting down anyway and this is
     %% a best-effort-basis.
-    rabbit_misc:write_term_file(FileName, [Nodes]).
+    rabbit_misc:write_term_file(FileName, [Nodes]),
+    ok.
 
 read_previous_run_disc_nodes() ->
     FileName = running_nodes_filename(),
@@ -433,7 +434,7 @@ init_db(ClusterNodes, Force) ->
                     ok = create_schema();
                 {[], true} ->
                     %% We're the first node up
-                    case rabbit_upgrade:maybe_upgrade(local) of
+                    case rabbit_upgrade:maybe_upgrade_local() of
                         ok                    -> ensure_schema_integrity();
                         version_not_available -> schema_ok_or_move()
                     end;
@@ -449,7 +450,7 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    case rabbit_upgrade:maybe_upgrade(local) of
+                    case rabbit_upgrade:maybe_upgrade_local() of
                         ok ->
                             ok;
                         %% If we're just starting up a new node we won't have

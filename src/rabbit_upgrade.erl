@@ -16,7 +16,7 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade_mnesia/0, maybe_upgrade/1]).
+-export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0]).
 -export([read_version/0, write_version/0, desired_version/0,
          desired_version/1]).
 
@@ -35,7 +35,7 @@
 -type(scope() :: 'mnesia' | 'local').
 
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
--spec(maybe_upgrade/1 :: (scope()) -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
 -spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write_version/0 :: () -> 'ok').
 -spec(desired_version/0 :: () -> version()).
@@ -128,7 +128,7 @@ upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
             AfterUs = rabbit_mnesia:read_previous_run_disc_nodes(),
-            case {am_i_disc_node(), AfterUs} of
+            case {is_disc_node(), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
@@ -169,7 +169,7 @@ upgrade_mode(AllNodes) ->
             end
     end.
 
-am_i_disc_node() ->
+is_disc_node() ->
     %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
     %% we can't look at the config file (may not include us even if we're a
     %% disc node).
@@ -210,13 +210,13 @@ secondary_upgrade(AllNodes) ->
     %% Note that we cluster with all nodes, rather than all disc nodes
     %% (as we can't know all disc nodes at this point). This is safe as
     %% we're not writing the cluster config, just setting up Mnesia.
-    ClusterNodes = case am_i_disc_node() of
+    ClusterNodes = case is_disc_node() of
                        true  -> AllNodes;
                        false -> AllNodes -- [node()]
                    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    rabbit_mnesia:init_db(ClusterNodes, true),
-    write_version(mnesia),
+    ok = rabbit_mnesia:init_db(ClusterNodes, true),
+    ok = write_version(mnesia),
     ok.
 
 nodes_running(Nodes) ->
@@ -230,11 +230,11 @@ node_running(Node) ->
 
 %% -------------------------------------------------------------------
 
-maybe_upgrade(Scope) ->
-    case upgrades_required(Scope) of
+maybe_upgrade_local() ->
+    case upgrades_required(local) of
         version_not_available -> version_not_available;
         []                    -> ok;
-        Upgrades              -> apply_upgrades(Scope, Upgrades,
+        Upgrades              -> apply_upgrades(local, Upgrades,
                                                 fun() -> ok end)
     end.
 
