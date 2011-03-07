@@ -242,6 +242,8 @@ read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
         {ok, [V]}        -> case is_new_version(V) of
                                 false -> {ok, convert_old_version(V)};
+                                %% Write in this format for future expansion;
+                                %% we want to allow plugins to own upgrades.
                                 true  -> [{rabbit, RV}] = V,
                                          {ok, RV}
                             end;
