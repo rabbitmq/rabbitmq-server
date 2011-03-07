@@ -760,16 +760,16 @@ internal_dropwhile(Pred, S) ->
 -spec q_pop(s()) -> maybe(m()).
 
 q_pop(#s { queue_name = DbQueueName }) ->
-    Recs  = mysql_helper:q_peek(DbQueueName),
-    MList = emysql_util:as_record(Recs,
-                                  q_record,
-                                  record_info(fields,
-                                              q_record)),
-    case MList of
-        []  -> nothing;
-        [M] -> #q_record{ id = DbId } = M,
-               mysql_helper:delete_from_q(DbQueueName, DbId),
-               {just, M}
+    QRecs  = mysql_helper:q_peek(DbQueueName),
+    QRecList = emysql_util:as_record(QRecs,
+                                     q_record,
+                                     record_info(fields,
+                                                 q_record)),
+    case QRecList of
+        []     -> nothing;
+        [QRec] -> #q_record{ id = DbId, m = M } = QRec,
+                  mysql_helper:delete_from_q(DbQueueName, DbId),
+                  {just, binary_to_term(M)}
     end.
 
 %% q_peek returns the first msg, if any, from the Q table in MySQL.
@@ -784,7 +784,7 @@ q_peek(#s { queue_name = DbQueueName }) ->
                                               q_record)),
     case MList of
         []  -> nothing;
-        [M] -> {just, M}
+        [#q_record{m = M}] -> {just, binary_to_term(M)}
     end.
 
 %% post_pop operates after q_pop, calling add_p if necessary.
