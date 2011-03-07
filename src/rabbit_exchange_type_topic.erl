@@ -83,9 +83,10 @@ remove_bindings(true, X, Bs) ->
                  {[{FinalNode, D} | Acc], PathAcc1}
          end, {[], gb_trees:empty()}, Bs),
 
+    io:format("~p~n", [Paths]),
     [trie_remove_binding(X, FinalNode, D) || {FinalNode, D} <- ToDelete],
     [trie_remove_edge(X, Parent, Node, W) ||
-        {[{Node, W}, {Parent, _} | _ ], {0, 0}}
+        {Node, {[{Node, W}, {Parent, _} | _], 0, 0}}
             <- gb_trees:to_list(Paths)],
     ok;
 remove_bindings(false, _X, _Bs) ->
@@ -119,7 +120,7 @@ with_path_acc(X, Fun, [{Node, _} | ParentPath], PathAcc) ->
     NewVal = Fun(gb_trees:get(Node, PathAcc)),
     NewPathAcc = gb_trees:update(Node, NewVal, PathAcc),
     case NewVal of
-        {0, 0} ->
+        {_, 0, 0} ->
             decrement_edges(X, ParentPath,
                             maybe_add_path(X, ParentPath, NewPathAcc));
         _ ->
