@@ -401,11 +401,11 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
 
 confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     {CMs, MTC1} = lists:foldl(
-                    fun(Guid, {CMs, MTC0}) ->
-                            case dict:find(Guid, MTC0) of
+                    fun(MsgId, {CMs, MTC0}) ->
+                            case dict:find(MsgId, MTC0) of
                                 {ok, {ChPid, MsgSeqNo}} ->
                                     {gb_trees_cons(ChPid, MsgSeqNo, CMs),
-                                     dict:erase(Guid, MTC0)};
+                                     dict:erase(MsgId, MTC0)};
                                 _ ->
                                     {CMs, MTC0}
                             end
