@@ -61,7 +61,7 @@ static_context_selector(Context) ->
                     (Path == Context) or (string:str(Path, Context ++ "/") == 1);
                 _ ->
                     false
-            end        
+            end
     end.
 
 %% @doc Produces a handler for use with register_handler that serves
