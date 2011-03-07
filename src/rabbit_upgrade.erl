@@ -401,7 +401,8 @@ lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 info(Msg, Args) -> error_logger:info_msg(Msg, Args).
 
 is_new_version(Version) ->
-    is_list(Version) andalso
-        length(Version) > 0 andalso
-        lists:all(fun(Item) -> is_tuple(Item) andalso size(Item) == 2 end,
-                  Version).
+    try
+        orddict:size(Version) > 0
+    catch error:badarg ->
+            false
+    end.
