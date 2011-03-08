@@ -359,7 +359,18 @@ promote_me(From, #state { q                   = Q,
     %% publish stuff by sending it to ourself - we must pass it
     %% through to this init, otherwise we can violate ordering
     %% constraints.
-    GTC = dict:from_list(
+
+    %% MTC should contain only entries for which we are still
+    %% expecting confirms to come back to use from the underlying BQ.
+
+    %% TODO: what do we do with entries in MS that are 'confirmed'
+    %% already? Well they should end up in the master queue's state,
+    %% and the confirms should be issued either by the
+    %% amqqueue_process if 'immediately', or otherwise by the master
+    %% queue on validate_message?! That's disgusting. There's no way
+    %% validate_message should be side-effecting... though we could at
+    %% least ensure it's idempotent. Hmm.
+    MTC = dict:from_list(
             [{MsgId, {ChPid, MsgSeqNo}} ||
                 {MsgId, {published, ChPid, MsgSeqNo}} <- dict:to_list(MS)]),
     AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
@@ -367,7 +378,7 @@ promote_me(From, #state { q                   = Q,
                                || {_ChPid, PubQ} <- dict:to_list(SQ)]),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q, rabbit_mirror_queue_master, MasterState, RateTRef,
-                   AckTags, Deliveries, GTC),
+                   AckTags, Deliveries, MTC),
     {become, rabbit_amqqueue_process, QueueState, hibernate}.
 
 noreply(State) ->
