@@ -3,7 +3,7 @@
 -export([start/0, stop/0]).
 -export([register_context_handler/4, register_static_context/5]).
 -export([register_authenticated_static_context/6]).
--export([context_listener/1, context_listener_opts/1, context_path/2]).
+-export([context_listener/1, context_path/2]).
 
 -define(APP, ?MODULE).
 
@@ -17,14 +17,8 @@ start() ->
 stop() ->
     application:stop(rabbit_mochiweb).
 
-%% Handler Registration
-
-%% @doc Registers a dynamic selector and handler combination, with
-%% a link to display in lists.
-register_handler(Context, Selector, Handler, Link) ->
-    rabbit_mochiweb_registry:add(Context, Selector, Handler, Link).
-
-%% Get the actual path for a context
+%% @doc Get the path for a context; if not configured then use the
+%% default given.
 context_path(Context, Default) ->
     case application:get_env(?MODULE, contexts) of
         undefined ->
@@ -37,29 +31,35 @@ context_path(Context, Default) ->
             end
     end.
 
+%% @doc Get the listener and its options for a context.
 context_listener(Context) ->
-    case application:get_env(?MODULE, contexts) of
-        undefined ->
-            '*';
-        {ok, Contexts} ->
-            case proplists:get_value(Context, Contexts) of
-                undefined -> '*';
-                {Listener, _Path} -> Listener;
-                Listener -> Listener
-            end
-    end.
-
-context_listener_opts(Context) ->
-    Listener = context_listener(Context),
+    L = case application:get_env(?MODULE, contexts) of
+            undefined ->
+                '*';
+            {ok, Contexts} ->
+                case proplists:get_value(Context, Contexts) of
+                    undefined -> '*';
+                    {Listener, _Path} -> Listener;
+                    Listener -> Listener
+                end
+        end,
     case application:get_env(?APP, listeners) of
         {ok, Listeners} ->
-            case proplists:get_value(Listener, Listeners) of
-                undefined -> undefined;
-                Props     -> Props
+            case proplists:lookup(L, Listeners) of
+                none -> undefined;
+                Spec -> Spec
             end;
         undefined ->
             undefined
     end.
+
+%% Handler Registration
+
+%% @doc Registers a dynamic selector and handler combination, with a
+%% link to display in lists. Assumes that context is configured; check
+%% with context_path first to make sure.
+register_handler(Context, Selector, Handler, Link) ->
+    rabbit_mochiweb_registry:add(Context, Selector, Handler, Link).
 
 %% Methods for standard use cases
 

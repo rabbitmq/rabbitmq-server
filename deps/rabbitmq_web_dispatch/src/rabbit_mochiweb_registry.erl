@@ -46,7 +46,8 @@ init([Instances]) ->
 
 handle_call({add, Context, Selector, Handler, Link}, _From,
             undefined) ->
-    Instance = rabbit_mochiweb:context_listener(Context),
+    Listener = {Instance, Opts} = rabbit_mochiweb:context_listener(Context),
+    rabbit_mochiweb_sup:ensure_listener(Listener),
     case lookup_dispatch(Instance) of
         {Selectors, Fallback} ->
             set_dispatch(Instance,
