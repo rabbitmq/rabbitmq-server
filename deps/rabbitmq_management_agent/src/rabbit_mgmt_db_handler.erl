@@ -22,6 +22,8 @@
 
 -behaviour(gen_event).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([add_handler/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -31,7 +33,9 @@
 
 add_handler() ->
     ensure_statistics_enabled(),
-    gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
+    gen_event:add_sup_handler(rabbit_event, ?MODULE, []),
+    gen_event:add_sup_handler(alarm_handler, ?MODULE, []).
+
 
 %%----------------------------------------------------------------------------
 
@@ -62,9 +66,15 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(Event, State) ->
+handle_event(Event = #event{}, State) ->
 %%    io:format("Got event ~p~n", [Event]),
     gen_server:cast({global, rabbit_mgmt_db}, {event, Event}),
+    {ok, State};
+handle_event(E = {set_alarm, _}, State) ->
+    gen_server:cast(rabbit_mgmt_external_stats, E),
+    {ok, State};
+handle_event(E = {clear_alarm, _}, State) ->
+    gen_server:cast(rabbit_mgmt_external_stats, E),
     {ok, State}.
 
 handle_info(_Info, State) ->
