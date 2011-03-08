@@ -83,7 +83,6 @@ remove_bindings(true, X, Bs) ->
                  {[{FinalNode, D} | Acc], PathAcc1}
          end, {[], gb_trees:empty()}, Bs),
 
-    io:format("~p~n", [Paths]),
     [trie_remove_binding(X, FinalNode, D) || {FinalNode, D} <- ToDelete],
     [trie_remove_edge(X, Parent, Node, W) ||
         {Node, {[{Node, W}, {Parent, _} | _], 0, 0}}
