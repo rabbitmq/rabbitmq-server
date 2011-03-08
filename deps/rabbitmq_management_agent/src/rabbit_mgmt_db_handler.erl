@@ -75,6 +75,8 @@ handle_event(E = {set_alarm, _}, State) ->
     {ok, State};
 handle_event(E = {clear_alarm, _}, State) ->
     gen_server:cast(rabbit_mgmt_external_stats, E),
+    {ok, State};
+handle_event(_E, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
