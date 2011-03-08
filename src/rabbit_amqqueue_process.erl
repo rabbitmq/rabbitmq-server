@@ -422,7 +422,7 @@ gb_trees_cons(Key, Value, Tree) ->
     end.
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
-    {no_confirm, State};
+    {never, State};
 record_confirm_message(#delivery{sender     = ChPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
@@ -431,10 +431,10 @@ record_confirm_message(#delivery{sender     = ChPid,
                        State =
                            #q{msg_id_to_channel = MTC,
                               q                 = #amqqueue{durable = true}}) ->
-    {confirm,
+    {eventually,
      State#q{msg_id_to_channel = dict:store(MsgId, {ChPid, MsgSeqNo}, MTC)}};
 record_confirm_message(_Delivery, State) ->
-    {no_confirm, State}.
+    {immediately, State}.
 
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -451,10 +451,9 @@ attempt_delivery(#delivery{txn        = none,
                            msg_seq_no = MsgSeqNo},
                  {NeedsConfirming, State = #q{backing_queue = BQ}}) ->
     %% must confirm immediately if it has a MsgSeqNo and not NeedsConfirming
-    case {NeedsConfirming, MsgSeqNo} of
-        {_, undefined}  -> ok;
-        {no_confirm, _} -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
-        {confirm, _}    -> ok
+    case NeedsConfirming of
+        immediately -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
+        _           -> ok
     end,
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
@@ -466,7 +465,7 @@ attempt_delivery(#delivery{txn        = none,
                     BQ:publish_delivered(
                       AckRequired, Message,
                       (?BASE_MESSAGE_PROPERTIES)#message_properties{
-                        needs_confirming = (NeedsConfirming =:= confirm)},
+                        needs_confirming = (NeedsConfirming =:= eventually)},
                       BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
@@ -493,7 +492,7 @@ deliver_or_enqueue(Delivery, State) ->
             BQS1 = BQ:publish(Message,
                               (message_properties(State)) #message_properties{
                                 needs_confirming =
-                                    (NeedsConfirming =:= confirm)},
+                                    (NeedsConfirming =:= eventually)},
                               BQS),
             {false, ensure_ttl_timer(State1#q{backing_queue_state = BQS1})}
     end.
