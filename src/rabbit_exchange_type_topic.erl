@@ -85,7 +85,7 @@ remove_bindings(true, X, Bs) ->
 
     [trie_remove_binding(X, FinalNode, D) || {FinalNode, D} <- ToDelete],
     [trie_remove_edge(X, Parent, Node, W) ||
-        {Node, {[{Node, W}, {Parent, _} | _], 0, 0}}
+        {Node, {Parent, W, {0, 0}}}
             <- gb_trees:to_list(Paths)],
     ok;
 remove_bindings(false, _X, _Bs) ->
@@ -101,25 +101,26 @@ maybe_add_path(X, Path = [{Node, _} | _], PathAcc) ->
 
 decrement_bindings(X, Path, PathAcc) ->
     with_path_acc(X,
-                  fun({_Path, Bindings, Edges}) ->
-                          {Path, Bindings - 1, Edges}
+                  fun({Bindings, Edges}) ->
+                          {Bindings - 1, Edges}
                   end,
                   Path, PathAcc).
 
 decrement_edges(X, Path, PathAcc) ->
     with_path_acc(X,
-                  fun({_Path, Bindings, Edges}) ->
-                          {Path, Bindings, Edges - 1}
+                  fun({Bindings, Edges}) ->
+                          {Bindings, Edges - 1}
                   end,
                   Path, PathAcc).
 
 with_path_acc(_X, _Fun, [{root, none}], PathAcc) ->
     PathAcc;
 with_path_acc(X, Fun, [{Node, _} | ParentPath], PathAcc) ->
-    NewVal = Fun(gb_trees:get(Node, PathAcc)),
-    NewPathAcc = gb_trees:update(Node, NewVal, PathAcc),
-    case NewVal of
-        {_, 0, 0} ->
+    {Parent, W, Counts} = gb_trees:get(Node, PathAcc),
+    NewCounts = Fun(Counts),
+    NewPathAcc = gb_trees:update(Node, {Parent, W, NewCounts}, PathAcc),
+    case NewCounts of
+        {0, 0} ->
             decrement_edges(X, ParentPath,
                             maybe_add_path(X, ParentPath, NewPathAcc));
         _ ->
