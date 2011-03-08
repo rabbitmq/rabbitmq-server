@@ -270,7 +270,7 @@ desired_version(Scope) ->
     with_upgrade_graph(fun (G) -> heads(G) end, Scope).
 
 flatten(LoL) ->
-    lists:sort(lists:flatten(LoL)).
+    lists:sort(lists:append(LoL)).
 
 filter_by_scope(Scope, Versions) ->
     with_upgrade_graph(
