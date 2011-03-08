@@ -799,8 +799,7 @@ add_p(M = #m { seq_id = SeqId }, #s { queue_name = DbQueueName }) ->
     ok.
 
 %% del_ps deletes some number of pending acks from the P table in
-%% Mnesia, applying a (Mnesia transactional) function F after each msg
-%% is deleted.
+%% MySQL, applying a function F after each msg is deleted.
 
 -spec del_ps(fun ((m(), s()) -> s()), [seq_id()], s()) -> s().
 
