@@ -1,4 +1,9 @@
 <% if (channels.length > 0) { %>
+<%
+     var col_return_unroutable = !is_col_empty(channels, 'return_unroutable');
+     var col_return_not_delivered = !is_col_empty(channels, 'return_not_delivered');
+     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0);
+%>
 <table class="list">
  <thead>
   <tr>
@@ -10,7 +15,7 @@
    <th colspan="5">Details</th>
 <% } %>
 <% if (statistics_level == 'fine') { %>
-   <th colspan="4">Message rates</th>
+   <th colspan="<%= ratesWidth %>">Message rates</th>
 <% } %>
   </tr>
   <tr>
@@ -33,6 +38,12 @@
     <th><%= fmt_sort('confirm',         'message_stats.confirm_details.rate') %></th>
     <th><%= fmt_sort('deliver / get',   'message_stats.deliver_get_details.rate') %></th>
     <th><%= fmt_sort('ack',             'message_stats.ack_details.rate') %></th>
+    <% if (col_return_unroutable) { %>
+        <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
+    <% } %>
+    <% if (col_return_not_delivered) { %>
+        <th><%= fmt_sort('return (immediate)', 'message_stats.return_not_delivered_details.rate') %></th>
+    <% } %>
 <% } %>
 <% } else { %>
 <!-- TODO make sortable after bug 23401 -->
@@ -47,6 +58,12 @@
     <th>confirm</th>
     <th>deliver / get</th>
     <th>ack</th>
+    <% if (col_return_unroutable) { %>
+        <th>return (mandatory)</th>
+    <% } %>
+    <% if (col_return_not_delivered) { %>
+        <th>return (immediate)</th>
+    <% } %>
 <% } %>
 <% } %>
   </tr>
@@ -84,6 +101,12 @@
     <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
+    <% if (col_return_unroutable) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'return_unroutable') %></td>
+    <% } %>
+    <% if (col_return_not_delivered) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'return_not_delivered') %></td>
+    <% } %>
 <% } %>
   </tr>
   <% } %>
