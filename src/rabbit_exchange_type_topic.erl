@@ -69,48 +69,42 @@ add_binding(false, _Exchange, _Binding) ->
 
 remove_bindings(true, X, Bs) ->
     %% The remove process is split into two distinct phases. In the
-    %% first phase, we first gather the lists of bindings and edges to
+    %% first phase we gather the lists of bindings and edges to
     %% delete, then in the second phase we process all the
     %% deletions. This is to prevent interleaving of read/write
     %% operations in mnesia that can adversely affect performance.
     {ToDelete, Paths} =
        lists:foldl(
-         fun(B = #binding{destination = D}, {Acc, PathAcc}) ->
-                 Path = [{FinalNode, _} | _] = binding_path(B),
-                 PathAcc1 = decrement_bindings(X, Path,
-                                               maybe_add_path(X, Path,
-                                                              PathAcc)),
-                 {[{FinalNode, D} | Acc], PathAcc1}
+         fun(#binding{source = S, key = K, destination = D}, {Acc, PathAcc}) ->
+                 Path = [{FinalNode, _} | _] =
+                     follow_down_get_path(S, split_topic_key(K)),
+                 {[{FinalNode, D} | Acc],
+                  decrement_bindings(X, Path, maybe_add_path(X, Path, PathAcc))}
          end, {[], gb_trees:empty()}, Bs),
 
     [trie_remove_binding(X, FinalNode, D) || {FinalNode, D} <- ToDelete],
     [trie_remove_edge(X, Parent, Node, W) ||
-        {Node, {Parent, W, {0, 0}}}
-            <- gb_trees:to_list(Paths)],
+        {Node, {Parent, W, {0, 0}}} <- gb_trees:to_list(Paths)],
     ok;
 remove_bindings(false, _X, _Bs) ->
     ok.
 
 maybe_add_path(_X, [{root, none}], PathAcc) ->
     PathAcc;
-maybe_add_path(X, Path = [{Node, _} | _], PathAcc) ->
+maybe_add_path(X, [{Node, W}, {Parent, _} | _], PathAcc) ->
     case gb_trees:is_defined(Node, PathAcc) of
         true  -> PathAcc;
-        false -> gb_trees:insert(Node, path_entry(X, Path), PathAcc)
+        false -> gb_trees:insert(Node, {Parent, W, {trie_binding_count(X, Node),
+                                                    trie_child_count(X, Node)}},
+                                 PathAcc)
     end.
 
 decrement_bindings(X, Path, PathAcc) ->
-    with_path_acc(X,
-                  fun({Bindings, Edges}) ->
-                          {Bindings - 1, Edges}
-                  end,
+    with_path_acc(X, fun({Bindings, Edges}) -> {Bindings - 1, Edges} end,
                   Path, PathAcc).
 
 decrement_edges(X, Path, PathAcc) ->
-    with_path_acc(X,
-                  fun({Bindings, Edges}) ->
-                          {Bindings, Edges - 1}
-                  end,
+    with_path_acc(X, fun({Bindings, Edges}) -> {Bindings, Edges - 1} end,
                   Path, PathAcc).
 
 with_path_acc(_X, _Fun, [{root, none}], PathAcc) ->
@@ -120,18 +114,11 @@ with_path_acc(X, Fun, [{Node, _} | ParentPath], PathAcc) ->
     NewCounts = Fun(Counts),
     NewPathAcc = gb_trees:update(Node, {Parent, W, NewCounts}, PathAcc),
     case NewCounts of
-        {0, 0} ->
-            decrement_edges(X, ParentPath,
-                            maybe_add_path(X, ParentPath, NewPathAcc));
-        _ ->
-            NewPathAcc
+        {0, 0} -> decrement_edges(X, ParentPath,
+                                  maybe_add_path(X, ParentPath, NewPathAcc));
+        _      -> NewPathAcc
     end.
 
-path_entry(X, Path = [{Node, W}, {Parent, _} | _]) ->
-    {Parent, W, {trie_binding_count(X, Node), trie_child_count(X, Node)}}.
-
-binding_path(#binding{source = X, key = K}) ->
-    follow_down_get_path(X, split_topic_key(K)).
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
