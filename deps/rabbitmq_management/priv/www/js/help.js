@@ -47,12 +47,18 @@ HELP = {
       <dl>',
 
     'file-descriptors':
-      'File descriptor count and limit, as reported by the operating system. \
-      The count includes network sockets and file handlers.<br/> \
-      To optimize disk access RabbitMQ uses as many free descriptors as are \
+      '<p>File descriptor count and limit, as reported by the operating \
+      system. The count includes network sockets and file handlers.</p> \
+      <p>To optimize disk access RabbitMQ uses as many free descriptors as are \
       available, so the count may safely approach the limit. \
       However, if most of the file descriptors are used by sockets then \
-      persister performance will be negatively impacted.',
+      persister performance will be negatively impacted.</p> \
+      <p>To change the limit on Unix / Linux, use "ulimit -n". To change \
+      the limit on Windows, set the ERL_MAX_PORTS environment variable to \
+      <i>twice</i> the limit desired.</p> \
+      <p>To report used file handles on Windows, handle.exe from \
+      sysinternals must be installed in your path. You can download it \
+      <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655">here</a>.</p>',
 
     'socket-descriptors':
       'The network sockets count and limit managed by RabbitMQ.<br/> \
