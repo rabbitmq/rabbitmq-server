@@ -43,12 +43,12 @@
     <tr>
       <th>
         Memory
-<% if (node.mem_total != 'memory_monitoring_disabled') { %>
+<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
         <sub>(used / high watermark)</sub>
 <% } %>
       </th>
       <td class="status">
-<% if (node.mem_total != 'memory_monitoring_disabled') { %>
+<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
    <% if (node.mem_alarm) { %>
        <div class="red">
          <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>

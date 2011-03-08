@@ -54,6 +54,7 @@ table.mini td { border: none; padding: 0 2px 2px 2px; }
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
+td.status { text-align: center; }
 td.status div { padding: 5px; text-align: center; border-radius: 5px; -moz-border-radius: 5px; }
 td.status div.red { background: #F62817; color:white; }
 td.status div.red * { color:white; }
