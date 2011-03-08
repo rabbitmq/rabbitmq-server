@@ -240,50 +240,44 @@ maybe_upgrade_local() ->
 
 read_version() ->
     case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [V]}        -> case is_new_version(V) of
-                                false -> {ok, convert_old_version(V)};
-                                %% Write in this format for future expansion;
-                                %% we want to allow plugins to own upgrades.
-                                true  -> [{rabbit, RV}] = V,
-                                         {ok, RV}
-                            end;
+        {ok, [V]}        -> {ok, V};
         {error, _} = Err -> Err
     end.
 
 read_version(Scope) ->
     case read_version() of
         {error, _} = E -> E;
-        {ok, V}        -> {ok, orddict:fetch(Scope, V)}
+        {ok, V}        -> {ok, filter_by_scope(Scope, V)}
     end.
 
 write_version() ->
-    ok = rabbit_misc:write_term_file(schema_filename(),
-                                     [[{rabbit, desired_version()}]]),
+    ok = rabbit_misc:write_term_file(schema_filename(), [desired_version()]),
     ok.
 
 write_version(Scope) ->
     {ok, V0} = read_version(),
-    V = orddict:store(Scope, desired_version(Scope), V0),
-    ok = rabbit_misc:write_term_file(schema_filename(), [[{rabbit, V}]]),
+    V = flatten([case S of
+                     Scope -> desired_version(S);
+                     _     -> filter_by_scope(S, V0)
+                 end || S <- ?SCOPES]),
+    ok = rabbit_misc:write_term_file(schema_filename(), [V]),
     ok.
 
 desired_version() ->
-    lists:foldl(
-      fun (Scope, Acc) ->
-              orddict:store(Scope, desired_version(Scope), Acc)
-      end,
-      orddict:new(), ?SCOPES).
+    flatten([desired_version(Scope) || Scope <- ?SCOPES]).
 
 desired_version(Scope) ->
     with_upgrade_graph(fun (G) -> heads(G) end, Scope).
 
-convert_old_version(Heads) ->
-    Locals = [add_queue_ttl],
-    V0 = orddict:new(),
-    V1 = orddict:store(mnesia, Heads -- Locals, V0),
-    orddict:store(local,
-                  lists:filter(fun(H) -> lists:member(H, Locals) end, Heads),
-                  V1).
+flatten(LoL) ->
+    lists:sort(lists:flatten(LoL)).
+
+filter_by_scope(Scope, Versions) ->
+    with_upgrade_graph(
+      fun(G) ->
+              ScopeVs = digraph:vertices(G),
+              [V || V <- Versions, lists:member(V, ScopeVs)]
+      end, Scope).
 
 %% -------------------------------------------------------------------
 
@@ -399,10 +393,3 @@ lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet
 info(Msg, Args) -> error_logger:info_msg(Msg, Args).
-
-is_new_version(Version) ->
-    try
-        orddict:size(Version) > 0
-    catch error:badarg ->
-            false
-    end.
