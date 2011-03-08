@@ -127,8 +127,8 @@ with_path_acc(X, Fun, [{Node, _} | ParentPath], PathAcc) ->
             NewPathAcc
     end.
 
-path_entry(X, Path = [{Node, _} | _]) ->
-    {Path, trie_binding_count(X, Node), trie_child_count(X, Node)}.
+path_entry(X, Path = [{Node, W}, {Parent, _} | _]) ->
+    {Parent, W, {trie_binding_count(X, Node), trie_child_count(X, Node)}}.
 
 binding_path(#binding{source = X, key = K}) ->
     follow_down_get_path(X, split_topic_key(K)).
