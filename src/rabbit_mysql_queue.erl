@@ -807,11 +807,13 @@ add_p(M = #m { seq_id = SeqId }, #s { queue_name = DbQueueName }) ->
 del_ps(F, SeqIds, S = #s { queue_name = DbQueueName }) ->
     lists:foldl(
       fun( SeqId, Si) ->
-              %% FUCK:  get p_record for this seq id
-              %% [#p_record { m = M }] = mnesia:read(PTable, SeqId, 'read'),
-              %% mysql_helper:delete_message_from_p_by_seq_id(SeqId),
-              %% F(M, Si)
-              F(Si) %% <-- GET RID OF ME!
+              DbList = mysql_helper:read_p_record(DbQueueName, SeqId),
+              [#p_record {m = M}] = emysql_util:as_record(DbList,
+                                                          p_record,
+                                                          record_info(fields,
+                                                                      p_record)),
+              mysql_helper:delete_message_from_p_by_seq_id(SeqId),
+              F(M, Si)
       end,
       S,
       SeqIds).
