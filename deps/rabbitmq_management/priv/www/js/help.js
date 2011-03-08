@@ -48,7 +48,7 @@ HELP = {
 
     'file-descriptors':
       '<p>File descriptor count and limit, as reported by the operating \
-      system. The count includes network sockets and file handlers.</p> \
+      system. The count includes network sockets and file handles.</p> \
       <p>To optimize disk access RabbitMQ uses as many free descriptors as are \
       available, so the count may safely approach the limit. \
       However, if most of the file descriptors are used by sockets then \
