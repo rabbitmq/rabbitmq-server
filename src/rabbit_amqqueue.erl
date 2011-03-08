@@ -141,9 +141,9 @@
                     fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
                                         rabbit_types:connection_exit())).
 -spec(maybe_run_queue_via_backing_queue/2 ::
-        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+        (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(maybe_run_queue_via_backing_queue_async/2 ::
-        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+        (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
