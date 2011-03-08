@@ -16,18 +16,18 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/1, delete_and_terminate/1,
-         purge/1, publish/3, publish_delivered/4, fetch/2, ack/2,
-         tx_publish/4, tx_ack/3, tx_rollback/2, tx_commit/4,
+-export([init/2, terminate/1, delete_and_terminate/1,
+         purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
+         tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, multiple_routing_keys/0]).
+         status/1, invoke/3, multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/5]).
+-export([start_msg_store/2, stop_msg_store/0, init/4]).
 
 %%----------------------------------------------------------------------------
 %% Definitions:
@@ -397,15 +397,16 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(QueueName, IsDurable, Recover) ->
+init(Queue, Recover) ->
     Self = self(),
-    init(QueueName, IsDurable, Recover,
+    init(Queue, Recover,
          fun (MsgIds, ActionTaken) ->
                  msgs_written_to_disk(Self, MsgIds, ActionTaken)
          end,
          fun (MsgIds) -> msg_indices_written_to_disk(Self, MsgIds) end).
 
-init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(#amqqueue { name = QueueName, durable = IsDurable }, false,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
     init(IsDurable, IndexState, 0, [],
          case IsDurable of
@@ -415,7 +416,8 @@ init(QueueName, IsDurable, false, MsgOnDiskFun, MsgIdxOnDiskFun) ->
          end,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined));
 
-init(QueueName, true, true, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+init(#amqqueue { name = QueueName }, true,
+     MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -505,13 +507,13 @@ purge(State = #vqstate { q4                = Q4,
                               ram_index_count   = 0,
                               persistent_count  = PCount1 })}.
 
-publish(Msg, MsgProps, State) ->
+publish(Msg, MsgProps, _ChPid, State) ->
     {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
     a(reduce_memory_use(State1)).
 
 publish_delivered(false, #basic_message { id = MsgId },
                   #message_properties { needs_confirming = NeedsConfirming },
-                  State = #vqstate { len = 0 }) ->
+                  _ChPid, State = #vqstate { len = 0 }) ->
     case NeedsConfirming of
         true  -> blind_confirm(self(), gb_sets:singleton(MsgId));
         false -> ok
@@ -521,6 +523,7 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                                id = MsgId },
                   MsgProps = #message_properties {
                     needs_confirming = NeedsConfirming },
+                  _ChPid,
                   State = #vqstate { len              = 0,
                                      next_seq_id      = SeqId,
                                      out_counter      = OutCount,
@@ -650,13 +653,14 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                          persistent_count = PCount1 })}.
 
 ack(AckTags, State) ->
-    a(ack(fun msg_store_remove/3,
-          fun (_, State0) -> State0 end,
-          AckTags, State)).
+    {MsgIds, State1} = ack(fun msg_store_remove/3,
+                           fun (_, State0) -> State0 end,
+                           AckTags, State),
+    {MsgIds, a(State1)}.
 
 tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
-           State = #vqstate { durable           = IsDurable,
-                              msg_store_clients = MSCState }) ->
+           _ChPid, State = #vqstate { durable           = IsDurable,
+                                      msg_store_clients = MSCState }) ->
     Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
     store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
     case IsPersistent andalso IsDurable of
@@ -707,7 +711,7 @@ requeue(AckTags, MsgPropsFun, State) ->
                            (MsgPropsFun(MsgProps)) #message_properties {
                              needs_confirming = false }
                    end,
-    a(reduce_memory_use(
+    {MsgIds, State1} =
         ack(fun msg_store_release/3,
             fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
                     {_SeqId, State2} = publish(Msg, MsgPropsFun1(MsgProps),
@@ -722,7 +726,8 @@ requeue(AckTags, MsgPropsFun, State) ->
                                                true, true, State2),
                     State3
             end,
-            AckTags, State))).
+            AckTags, State),
+    {MsgIds, a(reduce_memory_use(State1))}.
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -860,6 +865,9 @@ status(#vqstate {
       {avg_ack_ingress_rate, AvgAckIngressRate},
       {avg_ack_egress_rate , AvgAckEgressRate} ].
 
+invoke(?MODULE, Fun, State) ->
+    Fun(State).
+
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
@@ -971,7 +979,7 @@ msg_store_close_fds_fun(IsPersistent) ->
     Self = self(),
     fun () ->
             rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-              Self,
+              Self, ?MODULE,
               fun (State = #vqstate { msg_store_clients = MSCState }) ->
                       {ok, MSCState1} =
                           msg_store_close_fds(MSCState, IsPersistent),
@@ -1117,10 +1125,11 @@ blank_rate(Timestamp, IngressLength) ->
 msg_store_callback(PersistentMsgIds, Pubs, AckTags, Fun, MsgPropsFun) ->
     Self = self(),
     F = fun () -> rabbit_amqqueue:maybe_run_queue_via_backing_queue(
-                    Self, fun (StateN) -> {[], tx_commit_post_msg_store(
-                                                 true, Pubs, AckTags,
-                                                 Fun, MsgPropsFun, StateN)}
-                          end)
+                    Self, ?MODULE,
+                    fun (StateN) -> {[], tx_commit_post_msg_store(
+                                           true, Pubs, AckTags,
+                                           Fun, MsgPropsFun, StateN)}
+                    end)
         end,
     fun () -> spawn(fun () -> ok = rabbit_misc:with_exit_handler(
                                      fun () -> remove_persistent_messages(
@@ -1183,20 +1192,21 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
     Acks  = lists:append(SAcks),
     Pubs  = [{Msg, Fun(MsgProps)} || {Fun, PubsN}    <- lists:reverse(SPubs),
                                      {Msg, MsgProps} <- lists:reverse(PubsN)],
-    {SeqIds, State1 = #vqstate { index_state = IndexState }} =
+    {_MsgIds, State1} = ack(Acks, State),
+    {SeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun ({Msg = #basic_message { is_persistent = IsPersistent },
                 MsgProps},
-               {SeqIdsAcc, State2}) ->
+               {SeqIdsAcc, State3}) ->
                   IsPersistent1 = IsDurable andalso IsPersistent,
-                  {SeqId, State3} =
-                      publish(Msg, MsgProps, false, IsPersistent1, State2),
-                  {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State3}
-          end, {PAcks, ack(Acks, State)}, Pubs),
+                  {SeqId, State4} =
+                      publish(Msg, MsgProps, false, IsPersistent1, State3),
+                  {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State4}
+          end, {PAcks, State1}, Pubs),
     IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
     [ Fun() || Fun <- lists:reverse(SFuns) ],
     reduce_memory_use(
-      State1 #vqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }).
+      State2 #vqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }).
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,
@@ -1343,7 +1353,7 @@ remove_pending_ack(KeepPersistent,
                    State = #vqstate { pending_ack       = PA,
                                       index_state       = IndexState,
                                       msg_store_clients = MSCState }) ->
-    {PersistentSeqIds, MsgIdsByStore} =
+    {PersistentSeqIds, MsgIdsByStore, _AllMsgIds} =
         dict:fold(fun accumulate_ack/3, accumulate_ack_init(), PA),
     State1 = State #vqstate { pending_ack   = dict:new(),
                               ram_ack_index = gb_trees:empty() },
@@ -1362,9 +1372,9 @@ remove_pending_ack(KeepPersistent,
     end.
 
 ack(_MsgStoreFun, _Fun, [], State) ->
-    State;
+    {[], State};
 ack(MsgStoreFun, Fun, AckTags, State) ->
-    {{PersistentSeqIds, MsgIdsByStore},
+    {{PersistentSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
                          persistent_count  = PCount,
@@ -1384,21 +1394,24 @@ ack(MsgStoreFun, Fun, AckTags, State) ->
      || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)],
     PCount1 = PCount - find_persistent_count(sum_msg_ids_by_store_to_len(
                                                orddict:new(), MsgIdsByStore)),
-    State1 #vqstate { index_state      = IndexState1,
-                      persistent_count = PCount1,
-                      ack_out_counter  = AckOutCount + length(AckTags) }.
+    {lists:reverse(AllMsgIds),
+     State1 #vqstate { index_state      = IndexState1,
+                       persistent_count = PCount1,
+                       ack_out_counter  = AckOutCount + length(AckTags) }}.
 
-accumulate_ack_init() -> {[], orddict:new()}.
+accumulate_ack_init() -> {[], orddict:new(), []}.
 
 accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
-                                     index_on_disk = false },
-               {PersistentSeqIdsAcc, MsgIdsByStore}) ->
-    {PersistentSeqIdsAcc, MsgIdsByStore};
+                                     index_on_disk = false,
+                                     msg_id        = MsgId },
+              {PersistentSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
+    {PersistentSeqIdsAcc, MsgIdsByStore, [MsgId | AllMsgIds]};
 accumulate_ack(SeqId, {IsPersistent, MsgId, _MsgProps},
-               {PersistentSeqIdsAcc, MsgIdsByStore}) ->
+               {PersistentSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
     {cons_if(IsPersistent, SeqId, PersistentSeqIdsAcc),
-     rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore)}.
+     rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore),
+     [MsgId | AllMsgIds]}.
 
 find_persistent_count(LensByStore) ->
     case orddict:find(true, LensByStore) of
@@ -1444,33 +1457,35 @@ msgs_confirmed(MsgIdSet, State) ->
 
 blind_confirm(QPid, MsgIdSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (State) -> msgs_confirmed(MsgIdSet, State) end).
+      QPid, ?MODULE, fun (State) -> msgs_confirmed(MsgIdSet, State) end).
 
 msgs_written_to_disk(QPid, MsgIdSet, removed) ->
     blind_confirm(QPid, MsgIdSet);
 msgs_written_to_disk(QPid, MsgIdSet, written) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
-                                    msg_indices_on_disk = MIOD,
-                                    unconfirmed         = UC }) ->
-                    Written = gb_sets:intersection(UC, MsgIdSet),
-                    msgs_confirmed(gb_sets:intersection(MsgIdSet, MIOD),
-                                   State #vqstate {
-                                     msgs_on_disk =
-                                         gb_sets:union(MOD, Written) })
-            end).
+      QPid, ?MODULE,
+      fun (State = #vqstate { msgs_on_disk        = MOD,
+                              msg_indices_on_disk = MIOD,
+                              unconfirmed         = UC }) ->
+              msgs_confirmed(gb_sets:intersection(MsgIdSet, MIOD),
+                             State #vqstate {
+                               msgs_on_disk =
+                                   gb_sets:union(
+                                     MOD, gb_sets:intersection(UC, MsgIdSet)) })
+      end).
 
 msg_indices_written_to_disk(QPid, MsgIdSet) ->
     rabbit_amqqueue:maybe_run_queue_via_backing_queue_async(
-      QPid, fun (State = #vqstate { msgs_on_disk        = MOD,
-                                    msg_indices_on_disk = MIOD,
-                                    unconfirmed         = UC }) ->
-                    Written = gb_sets:intersection(UC, MsgIdSet),
-                    msgs_confirmed(gb_sets:intersection(MsgIdSet, MOD),
-                                   State #vqstate {
-                                     msg_indices_on_disk =
-                                         gb_sets:union(MIOD, Written) })
-            end).
+      QPid, ?MODULE,
+      fun (State = #vqstate { msgs_on_disk        = MOD,
+                              msg_indices_on_disk = MIOD,
+                              unconfirmed         = UC }) ->
+              msgs_confirmed(gb_sets:intersection(MsgIdSet, MOD),
+                             State #vqstate {
+                               msg_indices_on_disk =
+                                   gb_sets:union(
+                                     MIOD, gb_sets:intersection(UC, MsgIdSet)) })
+      end).
 
 %%----------------------------------------------------------------------------
 %% Phase changes

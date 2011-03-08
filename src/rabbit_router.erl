@@ -113,7 +113,9 @@ check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
 lookup_qpids(QNames) ->
     lists:foldl(fun (QName, QPids) ->
                         case mnesia:dirty_read({rabbit_queue, QName}) of
-                            [#amqqueue{pid = QPid}] -> [QPid | QPids];
-                            []                      -> QPids
+                            [#amqqueue{pid = QPid, mirror_pids = MPids}] ->
+                                MPids ++ [QPid | QPids];
+                            [] ->
+                                QPids
                         end
                 end, [], QNames).
