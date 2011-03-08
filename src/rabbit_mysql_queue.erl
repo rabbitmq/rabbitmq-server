@@ -805,15 +805,16 @@ add_p(M = #m { seq_id = SeqId }, #s { queue_name = DbQueueName }) ->
 -spec del_ps(fun ((m(), s()) -> s()), [seq_id()], s()) -> s().
 
 del_ps(F, SeqIds, S = #s { queue_name = DbQueueName }) ->
-    %% lists:foldl(
-    %%   fun (SeqId, Si) ->
-    %%           [#p_record { m = M }] = mnesia:read(PTable, SeqId, 'read'),
-    %%           mnesia:delete(PTable, SeqId, 'write'),
-    %%           F(M, Si)
-    %%   end,
-    %%   S,
-    %%   SeqIds).
-    yo_mama_bogus_result.
+    lists:foldl(
+      fun( SeqId, Si) ->
+              %% FUCK:  get p_record for this seq id
+              %% [#p_record { m = M }] = mnesia:read(PTable, SeqId, 'read'),
+              %% mysql_helper:delete_message_from_p_by_seq_id(SeqId),
+              %% F(M, Si)
+              F(Si) %% <-- GET RID OF ME!
+      end,
+      S,
+      SeqIds).
 
 %% save copies the volatile part of the state (next_seq_id and
 %% next_out_id) to Mnesia.

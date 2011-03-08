@@ -55,16 +55,18 @@ ensure_connection_pool() ->
     end.
 
 
+%%
 %% NOTE:  What the MySQL protocol actually supports in prepared statements
 %%        seems a bit non-uniform.  For example, 'COMMIT' is in, but
 %%        'START TRANSACTION' isn't.  Fortunately, most of the things that
 %%        are parametrizable, and thus prone to injection attacks and the
 %%        like do seem to be there.
 %%
-%% NOTE:  Other note.  There are a few other things that seem missing.  For
-%%        example there doesn't seem to be an easy way to prepare a list of
-%%        values into a prepared statement '?' e.g. in something like:
-%%        DELETE FROM whatever WHERE id IN (1,2,3,4,5);
+%% NOTE:  Also, there are a few other things that seem missing from
+%%        Emysql.  For example there doesn't seem to be an easy way to
+%%        prepare a list of values into a prepared statement '?' e.g. in
+%%        something like: DELETE FROM whatever WHERE id IN (1,2,3,4,5);
+%%
 prepare_mysql_statements() ->
     Statements = [ %% ---------- Statements for 'q' table ------------
                   {insert_q_stmt,<<"INSERT INTO q(queue_name, m) VALUES(?,?)">>},
@@ -92,6 +94,8 @@ prepare_mysql_statements() ->
                    <<"DELETE FROM p WHERE queue_name = ?">>},
                   {count_p_stmt,
                    <<"SELECT COUNT(*) FROM p WHERE queue_name = ?">>},
+                  {read_p_stmt,
+                   <<"SELECT * FROM p WHERE queue_name = ? AND seq_id = ?">>},
 
                    %% ---------- Statements for 'n' table ------------
                   {insert_n_stmt,
@@ -112,7 +116,6 @@ commit_mysql_transaction() ->
                    <<"COMMIT">>).
 
 delete_queue_data(QueueName) ->
-    %% TODO:  Error checking...
     [ emysql:execute(?RABBIT_DB_POOL_NAME,
                      Stmt,
                      [QueueName]) || Stmt <- [delete_q_stmt,
@@ -196,11 +199,16 @@ write_message_to_p(DbQueueName, SeqId, Msg) ->
                    [SeqId, DbQueueName, term_to_binary(Msg)]),
     ok.
 
-delete_message_from_p(DbQueueName, SeqId) ->
+delete_message_from_p_by_seq_id(SeqId) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,
-                   delete_p_stmt,
+                   delete_p_by_seq_id_stmt,
                    [SeqId]),
     ok.
+
+read_p_record(DbQueueName, SeqId) ->
+    emysql:execute(?RABBIT_DB_POOL_NAME,
+                   read_p_stmt,
+                   [DbQueueName, SeqId]).
 
 q_peek(DbQueueName) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,
