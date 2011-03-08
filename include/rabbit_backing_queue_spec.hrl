@@ -68,5 +68,5 @@
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
 -spec(invoke/3 :: (atom(), fun ((A) -> A), state()) ->
       {[rabbit_guid:guid()], state()}).
--spec(validate_message/2 ::
-        (rabbit_types:basic_message(), state()) -> boolean()).
+-spec(validate_message/2 :: (rabbit_types:basic_message(), state()) ->
+                                 {'valid'|'invalid', boolean()}).

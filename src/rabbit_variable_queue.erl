@@ -868,7 +868,7 @@ status(#vqstate {
 invoke(?MODULE, Fun, State) ->
     Fun(State).
 
-validate_message(_Msg, _State) -> true.
+validate_message(_Msg, _State) -> valid.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
