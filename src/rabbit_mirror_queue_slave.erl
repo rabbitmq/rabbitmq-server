@@ -119,16 +119,15 @@ init([#amqqueue { name = QueueName } = Q]) ->
 
 handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     %% Synchronous, "immediate" delivery mode
-    %%
-    %% TODO: we cannot reply here because we may not have received
-    %% this from gm, and indeed the master might die before it
-    %% receives it. Thus if we are promoted to master at that point
-    %% then we must reply appropriately. So we're going to have to
-    %% enqueue it, record that it needs a reply, and then reply either
-    %% when we get the nod via gm, or, if we're promoted, in the mean
-    %% time we'll have to figure out something else...  Of course, if
-    %% we've already seen it from gm then we're going to have to reply
-    %% now.
+
+    %% It is safe to reply 'false' here even if a) we've not seen the
+    %% msg via gm, or b) the master dies before we receive the msg via
+    %% gm. In the case of (a), we will eventually receive the msg via
+    %% gm, and it's only the master's result to the channel that is
+    %% important. In the case of (b), if the master does die and we do
+    %% get promoted then at that point we have no consumers, thus
+    %% 'false' is precisely the correct answer. However, we must be
+    %% careful to _not_ enqueue the message in this case.
     gen_server2:reply(From, false), %% master may deliver it, not us
     noreply(maybe_enqueue_message(Delivery, State));
 
