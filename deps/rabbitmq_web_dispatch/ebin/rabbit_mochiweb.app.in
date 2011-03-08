@@ -13,6 +13,7 @@
   {mod, {rabbit_mochiweb_app, []}},
   {env, [
          {listeners, [{'*', [{port, 55670}]},
-                      {mgmt, [{port, 55672}]}]}
+                      {mgmt, [{port, 55672}]}]},
+         {contexts, [{mgmt, mgmt}]}
         ]},
   {applications, [kernel, stdlib]}]}.
