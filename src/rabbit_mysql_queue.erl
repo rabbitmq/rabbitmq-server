@@ -418,10 +418,6 @@ fetch(AckRequired, S) ->
     callback([]),
     Result.
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
-
 %%----------------------------------------------------------------------------
 %% ack/2 acknowledges msgs named by SeqIds.
 %%
@@ -432,14 +428,18 @@ fetch(AckRequired, S) ->
 
 ack(SeqIds, S) ->
     % rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
-    {atomic, Result} =
-        mnesia:transaction(fun () -> RS = internal_ack(SeqIds, S),
-                                     save(RS),
-                                     RS
-                           end),
+    mysql_helper:begin_mysql_transaction(),
+    RS = internal_ack(SeqIds, S),
+    save(RS),
+    RS,
+    mysql_helper:commit_mysql_transaction(),
     % rabbit_log:info("ack ->~n ~p", [Result]),
     callback([]),
-    Result.
+    RS.
+
+%%#############################################################################
+%%                            THE RUBICON...
+%%#############################################################################
 
 %%#############################################################################
 %%                       OTHER SIDE OF THE RUBICON...
