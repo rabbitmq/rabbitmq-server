@@ -428,9 +428,8 @@ record_confirm_message(#delivery{sender     = ChPid,
                                  message    = #basic_message {
                                    is_persistent = true,
                                    id            = MsgId}},
-                       State =
-                           #q{msg_id_to_channel = MTC,
-                              q                 = #amqqueue{durable = true}}) ->
+                       State = #q{q                 = #amqqueue{durable = true},
+                                  msg_id_to_channel = MTC}) ->
     {eventually,
      State#q{msg_id_to_channel = dict:store(MsgId, {ChPid, MsgSeqNo}, MTC)}};
 record_confirm_message(_Delivery, State) ->
