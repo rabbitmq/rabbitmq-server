@@ -49,10 +49,16 @@
       </th>
       <td class="status">
 <% if (node.mem_total != 'memory_monitoring_disabled') { %>
-       <div class="<%= fmt_color(node.mem_used / node.mem_limit,
-                                 MEMORY_THRESHOLDS) %>">
+   <% if (node.mem_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>
+         <span class="help" id="memory-alarm"></span>
+       </div>
+   <% } else { %>
+       <div class="green">
          <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>
        </div>
+   <% } %>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
 <% } %>

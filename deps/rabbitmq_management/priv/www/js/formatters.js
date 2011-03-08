@@ -5,7 +5,6 @@ SOCKETS_THRESHOLDS=[[1.0, 'red'],
                     [0.8, 'yellow']];
 PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
-MEMORY_THRESHOLDS=[[1.0, 'red']];
 
 function fmt_string(str) {
     if (str == undefined) return UNKNOWN_REPR;

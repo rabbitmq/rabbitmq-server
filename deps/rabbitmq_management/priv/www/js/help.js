@@ -59,6 +59,11 @@ HELP = {
       When the limit is exhausted RabbitMQ will stop accepting new \
       network connections.',
 
+    'memory-alarm':
+      'The memory alarm for this node has gone off. It will block \
+      incoming network traffic until the memory usage drops below \
+      the watermark.',
+
     'foo': 'foo' // No comma.
 };
 
