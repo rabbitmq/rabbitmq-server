@@ -1187,7 +1187,7 @@ ulimit() ->
             case os:type() of
                 {win32, _OsName} ->
                     %% On Windows max_fds is twice the number of open files:
-                    %%   https://github.com/yrashk/erlang/blob/master/erts/emulator/sys/win32/sys.c#L2463-2466
+                    %%   https://github.com/yrashk/erlang/blob/e1282325ed75e52a98d5/erts/emulator/sys/win32/sys.c#L2459-2466
                     MaxFds div 2;
                 _Any ->
                     %% For other operating systems trust Erlang.
