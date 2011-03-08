@@ -127,7 +127,10 @@ behaviour_info(callbacks) ->
      %% Passed a function to be invoked with the relevant backing
      %% queue's state. Useful for when the backing queue or other
      %% components need to pass functions into the backing queue.
-     {invoke, 3}
+     {invoke, 3},
+
+     %% TODO: document me
+     {validate_message, 2}
     ];
 behaviour_info(_Other) ->
     undefined.

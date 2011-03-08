@@ -280,3 +280,8 @@ invoke(Mod, Fun, State = #state { backing_queue = BQ,
                                   backing_queue_state = BQS }) ->
     {MsgIds, BQS1} = BQ:invoke(Mod, Fun, BQS),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
+
+validate_message(Message, #state { backing_queue = BQ,
+                                   backing_queue_state = BSQ }) ->
+    %% this will definitely change.
+    BQ:validate_message(Message, BQS).

@@ -119,6 +119,16 @@ init([#amqqueue { name = QueueName } = Q]) ->
 
 handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     %% Synchronous, "immediate" delivery mode
+    %%
+    %% TODO: we cannot reply here because we may not have received
+    %% this from gm, and indeed the master might die before it
+    %% receives it. Thus if we are promoted to master at that point
+    %% then we must reply appropriately. So we're going to have to
+    %% enqueue it, record that it needs a reply, and then reply either
+    %% when we get the nod via gm, or, if we're promoted, in the mean
+    %% time we'll have to figure out something else...  Of course, if
+    %% we've already seen it from gm then we're going to have to reply
+    %% now.
     gen_server2:reply(From, false), %% master may deliver it, not us
     noreply(maybe_enqueue_message(Delivery, State));
 
@@ -419,7 +429,7 @@ maybe_enqueue_message(
                          msg_seq_no = MsgSeqNo,
                          sender     = ChPid },
   State = #state { sender_queues = SQ,
-                   msg_id_status   = MS }) ->
+                   msg_id_status = MS }) ->
     %% We will never see {published, ChPid, MsgSeqNo} here.
     case dict:find(MsgId, MS) of
         error ->
@@ -506,6 +516,7 @@ process_instruction(
 
     State1 = State #state { sender_queues = SQ1,
                             msg_id_status = MS2 },
+    %% we probably want to work in BQ:validate_message here
     {ok,
      case Deliver of
          false ->

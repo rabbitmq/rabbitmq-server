@@ -487,46 +487,64 @@ attempt_delivery(#delivery{txn        = none,
                            sender     = ChPid,
                            message    = Message,
                            msg_seq_no = MsgSeqNo},
-                 {NeedsConfirming, State = #q{backing_queue = BQ}}) ->
+                 {NeedsConfirming, State = #q{backing_queue = BQ,
+                                              backing_queue_state = BQS}}) ->
     %% must confirm immediately if it has a MsgSeqNo and not NeedsConfirming
     case {NeedsConfirming, MsgSeqNo} of
         {_, undefined}  -> ok;
         {no_confirm, _} -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
         {confirm, _}    -> ok
     end,
-    PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
-    DeliverFun =
-        fun (AckRequired, false, State1 = #q{backing_queue_state = BQS}) ->
-                %% we don't need an expiry here because messages are
-                %% not being enqueued, so we use an empty
-                %% message_properties.
-                {AckTag, BQS1} =
-                    BQ:publish_delivered(
-                      AckRequired, Message,
-                      (?BASE_MESSAGE_PROPERTIES)#message_properties{
-                        needs_confirming = (NeedsConfirming =:= confirm)},
-                      ChPid, BQS),
-                {{Message, false, AckTag}, true,
-                 State1#q{backing_queue_state = BQS1}}
-        end,
-    {Delivered, State1} =
-        deliver_msgs_to_consumers({ PredFun, DeliverFun }, false, State),
-    {Delivered, NeedsConfirming, State1};
+    case BQ:validate_message(Message, BQS) of
+        {invalid, _Bool} = Invalid ->
+            {Invalid, NeedsConfirming, State};
+        valid ->
+            PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
+            DeliverFun =
+                fun (AckRequired, false,
+                     State1 = #q{backing_queue_state = BQS1}) ->
+                        %% we don't need an expiry here because
+                        %% messages are not being enqueued, so we use
+                        %% an empty message_properties.
+                        {AckTag, BQS2} =
+                            BQ:publish_delivered(
+                              AckRequired, Message,
+                              (?BASE_MESSAGE_PROPERTIES)#message_properties{
+                                needs_confirming =
+                                    (NeedsConfirming =:= confirm)},
+                              ChPid, BQS1),
+                        {{Message, false, AckTag}, true,
+                         State1#q{backing_queue_state = BQS2}}
+                end,
+            {Delivered, State1} =
+                deliver_msgs_to_consumers({ PredFun, DeliverFun }, false,
+                                          State),
+            {{valid, Delivered}, NeedsConfirming, State1}
+    end;
 attempt_delivery(#delivery{txn     = Txn,
                            sender  = ChPid,
                            message = Message},
                  {NeedsConfirming, State = #q{backing_queue = BQ,
                                               backing_queue_state = BQS}}) ->
-    store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
-    BQS1 = BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, ChPid, BQS),
-    {true, NeedsConfirming, State#q{backing_queue_state = BQS1}}.
+    case BQ:validate_message(Message, BQS) of
+        {invalid, _Reason} = Invalid ->
+            {Invalid, NeedsConfirming, State};
+        valid ->
+            store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
+            BQS1 = BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, ChPid,
+                                 BQS),
+            {{valid, true}, NeedsConfirming,
+             State#q{backing_queue_state = BQS1}}
+    end.
 
 deliver_or_enqueue(Delivery, State) ->
     case attempt_delivery(Delivery, record_confirm_message(Delivery, State)) of
-        {true, _, State1} ->
+        {{invalid, seen}, _, State1} ->
             {true, State1};
-        {false, NeedsConfirming, State1 = #q{backing_queue = BQ,
-                                             backing_queue_state = BQS}} ->
+        {{valid, true}, _, State1} ->
+            {true, State1};
+        {{valid, false}, NeedsConfirming,
+         State1 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             #delivery{message = Message} = Delivery,
             BQS1 = BQ:publish(Message,
                               (message_properties(State)) #message_properties{
@@ -863,9 +881,9 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, _NeedsConfirming, State1} =
+    {{_Valid, Bool}, _NeedsConfirming, State1} =
         attempt_delivery(Delivery, record_confirm_message(Delivery, State)),
-    reply(Delivered, State1);
+    reply(Bool, State1);
 
 handle_call({deliver, Delivery}, From, State) ->
     %% Synchronous, "mandatory" delivery mode. Reply asap.
