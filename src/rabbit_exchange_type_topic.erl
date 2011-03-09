@@ -67,7 +67,7 @@ add_binding(true, _Exchange, Binding) ->
 add_binding(false, _Exchange, _Binding) ->
     ok.
 
-remove_bindings(true, X, Bs) ->
+remove_bindings(true, #exchange{name = X}, Bs) ->
     %% The remove process is split into two distinct phases. In the
     %% first phase we gather the lists of bindings and edges to
     %% delete, then in the second phase we process all the
