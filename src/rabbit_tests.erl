@@ -1290,13 +1290,16 @@ test_confirms() ->
     after 1000 ->
             ok
     end,
-    %% Delete queue
+    %% Cleanup
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName2}),
     receive #'queue.delete_ok'{} ->
             ok
     after 1000 ->
             throw(failed_to_cleanup_queue)
     end,
+    unlink(Ch),
+    ok = rabbit_channel:shutdown(Ch),
+
     passed.
 
 test_statistics() ->
