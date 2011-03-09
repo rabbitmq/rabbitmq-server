@@ -548,10 +548,10 @@ remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM}, Nack,
     Qs1 = gb_sets:del_element(QPid, Qs),
     %% If QPid somehow died initiating a nack, clear the message from
     %% internal data-structures.  Also, cleanup empty entries.
-    Empty = gb_sets:is_empty(Qs1),
-    if (Empty orelse Nack) ->
+    case (Nack orelse gb_sets:is_empty(Qs1)) of
+        true  ->
             {[{MsgSeqNo, XName} | MXs], gb_trees:delete(MsgSeqNo, UMQ), UQM1};
-       true ->
+        false ->
             {MXs, gb_trees:update(MsgSeqNo, {XName, Qs1}, UMQ), UQM1}
     end.
 
