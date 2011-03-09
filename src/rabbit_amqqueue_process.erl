@@ -449,7 +449,6 @@ attempt_delivery(#delivery{txn        = none,
                            message    = Message,
                            msg_seq_no = MsgSeqNo},
                  {NeedsConfirming, State = #q{backing_queue = BQ}}) ->
-    %% must confirm immediately if it has a MsgSeqNo and not NeedsConfirming
     case NeedsConfirming of
         immediately -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
         _           -> ok
