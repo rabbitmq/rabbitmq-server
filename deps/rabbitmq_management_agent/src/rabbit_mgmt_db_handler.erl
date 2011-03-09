@@ -67,7 +67,6 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event(Event = #event{}, State) ->
-%%    io:format("Got event ~p~n", [Event]),
     gen_server:cast({global, rabbit_mgmt_db}, {event, Event}),
     {ok, State};
 handle_event(E = {set_alarm, _}, State) ->
