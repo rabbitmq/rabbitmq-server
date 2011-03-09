@@ -539,7 +539,7 @@ attempt_delivery(#delivery{txn     = Txn,
 
 deliver_or_enqueue(Delivery, State) ->
     case attempt_delivery(Delivery, record_confirm_message(Delivery, State)) of
-        {{invalid, seen}, _, State1} ->
+        {{invalid, _Bool}, _, State1} ->
             {true, State1};
         {{valid, true}, _, State1} ->
             {true, State1};
