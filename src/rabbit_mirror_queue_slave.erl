@@ -397,11 +397,11 @@ promote_me(From, #state { q                   = Q,
     %%   published via gm only, and confirmed; pending publication
     %%   from channel.
     %%
-    %% The middle form only, needs to go through to the queue_process
-    %% state to form the msg_id_to_channel mapping (MTC).
-    %%
     %% The two outer forms only, need to go to the master state
     %% seen_status (SS).
+    %%
+    %% The middle form only, needs to go through to the queue_process
+    %% state to form the msg_id_to_channel mapping (MTC).
     %%
     %% No messages that are enqueued from SQ at this point will have
     %% entries in MS.
@@ -411,15 +411,21 @@ promote_me(From, #state { q                   = Q,
     %% this does not affect MS, nor which bits go through to SS in
     %% Master, or MTC in queue_process.
 
-    MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, MS),
+    SS = dict:filter(fun ({published, _ChPid})            -> true;
+                         ({published, _ChPid, _MsgSeqNo}) -> false;
+                         ({confirmed, _ChPid})            -> true
+                     end, MS),
 
-    MTC = dict:from_list(
-            [{MsgId, {ChPid, MsgSeqNo}} ||
-                {MsgId, {published, ChPid, MsgSeqNo}} <- dict:to_list(MS)]),
+    MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
+                    CPid, BQ, BQS, GM, SS),
+
+    MTC = dict:filter(fun ({published, _ChPid})            -> false;
+                          ({published, _ChPid, _MsgSeqNo}) -> true;
+                          ({confirmed, _ChPid})            -> false
+                      end, MS),
     AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
-    Deliveries = lists:append([queue:to_list(PubQ)
-                               || {_ChPid, PubQ} <- dict:to_list(SQ)]),
+    Deliveries = [Delivery || {_ChPid, PubQ} <- dict:to_list(SQ),
+                              {Delivery, true} <- queue:to_list(PubQ)],
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q, rabbit_mirror_queue_master, MasterState, RateTRef,
                    AckTags, Deliveries, MTC),
