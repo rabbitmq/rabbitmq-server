@@ -201,16 +201,12 @@ handle_call({info, Items}, _From, State0) ->
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
 
-handle_cast({set_alarm, {{vm_memory_high_watermark, Node}, []}}, State) ->
-    {noreply, case node() of
-                  Node -> State#state{memory_alarm = true};
-                  _    -> State
-              end};
-handle_cast({clear_alarm, {vm_memory_high_watermark, Node}}, State) ->
-    {noreply, case node() of
-                  Node -> State#state{memory_alarm = false};
-                  _    -> State
-              end};
+handle_cast({set_alarm, {{vm_memory_high_watermark, Node}, []}}, State)
+  when Node =:= node() ->
+    {noreply, State#state{memory_alarm = true}};
+handle_cast({clear_alarm, {vm_memory_high_watermark, Node}}, State)
+  when Node =:= node() ->
+    {noreply, State#state{memory_alarm = false}};
 handle_cast(_C, State) ->
     {noreply, State}.
 
