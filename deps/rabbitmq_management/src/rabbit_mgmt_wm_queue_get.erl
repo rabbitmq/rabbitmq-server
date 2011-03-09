@@ -83,7 +83,8 @@ basic_get(Ch, Q, NoAck) ->
                         [{payload,          base64:encode(Payload)},
                          {payload_encoding, base64}]
                 end,
-            [{redelivered,   Redelivered},
+            [{payload_bytes, size(Payload)},
+             {redelivered,   Redelivered},
              {exchange,      Exchange},
              {routing_key,   RoutingKey},
              {message_count, MessageCount},

@@ -30,7 +30,10 @@ The server reported <b><%= msg.message_count %></b> messages remaining.
     <td><%= fmt_table_short(msg.properties) %></td>
   </tr>
   <tr>
-    <th>Payload</th>
+    <th>
+      Payload
+      <sub><%= msg.payload_bytes %> bytes</sub>
+    </th>
     <td>
       <pre id="msg-payload"><%= fmt_escape_html(msg.payload) %></pre>
     </td>
