@@ -156,13 +156,6 @@
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
 
-%% Googling around suggests that Windows has a limit somewhere around
-%% 16M, eg
-%% http://blogs.technet.com/markrussinovich/archive/2009/09/29/3283844.aspx
-%% however, it turns out that's only available through the win32
-%% API. Via the C Runtime, we have just 512:
-%% http://msdn.microsoft.com/en-us/library/6e3b887c%28VS.80%29.aspx
--define(FILE_HANDLES_LIMIT_WINDOWS, 512).
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
 
@@ -1185,29 +1178,20 @@ track_client(Pid, Clients) ->
         false -> ok
     end.
 
-%% For all unices, assume ulimit exists. Further googling suggests
-%% that BSDs (incl OS X), solaris and linux all agree that ulimit -n
-%% is file handles
+
+%% To increase the number of file descriptors: on Windows set ERL_MAX_PORTS
+%% environment variable, on Linux set `ulimit -n`.
 ulimit() ->
-    case os:type() of
-        {win32, _OsName} ->
-            ?FILE_HANDLES_LIMIT_WINDOWS;
-        {unix, _OsName} ->
-            %% Under Linux, Solaris and FreeBSD, ulimit is a shell
-            %% builtin, not a command. In OS X and AIX it's a command.
-            %% Fortunately, os:cmd invokes the cmd in a shell env, so
-            %% we're safe in all cases.
-            case os:cmd("ulimit -n") of
-                "unlimited" ->
-                    infinity;
-                String = [C|_] when $0 =< C andalso C =< $9 ->
-                    list_to_integer(
-                      lists:takewhile(
-                        fun (D) -> $0 =< D andalso D =< $9 end, String));
-                _ ->
-                    %% probably a variant of
-                    %% "/bin/sh: line 1: ulimit: command not found\n"
-                    unknown
+    case proplists:get_value(max_fds, erlang:system_info(check_io)) of
+        MaxFds when is_integer(MaxFds) andalso MaxFds > 1 ->
+            case os:type() of
+                {win32, _OsName} ->
+                    %% On Windows max_fds is twice the number of open files:
+                    %%   https://github.com/yrashk/erlang/blob/e1282325ed75e52a98d5/erts/emulator/sys/win32/sys.c#L2459-2466
+                    MaxFds div 2;
+                _Any ->
+                    %% For other operating systems trust Erlang.
+                    MaxFds
             end;
         _ ->
             unknown
