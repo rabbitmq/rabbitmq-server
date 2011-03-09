@@ -128,13 +128,17 @@ handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     %% get promoted then at that point we have no consumers, thus
     %% 'false' is precisely the correct answer. However, we must be
     %% careful to _not_ enqueue the message in this case.
+
+    %% Note this is distinct from the case where we receive the msg
+    %% via gm first, then we're promoted to master, and only then do
+    %% we receive the msg from the channel.
     gen_server2:reply(From, false), %% master may deliver it, not us
-    noreply(maybe_enqueue_message(Delivery, State));
+    noreply(maybe_enqueue_message(Delivery, false, State));
 
 handle_call({deliver, Delivery = #delivery {}}, From, State) ->
     %% Synchronous, "mandatory" delivery mode
     gen_server2:reply(From, true), %% amqqueue throws away the result anyway
-    noreply(maybe_enqueue_message(Delivery, State));
+    noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_call({gm_deaths, Deaths}, From,
             State = #state { q           = #amqqueue { name = QueueName },
@@ -170,7 +174,7 @@ handle_cast({gm, Instruction}, State) ->
 
 handle_cast({deliver, Delivery = #delivery {}}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    noreply(maybe_enqueue_message(Delivery, State));
+    noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -438,6 +442,7 @@ maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
                          msg_seq_no = MsgSeqNo,
                          sender     = ChPid },
+  EnqueueOnPromotion,
   State = #state { sender_queues = SQ,
                    msg_id_status = MS }) ->
     %% We will never see {published, ChPid, MsgSeqNo} here.
@@ -447,7 +452,8 @@ maybe_enqueue_message(
                      {ok, MQ1} -> MQ1;
                      error    -> queue:new()
                  end,
-            SQ1 = dict:store(ChPid, queue:in(Delivery, MQ), SQ),
+            SQ1 = dict:store(ChPid,
+                             queue:in({Delivery, EnqueueOnPromotion}, MQ), SQ),
             State #state { sender_queues = SQ1 };
         {ok, {confirmed, ChPid}} ->
             %% BQ has confirmed it but we didn't know what the

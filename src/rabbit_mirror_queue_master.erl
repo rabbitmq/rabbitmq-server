@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3]).
+         status/1, invoke/3, validate_message/2]).
 
 -export([start/1, stop/0]).
 
@@ -113,7 +113,6 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid,
 
 publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, State = #state { gm                  = GM,
-                                          backing_queue       = BQ,
                                           seen_status         = SS,
                                           backing_queue       = BQ,
                                           backing_queue_state = BQS }) ->
@@ -252,7 +251,7 @@ invoke(Mod, Fun, State = #state { backing_queue = BQ,
 validate_message(Message = #basic_message { id = MsgId },
                  State = #state { seen_status         = SS,
                                   backing_queue       = BQ,
-                                  backing_queue_state = BSQ }) ->
+                                  backing_queue_state = BQS }) ->
     %% Here, we need to deal with the possibility that we're about to
     %% receive a message that we've already seen when we were a slave
     %% (we received it via gm). Thus if we do receive such message now
@@ -266,14 +265,15 @@ validate_message(Message = #basic_message { id = MsgId },
             %% only if we ourselves are not filtering out the msg.
             {Result, BQS1} = BQ:validate_message(Message, BQS),
             {Result, State #state { backing_queue_state = BQS1 }};
-        {ok, {published, ChPid}} ->
+        {ok, {published, _ChPid}} ->
             %% It already got published when we were a slave and no
             %% confirmation is waiting. amqqueue_process will have, in
             %% its msg_id_to_channel mapping, the entry for dealing
             %% with the confirm when that comes back in. The msg is
-            %% invalid. We will not see this again, so erase.
+            %% invalid. We will not see this again, nor will we be
+            %% further involved in confirming this message, so erase.
             {invalid, State #state { seen_status = dict:erase(MsgId, SS) }};
-        {ok, {confirmed, ChPid}} ->
+        {ok, {confirmed, _ChPid}} ->
             %% It got confirmed before we became master, but we've
             %% only just received the publish from the channel, so
             %% couldn't previously know what the msg_seq_no was. Thus
