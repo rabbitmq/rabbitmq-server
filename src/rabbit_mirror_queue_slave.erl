@@ -357,23 +357,35 @@ promote_me(From, #state { q                   = Q,
     ok = gm:confirmed_broadcast(GM, heartbeat),
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, MS),
-    %% We have to do the requeue via this init because otherwise we
-    %% don't have access to the relevent MsgPropsFun. Also, we are
-    %% already in mnesia as the master queue pid. Thus we cannot just
-    %% publish stuff by sending it to ourself - we must pass it
-    %% through to this init, otherwise we can violate ordering
-    %% constraints.
 
-    %% MTC should contain only entries for which we are still
-    %% expecting confirms to come back to use from the underlying BQ.
+    %% We find all the messages that we've received from channels but
+    %% not from gm, and if they're due to be enqueued on promotion
+    %% then we pass them to the
+    %% queue_process:init_with_backing_queue_state to be enqueued.
 
-    %% TODO: what do we do with entries in MS that are 'confirmed'
-    %% already? Well they should end up in the master queue's state,
-    %% and the confirms should be issued either by the
-    %% amqqueue_process if 'immediately', or otherwise by the master
-    %% queue on validate_message?! That's disgusting. There's no way
-    %% validate_message should be side-effecting... though we could at
-    %% least ensure it's idempotent. Hmm.
+    %% We also have to requeue messages which are pending acks: the
+    %% consumers from the master queue have been lost and so these
+    %% messages need requeuing. They might also be pending
+    %% confirmation, and indeed they might also be pending arrival of
+    %% the publication from the channel itself, if we received both
+    %% the publication and the fetch via gm first! Requeuing doesn't
+    %% affect confirmations: if the message was previously pending a
+    %% confirmation then it still will be, under the same msg_id. So
+    %% as a master, we need to be prepared to filter out the
+    %% publication of said messages from the channel (validate_message
+    %% (thus such requeued messages must remain in the msg_id_status
+    %% which becomes seen_status in the master)).
+
+    %% Then there are messages we already have in the queue, which are
+    %% not currently pending acknowledgement:
+    %% 1. Messages we've only received via gm:
+    %%    Filter out subsequent publication from channel through
+    %%    validate_message. Might have to issue confirms then or
+    %%    later, thus queue_process state will have to know that
+    %%    there's a pending confirm.
+    %% 2. Messages received via both gm and channel:
+    %%    Queue will have to deal with issuing confirms if necessary.
+
     MTC = dict:from_list(
             [{MsgId, {ChPid, MsgSeqNo}} ||
                 {MsgId, {published, ChPid, MsgSeqNo}} <- dict:to_list(MS)]),
