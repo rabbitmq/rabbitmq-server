@@ -355,14 +355,12 @@ promote_me(From, #state { q                   = Q,
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
     ok = gm:confirmed_broadcast(GM, heartbeat),
-    MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, MS),
 
     %% We find all the messages that we've received from channels but
     %% not from gm, and if they're due to be enqueued on promotion
     %% then we pass them to the
     %% queue_process:init_with_backing_queue_state to be enqueued.
-
+    %%
     %% We also have to requeue messages which are pending acks: the
     %% consumers from the master queue have been lost and so these
     %% messages need requeuing. They might also be pending
@@ -374,8 +372,8 @@ promote_me(From, #state { q                   = Q,
     %% as a master, we need to be prepared to filter out the
     %% publication of said messages from the channel (validate_message
     %% (thus such requeued messages must remain in the msg_id_status
-    %% which becomes seen_status in the master)).
-
+    %% (MS) which becomes seen_status (SS) in the master)).
+    %%
     %% Then there are messages we already have in the queue, which are
     %% not currently pending acknowledgement:
     %% 1. Messages we've only received via gm:
@@ -385,6 +383,36 @@ promote_me(From, #state { q                   = Q,
     %%    there's a pending confirm.
     %% 2. Messages received via both gm and channel:
     %%    Queue will have to deal with issuing confirms if necessary.
+    %%
+    %% MS contains the following three entry types:
+    %%
+    %% {published, ChPid}:
+    %%   published via gm only; pending arrival of publication from
+    %%   channel, maybe pending confirm.
+    %%
+    %% {published, ChPid, MsgSeqNo}:
+    %%   published via gm and channel; pending confirm.
+    %%
+    %% {confirmed, ChPid}:
+    %%   published via gm only, and confirmed; pending publication
+    %%   from channel.
+    %%
+    %% The middle form only, needs to go through to the queue_process
+    %% state to form the msg_id_to_channel mapping (MTC).
+    %%
+    %% The two outer forms only, need to go to the master state
+    %% seen_status (SS).
+    %%
+    %% No messages that are enqueued from SQ at this point will have
+    %% entries in MS.
+    %%
+    %% Messages that are extracted from MA may have entries in MS, and
+    %% those messages are then requeued. However, as discussed above,
+    %% this does not affect MS, nor which bits go through to SS in
+    %% Master, or MTC in queue_process.
+
+    MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
+                    CPid, BQ, BQS, GM, MS),
 
     MTC = dict:from_list(
             [{MsgId, {ChPid, MsgSeqNo}} ||
