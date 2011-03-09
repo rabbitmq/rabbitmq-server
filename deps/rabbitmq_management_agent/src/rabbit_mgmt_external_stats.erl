@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {time_ms, fd_used, fd_total, memory_alarm = false}).
+-record(state, {time_ms, fd_used, fd_total}).
 
 %%--------------------------------------------------------------------
 
@@ -133,9 +133,8 @@ get_memory_limit() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(fd_used,        #state{fd_used      = FdUsed})      -> FdUsed;
-i(fd_total,       #state{fd_total     = FdTotal})     -> FdTotal;
-i(mem_alarm,      #state{memory_alarm = MemoryAlarm}) -> MemoryAlarm;
+i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
+i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,   _State) ->
     proplists:get_value(obtain_count, file_handle_cache:info([obtain_count]));
 i(sockets_total,  _State) ->
@@ -165,7 +164,9 @@ i(auth_mechanisms, _State) ->
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications, _State) ->
     [format_application(A) ||
-        A <- lists:keysort(1, application:which_applications())].
+        A <- lists:keysort(1, application:which_applications())];
+i(mem_alarm, _State) -> lists:member({{vm_memory_high_watermark, node()}, []},
+                                     alarm_handler:get_alarms()).
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
@@ -201,12 +202,6 @@ handle_call({info, Items}, _From, State0) ->
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
 
-handle_cast({set_alarm, {{vm_memory_high_watermark, Node}, []}}, State)
-  when Node =:= node() ->
-    {noreply, State#state{memory_alarm = true}};
-handle_cast({clear_alarm, {vm_memory_high_watermark, Node}}, State)
-  when Node =:= node() ->
-    {noreply, State#state{memory_alarm = false}};
 handle_cast(_C, State) ->
     {noreply, State}.
 
