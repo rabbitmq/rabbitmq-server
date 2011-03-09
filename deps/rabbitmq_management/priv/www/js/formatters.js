@@ -177,6 +177,8 @@ function fmt_amqp_value(val) {
         return val2.join("<br/>");
     } else if (val instanceof Object) {
         return fmt_table_short(val);
+    } else if (typeof(val) == 'string') {
+        return fmt_escape_html(val);
     } else {
         return val;
     }
