@@ -5,6 +5,7 @@
 
 start(normal, []) ->
     rabbit_mochiweb:register_static_context(
+      ctxt,
       "rabbit_mochiweb_test", ?MODULE, "priv/www", "Test"),
     {ok, spawn(fun() -> receive _ -> ok end end)}.
 
