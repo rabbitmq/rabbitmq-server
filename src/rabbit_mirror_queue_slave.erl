@@ -501,9 +501,10 @@ process_instruction(
                 case queue:out(MQ) of
                     {empty, _MQ} ->
                         {SQ, MS1};
-                    {{value, Delivery = #delivery {
-                               msg_seq_no = MsgSeqNo,
-                               message    = #basic_message { id = MsgId } }},
+                    {{value, {Delivery = #delivery {
+                                msg_seq_no = MsgSeqNo,
+                                message    = #basic_message { id = MsgId } },
+                              _EnqueueOnPromotion}},
                      MQ1} ->
                         %% We received the msg from the channel
                         %% first. Thus we need to deal with confirms
@@ -519,7 +520,7 @@ process_instruction(
                                  ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
                                  MS
                          end};
-                    {{value, #delivery {}}, _MQ1} ->
+                    {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ1} ->
                         %% The instruction was sent to us before we
                         %% were within the mirror_pids within the
                         %% #amqqueue{} record. We'll never receive the
