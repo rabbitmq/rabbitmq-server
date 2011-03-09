@@ -437,12 +437,10 @@ ack(SeqIds, S) ->
     callback([]),
     RS.
 
-%%#############################################################################
-%%                            THE RUBICON...
-%%#############################################################################
+
 
 %%#############################################################################
-%%                       OTHER SIDE OF THE RUBICON...
+%%                            THE RUBICON...
 %%#############################################################################
 
 %%----------------------------------------------------------------------------
@@ -550,6 +548,11 @@ tx_commit(Txn, F, PropsF, S) ->
     callback(Pubs),
     Result.
 
+%%#############################################################################
+%%                       OTHER SIDE OF THE RUBICON...
+%%#############################################################################
+
+
 %%----------------------------------------------------------------------------
 %% requeue/3 reinserts msgs into the queue that have already been
 %% delivered and were pending acknowledgement.
@@ -562,21 +565,17 @@ tx_commit(Txn, F, PropsF, S) ->
 
 requeue(SeqIds, PropsF, S) ->
     % rabbit_log:info("requeue(~n ~p,~n ~p,~n ~p) ->", [SeqIds, PropsF, S]),
-    {atomic, Result} =
-        mnesia:transaction(
-          fun () -> RS =
-                        del_ps(
-                          fun (#m { msg = Msg, props = Props }, Si) ->
-                                  publish_state(Msg, PropsF(Props), true, Si)
-                          end,
-                          SeqIds,
-                          S),
-                    save(RS),
-                    RS
-          end),
+    mysql_helper:begin_mysql_transaction(),
+    RS = del_ps(fun (#m { msg = Msg, props = Props }, Si) ->
+                        publish_state(Msg, PropsF(Props), true, Si)
+                end,
+                SeqIds,
+                S),
+    save(RS),
+    mysql_helper:commit_mysql_transaction(),
     % rabbit_log:info("requeue ->~n ~p", [Result]),
     callback([]),
-    Result.
+    RS.
 
 %%----------------------------------------------------------------------------
 %% len/1 returns the queue length.
