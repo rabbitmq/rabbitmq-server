@@ -483,7 +483,7 @@ attempt_delivery(#delivery{txn     = Txn,
 deliver_or_enqueue(Delivery, State) ->
     case attempt_delivery(Delivery, record_confirm_message(Delivery, State)) of
         {true, _, State1} ->
-            {true, State1};
+            State1;
         {false, NeedsConfirming, State1 = #q{backing_queue = BQ,
                                              backing_queue_state = BQS}} ->
             #delivery{message = Message} = Delivery,
@@ -492,7 +492,7 @@ deliver_or_enqueue(Delivery, State) ->
                                 needs_confirming =
                                     (NeedsConfirming =:= eventually)},
                               BQS),
-            {false, ensure_ttl_timer(State1#q{backing_queue_state = BQS1})}
+            ensure_ttl_timer(State1#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
@@ -822,8 +822,7 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
 handle_call({deliver, Delivery}, From, State) ->
     %% Synchronous, "mandatory" delivery mode. Reply asap.
     gen_server2:reply(From, true),
-    {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
-    noreply(NewState);
+    noreply(deliver_or_enqueue(Delivery, State));
 
 handle_call({commit, Txn, ChPid}, From, State) ->
     case lookup_ch(ChPid) of
@@ -985,8 +984,7 @@ handle_cast(sync_timeout, State) ->
 
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
-    noreply(NewState);
+    noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, Txn, AckTags, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
