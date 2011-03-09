@@ -33,7 +33,7 @@ behaviour_info(callbacks) ->
      {stop, 0},
 
      %% Initialise the backing queue and its state.
-     {init, 3},
+     {init, 2},
 
      %% Called on queue shutdown when queue isn't being deleted.
      {terminate, 1},
@@ -47,12 +47,12 @@ behaviour_info(callbacks) ->
      {purge, 1},
 
      %% Publish a message.
-     {publish, 3},
+     {publish, 4},
 
      %% Called for messages which have already been passed straight
      %% out to a client. The queue will be empty for these calls
      %% (i.e. saves the round trip through the backing queue).
-     {publish_delivered, 4},
+     {publish_delivered, 5},
 
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
@@ -66,7 +66,7 @@ behaviour_info(callbacks) ->
      {ack, 2},
 
      %% A publish, but in the context of a transaction.
-     {tx_publish, 4},
+     {tx_publish, 5},
 
      %% Acks, but in the context of a transaction.
      {tx_ack, 3},
@@ -122,7 +122,15 @@ behaviour_info(callbacks) ->
 
      %% Exists for debugging purposes, to be able to expose state via
      %% rabbitmqctl list_queues backing_queue_status
-     {status, 1}
+     {status, 1},
+
+     %% Passed a function to be invoked with the relevant backing
+     %% queue's state. Useful for when the backing queue or other
+     %% components need to pass functions into the backing queue.
+     {invoke, 3},
+
+     %% TODO: document me
+     {validate_message, 2}
     ];
 behaviour_info(_Other) ->
     undefined.
