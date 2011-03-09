@@ -177,11 +177,11 @@ stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
 set-memory-alarm: all
-	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \
+	echo "alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []})." | \
 	$(ERL_CALL)
 
 clear-memory-alarm: all
-	echo "alarm_handler:clear_alarm(vm_memory_high_watermark)." | \
+	echo "alarm_handler:clear_alarm({vm_memory_high_watermark, node()})." | \
 	$(ERL_CALL)
 
 stop-node:

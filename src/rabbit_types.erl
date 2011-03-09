@@ -21,7 +21,7 @@
 -ifdef(use_specs).
 
 -export_type([txn/0, maybe/1, info/0, infos/0, info_key/0, info_keys/0,
-              message/0, basic_message/0,
+              message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
@@ -62,11 +62,12 @@
                  properties_bin        :: binary(),
                  payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
+-type(msg_id() :: rabbit_guid:guid()).
 -type(basic_message() ::
         #basic_message{exchange_name  :: rabbit_exchange:name(),
                        routing_keys   :: [rabbit_router:routing_key()],
                        content        :: content(),
-                       guid           :: rabbit_guid:guid(),
+                     id             :: msg_id(),
                        is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
