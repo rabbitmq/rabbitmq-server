@@ -142,10 +142,8 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                    stats_timer         = rabbit_event:init_stats_timer(),
                    msg_id_to_channel   = MTC})),
     lists:foldl(
-      fun (Delivery, StateN) ->
-              {_Delivered, StateN1} = deliver_or_enqueue(Delivery, StateN),
-              StateN1
-      end, State, Deliveries).
+      fun (Delivery, StateN) -> deliver_or_enqueue(Delivery, StateN) end,
+      State, Deliveries).
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);

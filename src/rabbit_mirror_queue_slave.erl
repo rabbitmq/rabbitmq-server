@@ -222,7 +222,7 @@ terminate(Reason, #state { q                   = Q,
                            rate_timer_ref      = RateTRef }) ->
     ok = gm:leave(GM),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
-                   Q, BQ, BQS, RateTRef, [], []),
+                   Q, BQ, BQS, RateTRef, [], [], dict:new()),
     rabbit_amqqueue_process:terminate(Reason, QueueState);
 terminate([_SPid], _Reason) ->
     %% gm case
@@ -411,17 +411,17 @@ promote_me(From, #state { q                   = Q,
     %% this does not affect MS, nor which bits go through to SS in
     %% Master, or MTC in queue_process.
 
-    SS = dict:filter(fun ({published, _ChPid})            -> true;
-                         ({published, _ChPid, _MsgSeqNo}) -> false;
-                         ({confirmed, _ChPid})            -> true
+    SS = dict:filter(fun (_MsgId, {published, _ChPid})            -> true;
+                         (_MsgId, {published, _ChPid, _MsgSeqNo}) -> false;
+                         (_MsgId, {confirmed, _ChPid})            -> true
                      end, MS),
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, SS),
 
-    MTC = dict:filter(fun ({published, _ChPid})            -> false;
-                          ({published, _ChPid, _MsgSeqNo}) -> true;
-                          ({confirmed, _ChPid})            -> false
+    MTC = dict:filter(fun (_MsgId, {published, _ChPid})            -> false;
+                          (_MsgId, {published, _ChPid, _MsgSeqNo}) -> true;
+                          (_MsgId, {confirmed, _ChPid})            -> false
                       end, MS),
     AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
     Deliveries = [Delivery || {_ChPid, PubQ} <- dict:to_list(SQ),
