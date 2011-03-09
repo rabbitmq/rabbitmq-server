@@ -54,8 +54,7 @@ HELP = {
       However, if most of the file descriptors are used by sockets then \
       persister performance will be negatively impacted.</p> \
       <p>To change the limit on Unix / Linux, use "ulimit -n". To change \
-      the limit on Windows, set the ERL_MAX_PORTS environment variable to \
-      <i>twice</i> the limit desired.</p> \
+      the limit on Windows, set the ERL_MAX_PORTS environment variable</p> \
       <p>To report used file handles on Windows, handle.exe from \
       sysinternals must be installed in your path. You can download it \
       <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655">here</a>.</p>',
