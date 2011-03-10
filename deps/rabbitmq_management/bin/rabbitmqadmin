@@ -82,8 +82,9 @@ PURGABLE = {
     }
 
 EXTRA_VERBS = {
-    'publish': {'mandatory': ['routing_key', 'payload'],
-                'optional':  {'exchange': 'amq.default',
+    'publish': {'mandatory': ['routing_key'],
+                'optional':  {'payload': None,
+                              'exchange': 'amq.default',
                               'payload_encoding': 'string'},
                 'uri':       '/exchanges/{vhost}/{exchange}/publish'},
     'get':     {'mandatory': ['queue'],
@@ -243,6 +244,10 @@ class Management:
     def invoke_publish(self):
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
         upload['properties'] = {} # TODO do we care here?
+        if not upload['payload']:
+            data = sys.stdin.read()
+            upload['payload'] = base64.b64encode(data)
+            upload['payload_encoding'] = 'base64'
         resp = json.loads(self.post(uri, json.dumps(upload)))
         if resp['routed']:
             self.verbose("Message published")
