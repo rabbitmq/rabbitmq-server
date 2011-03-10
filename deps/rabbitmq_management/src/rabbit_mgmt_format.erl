@@ -77,9 +77,19 @@ amqp_table(undefined) -> amqp_table([]);
 amqp_table(Table)     -> {struct, [{Name, amqp_value(Type, Value)} ||
                                       {Name, Type, Value} <- Table]}.
 
-amqp_value(array, Val) -> [amqp_value(T, V) || {T, V} <- Val];
-amqp_value(table, Val) -> amqp_table(Val);
-amqp_value(_Type, Val) -> Val.
+amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
+amqp_value(table, V)                   -> amqp_table(V);
+amqp_value(_Type, V) when is_binary(V) -> utf8_safe(V);
+amqp_value(_Type, V)                   -> V.
+
+utf8_safe(V) ->
+    try
+        xmerl_ucs:from_utf8(V),
+        V
+    catch exit:{ucs, _} ->
+            Enc = base64:encode(V),
+            <<"Invalid UTF-8, base64 is: ", Enc/binary>>
+    end.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
