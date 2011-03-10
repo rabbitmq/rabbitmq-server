@@ -60,10 +60,11 @@ HELP = {
       network connections.',
 
     'message-get-requeue':
-      'Clicking "Get Message(s)" will consume messages from the queue. \
+      '<p>Clicking "Get Message(s)" will consume messages from the queue. \
       If requeue is set the message will be re-added to the queue, \
-      but ordering will not be preserved and "redelivered" will be set.<br/> \
-      If requeue is not set messages will be removed from the queue.',
+      but ordering will not be preserved and "redelivered" will be set.</p> \
+      <p>If requeue is not set messages will be removed from the queue.</p> \
+      <p>Furthermore, message payloads will be truncated to 50000 bytes.</p>',
 
     'message-publish-headers':
       'Headers can have any name. Only long string headers can be set here.',

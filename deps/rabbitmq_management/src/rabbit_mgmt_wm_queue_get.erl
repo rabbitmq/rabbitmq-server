@@ -45,7 +45,7 @@ do_it(ReqData, Context) ->
     Q = rabbit_mgmt_util:id(queue, ReqData),
     rabbit_mgmt_util:with_decode(
       [requeue, count, encoding], ReqData, Context,
-      fun([RequeueBin, CountBin, EncBin], _) ->
+      fun([RequeueBin, CountBin, EncBin], Body) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
@@ -58,22 +58,27 @@ do_it(ReqData, Context) ->
                                                          {bad_encoding,
                                                           EncBin}})
                               end,
+                        Trunc = case proplists:get_value(truncate, Body) of
+                                    undefined -> none;
+                                    TruncBin  -> rabbit_mgmt_util:parse_int(
+                                                   TruncBin)
+                                end,
                         rabbit_mgmt_util:reply(
-                          basic_gets(Count, Ch, Q, NoAck, Enc),
+                          basic_gets(Count, Ch, Q, NoAck, Enc, Trunc),
                           ReqData, Context)
                 end)
       end).
 
-basic_gets(0, _, _, _, _) ->
+basic_gets(0, _, _, _, _, _) ->
     [];
 
-basic_gets(Count, Ch, Q, NoAck, Enc) ->
-    case basic_get(Ch, Q, NoAck, Enc) of
+basic_gets(Count, Ch, Q, NoAck, Enc, Trunc) ->
+    case basic_get(Ch, Q, NoAck, Enc, Trunc) of
         none -> [];
-        M    -> [M | basic_gets(Count - 1, Ch, Q, NoAck, Enc)]
+        M    -> [M | basic_gets(Count - 1, Ch, Q, NoAck, Enc, Trunc)]
     end.
 
-basic_get(Ch, Q, NoAck, Enc) ->
+basic_get(Ch, Q, NoAck, Enc, Trunc) ->
     case amqp_channel:call(Ch, #'basic.get'{queue = Q,
                                             no_ack = NoAck}) of
         {#'basic.get_ok'{redelivered   = Redelivered,
@@ -87,7 +92,7 @@ basic_get(Ch, Q, NoAck, Enc) ->
              {routing_key,   RoutingKey},
              {message_count, MessageCount},
              {properties,    rabbit_mgmt_format:basic_properties(Props)}] ++
-                payload_part(Payload, Enc);
+                payload_part(maybe_truncate(Payload, Trunc), Enc);
         #'basic.get_empty'{} ->
             none
     end.
@@ -96,6 +101,12 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
+
+maybe_truncate(Payload, none)                         -> Payload;
+maybe_truncate(Payload, Len) when size(Payload) < Len -> Payload;
+maybe_truncate(Payload, Len) ->
+    <<Start:Len/binary, _Rest/binary>> = Payload,
+    Start.
 
 payload_part(Payload, Enc) ->
     {PL, E} = case Enc of

@@ -134,6 +134,7 @@
     <form action="#/queues/get" method="post">
       <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
       <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="truncate" value="50000"/>
       <table class="form">
         <tr>
           <th><label>Requeue:</label></th>

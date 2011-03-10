@@ -327,13 +327,15 @@ Content-Length: 0</pre>
         <td>
           Get messages from a queue. (This is not an HTTP GET as it
           will alter the state of the queue.) You should post a body looking like:
-          <pre>{"count": 5, "requeue": true}</pre>
+          <pre>{"count": 5, "requeue": true, "truncate": 50000}</pre>
           to control the (maximum) number of messages you get and
           whether those messages are requeued. If <code>requeue</code>
           is false the messages will be removed from the queue. If
           requeue is true they will be requeued - but their position
           in the queue may change and their <code>redelivered</code>
-          flag will be set.
+          flag will be set. <code>truncate</code> is optional - if
+          present it will truncate the message payload if it is larger
+          than the size given (in bytes).
         </td>
       </tr>
       <tr>
