@@ -66,10 +66,11 @@ register_handler(Context, Selector, Handler, Link) ->
 %% @spec register_context_handler(Context, Path, Handler, LinkText) ->
 %% {ok, Path}
 %% @doc Registers a dynamic handler under a fixed context path, with
-%% link to display in the global context. Thepath may be overidden by
+%% link to display in the global context. The path may be overidden by
 %% rabbit_mochiweb's configuration.
 register_context_handler(Context, Prefix0, Handler, LinkText) ->
     Prefix = context_path(Context, Prefix0),
+    Listener = context_listener(Context),
     register_handler(
       Context,
       fun(Req) ->
@@ -77,7 +78,8 @@ register_context_handler(Context, Prefix0, Handler, LinkText) ->
               (Path == Prefix) orelse
               (string:str(Path, Prefix ++ "/") == 1)
       end,
-      Handler, {Prefix, LinkText}),
+      fun (Req) -> Handler({Prefix, Listener}, Req) end,
+      {Prefix, LinkText}),
     {ok, Prefix}.
 
 %% @doc Convenience function registering a fully static context to

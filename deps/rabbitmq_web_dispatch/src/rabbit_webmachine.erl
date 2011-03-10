@@ -42,9 +42,10 @@ setup(LogModule, ErrorHandler) ->
     end.
 
 makeloop(Dispatch) ->
-    fun (MochiReq) ->
+    fun ({Prefix, _Listener}, MochiReq) ->
             Req = webmachine:new_request(mochiweb, MochiReq),
-            {Path, _} = Req:path(),
+            {Path0, _} = Req:path(),
+            Path = string:substr(Path0, length(Prefix) + 2), % implicit "/"
             %% webmachine_mochiweb:loop/1 uses dispatch/3 here;
             %% however, we don't need to dispatch by the host name.
             case webmachine_dispatcher:dispatch(Path, Dispatch) of
