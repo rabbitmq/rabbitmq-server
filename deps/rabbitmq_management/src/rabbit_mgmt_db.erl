@@ -212,7 +212,7 @@ handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
     Qs1 = queue_stats(Qs0, FineSpecs, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
-    {reply, Qs2, State};
+    {reply, adjust_hibernated_memory_use(Qs2), State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -615,3 +615,20 @@ channel_stats(Objs, FineSpecs, Tables) ->
                          fun (Props) -> {'_', pget(pid, Props)} end, Tables),
                        fine_stats_fun(FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
+
+%%----------------------------------------------------------------------------
+
+%% We do this when retrieving the queue record rather than when
+%% storing it since the memory use will drop *after* we find out about
+%% hibernation, so to do it the normal way would be racy. This should
+%% be quite cheap though.
+adjust_hibernated_memory_use(Qs) ->
+    [adjust_hibernated_memory_use0(Q) || Q <- Qs].
+
+adjust_hibernated_memory_use0(Q) ->
+    case pget(idle_since, Q, not_idle) of
+        not_idle -> Q;
+        _        -> Pid = rabbit_misc:string_to_pid(pget(pid, Q)),
+                    Memory = process_info(Pid, memory),
+                    [Memory|proplists:delete(memory, Q)]
+    end.
