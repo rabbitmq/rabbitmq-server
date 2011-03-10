@@ -81,6 +81,16 @@ PURGABLE = {
               'uri':       '/queues/{vhost}/{name}/contents'}
     }
 
+EXTRA_VERBS = {
+    'publish': {'mandatory': ['routing_key', 'payload'],
+                'optional':  {'exchange': 'amq.default',
+                              'payload_encoding': 'string'},
+                'uri':       '/exchanges/{vhost}/{exchange}/publish'},
+    'get':     {'mandatory': ['queue'],
+                'optional':  {'count': '1', 'requeue': 'true'},
+                'uri':       '/queues/{vhost}/{queue}/get'}
+}
+
 for k in DECLARABLE:
     DECLARABLE[k]['uri'] = URIS[k]
 
@@ -98,16 +108,14 @@ where cmd is one of:
         usage += "  list {0} [<column>...]\n".format(l)
     for s in SHOWABLE:
         usage += "  show {0} [<column>...]\n".format(s)
-    usage += fmt_usage_stanza(DECLARABLE, 'declare')
-    usage += fmt_usage_stanza(DELETABLE,  'delete')
-    usage += fmt_usage_stanza(CLOSABLE,   'close')
-    usage += fmt_usage_stanza(PURGABLE,   'purge')
+    usage += fmt_usage_stanza(DECLARABLE,  'declare')
+    usage += fmt_usage_stanza(DELETABLE,   'delete')
+    usage += fmt_usage_stanza(CLOSABLE,    'close')
+    usage += fmt_usage_stanza(PURGABLE,    'purge')
+    usage += fmt_usage_stanza(EXTRA_VERBS, '')
     usage += """
   export <file>
-  import <file>
-
-  publish exchange=... routing_key=... payload=... payload_encoding=...
-  get queue=... count=... requeue=..."""
+  import <file>"""
     return usage
 
 def fmt_usage_stanza(root, verb):
@@ -119,8 +127,10 @@ def fmt_usage_stanza(root, verb):
         return res
 
     text = "\n"
+    if verb != "":
+        verb = " " + verb
     for k in root.keys():
-        text += "  {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
+        text += " {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
     return text
 
 parser = OptionParser(usage=make_usage())
@@ -230,11 +240,7 @@ class Management:
         return self.args[0]
 
     def invoke_publish(self):
-        (uri, payload) = self.parse_args(self.args,
-                                         ['routing_key', 'payload'],
-                                         {'exchange': 'amq.default',
-                                          'payload_encoding': 'string'},
-                                         '/exchanges/{vhost}/{exchange}/publish')
+        (uri, payload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
         payload['properties'] = {} # TODO do we care here?
         resp = json.loads(self.post(uri, json.dumps(payload)))
         if resp['routed']:
@@ -243,10 +249,7 @@ class Management:
             self.verbose("Message published but NOT routed")
 
     def invoke_get(self):
-        (uri, payload) = self.parse_args(self.args,
-                                         ['queue'],
-                                         {'count': '1', 'requeue': 'true'},
-                                         '/queues/{vhost}/{queue}/get')
+        (uri, payload) = self.parse_args(self.args, EXTRA_VERBS['get'])
         format_list(self.post(uri, json.dumps(payload)), [], self.options)
 
     def invoke_export(self):
@@ -311,11 +314,13 @@ class Management:
         assert_usage(obj_type in root,
                      'Type {0} not recognised'.format(obj_type))
         obj = root[obj_type]
-        (uri, payload) = self.parse_args(self.args[1:], obj['mandatory'],
-                                         obj['optional'], obj['uri'])
+        (uri, payload) = self.parse_args(self.args[1:], obj)
         return (obj_type, uri, payload)
 
-    def parse_args(self, args, mandatory, optional, uri_template):
+    def parse_args(self, args, obj):
+        mandatory =  obj['mandatory']
+        optional = obj['optional']
+        uri_template = obj['uri']
         payload = {}
         for k in optional.keys():
             payload[k] = optional[k]
