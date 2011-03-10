@@ -87,6 +87,19 @@ HELP = {
       <li>cluster_id</li>\
       </ul>',
 
+    'string-base64':
+    '<p>AMQP message payloads can contain any binary content. They can \
+     therefore be difficult to display in a browser. The options here \
+     have the following meanings:</p> \
+     <dl> \
+       <dt>Auto string / base64</dt> \
+       <dd>If the message payload can be interpreted as a string in UTF-8 \
+           encoding, do so. Otherwise return the payload encoded as \
+           base64.</dd> \
+       <dt>base64</dt> \
+       <dd>Return the payload encoded as base64 unconditionally.</dd> \
+     </dl>',
+
     'foo': 'foo' // No comma.
 };
 

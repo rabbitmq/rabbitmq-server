@@ -4,14 +4,7 @@
 %>
 <div>
 <h3>Message <%= i+1 %></h3>
-<p>
-<% if (msg.payload_encoding == 'string') { %>
-The message contents appear to be <b>valid UTF-8</b>, therefore it is shown as text.
-<% } else { %>
-The message contents do not appear to be valid UTF-8, therefore it is shown as <b>base64</b>.
-<% } %>
-The server reported <b><%= msg.message_count %></b> messages remaining.
-</p>
+<p>The server reported <b><%= msg.message_count %></b> messages remaining.</p>
 <table class="facts">
   <tr>
     <th>Exchange</th>
@@ -33,6 +26,7 @@ The server reported <b><%= msg.message_count %></b> messages remaining.
     <th>
       Payload
       <sub><%= msg.payload_bytes %> bytes</sub>
+      <sub>Encoding: <%= msg.payload_encoding %></sub>
     </th>
     <td>
       <pre id="msg-payload"><%= fmt_escape_html(msg.payload) %></pre>
