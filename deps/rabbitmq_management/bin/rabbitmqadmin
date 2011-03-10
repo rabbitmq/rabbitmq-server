@@ -106,7 +106,7 @@ where cmd is one of:
   export <file>
   import <file>
 
-  publish exchange=... routing_key=... payload=...
+  publish exchange=... routing_key=... payload=... payload_encoding=...
   get queue=... count=... requeue=..."""
     return usage
 
@@ -232,9 +232,9 @@ class Management:
     def invoke_publish(self):
         (uri, payload) = self.parse_args(self.args,
                                          ['routing_key', 'payload'],
-                                         {'exchange': 'amq.default'},
+                                         {'exchange': 'amq.default',
+                                          'payload_encoding': 'string'},
                                          '/exchanges/{vhost}/{exchange}/publish')
-        payload['payload_encoding'] = 'string'
         payload['properties'] = {} # TODO do we care here?
         resp = json.loads(self.post(uri, json.dumps(payload)))
         if resp['routed']:
@@ -322,7 +322,7 @@ class Management:
         for arg in args:
             assert_usage("=" in arg,
                          'Argument "{0}" not in format name=value'.format(arg))
-            (name, value) = arg.split("=")
+            (name, value) = arg.split("=", 1)
             assert_usage(name in mandatory or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
             payload[name] = value
