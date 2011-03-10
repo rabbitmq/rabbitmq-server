@@ -117,7 +117,14 @@ where cmd is one of:
     usage += fmt_usage_stanza(EXTRA_VERBS, '')
     usage += """
   export <file>
-  import <file>"""
+  import <file>
+
+  * If payload is not specified on publish, standard input is used
+
+  * If payload_file is not specified on get, the payload will be shown on
+    standard output along with the message metadata
+
+  * If payload_file is specified on get, count must not be set"""
     return usage
 
 def fmt_usage_stanza(root, verb):
