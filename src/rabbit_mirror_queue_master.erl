@@ -141,8 +141,7 @@ dropwhile(Fun, State = #state { gm                  = GM,
 fetch(AckRequired, State = #state { gm                  = GM,
                                     backing_queue       = BQ,
                                     backing_queue_state = BQS,
-                                    set_delivered       = SetDelivered,
-                                    seen_status         = SS }) ->
+                                    set_delivered       = SetDelivered }) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     case Result of
@@ -153,13 +152,8 @@ fetch(AckRequired, State = #state { gm                  = GM,
             ok = gm:broadcast(GM, {fetch, AckRequired, MsgId, Remaining}),
             IsDelivered1 = IsDelivered orelse SetDelivered > 0,
             SetDelivered1 = lists:max([0, SetDelivered - 1]),
-            SS1 = case SetDelivered + SetDelivered1 of
-                      1 -> dict:new(); %% transition to empty
-                      _ -> SS
-                  end,
             {{Message, IsDelivered1, AckTag, Remaining},
-             State1 #state { set_delivered = SetDelivered1,
-                             seen_status   = SS1 }}
+             State1 #state { set_delivered = SetDelivered1 }}
     end.
 
 ack(AckTags, State = #state { gm                  = GM,
