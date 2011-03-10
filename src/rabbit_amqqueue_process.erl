@@ -46,7 +46,7 @@
             rate_timer_ref,
             expiry_timer_ref,
             stats_timer,
-            guid_to_channel,
+            msg_id_to_channel,
             ttl,
             ttl_timer_ref
            }).
@@ -112,7 +112,7 @@ init(Q) ->
             expiry_timer_ref    = undefined,
             ttl                 = undefined,
             stats_timer         = rabbit_event:init_stats_timer(),
-            guid_to_channel     = dict:new()}, hibernate,
+            msg_id_to_channel   = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -399,21 +399,21 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
-confirm_messages(Guids, State = #q{guid_to_channel = GTC}) ->
-    {CMs, GTC1} = lists:foldl(
-                    fun(Guid, {CMs, GTC0}) ->
-                            case dict:find(Guid, GTC0) of
+confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
+    {CMs, MTC1} = lists:foldl(
+                    fun(MsgId, {CMs, MTC0}) ->
+                            case dict:find(MsgId, MTC0) of
                                 {ok, {ChPid, MsgSeqNo}} ->
                                     {gb_trees_cons(ChPid, MsgSeqNo, CMs),
-                                     dict:erase(Guid, GTC0)};
+                                     dict:erase(MsgId, MTC0)};
                                 _ ->
-                                    {CMs, GTC0}
+                                    {CMs, MTC0}
                             end
-                    end, {gb_trees:empty(), GTC}, Guids),
+                    end, {gb_trees:empty(), MTC}, MsgIds),
     gb_trees:map(fun(ChPid, MsgSeqNos) ->
                          rabbit_channel:confirm(ChPid, MsgSeqNos)
                  end, CMs),
-    State#q{guid_to_channel = GTC1}.
+    State#q{msg_id_to_channel = MTC1}.
 
 gb_trees_cons(Key, Value, Tree) ->
     case gb_trees:lookup(Key, Tree) of
@@ -422,19 +422,18 @@ gb_trees_cons(Key, Value, Tree) ->
     end.
 
 record_confirm_message(#delivery{msg_seq_no = undefined}, State) ->
-    {no_confirm, State};
+    {never, State};
 record_confirm_message(#delivery{sender     = ChPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
-                                   guid          = Guid}},
-                       State =
-                           #q{guid_to_channel = GTC,
-                              q               = #amqqueue{durable = true}}) ->
-    {confirm,
-     State#q{guid_to_channel = dict:store(Guid, {ChPid, MsgSeqNo}, GTC)}};
+                                   id            = MsgId}},
+                       State = #q{q                 = #amqqueue{durable = true},
+                                  msg_id_to_channel = MTC}) ->
+    {eventually,
+     State#q{msg_id_to_channel = dict:store(MsgId, {ChPid, MsgSeqNo}, MTC)}};
 record_confirm_message(_Delivery, State) ->
-    {no_confirm, State}.
+    {immediately, State}.
 
 run_message_queue(State) ->
     Funs = {fun deliver_from_queue_pred/2,
@@ -450,11 +449,9 @@ attempt_delivery(#delivery{txn        = none,
                            message    = Message,
                            msg_seq_no = MsgSeqNo},
                  {NeedsConfirming, State = #q{backing_queue = BQ}}) ->
-    %% must confirm immediately if it has a MsgSeqNo and not NeedsConfirming
-    case {NeedsConfirming, MsgSeqNo} of
-        {_, undefined}  -> ok;
-        {no_confirm, _} -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
-        {confirm, _}    -> ok
+    case NeedsConfirming of
+        immediately -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
+        _           -> ok
     end,
     PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
     DeliverFun =
@@ -466,7 +463,7 @@ attempt_delivery(#delivery{txn        = none,
                     BQ:publish_delivered(
                       AckRequired, Message,
                       (?BASE_MESSAGE_PROPERTIES)#message_properties{
-                        needs_confirming = (NeedsConfirming =:= confirm)},
+                        needs_confirming = (NeedsConfirming =:= eventually)},
                       BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
@@ -486,16 +483,16 @@ attempt_delivery(#delivery{txn     = Txn,
 deliver_or_enqueue(Delivery, State) ->
     case attempt_delivery(Delivery, record_confirm_message(Delivery, State)) of
         {true, _, State1} ->
-            {true, State1};
+            State1;
         {false, NeedsConfirming, State1 = #q{backing_queue = BQ,
                                              backing_queue_state = BQS}} ->
             #delivery{message = Message} = Delivery,
             BQS1 = BQ:publish(Message,
                               (message_properties(State)) #message_properties{
                                 needs_confirming =
-                                    (NeedsConfirming =:= confirm)},
+                                    (NeedsConfirming =:= eventually)},
                               BQS),
-            {false, ensure_ttl_timer(State1#q{backing_queue_state = BQS1})}
+            ensure_ttl_timer(State1#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
@@ -609,9 +606,9 @@ backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
       fun (BQS) -> {[], BQ:idle_timeout(BQS)} end, State).
 
 maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
-    {Guids, BQS1} = Fun(BQS),
+    {MsgIds, BQS1} = Fun(BQS),
     run_message_queue(
-      confirm_messages(Guids, State#q{backing_queue_state = BQS1})).
+      confirm_messages(MsgIds, State#q{backing_queue_state = BQS1})).
 
 commit_transaction(Txn, From, C = #cr{acktags = ChAckTags},
                    State = #q{backing_queue       = BQ,
@@ -757,8 +754,8 @@ prioritise_cast(Msg, _State) ->
         maybe_expire                              -> 8;
         drop_expired                              -> 8;
         emit_stats                                -> 7;
-        {ack, _Txn, _MsgIds, _ChPid}              -> 7;
-        {reject, _MsgIds, _Requeue, _ChPid}       -> 7;
+        {ack, _Txn, _AckTags, _ChPid}             -> 7;
+        {reject, _AckTags, _Requeue, _ChPid}      -> 7;
         {notify_sent, _ChPid}                     -> 7;
         {unblock, _ChPid}                         -> 7;
         {maybe_run_queue_via_backing_queue, _Fun} -> 6;
@@ -825,8 +822,7 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
 handle_call({deliver, Delivery}, From, State) ->
     %% Synchronous, "mandatory" delivery mode. Reply asap.
     gen_server2:reply(From, true),
-    {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
-    noreply(NewState);
+    noreply(deliver_or_enqueue(Delivery, State));
 
 handle_call({commit, Txn, ChPid}, From, State) ->
     case lookup_ch(ChPid) of
@@ -988,8 +984,7 @@ handle_cast(sync_timeout, State) ->
 
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    {_Delivered, NewState} = deliver_or_enqueue(Delivery, State),
-    noreply(NewState);
+    noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, Txn, AckTags, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
