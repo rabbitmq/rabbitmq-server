@@ -623,11 +623,17 @@ channel_stats(Objs, FineSpecs, Tables) ->
 %% hibernation, so to do it the normal way would be racy. This should
 %% be quite cheap though.
 adjust_hibernated_memory_use(Qs) ->
-    [adjust_hibernated_memory_use0(Q) || Q <- Qs].
+    Pids = [rabbit_misc:string_to_pid(pget(pid, Q)) ||
+               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
+    {Mem, _BadNodes} = delegate:invoke(
+                         Pids, fun (Pid) -> process_info(Pid, memory) end),
+    MemDict = dict:from_list(
+                [{list_to_binary(rabbit_misc:pid_to_string(P)), M} ||
+                    {P, M} <- Mem]),
+    [adjust_hibernated_memory_use(Q, MemDict) || Q <- Qs].
 
-adjust_hibernated_memory_use0(Q) ->
-    case pget(idle_since, Q, not_idle) of
-        not_idle -> Q;
-        _        -> Pid = rabbit_misc:string_to_pid(pget(pid, Q)),
-                    [process_info(Pid, memory)|proplists:delete(memory, Q)]
+adjust_hibernated_memory_use(Q, MemDict) ->
+    case dict:find(pget(pid, Q), MemDict) of
+        error        -> Q;
+        {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
     end.
