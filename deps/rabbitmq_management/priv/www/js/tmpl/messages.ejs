@@ -15,7 +15,7 @@ The server reported <b><%= msg.message_count %></b> messages remaining.
 <table class="facts">
   <tr>
     <th>Exchange</th>
-    <td><%= msg.exchange %></td>
+    <td><%= fmt_exchange(msg.exchange) %></td>
   </tr>
   <tr>
     <th>Routing Key</th>
