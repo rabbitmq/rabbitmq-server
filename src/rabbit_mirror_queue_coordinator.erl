@@ -39,7 +39,7 @@ start_link(Queue, GM) ->
     gen_server2:start_link(?MODULE, [Queue, GM], []).
 
 add_slave(CPid, SlaveNode) ->
-    gen_server2:cast(CPid, {add_slave, SlaveNode}).
+    gen_server2:call(CPid, {add_slave, SlaveNode}, infinity).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -67,9 +67,9 @@ init([#amqqueue { name = QueueName } = Q, GM]) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(get_gm, _From, State = #state { gm = GM }) ->
-    reply(GM, State).
+    reply(GM, State);
 
-handle_cast({add_slave, Node}, State = #state { q = Q }) ->
+handle_call({add_slave, Node}, _From, State = #state { q = Q }) ->
     Nodes = nodes(),
     case lists:member(Node, Nodes) of
         true ->
@@ -81,7 +81,7 @@ handle_cast({add_slave, Node}, State = #state { q = Q }) ->
               "Ignoring request to add slave on node ~p for ~s~n",
               [Node, rabbit_misc:rs(Q #amqqueue.name)])
     end,
-    noreply(State);
+    reply(ok, State).
 
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName } }) ->
