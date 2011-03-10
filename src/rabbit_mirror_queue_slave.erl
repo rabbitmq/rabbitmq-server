@@ -411,10 +411,9 @@ promote_me(From, #state { q                   = Q,
     %% this does not affect MS, nor which bits go through to SS in
     %% Master, or MTC in queue_process.
 
-    SS = dict:filter(fun (_MsgId, {published, _ChPid})            -> true;
-                         (_MsgId, {published, _ChPid, _MsgSeqNo}) -> false;
-                         (_MsgId, {confirmed, _ChPid})            -> true
-                     end, MS),
+    SS = dict:from_list([{MsgId, Status}
+                         || {MsgId, {Status, _ChPid}} <- dict:to_list(MS),
+                            Status =:= published orelse Status =:= confirmed]),
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, SS),
