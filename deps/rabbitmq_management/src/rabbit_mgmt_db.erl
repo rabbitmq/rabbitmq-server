@@ -629,6 +629,5 @@ adjust_hibernated_memory_use0(Q) ->
     case pget(idle_since, Q, not_idle) of
         not_idle -> Q;
         _        -> Pid = rabbit_misc:string_to_pid(pget(pid, Q)),
-                    Memory = process_info(Pid, memory),
-                    [Memory|proplists:delete(memory, Q)]
+                    [process_info(Pid, memory)|proplists:delete(memory, Q)]
     end.
