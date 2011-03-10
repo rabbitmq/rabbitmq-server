@@ -44,7 +44,7 @@ do_it(ReqData, Context) ->
     X = rabbit_mgmt_util:id(exchange, ReqData),
     rabbit_mgmt_util:with_decode(
       [routing_key, properties, payload, payload_encoding], ReqData, Context,
-      fun([RoutingKey, Props0, Payload0, Enc]) ->
+      fun([RoutingKey, Props0, Payload0, Enc], _) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->

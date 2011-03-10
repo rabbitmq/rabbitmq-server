@@ -19,7 +19,7 @@
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
 -export([bad_request/3, id/2, parse_bool/1, parse_int/1]).
--export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
+-export([with_decode/4, not_found/3, amqp_request/4]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
@@ -197,44 +197,28 @@ id0(Key, ReqData) ->
         error    -> none
     end.
 
-%% TODO unify this with the function below after bug23384 is merged
-with_decode_opts(Keys, ReqData, Context, Fun) ->
-    Body = wrq:req_body(ReqData),
-    case decode(Keys, Body) of
-        {error, Reason} -> bad_request(Reason, ReqData, Context);
-        _Values         -> try
-                               {ok, Obj0} = decode(Body),
-                               Obj = [{list_to_atom(binary_to_list(K)), V} ||
-                                         {K, V} <- Obj0],
-                               Fun(Obj)
-                           catch {error, Error} ->
-                                   bad_request(Error, ReqData, Context)
-                           end
-    end.
-
 with_decode(Keys, ReqData, Context, Fun) ->
     with_decode(Keys, wrq:req_body(ReqData), ReqData, Context, Fun).
 
 with_decode(Keys, Body, ReqData, Context, Fun) ->
     case decode(Keys, Body) of
-        {error, Reason} -> bad_request(Reason, ReqData, Context);
-        Values          -> try
-                               Fun(Values)
-                           catch {error, Error} ->
-                                   bad_request(Error, ReqData, Context)
-                           end
+        {error, Reason}    -> bad_request(Reason, ReqData, Context);
+        {ok, Values, JSON} -> try
+                                  Fun(Values, JSON)
+                              catch {error, Error} ->
+                                      bad_request(Error, ReqData, Context)
+                              end
     end.
 
 decode(Keys, Body) ->
     case decode(Body) of
-        {ok, J} -> Results =
-                       [get_or_missing(list_to_binary(atom_to_list(K)), J) ||
-                           K <- Keys],
-                   case [E || E = {key_missing, _} <- Results] of
-                       []      -> Results;
-                       Errors  -> {error, Errors}
-                   end;
-        Else    -> Else
+        {ok, J0} -> J = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- J0],
+                    Results = [get_or_missing(K, J) || K <- Keys],
+                    case [E || E = {key_missing, _} <- Results] of
+                        []      -> {ok, Results, J};
+                        Errors  -> {error, Errors}
+                    end;
+        Else     -> Else
     end.
 
 decode(Body) ->
