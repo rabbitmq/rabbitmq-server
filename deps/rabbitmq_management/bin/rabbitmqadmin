@@ -87,7 +87,8 @@ EXTRA_VERBS = {
                               'payload_encoding': 'string'},
                 'uri':       '/exchanges/{vhost}/{exchange}/publish'},
     'get':     {'mandatory': ['queue'],
-                'optional':  {'count': '1', 'requeue': 'true'},
+                'optional':  {'count': '1', 'requeue': 'true',
+                              'payload_file': None},
                 'uri':       '/queues/{vhost}/{queue}/get'}
 }
 
@@ -250,7 +251,17 @@ class Management:
 
     def invoke_get(self):
         (uri, payload) = self.parse_args(self.args, EXTRA_VERBS['get'])
-        format_list(self.post(uri, json.dumps(payload)), [], self.options)
+        payload_file = payload['payload_file']
+        assert_usage(not payload_file or payload['count'] == '1',
+                     'Cannot get multiple messages using payload_file')
+        result = self.post(uri, json.dumps(payload))
+        if payload_file:
+            write_payload_file(payload_file, result)
+            columns = ['routing_key', 'exchange', 'message_count',
+                       'payload_bytes', 'redelivered']
+            format_list(result, columns, self.options)
+        else:
+            format_list(result, [], self.options)
 
     def invoke_export(self):
         path = self.get_arg()
@@ -338,9 +349,11 @@ class Management:
         payload['vhost'] = self.options.vhost or '/'
         uri_args = {}
         for k in payload:
-            uri_args[k] = urllib.quote_plus(payload[k])
-            if k == 'destination_type':
-                uri_args['destination_char'] = payload[k][0]
+            v = payload[k]
+            if v:
+                uri_args[k] = urllib.quote_plus(v)
+                if k == 'destination_type':
+                    uri_args['destination_char'] = v[0]
         uri = uri_template.format(**uri_args)
         return (uri, payload)
 
@@ -527,6 +540,17 @@ FORMATS = {
     'kvp'         : KeyValueList,
     'bash'        : BashList
 }
+
+def write_payload_file(payload_file, json_list):
+    result = json.loads(json_list)[0]
+    payload = result['payload']
+    payload_encoding = result['payload_encoding']
+    with open(payload_file, 'w') as f:
+        if payload_encoding == 'base64':
+            data = base64.b64decode(payload)
+        else:
+            data = payload
+        f.write(data)
 
 def print_bash_completion():
     script = """# This is a bash completion script for rabbitmqadmin.
