@@ -419,10 +419,10 @@ promote_me(From, #state { q                   = Q,
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, SS),
 
-    MTC = dict:filter(fun (_MsgId, {published, _ChPid})            -> false;
-                          (_MsgId, {published, _ChPid, _MsgSeqNo}) -> true;
-                          (_MsgId, {confirmed, _ChPid})            -> false
-                      end, MS),
+
+    MTC = dict:from_list(
+            [{MsgId, {ChPid, MsgSeqNo}} ||
+                {MsgId, {published, ChPid, MsgSeqNo}} <- dict:to_list(MS)]),
     AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
     Deliveries = [Delivery || {_ChPid, PubQ} <- dict:to_list(SQ),
                               {Delivery, true} <- queue:to_list(PubQ)],
