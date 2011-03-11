@@ -62,7 +62,7 @@ init(#amqqueue { arguments = Args } = Q, Recover) ->
                  _  -> [list_to_atom(binary_to_list(Node)) ||
                            {longstr, Node} <- Nodes]
              end,
-    [rabbit_mirror_queue_coordinator:add_slave(CPid, Node) || Node <- Nodes1],
+    [rabbit_mirror_queue_misc:add_slave(Q, Node) || Node <- Nodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover),
     #state { gm                  = GM,

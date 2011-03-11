@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_coordinator).
 
--export([start_link/2, add_slave/2, get_gm/1]).
+-export([start_link/2, get_gm/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -37,9 +37,6 @@
 
 start_link(Queue, GM) ->
     gen_server2:start_link(?MODULE, [Queue, GM], []).
-
-add_slave(CPid, SlaveNode) ->
-    gen_server2:call(CPid, {add_slave, SlaveNode}, infinity).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -67,21 +64,7 @@ init([#amqqueue { name = QueueName } = Q, GM]) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(get_gm, _From, State = #state { gm = GM }) ->
-    reply(GM, State);
-
-handle_call({add_slave, Node}, _From, State = #state { q = Q }) ->
-    Nodes = nodes(),
-    case lists:member(Node, Nodes) of
-        true ->
-            Result = rabbit_mirror_queue_slave_sup:start_child(Node, [Q]),
-            rabbit_log:info("Adding slave node for ~s: ~p~n",
-                            [rabbit_misc:rs(Q #amqqueue.name), Result]);
-        false ->
-            rabbit_log:info(
-              "Ignoring request to add slave on node ~p for ~s~n",
-              [Node, rabbit_misc:rs(Q #amqqueue.name)])
-    end,
-    reply(ok, State).
+    reply(GM, State).
 
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName } }) ->

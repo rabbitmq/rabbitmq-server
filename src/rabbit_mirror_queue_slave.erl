@@ -76,46 +76,38 @@ init([#amqqueue { name = QueueName } = Q]) ->
     end,
     Self = self(),
     Node = node(),
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   [Q1 = #amqqueue { pid = QPid, mirror_pids = MPids }] =
-                       mnesia:read({rabbit_queue, QueueName}),
-                   case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
-                       [] ->
-                           MPids1 = MPids ++ [Self],
-                           mnesia:write(rabbit_queue,
-                                        Q1 #amqqueue { mirror_pids = MPids1 },
-                                        write),
-                           {ok, QPid};
-                       _ ->
-                           {error, node_already_present}
-                   end
-           end) of
-        {ok, MPid} ->
-            ok = file_handle_cache:register_callback(
-                   rabbit_amqqueue, set_maximum_since_use, [self()]),
-            ok = rabbit_memory_monitor:register(
-                   self(), {rabbit_amqqueue, set_ram_duration_target,
-                            [self()]}),
-            {ok, BQ} = application:get_env(backing_queue_module),
-            BQS = BQ:init(Q, false),
-            {ok, #state { q                   = Q,
-                          gm                  = GM,
-                          master_node         = node(MPid),
-                          backing_queue       = BQ,
-                          backing_queue_state = BQS,
-                          rate_timer_ref      = undefined,
-                          sync_timer_ref      = undefined,
+    {ok, MPid} =
+        rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  [Q1 = #amqqueue { pid = QPid, mirror_pids = MPids }] =
+                      mnesia:read({rabbit_queue, QueueName}),
+                  %% ASSERTION
+                  [] = [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node],
+                  MPids1 = MPids ++ [Self],
+                  mnesia:write(rabbit_queue,
+                               Q1 #amqqueue { mirror_pids = MPids1 },
+                               write),
+                  {ok, QPid}
+          end),
+    ok = file_handle_cache:register_callback(
+           rabbit_amqqueue, set_maximum_since_use, [self()]),
+    ok = rabbit_memory_monitor:register(
+           self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
+    {ok, BQ} = application:get_env(backing_queue_module),
+    BQS = BQ:init(Q, false),
+    {ok, #state { q                   = Q,
+                  gm                  = GM,
+                  master_node         = node(MPid),
+                  backing_queue       = BQ,
+                  backing_queue_state = BQS,
+                  rate_timer_ref      = undefined,
+                  sync_timer_ref      = undefined,
 
-                          sender_queues       = dict:new(),
-                          msg_id_ack          = dict:new(),
-                          msg_id_status       = dict:new()
-                        }, hibernate,
-             {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
-              ?DESIRED_HIBERNATE}};
-        {error, Error} ->
-            {stop, Error}
-    end.
+                  sender_queues       = dict:new(),
+                  msg_id_ack          = dict:new(),
+                  msg_id_status       = dict:new()
+                }, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     %% Synchronous, "immediate" delivery mode
@@ -578,7 +570,7 @@ process_instruction(
 
     State1 = State #state { sender_queues = SQ1,
                             msg_id_status = MS2 },
-    %% we probably want to work in BQ:validate_message here
+
     {ok,
      case Deliver of
          false ->
@@ -649,10 +641,11 @@ process_instruction({requeue, MsgPropsFun, MsgIds},
                  State #state { msg_id_ack          = MA1,
                                 backing_queue_state = BQS1 };
              false ->
-                 %% the only thing we can safely do is nuke out our BQ
-                 %% and MA
+                 %% The only thing we can safely do is nuke out our BQ
+                 %% and MA. The interaction between this and confirms
+                 %% doesn't really bear thinking about...
                  {_Count, BQS1} = BQ:purge(BQS),
-                 {MsgIds, BQS2} = ack_all(BQ, MA, BQS1),
+                 {_MsgIds, BQS2} = ack_all(BQ, MA, BQS1),
                  State #state { msg_id_ack          = dict:new(),
                                 backing_queue_state = BQS2 }
          end};
