@@ -53,7 +53,7 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(#amqqueue { arguments = Args } = Q, Recover) ->
+init(#amqqueue { arguments = Args, name = QName } = Q, Recover) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, undefined),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     {_Type, Nodes} = rabbit_misc:table_lookup(Args, <<"x-mirror">>),
@@ -62,7 +62,7 @@ init(#amqqueue { arguments = Args } = Q, Recover) ->
                  _  -> [list_to_atom(binary_to_list(Node)) ||
                            {longstr, Node} <- Nodes]
              end,
-    [rabbit_mirror_queue_misc:add_slave(Q, Node) || Node <- Nodes1],
+    [rabbit_mirror_queue_misc:add_slave(QName, Node) || Node <- Nodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover),
     #state { gm                  = GM,
@@ -120,11 +120,11 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
     %% Must use confirmed_broadcast here in order to guarantee that
     %% all slaves are forced to interpret this publish_delivered at
     %% the same point, especially if we die and a slave is promoted.
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
     ok = gm:confirmed_broadcast(
            GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg}),
-    BQS1 = BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
-    State #state { backing_queue_state = BQS1 }.
+    {AckTag, BQS1} =
+        BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
+    {AckTag, State #state { backing_queue_state = BQS1 }}.
 
 dropwhile(Fun, State = #state { gm                  = GM,
                                 backing_queue       = BQ,
@@ -247,20 +247,22 @@ invoke(Mod, Fun, State = #state { backing_queue       = BQ,
                   case dict:find(MsgId, SSN) of
                       error ->
                           {[MsgId | MsgIdsN], SSN};
-                        {ok, published} ->
-                            %% It was published when we were a slave,
-                            %% and we were promoted before we saw the
-                            %% publish from the channel. We still
-                            %% haven't seen the channel publish, and
-                            %% consequently we need to filter out the
-                            %% confirm here. We will issue the confirm
-                            %% when we see the publish from the
-                            %% channel.
-                            {MsgIdsN, dict:store(MsgId, confirmed, SSN)}
+                      {ok, published} ->
+                          %% It was published when we were a slave,
+                          %% and we were promoted before we saw the
+                          %% publish from the channel. We still
+                          %% haven't seen the channel publish, and
+                          %% consequently we need to filter out the
+                          %% confirm here. We will issue the confirm
+                          %% when we see the publish from the channel.
+                          {MsgIdsN, dict:store(MsgId, confirmed, SSN)};
+                      {ok, confirmed} ->
+                          %% Well, confirms are racy by definition.
+                          {[MsgId | MsgIdsN], SSN}
                   end
-            end, {[], SS}, MsgIds),
+          end, {[], SS}, MsgIds),
     {MsgIds1, State #state { backing_queue_state = BQS1,
-                            seen_status         = SS1 }}.
+                             seen_status         = SS1 }}.
 
 validate_message(Message = #basic_message { id = MsgId },
                  State = #state { seen_status         = SS,

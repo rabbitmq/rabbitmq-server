@@ -22,6 +22,12 @@
                     {requires,    queue_sup_queue_recovery},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({mirrored_queues,
+                   [{description, "adding mirrors to queues"},
+                    {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
+                    {requires,    mirror_queue_slave_sup},
+                    {enables,     routing_ready}]}).
+
 -behaviour(supervisor2).
 
 -export([start/0, start_link/0, start_child/2]).

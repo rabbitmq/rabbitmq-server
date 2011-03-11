@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_misc).
 
--export([remove_from_queue/2, add_slave/2, add_slave/3]).
+-export([remove_from_queue/2, add_slave/2, add_slave/3, on_node_up/0]).
 
 -include("rabbit.hrl").
 
@@ -74,3 +74,19 @@ add_slave(Queue, MirrorNode) ->
                       end
               end
       end).
+
+on_node_up() ->
+    Qs =
+        rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  mnesia:foldl(
+                    fun (#amqqueue{ arguments = Args, name = QName }, QsN) ->
+                            case rabbit_misc:table_lookup(
+                                   Args, <<"x-mirror">>) of
+                                {_Type, []} -> [QName | QsN];
+                                _           -> QsN
+                            end
+                    end, [], rabbit_queue)
+          end),
+    [add_slave(Q, node()) || Q <- Qs],
+    ok.
