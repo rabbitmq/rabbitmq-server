@@ -620,8 +620,8 @@ channel_stats(Objs, FineSpecs, Tables) ->
 
 %% We do this when retrieving the queue record rather than when
 %% storing it since the memory use will drop *after* we find out about
-%% hibernation, so to do it the normal way would be racy. This should
-%% be quite cheap though.
+%% hibernation, so to do it when we receive a queue stats event would
+%% be fiddly and racy. This should be quite cheap though.
 adjust_hibernated_memory_use(Qs) ->
     Pids = [rabbit_misc:string_to_pid(pget(pid, Q)) ||
                Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
