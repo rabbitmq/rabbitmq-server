@@ -164,7 +164,8 @@ server_properties(Protocol) ->
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
     [{<<"publisher_confirms">>,         bool, true},
      {<<"exchange_exchange_bindings">>, bool, true},
-     {<<"basic.nack">>,                 bool, true}];
+     {<<"basic.nack">>,                 bool, true},
+     {<<"consumer_cancel_notify">>,     bool, true}];
 server_capabilities(_) ->
     [].
 
