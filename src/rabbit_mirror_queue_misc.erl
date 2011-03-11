@@ -83,8 +83,17 @@ on_node_up() ->
                     fun (#amqqueue{ arguments = Args, name = QName }, QsN) ->
                             case rabbit_misc:table_lookup(
                                    Args, <<"x-mirror">>) of
-                                {_Type, []} -> [QName | QsN];
-                                _           -> QsN
+                                {_Type, []} ->
+                                    [QName | QsN];
+                                {_Type, Nodes} ->
+                                    Nodes1 = [list_to_atom(binary_to_list(Node))
+                                              || {longstr, Node} <- Nodes],
+                                    case lists:member(node(), Nodes1) of
+                                        true  -> [QName | QsN];
+                                        false -> QsN
+                                    end;
+                                _ ->
+                                    QsN
                             end
                     end, [], rabbit_queue)
           end),
