@@ -453,8 +453,8 @@ unregister_name({global,Name}) ->
     _ = global:unregister_name(Name);
 unregister_name(Pid) when is_pid(Pid) ->
     Pid;
-% Under R12 let's just ignore it, as we have a single term as Name.
-% On R13 it will never get here, as we get tuple with 'local/global' atom.
+%% Under R12 let's just ignore it, as we have a single term as Name.
+%% On R13 it will never get here, as we get tuple with 'local/global' atom.
 unregister_name(_Name) -> ok.
 
 extend_backoff(undefined) ->

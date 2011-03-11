@@ -250,13 +250,13 @@ duplicate_node_check(NodeStr) ->
     case net_adm:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
-                     true -> io:format("node with name ~p "
-                                       "already running on ~p~n",
-                                       [NodeName, NodeHost]),
-                             [io:format(Fmt ++ "~n", Args) ||
-                              {Fmt, Args} <- rabbit_control:diagnostics(Node)],
-                             terminate(?ERROR_CODE);
-                     false -> ok
+                true -> io:format("node with name ~p "
+                                  "already running on ~p~n",
+                                  [NodeName, NodeHost]),
+                        [io:format(Fmt ++ "~n", Args) ||
+                            {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                        terminate(?ERROR_CODE);
+                false -> ok
             end;
         {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
                                          [EpmdReason])

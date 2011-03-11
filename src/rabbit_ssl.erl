@@ -87,8 +87,8 @@ cert_info(F, Cert) ->
 
 find_by_type(Type, {rdnSequence, RDNs}) ->
     case [V || #'AttributeTypeAndValue'{type = T, value = V}
-                     <- lists:flatten(RDNs),
-                 T == Type] of
+                   <- lists:flatten(RDNs),
+               T == Type] of
         [{printableString, S}] -> S;
         []                     -> not_found
     end.
@@ -166,7 +166,7 @@ format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
        true         -> S
     end;
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
-                            Min1, Min2, S1, S2, $Z]}) ->
+                             Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 format_asn1_value(V) ->

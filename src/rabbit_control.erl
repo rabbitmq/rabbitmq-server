@@ -103,24 +103,22 @@ print_badrpc_diagnostics(Node) ->
 
 diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    [
-        {"diagnostics:", []},
-        case net_adm:names(NodeHost) of
-            {error, EpmdReason} ->
-                {"- unable to connect to epmd on ~s: ~w",
-                    [NodeHost, EpmdReason]};
-            {ok, NamePorts} ->
-                {"- nodes and their ports on ~s: ~p",
-                              [NodeHost, [{list_to_atom(Name), Port} ||
-                                          {Name, Port} <- NamePorts]]}
-        end,
-        {"- current node: ~w", [node()]},
-        case init:get_argument(home) of
-            {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
-            Other          -> {"- no current node home dir: ~p", [Other]}
-        end,
-        {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}
-    ].
+    [{"diagnostics:", []},
+     case net_adm:names(NodeHost) of
+         {error, EpmdReason} ->
+             {"- unable to connect to epmd on ~s: ~w",
+              [NodeHost, EpmdReason]};
+         {ok, NamePorts} ->
+             {"- nodes and their ports on ~s: ~p",
+              [NodeHost, [{list_to_atom(Name), Port} ||
+                             {Name, Port} <- NamePorts]]}
+     end,
+     {"- current node: ~w", [node()]},
+     case init:get_argument(home) of
+         {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+         Other          -> {"- no current node home dir: ~p", [Other]}
+     end,
+     {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
 
 stop() ->
     ok.
@@ -152,13 +150,13 @@ action(force_reset, Node, [], _Opts, Inform) ->
 action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Clustering node ~p with ~p",
-              [Node, ClusterNodes]),
+           [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
 action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-              [Node, ClusterNodes]),
+           [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
 action(status, Node, [], _Opts, Inform) ->
@@ -320,10 +318,8 @@ wait_for_application0(Node, Attempts) ->
     wait_for_application(Node, Attempts).
 
 default_if_empty(List, Default) when is_list(List) ->
-    if List == [] ->
-        Default;
-       true ->
-        [list_to_atom(X) || X <- List]
+    if List == [] -> Default;
+       true       -> [list_to_atom(X) || X <- List]
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
@@ -414,7 +410,7 @@ prettify_typed_amqp_value(Type, Value) ->
         _       -> Value
     end.
 
-% the slower shutdown on windows required to flush stdout
+%% the slower shutdown on windows required to flush stdout
 quit(Status) ->
     case os:type() of
         {unix, _} ->

@@ -35,9 +35,8 @@
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
--define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
 -record(v1, {parent, sock, connection, callback, recv_length, recv_ref,
              connection_state, queue_collector, heartbeater, stats_timer,
@@ -62,7 +61,7 @@
          State#v1.connection_state =:= blocking orelse
          State#v1.connection_state =:= blocked)).
 
-%%----------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
@@ -165,7 +164,8 @@ server_properties(Protocol) ->
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
     [{<<"publisher_confirms">>,         bool, true},
      {<<"exchange_exchange_bindings">>, bool, true},
-     {<<"basic.nack">>,                 bool, true}];
+     {<<"basic.nack">>,                 bool, true},
+     {<<"consumer_cancel_notify">>,     bool, true}];
 server_capabilities(_) ->
     [].
 
@@ -592,14 +592,14 @@ handle_method0(MethodName, FieldsBin,
                State = #v1{connection = #connection{protocol = Protocol}}) ->
     HandleException =
         fun(R) ->
-            case ?IS_RUNNING(State) of
-                true  -> send_exception(State, 0, R);
-                %% We don't trust the client at this point - force
-                %% them to wait for a bit so they can't DOS us with
-                %% repeated failed logins etc.
-                false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-                         throw({channel0_error, State#v1.connection_state, R})
-            end
+                case ?IS_RUNNING(State) of
+                    true  -> send_exception(State, 0, R);
+                    %% We don't trust the client at this point - force
+                    %% them to wait for a bit so they can't DOS us with
+                    %% repeated failed logins etc.
+                    false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+                             throw({channel0_error, State#v1.connection_state, R})
+                end
         end,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
@@ -641,14 +641,15 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                            connection = Connection,
                            sock = Sock,
                            start_heartbeat_fun = SHF}) ->
-    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+    ServerFrameMax = server_frame_max(),
+    if FrameMax /= 0 andalso FrameMax < ?FRAME_MIN_SIZE ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w < ~w min size",
               [FrameMax, ?FRAME_MIN_SIZE]);
-       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+       ServerFrameMax /= 0 andalso FrameMax > ServerFrameMax ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w > ~w max size",
-              [FrameMax, ?FRAME_MAX]);
+              [FrameMax, ServerFrameMax]);
        true ->
             Frame = rabbit_binary_generator:build_heartbeat_frame(),
             SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
@@ -706,6 +707,12 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
+%% Compute frame_max for this instance. Could simply use 0, but breaks
+%% QPid Java client.
+server_frame_max() ->
+    {ok, FrameMax} = application:get_env(rabbit, frame_max),
+    FrameMax.
+
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
@@ -734,8 +741,7 @@ auth_mechanisms(Sock) ->
 
 auth_mechanisms_binary(Sock) ->
     list_to_binary(
-            string:join(
-              [atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
+      string:join([atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
 
 auth_phase(Response,
            State = #v1{auth_mechanism = AuthMechanism,
@@ -757,7 +763,7 @@ auth_phase(Response,
             State#v1{auth_state = AuthState1};
         {ok, User} ->
             Tune = #'connection.tune'{channel_max = 0,
-                                      frame_max = ?FRAME_MAX,
+                                      frame_max = server_frame_max(),
                                       heartbeat = 0},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,

@@ -29,9 +29,9 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (mfa()) ->
-                          rabbit_types:ok_pid_or_error()).
+                           rabbit_types:ok_pid_or_error()).
 -spec(start_link/2 :: ({'local', atom()}, mfa()) ->
-                          rabbit_types:ok_pid_or_error()).
+                           rabbit_types:ok_pid_or_error()).
 
 -endif.
 

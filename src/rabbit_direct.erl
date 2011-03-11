@@ -26,8 +26,8 @@
 
 -spec(boot/0 :: () -> 'ok').
 -spec(connect/4 :: (binary(), binary(), binary(), rabbit_types:protocol()) ->
-                       {'ok', {rabbit_types:user(),
-                               rabbit_framing:amqp_table()}}).
+                        {'ok', {rabbit_types:user(),
+                                rabbit_framing:amqp_table()}}).
 -spec(start_channel/7 ::
         (rabbit_channel:channel_number(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
@@ -40,12 +40,12 @@
 boot() ->
     {ok, _} =
         supervisor2:start_child(
-            rabbit_sup,
-            {rabbit_direct_client_sup,
-             {rabbit_client_sup, start_link,
-              [{local, rabbit_direct_client_sup},
-               {rabbit_channel_sup, start_link, []}]},
-             transient, infinity, supervisor, [rabbit_client_sup]}),
+          rabbit_sup,
+          {rabbit_direct_client_sup,
+           {rabbit_client_sup, start_link,
+            [{local, rabbit_direct_client_sup},
+             {rabbit_channel_sup, start_link, []}]},
+           transient, infinity, supervisor, [rabbit_client_sup]}),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -73,7 +73,7 @@ start_channel(Number, ClientChannelPid, Protocol, User, VHost, Capabilities,
               Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
-            rabbit_direct_client_sup,
-            [{direct, Number, ClientChannelPid, Protocol, User, VHost,
-              Capabilities, Collector}]),
+          rabbit_direct_client_sup,
+          [{direct, Number, ClientChannelPid, Protocol, User, VHost,
+            Capabilities, Collector}]),
     {ok, ChannelPid}.
