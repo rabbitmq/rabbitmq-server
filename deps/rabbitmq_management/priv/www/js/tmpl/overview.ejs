@@ -47,7 +47,6 @@
     </th>
     <th>
       Memory
-      <sub>(used / high watermark)</sub>
     </th>
     <th>Uptime</th>
     <th>
@@ -96,11 +95,18 @@
        </div>
      </td>
      <td class="status">
-<% if (node.mem_total != 'memory_monitoring_disabled') { %>
-       <div class="<%= fmt_color(node.mem_used / node.mem_limit,
-                                 MEMORY_THRESHOLDS) %>">
-         <%= fmt_bytes(node.mem_used) %> / <%= fmt_bytes(node.mem_limit) %>
+<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
+   <% if (node.mem_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.mem_used) %>
+         <span class="help" id="memory-alarm"></span>
        </div>
+   <% } else { %>
+       <div class="green">
+         <%= fmt_bytes(node.mem_used) %>
+       </div>
+   <% } %>
+   <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
 <% } %>
