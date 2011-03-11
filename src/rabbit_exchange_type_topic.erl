@@ -247,7 +247,7 @@ trie_binding_count(X, Node) ->
               _            = '_'}).
 
 count(Table, Match) ->
-    length(mnesia:match_object(Table, Match, read)).
+    length(mnesia:match_object(Table, Match, write)).
 
 trie_remove_all_edges(X) ->
     remove_all(rabbit_topic_trie_edge,
