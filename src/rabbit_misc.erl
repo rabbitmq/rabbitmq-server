@@ -52,7 +52,7 @@
          unlink_and_capture_exit/1]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
--export([now_ms/0]).
+-export([now_ms/0, timestamp/0]).
 -export([lock_file/1]).
 -export([const_ok/1, const/1]).
 -export([ntoa/1, ntoab/1]).
@@ -190,6 +190,7 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
+-spec(timestamp/0 ::() -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/1 :: (any()) -> 'ok').
 -spec(const/1 :: (A) -> const(A)).
@@ -199,6 +200,7 @@
 
 -endif.
 
+-define(EPOCH, {{1970, 1, 1}, {0, 0, 0}}).
 %%----------------------------------------------------------------------------
 
 method_record_type(Record) ->
@@ -790,6 +792,10 @@ get_flag(_, []) ->
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.
+
+timestamp() ->
+    calendar:datetime_to_gregorian_seconds(erlang:universaltime()) -
+        calendar:datetime_to_gregorian_seconds(?EPOCH).
 
 module_attributes(Module) ->
     case catch Module:module_info(attributes) of
