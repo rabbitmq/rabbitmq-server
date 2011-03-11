@@ -7,13 +7,17 @@
 %% ----------------------------------------------------------------------
 
 start({Instance, Env}) ->
-    Port = proplists:get_value(port, Env, 55672),
-    Loop = loopfun(Instance),
-    {_, OtherOptions} = proplists:split(Env, [port]),
-    Name = name(Instance),
-    mochiweb_http:start(
-      [{name, Name}, {port, Port}, {loop, Loop}] ++
-          OtherOptions).
+    case proplists:get_value(port, Env, undefined) of
+        undefined ->
+            {error, {no_port_given, Instance, Env}};
+        P ->
+            Loop = loopfun(Instance),
+            {_, OtherOptions} = proplists:split(Env, [port]),
+            Name = name(Instance),
+            mochiweb_http:start(
+              [{name, Name}, {port, Port}, {loop, Loop}] ++
+              OtherOptions)
+    end.
 
 stop(Instance) ->
     mochiweb_http:stop(name(Instance)).
