@@ -1628,23 +1628,38 @@ test_file_handle_cache() ->
     ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
     TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
     ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
-    Pid = spawn(fun () -> {ok, Hdl} = file_handle_cache:open(
-                                        filename:join(TmpDir, "file3"),
-                                        [write], []),
-                          receive close -> ok end,
-                          file_handle_cache:delete(Hdl)
-                end),
     Src = filename:join(TmpDir, "file1"),
     Dst = filename:join(TmpDir, "file2"),
     Content = <<"foo">>,
-    ok = file:write_file(Src, Content),
-    {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
-    {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
-    Size = size(Content),
-    {ok, Size} = file_handle_cache:copy(SrcHdl, DstHdl, Size),
-    ok = file_handle_cache:delete(SrcHdl),
-    file_handle_cache:delete(DstHdl),
-    Pid ! close,
+    CopyFun = fun () ->
+                      ok = file:write_file(Src, Content),
+                      {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
+                      {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
+                      Size = size(Content),
+                      {ok, Size} = file_handle_cache:copy(SrcHdl, DstHdl, Size),
+                      ok = file_handle_cache:delete(SrcHdl),
+                      ok = file_handle_cache:delete(DstHdl)
+              end,
+    Pid = spawn(fun () -> {ok, Hdl} = file_handle_cache:open(
+                                        filename:join(TmpDir, "file3"),
+                                        [write], []),
+                          receive {next, Pid1} -> Pid1 ! {next, self()} end,
+                          file_handle_cache:delete(Hdl),
+                          %% This will block and never return, so we
+                          %% exercise the fhc tidying up the pending
+                          %% queue on the death of a process.
+                          ok = CopyFun()
+                end),
+    ok = CopyFun(),
+    ok = file_handle_cache:set_limit(3),
+    Pid ! {next, self()},
+    receive {next, Pid} -> ok end,
+    erlang:monitor(process, Pid),
+    timer:sleep(500),
+    exit(Pid, kill),
+    receive {'DOWN', _MRef, process, Pid, _Reason} -> ok end,
+    file:delete(Src),
+    file:delete(Dst),
     ok = file_handle_cache:set_limit(Limit),
     passed.
 
