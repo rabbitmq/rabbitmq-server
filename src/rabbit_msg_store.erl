@@ -689,8 +689,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     {ok, Offset} = file_handle_cache:position(CurHdl, Offset),
     ok = file_handle_cache:truncate(CurHdl),
 
-    {ok, maybe_compact(
-           State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid }),
+    {ok, maybe_compact(State1 #msstate { current_file_handle = CurHdl }),
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
