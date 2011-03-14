@@ -39,11 +39,13 @@ behaviour_info(callbacks) ->
      %% 2. a boolean indicating whether the queue is durable
      %% 3. a boolean indicating whether the queue is an existing queue
      %%    that should be recovered
-     %% 4. an asynchronous callback which can be passed by the
-     %%    backing queue to other processes which need to call back
-     %%    into it when an event has occured that requires a
-     %%    state transition. Note that it can also be used in process.
-     %%    The callback accepts a function from state to state.
+     %% 4. an asynchronous callback which accepts a function from
+     %%    state to state and invokes it with the current backing
+     %%    queue state. This is useful for handling events, e.g. when
+     %%    the backing queue does not have its own process to receive
+     %%    such events, or when the processing of an event results in
+     %%    a state transition the queue logic needs to know about
+     %%    (such as messages getting confirmed).
      %% 5. a synchronous callback. Same as the asynchronous callback
      %%    but waits for completion and returns 'error' on error.
      {init, 5},
