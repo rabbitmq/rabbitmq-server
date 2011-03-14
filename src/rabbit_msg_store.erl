@@ -646,6 +646,15 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
     {ok, FileSizeLimit} = application:get_env(msg_store_file_size_limit),
 
+    {ok, GCPid} = rabbit_msg_store_gc:start_link(
+                    #gc_state { dir              = Dir,
+                                index_module     = IndexModule,
+                                index_state      = IndexState,
+                                file_summary_ets = FileSummaryEts,
+                                file_handles_ets = FileHandlesEts,
+                                msg_store        = self()
+                              }),
+
     State = #msstate { dir                    = Dir,
                        index_module           = IndexModule,
                        index_state            = IndexState,
@@ -657,7 +666,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        sum_valid_data         = 0,
                        sum_file_size          = 0,
                        pending_gc_completion  = orddict:new(),
-                       gc_pid                 = undefined,
+                       gc_pid                 = GCPid,
                        file_handles_ets       = FileHandlesEts,
                        file_summary_ets       = FileSummaryEts,
                        dedup_cache_ets        = DedupCacheEts,
@@ -680,17 +689,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     {ok, Offset} = file_handle_cache:position(CurHdl, Offset),
     ok = file_handle_cache:truncate(CurHdl),
 
-    {ok, GCPid} = rabbit_msg_store_gc:start_link(
-                    #gc_state { dir              = Dir,
-                                index_module     = IndexModule,
-                                index_state      = IndexState,
-                                file_summary_ets = FileSummaryEts,
-                                file_handles_ets = FileHandlesEts,
-                                msg_store        = self()
-                              }),
-
-    {ok, maybe_compact(
-           State1 #msstate { current_file_handle = CurHdl, gc_pid = GCPid }),
+    {ok, maybe_compact(State1 #msstate { current_file_handle = CurHdl }),
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
