@@ -217,12 +217,11 @@ noreply(NewState) ->
 
 next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    BQNeedsSync = BQ:needs_idle_timeout(BQS1),
     State1 = ensure_stats_timer(
                ensure_rate_timer(
                  confirm_messages(MsgIds, State#q{
                                             backing_queue_state = BQS1}))),
-    case BQNeedsSync of
+    case BQ:needs_idle_timeout(BQS1) of
         true  -> {ensure_sync_timer(State1), 0};
         false -> {stop_sync_timer(State1), hibernate}
     end.
