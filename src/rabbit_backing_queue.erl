@@ -39,8 +39,9 @@ behaviour_info(callbacks) ->
      %% 2. a boolean indicating whether the queue is durable
      %% 3. a boolean indicating whether the queue is an existing queue
      %%    that should be recovered
-     %% 4. an asynchronous callback which can be invoked by the
-     %%    backing queue when an event has occured that requires a
+     %% 4. an asynchronous callback which can be passed by the
+     %%    backing queue to other processes which need to call back
+     %%    into it when an event has occured that requires a
      %%    state transition. The callback accepts a function from
      %%    state to state.
      %% 5. a synchronous callback. Same as the asynchronous callback
