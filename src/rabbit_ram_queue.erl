@@ -147,12 +147,12 @@ stop() -> ok.
 %%         -> state()).
 
 init(_QueueName, _IsDurable, _Recover) ->
-    % rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
+    %% rabbit_log:info("init(~n ~p,~n ~p,~n ~p) ->", [QueueName, IsDurable, Recover]),
     Result = #s { q = queue:new(),
                   p = dict:new(),
                   next_seq_id = 0,
                   txn_dict = dict:new() },
-    % rabbit_log:info("init ->~n ~p", [Result]),
+    %% rabbit_log:info("init ->~n ~p", [Result]),
     callback([]),
     Result.
 
@@ -165,9 +165,9 @@ init(_QueueName, _IsDurable, _Recover) ->
 %% -spec(terminate/1 :: (state()) -> state()).
 
 terminate(S) ->
-    % rabbit_log:info("terminate(~n ~p) ->", [S]),
+    %% rabbit_log:info("terminate(~n ~p) ->", [S]),
     Result = S #s { p = dict:new() },
-    % rabbit_log:info("terminate ->~n ~p", [Result]),
+    %% rabbit_log:info("terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -179,9 +179,9 @@ terminate(S) ->
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
 delete_and_terminate(S) ->
-    % rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
+    %% rabbit_log:info("delete_and_terminate(~n ~p) ->", [S]),
     Result = S #s { q = queue:new(), p = dict:new() },
-    % rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
+    %% rabbit_log:info("delete_and_terminate ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -193,9 +193,9 @@ delete_and_terminate(S) ->
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
 purge(S = #s { q = Q }) ->
-    % rabbit_log:info("purge(~n ~p) ->", [S]),
+    %% rabbit_log:info("purge(~n ~p) ->", [S]),
     Result = {queue:len(Q), S #s { q = queue:new() }},
-    % rabbit_log:info("purge ->~n ~p", [Result]),
+    %% rabbit_log:info("purge ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -210,9 +210,9 @@ purge(S = #s { q = Q }) ->
 %%         -> state()).
 
 publish(Msg, Props, S) ->
-    % rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    %% rabbit_log:info("publish(~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     Result = publish_state(Msg, Props, false, S),
-    % rabbit_log:info("publish ->~n ~p", [Result]),
+    %% rabbit_log:info("publish ->~n ~p", [Result]),
     callback([{Msg, Props}]),
     Result.
 
@@ -231,17 +231,17 @@ publish(Msg, Props, S) ->
 %%                              -> {undefined, state()}).
 
 publish_delivered(false, Msg, Props, S) ->
-    % rabbit_log:info("publish_delivered(false,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    %% rabbit_log:info("publish_delivered(false,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     Result = {undefined, S},
-    % rabbit_log:info("publish_delivered ->~n ~p", [Result]),
+    %% rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     callback([{Msg, Props}]),
     Result;
 publish_delivered(true, Msg, Props, S = #s { next_seq_id = SeqId }) ->
-    % rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
+    %% rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->", [Msg, Props, S]),
     Result = {SeqId,
               (add_p((m(Msg, SeqId, Props)) #m { is_delivered = true }, S))
               #s { next_seq_id = SeqId + 1 }},
-    % rabbit_log:info("publish_delivered ->~n ~p", [Result]),
+    %% rabbit_log:info("publish_delivered ->~n ~p", [Result]),
     callback([{Msg, Props}]),
     Result.
 
@@ -260,9 +260,9 @@ publish_delivered(true, Msg, Props, S = #s { next_seq_id = SeqId }) ->
 %%         -> state()).
 
 dropwhile(Pred, S) ->
-    % rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
+    %% rabbit_log:info("dropwhile(~n ~p,~n ~p) ->", [Pred, S]),
     {_, Result} = internal_dropwhile(Pred, S),
-    % rabbit_log:info("dropwhile ->~n ~p", [Result]),
+    %% rabbit_log:info("dropwhile ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -274,7 +274,7 @@ dropwhile(Pred, S) ->
 %%                  (false, state()) -> {fetch_result(undefined), state()}).
 
 fetch(AckRequired, S) ->
-    % rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
+    %% rabbit_log:info("fetch(~n ~p,~n ~p) ->", [AckRequired, S]),
     %
     % TODO: This dropwhile is to help the testPublishAndGetWithExpiry
     % functional test pass. Although msg expiration is asynchronous by
@@ -287,7 +287,7 @@ fetch(AckRequired, S) ->
            fun (#message_properties{expiry = Expiry}) -> Expiry < Now end,
            S),
     Result = internal_fetch(AckRequired, S1),
-    % rabbit_log:info("fetch ->~n ~p", [Result]),
+    %% rabbit_log:info("fetch ->~n ~p", [Result]),
     callback([]),
     Result.
 
@@ -299,9 +299,9 @@ fetch(AckRequired, S) ->
 %% -spec(ack/2 :: ([ack()], state()) -> state()).
 
 ack(SeqIds, S) ->
-    % rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
+    %% rabbit_log:info("ack(~n ~p,~n ~p) ->", [SeqIds, S]),
     Result = internal_ack(SeqIds, S),
-    % rabbit_log:info("ack ->~n ~p", [Result]),
+    %% rabbit_log:info("ack ->~n ~p", [Result]),
     callback([]),
     Result.
 
@@ -320,10 +320,10 @@ ack(SeqIds, S) ->
 %%         -> state()).
 
 tx_publish(Txn, Msg, Props, S) ->
-    % rabbit_log:info("tx_publish(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, Msg, Props, S]),
+    %% rabbit_log:info("tx_publish(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, Msg, Props, S]),
     Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, S),
     Result = store_tx(Txn, Tx #tx { to_pub = [{Msg, Props} | Pubs] }, S),
-    % rabbit_log:info("tx_publish ->~n ~p", [Result]),
+    %% rabbit_log:info("tx_publish ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -335,10 +335,10 @@ tx_publish(Txn, Msg, Props, S) ->
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
 tx_ack(Txn, SeqIds, S) ->
-    % rabbit_log:info("tx_ack(~n ~p,~n ~p,~n ~p) ->", [Txn, SeqIds, S]),
+    %% rabbit_log:info("tx_ack(~n ~p,~n ~p,~n ~p) ->", [Txn, SeqIds, S]),
     Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, S),
     Result = store_tx(Txn, Tx #tx { to_ack = SeqIds ++ SeqIds0 }, S),
-    % rabbit_log:info("tx_ack ->~n ~p", [Result]),
+    %% rabbit_log:info("tx_ack ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -349,10 +349,10 @@ tx_ack(Txn, SeqIds, S) ->
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
 tx_rollback(Txn, S) ->
-    % rabbit_log:info("tx_rollback(~n ~p,~n ~p) ->", [Txn, S]),
+    %% rabbit_log:info("tx_rollback(~n ~p,~n ~p) ->", [Txn, S]),
     #tx { to_ack = SeqIds } = lookup_tx(Txn, S),
     Result = {SeqIds, erase_tx(Txn, S)},
-    % rabbit_log:info("tx_rollback ->~n ~p", [Result]),
+    %% rabbit_log:info("tx_rollback ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -370,11 +370,11 @@ tx_rollback(Txn, S) ->
 %%         -> {[ack()], state()}).
 
 tx_commit(Txn, F, PropsF, S) ->
-    % rabbit_log:info("tx_commit(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, F, PropsF, S]),
+    %% rabbit_log:info("tx_commit(~n ~p,~n ~p,~n ~p,~n ~p) ->", [Txn, F, PropsF, S]),
     #tx { to_ack = SeqIds, to_pub = Pubs } = lookup_tx(Txn, S),
     Result = {SeqIds, tx_commit_state(Pubs, SeqIds, PropsF, erase_tx(Txn, S))},
     F(),
-    % rabbit_log:info("tx_commit ->~n ~p", [Result]),
+    %% rabbit_log:info("tx_commit ->~n ~p", [Result]),
     callback(Pubs),
     Result.
 
@@ -388,14 +388,14 @@ tx_commit(Txn, F, PropsF, S) ->
 %%         ([ack()], message_properties_transformer(), state()) -> state()).
 
 requeue(SeqIds, PropsF, S) ->
-    % rabbit_log:info("requeue(~n ~p,~n ~p,~n ~p) ->", [SeqIds, PropsF, S]),
+    %% rabbit_log:info("requeue(~n ~p,~n ~p,~n ~p) ->", [SeqIds, PropsF, S]),
     Result = del_ps(
                fun (#m { msg = Msg, props = Props }, Si) ->
                        publish_state(Msg, PropsF(Props), true, Si)
                end,
                SeqIds,
                S),
-    % rabbit_log:info("requeue ->~n ~p", [Result]),
+    %% rabbit_log:info("requeue ->~n ~p", [Result]),
     callback([]),
     Result.
 
@@ -407,9 +407,9 @@ requeue(SeqIds, PropsF, S) ->
 %% -spec(len/1 :: (state()) -> non_neg_integer()).
 
 len(#s { q = Q }) ->
-    % rabbit_log:info("len(~n ~p) ->", [S]),
+    %% rabbit_log:info("len(~n ~p) ->", [S]),
     Result = queue:len(Q),
-    % rabbit_log:info("len ->~n ~p", [Result]),
+    %% rabbit_log:info("len ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -420,9 +420,9 @@ len(#s { q = Q }) ->
 %% -spec(is_empty/1 :: (state()) -> boolean()).
 
 is_empty(#s { q = Q }) ->
-    % rabbit_log:info("is_empty(~n ~p) ->", [S]),
+    %% rabbit_log:info("is_empty(~n ~p) ->", [S]),
     Result = queue:is_empty(Q),
-    % rabbit_log:info("is_empty ->~n ~p", [Result]),
+    %% rabbit_log:info("is_empty ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -481,10 +481,10 @@ handle_pre_hibernate(S) -> S.
 %% -spec(status/1 :: (state()) -> [{atom(), any()}]).
 
 status(#s { q = Q, p = P, next_seq_id = NextSeqId }) ->
-    % rabbit_log:info("status(~n ~p) ->", [S]),
+    %% rabbit_log:info("status(~n ~p) ->", [S]),
     Result =
         [{len, queue:len(Q)}, {next_seq_id, NextSeqId}, {acks, dict:size(P)}],
-    % rabbit_log:info("status ->~n ~p", [Result]),
+    %% rabbit_log:info("status ->~n ~p", [Result]),
     Result.
 
 %%----------------------------------------------------------------------------
