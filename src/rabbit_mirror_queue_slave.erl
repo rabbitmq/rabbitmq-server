@@ -94,7 +94,7 @@ init([#amqqueue { name = QueueName } = Q]) ->
     ok = rabbit_memory_monitor:register(
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     {ok, BQ} = application:get_env(backing_queue_module),
-    BQS = BQ:init(Q, false),
+    BQS = bq_init(BQ, Q, false),
     {ok, #state { q                   = Q,
                   gm                  = GM,
                   master_node         = node(MPid),
@@ -154,12 +154,12 @@ handle_call({gm_deaths, Deaths}, From,
             {stop, normal, State}
     end;
 
-handle_call({maybe_run_queue_via_backing_queue, Mod, Fun}, _From, State) ->
-    reply(ok, maybe_run_queue_via_backing_queue(Mod, Fun, State)).
+handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
+    reply(ok, run_backing_queue(Mod, Fun, State)).
 
 
-handle_cast({maybe_run_queue_via_backing_queue, Mod, Fun}, State) ->
-    noreply(maybe_run_queue_via_backing_queue(Mod, Fun, State));
+handle_cast({run_backing_queue, Mod, Fun}, State) ->
+    noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
@@ -235,20 +235,20 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        {maybe_run_queue_via_backing_queue, _Mod, _Fun} -> 6;
-        {gm_deaths, _Deaths}                            -> 5;
-        _                                               -> 0
+        {run_backing_queue, _Mod, _Fun} -> 6;
+        {gm_deaths, _Deaths}            -> 5;
+        _                               -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                             -> 8;
-        {set_ram_duration_target, _Duration}            -> 8;
-        {set_maximum_since_use, _Age}                   -> 8;
-        {maybe_run_queue_via_backing_queue, _Mod, _Fun} -> 6;
-        sync_timeout                                    -> 6;
-        {gm, _Msg}                                      -> 5;
-        _                                               -> 0
+        update_ram_duration                  -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        {run_backing_queue, _Mod, _Fun}      -> 6;
+        sync_timeout                         -> 6;
+        {gm, _Msg}                           -> 5;
+        _                                    -> 0
     end.
 
 %% ---------------------------------------------------------------------------
@@ -282,12 +282,23 @@ handle_msg([SPid], _From, Msg) ->
 %% Others
 %% ---------------------------------------------------------------------------
 
-maybe_run_queue_via_backing_queue(
-  Mod, Fun, State = #state { backing_queue       = BQ,
-                             backing_queue_state = BQS }) ->
-    {MsgIds, BQS1} = BQ:invoke(Mod, Fun, BQS),
-    confirm_messages(MsgIds, State #state { backing_queue_state = BQS1 }).
+bq_init(BQ, Q, Recover) ->
+    Self = self(),
+    BQ:init(Q, Recover,
+            fun (Mod, Fun) ->
+                    rabbit_amqqueue:run_backing_queue_async(Self, Mod, Fun)
+            end,
+            fun (Mod, Fun) ->
+                    rabbit_misc:with_exit_handler(
+                      fun () -> error end,
+                      fun () ->
+                              rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
+                      end)
+            end).
 
+run_backing_queue(Mod, Fun, State = #state { backing_queue       = BQ,
+                                             backing_queue_state = BQS }) ->
+    State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
 needs_confirming(#delivery{ msg_seq_no = undefined }, _State) ->
     never;
@@ -430,18 +441,19 @@ reply(Reply, State) ->
     {NewState, Timeout} = next_state(State),
     {reply, Reply, NewState, Timeout}.
 
-next_state(State) ->
-    State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
-        ensure_rate_timer(State),
-    case BQ:needs_idle_timeout(BQS) of
+next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
+    {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
+    State1 = ensure_rate_timer(
+               confirm_messages(MsgIds, State #state {
+                                          backing_queue_state = BQS1 })),
+    case BQ:needs_idle_timeout(BQS1) of
         true  -> {ensure_sync_timer(State1), 0};
         false -> {stop_sync_timer(State1), hibernate}
     end.
 
 %% copied+pasted from amqqueue_process
 backing_queue_idle_timeout(State = #state { backing_queue = BQ }) ->
-    maybe_run_queue_via_backing_queue(
-      BQ, fun (BQS) -> {[], BQ:idle_timeout(BQS)} end, State).
+    run_backing_queue(BQ, fun (M, BQS) -> M:idle_timeout(BQS) end, State).
 
 ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
     {ok, TRef} = timer:apply_after(
