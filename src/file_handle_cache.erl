@@ -970,12 +970,13 @@ queue_fold(Fun, Init, Q) ->
 
 filter_pending(Fun, {Count, Queue}) ->
     {Delta, Queue1} =
-        queue_fold(fun (Item, {DeltaN, QueueN}) ->
-                           case Fun(Item) of
-                               true  -> {DeltaN, queue:in(Item, QueueN)};
-                               false -> {DeltaN - requested(Item), QueueN}
-                           end
-                   end, {0, queue:new()}, Queue),
+        queue_fold(
+          fun (Item = #pending { requested = Requested }, {DeltaN, QueueN}) ->
+                  case Fun(Item) of
+                      true  -> {DeltaN, queue:in(Item, QueueN)};
+                      false -> {DeltaN - Requested, QueueN}
+                  end
+          end, {0, queue:new()}, Queue),
     {Count + Delta, Queue1}.
 
 pending_new() ->
@@ -1020,9 +1021,6 @@ adjust_alarm(OldState, NewState) ->
         _             -> ok
     end,
     NewState.
-
-requested({_Kind, _Pid, Requested, _From}) ->
-    Requested.
 
 process_pending(State = #fhc_state { limit = infinity }) ->
     State;
