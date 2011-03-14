@@ -716,15 +716,15 @@ handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
 handle_call({new_client_state, CRef, MsgOnDiskFun, CloseFDsFun}, _From,
-            State = #msstate { dir                    = Dir,
-                               index_state            = IndexState,
-                               index_module           = IndexModule,
-                               file_handles_ets       = FileHandlesEts,
-                               file_summary_ets       = FileSummaryEts,
-                               dedup_cache_ets        = DedupCacheEts,
-                               cur_file_cache_ets     = CurFileCacheEts,
-                               clients                = Clients,
-                               gc_pid                 = GCPid }) ->
+            State = #msstate { dir                = Dir,
+                               index_state        = IndexState,
+                               index_module       = IndexModule,
+                               file_handles_ets   = FileHandlesEts,
+                               file_summary_ets   = FileSummaryEts,
+                               dedup_cache_ets    = DedupCacheEts,
+                               cur_file_cache_ets = CurFileCacheEts,
+                               clients            = Clients,
+                               gc_pid             = GCPid }) ->
     Clients1 = dict:store(CRef, {MsgOnDiskFun, CloseFDsFun}, Clients),
     reply({IndexState, IndexModule, Dir, GCPid,
            FileHandlesEts, FileSummaryEts, DedupCacheEts, CurFileCacheEts},
