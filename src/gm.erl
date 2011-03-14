@@ -931,6 +931,12 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group) ->
                                prune_or_create_group(Self, GroupName));
                 Alive ->
                     Left = lists:nth(random:uniform(length(Alive)), Alive),
+                    Handler =
+                        fun () ->
+                                join_group(
+                                  Self, GroupName,
+                                  record_dead_member_in_group(Left, GroupName))
+                        end,
                     try
                         case gen_server2:call(
                                Left, {add_on_right, Self}, infinity) of
@@ -940,9 +946,10 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group) ->
                     catch
                         exit:{R, _}
                           when R =:= noproc; R =:= normal; R =:= shutdown ->
-                            join_group(
-                              Self, GroupName,
-                              record_dead_member_in_group(Left, GroupName))
+                            Handler();
+                        exit:{{R, _}, _}
+                          when R =:= nodedown; R =:= shutdown ->
+                            Handler()
                     end
             end
     end.

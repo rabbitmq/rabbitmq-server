@@ -149,7 +149,7 @@ declare(Recover, From,
                      ok = rabbit_memory_monitor:register(
                             self(), {rabbit_amqqueue,
                                      set_ram_duration_target, [self()]}),
-                     BQS = BQ:init(QName, IsDurable, Recover),
+                     BQS = bq_init(BQ, QName, IsDurable, Recover),
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
@@ -158,6 +158,20 @@ declare(Recover, From,
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
+
+bq_init(BQ, QName, IsDurable, Recover) ->
+    Self = self(),
+    BQ:init(QName, IsDurable, Recover,
+            fun (Fun) ->
+                    rabbit_amqqueue:run_backing_queue_async(Self, Fun)
+            end,
+            fun (Fun) ->
+                    rabbit_misc:with_exit_handler(
+                      fun () -> error end,
+                      fun () ->
+                              rabbit_amqqueue:run_backing_queue(Self, Fun)
+                      end)
+            end).
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
     lists:foldl(fun({Arg, Fun}, State1) ->
@@ -201,13 +215,15 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, NewState1, Timeout}.
 
-next_state(State) ->
-    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        ensure_rate_timer(State),
-    State2 = ensure_stats_timer(State1),
-    case BQ:needs_idle_timeout(BQS) of
-        true  -> {ensure_sync_timer(State2), 0};
-        false -> {stop_sync_timer(State2), hibernate}
+next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
+    State1 = ensure_stats_timer(
+               ensure_rate_timer(
+                 confirm_messages(MsgIds, State#q{
+                                            backing_queue_state = BQS1}))),
+    case BQ:needs_idle_timeout(BQS1) of
+        true  -> {ensure_sync_timer(State1), 0};
+        false -> {stop_sync_timer(State1), hibernate}
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
@@ -399,6 +415,8 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
 
+confirm_messages([], State) ->
+    State;
 confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     {CMs, MTC1} = lists:foldl(
                     fun(MsgId, {CMs, MTC0}) ->
@@ -496,10 +514,9 @@ deliver_or_enqueue(Delivery, State) ->
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
-    maybe_run_queue_via_backing_queue(
-      fun (BQS) ->
-              {[], BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS)}
-      end, State).
+    run_backing_queue(
+      fun (BQS) -> BQ:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS) end,
+      State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,
                               backing_queue       = BQ}) ->
@@ -602,13 +619,10 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
-    maybe_run_queue_via_backing_queue(
-      fun (BQS) -> {[], BQ:idle_timeout(BQS)} end, State).
+    run_backing_queue(fun (BQS) -> BQ:idle_timeout(BQS) end, State).
 
-maybe_run_queue_via_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
-    {MsgIds, BQS1} = Fun(BQS),
-    run_message_queue(
-      confirm_messages(MsgIds, State#q{backing_queue_state = BQS1})).
+run_backing_queue(Fun, State = #q{backing_queue_state = BQS}) ->
+    run_message_queue(State#q{backing_queue_state = Fun(BQS)}).
 
 commit_transaction(Txn, From, C = #cr{acktags = ChAckTags},
                    State = #q{backing_queue       = BQ,
@@ -738,29 +752,29 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        info                                      -> 9;
-        {info, _Items}                            -> 9;
-        consumers                                 -> 9;
-        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
-        _                                         -> 0
+        info                      -> 9;
+        {info, _Items}            -> 9;
+        consumers                 -> 9;
+        {run_backing_queue, _Fun} -> 6;
+        _                         -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                       -> 8;
-        delete_immediately                        -> 8;
-        {set_ram_duration_target, _Duration}      -> 8;
-        {set_maximum_since_use, _Age}             -> 8;
-        maybe_expire                              -> 8;
-        drop_expired                              -> 8;
-        emit_stats                                -> 7;
-        {ack, _Txn, _AckTags, _ChPid}             -> 7;
-        {reject, _AckTags, _Requeue, _ChPid}      -> 7;
-        {notify_sent, _ChPid}                     -> 7;
-        {unblock, _ChPid}                         -> 7;
-        {maybe_run_queue_via_backing_queue, _Fun} -> 6;
-        sync_timeout                              -> 6;
-        _                                         -> 0
+        update_ram_duration                  -> 8;
+        delete_immediately                   -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        maybe_expire                         -> 8;
+        drop_expired                         -> 8;
+        emit_stats                           -> 7;
+        {ack, _Txn, _AckTags, _ChPid}        -> 7;
+        {reject, _AckTags, _Requeue, _ChPid} -> 7;
+        {notify_sent, _ChPid}                -> 7;
+        {unblock, _ChPid}                    -> 7;
+        {run_backing_queue, _Fun}            -> 6;
+        sync_timeout                         -> 6;
+        _                                    -> 0
     end.
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
@@ -784,7 +798,7 @@ handle_call({init, Recover}, From,
                      _    -> rabbit_log:warning(
                                "Queue ~p exclusive owner went away~n", [QName])
                  end,
-                 BQS = BQ:init(QName, IsDurable, Recover),
+                 BQS = bq_init(BQ, QName, IsDurable, Recover),
                  %% Rely on terminate to delete the queue.
                  {stop, normal, State#q{backing_queue_state = BQS}}
     end;
@@ -972,12 +986,12 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
             noreply(requeue_and_run(AckTags, State))
     end;
 
-handle_call({maybe_run_queue_via_backing_queue, Fun}, _From, State) ->
-    reply(ok, maybe_run_queue_via_backing_queue(Fun, State)).
+handle_call({run_backing_queue, Fun}, _From, State) ->
+    reply(ok, run_backing_queue(Fun, State)).
 
 
-handle_cast({maybe_run_queue_via_backing_queue, Fun}, State) ->
-    noreply(maybe_run_queue_via_backing_queue(Fun, State));
+handle_cast({run_backing_queue, Fun}, State) ->
+    noreply(run_backing_queue(Fun, State));
 
 handle_cast(sync_timeout, State) ->
     noreply(backing_queue_idle_timeout(State#q{sync_timer_ref = undefined}));

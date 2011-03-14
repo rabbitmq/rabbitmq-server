@@ -33,7 +33,22 @@ behaviour_info(callbacks) ->
      {stop, 0},
 
      %% Initialise the backing queue and its state.
-     {init, 3},
+     %%
+     %% Takes
+     %% 1. the queue name
+     %% 2. a boolean indicating whether the queue is durable
+     %% 3. a boolean indicating whether the queue is an existing queue
+     %%    that should be recovered
+     %% 4. an asynchronous callback which accepts a function from
+     %%    state to state and invokes it with the current backing
+     %%    queue state. This is useful for handling events, e.g. when
+     %%    the backing queue does not have its own process to receive
+     %%    such events, or when the processing of an event results in
+     %%    a state transition the queue logic needs to know about
+     %%    (such as messages getting confirmed).
+     %% 5. a synchronous callback. Same as the asynchronous callback
+     %%    but waits for completion and returns 'error' on error.
+     {init, 5},
 
      %% Called on queue shutdown when queue isn't being deleted.
      {terminate, 1},
@@ -53,6 +68,10 @@ behaviour_info(callbacks) ->
      %% out to a client. The queue will be empty for these calls
      %% (i.e. saves the round trip through the backing queue).
      {publish_delivered, 4},
+
+     %% Return ids of messages which have been confirmed since
+     %% the last invocation of this function (or initialisation).
+     {drain_confirmed, 1},
 
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
