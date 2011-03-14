@@ -1,0 +1,13 @@
+unrebar.patch
+  - build with make rather than rebar, to fit into our build / deploy process.
+
+uneunit.patch
+  - build without eunit, so we can build on R12B-5.
+
+10-crypto.patch
+  - remove referecnces to the crypto app, so that we can run without it
+    on platforms where it's hard to get hold of.
+
+ssl.patch
+  - fix SSL on webmachine, see https://issues.basho.com/show_bug.cgi?id=769
+    (unresolved at time of writing).

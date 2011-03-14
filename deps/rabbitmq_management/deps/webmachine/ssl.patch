@@ -1,0 +1,12 @@
+diff -r 0c4b60ac68b4 src/webmachine_request.erl
+--- a/src/webmachine_request.erl	Tue Jun 15 08:36:55 2010 -0400
++++ b/src/webmachine_request.erl	Mon Mar 14 12:09:38 2011 +0000
+@@ -92,7 +92,7 @@
+     case ReqState#wm_reqstate.peer of
+ 	undefined ->
+             Socket = ReqState#wm_reqstate.socket,
+-	    Peer = case inet:peername(Socket) of 
++	    Peer = case mochiweb_socket:peername(Socket) of
+ 		{ok, {Addr={10, _, _, _}, _Port}} ->
+ 		    case get_header_value("x-forwarded-for") of
+ 			{undefined, _} ->

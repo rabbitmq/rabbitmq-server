@@ -29,8 +29,11 @@ $(LIB_PACKAGE_DIR): $(CHECKOUT_DIR)
 $(CHECKOUT_DIR):
 	rm -rf $@-tmp
 	hg clone -r $(REVISION) $(HG_UPSTREAM) $@-tmp
-	cd $@-tmp && patch -p1 < ../unrebar.patch && patch -p1 < ../uneunit.patch && \
-          patch -p1 < ../10-crypto.patch &&  cd .. && mv $@-tmp $@
+	cd $@-tmp && patch -p1 < ../unrebar.patch && \
+                     patch -p1 < ../uneunit.patch && \
+                     patch -p1 < ../10-crypto.patch && \
+                     patch -p1 < ../ssl.patch && \
+                     cd .. && mv $@-tmp $@
 
 %.ez: $(LIB_PACKAGE_DIR)
 	$(MAKE) -C $(LIB_PACKAGE_DIR) clean all
