@@ -370,7 +370,7 @@ class Lister:
 
         def add_to_row(col, val):
             if col in column_ix:
-                row[column_ix[col]] = str(val)
+                row[column_ix[col]] = unicode(val)
 
         if len(self.columns) == 0:
             for item in items:
@@ -416,7 +416,7 @@ class LongList(Lister):
         max_width = 0
         for col in columns:
             max_width = max(max_width, len(col))
-        fmt = "{0:>" + str(max_width) + "}: {1}"
+        fmt = "{0:>" + unicode(max_width) + "}: {1}"
         print sep
         for i in xrange(0, len(table)):
             for j in xrange(0, len(columns)):
@@ -449,7 +449,7 @@ class TableList(Lister):
     def ascii_row(self, col_widths, row, align):
         txt = "|"
         for i in xrange(0, len(col_widths)):
-            fmt = " {0:" + align + str(col_widths[i]) + "} "
+            fmt = " {0:" + align + unicode(col_widths[i]) + "} "
             txt += fmt.format(row[i]) + "|"
         print txt
 
