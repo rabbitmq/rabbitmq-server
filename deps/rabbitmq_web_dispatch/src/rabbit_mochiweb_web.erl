@@ -15,7 +15,7 @@ start({Instance, Env}) ->
             {_, OtherOptions} = proplists:split(Env, [port]),
             Name = name(Instance),
             mochiweb_http:start(
-              [{name, Name}, {port, Port}, {loop, Loop}] ++
+              [{name, Name}, {port, P}, {loop, Loop}] ++
               OtherOptions)
     end.
 
