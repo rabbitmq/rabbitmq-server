@@ -163,10 +163,9 @@
       <h3>Web Contexts</h3>
       <table class="list">
         <tr>
-          <th>Host</th>
+          <th>URL</th>
           <th>Port</th>
           <th>Path</th>
-          <th>Description</th>
         </tr>
         <%
            for (var i = 0; i < overview.contexts.length; i++) {
@@ -176,7 +175,11 @@
         %>
         <tr<%= alt_rows(i)%>>
           <td>
-            <%= context.host %>
+            <% if (context.description) { %>
+              <a href="<%= uri %>"><%= context.description %></a>
+            <% } else { %>
+              <i>unnamed</i>
+            <% } %>
             <sub><%= context.node %></sub>
           </td>
           <td>
@@ -185,11 +188,6 @@
           </td>
           <td>
             <%= context.path %>
-          </td>
-          <td>
-            <% if (context.description) { %>
-              <a href="<%= uri %>"><%= context.description %></a>
-            <% } %>
           </td>
         </tr>
         <% } %>
