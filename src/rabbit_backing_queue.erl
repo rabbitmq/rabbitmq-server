@@ -42,8 +42,8 @@ behaviour_info(callbacks) ->
      %% 4. an asynchronous callback which can be passed by the
      %%    backing queue to other processes which need to call back
      %%    into it when an event has occured that requires a
-     %%    state transition. The callback accepts a function from
-     %%    state to state.
+     %%    state transition. Note that it can also be used in process.
+     %%    The callback accepts a function from state to state.
      %% 5. a synchronous callback. Same as the asynchronous callback
      %%    but waits for completion and returns 'error' on error.
      {init, 5},
