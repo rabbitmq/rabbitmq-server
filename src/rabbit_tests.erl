@@ -1628,10 +1628,12 @@ test_file_handle_cache() ->
     ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
     TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
     ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
-    Src = filename:join(TmpDir, "file1"),
-    Dst = filename:join(TmpDir, "file2"),
+    Src1 = filename:join(TmpDir, "file1"),
+    Dst1 = filename:join(TmpDir, "file2"),
+    Src2 = filename:join(TmpDir, "file3"),
+    Dst2 = filename:join(TmpDir, "file4"),
     Content = <<"foo">>,
-    CopyFun = fun () ->
+    CopyFun = fun (Src, Dst) ->
                       ok = file:write_file(Src, Content),
                       {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
                       {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
@@ -1648,18 +1650,22 @@ test_file_handle_cache() ->
                           %% This will block and never return, so we
                           %% exercise the fhc tidying up the pending
                           %% queue on the death of a process.
-                          ok = CopyFun()
+                          ok = CopyFun(Src1, Dst1)
                 end),
-    ok = CopyFun(),
-    ok = file_handle_cache:set_limit(3),
+    ok = CopyFun(Src1, Dst1),
+    ok = file_handle_cache:set_limit(2),
     Pid ! {next, self()},
     receive {next, Pid} -> ok end,
+    timer:sleep(100),
+    Pid1 = spawn(fun () -> CopyFun(Src2, Dst2) end),
+    timer:sleep(100),
     erlang:monitor(process, Pid),
-    timer:sleep(500),
+    erlang:monitor(process, Pid1),
     exit(Pid, kill),
+    exit(Pid1, kill),
     receive {'DOWN', _MRef, process, Pid, _Reason} -> ok end,
-    file:delete(Src),
-    file:delete(Dst),
+    receive {'DOWN', _MRef1, process, Pid1, _Reason1} -> ok end,
+    [file:delete(File) || File <- [Src1, Dst1, Src2, Dst2]],
     ok = file_handle_cache:set_limit(Limit),
     passed.
 
