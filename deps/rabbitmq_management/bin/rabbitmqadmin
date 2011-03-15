@@ -174,9 +174,20 @@ def main():
     method = getattr(mgmt, "invoke_%s" % args[0])
     method()
 
-def die(str):
-    sys.stderr.write("*** {0}".format(str))
+def output(s):
+    print maybe_utf8(s, sys.stdout)
+
+def die(s):
+    sys.stderr.write(maybe_utf8("*** {0}".format(s), sys.stderr))
     exit(1)
+
+def maybe_utf8(s, stream):
+    if stream.isatty():
+        # It will have an encoding, which Python will respect
+        return s
+    else:
+        # It won't have an encoding, and Python will pick ASCII by default
+        return s.encode('utf-8')
 
 class Management:
     def __init__(self, options, args):
@@ -583,14 +594,6 @@ _rabbitmqadmin()
 complete -F _rabbitmqadmin rabbitmqadmin
 """
     output(script)
-
-def output(s):
-    if sys.stdout.isatty():
-        # It will have an encoding, which Python will respect
-        print s
-    else:
-        # It won't have an encoding, and Python will pick ASCII by default
-        print s.encode('utf-8')
 
 if __name__ == "__main__":
     main()
