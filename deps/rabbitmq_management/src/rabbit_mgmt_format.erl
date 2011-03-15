@@ -21,7 +21,7 @@
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1]).
--export([connection/1]).
+-export([connection/1, addr/1, port/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
