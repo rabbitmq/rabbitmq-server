@@ -280,7 +280,8 @@ delete_and_terminate(S = #s { queue_name = DbQueueName }) ->
     mysql_helper:clear_table(q, DbQueueName),
     mysql_helper:clear_table(p, DbQueueName),
     mysql_helper:commit_mysql_transaction(),
-    rabbit_log:info("delete_and_terminate ->~n ~p", [S]).
+    rabbit_log:info("delete_and_terminate ->~n ~p", [S]),
+    S.
 
 
 %%----------------------------------------------------------------------------
@@ -356,7 +357,11 @@ publish_delivered(true,
     rabbit_log:info("publish_delivered(true,~n ~p,~n ~p,~n ~p) ->",
                     [Msg, Props, S]),
     mysql_helper:begin_mysql_transaction(),
-    mysql_helper:write_message_to_p(DbQueueName, SeqId, Msg),
+    mysql_helper:write_message_to_p(DbQueueName,
+                                    SeqId,
+                                    (m(Msg,
+                                       SeqId,
+                                       Props))#m{is_delivered = true}),
     RS = S #s { next_seq_id = SeqId + 1 },
     save(RS),
     mysql_helper:commit_mysql_transaction(),
@@ -573,7 +578,7 @@ requeue(SeqIds, PropsF, S) ->
                 S),
     save(RS),
     mysql_helper:commit_mysql_transaction(),
-    % rabbit_log:info("requeue ->~n ~p", [Result]),
+    % rabbit_log:info("requeue ->~n ~p", [RS]),
     callback([]),
     RS.
 
@@ -806,10 +811,12 @@ del_ps(F, SeqIds, S = #s { queue_name = DbQueueName }) ->
     lists:foldl(
       fun( SeqId, Si) ->
               DbList = mysql_helper:read_p_record(DbQueueName, SeqId),
-              [#p_record {m = M}] = emysql_util:as_record(DbList,
-                                                          p_record,
-                                                          record_info(fields,
-                                                                      p_record)),
+              [#p_record {m = MBin}] =
+                              emysql_util:as_record(DbList,
+                                                    p_record,
+                                                    record_info(fields,
+                                                                p_record)),
+              M = binary_to_term(MBin),
               mysql_helper:delete_message_from_p_by_seq_id(SeqId),
               F(M, Si)
       end,

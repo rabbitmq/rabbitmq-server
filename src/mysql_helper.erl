@@ -185,18 +185,18 @@ count_rows_for_queue(TableType, DbQueueName) ->
     {result_packet, _,_,[[Val]],_} = QueryResult,
     Val.
 
-write_message_to_q(DbQueueName, Msg, IsPersistent) ->
+write_message_to_q(DbQueueName, M, IsPersistent) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,
                    write_msg_to_q_stmt,
-                   [DbQueueName, term_to_binary(Msg), IsPersistent]),
+                   [DbQueueName, term_to_binary(M), IsPersistent]),
     ok.
 
 %% BUGBUG:  Since the q table shadows is_persistent for convenience, will
 %%          the pending acks table need to as well?
-write_message_to_p(DbQueueName, SeqId, Msg) ->
+write_message_to_p(DbQueueName, SeqId, M) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,
                    insert_p_stmt,
-                   [SeqId, DbQueueName, term_to_binary(Msg)]),
+                   [SeqId, DbQueueName, term_to_binary(M)]),
     ok.
 
 delete_message_from_p_by_seq_id(SeqId) ->
