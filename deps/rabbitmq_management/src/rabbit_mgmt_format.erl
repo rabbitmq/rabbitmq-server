@@ -21,6 +21,7 @@
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1]).
+-export([connection/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -69,12 +70,12 @@ ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 addr(Addr) when is_list(Addr); is_atom(Addr) -> print("~s", Addr);
 addr(Addr) when is_tuple(Addr)               -> ip(Addr).
 
+port(Port) when is_number(Port) -> Port;
+port(Port)                      -> print("~w", Port).
+
 properties(unknown) -> unknown;
 properties(Table)   -> {struct, [{Name, tuple(Value)} ||
                                     {Name, Value} <- Table]}.
-
-port(Port) when is_number(Port) -> Port;
-port(Port)                      -> print("~w", Port).
 
 amqp_table(unknown) -> unknown;
 amqp_table(Table)   -> {struct, [{Name, amqp_value(Type, Value)} ||
@@ -92,7 +93,8 @@ protocol(unknown) ->
     unknown;
 protocol(Version = {Major, Minor, Revision}) ->
     protocol({'AMQP', Version});
-protocol({Family, Version}) -> print("~s ~s", [Family, protocol_version(Version)]).
+protocol({Family, Version}) ->
+    print("~s ~s", [Family, protocol_version(Version)]).
 
 protocol_version(Arbitrary)
   when is_list(Arbitrary)                  -> Arbitrary;
@@ -220,9 +222,14 @@ args_type(X) ->
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
 
+connection(Props) ->
+    case proplists:get_value(name, Props) of
+        undefined -> print("~s:~w",
+                           [addr(proplists:get_value(peer_address, Props)),
+                            port(proplists:get_value(peer_port,    Props))]);
+        Name      -> Name
+    end.
 
-connection(Address, Port) ->
-    print("~s:~w", [addr(Address), Port]).
 exchange(X) ->
     format(X, [{fun resource/1,   [name]},
                {fun amqp_table/1, [arguments]}]).

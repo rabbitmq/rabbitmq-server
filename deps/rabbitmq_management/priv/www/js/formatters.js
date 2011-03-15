@@ -218,6 +218,10 @@ function fmt_idle_long(obj) {
     }
 }
 
+function fmt_escape_html(txt) {
+    return txt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
@@ -256,7 +260,7 @@ function link_node(name) {
 }
 
 function link_to(name, url) {
-    return '<a href="' + url + '">' + name + '</a>';
+    return '<a href="' + url + '">' + fmt_escape_html(name) + '</a>';
 }
 
 function message_rates(stats) {

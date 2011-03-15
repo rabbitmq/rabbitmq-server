@@ -299,8 +299,7 @@ handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
 
 handle_event(#event{type = connection_created, props = Stats}, State) ->
-    Name = rabbit_mgmt_format:connection(pget(peer_address, Stats),
-                                         pget(peer_port, Stats)),
+    Name = rabbit_mgmt_format:connection(Stats),
     handle_created(
       connection_stats, [{name, Name} | Stats],
       [{fun rabbit_mgmt_format:addr/1,         [address, peer_address]},
