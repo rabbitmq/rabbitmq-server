@@ -1150,12 +1150,10 @@ notify_age(CStates, AverageAge) ->
 
 notify_age0(Clients, CStates, Required) ->
     case [CState || CState <- CStates, CState#cstate.callback =/= undefined] of
-        [] ->
-            ok;
-        Notifications ->
-            {L1, L2} = lists:split(random:uniform(length(Notifications)),
-                                   Notifications),
-            notify(Clients, Required, L2 ++ L1)
+        []            -> ok;
+        Notifications -> S = random:uniform(length(Notifications)),
+                         {L1, L2} = lists:split(S, Notifications),
+                         notify(Clients, Required, L2 ++ L1)
     end.
 
 notify(_Clients, _Required, []) ->
