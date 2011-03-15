@@ -119,7 +119,7 @@
 %% Public API
 %%
 %% Specs are in rabbit_backing_queue_spec.hrl but are repeated here
-%% for readability.
+%% for clarity.
 
 %% ----------------------------------------------------------------------------
 %% start/1 predicts that a list of (durable) queues will be started in
