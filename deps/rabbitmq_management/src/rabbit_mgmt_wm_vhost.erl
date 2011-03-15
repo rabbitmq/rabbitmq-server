@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_vhost).
 
 -export([init/1, resource_exists/2, to_json/2,
@@ -42,7 +36,7 @@ allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {rabbit_access_control:vhost_exists(id(ReqData)), ReqData, Context}.
+    {rabbit_vhost:exists(id(ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
     VHost = [{name, id(ReqData)}],
@@ -54,7 +48,7 @@ accept_content(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     VHost = id(ReqData),
-    rabbit_access_control:delete_vhost(VHost),
+    rabbit_vhost:delete(VHost),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -66,7 +60,7 @@ id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
 
 put_vhost(VHost) ->
-    case rabbit_access_control:vhost_exists(VHost) of
+    case rabbit_vhost:exists(VHost) of
         true  -> ok;
-        false -> rabbit_access_control:add_vhost(VHost)
+        false -> rabbit_vhost:add(VHost)
     end.

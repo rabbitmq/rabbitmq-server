@@ -1,0 +1,145 @@
+<h1>Node <b><%= node.name %></b></h1>
+
+<div class="section">
+<h2>Overview</h2>
+<div class="hider updatable">
+  <table class="facts">
+    <tr>
+      <th>
+        File Descriptors <span class="help" id="file-descriptors"></span>
+        <sub>(used / available)</sub>
+      </th>
+      <td class="status">
+        <div class="<%= fmt_color(node.fd_used / node.fd_total,
+                                  FD_THRESHOLDS) %>">
+          <%= node.fd_used %> / <%= node.fd_total %>
+       </div>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Socket Descriptors <span class="help" id="socket-descriptors"></span>
+        <sub>(used / available)</sub>
+      </th>
+      <td class="status">
+        <div class="<%= fmt_color(node.sockets_used / node.sockets_total,
+                                  SOCKETS_THRESHOLDS) %>">
+          <%= node.sockets_used %> / <%= node.sockets_total %>
+       </div>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Erlang Processes
+        <sub>(used / available)</sub>
+      </th>
+     <td class="status">
+       <div class="<%= fmt_color(node.proc_used / node.proc_total,
+                                 PROCESS_THRESHOLDS) %>">
+         <%= node.proc_used %> / <%= node.proc_total %>
+       </div>
+     </td>
+    </tr>
+    <tr>
+      <th>
+        Memory
+      </th>
+      <td class="status">
+<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
+   <% if (node.mem_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.mem_used) %>
+         <span class="help" id="memory-alarm"></span>
+       </div>
+   <% } else { %>
+       <div class="green">
+         <%= fmt_bytes(node.mem_used) %>
+       </div>
+   <% } %>
+   <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
+<% } else { %>
+       <%= fmt_bytes(node.mem_used) %>
+<% } %>
+      </td>
+    </tr>
+  </table>
+
+  <table class="facts">
+    <tr>
+      <th>Uptime</th>
+      <td><%= fmt_uptime(node.uptime) %></td>
+    </tr>
+    <tr>
+      <th>RabbitMQ Version</th>
+      <td><%= fmt_rabbit_version(node.applications) %></td>
+    </tr>
+    <tr>
+      <th>Erlang Version</th>
+      <td><%= node.erlang_version %></td>
+    </tr>
+    <tr>
+      <th>Mnesia Storage <span class="help" id="mnesia-storage"></span></th>
+      <td><%= node.type %></td>
+    </tr>
+  </table>
+
+  <table class="facts">
+    <tr>
+      <th>OS Pid</th>
+      <td><%= node.os_pid %></td>
+    </tr>
+    <tr>
+      <th>Statistics</th>
+      <td><%= node.statistics_level %></td>
+    </tr>
+    <tr>
+      <th>Run Queue</th>
+      <td><%= node.run_queue %></td>
+    </tr>
+    <tr>
+      <th>Processors</th>
+      <td><%= node.processors %></td>
+    </tr>
+  </table>
+  <span class="br"></span>
+</div>
+</div>
+
+
+<div class="section-hidden">
+<h2>Applications</h2>
+<div class="hider updatable">
+<% if (node.running) { %>
+<table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Version</th>
+    </tr>
+    <%
+      for (var j = 0; j < node.applications.length; j++) {
+        var application = node.applications[j];
+    %>
+       <tr<%= alt_rows(j)%>>
+         <td>
+           <abbr title="<%= application.description %>">
+             <%= application.name %></abbr>
+         </td>
+         <td><%= application.version %></td>
+       </tr>
+    <% } %>
+</table>
+<% } else {%>
+<p>...node not running...</p>
+<% } %>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Registry</h2>
+<div class="hider updatable">
+<h3>Exchange Types</h3>
+<%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
+<h3>Authentication Mechanisms</h3>
+<%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
+</div>
+</div>

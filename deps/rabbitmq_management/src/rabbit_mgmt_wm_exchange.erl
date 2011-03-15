@@ -8,22 +8,16 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_exchange).
 
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2]).
+         delete_resource/2, exchange/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -48,25 +42,15 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(
-      rabbit_mgmt_format:exchange(rabbit_exchange:info(exchange(ReqData))),
-      ReqData, Context).
+    X0 = exchange(ReqData),
+    [X] = rabbit_mgmt_db:get_exchange(X0),
+    rabbit_mgmt_util:reply(X, ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    Name = rabbit_mgmt_util:id(exchange, ReqData),
-    rabbit_mgmt_util:with_decode_vhost(
-      [type, durable, auto_delete, arguments], ReqData, Context,
-      fun(VHost, [Type, Durable, AutoDelete, Args]) ->
-              Durable1    = rabbit_mgmt_util:parse_bool(Durable),
-              AutoDelete1 = rabbit_mgmt_util:parse_bool(AutoDelete),
-              rabbit_mgmt_util:amqp_request(
-                VHost, ReqData, Context,
-                #'exchange.declare'{ exchange    = Name,
-                                     type        = Type,
-                                     durable     = Durable1,
-                                     auto_delete = AutoDelete1,
-                                     arguments   = rabbit_mgmt_util:args(Args)})
-      end).
+    rabbit_mgmt_util:http_to_amqp(
+      'exchange.declare', ReqData, Context,
+      [{fun rabbit_mgmt_util:parse_bool/1, [durable, auto_delete, internal]}],
+      [{exchange, rabbit_mgmt_util:id(exchange, ReqData)}]).
 
 delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:amqp_request(
@@ -81,11 +65,15 @@ is_authorized(ReqData, Context) ->
 exchange(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
-        VHost     -> Name = rabbit_misc:r(VHost, exchange, id(ReqData)),
-                     case rabbit_exchange:lookup(Name) of
-                         {ok, X}            -> X;
-                         {error, not_found} -> not_found
-                     end
+        VHost     -> exchange(VHost, id(ReqData))
+    end.
+
+exchange(VHost, XName) ->
+    Name = rabbit_misc:r(VHost, exchange, XName),
+    case rabbit_exchange:lookup(Name) of
+        {ok, X}            -> rabbit_mgmt_format:exchange(
+                                rabbit_exchange:info(X));
+        {error, not_found} -> not_found
     end.
 
 id(ReqData) ->

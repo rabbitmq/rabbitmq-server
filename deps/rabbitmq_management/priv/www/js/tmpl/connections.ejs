@@ -5,16 +5,21 @@
 <table class="list">
  <thead>
   <tr>
-   <th colspan="4">Network</th>
-   <th colspan="4">Overview</th>
+   <th colspan="<% if (nodes_interesting) { %>4<% } else { %>3<% } %>">Network</th>
+   <th colspan="<% if (vhosts_interesting) { %>4<% } else { %>3<% } %>">Overview</th>
   </tr>
   <tr>
     <th><%= fmt_sort('Protocol',     'protocol') %></th>
     <th><%= fmt_sort('Peer address', 'name') %></th>
-    <th><%= fmt_sort('Receiving',    'recv_oct_details.rate') %></th>
-    <th><%= fmt_sort('Sending',      'send_oct_details.rate') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',         'node') %></th>
+<% } %>
+    <th><%= fmt_sort('From client',  'recv_oct_details.rate') %></th>
+    <th><%= fmt_sort('To client',    'send_oct_details.rate') %></th>
     <th><%= fmt_sort('Channels',     'channels') %></th>
+<% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
     <th><%= fmt_sort('User name',    'user') %></th>
     <th><%= fmt_sort('State',        'state') %></th>
   </tr>
@@ -27,11 +32,16 @@
   <tr<%= alt_rows(i)%>>
     <td><%= connection.protocol %></td>
     <td><%= link_conn(connection.name) %></td>
+<% if (nodes_interesting) { %>
+    <td><%= connection.node %></td>
+<% } %>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
     <td><%= connection.channels %></td>
-    <td><%= link_vhost(connection.vhost) %></td>
-    <td><%= link_user(connection.user) %></td>
+<% if (vhosts_interesting) { %>
+    <td><%= connection.vhost %></td>
+<% } %>
+    <td><%= connection.user %></td>
     <td><%= connection.state %></td>
   </tr>
   <% } %>

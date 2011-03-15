@@ -1,0 +1,35 @@
+<h3>Deliveries</h3>
+<% if (object && object.length > 0) { %>
+<table class="list list-with-total">
+  <tr>
+<% if (mode == 'queue') { %>
+    <th>Channel</th>
+<% } else { %>
+    <th>Queue</th>
+<% } %>
+    <th>deliver / get</th>
+    <th>ack</th>
+  </tr>
+<%
+   for (var i = 0; i < object.length; i++) {
+     var del = object[i];
+%>
+     <tr<%= alt_rows(i)%>>
+<% if (mode == 'queue') { %>
+       <td><%= link_channel(del.channel_details.name) %></td>
+<% } else { %>
+       <td><%= link_queue(del.queue_details.vhost, del.queue_details.name) %></td>
+<% } %>
+       <td class="r"><%= fmt_rate(del.stats, 'deliver_get') %></td>
+       <td class="r"><%= fmt_rate(del.stats, 'ack') %></td>
+     </tr>
+<% } %>
+  <tr class="total">
+    <th>Total:</th>
+    <td><%= fmt_rate(totals, 'deliver_get', false, 'mini-highlight') %></td>
+    <td><%= fmt_rate(totals, 'ack', false, 'mini-highlight') %></td>
+  </tr>
+</table>
+<% } else { %>
+<p> ... no deliveries ...</p>
+<% } %>

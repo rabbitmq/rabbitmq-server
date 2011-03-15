@@ -1,26 +1,37 @@
 <h1>Queues</h1>
 <div class="section">
   <h2>All queues</h2>
-  <div class="updatable">
+  <div class="hider updatable">
 <%= maybe_truncate(queues) %>
 <% if (queues.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
-    <th colspan="2">Overview</th>
+    <th colspan="<% if (nodes_interesting && vhosts_interesting) { %>6<% } else if (nodes_interesting || vhosts_interesting) { %>5<% } else { %>4<% } %>">Overview</th>
     <th colspan="3">Messages</th>
-    <th colspan="4">Parameters</th>
+<% if (statistics_level == 'fine') { %>
+    <th colspan="3">Message rates</th>
+<% } %>
   </tr>
   <tr>
+<% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
     <th><%= fmt_sort('Name',         'name') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',         'node') %></th>
+<% } %>
+    <th><%= fmt_sort('Exclusive',    'owner_pid_details.name') %></th>
+    <th>Parameters</th>
+    <th><%= fmt_sort('Status',       'idle_since') %></th>
     <th><%= fmt_sort('Ready',        'messages_ready') %></th>
     <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
     <th><%= fmt_sort('Total',        'messages') %></th>
-    <th><%= fmt_sort('Durable',      'durable') %></th>
-    <th><%= fmt_sort('Auto delete',  'auto_delete') %></th>
-    <th><%= fmt_sort('Exclusive',    'owner_pid_details.name') %></th>
-    <th>Arguments</th>
+<% if (statistics_level == 'fine') { %>
+    <th><%= fmt_sort('incoming',        'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('deliver / get',   'message_stats.deliver_get_details.rate') %></th>
+    <th><%= fmt_sort('ack',             'message_stats.ack_details.rate') %></th>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -29,19 +40,30 @@
     var queue = queues[i];
 %>
   <tr<%= alt_rows(i) %>>
-   <td><%= link_vhost(queue.vhost) %></td>
+<% if (vhosts_interesting) { %>
+   <td><%= queue.vhost %></td>
+<% } %>
    <td><%= link_queue(queue.vhost, queue.name) %></td>
-   <td class="r"><%= fmt_string(queue.messages_ready) %></td>
-   <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>
-   <td class="r"><%= fmt_string(queue.messages) %></td>
-   <td class="c"><%= fmt_boolean(queue.durable) %></td>
-   <td class="c"><%= fmt_boolean(queue.auto_delete) %></td>
-   <td class="c">
-     <% if (queue.owner_pid != 'none') { %>
+<% if (nodes_interesting) { %>
+   <td><%= queue.node %></td>
+<% } %>
+   <td>
+     <% if (queue.owner_pid_details != undefined) { %>
      <%= link_conn(queue.owner_pid_details.name) %>
      <% } %>
    </td>
-   <td><%= fmt_table_short(queue.arguments) %></td>
+   <td class="c">
+     <%= fmt_parameters(queue) %>
+   </td>
+   <td class="c"><%= fmt_idle(queue) %></td>
+   <td class="r"><%= fmt_string(queue.messages_ready) %></td>
+   <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>
+   <td class="r"><%= fmt_string(queue.messages) %></td>
+<% if (statistics_level == 'fine') { %>
+    <td class="r"><%= fmt_rate(queue.message_stats, 'publish', false) %></td>
+    <td class="r"><%= fmt_rate(queue.message_stats, 'deliver_get', false) %></td>
+    <td class="r"><%= fmt_rate(queue.message_stats, 'ack', false) %></td>
+<% } %>
   </tr>
   <% } %>
  </tbody>
@@ -54,7 +76,7 @@
 
 <div class="section-hidden">
   <h2>Add a new queue</h2>
-  <div>
+  <div class="hider">
     <form action="#/queues" method="put">
       <table class="form">
         <tr>
@@ -69,7 +91,7 @@
         </tr>
         <tr>
           <th><label>Name:</label></th>
-          <td><input type="text" name="name"/></td>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
         <tr>
           <th><label>Durability:</label></th>
@@ -80,6 +102,18 @@
             </select>
           </td>
         </tr>
+<% if (nodes_interesting) { %>
+        <tr>
+          <th><label>On node:</label></th>
+          <td>
+            <select name="node">
+              <% for (var i = 0; i < nodes.length; i++) { %>
+              <option value="<%= nodes[i].name %>"><%= nodes[i].name %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } %>
         <tr>
           <th><label>Auto delete:</label></th>
           <td>
@@ -91,7 +125,10 @@
         </tr>
         <tr>
           <th><label>Arguments:</label></th>
-          <td><span class="multifield" id="arguments"></span></td>
+          <td>
+            <span class="multifield" id="arguments"></span>
+            <span class="help" id="queue-arguments"></span>
+          </td>
         </tr>
       </table>
       <input type="submit" value="Add queue"/>

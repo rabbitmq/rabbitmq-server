@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_aliveness_test).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
@@ -42,9 +36,10 @@ resource_exists(ReqData, Context) ->
          _         -> true
      end, ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    Params = #amqp_params{username = Context#context.username,
-                          password = Context#context.password,
+to_json(ReqData, Context = #context{ user = #user { username = Username },
+                                     password = Password }) ->
+    Params = #amqp_params{username = Username,
+                          password = Password,
                           virtual_host = rabbit_mgmt_util:vhost(ReqData)},
     %% TODO use network connection (need to check what we're bound to)
     {ok, Conn} = amqp_connection:start(direct, Params),

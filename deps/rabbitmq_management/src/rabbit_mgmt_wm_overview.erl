@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_overview).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
@@ -33,18 +27,42 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    OSStats = rabbit_mgmt_external_stats:info(),
-    Overview = rabbit_mgmt_db:get_overview(),
+to_json(ReqData, Context = #context{user = User = #user{is_admin = IsAdmin}}) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_mgmt_util:reply(
-      OSStats ++ Overview ++
-          [{node,             node()},
-           {os_pid,           list_to_binary(os:getpid())},
-           {mem_ets,          erlang:memory(ets)},
-           {mem_binary,       erlang:memory(binary)},
-           {statistics_level, StatsLevel}],
-      ReqData, Context).
+    %% NB: node and stats level duplicate what's in /nodes but we want
+    %% to (a) know which node we're talking to and (b) use the stats
+    %% level to switch features on / off in the UI.
+    Overview0 = [{management_version, version()},
+                 {statistics_level,   StatsLevel}],
+    Overview =
+        case IsAdmin of
+            true ->
+                Listeners = [rabbit_mgmt_format:listener(L)
+                             || L <- rabbit_networking:active_listeners()],
+                Overview0 ++
+                    rabbit_mgmt_db:get_overview() ++
+                    [{node,               node()},
+                     {statistics_db_node, stats_db_node()},
+                     {listeners,          Listeners}];
+            _ ->
+                Overview0 ++
+                    rabbit_mgmt_db:get_overview(User)
+        end,
+    rabbit_mgmt_util:reply(Overview, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+%%--------------------------------------------------------------------
+
+stats_db_node() ->
+    case global:whereis_name(rabbit_mgmt_db) of
+        undefined -> not_running;
+        Pid       -> node(Pid)
+    end.
+
+version() ->
+    [Vsn] = [V || {A, _D, V} <- application:loaded_applications(),
+            A =:= rabbit_management],
+    list_to_binary(Vsn).
+

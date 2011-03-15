@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_all_configuration).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
@@ -27,8 +21,6 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
-
--define(FRAMING, rabbit_framing_amqp_0_9_1).
 
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
@@ -133,8 +125,14 @@ export_queue(Queue) ->
     pget(owner_pid, Queue) == none.
 
 export_binding(Binding, Qs) ->
-    pget(exchange, Binding) =/= <<"">> andalso
-        lists:member({pget(queue, Binding), pget(vhost, Binding)}, Qs).
+    Src      = pget(source, Binding),
+    Dest     = pget(destination, Binding),
+    DestType = pget(destination_type, Binding),
+    VHost    = pget(vhost, Binding),
+    Src =/= <<"">>
+        andalso
+          ( (DestType =:= queue andalso lists:member({Dest, VHost}, Qs))
+            orelse (DestType =:= exchange andalso Dest =/= <<"">>) ).
 
 export_exchange(Exchange) ->
     export_name(pget(name, Exchange)).
@@ -146,12 +144,14 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password, administrator]},
+    [{users,       [name, password_hash, administrator]},
      {vhosts,      [name]},
-     {permissions, [user, vhost, configure, write, read, scope]},
+     {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
-     {exchanges,   [name, vhost, type, durable, auto_delete, arguments]},
-     {bindings,    [exchange, vhost, queue, routing_key, arguments]}].
+     {exchanges,   [name, vhost, type, durable, auto_delete, internal,
+                    arguments]},
+     {bindings,    [source, vhost, destination, destination_type, routing_key,
+                    arguments]}].
 
 filter(Items) ->
     [filter_items(N, V, proplists:get_value(N, rw_state())) || {N, V} <- Items].
@@ -177,21 +177,18 @@ clean_value(A)           -> A.
 %%--------------------------------------------------------------------
 
 add_user(User) ->
-    rabbit_mgmt_wm_user:put_user(pget(name,          User),
-                                 pget(password,      User),
-                                 pget(administrator, User)).
+    rabbit_mgmt_wm_user:put_user(User).
 
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
     rabbit_mgmt_wm_vhost:put_vhost(VHostName).
 
 add_permission(Permission) ->
-    rabbit_access_control:set_permissions(pget(scope,     Permission),
-                                          pget(user,      Permission),
-                                          pget(vhost,     Permission),
-                                          pget(configure, Permission),
-                                          pget(write,     Permission),
-                                          pget(read,      Permission)).
+    rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
+                                                 pget(vhost,     Permission),
+                                                 pget(configure, Permission),
+                                                 pget(write,     Permission),
+                                                 pget(read,      Permission)).
 
 add_queue(Queue) ->
     rabbit_amqqueue:declare(r(queue,                              Queue),
@@ -201,36 +198,27 @@ add_queue(Queue) ->
                             none).
 
 add_exchange(Exchange) ->
+    Internal = case pget(internal, Exchange) of
+                   undefined -> false; %% =< 2.2.0
+                   I         -> I
+               end,
     rabbit_exchange:declare(r(exchange,                           Exchange),
                             rabbit_exchange:check_type(pget(type, Exchange)),
                             pget(durable,                         Exchange),
                             pget(auto_delete,                     Exchange),
+                            Internal,
                             rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
 add_binding(Binding) ->
+    DestType = list_to_atom(binary_to_list(pget(destination_type, Binding))),
     rabbit_binding:add(
-      #binding{exchange_name = r(exchange, exchange,                Binding),
-               queue_name    = r(queue, queue,                      Binding),
-               key           = pget(routing_key,                    Binding),
+      #binding{source       = r(exchange, source,                   Binding),
+               destination  = r(DestType, destination,              Binding),
+               key          = pget(routing_key,                     Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
 
 pget(Key, List) ->
     proplists:get_value(Key, List).
-
-%% TODO use this elsewhere
-%% props_to_method(Method, Props) ->
-%%     Props1 = add_args_types(Props),
-%%     FieldNames = ?FRAMING:method_fieldnames(Method),
-%%     {Res, _Idx} = lists:foldl(
-%%                     fun (K, {R, Idx}) ->
-%%                             NewR = case proplists:get_value(K, Props1) of
-%%                                        undefined -> R;
-%%                                        V         -> setelement(Idx, R, V)
-%%                                    end,
-%%                             {NewR, Idx + 1}
-%%                     end, {?FRAMING:method_record(Method), 2},
-%%                     FieldNames),
-%%     Res.
 
 r(Type, Props) ->
     r(Type, name, Props).

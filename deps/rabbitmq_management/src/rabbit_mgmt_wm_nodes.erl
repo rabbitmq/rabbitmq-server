@@ -8,14 +8,20 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Plugin.
+%%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
--module(rabbit_mgmt_wm_permissions).
+%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
+%%
+%%   Copyright (C) 2010 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+-module(rabbit_mgmt_wm_nodes).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([permissions/0]).
+-export([all_nodes/0]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -29,14 +35,25 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(permissions(), ["vhost", "user"],
-                                ReqData, Context).
+    rabbit_mgmt_util:reply_list(all_nodes(), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-permissions() ->
-    [rabbit_mgmt_format:permissions(P) ||
-        P <- rabbit_auth_backend_internal:list_permissions()].
+all_nodes() ->
+    S = rabbit_mnesia:status(),
+    Nodes = proplists:get_value(nodes, S),
+    Types = proplists:get_keys(Nodes),
+    Running = proplists:get_value(running_nodes, S),
+    lists:append(
+      [[make_entry(Node, Type, lists:member(Node, Running))
+        || Node <- proplists:get_value(Type, Nodes)] || Type <- Types]).
+
+make_entry(Node, Type, Running) ->
+    [{name, Node}, {type, Type}, {running, Running}]
+        ++ case Running of
+               true -> rabbit_mgmt_external_stats:info(Node);
+               _    -> []
+           end.

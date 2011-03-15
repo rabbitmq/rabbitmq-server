@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_users).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
@@ -44,6 +38,6 @@ is_authorized(ReqData, Context) ->
 
 users() ->
     [begin
-         {ok, User} = rabbit_access_control:lookup_user(U),
-         rabbit_mgmt_format:user(User)
-     end || {U, _} <- rabbit_access_control:list_users()].
+         {ok, User} = rabbit_auth_backend_internal:lookup_user(U),
+         rabbit_mgmt_format:internal_user(User)
+     end || {U, _} <- rabbit_auth_backend_internal:list_users()].

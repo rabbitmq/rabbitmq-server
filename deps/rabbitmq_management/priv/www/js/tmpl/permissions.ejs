@@ -1,6 +1,6 @@
 <div class="section">
   <h2>Permissions</h2>
-  <div>
+  <div class="hider">
     <table class="list">
       <thead>
         <tr>
@@ -9,7 +9,6 @@
 <% } else { %>
           <th>Virtual Host</th>
 <% } %>
-          <th>Scope</th>
           <th>Configure Regexp</th>
           <th>Write Regexp</th>
           <th>Read Regexp</th>
@@ -17,21 +16,23 @@
         </tr>
       </thead>
       <tbody>
-        <% for (var i = 0; i < permissions.length; i++) { %>
+<%
+for (var i = 0; i < permissions.length; i++) {
+    var permission = permissions[i];
+%>
            <tr<%= alt_rows(i)%>>
 <% if (mode == 'vhost') { %>
-             <td><%= link_to(permissions[i].user, '#/users/' + esc(permissions[i].user)) %></td>
+             <td><%= link_to(permission.user, '#/users/' + esc(permission.user)) %></td>
 <% } else { %>
-             <td><%= link_to(permissions[i].vhost, '#/vhosts/' + esc(permissions[i].vhost)) %></td>
+             <td><%= link_to(permission.vhost, '#/vhosts/' + esc(permission.vhost)) %></td>
 <% } %>
-             <td><%= permissions[i].scope %></td>
-             <td><%= permissions[i].configure %></td>
-             <td><%= permissions[i].write %></td>
-             <td><%= permissions[i].read %></td>
+             <td><%= permission.configure %></td>
+             <td><%= permission.write %></td>
+             <td><%= permission.read %></td>
              <td class="c">
                <form action="#/permissions" method="delete" class="confirm">
-                 <input type="hidden" name="username" value="<%= permissions[i].user %>"/>
-                 <input type="hidden" name="vhost" value="<%= permissions[i].vhost %>"/>
+                 <input type="hidden" name="username" value="<%= permission.user %>"/>
+                 <input type="hidden" name="vhost" value="<%= permission.vhost %>"/>
                  <input type="submit" value="Clear"/>
                </form>
              </td>
@@ -44,7 +45,7 @@
 
 <div class="section-hidden">
   <h2>Set Permission</h2>
-  <div>
+  <div class="hider">
     <form action="#/permissions" method="put">
       <table class="form">
         <tr>
@@ -81,15 +82,6 @@
         <tr>
           <th><label>Read Regexp:</label></th>
           <td><input type="text" name="read" value=".*"/></td>
-        </tr>
-        <tr>
-          <th><label>Scope:</label></th>
-          <td>
-            <select name="scope">
-              <option value="client">Client</option>
-              <option value="all">All</option>
-            </select>
-          </td>
         </tr>
       </table>
       <input type="submit" value="Set Permission"/>

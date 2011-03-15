@@ -1,6 +1,3 @@
-WARNING: this is experimental, unstable, unfinished. Do not rely on any
-APIs exposed. Do not rely on it not to crash your server.
-
 See BUILDING for information on building. For a binary version of this
 plugin for the latest released RabbitMQ, go to
 http://www.rabbitmq.com/plugins.html.

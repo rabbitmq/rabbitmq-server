@@ -18,7 +18,7 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--module(rabbit_mgmt_sup).
+-module(rabbit_mgmt_global_sup).
 
 -behaviour(supervisor).
 
@@ -26,13 +26,13 @@
 -export([start_link/0]).
 
 init([]) ->
-    ExternalStats = {rabbit_mgmt_external_stats,
-                     {rabbit_mgmt_external_stats, start_link, []},
-                     permanent, 5000, worker, [rabbit_mgmt_external_stats]},
     DB = {rabbit_mgmt_db,
           {rabbit_mgmt_db, start_link, []},
-          permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    {ok, {{one_for_one, 10, 10}, [ExternalStats, DB]}}.
+          permanent, 5000, worker, [rabbit_mgmt_db]},
+    {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    case supervisor:start_link({global, ?MODULE}, ?MODULE, []) of
+        {error, {already_started, _}} -> ignore;
+        Else                          -> Else
+    end.

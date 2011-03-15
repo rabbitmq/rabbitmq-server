@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_vhosts).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
@@ -34,12 +28,8 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{username = Username,
-                                    is_admin = IsAdmin}) ->
-    VHosts = case IsAdmin of
-                 true  -> vhosts();
-                 false -> format(rabbit_mgmt_util:vhosts(Username))
-             end,
+to_json(ReqData, Context = #context{user = User}) ->
+    VHosts = format(rabbit_access_control:list_vhosts(User, read)),
     rabbit_mgmt_util:reply_list(VHosts, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
@@ -48,7 +38,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 vhosts() ->
-    format(rabbit_access_control:list_vhosts()).
+    format(rabbit_vhost:list()).
 
 format(Vs) ->
     [[{name, N}] || N <- Vs].

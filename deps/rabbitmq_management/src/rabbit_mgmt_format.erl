@@ -1,4 +1,3 @@
-
 %%   The contents of this file are subject to the Mozilla Public License
 %%   Version 1.1 (the "License"); you may not use this file except in
 %%   compliance with the License. You may obtain a copy of the License at
@@ -9,24 +8,19 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, pid/1, ip/1, addr/1,
-         port/1, table/1, tuple/1, timestamp/1]).
--export([protocol/1, resource/1, permissions/1, queue/1, connection/2]).
--export([exchange/1, user/1, binding/1, url/2, application/1]).
+-export([format/2, print/2, pid/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
+-export([timestamp/1, timestamp_ms/1]).
+-export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
+-export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
--export([args_type/1]).
+-export([to_amqp_table/1, listener/1, properties/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -59,18 +53,36 @@ pid('')                   ->  <<"">>;
 pid(unknown)              -> unknown;
 pid(none)                 -> none.
 
+node_and_pid(Pid) when is_pid(Pid) ->
+    [{pid,  pid(Pid)},
+     {node, node(Pid)}];
+node_and_pid('')      -> [];
+node_and_pid(unknown) -> [];
+node_and_pid(none)    -> [].
+
 ip(unknown) -> unknown;
-ip(IP)      -> list_to_binary(inet_parse:ntoa(IP)).
+ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
+
+ipb(unknown) -> unknown;
+ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
 addr(Addr) when is_list(Addr); is_atom(Addr) -> print("~s", Addr);
 addr(Addr) when is_tuple(Addr)               -> ip(Addr).
 
+properties(unknown) -> unknown;
+properties(Table)   -> {struct, [{Name, tuple(Value)} ||
+                                    {Name, Value} <- Table]}.
+
 port(Port) when is_number(Port) -> Port;
 port(Port)                      -> print("~w", Port).
 
-table(unknown) -> unknown;
-table(Table)   -> {struct, [{Name, tuple(Value)} ||
-                               {Name, _Type, Value} <- Table]}.
+amqp_table(unknown) -> unknown;
+amqp_table(Table)   -> {struct, [{Name, amqp_value(Type, Value)} ||
+                                    {Name, Type, Value} <- Table]}.
+
+amqp_value(array, Val) -> [amqp_value(T, V) || {T, V} <- Val];
+amqp_value(table, Val) -> amqp_table(Val);
+amqp_value(_Type, Val) -> Val.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
@@ -88,10 +100,17 @@ protocol_version({Major, Minor})           -> io_lib:format("~B-~B", [Major, Min
 protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
 protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
                                                     [Major, Minor, Revision]).
+
+timestamp_ms(unknown) ->
+    unknown;
+timestamp_ms(Timestamp) ->
+    timer:now_diff(Timestamp, {0,0,0}) div 1000.
+
 timestamp(unknown) ->
     unknown;
 timestamp(Timestamp) ->
-    timer:now_diff(Timestamp, {0,0,0}) div 1000.
+    {{Y, M, D}, {H, Min, S}} = calendar:now_to_local_time(Timestamp),
+    print("~w-~w-~w ~w:~w:~w", [Y, M, D, H, Min, S]).
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
@@ -101,19 +120,34 @@ resource(_, unknown) ->
 resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
 
-permissions({User, VHost, Conf, Write, Read, Scope}) ->
+permissions({User, VHost, Conf, Write, Read}) ->
     [{user,      User},
      {vhost,     VHost},
      {configure, Conf},
      {write,     Write},
-     {read,      Read},
-     {scope,     Scope}].
+     {read,      Read}].
+
+internal_user(User) ->
+    [{name,          User#internal_user.username},
+     {password_hash, base64:encode(User#internal_user.password_hash)},
+     {administrator, User#internal_user.is_admin}].
 
 user(User) ->
     [{name,          User#user.username},
-     {password,      User#user.password},
-     {administrator, User#user.is_admin}].
+     {administrator, User#user.is_admin},
+     {auth_backend,  User#user.auth_backend}].
 
+
+listener(#listener{node = Node, protocol = Protocol,
+                   host = Host, ip_address = IPAddress, port = Port}) ->
+    [{node, Node},
+     {protocol, Protocol},
+     {host, list_to_binary(Host)},
+     {ip_address, ip(IPAddress)},
+     {port, Port}].
+
+pack_binding_props(<<"">>, []) ->
+    <<"_">>;
 pack_binding_props(Key, Args) ->
     Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
     ArgsKeys = lists:sort(dict:fetch_keys(Dict)),
@@ -140,7 +174,7 @@ unpack_binding_props(Str) ->
 
 unpack_binding_props0([Key | Args]) ->
     try
-        {unquote_binding(Key), unpack_binding_args(Args)}
+        {unquote_binding(Key), to_amqp_table(unpack_binding_args(Args))}
     catch E -> E
     end;
 unpack_binding_props0([]) ->
@@ -151,8 +185,7 @@ unpack_binding_args([]) ->
 unpack_binding_args([K]) ->
     throw({bad_request, {no_value, K}});
 unpack_binding_args([K, V | Rest]) ->
-    Value = unquote_binding(V),
-    [{unquote_binding(K), args_type(Value), Value} | unpack_binding_args(Rest)].
+    [{unquote_binding(K), unquote_binding(V)} | unpack_binding_args(Rest)].
 
 unquote_binding(Name) ->
     list_to_binary(mochiweb_util:unquote(Name)).
@@ -169,6 +202,14 @@ tokenise(Str) ->
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 
+to_amqp_table(T) ->
+    [to_amqp_table_row(K, V) || {K, V} <- T].
+
+to_amqp_table_row(K, Vs) when is_list(Vs) ->
+    {K, array, [{args_type(V), V} || V <- Vs]};
+to_amqp_table_row(K, V) ->
+    {K, args_type(V), V}.
+
 args_type(X) when is_binary(X) ->
     longstr;
 args_type(X) when is_number(X) ->
@@ -179,17 +220,12 @@ args_type(X) ->
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
 
-application({Application, Description, Version}) ->
-    [{name, Application},
-     {description, list_to_binary(Description)},
-     {version, list_to_binary(Version)}].
 
 connection(Address, Port) ->
     print("~s:~w", [addr(Address), Port]).
-
 exchange(X) ->
-    format(X, [{fun resource/1, [name]},
-               {fun table/1,    [arguments]}]).
+    format(X, [{fun resource/1,   [name]},
+               {fun amqp_table/1, [arguments]}]).
 
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
@@ -207,22 +243,24 @@ queue(#amqqueue{name            = Name,
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
        {pid,         Pid}],
-      [{fun pid/1,      [pid, owner_pid]},
-       {fun resource/1, [name]},
-       {fun table/1,    [arguments]}]).
+      [{fun pid/1,          [owner_pid]},
+       {fun node_and_pid/1, [pid]},
+       {fun resource/1,     [name]},
+       {fun amqp_table/1,   [arguments]}]).
 
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
 %% there are no per-exchange / queue / etc variants for the latter. Therefore
 %% we have a record rather than a proplist to deal with.
-binding(#binding{exchange_name = X,
-                 key           = Key,
-                 queue_name    = Q,
-                 args          = Args}) ->
+binding(#binding{source      = S,
+                 key         = Key,
+                 destination = D,
+                 args        = Args}) ->
     format(
-      [{exchange,       X},
-       {queue,          Q#resource.name},
-       {routing_key,    Key},
-       {arguments,      Args},
+      [{source,           S},
+       {destination,      D#resource.name},
+       {destination_type, D#resource.kind},
+       {routing_key,      Key},
+       {arguments,        Args},
        {properties_key, pack_binding_props(Key, Args)}],
-      [{fun (Res) -> resource(exchange, Res) end, [exchange]},
-       {fun table/1,                              [arguments]}]).
+      [{fun (Res) -> resource(source, Res) end, [source]},
+       {fun amqp_table/1,                       [arguments]}]).

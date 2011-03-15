@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_permission).
 
 -export([init/1, resource_exists/2, to_json/2,
@@ -62,10 +56,10 @@ accept_content(ReqData, Context) ->
             User = rabbit_mgmt_util:id(user, ReqData),
             VHost = rabbit_mgmt_util:id(vhost, ReqData),
             rabbit_mgmt_util:with_decode(
-              [scope, configure, write, read], ReqData, Context,
-              fun([Scope, Conf, Write, Read]) ->
-                      rabbit_access_control:set_permissions(
-                        Scope, User, VHost, Conf, Write, Read),
+              [configure, write, read], ReqData, Context,
+              fun([Conf, Write, Read]) ->
+                      rabbit_auth_backend_internal:set_permissions(
+                        User, VHost, Conf, Write, Read),
                       {true, ReqData, Context}
               end)
     end.
@@ -73,7 +67,7 @@ accept_content(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    rabbit_access_control:clear_permissions(User, VHost),
+    rabbit_auth_backend_internal:clear_permissions(User, VHost),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -83,17 +77,18 @@ is_authorized(ReqData, Context) ->
 
 perms(ReqData) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    case rabbit_access_control:lookup_user(User) of
+    case rabbit_auth_backend_internal:lookup_user(User) of
         {ok, _} ->
             case rabbit_mgmt_util:vhost(ReqData) of
                 not_found ->
                     not_found;
                 VHost ->
-                    Perms = rabbit_access_control:list_user_vhost_permissions(
-                              User, VHost),
+                    Perms =
+                        rabbit_auth_backend_internal:list_user_vhost_permissions(
+                          User, VHost),
                     case Perms of
-                        [{Configure, Write, Read, Scope}] ->
-                            {User, VHost, Configure, Write, Read, Scope};
+                        [{Configure, Write, Read}] ->
+                            {User, VHost, Configure, Write, Read};
                         [] ->
                             none
                     end

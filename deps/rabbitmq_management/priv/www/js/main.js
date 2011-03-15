@@ -1,14 +1,21 @@
 var statistics_level;
 var user_administrator;
+var nodes_interesting;
+var vhosts_interesting;
 
 $(document).ready(function() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     user_administrator = user.administrator;
+    nodes_interesting = user_administrator &&
+        JSON.parse(sync_get('/nodes')).length > 1;
+    vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     setup_constant_events();
+    current_vhost = get_pref('vhost');
     update_vhosts();
     app.run();
+    update_interval();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -18,26 +25,63 @@ $(document).ready(function() {
 function setup_constant_events() {
     $('#update-every').change(function() {
             var interval = $(this).val();
-            if (interval == '') interval = null;
+            store_pref('interval', interval);
+            if (interval == '')
+                interval = null;
+            else
+                interval = parseInt(interval);
             set_timer_interval(interval);
         });
     $('#show-vhost').change(function() {
             current_vhost = $(this).val();
+            store_pref('vhost', current_vhost);
             update();
         });
+    if (!vhosts_interesting) {
+        $('#vhost-form').hide();
+    }
 }
 
 function update_vhosts() {
     var vhosts = JSON.parse(sync_get('/vhosts'));
+    vhosts_interesting = vhosts.length > 1;
+    if (vhosts_interesting)
+        $('#vhost-form').show();
+    else
+        $('#vhost-form').hide();
     var select = $('#show-vhost').get(0);
     select.options.length = vhosts.length + 1;
     var index = 0;
     for (var i = 0; i < vhosts.length; i++) {
         var vhost = vhosts[i].name;
-        select.options[i + 1] = new Option(vhost);
+        select.options[i + 1] = new Option(vhost, vhost);
         if (vhost == current_vhost) index = i + 1;
     }
     select.selectedIndex = index;
+    current_vhost = select.options[index].value;
+    store_pref('vhost', current_vhost);
+}
+
+function update_interval() {
+    var intervalStr = get_pref('interval');
+    var interval;
+
+    if (intervalStr == null)    interval = 5000;
+    else if (intervalStr == '') interval = null;
+    else                        interval = parseInt(intervalStr);
+
+    if (isNaN(interval)) interval = null; // Prevent DoS if cookie malformed
+
+    set_timer_interval(interval);
+
+    var select = $('#update-every').get(0);
+    var opts = select.options;
+    for (var i = 0; i < opts.length; i++) {
+        if (opts[i].value == intervalStr) {
+            select.selectedIndex = i;
+            break;
+        }
+    }
 }
 
 var app = $.sammy(dispatcher);
@@ -48,12 +92,25 @@ function dispatcher() {
                 render(r, t, p);
             });
     }
-    path('#/', {'overview': '/overview', 'applications': '/applications'}, 'overview');
+    this.get('#/', function() {
+            var reqs = {'overview': '/overview'};
+            if (user_administrator) {
+                reqs['nodes'] = '/nodes';
+            }
+            render(reqs, 'overview', '#/');
+        });
+    this.get('#/nodes/:name', function() {
+            var name = esc(this.params['name']);
+            render({'node': '/nodes/' + name},
+                   'node', '');
+        });
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     this.get('#/connections/:name', function() {
-            render({'connection': '/connections/' + esc(this.params['name'])}, 'connection',
-                   '#/connections');
+            var name = esc(this.params['name']);
+            render({'connection': '/connections/' + name,
+                    'channels': '/connections/' + name + '/channels'},
+                'connection', '#/connections');
         });
     this.del('#/connections', function() {
             if (sync_delete(this, '/connections/:name'))
@@ -71,7 +128,9 @@ function dispatcher() {
     this.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': path,
-                    'bindings': path + '/bindings'}, 'exchange', '#/exchanges');
+                    'bindings_source': path + '/bindings/source',
+                    'bindings_destination': path + '/bindings/destination'},
+                'exchange', '#/exchanges');
         });
     this.put('#/exchanges', function() {
             if (sync_put(this, '/exchanges/:vhost/:name'))
@@ -84,7 +143,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
+    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts', 'nodes': '/nodes'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': path,
@@ -102,20 +161,20 @@ function dispatcher() {
             }
             else if (this.params['mode'] == 'purge') {
                 if (sync_delete(this, '/queues/:vhost/:name/contents')) {
-                    error_popup("Queue purged");
-                    update();
+                    show_popup('info', "Queue purged");
+                    update_partial();
                 }
             }
             return false;
         });
 
     this.post('#/bindings', function() {
-            if (sync_post(this, '/bindings/:vhost/e2q/:exchange/:queue'))
+            if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
             return false;
         });
     this.del('#/bindings', function() {
-            if (sync_delete(this, '/bindings/:vhost/e2q/:exchange/:queue/:properties_key'))
+            if (sync_delete(this, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
                 update();
             return false;
         });
@@ -190,6 +249,10 @@ var timer_interval;
 
 function set_timer_interval(interval) {
     timer_interval = interval;
+    reset_timer();
+}
+
+function reset_timer() {
     clearInterval(timer);
     if (timer_interval != null) {
         timer = setInterval('partial_update()', timer_interval);
@@ -209,13 +272,22 @@ function update() {
             replace_content('main', html);
             postprocess();
             postprocess_partial();
-            set_timer_interval(5000);
+            maybe_scroll();
+            reset_timer();
         });
 }
 
+var update_counter = 0;
+
 function partial_update() {
     if ($('.updatable').length > 0) {
+        if (update_counter >= 200) {
+            update_counter = 0;
+            full_refresh();
+            return;
+        }
         with_update(function(html) {
+            update_counter++;
             replace_content('scratch', html);
             var befores = $('#main .updatable');
             var afters = $('#scratch .updatable');
@@ -223,11 +295,41 @@ function partial_update() {
                 throw("before/after mismatch");
             }
             for (var i = 0; i < befores.length; i++) {
-                befores[i].innerHTML = afters[i].innerHTML;
+                $(befores[i]).replaceWith(afters[i]);
             }
             postprocess_partial();
         });
     }
+}
+
+function full_refresh() {
+    store_pref('position', x_position() + ',' + y_position());
+    location.reload();
+}
+
+function maybe_scroll() {
+    var pos = get_pref('position');
+    if (pos) {
+        clear_pref('position');
+        var xy = pos.split(",");
+        window.scrollTo(parseInt(xy[0]), parseInt(xy[1]));
+    }
+}
+
+function x_position() {
+    return window.pageXOffset ?
+        window.pageXOffset :
+        document.documentElement.scrollLeft ?
+        document.documentElement.scrollLeft :
+        document.body.scrollLeft;
+}
+
+function y_position() {
+    return window.pageYOffset ?
+        window.pageYOffset :
+        document.documentElement.scrollTop ?
+        document.documentElement.scrollTop :
+        document.body.scrollTop;
 }
 
 function with_update(fun) {
@@ -274,10 +376,18 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function error_popup(text) {
-    $('body').prepend('<div class="form-error">' + text + '</div>');
-    $('.form-error').center().fadeOut(5000)
-        .click( function() { $(this).stop().fadeOut('fast') } );
+function show_popup(type, text) {
+    var cssClass = '.form-popup-' + type;
+    function hide() {
+        $(cssClass).slideUp(200, function() {
+                $(this).remove();
+            });
+    }
+
+    hide();
+    $('h1').after(format('error-popup', {'type': type, 'text': text}));
+    $(cssClass).center().slideDown(200);
+    $(cssClass + ' span').click(hide);
 }
 
 function postprocess() {
@@ -288,8 +398,7 @@ function postprocess() {
                            "after deletion.");
         });
     $('div.section h2, div.section-hidden h2').click(function() {
-            $(this).next().slideToggle(100);
-            $(this).toggleClass("toggled");
+            toggle_visibility($(this));
         });
     $('label').map(function() {
             if ($(this).attr('for') == '') {
@@ -302,15 +411,32 @@ function postprocess() {
             }
         });
     $('#download-configuration').click(function() {
-            var path = '/api/all-configuration?download=' +
+            var path = '../api/all-configuration?download=' +
                 esc($('#download-filename').val());
             window.location = path;
             setTimeout('app.run()');
             return false;
         });
+    $('input, select').die();
     $('.multifield input').live('blur', function() {
             update_multifields();
         });
+    $('#has-password').change(function() {
+        if ($(this).val() == 'true') {
+            $('#password').slideDown(100);
+            $('#no-password').slideUp(100);
+        } else {
+            $('#password').slideUp(100);
+            $('#no-password').slideDown(100);
+        }
+    });
+    setup_visibility();
+    $('.help').die().live('click', function() {
+        help($(this).attr('id'))
+    });
+    $('input, select').live('focus', function() {
+        update_counter = 0; // If there's interaction, reset the counter.
+    });
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -329,6 +455,7 @@ function postprocess_partial() {
             }
             update();
         });
+    $('.help').html('(?)');
 }
 
 function update_multifields() {
@@ -363,10 +490,53 @@ function update_multifields() {
         });
 }
 
+function setup_visibility() {
+    $('div.section,div.section-hidden').each(function(_index) {
+        var pref = section_pref(current_template,
+                                $(this).children('h2').text());
+        var show = get_pref(pref);
+        if (show == null) {
+            show = $(this).hasClass('section');
+        }
+        else {
+            show = show == 't';
+        }
+        if (show) {
+            $(this).addClass('section-visible');
+        }
+        else {
+            $(this).addClass('section-invisible');
+        }
+    });
+}
+
+function toggle_visibility(item) {
+    var hider = item.next();
+    var all = item.parent();
+    var pref = section_pref(current_template, item.text());
+    item.next().slideToggle(100);
+    if (all.hasClass('section-visible')) {
+        if (all.hasClass('section'))
+            store_pref(pref, 'f');
+        else
+            clear_pref(pref);
+        all.removeClass('section-visible');
+        all.addClass('section-invisible');
+    }
+    else {
+        if (all.hasClass('section-hidden'))
+            store_pref(pref, 't');
+        else
+            clear_pref(pref);
+        all.removeClass('section-invisible');
+        all.addClass('section-visible');
+    }
+}
+
 function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
-        with_req('/api' + reqs[key], function(resp) {
+        with_req('../api' + reqs[key], function(resp) {
                 acc[key] = jQuery.parseJSON(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
@@ -381,8 +551,7 @@ function with_reqs(reqs, acc, fun) {
 }
 
 function replace_content(id, html) {
-    $("#" + id).empty();
-    $(html).appendTo("#" + id);
+    $("#" + id).html(html);
 }
 
 function format(template, json) {
@@ -395,12 +564,18 @@ function format(template, json) {
     }
 }
 
+var last_successful_connect;
+
 function update_status(status) {
     var text;
     if (status == 'ok')
-        text = "Last update: " + new Date();
-    else if (status == 'error')
-        text = "Error: could not connect to server at " + new Date();
+        text = "Last update: " + fmt_date(new Date());
+    else if (status == 'error') {
+        var next_try = new Date(new Date().getTime() + timer_interval);
+        text = "Error: could not connect to server since " +
+            fmt_date(last_successful_connect) + ".<br/>Will retry at " +
+            fmt_date(next_try) + ".";
+    }
     else
         throw("Unknown status " + status);
 
@@ -415,6 +590,7 @@ function with_req(path, fun) {
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (req.status == 200) {
+                last_successful_connect = new Date();
                 fun(req);
             }
             else if (req.status == 408) {
@@ -456,10 +632,17 @@ function sync_post(sammy, path_template) {
 }
 
 function sync_req(type, params0, path_template) {
-    var params = collapse_multifields(params0);
-    var path = fill_path_template(path_template, params);
+    var params;
+    var path;
+    try {
+        params = params_magic(params0);
+        path = fill_path_template(path_template, params);
+    } catch (e) {
+        show_popup('warn', e);
+        return false;
+    }
     var req = xmlHttpRequest();
-    req.open(type, '/api' + path, false);
+    req.open(type, '../api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
         if (type == 'GET')
@@ -475,8 +658,10 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (req.status == 400) {
-        error_popup(JSON.stringify(JSON.parse(req.responseText).reason));
+    if (req.status >= 400 && req.status <= 404) {
+        var reason = JSON.parse(req.responseText).reason;
+        if (typeof(reason) != 'string') reason = JSON.stringify(reason);
+        show_popup('warn', reason);
         return false;
     }
 
@@ -496,12 +681,23 @@ function sync_req(type, params0, path_template) {
 function fill_path_template(template, params) {
     var re = /:[a-zA-Z_]*/g;
     return template.replace(re, function(m) {
-            return esc(params[m.substring(1)]);
+            var str = esc(params[m.substring(1)]);
+            if (str == '') {
+                throw(m.substring(1) + " is required");
+            }
+            return str;
         });
 }
 
 // Better suggestions appreciated
-var INTEGER_ARGUMENTS = map(['x-expires']);
+var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
+var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
+
+function params_magic(params) {
+    return check_password(
+             maybe_remove_password(
+               collapse_multifields(params)));
+}
 
 function collapse_multifields(params0) {
     var params = {};
@@ -525,11 +721,32 @@ function collapse_multifields(params0) {
                 var v = params0[name + '_' + id + '_mfvalue'];
                 if (k in INTEGER_ARGUMENTS) {
                     v = parseInt(v);
+                } else if (k in ARRAY_ARGUMENTS) {
+                    v = v.split(" ");
                 }
                 params[name][k] = v;
             }
         }
     }
+    return params;
+}
+
+function check_password(params) {
+    if (params['password'] != undefined) {
+        if (params['password'] != params['password_confirm']) {
+            throw("Passwords do not match.");
+        }
+        delete params['password_confirm'];
+    }
+
+    return params;
+}
+
+function maybe_remove_password(params) {
+    if (params['has-password'] == 'false') {
+        delete params['password'];
+    }
+
     return params;
 }
 

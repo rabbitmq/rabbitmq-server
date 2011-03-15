@@ -1,118 +1,186 @@
 <h1>Overview</h1>
 
+<div class="section">
+<h2>Totals</h2>
+<div class="hider updatable">
+  <h3>Queued Messages</h3>
+  <div class="highlight">
+    Ready
+    <strong><%= overview.queue_totals.messages_ready %></strong>
+  </div>
+  <div class="highlight">
+    Unacknowledged
+    <strong><%= overview.queue_totals.messages_unacknowledged %></strong>
+  </div>
+  <div class="highlight">
+    Total
+    <strong><%= overview.queue_totals.messages %></strong>
+  </div>
+<span class="br"></span>
 <% if (statistics_level == 'fine') { %>
-<div class="section">
-<h2>Message Rates</h2>
-<div class="updatable">
-<%= message_rates(overview.message_stats) %>
+  <h3>Message Rates</h3>
+  <%= message_rates(overview.message_stats) %>
+<% } %>
 <span class="br"></span>
 </div>
 </div>
-<% } %>
 
+<% if (user_administrator) { %>
 <div class="section">
-<h2>System Information</h2>
-<div class="updatable">
-<table class="facts">
-  <tr>
-    <th>Erlang Nodename</th>
-    <td><%= overview.node %></td>
-  </tr>
-  <tr>
-    <th>Operating System PID</th>
-    <td><%= overview.os_pid %></td>
-  </tr>
-  <tr>
-    <th>Bound To</th>
-    <td><%= overview.bound_to %></td>
-  </tr>
-  <tr>
-    <th>File Descriptors</th>
-    <td class="status">
-      <div class="<%= fmt_color(overview.fd_used / overview.fd_total) %>">
-        <%= overview.fd_used %> / <%= overview.fd_total %>
-        <sub>(used/available)</sub>
-      </div>
-    </td>
-  </tr>
-  <tr>
-    <th>Erlang Processes</th>
-    <td class="status">
-      <div class="<%= fmt_color(overview.proc_used / overview.proc_total) %>">
-        <%= overview.proc_used %> / <%= overview.proc_total %>
-        <sub>(used/available)</sub>
-      </div>
-    </td>
-  </tr>
-<% if (overview.mem_total != 'memory_monitoring_disabled') { %>
-  <tr>
-    <th>Memory</th>
-    <td class="status">
-      <div class="<%= fmt_color(overview.mem_used / overview.mem_total) %>">
-        <%= fmt_bytes(overview.mem_used) %> / <%= fmt_bytes(overview.mem_total) %>
-        <sub>(used/available)</sub>
-      </div>
-    </td>
-  </tr>
-<% } %>
-</table>
-</div>
-</div>
-
-<div class="section-hidden">
-<h2>Applications</h2>
-<div>
+<h2>Nodes and Ports</h2>
+<div class="hider updatable">
+<h3>RabbitMQ Nodes</h3>
 <table class="list">
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Version</th>
-    </tr>
-  </thead>
-  <tbody>
-    <% for (var i = 0; i < applications.length; i++) { %>
-       <tr<%= alt_rows(i)%>>
-         <td><abbr title="<%= applications[i].description %>"><%= applications[i].name %></abbr></td>
-         <td><%= applications[i].version %></td>
-       </tr>
-    <% } %>
-  </tbody>
+  <tr>
+    <th>Name</th>
+    <th>
+      File Descriptors <span class="help" id="file-descriptors"></span>
+      <sub>(used / available)</sub>
+    </th>
+    <th>
+      Socket Descriptors <span class="help" id="socket-descriptors"></span>
+      <sub>(used / available)</sub>
+    </th>
+    <th>
+      Erlang Processes
+      <sub>(used / available)</sub>
+    </th>
+    <th>
+      Memory
+    </th>
+    <th>Uptime</th>
+    <th>
+      Version
+      <sub>(RabbitMQ / Erlang)</sub>
+    </th>
+    <th>Mnesia Storage <span class="help" id="mnesia-storage"></span></th>
+  </tr>
+<%
+   for (var i = 0; i < nodes.length; i++) {
+     var node = nodes[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td>
+       <%= link_node(node.name) %>
+     </td>
+<% if (!node.running) { %>
+     <td class="status" colspan="6">
+       <div class="red">
+         Node not running
+       </div>
+     </td>
+<% } else if (node.external_stats_not_running) { %>
+     <td class="status" colspan="6">
+       <div class="red">
+         Management agent not installed
+       </div>
+     </td>
+<% } else { %>
+     <td class="status">
+       <div class="<%= fmt_color(node.fd_used / node.fd_total,
+                                 FD_THRESHOLDS) %>">
+         <%= node.fd_used %> / <%= node.fd_total %>
+       </div>
+     </td>
+     <td class="status">
+       <div class="<%= fmt_color(node.sockets_used / node.sockets_total,
+                                 SOCKETS_THRESHOLDS) %>">
+         <%= node.sockets_used %> / <%= node.sockets_total %>
+       </div>
+     </td>
+     <td class="status">
+       <div class="<%= fmt_color(node.proc_used / node.proc_total,
+                                 PROCESS_THRESHOLDS) %>">
+         <%= node.proc_used %> / <%= node.proc_total %>
+       </div>
+     </td>
+     <td class="status">
+<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
+   <% if (node.mem_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.mem_used) %>
+         <span class="help" id="memory-alarm"></span>
+       </div>
+   <% } else { %>
+       <div class="green">
+         <%= fmt_bytes(node.mem_used) %>
+       </div>
+   <% } %>
+   <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
+<% } else { %>
+       <%= fmt_bytes(node.mem_used) %>
+<% } %>
+     </td>
+     <td class="r">
+       <%= fmt_uptime(node.uptime) %>
+     </td>
+     <td class="c">
+       <%= fmt_rabbit_version(node.applications) %> / <%= node.erlang_version %>
+     </td>
+<% } %>
+     <td class="c">
+       <%= node.type %>
+     </td>
+   </tr>
+<% } %>
 </table>
-<span class="br"></span>
+
+<% if (nodes_interesting) { %>
+<p>You are connected to: <b><%= overview.node %></b>.</p>
+<% if (overview.statistics_db_node == 'not_running') { %>
+  <p class="status-error">Statistics database node could not be contacted. Message rates and queue lengths will not be shown.</p>
+<% } else { %>
+  <p>Statistics database on: <b><%= overview.statistics_db_node %></b>.</b>
+<% } %>
+<% } %>
+
+<h3>Listening Ports</h3>
+<table class="list">
+  <tr>
+    <th>Host</th>
+    <th>Bound to</th>
+    <th>Port</th>
+  </tr>
+<%
+for (var i = 0; i < overview.listeners.length; i++) {
+    var listener = overview.listeners[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td>
+       <%= listener.host %>
+       <sub><%= listener.node %></sub>
+     </td>
+     <td>
+       <%= listener.ip_address %>
+     </td>
+     <td>
+       <%= listener.port %>
+       <sub><%= listener.protocol %></sub>
+     </td>
+   </tr>
+<% } %>
+</table>
 </div>
 </div>
 
 <div class="section-hidden administrator-only">
 <h2>Import / Export Configuration</h2>
-<div>
-  <p>
-    The configuration consists of users, virtual hosts, permissions,
-    exchanges, queues and bindings. It does not include the contents of
-    queues.
-  </p>
-  <form action="/api/all-configuration" method="post" enctype="multipart/form-data">
+<div class="hider">
+  <form action="../api/all-configuration" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>
-          <h3>Export</h3>
+          <h3>Export <span class="help" id="export-config"></span></h3>
           <p>
             <label for="download-filename">Filename for download:</label><br/>
             <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
           </p>
-          <p>
-            Note: exclusive queues will not be exported.
-          </p>
         </td>
         <td>
-          <h3>Import</h3>
+          <h3>Import <span class="help" id="import-config"></span></h3>
           <p>
             <label>Configuration file:</label><br/>
             <input type="file" name="file"/>
-          </p>
-          <p>
-            Note: The configuration that is imported will be merged with
-            the current configuration. If an error occurs during import,
-            any configuration changes made will not be rolled back.
           </p>
         </td>
       </tr>
@@ -137,7 +205,7 @@
 <% if (overview.statistics_level != 'fine') { %>
 <div class="section-hidden">
 <h2>Message Rates Disabled</h2>
-<div>
+<div class="hider">
 <p>
   The statistics level in this RabbitMQ server is currently set to
   <code><%= overview.statistics_level %></code>. Message rates are therefore
@@ -153,4 +221,6 @@
 <span class="br"></span>
 </div>
 </div>
+<% } %>
+
 <% } %>

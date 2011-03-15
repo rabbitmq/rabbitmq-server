@@ -1,0 +1,117 @@
+<% if (channels.length > 0) { %>
+<%
+     var col_return_unroutable = !is_col_empty(channels, 'return_unroutable');
+     var col_return_not_delivered = !is_col_empty(channels, 'return_not_delivered');
+     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0);
+%>
+<table class="list">
+ <thead>
+  <tr>
+<% if (mode == 'standalone') { %>
+   <th colspan="<% if (nodes_interesting) { %>2<% } else { %>1<% } %>"></th>
+   <th colspan="<% if (vhosts_interesting) { %>7<% } else { %>6<% } %>">Details</th>
+<% } else { %>
+   <th></th>
+   <th colspan="5">Details</th>
+<% } %>
+<% if (statistics_level == 'fine') { %>
+   <th colspan="<%= ratesWidth %>">Message rates</th>
+<% } %>
+  </tr>
+  <tr>
+<% if (mode == 'standalone') { %>
+    <th><%= fmt_sort('Channel',         'name') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',            'node') %></th>
+<% } %>
+<% if (vhosts_interesting) { %>
+    <th><%= fmt_sort('Virtual host',    'vhost') %></th>
+<% } %>
+    <th><%= fmt_sort('User name',       'user') %></th>
+    <th>Mode <span class="help" id="channel-mode"></span></th>
+    <th><%= fmt_sort('Prefetch',        'prefetch_count') %></th>
+    <th><%= fmt_sort('Unacked',         'messages_unacknowledged') %></th>
+    <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
+    <th><%= fmt_sort('Status',          'idle_since') %></th>
+<% if (statistics_level == 'fine') { %>
+    <th><%= fmt_sort('publish',         'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('confirm',         'message_stats.confirm_details.rate') %></th>
+    <th><%= fmt_sort('deliver / get',   'message_stats.deliver_get_details.rate') %></th>
+    <th><%= fmt_sort('ack',             'message_stats.ack_details.rate') %></th>
+    <% if (col_return_unroutable) { %>
+        <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
+    <% } %>
+    <% if (col_return_not_delivered) { %>
+        <th><%= fmt_sort('return (immediate)', 'message_stats.return_not_delivered_details.rate') %></th>
+    <% } %>
+<% } %>
+<% } else { %>
+<!-- TODO make sortable after bug 23401 -->
+    <th>Channel</th>
+    <th>Mode <span class="help" id="channel-mode"></span></th>
+    <th>Prefetch</th>
+    <th>Unacked</th>
+    <th>Unconfirmed</th>
+    <th>Status</th>
+<% if (statistics_level == 'fine') { %>
+    <th>publish</th>
+    <th>confirm</th>
+    <th>deliver / get</th>
+    <th>ack</th>
+    <% if (col_return_unroutable) { %>
+        <th>return (mandatory)</th>
+    <% } %>
+    <% if (col_return_not_delivered) { %>
+        <th>return (immediate)</th>
+    <% } %>
+<% } %>
+<% } %>
+  </tr>
+ </thead>
+ <tbody>
+<%
+  for (var i = 0; i < channels.length; i++) {
+    var channel = channels[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td>
+      <%= link_channel(channel.name) %>
+    </td>
+<% if (mode == 'standalone' && nodes_interesting) { %>
+    <td><%= channel.node %></td>
+<% } %>
+<% if (mode == 'standalone') { %>
+<% if (vhosts_interesting) { %>
+    <td class="c"><%= channel.vhost %></td>
+<% } %>
+    <td class="c"><%= channel.user %></td>
+<% } %>
+    <td class="c">
+      <%= fmt_channel_mode(channel) %>
+      <% if (channel.transactional) { %>
+      <sub><%= channel.acks_uncommitted %> uncommitted acks</sub>
+      <% } %>
+    </td>
+    <td class="c"><%= channel.prefetch_count %></td>
+    <td class="c"><%= channel.messages_unacknowledged %></td>
+    <td class="c"><%= channel.messages_unconfirmed %></td>
+    <td class="c"><%= fmt_idle(channel) %></td>
+<% if (statistics_level == 'fine') { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
+    <% if (col_return_unroutable) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'return_unroutable') %></td>
+    <% } %>
+    <% if (col_return_not_delivered) { %>
+    <td class="r"><%= fmt_rate(channel.message_stats, 'return_not_delivered') %></td>
+    <% } %>
+<% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no channels ...</p>
+<% } %>

@@ -8,30 +8,27 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_util).
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
--export([bad_request/3, id/2, parse_bool/1, now_ms/0]).
--export([with_decode/4, not_found/3, amqp_request/4]).
--export([all_or_one_vhost/2, with_decode_vhost/4, reply/3, filter_vhost/3]).
--export([filter_user/3, with_decode/5, redirect/2, args/1, vhosts/1]).
--export([reply_list/3, reply_list/4]).
+-export([bad_request/3, id/2, parse_bool/1]).
+-export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
+-export([props_to_method/2]).
+-export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
+-export([filter_user/3, with_decode/5, redirect/2, args/1]).
+-export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+
+-define(FRAMING, rabbit_framing_amqp_0_9_1).
 
 %%--------------------------------------------------------------------
 
@@ -43,14 +40,17 @@ is_authorized_admin(ReqData, Context) ->
                   fun(#user{is_admin = IsAdmin}) -> IsAdmin end).
 
 is_authorized_vhost(ReqData, Context) ->
-    is_authorized(ReqData, Context,
-                  fun(#user{username = Username}) ->
-                          case vhost(ReqData) of
-                              not_found -> true;
-                              none      -> true;
-                              V         -> lists:member(V, vhosts(Username))
-                          end
-                  end).
+    is_authorized(
+      ReqData, Context,
+      fun(User) ->
+              case vhost(ReqData) of
+                  not_found -> true;
+                  none      -> true;
+                  V         -> lists:member(
+                                 V,
+                                 rabbit_access_control:list_vhosts(User, write))
+              end
+      end).
 
 is_authorized_user(ReqData, Context, Item) ->
     is_authorized(
@@ -60,62 +60,78 @@ is_authorized_user(ReqData, Context, Item) ->
       end).
 
 is_authorized(ReqData, Context, Fun) ->
-    Unauthorized = {"Basic realm=\"RabbitMQ Management Console\"",
+    %% The realm name is wrong, but it needs to match the context name
+    %% of /mgmt/ to prevent some web ui users from being asked for
+    %% creds twice.
+    %% This will get fixed if / when we stop using rabbitmq-mochiweb.
+    Unauthorized = {"Basic realm=\"Management: Web UI\"",
                     ReqData, Context},
-    case wrq:get_req_header("authorization", ReqData) of
-        "Basic " ++ Base64 ->
-            Str = base64:mime_decode_to_string(Base64),
-            [Username, Pass] =
-                [list_to_binary(S) || S <- string:tokens(Str, ":")],
-            case rabbit_access_control:lookup_user(Username) of
-                {ok, User = #user{password = Pass1,
-                                  is_admin = IsAdmin}} when Pass == Pass1  ->
+    case rabbit_mochiweb_util:parse_auth_header(
+           wrq:get_req_header("authorization", ReqData)) of
+        [Username, Password] ->
+            case rabbit_access_control:check_user_pass_login(Username,
+                                                             Password) of
+                {ok, User} ->
                     case Fun(User) of
                         true  -> {true, ReqData,
-                                  Context#context{username = Username,
-                                                  password = Pass,
-                                                  is_admin = IsAdmin}};
+                                  Context#context{user     = User,
+                                                  password = Password}};
                         false -> Unauthorized
                     end;
-                {ok, #user{}} ->
-                    Unauthorized;
-                {error, _} ->
+                {refused, _, _} ->
                     Unauthorized
             end;
         _ ->
             Unauthorized
     end.
 
-now_ms() ->
-    rabbit_mgmt_format:timestamp(now()).
-
 vhost(ReqData) ->
     case id(vhost, ReqData) of
         none  -> none;
-        VHost -> case rabbit_access_control:vhost_exists(VHost) of
+        VHost -> case rabbit_vhost:exists(VHost) of
                      true  -> VHost;
                      false -> not_found
                  end
     end.
 
+destination_type(ReqData) ->
+    case id(dtype, ReqData) of
+        <<"e">> -> exchange;
+        <<"q">> -> queue
+    end.
+
 reply(Facts, ReqData, Context) ->
     ReqData1 = wrq:set_resp_header("Cache-Control", "no-cache", ReqData),
-    {mochijson2:encode(Facts), ReqData1, Context}.
+    try
+        {mochijson2:encode(Facts), ReqData1, Context}
+    catch
+        exit:{json_encode, E} ->
+            Error = iolist_to_binary(
+                      io_lib:format("JSON encode error: ~p", [E])),
+            Reason = iolist_to_binary(
+                       io_lib:format("While encoding:~n~p", [Facts])),
+            internal_server_error(Error, Reason, ReqData1, Context)
+    end.
 
 reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    Sort = case wrq:get_qs_value("sort", ReqData) of
+    reply(sort_list(Facts, DefaultSorts,
+                    wrq:get_qs_value("sort", ReqData),
+                    wrq:get_qs_value("sort_reverse", ReqData)),
+          ReqData, Context).
+
+sort_list(Facts, DefaultSorts, Sort, Reverse) ->
+    SortList = case Sort of
                undefined -> DefaultSorts;
                Extra     -> [Extra | DefaultSorts]
            end,
-    Facts1 = lists:sort(fun(A, B) -> compare(A, B, Sort) end, Facts),
-    Facts2 = case wrq:get_qs_value("sort_reverse", ReqData) of
-                 "true" -> lists:reverse(Facts1);
-                 _      -> Facts1
-             end,
-    reply(Facts2, ReqData, Context).
+    Sorted = lists:sort(fun(A, B) -> compare(A, B, SortList) end, Facts),
+    case Reverse of
+        "true" -> lists:reverse(Sorted);
+        _      -> Sorted
+    end.
 
 compare(_A, _B, []) ->
     true;
@@ -153,14 +169,20 @@ not_authorised(Reason, ReqData, Context) ->
 not_found(Reason, ReqData, Context) ->
     halt_response(404, not_found, Reason, ReqData, Context).
 
+internal_server_error(Error, Reason, ReqData, Context) ->
+    rabbit_log:error("~s~n~s~n", [Error, Reason]),
+    halt_response(500, Error, Reason, ReqData, Context).
+
 halt_response(Code, Type, Reason, ReqData, Context) ->
     Json = {struct, [{error, Type},
                      {reason, rabbit_mgmt_format:tuple(Reason)}]},
     ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
     {{halt, Code}, ReqData1, Context}.
 
-id(exchange, ReqData) ->
-    case id0(exchange, ReqData) of
+id(Key, ReqData) when Key =:= exchange;
+                      Key =:= source;
+                      Key =:= destination ->
+    case id0(Key, ReqData) of
         <<"amq.default">> -> <<"">>;
         Name              -> Name
     end;
@@ -171,6 +193,21 @@ id0(Key, ReqData) ->
     case dict:find(Key, wrq:path_info(ReqData)) of
         {ok, Id} -> list_to_binary(mochiweb_util:unquote(Id));
         error    -> none
+    end.
+
+%% TODO unify this with the function below after bug23384 is merged
+with_decode_opts(Keys, ReqData, Context, Fun) ->
+    Body = wrq:req_body(ReqData),
+    case decode(Keys, Body) of
+        {error, Reason} -> bad_request(Reason, ReqData, Context);
+        _Values         -> try
+                               {ok, Obj0} = decode(Body),
+                               Obj = [{list_to_atom(binary_to_list(K)), V} ||
+                                         {K, V} <- Obj0],
+                               Fun(Obj)
+                           catch {error, Error} ->
+                                   bad_request(Error, ReqData, Context)
+                           end
     end.
 
 with_decode(Keys, ReqData, Context, Fun) ->
@@ -187,27 +224,22 @@ with_decode(Keys, Body, ReqData, Context, Fun) ->
     end.
 
 decode(Keys, Body) ->
-    {Res, Json} = try
-                      {struct, J} = mochijson2:decode(Body),
-                      {ok, J}
-                  catch error:_ -> {error, not_json}
-                  end,
-    case Res of
-        ok -> Results =
-                  [get_or_missing(list_to_binary(atom_to_list(K)), Json) ||
-                      K <- Keys],
-              case [E || E = {key_missing, _} <- Results] of
-                  []      -> Results;
-                  Errors  -> {error, Errors}
-              end;
-        _  -> {Res, Json}
+    case decode(Body) of
+        {ok, J} -> Results =
+                       [get_or_missing(list_to_binary(atom_to_list(K)), J) ||
+                           K <- Keys],
+                   case [E || E = {key_missing, _} <- Results] of
+                       []      -> Results;
+                       Errors  -> {error, Errors}
+                   end;
+        Else    -> Else
     end.
 
-with_decode_vhost(Keys, ReqData, Context, Fun) ->
-    case vhost(ReqData) of
-        not_found -> not_found(vhost_not_found, ReqData, Context);
-        VHost     -> with_decode(Keys, ReqData, Context,
-                                 fun (Vals) -> Fun(VHost, Vals) end)
+decode(Body) ->
+    try
+        {struct, J} = mochijson2:decode(Body),
+        {ok, J}
+    catch error:_ -> {error, not_json}
     end.
 
 get_or_missing(K, L) ->
@@ -216,6 +248,52 @@ get_or_missing(K, L) ->
         V         -> V
     end.
 
+http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
+    case vhost(ReqData) of
+        not_found ->
+            not_found(vhost_not_found, ReqData, Context);
+        VHost ->
+            case decode(wrq:req_body(ReqData)) of
+                {ok, Props} ->
+                    try
+                        Node =
+                            case proplists:get_value(<<"node">>, Props) of
+                                undefined -> node();
+                                N         -> rabbit_misc:makenode(
+                                               binary_to_list(N))
+                            end,
+                        amqp_request(VHost, ReqData, Context, Node,
+                                     props_to_method(
+                                       MethodName, Props, Transformers, Extra))
+                    catch {error, Error} ->
+                            bad_request(Error, ReqData, Context)
+                    end;
+                {error, Reason} ->
+                    bad_request(Reason, ReqData, Context)
+            end
+    end.
+
+props_to_method(MethodName, Props, Transformers, Extra) ->
+    Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- Props],
+    props_to_method(
+      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, Transformers)).
+
+props_to_method(MethodName, Props) ->
+    Props1 = rabbit_mgmt_format:format(
+               Props,
+               [{fun (Args) -> [{arguments, args(Args)}] end, [arguments]}]),
+    FieldNames = ?FRAMING:method_fieldnames(MethodName),
+    {Res, _Idx} = lists:foldl(
+                    fun (K, {R, Idx}) ->
+                            NewR = case proplists:get_value(K, Props1) of
+                                       undefined -> R;
+                                       V         -> setelement(Idx, R, V)
+                                   end,
+                            {NewR, Idx + 1}
+                    end, {?FRAMING:method_record(MethodName), 2},
+                    FieldNames),
+    Res.
+
 parse_bool(<<"true">>)  -> true;
 parse_bool(<<"false">>) -> false;
 parse_bool(true)        -> true;
@@ -223,48 +301,58 @@ parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
 amqp_request(VHost, ReqData, Context, Method) ->
+    amqp_request(VHost, ReqData, Context, node(), Method).
+
+amqp_request(VHost, ReqData,
+             Context = #context{ user = #user { username = Username },
+                                 password = Password }, Node, Method) ->
     try
-        Params = #amqp_params{username = Context#context.username,
-                              password = Context#context.password,
+        Params = #amqp_params{username     = Username,
+                              password     = Password,
+                              node         = Node,
                               virtual_host = VHost},
-        {ok, Conn} = amqp_connection:start(direct, Params),
-        %% No need to check for {error, {auth_failure_likely...
-        %% since we will weed out failed logins in some webmachine
-        %% is_authorized/2 anyway.
-        {ok, Ch} = amqp_connection:open_channel(Conn),
-        amqp_channel:call(Ch, Method),
-        amqp_channel:close(Ch),
-        amqp_connection:close(Conn),
-        {true, ReqData, Context}
+        case amqp_connection:start(direct, Params) of
+            {ok, Conn} ->
+                {ok, Ch} = amqp_connection:open_channel(Conn),
+                amqp_channel:call(Ch, Method),
+                amqp_channel:close(Ch),
+                amqp_connection:close(Conn),
+                {true, ReqData, Context};
+            {error, auth_failure} ->
+                not_authorised(<<"">>, ReqData, Context);
+            {error, {nodedown, N}} ->
+                bad_request(
+                  list_to_binary(
+                    io_lib:format("Node ~s could not be contacted", [N])),
+                 ReqData, Context)
+        end
     catch
         exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
-            not_found(list_to_binary(Reason), ReqData, Context);
+            not_found(Reason, ReqData, Context);
         exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
-            not_authorised(list_to_binary(Reason), ReqData, Context);
-        exit:{{server_initiated_close, Code, Reason}, _} ->
+            not_authorised(Reason, ReqData, Context);
+        exit:{{ServerClose, Code, Reason}, _}
+          when ServerClose =:= server_initiated_close;
+               ServerClose =:= server_initiated_hard_close ->
             bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
                         ReqData, Context)
     end.
 
 all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
-        none      -> lists:append(
-                       [Fun(V) || V <- rabbit_access_control:list_vhosts()]);
+        none      -> lists:append([Fun(V) || V <- rabbit_vhost:list()]);
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
     end.
 
 filter_vhost(List, _ReqData, Context) ->
-    VHosts = vhosts(Context#context.username),
+    VHosts = rabbit_access_control:list_vhosts(Context#context.user, write),
     [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
 
-vhosts(Username) ->
-    [VHost || {VHost, _, _, _, _}
-                  <- rabbit_access_control:list_user_permissions(Username)].
-
-filter_user(List, _ReqData, #context{is_admin = true}) ->
+filter_user(List, _ReqData, #context{user = #user{is_admin = true}}) ->
     List;
-filter_user(List, _ReqData, #context{username = Username, is_admin = false}) ->
+filter_user(List, _ReqData,
+            #context{user = #user{username = Username, is_admin = false}}) ->
     [I || I <- List, proplists:get_value(user, I) == Username].
 
 redirect(Location, ReqData) ->
@@ -274,4 +362,4 @@ redirect(Location, ReqData) ->
 args({struct, L}) ->
     args(L);
 args(L) ->
-    [{K, rabbit_mgmt_format:args_type(V), V} || {K, V} <- L].
+    rabbit_mgmt_format:to_amqp_table(L).

@@ -1,17 +1,20 @@
 <h1>Exchanges</h1>
 <div class="section">
   <h2>All exchanges</h2>
-  <div class="updatable">
+  <div class="hider updatable">
 <%= maybe_truncate(exchanges) %>
 <table class="list">
  <thead>
   <tr>
+<% if (vhosts_interesting) { %>
    <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
    <th><%= fmt_sort('Name',         'name') %></th>
    <th><%= fmt_sort('Type',         'type') %></th>
-   <th><%= fmt_sort('Durable',      'durable') %></th>
-   <th><%= fmt_sort('Auto delete',  'auto_delete') %></th>
-   <th>Arguments</th>
+   <th>Parameters</th>
+<% if (statistics_level == 'fine') { %>
+   <th><%= fmt_sort('Message rate',   'message_stats_in.publish_details.rate') %></th>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -20,12 +23,13 @@
     var exchange = exchanges[i];
 %>
   <tr<%= alt_rows(i)%>>
-   <td><%= link_vhost(exchange.vhost) %></td>
+<% if (vhosts_interesting) { %>
+   <td><%= exchange.vhost %></td>
+<% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
-   <td><%= exchange.type %></td>
-   <td class="c"><%= fmt_boolean(exchange.durable) %></td>
-   <td class="c"><%= fmt_boolean(exchange.auto_delete) %></td>
-   <td><%= fmt_table_short(exchange.arguments) %></td>
+   <td class="c"><%= exchange.type %></td>
+   <td class="c"><%= fmt_parameters(exchange) %></td>
+   <td class="r"><%= fmt_rate(exchange.message_stats_in, 'publish', false) %></td>
   </tr>
   <% } %>
  </tbody>
@@ -35,7 +39,7 @@
 
 <div class="section-hidden">
   <h2>Add a new exchange</h2>
-  <div>
+  <div class="hider">
     <form action="#/exchanges" method="put">
       <table class="form">
         <tr>
@@ -50,11 +54,11 @@
         </tr>
         <tr>
           <th><label>Name:</label></th>
-          <td><input type="text" name="name"/></td>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
         <tr>
           <th><label>Type:</label></th>
-          <td><input type="text" name="type"/></td>
+          <td><input type="text" name="type"/><span class="mand">*</span></td>
         </tr>
         <tr>
           <th><label>Durability:</label></th>
@@ -75,8 +79,20 @@
           </td>
         </tr>
         <tr>
+          <th><label>Internal:</label></th>
+          <td>
+            <select name="internal">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
           <th><label>Arguments:</label></th>
-          <td><span class="multifield" id="arguments"></span></td>
+          <td>
+            <span class="multifield" id="arguments"></span>
+            <span class="help" id="exchange-arguments"></span>
+          </td>
         </tr>
       </table>
       <input type="submit" value="Add exchange"/>

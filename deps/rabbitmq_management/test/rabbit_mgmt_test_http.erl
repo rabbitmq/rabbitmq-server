@@ -30,16 +30,23 @@
 -define(NOT_AUTHORISED, 401).
 %%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
 -define(PREFIX, "http://localhost:55672/api").
+%% httpc seems to get racy when using HTTP 1.1
+-define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
 
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
-    [<<"0.0.0.0:5672">>] = pget(bound_to, http_get("/overview")),
+    true = 0 < length(pget(listeners, http_get("/overview"))),
+    http_put("/users/myuser", [{password,      <<"myuser">>},
+                               {administrator, false}], ?NO_CONTENT),
+    http_get("/overview", "myuser", "myuser", ?OK),
+    http_delete("/users/myuser", ?NO_CONTENT),
     %% TODO uncomment when priv works in test
     %%http_get(""),
-    %% Just for coverage
-    http_get("/applications"),
     ok.
+
+nodes_test() ->
+    assert_list([[{type, <<"disc">>}, {running, true}]], http_get("/nodes")).
 
 auth_test() ->
     test_auth(?NOT_AUTHORISED, []),
@@ -66,27 +73,22 @@ vhosts_test() ->
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 users_test() ->
-    assert_item([{name, <<"guest">>},
-                 {password, <<"guest">>},
-                 {administrator, true}], http_get("/whoami", ?OK)),
+    assert_item([{name, <<"guest">>}, {administrator, true}],
+                http_get("/whoami")),
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{password, <<"myuser">>},
+    http_put("/users/myuser", [{administrator, false}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password_hash,
+                                <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
                                {administrator, true}], ?NO_CONTENT),
-    [{name,          <<"myuser">>},
-     {password,      <<"password">>},
-     {administrator, true}] =
-        http_get("/users/myuser"),
-    [[{name,<<"guest">>},
-      {password,<<"guest">>},
-      {administrator, true}],
-     [{name,          <<"myuser">>},
-      {password,      <<"password">>},
-      {administrator, true}]] =
-        http_get("/users"),
+    assert_item([{name, <<"myuser">>}, {administrator, true}],
+                http_get("/users/myuser")),
+    assert_list([[{name, <<"myuser">>}, {administrator, true}],
+                 [{name, <<"guest">>}, {administrator, true}]],
+                http_get("/users")),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
     test_auth(?NOT_AUTHORISED, [auth_header("myuser", "password")]),
@@ -94,19 +96,12 @@ users_test() ->
     ok.
 
 permissions_validation_test() ->
-    Good = [{configure, <<".*">>}, {write, <<".*">>},
-            {read,      <<".*">>}, {scope, <<"client">>}],
+    Good = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/wrong", Good, ?BAD_REQUEST),
     http_put("/permissions/%2f/guest",
-             [{configure, <<".*">>}, {write, <<".*">>},
-              {read,      <<".*">>}], ?BAD_REQUEST),
-    http_put("/permissions/%2f/guest",
-             [{configure, <<".*">>}, {write, <<".*">>},
-              {read,      <<".*">>}, {scope, <<"wrong">>}], ?BAD_REQUEST),
-    http_put("/permissions/%2f/guest",
-             [{configure, <<"[">>},  {write, <<".*">>},
-              {read,      <<".*">>}, {scope, <<"client">>}], ?BAD_REQUEST),
+             [{configure, <<"[">>}, {write, <<".*">>}, {read, <<".*">>}],
+             ?BAD_REQUEST),
     http_put("/permissions/%2f/guest", Good, ?NO_CONTENT),
     ok.
 
@@ -115,8 +110,7 @@ permissions_list_test() ->
       {vhost,<<"/">>},
       {configure,<<".*">>},
       {write,<<".*">>},
-      {read,<<".*">>},
-      {scope,<<"client">>}]] =
+      {read,<<".*">>}]] =
         http_get("/permissions"),
 
     http_put("/users/myuser1", [{password, <<"">>}, {administrator, true}],
@@ -126,8 +120,7 @@ permissions_list_test() ->
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
 
-    Perms = [{configure, <<"foo">>}, {write, <<"foo">>},
-             {read,      <<"foo">>}, {scope, <<"client">>}],
+    Perms = [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
     http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost2/myuser1", Perms, ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser2", Perms, ?NO_CONTENT),
@@ -148,21 +141,19 @@ permissions_test() ->
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
     http_put("/permissions/myvhost/myuser",
-             [{configure, <<"foo">>}, {write, <<"foo">>},
-              {read,      <<"foo">>}, {scope, <<"client">>}], ?NO_CONTENT),
+             [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
+             ?NO_CONTENT),
 
     Permission = [{user,<<"myuser">>},
                   {vhost,<<"myvhost">>},
                   {configure,<<"foo">>},
                   {write,<<"foo">>},
-                  {read,<<"foo">>},
-                  {scope,<<"client">>}],
+                  {read,<<"foo">>}],
     Default = [{user,<<"guest">>},
                {vhost,<<"/">>},
                {configure,<<".*">>},
                {write,<<".*">>},
-               {read,<<".*">>},
-               {scope,<<"client">>}],
+               {read,<<".*">>}],
     Permission = http_get("/permissions/myvhost/myuser"),
     assert_list([Permission, Default], http_get("/permissions")),
     assert_list([Permission], http_get("/users/myuser/permissions")),
@@ -181,6 +172,9 @@ connections_test() ->
                "/connections/127.0.0.1%3A~w", [LocalPort])),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
+    %% TODO rabbit_reader:shutdown/2 returns before the connection is
+    %% closed. It may not be worth fixing.
+    timer:sleep(200),
     http_get(Path, ?NOT_FOUND).
 
 test_auth(Code, Headers) ->
@@ -188,14 +182,13 @@ test_auth(Code, Headers) ->
 
 exchanges_test() ->
     %% Can pass booleans or strings
-    Good = [{type, <<"direct">>}, {durable, <<"true">>},
-            {auto_delete, <<"false">>}, {arguments, []}],
+    Good = [{type, <<"direct">>}, {durable, <<"true">>}],
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
-             [{configure, <<".*">>}, {write, <<".*">>},
-              {read,      <<".*">>}, {scope, <<"client">>}], ?NO_CONTENT),
+             [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+             ?NO_CONTENT),
     http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
@@ -205,21 +198,17 @@ exchanges_test() ->
      {type,<<"direct">>},
      {durable,true},
      {auto_delete,false},
+     {internal,false},
      {arguments,[]}] =
         http_get("/exchanges/myvhost/foo"),
 
     http_put("/exchanges/badvhost/bar", Good, ?NOT_FOUND),
-    http_put("/exchanges/myvhost/bar",
-             [{type, <<"bad_exchange_type">>},
-              {durable, true}, {auto_delete, false}, {arguments, []}],
+    http_put("/exchanges/myvhost/bar", [{type, <<"bad_exchange_type">>}],
              ?BAD_REQUEST),
-    http_put("/exchanges/myvhost/bar",
-             [{type, <<"direct">>},
-              {durable, <<"troo">>}, {auto_delete, false}, {arguments, []}],
+    http_put("/exchanges/myvhost/bar", [{type, <<"direct">>},
+                                        {durable, <<"troo">>}],
              ?BAD_REQUEST),
-    http_put("/exchanges/myvhost/foo",
-             [{type, <<"direct">>},
-              {durable, false}, {auto_delete, false}, {arguments, []}],
+    http_put("/exchanges/myvhost/foo", [{type, <<"direct">>}],
              ?BAD_REQUEST),
 
     http_delete("/exchanges/myvhost/foo", ?NO_CONTENT),
@@ -230,7 +219,7 @@ exchanges_test() ->
     ok.
 
 queues_test() ->
-    Good = [{durable, true}, {auto_delete, false}, {arguments, []}],
+    Good = [{durable, true}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
@@ -238,10 +227,10 @@ queues_test() ->
 
     http_put("/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put("/queues/%2f/bar",
-             [{durable, <<"troo">>}, {auto_delete, false}, {arguments, []}],
+             [{durable, <<"troo">>}],
              ?BAD_REQUEST),
     http_put("/queues/%2f/foo",
-             [{durable, false}, {auto_delete, false}, {arguments, []}],
+             [{durable, false}],
              ?BAD_REQUEST),
 
     http_put("/queues/%2f/baz", Good, ?NO_CONTENT),
@@ -271,70 +260,107 @@ queues_test() ->
     ok.
 
 bindings_test() ->
-    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, []}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    XArgs = [{type, <<"direct">>}],
+    QArgs = [],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/e2q/myexchange/badqueue/routing", [], ?NOT_FOUND),
-    http_put("/bindings/%2f/e2q/badexchange/myqueue/routing", [], ?NOT_FOUND),
-    http_put("/bindings/%2f/e2q/myexchange/myqueue/bad_routing", [], ?BAD_REQUEST),
-    http_put("/bindings/%2f/e2q/myexchange/myqueue/routing", [], ?NO_CONTENT),
-    http_get("/bindings/%2f/e2q/myexchange/myqueue/routing", ?OK),
-    http_get("/bindings/%2f/e2q/myexchange/myqueue/rooting", ?NOT_FOUND),
+    http_put("/bindings/%2f/e/myexchange/q/badqueue/routing", [], ?NOT_FOUND),
+    http_put("/bindings/%2f/e/badexchange/q/myqueue/routing", [], ?NOT_FOUND),
+    http_put("/bindings/%2f/e/myexchange/q/myqueue/bad_routing", [], ?BAD_REQUEST),
+    http_put("/bindings/%2f/e/myexchange/q/myqueue/routing", [], ?NO_CONTENT),
+    http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?OK),
+    http_get("/bindings/%2f/e/myexchange/q/myqueue/rooting", ?NOT_FOUND),
     Binding =
-        [{exchange,<<"myexchange">>},
+        [{source,<<"myexchange">>},
          {vhost,<<"/">>},
-         {queue,<<"myqueue">>},
+         {destination,<<"myqueue">>},
+         {destination_type,<<"queue">>},
          {routing_key,<<"routing">>},
          {arguments,[]},
          {properties_key,<<"routing">>}],
     DBinding =
-        [{exchange,<<"">>},
+        [{source,<<"">>},
          {vhost,<<"/">>},
-         {queue,<<"myqueue">>},
+         {destination,<<"myqueue">>},
+         {destination_type,<<"queue">>},
          {routing_key,<<"myqueue">>},
          {arguments,[]},
          {properties_key,<<"myqueue">>}],
-    Binding = http_get("/bindings/%2f/e2q/myexchange/myqueue/routing"),
+    Binding = http_get("/bindings/%2f/e/myexchange/q/myqueue/routing"),
     assert_list([Binding],
-                http_get("/bindings/%2f/e2q/myexchange/myqueue")),
+                http_get("/bindings/%2f/e/myexchange/q/myqueue")),
     assert_list([Binding, DBinding],
                 http_get("/queues/%2f/myqueue/bindings")),
     assert_list([Binding],
-                http_get("/exchanges/%2f/myexchange/bindings")),
-    http_delete("/bindings/%2f/e2q/myexchange/myqueue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e2q/myexchange/myqueue/routing", ?NOT_FOUND),
+                http_get("/exchanges/%2f/myexchange/bindings/source")),
+    http_delete("/bindings/%2f/e/myexchange/q/myqueue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/myexchange/q/myqueue/routing", ?NOT_FOUND),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     http_get("/bindings/badvhost", ?NOT_FOUND),
     http_get("/bindings/badvhost/myqueue/myexchange/routing", ?NOT_FOUND),
-    http_get("/bindings/%2f/e2q/myexchange/myqueue/routing", ?NOT_FOUND),
+    http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?NOT_FOUND),
     ok.
 
 bindings_post_test() ->
-    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, []}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
-    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
+    XArgs = [{type, <<"direct">>}],
+    QArgs = [],
+    BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_post("/bindings/%2f/e2q/myexchange/badqueue", BArgs, ?NOT_FOUND),
-    http_post("/bindings/%2f/e2q/badexchange/myqueue", BArgs, ?NOT_FOUND),
-    http_post("/bindings/%2f/e2q/myexchange/myqueue", [{a, "b"}], ?BAD_REQUEST),
-    Headers = http_post("/bindings/%2f/e2q/myexchange/myqueue", BArgs, ?CREATED),
-    "/api/bindings/%2F/e2q/myexchange/myqueue/routing" =
+    http_post("/bindings/%2f/e/myexchange/q/badqueue", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/myexchange/q/myqueue", [{a, "b"}], ?BAD_REQUEST),
+    Headers = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
+    "../../../../%2F/e/myexchange/q/myqueue/routing_foo_bar" =
         pget("location", Headers),
-    [{exchange,<<"myexchange">>},
+    [{source,<<"myexchange">>},
      {vhost,<<"/">>},
-     {queue,<<"myqueue">>},
+     {destination,<<"myqueue">>},
+     {destination_type,<<"queue">>},
+     {routing_key,<<"routing">>},
+     {arguments,[{foo,<<"bar">>}]},
+     {properties_key,<<"routing_foo_bar">>}] =
+        http_get("/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar", ?OK),
+    http_delete("/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar", ?NO_CONTENT),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+bindings_e2e_test() ->
+    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
+    http_post("/bindings/%2f/e/amq.direct/e/badexchange", BArgs, ?NOT_FOUND),
+    http_post("/bindings/%2f/e/badexchange/e/amq.fanout", BArgs, ?NOT_FOUND),
+    Headers = http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
+    "../../../../%2F/e/amq.direct/e/amq.fanout/routing" =
+        pget("location", Headers),
+    [{source,<<"amq.direct">>},
+     {vhost,<<"/">>},
+     {destination,<<"amq.fanout">>},
+     {destination_type,<<"exchange">>},
      {routing_key,<<"routing">>},
      {arguments,[]},
      {properties_key,<<"routing">>}] =
-        http_get("/bindings/%2f/e2q/myexchange/myqueue/routing", ?OK),
-    http_delete("/bindings/%2f/e2q/myexchange/myqueue/routing", ?NO_CONTENT),
-    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
-    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+        http_get("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?OK),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
+    http_put("/bindings/%2f/e/amq.direct/e/amq.headers/routing", [], ?NO_CONTENT),
+    Binding =
+        [{source,<<"amq.direct">>},
+         {vhost,<<"/">>},
+         {destination,<<"amq.headers">>},
+         {destination_type,<<"exchange">>},
+         {routing_key,<<"routing">>},
+         {arguments,[]},
+         {properties_key,<<"routing">>}],
+    Binding = http_get("/bindings/%2f/e/amq.direct/e/amq.headers/routing"),
+    assert_list([Binding],
+                http_get("/bindings/%2f/e/amq.direct/e/amq.headers")),
+    assert_list([Binding],
+                http_get("/exchanges/%2f/amq.direct/bindings/source")),
+    assert_list([Binding],
+                http_get("/exchanges/%2f/amq.headers/bindings/destination")),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.headers/routing", ?NO_CONTENT),
+    http_get("/bindings/%2f/e/amq.direct/e/amq.headers/rooting", ?NOT_FOUND),
     ok.
 
 permissions_administrator_test() ->
@@ -364,9 +390,8 @@ permissions_administrator_test() ->
     ok.
 
 permissions_vhost_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
-    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
-                {read,      <<".*">>}, {scope, <<"client">>}],
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
@@ -407,9 +432,10 @@ permissions_vhost_test() ->
     Test1("/bindings"),
     Test2("/bindings", ""),
     Test2("/queues", "myqueue/bindings"),
-    Test2("/exchanges", "amq.default/bindings"),
-    Test2("/bindings", "e2q/amq.default/myqueue"),
-    Test2("/bindings", "e2q/amq.default/myqueue/myqueue"),
+    Test2("/exchanges", "amq.default/bindings/source"),
+    Test2("/exchanges", "amq.default/bindings/destination"),
+    Test2("/bindings", "e/amq.default/q/myqueue"),
+    Test2("/bindings", "e/amq.default/q/myqueue/myqueue"),
     http_delete("/vhosts/myvhost1", ?NO_CONTENT),
     http_delete("/vhosts/myvhost2", ?NO_CONTENT),
     http_delete("/users/myuser", ?NO_CONTENT),
@@ -417,21 +443,23 @@ permissions_vhost_test() ->
 
 permissions_amqp_test() ->
     %% Just test that it works at all, not that it works in all possible cases.
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
-                {read,      <<"foo.*">>}, {scope, <<"client">>}],
+                {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
                                {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser", ?NOT_AUTHORISED),
-    http_put("/queues/%2f/bar-queue", QArgs, "nonexistent", "nonexistent", ?NOT_AUTHORISED),
+    http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser",
+             ?NOT_AUTHORISED),
+    http_put("/queues/%2f/bar-queue", QArgs, "nonexistent", "nonexistent",
+             ?NOT_AUTHORISED),
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
 get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(network, #amqp_params{
-                                        username = Username,
-                                        password = Password}),
+                                        username = list_to_binary(Username),
+                                        password = list_to_binary(Password)}),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     ConnPath = binary_to_list(
                  rabbit_mgmt_format:print(
@@ -442,8 +470,7 @@ get_conn(Username, Password) ->
     {Conn, ConnPath, ChPath}.
 
 permissions_connection_channel_test() ->
-    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
-                {read,      <<".*">>}, {scope, <<"client">>}],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
                              {administrator, false}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
@@ -472,28 +499,30 @@ permissions_connection_channel_test() ->
     ok.
 
 unicode_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     http_put("/queues/%2f/♫♪♫♪", QArgs, ?NO_CONTENT),
     http_get("/queues/%2f/♫♪♫♪", ?OK),
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
 all_configuration_test() ->
-    XArgs = [{type, <<"direct">>}, {durable, false}, {auto_delete, false},
-             {arguments, []}],
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    XArgs = [{type, <<"direct">>}],
+    QArgs = [],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/e2q/my-exchange/my-queue/routing", [], ?NO_CONTENT),
-    http_put("/bindings/%2f/e2q/amq.direct/my-queue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/my-exchange/q/my-queue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/amq.direct/q/my-queue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", [], ?NO_CONTENT),
     AllConfig = http_get("/all-configuration", ?OK),
-    http_delete("/bindings/%2f/e2q/my-exchange/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e2q/amq.direct/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
     http_post("/all-configuration", AllConfig, ?NO_CONTENT),
-    http_delete("/bindings/%2f/e2q/my-exchange/my-queue/routing", ?NO_CONTENT),
-    http_delete("/bindings/%2f/e2q/amq.direct/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
+    http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
     ExtraConfig =
@@ -564,16 +593,15 @@ aliveness_test() ->
     ok.
 
 arguments_test() ->
-    XArgs = [{type, <<"headers">>}, {durable, false}, {auto_delete, false},
+    XArgs = [{type, <<"headers">>},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
-    QArgs = [{durable, false}, {auto_delete, false},
-             {arguments, [{'x-expires', 1800000}]}],
+    QArgs = [{arguments, [{'x-expires', 1800000}]}],
     BArgs = [{routing_key, <<"">>},
              {arguments, [{'x-match', <<"all">>},
                           {foo, <<"bar">>}]}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_post("/bindings/%2f/e2q/myexchange/myqueue", BArgs, ?CREATED),
+    http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
     AllConfig = http_get("/all-configuration", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
@@ -584,14 +612,27 @@ arguments_test() ->
         pget(arguments, http_get("/queues/%2f/myqueue", ?OK)),
     [{foo, <<"bar">>}, {'x-match', <<"all">>}] =
         pget(arguments,
-             http_get("/bindings/%2f/e2q/myexchange/myqueue/" ++
+             http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
                           "_foo_bar_x-match_all", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+arguments_table_test() ->
+    Args = [{'upstreams', [<<"amqp://localhost/%2f/upstream1">>,
+                           <<"amqp://localhost/%2f/upstream2">>]}],
+    XArgs = [{type, <<"headers">>},
+             {arguments, Args}],
+    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    AllConfig = http_get("/all-configuration", ?OK),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
+    http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
+    ok.
+
 queue_purge_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
+    QArgs = [],
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -619,9 +660,8 @@ queue_purge_test() ->
     ok.
 
 sorting_test() ->
-    QArgs = [{durable, false}, {auto_delete, false}, {arguments, []}],
-    PermArgs = [{configure, <<".*">>}, {write, <<".*">>},
-                {read,      <<".*">>}, {scope, <<"client">>}],
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/vhosts/vh1", [], ?NO_CONTENT),
     http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
     http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
@@ -669,8 +709,9 @@ http_get(Path, CodeExp) ->
     http_get(Path, "guest", "guest", CodeExp).
 
 http_get(Path, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(get, Path, [auth_header(User, Pass)]),
+    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
 http_put(Path, List, CodeExp) ->
@@ -694,24 +735,31 @@ http_put_raw(Path, Body, User, Pass, CodeExp) ->
 http_post_raw(Path, Body, CodeExp) ->
     http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
 
-%% TODO Lose the sleep below. What is happening async?
 http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Type, Path, [auth_header(User, Pass)], Body),
-    timer:sleep(100),
+    assert_code(CodeExp, CodeAct, Type, Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
-    {ok, {{_HTTP, CodeExp, _}, Headers, ResBody}} =
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(delete, Path, [auth_header()]),
+    assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
+assert_code(CodeExp, CodeAct, Type, Path, Body) ->
+    case CodeExp of
+        CodeAct -> ok;
+        _       -> throw({expected, CodeExp, got, CodeAct, type, Type,
+                          path, Path, body, Body})
+    end.
+
 req(Type, Path, Headers) ->
-    httpc:request(Type, {?PREFIX ++ Path, Headers}, [], []).
+    httpc:request(Type, {?PREFIX ++ Path, Headers}, ?HTTPC_OPTS, []).
 
 req(Type, Path, Headers, Body) ->
     httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
-                  [], []).
+                  ?HTTPC_OPTS, []).
 
 decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
 decode(_,    Headers, _ResBody) -> Headers.

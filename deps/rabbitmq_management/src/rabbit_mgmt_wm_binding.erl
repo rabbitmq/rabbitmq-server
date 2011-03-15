@@ -8,16 +8,10 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_binding).
 
 -export([init/1, resource_exists/2, to_json/2,
@@ -61,30 +55,18 @@ to_json(ReqData, Context) ->
                  end).
 
 accept_content(ReqData, Context) ->
-    sync_resource(
-      ReqData, Context,
-      fun(#binding{queue_name    = QueueName,
-                   exchange_name = ExchangeName,
-                   key           = RoutingKey,
-                   args          = Arguments}) ->
-              #'queue.bind'{ queue       = QueueName#resource.name,
-                             exchange    = ExchangeName#resource.name,
-                             routing_key = RoutingKey,
-                             arguments   = Arguments }
-      end).
+    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                     exchange -> 'exchange.bind';
+                     queue    -> 'queue.bind'
+                 end,
+    sync_resource(MethodName, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
-    sync_resource(
-      ReqData, Context,
-      fun(#binding{queue_name    = QueueName,
-                   exchange_name = ExchangeName,
-                   key           = RoutingKey,
-                   args          = Arguments}) ->
-              #'queue.unbind'{ queue       = QueueName#resource.name,
-                               exchange    = ExchangeName#resource.name,
-                               routing_key = RoutingKey,
-                               arguments   = Arguments }
-      end).
+    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                     exchange -> 'exchange.unbind';
+                     queue    -> 'queue.unbind'
+                 end,
+    sync_resource(MethodName, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -94,19 +76,20 @@ is_authorized(ReqData, Context) ->
 binding(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
-        VHost     -> Q = rabbit_mgmt_util:id(queue, ReqData),
-                     X = rabbit_mgmt_util:id(exchange, ReqData),
+        VHost     -> Source = rabbit_mgmt_util:id(source, ReqData),
+                     Dest = rabbit_mgmt_util:id(destination, ReqData),
+                     DestType = rabbit_mgmt_util:destination_type(ReqData),
                      Props = rabbit_mgmt_util:id(props, ReqData),
                      case rabbit_mgmt_format:unpack_binding_props(Props) of
                          {bad_request, Str} ->
                              {bad_request, Str};
                          {Key, Args} ->
-                             XName = rabbit_misc:r(VHost, exchange, X),
-                             QName = rabbit_misc:r(VHost, queue, Q),
-                             #binding{ exchange_name = XName,
-                                       queue_name    = QName,
-                                       key           = Key,
-                                       args          = Args }
+                             SName = rabbit_misc:r(VHost, exchange, Source),
+                             DName = rabbit_misc:r(VHost, DestType, Dest),
+                             #binding{ source      = SName,
+                                       destination = DName,
+                                       key         = Key,
+                                       args        = Args }
                      end
     end.
 
@@ -118,11 +101,15 @@ with_binding(ReqData, Context, Fun) ->
             Fun(Binding)
     end.
 
-sync_resource(ReqData, Context, BindingToAMQPMethod) ->
+sync_resource(MethodName, ReqData, Context) ->
     with_binding(
       ReqData, Context,
       fun(Binding) ->
+              Props0 = rabbit_mgmt_format:binding(Binding),
+              Props = Props0 ++
+                  [{exchange, proplists:get_value(source,      Props0)},
+                   {queue,    proplists:get_value(destination, Props0)}],
               rabbit_mgmt_util:amqp_request(
-                rabbit_mgmt_util:vhost(ReqData),
-                ReqData, Context, BindingToAMQPMethod(Binding))
+                rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
+                rabbit_mgmt_util:props_to_method(MethodName, Props))
       end).

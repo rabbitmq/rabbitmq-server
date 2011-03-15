@@ -1,14 +1,11 @@
-<div class="section">
-  <h2>Bindings</h2>
-  <div class="updatable">
 <% if (bindings.length > 0) { %>
-    <table class="list">
+    <table class="list bindings">
       <thead>
         <tr>
-<% if (mode == 'queue') { %>
-          <th>Exchange</th>
+<% if (mode == 'exchange_source') { %>
+          <th>To</th>
 <% } else { %>
-          <th>Queue</th>
+          <th>From</th>
 <% } %>
           <th>Routing Key</th>
           <th>Arguments</th>
@@ -16,23 +13,40 @@
         </tr>
       </thead>
       <tbody>
-        <% for (var i = 0; i < bindings.length; i++) { %>
+        <%
+           for (var i = 0; i < bindings.length; i++) {
+               var binding = bindings[i];
+        %>
            <tr<%= alt_rows(i)%>>
-<% if (mode == 'queue') { %>
-             <td><%= link_exchange(bindings[i].vhost, bindings[i].exchange) %></td>
+<% if (mode == 'queue' || mode == 'exchange_destination') { %>
+             <td>
+               <%= link_exchange(binding.vhost, binding.source) %>
+               <sub>Exchange</sub>
+             </td>
+<% } else if (binding.destination_type == 'exchange') { %>
+             <td>
+               <%= link_exchange(binding.vhost, binding.destination) %>
+               <sub>Exchange</sub>
+             </td>
 <% } else { %>
-             <td><%= link_queue(bindings[i].vhost, bindings[i].queue) %></td>
+             <td>
+               <%= link_queue(binding.vhost, binding.destination) %>
+               <sub>Queue</sub>
+             </td>
 <% } %>
-             <td><%= bindings[i].routing_key %></td>
-             <td><%= fmt_table_short(bindings[i].arguments) %></td>
+             <td><%= binding.routing_key %></td>
+             <td><%= fmt_table_short(binding.arguments) %></td>
              <td class="c">
+<% if (binding.source != '') { %>
                <form action="#/bindings" method="delete" class="confirm">
-                 <input type="hidden" name="vhost" value="<%= bindings[i].vhost %>"/>
-                 <input type="hidden" name="exchange" value="<%= fmt_exchange_url(bindings[i].exchange) %>"/>
-                 <input type="hidden" name="queue" value="<%= bindings[i].queue %>"/>
-                 <input type="hidden" name="properties_key" value="<%= bindings[i].properties_key %>"/>
+                 <input type="hidden" name="vhost" value="<%= binding.vhost %>"/>
+                 <input type="hidden" name="source" value="<%= fmt_exchange_url(binding.source) %>"/>
+                 <input type="hidden" name="destination" value="<%= binding.destination %>"/>
+                 <input type="hidden" name="destination_type" value="<%= binding.destination_type.substring(0, 1) %>"/>
+                 <input type="hidden" name="properties_key" value="<%= binding.properties_key %>"/>
                  <input type="submit" value="Unbind"/>
                </form>
+<% } %>
              </td>
            </tr>
            <% } %>
@@ -41,41 +55,3 @@
 <% } else { %>
   <p>... no bindings ...</p>
 <% } %>
-  </div>
-</div>
-
-<div class="section-hidden">
-  <h2>Add binding</h2>
-  <div>
-    <form action="#/bindings" method="post">
-      <input type="hidden" name="vhost" value="<%= parent.vhost %>"/>
-<% if (mode == 'queue') { %>
-      <input type="hidden" name="queue" value="<%= parent.name %>"/>
-<% } else { %>
-      <input type="hidden" name="exchange" value="<%= parent.name %>"/>
-<% } %>
-      <table class="form">
-<% if (mode == 'queue') { %>
-        <tr>
-          <th><label>Exchange:</label></th>
-          <td><input type="text" name="exchange" value=""/></td>
-        </tr>
-<% } else { %>
-        <tr>
-          <th><label>Queue:</label></th>
-          <td><input type="text" name="queue" value=""/></td>
-        </tr>
-<% } %>
-        <tr>
-          <th><label>Routing Key:</label></th>
-          <td><input type="text" name="routing_key" value=""/></td>
-        </tr>
-        <tr>
-          <th><label>Arguments:</label></th>
-          <td><span class="multifield" id="arguments"></span></td>
-        </tr>
-      </table>
-      <input type="submit" value="Bind"/>
-    </form>
-  </div>
-</div>
