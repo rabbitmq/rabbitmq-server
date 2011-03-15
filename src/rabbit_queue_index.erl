@@ -543,13 +543,6 @@ create_pub_record_body(MsgId, #message_properties{expiry = Expiry}) ->
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
-read_pub_record_body(Hdl) ->
-    case file_handle_cache:read(Hdl, ?MSG_ID_BYTES + ?EXPIRY_BYTES) of
-        {ok, Bin} -> {MsgId, MsgProps, <<>>} = extract_pub_record_body(Bin),
-                     {MsgId, MsgProps};
-        Error     -> Error
-    end.
-
 extract_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
                           Rest/binary>>) ->
     %% work around for binary data fragmentation. See
@@ -682,15 +675,18 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                 ?ACK_JPREFIX ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
-                    case read_pub_record_body(Hdl) of
-                        {MsgId, MsgProps} ->
-                            Publish = {MsgId, MsgProps,
-                                       case Prefix of
-                                           ?PUB_PERSIST_JPREFIX -> true;
-                                           ?PUB_TRANS_JPREFIX   -> false
-                                       end},
+                    case file_handle_cache:read(
+                           Hdl, ?MSG_ID_BYTES + ?EXPIRY_BYTES) of
+                        {ok, Bin} ->
+                            {MsgId, MsgProps, <<>>} =
+                                extract_pub_record_body(Bin),
+                            IsPersistent = case Prefix of
+                                               ?PUB_PERSIST_JPREFIX -> true;
+                                               ?PUB_TRANS_JPREFIX   -> false
+                                           end,
                             load_journal_entries(
-                              add_to_journal(SeqId, Publish, State));
+                              add_to_journal(
+                                SeqId, {MsgId, MsgProps, IsPersistent}, State));
                         _ErrOrEoF -> %% err, we've lost at least a publish
                             State
                     end
