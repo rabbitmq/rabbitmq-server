@@ -1144,7 +1144,7 @@ handle_consuming_queue_down(MRef, ConsumerTag,
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host   = VHostPath,
-                           connection_pid = ConnectionPid }) ->
+                           connection_pid = ConnPid }) ->
     %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
@@ -1160,8 +1160,7 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                       key         = ActualRoutingKey,
                       args        = Arguments},
              fun (_X, Q = #amqqueue{}) ->
-                     try rabbit_amqqueue:check_exclusive_access(Q,
-                                                                ConnectionPid)
+                     try rabbit_amqqueue:check_exclusive_access(Q, ConnPid)
                      catch exit:Reason -> {error, Reason}
                      end;
                  (_X, #exchange{}) ->
