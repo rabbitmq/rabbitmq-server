@@ -17,8 +17,7 @@
 -module(rabbit_upgrade).
 
 -export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0]).
--export([read_version/0, write_version/0, desired_version/0,
-         desired_version/1]).
+-export([desired_version/0]).
 
 -include("rabbit.hrl").
 
@@ -30,16 +29,9 @@
 
 -ifdef(use_specs).
 
--type(step() :: atom()).
--type(version() :: [{scope(), [step()]}]).
--type(scope() :: 'mnesia' | 'local').
-
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
 -spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
--spec(read_version/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
--spec(write_version/0 :: () -> 'ok').
--spec(desired_version/0 :: () -> version()).
--spec(desired_version/1 :: (scope()) -> [step()]).
+-spec(desired_version/0 :: () -> rabbit_version:version()).
 
 -endif.
 
@@ -173,7 +165,7 @@ is_disc_node() ->
     %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
     %% we can't look at the config file (may not include us even if we're a
     %% disc node).
-    filelib:is_regular(rabbit_mnesia:dir() ++ "/rabbit_durable_exchange.DCD").
+    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
 
 die(Msg, Args) ->
     %% We don't throw or exit here since that gets thrown
@@ -216,7 +208,7 @@ secondary_upgrade(AllNodes) ->
                    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok = rabbit_mnesia:init_db(ClusterNodes, true),
-    ok = write_version(mnesia),
+    ok = write_desired_scope_version(mnesia),
     ok.
 
 nodes_running(Nodes) ->
@@ -238,63 +230,37 @@ maybe_upgrade_local() ->
                                                 fun() -> ok end)
     end.
 
-read_version() ->
-    case rabbit_misc:read_term_file(schema_filename()) of
-        {ok, [V]}        -> {ok, V};
-        {error, _} = Err -> Err
-    end.
+desired_version() -> [{Scope, desired_version(Scope)} || Scope <- ?SCOPES].
 
-read_version(Scope) ->
-    case read_version() of
-        {error, _} = E -> E;
-        {ok, V}        -> {ok, filter_by_scope(Scope, V)}
-    end.
+desired_version(Scope) -> with_upgrade_graph(fun (G) -> heads(G) end, Scope).
 
-write_version() ->
-    ok = rabbit_misc:write_term_file(schema_filename(), [desired_version()]),
-    ok.
-
-write_version(Scope) ->
-    {ok, V0} = read_version(),
-    V = flatten([case S of
-                     Scope -> desired_version(S);
-                     _     -> filter_by_scope(S, V0)
-                 end || S <- ?SCOPES]),
-    ok = rabbit_misc:write_term_file(schema_filename(), [V]),
-    ok.
-
-desired_version() ->
-    flatten([desired_version(Scope) || Scope <- ?SCOPES]).
-
-desired_version(Scope) ->
-    with_upgrade_graph(fun (G) -> heads(G) end, Scope).
-
-flatten(LoL) ->
-    lists:sort(lists:append(LoL)).
-
-filter_by_scope(Scope, Versions) ->
-    with_upgrade_graph(
-      fun(G) ->
-              ScopeVs = digraph:vertices(G),
-              [V || V <- Versions, lists:member(V, ScopeVs)]
-      end, Scope).
+write_desired_scope_version(Scope) ->
+    ok = rabbit_version:with_scope_version(
+           Scope,
+           fun ({error, Error}) ->
+                   throw({error, {can_not_read_version_to_write_it, Error}})
+           end,
+           fun (_SV) -> {desired_version(Scope), ok} end).
 
 %% -------------------------------------------------------------------
 
 upgrades_required(Scope) ->
-    case read_version(Scope) of
-        {ok, CurrentHeads} ->
-            with_upgrade_graph(
-              fun (G) ->
-                      case unknown_heads(CurrentHeads, G) of
-                          []      -> upgrades_to_apply(CurrentHeads, G);
-                          Unknown -> throw({error,
-                                            {future_upgrades_found, Unknown}})
-                      end
-              end, Scope);
-        {error, enoent} ->
-            version_not_available
-    end.
+    rabbit_version:with_scope_version(
+      Scope,
+      fun ({error, enoent}) -> version_not_available end,
+      fun (CurrentHeads) ->
+              {CurrentHeads,
+               with_upgrade_graph(
+                 fun (G) ->
+                         case unknown_heads(CurrentHeads, G) of
+                             [] ->
+                                 upgrades_to_apply(CurrentHeads, G);
+                             Unknown ->
+                                 throw({error,
+                                        {future_upgrades_found, Unknown}})
+                         end
+                 end, Scope)}
+      end).
 
 with_upgrade_graph(Fun, Scope) ->
     case rabbit_misc:build_acyclic_graph(
@@ -363,7 +329,7 @@ apply_upgrades(Scope, Upgrades, Fun) ->
                     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
                     info("~s upgrades: All upgrades applied successfully~n",
                          [Scope]),
-                    ok = write_version(Scope),
+                    ok = write_desired_scope_version(Scope),
                     ok = rabbit_misc:recursive_delete([BackupDir]),
                     info("~s upgrades: Mnesia backup removed~n", [Scope]),
                     ok = file:delete(LockFile);
@@ -385,8 +351,6 @@ apply_upgrade(Scope, {M, F}) ->
 %% -------------------------------------------------------------------
 
 dir() -> rabbit_mnesia:dir().
-
-schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
 
 lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 
