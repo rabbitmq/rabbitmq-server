@@ -89,7 +89,7 @@ prepare_mysql_statements() ->
                    <<"INSERT INTO p(seq_id, queue_name, m) VALUES(?,?,?)">>},
                   {delete_p_stmt,<<"DELETE FROM p WHERE queue_name = ?">>},
                   {delete_p_by_seq_id_stmt,
-                   <<"DELETE FROM p WHERE seq_id = ?">>},
+                   <<"DELETE FROM p WHERE seq_id = ? AND queue_name = ?">>},
                   {clear_p_stmt,
                    <<"DELETE FROM p WHERE queue_name = ?">>},
                   {count_p_stmt,
@@ -199,16 +199,16 @@ write_message_to_p(DbQueueName, SeqId, M) ->
                    [SeqId, DbQueueName, term_to_binary(M)]),
     ok.
 
-delete_message_from_p_by_seq_id(SeqId) ->
+delete_message_from_p_by_seq_id(SeqId, DbQueueName) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,
                    delete_p_by_seq_id_stmt,
-                   [SeqId]),
+                   [SeqId, DbQueueName]),
     ok.
 
 read_p_record(DbQueueName, SeqId) ->
-    emysql:execute(?RABBIT_DB_POOL_NAME,
-                   read_p_stmt,
-                   [DbQueueName, SeqId]).
+    Result = emysql:execute(?RABBIT_DB_POOL_NAME,
+                            read_p_stmt,
+                            [DbQueueName, SeqId]).
 
 q_peek(DbQueueName) ->
     emysql:execute(?RABBIT_DB_POOL_NAME,

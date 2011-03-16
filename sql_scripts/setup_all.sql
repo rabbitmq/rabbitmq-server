@@ -44,8 +44,7 @@ CREATE TABLE IF NOT EXISTS
 CREATE TABLE IF NOT EXISTS
              p (seq_id BIGINT UNSIGNED NOT NULL,
                 queue_name VARCHAR(256) NOT NULL, -- (BUGBUG: max size?)
-                m MEDIUMBLOB,
-                PRIMARY KEY(seq_id))
+                m MEDIUMBLOB)
              ENGINE=InnoDB;
 CREATE INDEX p_seq_id_index ON p(seq_id);
 CREATE INDEX p_queue_name_index ON p(queue_name);
