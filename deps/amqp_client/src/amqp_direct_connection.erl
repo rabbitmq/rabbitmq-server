@@ -123,7 +123,16 @@ emit_created_event(State) ->
                         infos(?CREATION_EVENT_KEYS, State)).
 
 ensure_adapter_info(none) ->
-    #adapter_info{protocol = {'Direct', ?PROTOCOL:version()},
-                  name     = list_to_binary(rabbit_misc:pid_to_string(self()))};
+    ensure_adapter_info(#adapter_info{});
+
+ensure_adapter_info(A = #adapter_info{protocol = unknown}) ->
+    ensure_adapter_info(A#adapter_info{protocol =
+                                           {'Direct', ?PROTOCOL:version()}});
+
+ensure_adapter_info(A = #adapter_info{name         = unknown,
+                                      peer_address = unknown,
+                                      peer_port    = unknown}) ->
+    Name = list_to_binary(rabbit_misc:pid_to_string(self())),
+    ensure_adapter_info(A#adapter_info{name = Name});
 
 ensure_adapter_info(Info) -> Info.
