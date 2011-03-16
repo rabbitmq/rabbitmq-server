@@ -313,7 +313,6 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
     {MS1, CMs} =
         lists:foldl(
           fun (MsgId, {MSN, CMsN} = Acc) ->
-                  %% We will never see {confirmed, ChPid} here.
                   case dict:find(MsgId, MSN) of
                       error ->
                           %% If it needed confirming, it'll have
@@ -327,7 +326,14 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           %% Seen from both GM and Channel. Can now
                           %% confirm.
                           {dict:erase(MsgId, MSN),
-                           gb_trees_cons(ChPid, MsgSeqNo, CMsN)}
+                           gb_trees_cons(ChPid, MsgSeqNo, CMsN)};
+                      {ok, {confirmed, ChPid}} ->
+                          %% It's already been confirmed. This is
+                          %% probably it's been both sync'd to disk
+                          %% and then delivered and ack'd before we've
+                          %% seen the publish from the
+                          %% channel. Nothing to do here.
+                          Acc
                   end
           end, {MS, gb_trees:empty()}, MsgIds),
     gb_trees:map(fun (ChPid, MsgSeqNos) ->
