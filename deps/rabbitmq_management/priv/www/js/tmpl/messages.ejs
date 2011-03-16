@@ -29,7 +29,7 @@
       <sub>Encoding: <%= msg.payload_encoding %></sub>
     </th>
     <td>
-      <pre class="msg-payload"><%= fmt_maybe_wrap(msg.payload, msg.payload_encoding) %></pre>
+      <textarea class="msg-payload" disabled="disabled"><%= fmt_escape_html(msg.payload) %></textarea>
     </td>
   </tr>
 </table>
