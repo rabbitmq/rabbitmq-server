@@ -29,7 +29,6 @@
                 vhost,
                 params,
                 adapter_info,
-                client_properties,
                 collector,
                 closing_reason %% undefined | Reason
                }).
@@ -74,7 +73,7 @@ i(pid,  _State) -> self();
 %% AMQP Params
 i(user,              #state{params = P}) -> P#amqp_params.username;
 i(vhost,             #state{params = P}) -> P#amqp_params.virtual_host;
-i(client_properties, #state{client_properties = P}) -> P;
+i(client_properties, #state{params = P}) -> P#amqp_params.client_properties;
 %% Optional adapter info
 i(protocol,     #state{adapter_info = I}) -> I#adapter_info.protocol;
 i(address,      #state{adapter_info = I}) -> I#adapter_info.address;
@@ -91,25 +90,21 @@ info_keys() ->
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].
 
-connect(Params = #amqp_params{username          = Username,
-                              password          = Pass,
-                              node              = Node,
-                              adapter_info      = Info,
-                              client_properties = UserProps,
-                              virtual_host      = VHost}, SIF, _ChMgr, State) ->
+connect(Params = #amqp_params{username     = Username,
+                              password     = Pass,
+                              node         = Node,
+                              adapter_info = Info,
+                              virtual_host = VHost}, SIF, _ChMgr, State) ->
     case rpc:call(Node, rabbit_direct, connect,
                   [Username, Pass, VHost, ?PROTOCOL]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
-            State1 = State#state{
-                       node              = Node,
-                       user              = User,
-                       vhost             = VHost,
-                       params            = Params,
-                       adapter_info      = ensure_adapter_info(Info),
-                       client_properties =
-                           amqp_connection:fill_client_properties(UserProps),
-                       collector         = Collector},
+            State1 = State#state{node         = Node,
+                                 user         = User,
+                                 vhost        = VHost,
+                                 params       = Params,
+                                 adapter_info = ensure_adapter_info(Info),
+                                 collector    = Collector},
             emit_created_event(State1),
             {ok, {ServerProperties, 0, State1}};
         {error, _} = E ->

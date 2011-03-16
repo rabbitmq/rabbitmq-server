@@ -31,7 +31,6 @@
 -export([start/1, start/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
--export([fill_client_properties/1]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -206,19 +205,3 @@ info_keys(ConnectionPid) ->
 %% atoms that can be used for a certain connection, use info_keys/1.
 info_keys() ->
     amqp_gen_connection:info_keys().
-
-
-fill_client_properties(UserProperties) ->
-    {ok, Vsn} = application:get_key(amqp_client, vsn),
-    Default = [{<<"product">>,   longstr, <<"RabbitMQ">>},
-               {<<"version">>,   longstr, list_to_binary(Vsn)},
-               {<<"platform">>,  longstr, <<"Erlang">>},
-               {<<"copyright">>, longstr,
-                <<"Copyright (c) 2007-2011 VMware, Inc.">>},
-               {<<"information">>, longstr,
-                <<"Licensed under the MPL.  "
-                  "See http://www.rabbitmq.com/">>},
-               {<<"capabilities">>, table, ?CLIENT_CAPABILITIES}],
-    lists:foldl(fun({K, _, _} = Tuple, Acc) ->
-                    lists:keystore(K, 1, Acc, Tuple)
-                end, Default, UserProperties).
