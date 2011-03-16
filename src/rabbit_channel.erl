@@ -651,9 +651,9 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{writer_pid     = WriterPid,
-                             conn_pid = ConnPid,
-                             next_tag = DeliveryTag}) ->
+              _, State = #ch{writer_pid = WriterPid,
+                             conn_pid   = ConnPid,
+                             next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
@@ -968,8 +968,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
 handle_method(#'queue.declare'{queue   = QueueNameBin,
                                passive = true,
                                nowait  = NoWait},
-              _, State = #ch{virtual_host   = VHostPath,
-                             conn_pid = ConnPid}) ->
+              _, State = #ch{virtual_host = VHostPath,
+                             conn_pid     = ConnPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     check_configure_permitted(QueueName, State),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
@@ -1143,8 +1143,8 @@ handle_consuming_queue_down(MRef, ConsumerTag,
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
-               State = #ch{virtual_host   = VHostPath,
-                           conn_pid = ConnPid }) ->
+               State = #ch{virtual_host = VHostPath,
+                           conn_pid     = ConnPid }) ->
     %% FIXME: connection exception (!) on failure??
     %% (see rule named "failure" in spec-XML)
     %% FIXME: don't allow binding to internal exchanges -
