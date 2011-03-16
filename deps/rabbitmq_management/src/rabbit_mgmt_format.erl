@@ -223,10 +223,10 @@ url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
 
 connection(Props) ->
-    case proplists:get_value(name, Props) of
-        undefined -> print("~s:~w",
-                           [addr(proplists:get_value(peer_address, Props)),
-                            port(proplists:get_value(peer_port,    Props))]);
+    case proplists:get_value(name, Props, unknown) of
+        unknown -> print("~s:~w",
+                         [addr(proplists:get_value(peer_address, Props)),
+                          port(proplists:get_value(peer_port,    Props))]);
         Name      -> Name
     end.
 
