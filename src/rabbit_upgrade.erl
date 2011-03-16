@@ -238,7 +238,7 @@ write_desired_scope_version(Scope) ->
     ok = rabbit_version:with_scope_version(
            Scope,
            fun ({error, Error}) ->
-                   throw({error, {can_not_read_version_to_write_it, Error}})
+                   throw({error, {cannot_read_version_to_write_it, Error}})
            end,
            fun (_SV) -> {desired_version(Scope), ok} end).
 
