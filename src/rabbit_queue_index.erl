@@ -126,13 +126,13 @@
 %% (range: 0 - 16383)
 -define(REL_SEQ_ONLY_PREFIX, 00).
 -define(REL_SEQ_ONLY_PREFIX_BITS, 2).
--define(REL_SEQ_ONLY_ENTRY_LENGTH_BYTES, 2).
+-define(REL_SEQ_ONLY_RECORD_BYTES, 2).
 
 %% publish record is binary 1 followed by a bit for is_persistent,
 %% then 14 bits of rel seq id, 64 bits for message expiry and 128 bits
 %% of md5sum msg id
--define(PUBLISH_PREFIX, 1).
--define(PUBLISH_PREFIX_BITS, 1).
+-define(PUB_PREFIX, 1).
+-define(PUB_PREFIX_BITS, 1).
 
 -define(EXPIRY_BYTES, 8).
 -define(EXPIRY_BITS, (?EXPIRY_BYTES * 8)).
@@ -142,14 +142,13 @@
 -define(MSG_ID_BITS, (?MSG_ID_BYTES * 8)).
 
 %% 16 bytes for md5sum + 8 for expiry
--define(PUBLISH_RECORD_BODY_LENGTH_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES)).
+-define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES)).
 %% + 2 for seq, bits and prefix
--define(PUBLISH_RECORD_LENGTH_BYTES, (?PUBLISH_RECORD_BODY_LENGTH_BYTES + 2)).
+-define(PUB_RECORD_BYTES, (?PUB_RECORD_BODY_BYTES + 2)).
 
 %% 1 publish, 1 deliver, 1 ack per msg
 -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
-            (?PUBLISH_RECORD_LENGTH_BYTES +
-                 (2 * ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES))).
+            (?PUB_RECORD_BYTES + (2 * ?REL_SEQ_ONLY_RECORD_BYTES))).
 
 %% ---- misc ----
 
@@ -677,8 +676,7 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                 ?ACK_JPREFIX ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
-                    case file_handle_cache:read(
-                           Hdl, ?PUBLISH_RECORD_BODY_LENGTH_BYTES) of
+                    case file_handle_cache:read(Hdl, ?PUB_RECORD_BODY_BYTES) of
                         {ok, Bin} ->
                             {MsgId, MsgProps} = parse_pub_record_body(Bin),
                             IsPersistent = case Prefix of
@@ -797,7 +795,7 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
                  ok;
              {MsgId, MsgProps, IsPersistent} ->
                  file_handle_cache:append(
-                   Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
+                   Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                            (bool_to_int(IsPersistent)):1,
                            RelSeq:?REL_SEQ_BITS>>,
                          create_pub_record_body(MsgId, MsgProps)])
@@ -852,9 +850,9 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     end.
 
 load_segment_entries(KeepAcked,
-                     <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS, IsPersistentNum:1,
-                       RelSeq:?REL_SEQ_BITS,
-                       PubRecordBody:?PUBLISH_RECORD_BODY_LENGTH_BYTES/binary,
+                     <<?PUB_PREFIX:?PUB_PREFIX_BITS,
+                       IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
+                       PubRecordBody:?PUB_RECORD_BODY_BYTES/binary,
                        SegData/binary>>,
                      SegEntries, UnackedCount) ->
     {MsgId, MsgProps} = parse_pub_record_body(PubRecordBody),
@@ -1011,11 +1009,11 @@ add_queue_ttl_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
 add_queue_ttl_journal(_) ->
     stop.
 
-add_queue_ttl_segment(<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS, IsPersistentNum:1,
+add_queue_ttl_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
                         RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BYTES/binary,
                         Rest/binary>>) ->
-    {[<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS, IsPersistentNum:1,
-        RelSeq:?REL_SEQ_BITS>>, MsgId, expiry_to_binary(undefined)], Rest};
+    {[<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>,
+      MsgId, expiry_to_binary(undefined)], Rest};
 add_queue_ttl_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                         RelSeq:?REL_SEQ_BITS, Rest>>) ->
     {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
