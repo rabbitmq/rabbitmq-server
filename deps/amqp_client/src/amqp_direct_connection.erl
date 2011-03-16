@@ -65,6 +65,7 @@ channels_terminated(State = #state{closing_reason = Reason,
     {stop, Reason, State}.
 
 terminate(_Reason, _State) ->
+    rabbit_event:notify(connection_closed, [{pid, self()}]),
     ok.
 
 i(type, _State) -> direct;
