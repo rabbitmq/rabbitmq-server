@@ -23,9 +23,9 @@
 
 -export_type([step/0, version/0, scope/0]).
 
+-type(scope() :: atom()).
 -type(step() :: atom()).
 -type(version() :: [{scope(), [step()]}]).
--type(scope() :: atom()).
 
 -spec(read/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
 -spec(write/1 :: (version()) -> 'ok').
