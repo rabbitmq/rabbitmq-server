@@ -298,7 +298,7 @@
 
 %%----------------------------------------------------------------------------
 
--rabbit_upgrade({multiple_routing_keys, []}).
+-rabbit_upgrade({multiple_routing_keys, local, []}).
 
 -ifdef(use_specs).
 
