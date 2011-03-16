@@ -1628,10 +1628,8 @@ test_file_handle_cache() ->
     ok = file_handle_cache:set_limit(5), %% 1 or 2 sockets, 2 msg_stores
     TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
     ok = filelib:ensure_dir(filename:join(TmpDir, "nothing")),
-    Src1 = filename:join(TmpDir, "file1"),
-    Dst1 = filename:join(TmpDir, "file2"),
-    Src2 = filename:join(TmpDir, "file3"),
-    Dst2 = filename:join(TmpDir, "file4"),
+    [Src1, Dst1, Src2, Dst2] = Files =
+        [filename:join(TmpDir, Str) || Str <- ["file1", "file2", "file3", "file4"]],
     Content = <<"foo">>,
     CopyFun = fun (Src, Dst) ->
                       ok = file:write_file(Src, Content),
@@ -1643,7 +1641,7 @@ test_file_handle_cache() ->
                       ok = file_handle_cache:delete(DstHdl)
               end,
     Pid = spawn(fun () -> {ok, Hdl} = file_handle_cache:open(
-                                        filename:join(TmpDir, "file3"),
+                                        filename:join(TmpDir, "file5"),
                                         [write], []),
                           receive {next, Pid1} -> Pid1 ! {next, self()} end,
                           file_handle_cache:delete(Hdl),
@@ -1665,7 +1663,7 @@ test_file_handle_cache() ->
     exit(Pid1, kill),
     receive {'DOWN', _MRef, process, Pid, _Reason} -> ok end,
     receive {'DOWN', _MRef1, process, Pid1, _Reason1} -> ok end,
-    [file:delete(File) || File <- [Src1, Dst1, Src2, Dst2]],
+    [file:delete(File) || File <- Files],
     ok = file_handle_cache:set_limit(Limit),
     passed.
 
