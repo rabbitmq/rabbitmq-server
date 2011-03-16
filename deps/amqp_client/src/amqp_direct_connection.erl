@@ -42,7 +42,7 @@ open_channel_args(#state{node = Node,
                          user = User,
                          vhost = VHost,
                          collector = Collector}) ->
-    [Node, User, VHost, Collector].
+    [self(), Node, User, VHost, Collector].
 
 do(_Method, _State) ->
     ok.
