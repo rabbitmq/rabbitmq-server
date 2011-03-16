@@ -451,6 +451,9 @@ should_confirm_message(#delivery{sender     = ChPid,
 should_confirm_message(_Delivery, _State) ->
     immediately.
 
+needs_confirming({eventually, _, _, _}) -> true;
+needs_confirming(_)                     -> false.
+
 record_confirm_message({eventually, ChPid, MsgSeqNo, MsgId},
                        State = #q{msg_id_to_channel = MTC}) ->
     State#q{msg_id_to_channel = dict:store(MsgId, {ChPid, MsgSeqNo}, MTC)};
@@ -483,15 +486,11 @@ attempt_delivery(#delivery{txn        = none,
                 %% we don't need an expiry here because messages are
                 %% not being enqueued, so we use an empty
                 %% message_properties.
-                NeedsConfirming = case Confirm of
-                                      {eventually, _, _, _} -> true;
-                                      _                     -> false
-                                  end,
                 {AckTag, BQS1} =
                     BQ:publish_delivered(
                       AckRequired, Message,
                       (?BASE_MESSAGE_PROPERTIES)#message_properties{
-                        needs_confirming = NeedsConfirming},
+                        needs_confirming = needs_confirming(Confirm)},
                       BQS),
                 {{Message, false, AckTag}, true,
                  State1#q{backing_queue_state = BQS1}}
@@ -517,13 +516,9 @@ deliver_or_enqueue(Delivery, State) ->
         {false, Confirm, State1 = #q{backing_queue = BQ,
                                              backing_queue_state = BQS}} ->
             #delivery{message = Message} = Delivery,
-            NeedsConfirming = case Confirm of
-                                  {eventually, _, _, _} -> true;
-                                  _                     -> false
-                              end,
             BQS1 = BQ:publish(Message,
                               (message_properties(State)) #message_properties{
-                                needs_confirming = NeedsConfirming},
+                                needs_confirming = needs_confirming(Confirm)},
                               BQS),
             State2 = record_confirm_message(Confirm, State1),
             ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
@@ -849,11 +844,9 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
         attempt_delivery(Delivery,
                          should_confirm_message(Delivery, State),
                          State),
-    State2 = case {Confirm, Delivered} of
-                 {{eventually, _, _, _}, true} ->
-                     record_confirm_message(Confirm, State);
-                 _ ->
-                     State1
+    State2 = case Delivered andalso needs_confirming(Confirm) of
+                 true  -> record_confirm_message(Confirm, State);
+                 false -> State1
              end,
     reply(Delivered, State2);
 
