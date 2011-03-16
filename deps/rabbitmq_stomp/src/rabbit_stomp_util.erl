@@ -47,7 +47,7 @@
 -define(MESSAGE_ID_SEPARATOR, "@@").
 -define(HEADER_CONTENT_TYPE, "content-type").
 -define(HEADER_CONTENT_ENCODING, "content-encoding").
--define(HEADER_DELIVERY_MODE, "delivery-mode").
+-define(HEADER_PERSISTENT, "persistent").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_CORRELATION_ID, "correlation-id").
 -define(HEADER_REPLY_TO, "reply-to").
@@ -81,10 +81,16 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
     BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
     IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
 
+    DeliveryMode =
+        case rabbit_stomp_frame:boolean_header(Frame, "persistent", false) of
+            true  -> 2;
+            false -> undefined
+        end,
+
     #'P_basic'{
       content_type     = BinH(?HEADER_CONTENT_TYPE,     <<"text/plain">>),
       content_encoding = BinH(?HEADER_CONTENT_ENCODING, undefined),
-      delivery_mode    = IntH(?HEADER_DELIVERY_MODE,    undefined),
+      delivery_mode    = DeliveryMode,
       priority         = IntH(?HEADER_PRIORITY,         undefined),
       correlation_id   = BinH(?HEADER_CORRELATION_ID,   undefined),
       reply_to         = BinH(?HEADER_REPLY_TO,         undefined),
@@ -95,41 +101,36 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
 message_headers(Destination, SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag},
-                #'P_basic'{headers          = Headers,
-                           content_type     = ContentType,
-                           content_encoding = ContentEncoding,
-                           delivery_mode    = DeliveryMode,
-                           priority         = Priority,
-                           correlation_id   = CorrelationId,
-                           reply_to         = ReplyTo,
-                           message_id       = MessageId}) ->
-    [{"destination", Destination},
-       %% TODO append ContentEncoding as ContentType;
-       %% charset=ContentEncoding?  The STOMP SEND handler could also
-       %% parse "content-type" to split it, perhaps?
-       {"message-id", create_message_id(ConsumerTag,
-                                        SessionId,
-                                        DeliveryTag)}]
-      ++ maybe_header(?HEADER_CONTENT_TYPE, ContentType)
-      ++ maybe_header(?HEADER_CONTENT_ENCODING, ContentEncoding)
-      ++ case ConsumerTag of
-             <<"Q_",  _/binary>> -> [];
-             <<"T_", Id/binary>> -> [{"subscription", binary_to_list(Id)}]
-         end
-      ++ adhoc_convert_headers(case Headers of
-                                   undefined -> [];
-                                   _         -> Headers
-                               end)
-      ++ maybe_header(?HEADER_DELIVERY_MODE, DeliveryMode)
-      ++ maybe_header(?HEADER_PRIORITY, Priority)
-      ++ maybe_header(?HEADER_CORRELATION_ID, CorrelationId)
-      ++ maybe_header(?HEADER_REPLY_TO, ReplyTo)
-      ++ maybe_header(?HEADER_AMQP_MESSAGE_ID, MessageId).
+                Props = #'P_basic'{headers       = Headers}) ->
+    Basic = [{"destination", Destination},
+             {"message-id",
+              create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
+
+    Standard =
+        lists:foldl(
+          fun({Header, Index}, Acc) ->
+                  maybe_header(Header, element(Index, Props), Acc)
+          end,
+          case ConsumerTag of
+              <<"Q_",  _/binary>> ->
+                  Basic;
+              <<"T_", Id/binary>> ->
+                  [{"subscription", binary_to_list(Id)} | Basic]
+          end,
+          [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
+           {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
+           {?HEADER_PERSISTENT,       #'P_basic'.delivery_mode},
+           {?HEADER_PRIORITY,         #'P_basic'.priority},
+           {?HEADER_CORRELATION_ID,   #'P_basic'.correlation_id},
+           {?HEADER_REPLY_TO,         #'P_basic'.reply_to},
+           {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id}]),
+
+    adhoc_convert_headers(Headers, Standard).
 
 user_header(Hdr)
   when Hdr =:= ?HEADER_CONTENT_TYPE orelse
        Hdr =:= ?HEADER_CONTENT_ENCODING orelse
-       Hdr =:= ?HEADER_DELIVERY_MODE orelse
+       Hdr =:= ?HEADER_PERSISTENT orelse
        Hdr =:= ?HEADER_PRIORITY orelse
        Hdr =:= ?HEADER_CORRELATION_ID orelse
        Hdr =:= ?HEADER_REPLY_TO orelse
@@ -186,23 +187,27 @@ find_max_version({V1, X}, {_V2, []}) when length(X) > 0 ->
 longstr_field(K, V) ->
     {list_to_binary(K), longstr, list_to_binary(V)}.
 
-maybe_header(_Key, undefined) ->
-    [];
-maybe_header(Key, Value) when is_binary(Value) ->
-    [{Key, binary_to_list(Value)}];
-maybe_header(Key, Value) when is_integer(Value) ->
-    [{Key, integer_to_list(Value)}];
-maybe_header(_Key, _Value) ->
-    [].
+maybe_header(_Key, undefined, Acc) ->
+    Acc;
+maybe_header(?HEADER_PERSISTENT, 2, Acc) ->
+    [{?HEADER_PERSISTENT, "true"} | Acc];
+maybe_header(Key, Value, Acc) when is_binary(Value) ->
+    [{Key, binary_to_list(Value)} | Acc];
+maybe_header(Key, Value, Acc) when is_integer(Value) ->
+    [{Key, integer_to_list(Value)}| Acc];
+maybe_header(_Key, _Value, Acc) ->
+    Acc.
 
-adhoc_convert_headers(Headers) ->
+adhoc_convert_headers(undefined, Existing) ->
+    Existing;
+adhoc_convert_headers(Headers, Existing) ->
     lists:foldr(fun ({K, longstr, V}, Acc) ->
                         [{binary_to_list(K), binary_to_list(V)} | Acc];
                     ({K, signedint, V}, Acc) ->
                         [{binary_to_list(K), integer_to_list(V)} | Acc];
                     (_, Acc) ->
                         Acc
-                end, [], Headers).
+                end, Existing, Headers).
 
 create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
     [ConsumerTag,

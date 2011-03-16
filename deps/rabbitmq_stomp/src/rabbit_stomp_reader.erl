@@ -31,11 +31,12 @@
 -module(rabbit_stomp_reader).
 
 -export([start_link/1]).
--export([init/1, mainloop/1]).
+-export([init/1, mainloop/2]).
+-export([conserve_memory/2]).
 
 -include("rabbit_stomp_frame.hrl").
 
--record(reader_state, {socket, parse_state, processor}).
+-record(reader_state, {socket, parse_state, processor, state, iterations}).
 
 start_link(ProcessorPid) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [ProcessorPid])}.
@@ -43,7 +44,7 @@ start_link(ProcessorPid) ->
 init(ProcessorPid) ->
     receive
         {go, Sock} ->
-            ok = inet:setopts(Sock, [{active, once}]),
+            ok = inet:setopts(Sock, [{active, false}]),
 
             {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
             PeerAddressS = inet_parse:ntoa(PeerAddress),
@@ -51,35 +52,76 @@ init(ProcessorPid) ->
                                   [self(), PeerAddressS, PeerPort]),
             ParseState = rabbit_stomp_frame:initial_state(),
             try
-                ?MODULE:mainloop(#reader_state{socket        = Sock,
-                                               parse_state   = ParseState,
-                                               processor     = ProcessorPid})
+                ?MODULE:mainloop(
+                   register_memory_alarm(
+                     #reader_state{socket      = Sock,
+                                   parse_state = ParseState,
+                                   processor   = ProcessorPid,
+                                   state       = running,
+                                   iterations  = 0}), 0)
             after
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
                                       [self(), PeerAddressS, PeerPort])
             end
     end.
 
-mainloop(State) ->
+mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
+    run_socket(State, ByteCount),
     receive
-        {tcp, Sock, Bytes} ->
-            inet:setopts(Sock, [{active, once}]),
-            process_received_bytes(Bytes, State);
-        {tcp_closed, _Sock} ->
-            ok
+        {inet_async, Sock, _Ref, {ok, Data}} ->
+            process_received_bytes(Data, State);
+        {inet_async, Sock, _Ref, {error, closed}} ->
+            error_logger:info_msg("Socket ~p closed by client~n", [Sock]),
+            ok;
+        {inet_async, Sock, _Ref, {error, Reason}} ->
+            error_logger:error_msg("Socket ~p closed abruptly with "
+                                   "error code ~p~n",
+                                   [Sock, Reason]),
+            ok;
+        {conserve_memory, Conserve} ->
+            mainloop(internal_conserve_memory(Conserve, State), ByteCount)
     end.
 
 process_received_bytes([], State) ->
-    ?MODULE:mainloop(State);
+    ?MODULE:mainloop(State, 0);
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
-                         parse_state = ParseState}) ->
+                         parse_state = ParseState,
+                         state       = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
-        {more, ParseState1} ->
-            ?MODULE:mainloop(State#reader_state{parse_state = ParseState1});
+        {more, ParseState1, Length} ->
+            ?MODULE:mainloop(State#reader_state{parse_state = ParseState1},
+                             Length);
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
-            process_received_bytes(Rest, State#reader_state{parse_state = PS})
+            process_received_bytes(Rest,
+                                   State#reader_state{
+                                     parse_state = PS,
+                                     state       = next_state(S, Frame)})
     end.
+
+conserve_memory(Pid, Conserve) ->
+    Pid ! {conserve_memory, Conserve},
+    ok.
+
+register_memory_alarm(State) ->
+    internal_conserve_memory(
+      rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}), State).
+
+internal_conserve_memory(true, State = #reader_state{state = running}) ->
+    State#reader_state{state = blocking};
+internal_conserve_memory(false, State) ->
+    State#reader_state{state = running}.
+
+next_state(blocking, #stomp_frame{command = "SEND"}) ->
+    blocked;
+next_state(S, _) ->
+    S.
+
+run_socket(#reader_state{state = blocked}, _ByteCount) ->
+    ok;
+run_socket(#reader_state{socket = Sock}, ByteCount) ->
+    rabbit_net:async_recv(Sock, ByteCount, infinity),
+    ok.

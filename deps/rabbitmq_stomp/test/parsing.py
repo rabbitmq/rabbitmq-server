@@ -26,7 +26,7 @@ def connect(cnames):
         def wrapper(self, *args, **kwargs):
             for cname in cnames:
                 sd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sd.settimeout(3)
+                sd.settimeout(30000)
                 sd.connect((self.host, self.port))
                 sd.sendall(cmd)
                 self.match(resp, sd.recv(4096))
@@ -51,12 +51,24 @@ class TestParsing(unittest.TestCase):
 
     def match(self, pattern, data):
         ''' helper: try to match 'pattern' regexp with 'data' string.
-            Fail testif they don't match.
+            Fail test if they don't match.
         '''
         matched = re.match(pattern, data)
         if matched:
             return matched.groups()
         self.assertTrue(False, 'No match:\n%r\n%r' % (pattern, data) )
+
+    def recv_atleast(self, bufsize):
+        recvhead = []
+        rl = bufsize
+        while rl > 0:
+            buf = self.cd.recv(rl)
+            bl = len(buf)
+            if bl==0: break
+            recvhead.append( buf )
+            rl -= bl
+        return ''.join(recvhead)
+
 
     @connect(['cd'])
     def test_newline_after_nul(self):
@@ -68,9 +80,9 @@ class TestParsing(unittest.TestCase):
                         'destination:/exchange/amq.fanout\n\n'
                         'hello\n\x00\n')
         resp = ('MESSAGE\n'
+                'content-type:text/plain\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -87,9 +99,9 @@ class TestParsing(unittest.TestCase):
                         'destination:/exchange/amq.fanout\n'
                         '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
+                'content-type:text/plain\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -134,10 +146,10 @@ class TestParsing(unittest.TestCase):
                         '\n\0')
 
         resp=('MESSAGE\n'
-            'destination:/exchange/amq.topic/da9d4779\n'
-            'message-id:(.*)\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
+            'destination:/exchange/amq.topic/da9d4779\n'
+            'message-id:(.*)\n'
             'content-length:8\n'
             '\n'
             'message'
@@ -164,10 +176,10 @@ class TestParsing(unittest.TestCase):
                         '\0' % message)
 
         resp=('MESSAGE\n'
-            'destination:/exchange/amq.topic/test_huge_message\n'
-            'message-id:(.*)\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
+            'destination:/exchange/amq.topic/test_huge_message\n'
+            'message-id:(.*)\n'
             'content-length:%i\n'
             '\n'
             '%s(.*)'
@@ -185,3 +197,110 @@ class TestParsing(unittest.TestCase):
         self.match(resp, buf[:8192])
         self.assertEqual(len(buf) > len(message), True)
 
+    @connect(['cd'])
+    def test_message_with_embedded_nulls(self):
+        ''' Test sending/receiving message with embedded nulls. '''
+        dest='destination:/exchange/amq.topic/test_embed_nulls_message\n'
+        subscribe=( 'SUBSCRIBE\n'
+                    'id:xxx\n'
+                    +dest+
+                    '\n\0')
+        self.cd.sendall(subscribe)
+
+        boilerplate = '0123456789'*1024 # large enough boilerplate
+        message = '01'
+        oldi = 2
+        for i in [5, 90, 256-1, 384-1, 512, 1024, 1024+256+64+32]:
+            message = message + '\0' + boilerplate[oldi+1:i]
+            oldi = i
+        msg_len = len(message)
+
+        self.cd.sendall('SEND\n'
+                        +dest+
+                        'content-length:%i\n'
+                        '\n'
+                        '%s'
+                        '\0' % (len(message), message) )
+
+        headresp=('MESSAGE\n'            # 8
+            'content-type:text/plain\n'  # 24
+            'subscription:(.*)\n'        # 14 + subscription
+            +dest+                       # 57
+            'message-id:(.*)\n'          # 12 + message-id
+            'content-length:%i\n'        # 16 + 4==len('1024')
+            '\n'                         # 1
+            '(.*)$'                      # prefix of body+null (potentially)
+             % len(message) )
+        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
+
+        headbuf = self.recv_atleast(headlen)
+        self.assertFalse(len(headbuf) == 0)
+
+        (sub, msg_id, bodyprefix) = self.match(headresp, headbuf)
+        bodyresp=( '%s\0' % message )
+        bodylen = len(bodyresp);
+
+        bodybuf = ''.join([bodyprefix,
+                           self.recv_atleast(bodylen - len(bodyprefix))])
+
+        self.assertEqual(len(bodybuf), msg_len+1,
+            "body received not the same length as message sent")
+        self.assertEqual(bodybuf, bodyresp,
+            "   body (...'%s')\nincorrectly returned as (...'%s')"
+            % (bodyresp[-10:], bodybuf[-10:]))
+
+    @connect(['cd'])
+    def test_message_in_packets(self):
+        ''' Test sending/receiving message in packets. '''
+        dest='destination:/exchange/amq.topic/test_embed_nulls_message\n'
+        subscribe=( 'SUBSCRIBE\n'
+                    'id:xxx\n'
+                    +dest+
+                    '\n\0')
+        self.cd.sendall(subscribe)
+
+        boilerplate = '0123456789'*1024 # large enough boilerplate
+
+        message = boilerplate[:1024 + 512 + 256 + 32]
+        msg_len = len(message)
+
+        msg_to_send = ('SEND\n'
+                       +dest+
+                       '\n'
+                       '%s'
+                       '\0' % (message) )
+        packet_size = 191
+        part_index = 0
+        msg_to_send_len = len(msg_to_send)
+        while part_index < msg_to_send_len:
+            part = msg_to_send[part_index:part_index+packet_size]
+            time.sleep(0.1)
+            self.cd.sendall(part)
+            part_index += packet_size
+
+        headresp=('MESSAGE\n'           # 8
+            'content-type:text/plain\n' # 24
+            'subscription:(.*)\n'       # 14 + subscription
+            +dest+                      # 57
+            'message-id:(.*)\n'         # 12 + message-id
+            'content-length:%i\n'       # 16 + 4==len('1024')
+            '\n'                        # 1
+            '(.*)$'                     # prefix of body+null (potentially)
+             % len(message) )
+        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
+
+        headbuf = self.recv_atleast(headlen)
+        self.assertFalse(len(headbuf) == 0)
+
+        (sub, msg_id, bodyprefix) = self.match(headresp, headbuf)
+        bodyresp=( '%s\0' % message )
+        bodylen = len(bodyresp);
+
+        bodybuf = ''.join([bodyprefix,
+                           self.recv_atleast(bodylen - len(bodyprefix))])
+
+        self.assertEqual(len(bodybuf), msg_len+1,
+            "body received not the same length as message sent")
+        self.assertEqual(bodybuf, bodyresp,
+            "   body ('%s')\nincorrectly returned as ('%s')"
+            % (bodyresp, bodybuf))

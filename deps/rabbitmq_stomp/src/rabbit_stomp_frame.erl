@@ -36,8 +36,6 @@
 
 -include("rabbit_stomp_frame.hrl").
 
--export([parse_headers/2, initial_headers_state/0]).
--export([parse_body/2, initial_body_state/1]).
 -export([parse/2, initial_state/0]).
 -export([header/2, header/3,
          boolean_header/2, boolean_header/3,
@@ -45,63 +43,123 @@
          binary_header/2, binary_header/3]).
 -export([serialize/1]).
 
--record(hstate, {state, acc, key, command, headers}).
--record(bstate, {chunk, chunks, chunksize, remaining}).
+initial_state() ->
+    none.
 
--define(CHUNK_SIZE_LIMIT, 32768).
+parse(Content, State) ->
+    case State of
+        {resume, Fun} ->
+            Fun(Content);
+        none  ->
+            parse_command(Content, [])
+    end.
 
-%% States:
-%%  command . u(H) . key . value . (H + 0)
+parse_command(<<$\n,  Rest/binary>>, []) ->
+    parse_command(Rest, []);
+parse_command(<<$\r, Rest/binary>>, Acc) ->
+    parse_command(Rest, Acc);
+parse_command(<<0,  Rest/binary>>, []) ->
+    parse_command(Rest, []);
+parse_command(<<$\n, Rest/binary>>, Acc) ->
+    parse_headers(Rest, #stomp_frame{command = lists:reverse(Acc)}, [], []);
+parse_command(<<Ch:8, Rest/binary>>, Acc) ->
+    parse_command(Rest, [Ch | Acc]);
+parse_command(<<>>, Acc) ->
+    more(fun(Rest) -> parse_command(Rest, Acc) end).
 
-initial_headers_state() ->
-    #hstate{state = command, acc = [], headers = []}.
+parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
+    more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_headers(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+    parse_headers(Rest, Frame, HeaderAcc, KeyAcc);
+parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) ->
+    Remaining = case internal_integer_header(HeaderAcc, "content-length") of
+                    {ok, ByteCount} -> ByteCount;
+                    not_found       -> unknown
+                end,
+    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc}, [], Remaining);
+parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, []);
+parse_headers(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+    parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
 
-parse_headers([], ParseState) ->
-    {more, ParseState};
-parse_headers([$\r | Rest], ParseState = #hstate{state = State})
-  when State == command  orelse
-       State == key      orelse
-       State == value ->
-    parse_headers(Rest, ParseState);
-parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = []}) ->
-    parse_headers(Rest, ParseState);
-parse_headers([0 | Rest], ParseState = #hstate{state = command, acc = []}) ->
-    parse_headers(Rest, ParseState);
-parse_headers([$\n | Rest], ParseState = #hstate{state = command, acc = Acc}) ->
-    parse_headers(Rest, ParseState#hstate{state = key, acc = [],
-                                          command = lists:reverse(Acc)});
-parse_headers([$\n | Rest], _ParseState = #hstate{state = key, acc = Acc,
-                                                  command = Command,
-                                                  headers = Headers}) ->
-    case Acc of
-        [] -> {ok, Command, Headers, Rest};
-        _  -> {error, {bad_header_key, lists:reverse(Acc)}}
-    end;
-parse_headers([$: | Rest], ParseState = #hstate{state = key, acc = Acc}) ->
-    parse_headers(Rest, ParseState#hstate{state = value, acc = [],
-                                          key = lists:reverse(Acc)});
-parse_headers([$\\, Ch | Rest], ParseState = #hstate{state = value,
-                                                     acc   = Acc}) ->
+parse_header_value(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    more(fun(Rest) ->
+                     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
+             end);
+parse_header_value(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
+parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    NewKey = lists:reverse(KeyAcc),
+    NewHeaders = case lists:keysearch(NewKey, 1, HeaderAcc) of
+                     {value, _} -> HeaderAcc;
+                     false      -> [{NewKey, lists:reverse(ValAcc)} |
+                                    HeaderAcc]
+                 end,
+    parse_headers(Rest, Frame, NewHeaders, []);
+parse_header_value(<<$\\, Rest/binary>>, Frame,
+                   HeaderAcc, KeyAcc, ValAcc) ->
+    parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
+parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
+                   ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+
+parse_header_value_escape(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    more(fun(Rest) ->
+           parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
+         end);
+parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
+                          HeaderAcc, KeyAcc, ValAcc) ->
     case unescape(Ch) of
         {ok, EscCh} ->
-            parse_headers(Rest, ParseState#hstate{acc = [EscCh | Acc]});
+            parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
+                               [EscCh | ValAcc]);
         error ->
             {error, {bad_escape, Ch}}
-    end;
-parse_headers([$\n | Rest], ParseState = #hstate{state = value, acc = Acc,
-                                                 key = Key,
-                                                 headers = Headers}) ->
-    NewHeaders = case lists:keysearch(Key, 1, Headers) of
-                     {value, _} -> Headers;
-                     false      -> [{Key, lists:reverse(Acc)} | Headers]
-                 end,
-    parse_headers(Rest, ParseState#hstate{state = key, acc = [],
-                                          headers = NewHeaders});
-parse_headers([Ch | Rest], ParseState = #hstate{acc = Acc}) ->
-    if
-        Ch < 32 -> {error, {bad_character, Ch}};
-        true    -> parse_headers(Rest, ParseState#hstate{acc = [Ch | Acc]})
     end.
+
+parse_body(Content, Frame, Chunks, unknown) ->
+    case binary:split(Content, <<0>>) of
+        [Content] ->
+            more(fun(Rest) ->
+                         parse_body(Rest,
+                                    Frame,
+                                    finalize_chunk(Content, Chunks),
+                                    unknown)
+                 end);
+        [Chunk, Rest] ->
+            {ok, Frame#stomp_frame{
+                   body_iolist = lists:reverse(
+                                   finalize_chunk(Chunk, Chunks))}, Rest}
+    end;
+parse_body(Content, Frame, Chunks, Remaining) ->
+    Size = byte_size(Content),
+    case Remaining >= Size of
+        true ->
+            Left = Remaining - Size,
+            more(fun(Rest) ->
+                         parse_body(Rest, Frame,
+                                    finalize_chunk(Content, Chunks),
+                                    Left)
+                 end, Left+1);  %% expect a trailing null, too
+        false ->
+            <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
+            {ok,
+             Frame#stomp_frame{
+               body_iolist = lists:reverse(finalize_chunk(Chunk, Chunks))},
+             Remainder}
+    end.
+
+finalize_chunk(Chunk, Chunks) ->
+    case Chunk of
+        <<>> -> Chunks;
+        _    -> [Chunk | Chunks]
+    end.
+
+more(Continuation) ->
+    more(Continuation, 0).
+
+more(Continuation, Length) ->
+    {more, {resume, Continuation}, Length}.
 
 default_value({ok, Value}, _DefaultValue) ->
     Value;
@@ -147,77 +205,6 @@ binary_header(F, K) ->
 
 binary_header(F, K, V) ->
     default_value(binary_header(F, K), V).
-
-initial_body_state(Headers) ->
-    Remaining = case internal_integer_header(Headers, "content-length") of
-                    {ok, ByteCount} -> ByteCount;
-                    not_found       -> unknown
-                end,
-    #bstate{chunk = [], chunks = [], chunksize = 0, remaining = Remaining}.
-
-finalize_body(_State = #bstate{chunk = Chunk, chunks = Chunks}) ->
-    lists:reverse(case Chunk of
-                      [] -> Chunks;
-                      _ -> [finalize_chunk(Chunk) | Chunks]
-                  end).
-
-finalize_chunk(Chunk) ->
-    list_to_binary(lists:reverse(Chunk)).
-
-accumulate_byte(Ch, NewRemaining,
-                State = #bstate{chunk = Chunk,
-                                chunks = Chunks,
-                                chunksize = ?CHUNK_SIZE_LIMIT}) ->
-    State#bstate{chunk = [Ch],
-                 chunks = [finalize_chunk(Chunk) | Chunks],
-                 chunksize = 0,
-                 remaining = NewRemaining};
-accumulate_byte(Ch, NewRemaining, State = #bstate{chunk = Chunk,
-                                                  chunksize = ChunkSize}) ->
-    State#bstate{chunk = [Ch | Chunk],
-                 chunksize = ChunkSize + 1,
-                 remaining = NewRemaining}.
-
-parse_body([], State) ->
-    {more, State};
-parse_body([0 | Rest], State = #bstate{remaining = 0}) ->
-    {ok, finalize_body(State), Rest};
-parse_body([0 | Rest], State = #bstate{remaining = unknown}) ->
-    {ok, finalize_body(State), Rest};
-parse_body([Ch | Rest], State = #bstate{remaining = Remaining}) ->
-    case Remaining of
-        unknown ->
-            parse_body(Rest, accumulate_byte(Ch, unknown, State));
-        0 ->
-            {error, missing_body_terminator};
-        N ->
-            parse_body(Rest, accumulate_byte(Ch, N - 1, State))
-    end.
-
-initial_state() ->
-    {headers, initial_headers_state()}.
-
-parse(Rest, {headers, HState}) ->
-    case parse_headers(Rest, HState) of
-        {more, HState1} ->
-            {more, {headers, HState1}};
-        {ok, Command, Headers, Rest1} ->
-            parse(Rest1,
-                  #stomp_frame{command = Command,
-                               headers = Headers,
-                               body_iolist = initial_body_state(Headers)});
-        E = {error, _} ->
-            E
-    end;
-parse(Rest, Frame = #stomp_frame{body_iolist = BState}) ->
-    case parse_body(Rest, BState) of
-        {more, BState1} ->
-            {more, Frame#stomp_frame{body_iolist = BState1}};
-        {ok, Body, Rest1} ->
-            {ok, Frame#stomp_frame{body_iolist = Body}, Rest1};
-        E = {error, _} ->
-            E
-    end.
 
 serialize(#stomp_frame{command = Command,
                        headers = Headers,

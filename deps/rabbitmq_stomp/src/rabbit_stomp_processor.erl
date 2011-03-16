@@ -29,7 +29,7 @@
 %%   Contributor(s): ______________________________________.
 %%
 -module(rabbit_stomp_processor).
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/2, process_frame/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,24 +40,25 @@
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
-                start_heartbeat_fun}).
+                start_heartbeat_fun, pending_receipts}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(DEFAULT_QUEUE_PREFETCH, 1).
+-define(FLUSH_TIMEOUT, 60000).
 
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
 start_link(Sock, StartHeartbeatFun) ->
-    gen_server:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
+    gen_server2:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
 
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
-    gen_server:cast(Pid, {Command, Frame}).
+    gen_server2:cast(Pid, {Command, Frame}).
 
 %%----------------------------------------------------------------------------
-%% Basic gen_server callbacks
+%% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
 init([Sock, StartHeartbeatFun]) ->
@@ -70,7 +71,10 @@ init([Sock, StartHeartbeatFun]) ->
        connection          = none,
        subscriptions       = dict:new(),
        version             = none,
-       start_heartbeat_fun = StartHeartbeatFun}
+       start_heartbeat_fun = StartHeartbeatFun,
+       pending_receipts    = undefined},
+     hibernate,
+     {backoff, 1000, 1000, 10000}
     }.
 
 terminate(_Reason, State) ->
@@ -87,7 +91,6 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none,
                   {ok, Version} ->
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
-
                       do_login(rabbit_stomp_frame:header(Frame, "login"),
                                rabbit_stomp_frame:header(Frame, "passcode"),
                                rabbit_stomp_frame:header(Frame, "host",
@@ -109,7 +112,11 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none,
       State);
 
 handle_cast(_Request, State = #state{channel = none}) ->
-    error("Illegal command", "You must log in using CONNECT first\n", State);
+    {noreply,
+     send_error("Illegal command",
+                "You must log in using CONNECT first\n",
+                State),
+     hibernate};
 
 handle_cast({Command, Frame}, State) ->
     process_request(
@@ -125,12 +132,18 @@ handle_cast(client_timeout, State) ->
     {stop, client_timeout, State}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State};
+    {noreply, State, hibernate};
 handle_info(#'basic.cancel_ok'{}, State) ->
-    {noreply, State};
+    {noreply, State, hibernate};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
-    {noreply, send_delivery(Delivery, Props, Payload, State)}.
+    {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
+handle_info({inet_reply, _, ok}, State) ->
+    {noreply, State, hibernate};
+handle_info({inet_reply, _, Status}, State) ->
+    {stop, Status, State}.
 
 process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
@@ -149,11 +162,13 @@ process_request(ProcessFun, SuccessFun, State) ->
                 none -> ok;
                 _    -> send_frame(Frame, NewState)
             end,
-            {noreply, SuccessFun(NewState)};
+            {noreply, SuccessFun(NewState), hibernate};
         {error, Message, Detail, NewState} ->
-            {noreply, send_error(Message, Detail, NewState)};
-        {stop, R, State} ->
-            {stop, R, State}
+            {noreply, send_error(Message, Detail, NewState), hibernate};
+        {stop, normal, NewState} ->
+            {stop, normal, SuccessFun(NewState)};
+        {stop, R, NewState} ->
+            {stop, R, NewState}
     end.
 
 %%----------------------------------------------------------------------------
@@ -162,7 +177,7 @@ process_request(ProcessFun, SuccessFun, State) ->
 
 handle_frame("DISCONNECT", _Frame, State) ->
     %% We'll get to shutdown the channels in terminate
-    {stop, normal, State};
+    {stop, normal, shutdown_channel_and_connection(State)};
 
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
@@ -338,7 +353,6 @@ do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
                             connection    = Connection,
                             channel       = MainChannel}) ->
-
     Prefetch = rabbit_stomp_frame:integer_header(Frame, "prefetch-count",
                                                  default_prefetch(Destination)),
 
@@ -368,7 +382,6 @@ do_subscribe(Destination, DestHdr, Frame,
                              no_ack       = (AckMode == auto),
                              exclusive    = false},
                            self()),
-
     ExchangeAndKey = rabbit_stomp_util:parse_routing_information(Destination),
     ok = ensure_queue_binding(Queue, ExchangeAndKey, Channel),
 
@@ -399,18 +412,23 @@ do_send(Destination, _DestHdr,
     case transactional(Frame) of
         {yes, Transaction} ->
             extend_transaction(Transaction,
+                               fun(StateN) ->
+                                       maybe_record_receipt(Frame, StateN)
+                               end,
                                {Method, Props, BodyFragments},
                                State);
         no ->
-            ok(send_method(Method, Props, BodyFragments, State))
+            ok(send_method(Method, Props, BodyFragments,
+                           maybe_record_receipt(Frame, State)))
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
     #'basic.ack'{delivery_tag = DeliveryTag,
                  multiple     = IsMulti}.
 
-create_nack_method(DeliveryTag, _Subscription) ->
-    #'basic.reject'{delivery_tag = DeliveryTag}.
+create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
+    #'basic.nack'{delivery_tag = DeliveryTag,
+                  multiple     = IsMulti}.
 
 negotiate_version(Frame) ->
     ClientVers = re:split(
@@ -419,11 +437,6 @@ negotiate_version(Frame) ->
                    [{return, list}]),
     rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
 
-ensure_receipt(Frame, State) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
-        {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
-        not_found -> State
-    end.
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
@@ -456,11 +469,14 @@ send_method(Method, Properties, BodyFragments,
     send_method(Method, Channel, Properties, BodyFragments, State).
 
 send_method(Method, Channel, Properties, BodyFragments, State) ->
-    amqp_channel:call(Channel, Method, #amqp_msg{
-                                props = Properties,
-                                payload = lists:reverse(BodyFragments)}),
+    amqp_channel:call(
+      Channel, Method,
+      #amqp_msg{props   = Properties,
+                payload = list_to_binary(BodyFragments)}),
     State.
 
+shutdown_channel_and_connection(State = #state{channel = none}) ->
+    State;
 shutdown_channel_and_connection(State = #state{channel       = Channel,
                                                connection    = Connection,
                                                subscriptions = Subs}) ->
@@ -476,12 +492,74 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
 
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
-    State#state{channel = none, connection = none}.
+    State#state{channel = none, connection = none, subscriptions = none}.
 
 default_prefetch({queue, _}) ->
     ?DEFAULT_QUEUE_PREFETCH;
 default_prefetch(_) ->
     undefined.
+
+%%----------------------------------------------------------------------------
+%% Receipt Handling
+%%----------------------------------------------------------------------------
+
+ensure_receipt(Frame = #stomp_frame{command = Command}, State) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id}  -> do_receipt(Command, Id, State);
+        not_found -> State
+    end.
+
+do_receipt("SEND", _, State) ->
+    %% SEND frame receipts are handled when messages are confirmed
+    State;
+do_receipt(_Frame, ReceiptId, State) ->
+    send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
+
+maybe_record_receipt(Frame, State = #state{channel          = Channel,
+                                           pending_receipts = PR}) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id} ->
+            PR1 = case PR of
+                      undefined ->
+                          amqp_channel:register_confirm_handler(
+                            Channel, self()),
+                          #'confirm.select_ok'{} =
+                              amqp_channel:call(Channel, #'confirm.select'{}),
+                          gb_trees:empty();
+                      _ ->
+                          PR
+                  end,
+            SeqNo = amqp_channel:next_publish_seqno(Channel),
+            State#state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
+        not_found ->
+            State
+    end.
+
+flush_pending_receipts(DeliveryTag, IsMulti,
+                       State = #state{pending_receipts = PR}) ->
+    {Receipts, PR1} = accumulate_receipts(DeliveryTag, IsMulti, PR),
+    State1 = lists:foldl(fun(ReceiptId, StateN) ->
+                                 do_receipt(none, ReceiptId, StateN)
+                         end, State, Receipts),
+    State1#state{pending_receipts = PR1}.
+
+accumulate_receipts(DeliveryTag, false, PR) ->
+    case gb_trees:lookup(DeliveryTag, PR) of
+        {value, ReceiptId} -> {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
+        none               -> {[], PR}
+    end;
+accumulate_receipts(DeliveryTag, true, PR) ->
+    {Key, Value, PR1} = gb_trees:take_smallest(PR),
+    case DeliveryTag >= Key of
+        true  -> accumulate_receipts1(DeliveryTag, {Key, Value, PR1}, []);
+        false -> {[], PR}
+    end.
+
+accumulate_receipts1(DeliveryTag, {DeliveryTag, Value, PR}, Acc) ->
+    {lists:reverse([Value | Acc]), PR};
+accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
+    accumulate_receipts1(DeliveryTag,
+                         gb_trees:take_smallest(PR), [Value | Acc]).
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
@@ -520,6 +598,9 @@ begin_transaction(Transaction, State) ->
     put({transaction, Transaction}, []),
     ok(State).
 
+extend_transaction(Transaction, Callback, Action, State) ->
+    extend_transaction(Transaction, {callback, Callback, Action}, State).
+
 extend_transaction(Transaction, Action, State0) ->
     with_transaction(
       Transaction, State0,
@@ -547,6 +628,8 @@ abort_transaction(Transaction, State0) ->
               ok(State)
       end).
 
+perform_transaction_action({callback, Callback, Action}, State) ->
+    perform_transaction_action(Action, Callback(State));
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->
@@ -569,7 +652,7 @@ ensure_heartbeats(Heartbeats,
 
     Pid = self(),
     ReceiveFun = fun() ->
-                         gen_server:cast(Pid, client_timeout)
+                         gen_server2:cast(Pid, client_timeout)
                  end,
 
     {SendTimeout, ReceiveTimeout} =
@@ -603,10 +686,10 @@ ensure_queue(send, {exchange, _}, _Channel) ->
 ensure_queue(_, {queue, Name}, Channel) ->
     %% Always create named queue for /queue destinations
     Queue = list_to_binary(Name),
-    #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel,
-                          #'queue.declare'{durable = true,
-                                           queue   = Queue}),
+    amqp_channel:cast(Channel,
+                      #'queue.declare'{durable = true,
+                                       queue   = Queue,
+                                       nowait  = true}),
     {ok, Queue};
 ensure_queue(subscribe, {topic, _}, Channel) ->
     %% Create anonymous, exclusive queue for SUBSCRIBE on /topic destinations
@@ -683,17 +766,8 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     %% We ignore certain errors here, as we will be receiving an
     %% asynchronous notification of the same (or a related) fault
     %% shortly anyway. See bug 21365.
-    %% io:format("Sending ~p~n", [Frame]),
-    case gen_tcp:send(Sock, rabbit_stomp_frame:serialize(Frame)) of
-        ok -> State;
-        {error, closed} -> State;
-        {error, enotconn} -> State;
-        {error, Code} ->
-            error_logger:error_msg("Error sending STOMP frame ~p: ~p~n",
-                                   [Frame#stomp_frame.command,
-                                    Code]),
-            State
-    end.
+    rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)),
+    State.
 
 send_error(Message, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
@@ -705,10 +779,10 @@ send_error(Message, Format, Args, State) ->
     send_error(Message, format_detail(Format, Args), State).
 
 %%----------------------------------------------------------------------------
-%% Skeleton gen_server callbacks
+%% Skeleton gen_server2 callbacks
 %%----------------------------------------------------------------------------
-handle_call(_Cmd, _From, State) ->
-    State.
+handle_call(_Msg, _From, State) ->
+    {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
