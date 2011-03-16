@@ -634,26 +634,9 @@ function with_req(method, path, body, fun) {
     req.open(method, '../api' + path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
-            if (req.status == 200) {
+            if (check_bad_response(req)) {
                 last_successful_connect = new Date();
                 fun(req);
-            }
-            else if (req.status == 408) {
-                update_status('timeout');
-            }
-            else if (req.status == 0) { // Non-MSIE: could not connect
-                update_status('error');
-            }
-            else if (req.status > 12000) { // MSIE: could not connect
-                update_status('error');
-            }
-            else if (req.status == 404) {
-                var html = format('404', {});
-                replace_content('main', html);
-            }
-            else {
-                debug("Got response code " + req.status);
-                clearInterval(timer);
             }
         }
     };
@@ -702,24 +685,48 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (req.status >= 400 && req.status <= 404) {
+    if (check_bad_response(req)) {
+        if (type == 'GET')
+            return req.responseText;
+        else
+            return true;
+    }
+    else {
+        return false;
+    }
+}
+
+function check_bad_response(req) {
+    // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
+    // MSIE7 and 8 appear to do this in response to HTTP 204.
+    if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
+        return true;
+    }
+    else if (req.status >= 400 && req.status < 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
         show_popup('warn', reason);
-        return false;
     }
-
-    // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
-    // MSIE7 and 8 appear to do this in response to HTTP 204.
-    if (req.status >= 400 && req.status != 1223) {
+    else if (req.status == 404) {
+        var html = format('404', {});
+        replace_content('main', html);
+    }
+    else if (req.status == 408) {
+        update_status('timeout');
+    }
+    else if (req.status == 0) { // Non-MSIE: could not connect
+        update_status('error');
+    }
+    else if (req.status > 12000) { // MSIE: could not connect
+        update_status('error');
+    }
+    else {
         debug("Got response code " + req.status + " with body " +
               req.responseText);
+        clearInterval(timer);
     }
 
-    if (type == 'GET')
-        return req.responseText;
-    else
-        return true;
+    return false;
 }
 
 function fill_path_template(template, params) {
