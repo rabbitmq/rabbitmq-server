@@ -91,7 +91,7 @@ tuple(Term)                       -> Term.
 
 protocol(unknown) ->
     unknown;
-protocol(Version = {Major, Minor, Revision}) ->
+protocol(Version = {_Major, _Minor, _Revision}) ->
     protocol({'AMQP', Version});
 protocol({Family, Version}) ->
     print("~s ~s", [Family, protocol_version(Version)]).
