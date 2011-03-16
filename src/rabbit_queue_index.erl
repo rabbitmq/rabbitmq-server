@@ -843,7 +843,8 @@ load_segment(KeepAcked, #segment { path = Path }) ->
         false -> {array_new(), 0};
         true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
-                 {ok, SegData} = file_handle_cache:read(Hdl, ?SEGMENT_TOTAL_SIZE),
+                 {ok, SegData} = file_handle_cache:read(
+                                   Hdl, ?SEGMENT_TOTAL_SIZE),
                  Res = load_segment_entries(KeepAcked, SegData, array_new(), 0),
                  ok = file_handle_cache:close(Hdl),
                  Res
