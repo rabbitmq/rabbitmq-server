@@ -202,7 +202,8 @@ login(Params = #amqp_params{auth_mechanisms = ClientMechanisms,
         [{Name, MState0, Mech}|_] ->
             {Resp, MState1} = Mech(none, Params, MState0),
             StartOk = #'connection.start_ok'{
-              client_properties = client_properties(UserProps),
+              client_properties =
+                  amqp_connection:fill_client_properties(UserProps),
               mechanism = Name,
               response = Resp},
             do2(StartOk, State),
@@ -220,21 +221,6 @@ login_loop(Mech, MState0, Params, State) ->
             do2(#'connection.secure_ok'{response = Resp}, State),
             login_loop(Mech, MState1, Params, State)
     end.
-
-client_properties(UserProperties) ->
-    {ok, Vsn} = application:get_key(amqp_client, vsn),
-    Default = [{<<"product">>,   longstr, <<"RabbitMQ">>},
-               {<<"version">>,   longstr, list_to_binary(Vsn)},
-               {<<"platform">>,  longstr, <<"Erlang">>},
-               {<<"copyright">>, longstr,
-                <<"Copyright (c) 2007-2011 VMware, Inc.">>},
-               {<<"information">>, longstr,
-                <<"Licensed under the MPL.  "
-                  "See http://www.rabbitmq.com/">>},
-               {<<"capabilities">>, table, ?CLIENT_CAPABILITIES}],
-    lists:foldl(fun({K, _, _} = Tuple, Acc) ->
-                    lists:keystore(K, 1, Acc, Tuple)
-                end, Default, UserProperties).
 
 handshake_recv(Expecting) ->
     receive
