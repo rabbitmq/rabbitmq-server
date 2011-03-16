@@ -327,7 +327,7 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           %% confirm.
                           {dict:erase(MsgId, MSN),
                            gb_trees_cons(ChPid, MsgSeqNo, CMsN)};
-                      {ok, {confirmed, ChPid}} ->
+                      {ok, {confirmed, _ChPid}} ->
                           %% It's already been confirmed. This is
                           %% probably it's been both sync'd to disk
                           %% and then delivered and ack'd before we've
