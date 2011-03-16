@@ -301,7 +301,7 @@ handle_event(Event = #event{type = queue_deleted}, State) ->
 handle_event(#event{type = connection_created, props = Stats}, State) ->
     Name = rabbit_mgmt_format:connection(Stats),
     handle_created(
-      connection_stats, [{name, Name} | Stats],
+      connection_stats, [{name, Name} | proplists:delete(name, Stats)],
       [{fun rabbit_mgmt_format:addr/1,         [address, peer_address]},
        {fun rabbit_mgmt_format:port/1,         [port, peer_port]},
        {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
