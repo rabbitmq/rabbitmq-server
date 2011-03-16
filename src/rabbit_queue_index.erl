@@ -140,8 +140,11 @@
 
 -define(MSG_ID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
 -define(MSG_ID_BITS, (?MSG_ID_BYTES * 8)).
-%% 16 bytes for md5sum + 8 for expiry + 2 for seq, bits and prefix
--define(PUBLISH_RECORD_LENGTH_BYTES, ?MSG_ID_BYTES + ?EXPIRY_BYTES + 2).
+
+%% 16 bytes for md5sum + 8 for expiry
+-define(PUBLISH_RECORD_BODY_LENGTH_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES)).
+%% + 2 for seq, bits and prefix
+-define(PUBLISH_RECORD_LENGTH_BYTES, (?PUBLISH_RECORD_BODY_LENGTH_BYTES + 2)).
 
 %% 1 publish, 1 deliver, 1 ack per msg
 -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
@@ -537,14 +540,13 @@ queue_index_walker_reader(QueueName, Gatherer) ->
 %% expiry/binary manipulation
 %%----------------------------------------------------------------------------
 
-create_pub_record_body(MsgId, #message_properties{expiry = Expiry}) ->
+create_pub_record_body(MsgId, #message_properties { expiry = Expiry }) ->
     [MsgId, expiry_to_binary(Expiry)].
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
-extract_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
-                          Rest/binary>>) ->
+parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS>>) ->
     %% work around for binary data fragmentation. See
     %% rabbit_msg_file:read_next/2
     <<MsgId:?MSG_ID_BYTES/binary>> = <<MsgIdNum:?MSG_ID_BITS>>,
@@ -552,7 +554,7 @@ extract_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
               ?NO_EXPIRY -> undefined;
               X          -> X
           end,
-    {MsgId, #message_properties{expiry = Exp}, Rest}.
+    {MsgId, #message_properties { expiry = Exp }}.
 
 %%----------------------------------------------------------------------------
 %% journal manipulation
@@ -676,10 +678,9 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
                     case file_handle_cache:read(
-                           Hdl, ?MSG_ID_BYTES + ?EXPIRY_BYTES) of
+                           Hdl, ?PUBLISH_RECORD_BODY_LENGTH_BYTES) of
                         {ok, Bin} ->
-                            {MsgId, MsgProps, <<>>} =
-                                extract_pub_record_body(Bin),
+                            {MsgId, MsgProps} = parse_pub_record_body(Bin),
                             IsPersistent = case Prefix of
                                                ?PUB_PERSIST_JPREFIX -> true;
                                                ?PUB_TRANS_JPREFIX   -> false
@@ -852,12 +853,14 @@ load_segment(KeepAcked, #segment { path = Path }) ->
 
 load_segment_entries(KeepAcked,
                      <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS, IsPersistentNum:1,
-                       RelSeq:?REL_SEQ_BITS, SegData/binary>>,
+                       RelSeq:?REL_SEQ_BITS,
+                       PubRecordBody:?PUBLISH_RECORD_BODY_LENGTH_BYTES/binary,
+                       SegData/binary>>,
                      SegEntries, UnackedCount) ->
-    {MsgId, MsgProps, SegData1} = extract_pub_record_body(SegData),
+    {MsgId, MsgProps} = parse_pub_record_body(PubRecordBody),
     Obj = {{MsgId, MsgProps, 1 == IsPersistentNum}, no_del, no_ack},
     SegEntries1 = array:set(RelSeq, Obj, SegEntries),
-    load_segment_entries(KeepAcked, SegData1, SegEntries1, UnackedCount + 1);
+    load_segment_entries(KeepAcked, SegData, SegEntries1, UnackedCount + 1);
 load_segment_entries(KeepAcked,
                      <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                        RelSeq:?REL_SEQ_BITS, SegData/binary>>,
