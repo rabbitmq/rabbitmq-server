@@ -65,14 +65,11 @@ extract_user_pass(Response) ->
     end.
 
 extract_elem(<<0:8, Rest/binary>>) ->
-    Count = next_null_pos(Rest),
+    Count = next_null_pos(Rest, 0),
     <<Elem:Count/binary, Rest1/binary>> = Rest,
     {ok, Elem, Rest1};
 extract_elem(_) ->
     error.
-
-next_null_pos(Bin) ->
-    next_null_pos(Bin, 0).
 
 next_null_pos(<<>>, Count)                  -> Count;
 next_null_pos(<<0:8, _Rest/binary>>, Count) -> Count;
