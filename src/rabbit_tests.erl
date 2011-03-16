@@ -1121,8 +1121,9 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(
-                 1, self(), Writer, rabbit_framing_amqp_0_9_1, user(<<"user">>),
-                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
+                 1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
+                 user(<<"user">>), <<"/">>, [], self(),
+                 fun (_) -> {ok, self()} end),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1181,8 +1182,9 @@ test_spawn(Receiver) ->
     Me = self(),
     Writer = spawn(fun () -> Receiver(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
-                 1, Me, Writer, rabbit_framing_amqp_0_9_1, user(<<"guest">>),
-                 <<"/">>, [], self(), fun (_) -> {ok, self()} end),
+                 1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
+                 user(<<"guest">>), <<"/">>, [], self(),
+                 fun (_) -> {ok, self()} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
