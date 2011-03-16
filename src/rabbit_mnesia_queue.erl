@@ -58,16 +58,13 @@
 -behaviour(rabbit_backing_queue).
 
 %% The state record is the in-RAM AMQP queue state. It contains the
-%% names of three Mnesia queues; the next_seq_id and next_out_id (also
-%% stored in the N table in Mnesia); and the AMQP transaction dict
-%% (which can be dropped on a crash).
+%% names of two Mnesia queues; the next_seq_id; and the AMQP
+%% transaction dict (which can be dropped on a crash).
 
 -record(state,              % The in-RAM queue state
         { q_table,          % The Mnesia queue table name
           p_table,          % The Mnesia pending-ack table name
-          n_table,          % The Mnesia next_(seq_id, out_id) table name
           next_seq_id,      % The next M's seq_id
-          next_out_id,      % The next M's out id
           txn_dict          % In-progress txn->tx map
         }).
 
@@ -97,13 +94,11 @@
 
 %% A Q record is a msg stored in the Q table in Mnesia. It is indexed
 %% by the out-id, which orders msgs; and contains the msg_status
-%% record itself. We push msg_status records with a new high out_id,
-%% and pop the msg_status record with the lowest out_id.  (We cannot
-%% use the seq_id for ordering since msgs may be requeued while
-%% keeping the same seq_id.)
+%% record itself. We push msg_status records with a new high seq_id,
+%% and pop the msg_status record with the lowest seq_id.
 
 -record(q_record,           % Q records in Mnesia
-        { out_id,           % The key: The out_id
+        { seq_id,           % The key: The seq_id
           msg_status        % The value: The msg_status record
           }).
 
@@ -114,18 +109,6 @@
 -record(p_record,           % P records in Mnesia
         { seq_id,           % The key: The seq_id
           msg_status        % The value: The msg_status record
-          }).
-
-%% An N record holds counters in the single row in the N table in
-%% Mnesia. It contains the next_seq_id and next_out_id from the state
-%% record, so that they can be recovered after a crash. They are
-%% updated on every Mnesia transaction that updates them in the in-RAM
-%% State.
-
--record(n_record,           % next_seq_id & next_out_id record in Mnesia
-        { key,              % The key: the atom 'n'
-          next_seq_id,      % The Mnesia next_seq_id
-          next_out_id       % The Mnesia next_out_id
           }).
 
 -include("rabbit.hrl").
@@ -143,9 +126,7 @@
 
 -type(state() :: #state { q_table :: atom(),
 			  p_table :: atom(),
-			  n_table :: atom(),
 			  next_seq_id :: seq_id(),
-			  next_out_id :: non_neg_integer(),
 			  txn_dict :: dict() }).
 
 -type(msg_status() :: #msg_status { msg :: rabbit_types:basic_message(),
@@ -159,15 +140,11 @@
 -type(pub() :: { rabbit_types:basic_message(),
                  rabbit_types:message_properties() }).
 
--type(q_record() :: #q_record { out_id :: non_neg_integer(),
+-type(q_record() :: #q_record { seq_id :: non_neg_integer(),
                                 msg_status :: msg_status() }).
 
 -type(p_record() :: #p_record { seq_id :: seq_id(),
                                 msg_status :: msg_status() }).
-
--type(n_record() :: #n_record { key :: 'n',
-                                next_seq_id :: seq_id(),
-                                next_out_id :: non_neg_integer() }).
 
 -include("rabbit_backing_queue_spec.hrl").
 
@@ -216,41 +193,31 @@ stop() -> ok.
 %% Mnesia transaction!
 
 init(QueueName, IsDurable, Recover) ->
-    {QTable, PTable, NTable} = tables(QueueName),
+    {QTable, PTable} = tables(QueueName),
     case Recover of
         false -> _ = mnesia:delete_table(QTable),
-                 _ = mnesia:delete_table(PTable),
-                 _ = mnesia:delete_table(NTable);
+                 _ = mnesia:delete_table(PTable);
         true -> ok
     end,
     create_table(QTable, 'q_record', 'ordered_set', record_info(fields,
                                                                 q_record)),
     create_table(PTable, 'p_record', 'set', record_info(fields, p_record)),
-    create_table(NTable, 'n_record', 'set', record_info(fields, n_record)),
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
                   case IsDurable of
                       false -> clear_table(QTable),
-                               clear_table(PTable),
-                               clear_table(NTable);
+                               clear_table(PTable);
                       true -> delete_nonpersistent_msgs(QTable)
                   end,
-                  {NextSeqId, NextOutId} =
-                      case mnesia:read(NTable, 'n', 'read') of
-                          [] -> {0, 0};
-                          [#n_record { next_seq_id = NextSeqId0,
-                                       next_out_id = NextOutId0 }] ->
-                              {NextSeqId0, NextOutId0}
-                      end,
-                  RState = #state { q_table = QTable,
-				    p_table = PTable,
-				    n_table = NTable,
-				    next_seq_id = NextSeqId,
-				    next_out_id = NextOutId,
-				    txn_dict = dict:new() },
-                  save(RState),
-                  RState
+                  NextSeqId = case mnesia:first(QTable) of
+				  '$end_of_table' -> 0;
+				  SeqId -> SeqId
+			      end,
+                  #state { q_table = QTable,
+			   p_table = PTable,
+			   next_seq_id = NextSeqId,
+			   txn_dict = dict:new() }
           end),
     Result.
 
@@ -263,12 +230,10 @@ init(QueueName, IsDurable, Recover) ->
 %%
 %% -spec(terminate/1 :: (state()) -> state()).
 
-terminate(State = #state {
-	    q_table = QTable, p_table = PTable, n_table = NTable }) ->
-    {atomic, Result} =
-        mnesia:transaction(fun () -> clear_table(PTable), State end),
-    mnesia:dump_tables([QTable, PTable, NTable]),
-    Result.
+terminate(State = #state { q_table = QTable, p_table = PTable }) ->
+    {atomic, _} = mnesia:clear_table(PTable),
+    mnesia:dump_tables([QTable, PTable]),
+    State.
 
 %% ----------------------------------------------------------------------------
 %% delete_and_terminate/1 deletes all of a queue's enqueued msgs and
@@ -280,16 +245,13 @@ terminate(State = #state {
 %%
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
-delete_and_terminate(State = #state { q_table = QTable,
-				      p_table = PTable,
-				      n_table = NTable }) ->
-    {atomic, Result} =
+delete_and_terminate(State = #state { q_table = QTable, p_table = PTable }) ->
+    {atomic, _} =
         mnesia:transaction(fun () -> clear_table(QTable),
-                                     clear_table(PTable),
-                                     State
+                                     clear_table(PTable)
                            end),
-    mnesia:dump_tables([QTable, PTable, NTable]),
-    Result.
+    mnesia:dump_tables([QTable, PTable]),
+    State.
 
 %% ----------------------------------------------------------------------------
 %% purge/1 deletes all of queue's enqueued msgs, returning the count
@@ -323,10 +285,7 @@ purge(State = #state { q_table = QTable }) ->
 publish(Msg, Props, State) ->
     {atomic, Result} =
         mnesia:transaction(
-	  fun () -> RState = internal_publish(Msg, Props, false, State),
-		    save(RState),
-		    RState
-	  end),
+	  fun () -> internal_publish(Msg, Props, false, State) end),
     callback([{Msg, Props}]),
     Result.
 
@@ -346,22 +305,19 @@ publish(Msg, Props, State) ->
 %%                              -> {undefined, state()}).
 
 publish_delivered(false, Msg, Props, State) ->
-    Result = {undefined, State},
     callback([{Msg, Props}]),
-    Result;
-publish_delivered(true,
-                  Msg,
-                  Props,
-                  State =
-		      #state { next_seq_id = SeqId, next_out_id = OutId }) ->
+    {undefined, State};
+publish_delivered(true, Msg, Props, State = #state { next_seq_id = SeqId }) ->
     {atomic, Result} =
         mnesia:transaction(
           fun () ->
-                  add_p(m(SeqId, Msg, Props, true), State),
-                  RState = State #state { next_seq_id = SeqId + 1,
-					  next_out_id = OutId + 1 },
-                  save(RState),
-                  {SeqId, RState}
+                  add_p(#msg_status {
+			   seq_id = SeqId,
+			   msg = Msg,
+			   props = Props,
+			   is_delivered = true },
+			State),
+                  {SeqId, State #state { next_seq_id = SeqId + 1 }}
           end),
     callback([{Msg, Props}]),
     Result.
@@ -385,10 +341,7 @@ publish_delivered(true,
 
 dropwhile(Pred, State) ->
     {atomic, Result} =
-        mnesia:transaction(fun () -> RState = internal_dropwhile(Pred, State),
-                                     save(RState),
-                                     RState
-                           end),
+        mnesia:transaction(fun () -> internal_dropwhile(Pred, State) end),
     Result.
 
 %% ----------------------------------------------------------------------------
@@ -425,10 +378,7 @@ fetch(AckRequired, State) ->
 
 ack(SeqIds, State) ->
     {atomic, Result} =
-        mnesia:transaction(fun () -> RState = internal_ack(SeqIds, State),
-                                     save(RState),
-                                     RState
-                           end),
+        mnesia:transaction(fun () -> internal_ack(SeqIds, State) end),
     Result.
 
 %% ----------------------------------------------------------------------------
@@ -447,20 +397,10 @@ ack(SeqIds, State) ->
 %%         -> state()).
 
 tx_publish(Txn, Msg, Props, State = #state { txn_dict = TxnDict }) ->
-    {atomic, Result} =
-        mnesia:transaction(
-          fun () ->
-		  Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, TxnDict),
-		  RState =
-		      State #state {
-			txn_dict = store_tx(
-				    Txn,
-				    Tx #tx { to_pub = [{Msg, Props} | Pubs] },
-				    TxnDict) },
-		  save(RState),
-		  RState
-          end),
-    Result.
+    Tx = #tx { to_pub = Pubs } = lookup_tx(Txn, TxnDict),
+    State #state {
+      txn_dict =
+	  store_tx(Txn, Tx #tx { to_pub = [{Msg, Props} | Pubs] }, TxnDict) }.
 
 %% ----------------------------------------------------------------------------
 %% tx_ack/3 acks within an AMQP transaction. It stores the seq_id in
@@ -472,20 +412,10 @@ tx_publish(Txn, Msg, Props, State = #state { txn_dict = TxnDict }) ->
 %% -spec(tx_ack/3 :: (rabbit_types:txn(), [ack()], state()) -> state()).
 
 tx_ack(Txn, SeqIds, State = #state { txn_dict = TxnDict }) ->
-    {atomic, Result} =
-        mnesia:transaction(
-          fun () ->
-		  Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, TxnDict),
-		  RState =
-		      State #state {
-			txn_dict = store_tx(
-				     Txn,
-				     Tx #tx { to_ack = SeqIds ++ SeqIds0 },
-				     TxnDict) },
-		  save(RState),
-		  RState
-	  end),
-    Result.
+    Tx = #tx { to_ack = SeqIds0 } = lookup_tx(Txn, TxnDict),
+    State #state {
+      txn_dict =
+	  store_tx(Txn, Tx #tx { to_ack = SeqIds ++ SeqIds0 }, TxnDict) }.
 
 %% ----------------------------------------------------------------------------
 %% tx_rollback/2 aborts an AMQP transaction.
@@ -496,15 +426,8 @@ tx_ack(Txn, SeqIds, State = #state { txn_dict = TxnDict }) ->
 %% -spec(tx_rollback/2 :: (rabbit_types:txn(), state()) -> {[ack()], state()}).
 
 tx_rollback(Txn, State = #state { txn_dict = TxnDict }) ->
-    {atomic, Result} =
-        mnesia:transaction(
-	  fun () ->
-		  #tx { to_ack = SeqIds } = lookup_tx(Txn, TxnDict),
-		  RState = State #state { txn_dict = erase_tx(Txn, TxnDict) },
-		  save(RState),
-		  {SeqIds, RState}
-	  end),
-    Result.
+    #tx { to_ack = SeqIds } = lookup_tx(Txn, TxnDict),
+    {SeqIds, State #state { txn_dict = erase_tx(Txn, TxnDict) }}.
 
 %% ----------------------------------------------------------------------------
 %% tx_commit/4 commits an AMQP transaction. The F passed in is called
@@ -529,12 +452,11 @@ tx_commit(Txn, F, PropsF, State = #state { txn_dict = TxnDict }) ->
                   #tx { to_ack = SeqIds, to_pub = Pubs } =
 		      lookup_tx(Txn, TxnDict),
                   RState =
-		      internal_tx_commit(
+		      internal_commit(
 			Pubs,
 			SeqIds,
 			PropsF,
 			State #state { txn_dict = erase_tx(Txn, TxnDict) }),
-                  save(RState),
                   {{SeqIds, RState}, Pubs}
           end),
     F(),
@@ -554,17 +476,13 @@ tx_commit(Txn, F, PropsF, State = #state { txn_dict = TxnDict }) ->
 requeue(SeqIds, PropsF, State) ->
     {atomic, Result} =
         mnesia:transaction(
-          fun () -> RState =
-                        del_ps(
-                          fun (#msg_status { msg = Msg, props = Props },
-			       StateI) ->
-                                  internal_publish(
-				    Msg, PropsF(Props), true, StateI)
-                          end,
-                          SeqIds,
-                          State),
-                    save(RState),
-                    RState
+          fun () -> del_ps(
+		      fun (#msg_status { msg = Msg, props = Props }, StateI) ->
+			      internal_publish(
+				Msg, PropsF(Props), true, StateI)
+		      end,
+		      SeqIds,
+		      State)
           end),
     Result.
 
@@ -701,7 +619,7 @@ clear_table(Table) ->
 delete_nonpersistent_msgs(QTable) ->
     lists:foreach(
       fun (Key) ->
-              [#q_record { out_id = Key, msg_status = MsgStatus }] =
+              [#q_record { seq_id = Key, msg_status = MsgStatus }] =
                   mnesia:read(QTable, Key, 'read'),
               case MsgStatus of
                   #msg_status { msg = #basic_message {
@@ -723,13 +641,13 @@ internal_fetch(AckRequired, State) ->
         {just, MsgStatus} -> post_pop(AckRequired, MsgStatus, State)
     end.
 
--spec internal_tx_commit([pub()],
+-spec internal_commit([pub()],
 			 [seq_id()],
 			 message_properties_transformer(),
 			 state()) ->
 				state().
 
-internal_tx_commit(Pubs, SeqIds, PropsF, State) ->
+internal_commit(Pubs, SeqIds, PropsF, State) ->
     S1 = internal_ack(SeqIds, State),
     lists:foldl(
       fun ({Msg, Props}, StateI) ->
@@ -747,13 +665,15 @@ internal_tx_commit(Pubs, SeqIds, PropsF, State) ->
 internal_publish(Msg,
 		 Props,
 		 IsDelivered,
-		 State = #state { q_table = QTable,
-				  next_seq_id = SeqId,
-				  next_out_id = OutId }) ->
-    MsgStatus = m(SeqId, Msg, Props, IsDelivered),
+		 State = #state { q_table = QTable, next_seq_id = SeqId }) ->
+    MsgStatus = #msg_status {
+      seq_id = SeqId,
+      msg = Msg,
+      props = Props,
+      is_delivered = IsDelivered },
     mnesia:write(
-      QTable, #q_record { out_id = OutId, msg_status = MsgStatus }, 'write'),
-    State #state { next_seq_id = SeqId + 1, next_out_id = OutId + 1 }.
+      QTable, #q_record { seq_id = SeqId, msg_status = MsgStatus }, 'write'),
+    State #state { next_seq_id = SeqId + 1 }.
 
 -spec(internal_ack/2 :: ([seq_id()], state()) -> state()).
 
@@ -783,9 +703,9 @@ internal_dropwhile(Pred, State) ->
 q_pop(#state { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
-        OutId -> [#q_record { out_id = OutId, msg_status = MsgStatus }] =
-                     mnesia:read(QTable, OutId, 'read'),
-                 mnesia:delete(QTable, OutId, 'write'),
+        SeqId -> [#q_record { seq_id = SeqId, msg_status = MsgStatus }] =
+                     mnesia:read(QTable, SeqId, 'read'),
+                 mnesia:delete(QTable, SeqId, 'write'),
                  {just, MsgStatus}
     end.
 
@@ -797,8 +717,8 @@ q_pop(#state { q_table = QTable }) ->
 q_peek(#state { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
-        OutId -> [#q_record { out_id = OutId, msg_status = MsgStatus }] =
-                     mnesia:read(QTable, OutId, 'read'),
+        SeqId -> [#q_record { seq_id = SeqId, msg_status = MsgStatus }] =
+                     mnesia:read(QTable, SeqId, 'read'),
                  {just, MsgStatus}
     end.
 
@@ -851,25 +771,11 @@ del_ps(F, SeqIds, State = #state { p_table = PTable }) ->
       State,
       SeqIds).
 
-%% save copies the volatile part of the state (next_seq_id and
-%% next_out_id) to Mnesia.
-
--spec save(state()) -> ok.
-
-save(#state { n_table = NTable,
-	      next_seq_id = NextSeqId,
-	      next_out_id = NextOutId }) ->
-    ok = mnesia:write(NTable,
-                      #n_record { key = 'n',
-                                  next_seq_id = NextSeqId,
-                                  next_out_id = NextOutId },
-                      'write').
-
 %% ----------------------------------------------------------------------------
 %% Pure helper functions.
 %% ----------------------------------------------------------------------------
 
-%% Convert a queue name (a record) into an Mnesia table name (an atom).
+%% Convert a queue name (a record) into its Mnesia table names (atoms).
 
 %% TODO: Import correct argument type.
 
@@ -878,26 +784,13 @@ save(#state { n_table = NTable,
 %% should extend this as necessary, and perhaps make it a little
 %% prettier.
 
--spec tables({resource, binary(), queue, binary()}) ->
-                    {atom(), atom(), atom()}.
+-spec tables({resource, binary(), queue, binary()}) -> {atom(), atom()}.
 
 tables({resource, VHost, queue, Name}) ->
     VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
     Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
     Str = lists:flatten(io_lib:format("~999999999p", [{VHost2, Name2}])),
-    {list_to_atom("q" ++ Str),
-     list_to_atom("p" ++ Str),
-     list_to_atom("n" ++ Str)}.
-
--spec m(seq_id(),
-        rabbit_types:basic_message(),
-        rabbit_types:message_properties(),
-	boolean()) ->
-               msg_status().
-
-m(SeqId, Msg, Props, IsDelivered) ->
-    #msg_status {
-        seq_id = SeqId, msg = Msg, props = Props, is_delivered = IsDelivered }.
+    {list_to_atom("q" ++ Str), list_to_atom("p" ++ Str)}.
 
 -spec lookup_tx(rabbit_types:txn(), dict()) -> tx().
 
