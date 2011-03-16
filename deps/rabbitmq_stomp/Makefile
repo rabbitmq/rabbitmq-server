@@ -24,30 +24,28 @@ unittest: $(TARGETS) $(TEST_TARGETS)
 		-eval 'init:stop()' | tee $(TMPDIR)/rabbit-stomp-unittest-output |\
 			egrep "passed" >/dev/null
 
-
-CAN_RUN_SSL=$(shell if [ -d $(RABBITMQ_TEST_PATH) ]; then echo "true"; else echo "false"; fi)
+CAN_RUN_SSL:=$(shell if [ -d $(RABBITMQ_TEST_PATH) ]; then echo "true"; else echo "false"; fi)
 
 ssl_clean:
 	rm -rf $(CERTS_DIR)
 
 SSL_VERIFY:=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.0" ]; then echo "true"; else echo "false"; fi)
+
 ifeq (true,$(SSL_VERIFY))
-SSL_VERIFY_OPTION :={verify,verify_peer},{fail_if_no_peer_cert,false}
+    SSL_VERIFY_OPTION :={verify,verify_peer},{fail_if_no_peer_cert,false}
 else
-SSL_VERIFY_OPTION :={verify_code,1}
+    SSL_VERIFY_OPTION :={verify_code,1}
 endif
 
 ifeq ($(CAN_RUN_SSL),true)
-
-TEST_SCRIPTS += ./test/test_ssl.py
-
-TEST_ARGS := -rabbit_stomp ssl_listeners [61614] -rabbit ssl_options ['{cacertfile,'\"$(CERTS_DIR)/testca/cacert.pem\"'},{certfile,'\"$(CERTS_DIR)/server/cert.pem\"'},{keyfile,'\"$(CERTS_DIR)/server/key.pem\"'},$(SSL_VERIFY_OPTION)']
+    TEST_SCRIPTS += ./test/test_ssl.py
+    TEST_ARGS := -rabbit_stomp ssl_listeners [61614] -rabbit ssl_options ['{cacertfile,'\"$(CERTS_DIR)/testca/cacert.pem\"'},{certfile,'\"$(CERTS_DIR)/server/cert.pem\"'},{keyfile,'\"$(CERTS_DIR)/server/key.pem\"'},$(SSL_VERIFY_OPTION)']
 
 $(CERTS_DIR):
 	mkdir -p $(CERTS_DIR)
-	make -C $(RABBITMQ_TEST_PATH)/certs PASSWORD=test DIR=$(abspath $(CERTS_DIR))
-else
+	make -C $(RABBITMQ_TEST_PATH)/certs all PASSWORD=test DIR=$(CERTS_DIR)
 
+else
 $(CERTS_DIR):
 	mkdir -p $(CERTS_DIR)
 	touch $(CERTS_DIR)/.ssl_skip
