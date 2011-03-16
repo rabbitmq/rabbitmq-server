@@ -634,7 +634,7 @@ function with_req(method, path, body, fun) {
     req.open(method, '../api' + path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
-            if (check_bad_response(req)) {
+            if (check_bad_response(req, true)) {
                 last_successful_connect = new Date();
                 fun(req);
             }
@@ -685,7 +685,7 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (check_bad_response(req)) {
+    if (check_bad_response(req, false)) {
         if (type == 'GET')
             return req.responseText;
         else
@@ -696,20 +696,20 @@ function sync_req(type, params0, path_template) {
     }
 }
 
-function check_bad_response(req) {
+function check_bad_response(req, full_page_404) {
     // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
         return true;
     }
-    else if (req.status >= 400 && req.status < 404) {
+    else if (req.status == 404 && full_page_404) {
+        var html = format('404', {});
+        replace_content('main', html);
+    }
+    else if (req.status >= 400 && req.status <= 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
         show_popup('warn', reason);
-    }
-    else if (req.status == 404) {
-        var html = format('404', {});
-        replace_content('main', html);
     }
     else if (req.status == 408) {
         update_status('timeout');
