@@ -457,8 +457,7 @@ init_db(ClusterNodes, Force) ->
                         %% If we're just starting up a new node we won't have
                         %% a version
                         version_not_available ->
-                            ok = rabbit_version:write(
-                                   rabbit_upgrade:desired_version())
+                            ok = rabbit_version:write_desired_version()
                     end,
                     ensure_schema_integrity()
             end;
@@ -485,14 +484,14 @@ schema_ok_or_move() ->
     end.
 
 ensure_version_ok({ok, DiscVersion}) ->
-    DesiredVersion = rabbit_upgrade:desired_version(),
+    DesiredVersion = rabbit_version:desired_version(),
     case rabbit_version:'=~='(DesiredVersion, DiscVersion) of
         true  -> ok;
         false -> throw({error, {schema_mismatch,
                                 DesiredVersion, DiscVersion}})
     end;
 ensure_version_ok({error, _}) ->
-    ok = rabbit_version:write(rabbit_upgrade:desired_version()).
+    ok = rabbit_version:write_desired_version().
 
 create_schema() ->
     mnesia:stop(),
@@ -502,7 +501,7 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = rabbit_version:write(rabbit_upgrade:desired_version()).
+    ok = rabbit_version:write_desired_version().
 
 move_db() ->
     mnesia:stop(),

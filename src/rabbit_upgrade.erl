@@ -17,13 +17,11 @@
 -module(rabbit_upgrade).
 
 -export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0]).
--export([desired_version/0]).
 
 -include("rabbit.hrl").
 
 -define(VERSION_FILENAME, "schema_version").
 -define(LOCK_FILENAME, "schema_upgrade_lock").
--define(SCOPES, [mnesia, local]).
 
 %% -------------------------------------------------------------------
 
@@ -31,7 +29,6 @@
 
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
 -spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
--spec(desired_version/0 :: () -> rabbit_version:version()).
 
 -endif.
 
@@ -96,8 +93,8 @@
 
 maybe_upgrade_mnesia() ->
     AllNodes = rabbit_mnesia:all_clustered_nodes(),
-    case upgrades_required(mnesia) of
-        version_not_available ->
+    case rabbit_version:upgrades_required(mnesia) of
+        {error, version_not_available} ->
             rabbit:prepare(), %% Ensure we have logs for this
             case AllNodes of
                 [_] -> ok;
@@ -105,9 +102,11 @@ maybe_upgrade_mnesia() ->
                            "< 2.1.1.~nUnfortunately you will need to "
                            "rebuild the cluster.", [])
             end;
-        [] ->
+        {error, _} = Err ->
+            throw(Err);
+        {ok, []} ->
             ok;
-        Upgrades ->
+        {ok, Upgrades} ->
             rabbit:prepare(), %% Ensure we have logs for this
             case upgrade_mode(AllNodes) of
                 primary   -> primary_upgrade(Upgrades, AllNodes);
@@ -142,18 +141,19 @@ upgrade_mode(AllNodes) ->
             end;
         [Another|_] ->
             ClusterVersion =
-                case rpc:call(Another,
-                              rabbit_upgrade, desired_version, [mnesia]) of
+                case rpc:call(Another, rabbit_version, desired_scope_version,
+                              [mnesia]) of
                     {badrpc, {'EXIT', {undef, _}}} -> unknown_old_version;
                     {badrpc, Reason}               -> {unknown, Reason};
                     V                              -> V
                 end,
-            case desired_version(mnesia) of
-                ClusterVersion ->
+            MyVersion = rabbit_version:desired_scope_version(mnesia),
+            case rabbit_version:'=~='(ClusterVersion, MyVersion) of
+                true ->
                     %% The other node(s) have upgraded already, I am not the
                     %% upgrader
                     secondary;
-                MyVersion ->
+                false ->
                     %% The other node(s) are running an unexpected version.
                     die("Cluster upgrade needed but other nodes are "
                         "running ~p~nand I want ~p",
@@ -208,7 +208,7 @@ secondary_upgrade(AllNodes) ->
                    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok = rabbit_mnesia:init_db(ClusterNodes, true),
-    ok = write_desired_scope_version(mnesia),
+    ok = rabbit_version:write_desired_scope_version(mnesia),
     ok.
 
 nodes_running(Nodes) ->
@@ -223,89 +223,13 @@ node_running(Node) ->
 %% -------------------------------------------------------------------
 
 maybe_upgrade_local() ->
-    case upgrades_required(local) of
-        version_not_available -> version_not_available;
-        []                    -> ok;
-        Upgrades              -> apply_upgrades(local, Upgrades,
-                                                fun() -> ok end)
+    case rabbit_version:upgrades_required(local) of
+        {error, version_not_available} -> version_not_available;
+        {error, _} = Err               -> throw(Err);
+        {ok, []}                       -> ok;
+        {ok, Upgrades}                 -> apply_upgrades(local, Upgrades,
+                                                         fun () -> ok end)
     end.
-
-desired_version() -> [{Scope, desired_version(Scope)} || Scope <- ?SCOPES].
-
-desired_version(Scope) -> with_upgrade_graph(fun (G) -> heads(G) end, Scope).
-
-write_desired_scope_version(Scope) ->
-    ok = rabbit_version:with_scope_version(
-           Scope,
-           fun ({error, Error}) ->
-                   throw({error, {cannot_read_version_to_write_it, Error}})
-           end,
-           fun (_SV) -> {desired_version(Scope), ok} end).
-
-%% -------------------------------------------------------------------
-
-upgrades_required(Scope) ->
-    rabbit_version:with_scope_version(
-      Scope,
-      fun ({error, enoent}) -> version_not_available end,
-      fun (CurrentHeads) ->
-              {CurrentHeads,
-               with_upgrade_graph(
-                 fun (G) ->
-                         case unknown_heads(CurrentHeads, G) of
-                             [] ->
-                                 upgrades_to_apply(CurrentHeads, G);
-                             Unknown ->
-                                 throw({error,
-                                        {future_upgrades_found, Unknown}})
-                         end
-                 end, Scope)}
-      end).
-
-with_upgrade_graph(Fun, Scope) ->
-    case rabbit_misc:build_acyclic_graph(
-           fun (Module, Steps) -> vertices(Module, Steps, Scope) end,
-           fun (Module, Steps) -> edges(Module, Steps, Scope) end,
-           rabbit_misc:all_module_attributes(rabbit_upgrade)) of
-        {ok, G} -> try
-                       Fun(G)
-                   after
-                       true = digraph:delete(G)
-                   end;
-        {error, {vertex, duplicate, StepName}} ->
-            throw({error, {duplicate_upgrade_step, StepName}});
-        {error, {edge, {bad_vertex, StepName}, _From, _To}} ->
-            throw({error, {dependency_on_unknown_upgrade_step, StepName}});
-        {error, {edge, {bad_edge, StepNames}, _From, _To}} ->
-            throw({error, {cycle_in_upgrade_steps, StepNames}})
-    end.
-
-vertices(Module, Steps, Scope0) ->
-    [{StepName, {Module, StepName}} || {StepName, Scope1, _Reqs} <- Steps,
-                                       Scope0 == Scope1].
-
-edges(_Module, Steps, Scope0) ->
-    [{Require, StepName} || {StepName, Scope1, Requires} <- Steps,
-                            Require <- Requires,
-                            Scope0 == Scope1].
-unknown_heads(Heads, G) ->
-    [H || H <- Heads, digraph:vertex(G, H) =:= false].
-
-upgrades_to_apply(Heads, G) ->
-    %% Take all the vertices which can reach the known heads. That's
-    %% everything we've already applied. Subtract that from all
-    %% vertices: that's what we have to apply.
-    Unsorted = sets:to_list(
-                 sets:subtract(
-                   sets:from_list(digraph:vertices(G)),
-                   sets:from_list(digraph_utils:reaching(Heads, G)))),
-    %% Form a subgraph from that list and find a topological ordering
-    %% so we can invoke them in order.
-    [element(2, digraph:vertex(G, StepName)) ||
-        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
-
-heads(G) ->
-    lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).
 
 %% -------------------------------------------------------------------
 
@@ -329,7 +253,7 @@ apply_upgrades(Scope, Upgrades, Fun) ->
                     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
                     info("~s upgrades: All upgrades applied successfully~n",
                          [Scope]),
-                    ok = write_desired_scope_version(Scope),
+                    ok = rabbit_version:write_desired_scope_version(Scope),
                     ok = rabbit_misc:recursive_delete([BackupDir]),
                     info("~s upgrades: Mnesia backup removed~n", [Scope]),
                     ok = file:delete(LockFile);
