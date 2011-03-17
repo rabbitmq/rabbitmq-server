@@ -378,7 +378,7 @@ delete_cluster_nodes_config() ->
     end.
 
 running_nodes_filename() ->
-    dir() ++ "/nodes_running_at_shutdown".
+    filename:join(dir(), "nodes_running_at_shutdown").
 
 record_running_disc_nodes() ->
     FileName = running_nodes_filename(),

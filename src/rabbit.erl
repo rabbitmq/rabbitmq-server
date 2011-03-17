@@ -204,7 +204,6 @@ start() ->
     end.
 
 stop() ->
-    ok = rabbit_mnesia:record_running_disc_nodes(),
     ok = rabbit_misc:stop_applications(?APPS).
 
 stop_and_halt() ->
@@ -246,6 +245,7 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
+    ok = rabbit_mnesia:record_running_disc_nodes(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
