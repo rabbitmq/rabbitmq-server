@@ -409,13 +409,13 @@ execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
 execute_mnesia_tx_with_tail(TxFun) ->
     case mnesia:is_transaction() of
         true  -> execute_mnesia_transaction(TxFun);
-        false -> TailFun = execute_mnesia_transaction(
-                             fun () ->
-                                     TailFun1 = TxFun(),
-                                     TailFun1(true),
-                                     TailFun1
-                             end),
-                 TailFun(false)
+        false -> {TailFun, TailRes} = execute_mnesia_transaction(
+                                        fun () ->
+                                                TailFun1 = TxFun(),
+                                                Res1 = TailFun1(transaction),
+                                                {TailFun1, Res1}
+                                        end),
+                 TailFun(TailRes)
     end.
 
 ensure_ok(ok, _) -> ok;

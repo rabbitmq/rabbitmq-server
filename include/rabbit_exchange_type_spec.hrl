@@ -17,6 +17,7 @@
 -ifdef(use_specs).
 
 -spec(description/0 :: () -> [{atom(), any()}]).
+-spec(serialise_events/0 :: () -> boolean()).
 -spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                  -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').

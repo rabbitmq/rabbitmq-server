@@ -264,12 +264,13 @@ process_route(#resource{kind = queue} = QName,
     {WorkList, SeenXs, [QName | QNames]}.
 
 call_with_exchange(XName, Fun, PrePostCommitFun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> case mnesia:read({rabbit_exchange, XName}) of
-                    []  -> {error, not_found};
-                    [X] -> Fun(X)
-                end
-      end, PrePostCommitFun).
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () -> Result = case mnesia:read({rabbit_exchange, XName}) of
+                             []  -> {error, not_found};
+                             [X] -> Fun(X)
+                         end,
+                fun(Tx) -> PrePostCommitFun(Result, Tx) end
+      end).
 
 delete(XName, IfUnused) ->
     call_with_exchange(
@@ -279,9 +280,9 @@ delete(XName, IfUnused) ->
           false -> fun unconditional_delete/1
       end,
       fun ({deleted, X, Bs, Deletions}, Tx) ->
-              ok = rabbit_binding:process_deletions(
-                     rabbit_binding:add_deletion(
-                       XName, {X, deleted, Bs}, Deletions), Tx);
+              rabbit_binding:process_deletions(
+                rabbit_binding:add_deletion(
+                  XName, {X, deleted, Bs}, Deletions), Tx);
           (Error = {error, _InUseOrNotFound}, _Tx) ->
               Error
       end).

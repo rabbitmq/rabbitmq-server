@@ -26,6 +26,7 @@
 -rabbit_upgrade({internal_exchanges, []}).
 -rabbit_upgrade({user_to_internal_user, [hash_passwords]}).
 -rabbit_upgrade({topic_trie, []}).
+-rabbit_upgrade({exchange_event_serialisation, []}).
 
 %% -------------------------------------------------------------------
 
@@ -37,6 +38,7 @@
 -spec(internal_exchanges/0 :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
 -spec(topic_trie/0 :: () -> 'ok').
+-spec(exchange_event_serialisation/0 :: () -> 'ok').
 
 -endif.
 
@@ -100,6 +102,10 @@ topic_trie() ->
     create(rabbit_topic_trie_binding, [{record_name, topic_trie_binding},
                                        {attributes, [trie_binding, value]},
                                        {type, ordered_set}]).
+
+exchange_event_serialisation() ->
+    create(rabbit_exchange_serial, [{record_name, exchange_serial},
+                                    {attributes, [name, serial]}]).
 
 %%--------------------------------------------------------------------
 

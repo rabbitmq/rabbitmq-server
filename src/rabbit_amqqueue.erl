@@ -433,8 +433,8 @@ internal_delete(QueueName) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> rabbit_misc:const({error, not_found});
                   [_] -> Deletions = internal_delete1(QueueName),
-                         fun (Tx) -> ok = rabbit_binding:process_deletions(
-                                            Deletions, Tx)
+                         fun (Tx) -> rabbit_binding:process_deletions(
+                                       Deletions, Tx)
                          end
               end
       end).
