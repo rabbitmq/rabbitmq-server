@@ -112,8 +112,7 @@ maybe_upgrade_mnesia() ->
                 primary   -> primary_upgrade(Upgrades, AllNodes);
                 secondary -> secondary_upgrade(AllNodes)
             end
-    end,
-    ok = rabbit_mnesia:delete_previously_running_disc_nodes().
+    end.
 
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of

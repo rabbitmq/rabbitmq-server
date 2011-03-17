@@ -233,6 +233,7 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
+            ok = rabbit_mnesia:delete_previously_running_disc_nodes(),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
 
