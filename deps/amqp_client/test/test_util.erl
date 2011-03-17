@@ -279,12 +279,12 @@ channel_multi_open_close_test(Connection) ->
                                           closing            -> ok
                                       catch
                                           exit:{noproc, _}             -> ok;
-                                          exit:{connection_closing, _} -> ok
+                                          exit:{normal, _} -> ok
                                       end;
                 closing            -> ok
             catch
                 exit:{noproc, _}             -> ok;
-                exit:{connection_closing, _} -> ok
+                exit:{normal, _} -> ok
             end
         end) || _ <- lists:seq(1, 50)],
     erlang:yield(),
