@@ -141,13 +141,13 @@ upgrade_mode(AllNodes) ->
             end;
         [Another|_] ->
             ClusterVersion =
-                case rpc:call(Another, rabbit_version, desired_scope_version,
+                case rpc:call(Another, rabbit_version, desired_for_scope,
                               [mnesia]) of
                     {badrpc, {'EXIT', {undef, _}}} -> unknown_old_version;
                     {badrpc, Reason}               -> {unknown, Reason};
                     V                              -> V
                 end,
-            MyVersion = rabbit_version:desired_scope_version(mnesia),
+            MyVersion = rabbit_version:desired_for_scope(mnesia),
             case rabbit_version:'=~='(ClusterVersion, MyVersion) of
                 true ->
                     %% The other node(s) have upgraded already, I am not the
@@ -208,7 +208,7 @@ secondary_upgrade(AllNodes) ->
                    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok = rabbit_mnesia:init_db(ClusterNodes, true),
-    ok = rabbit_version:write_desired_scope_version(mnesia),
+    ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 
 nodes_running(Nodes) ->
@@ -253,7 +253,7 @@ apply_upgrades(Scope, Upgrades, Fun) ->
                     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
                     info("~s upgrades: All upgrades applied successfully~n",
                          [Scope]),
-                    ok = rabbit_version:write_desired_scope_version(Scope),
+                    ok = rabbit_version:record_desired_for_scope(Scope),
                     ok = rabbit_misc:recursive_delete([BackupDir]),
                     info("~s upgrades: Mnesia backup removed~n", [Scope]),
                     ok = file:delete(LockFile);

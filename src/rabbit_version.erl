@@ -16,14 +16,14 @@
 
 -module(rabbit_version).
 
--export([read/0, '=~='/2, desired_version/0, desired_scope_version/1,
-         write_desired_version/0, write_desired_scope_version/1,
+-export([recorded/0, '=~='/2, desired/0, desired_for_scope/1,
+         record_desired/0, record_desired_for_scope/1,
          upgrades_required/1]).
 
 %% -------------------------------------------------------------------
 -ifdef(use_specs).
 
--export_type([scope/0, step/0, scope_version/0]).
+-export_type([scope/0, step/0]).
 
 -type(scope() :: atom()).
 -type(scope_version() :: [atom()]).
@@ -31,12 +31,12 @@
 
 -type(version() :: [atom()]).
 
--spec(read/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
--spec('=~='/2 :: (version(), version()) -> boolean()).
--spec(desired_version/0 :: () -> version()).
--spec(desired_scope_version/1 :: (scope()) -> scope_version()).
--spec(write_desired_version/0 :: () -> 'ok').
--spec(write_desired_scope_version/1 ::
+-spec(recorded/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
+-spec('=~='/2 :: ([A], [A]) -> boolean()).
+-spec(desired/0 :: () -> version()).
+-spec(desired_for_scope/1 :: (scope()) -> scope_version()).
+-spec(record_desired/0 :: () -> 'ok').
+-spec(record_desired_for_scope/1 ::
         (scope()) -> rabbit_types:ok_or_error(any())).
 -spec(upgrades_required/1 ::
         (scope()) -> rabbit_types:ok_or_error2([step()], any())).
@@ -49,15 +49,15 @@
 
 %% -------------------------------------------------------------------
 
-read() -> case rabbit_misc:read_term_file(schema_filename()) of
-              {ok, [V]}        -> {ok, V};
-              {error, _} = Err -> Err
-          end.
+recorded() -> case rabbit_misc:read_term_file(schema_filename()) of
+                  {ok, [V]}        -> {ok, V};
+                  {error, _} = Err -> Err
+              end.
 
-write(V) -> ok = rabbit_misc:write_term_file(schema_filename(), [V]).
+record(V) -> ok = rabbit_misc:write_term_file(schema_filename(), [V]).
 
-read_scope_version(Scope) ->
-    case read() of
+recorded_for_scope(Scope) ->
+    case recorded() of
         {error, _} = Err ->
             Err;
         {ok, Version} ->
@@ -67,14 +67,14 @@ read_scope_version(Scope) ->
                  end}
     end.
 
-write_scope_version(Scope, ScopeVersion) ->
-    case read() of
+record_for_scope(Scope, ScopeVersion) ->
+    case recorded() of
         {error, _} = Err ->
             Err;
         {ok, Version} ->
             Version1 = lists:keystore(Scope, 1, categorise_by_scope(Version),
                                       {Scope, ScopeVersion}),
-            ok = write([Name || {_Scope, Names} <- Version1, Name <- Names])
+            ok = record([Name || {_Scope, Names} <- Version1, Name <- Names])
     end.
 
 %% -------------------------------------------------------------------
@@ -84,18 +84,17 @@ write_scope_version(Scope, ScopeVersion) ->
 
 %% -------------------------------------------------------------------
 
-desired_version() ->
-    [Name || Scope <- ?SCOPES, Name <- desired_scope_version(Scope)].
+desired() -> [Name || Scope <- ?SCOPES, Name <- desired_for_scope(Scope)].
 
-desired_scope_version(Scope) -> with_upgrade_graph(fun heads/1, Scope).
+desired_for_scope(Scope) -> with_upgrade_graph(fun heads/1, Scope).
 
-write_desired_version() -> write(desired_version()).
+record_desired() -> record(desired()).
 
-write_desired_scope_version(Scope) ->
-    write_scope_version(Scope, desired_scope_version(Scope)).
+record_desired_for_scope(Scope) ->
+    record_for_scope(Scope, desired_for_scope(Scope)).
 
 upgrades_required(Scope) ->
-    case read_scope_version(Scope) of
+    case recorded_for_scope(Scope) of
         {error, enoent} ->
             {error, version_not_available};
         {ok, CurrentHeads} ->

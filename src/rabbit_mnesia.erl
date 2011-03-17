@@ -442,7 +442,7 @@ init_db(ClusterNodes, Force) ->
                 {[AnotherNode|_], _} ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
-                      rpc:call(AnotherNode, rabbit_version, read, [])),
+                      rpc:call(AnotherNode, rabbit_version, recorded, [])),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
@@ -457,7 +457,7 @@ init_db(ClusterNodes, Force) ->
                         %% If we're just starting up a new node we won't have
                         %% a version
                         version_not_available ->
-                            ok = rabbit_version:write_desired_version()
+                            ok = rabbit_version:record_desired()
                     end,
                     ensure_schema_integrity()
             end;
@@ -484,14 +484,14 @@ schema_ok_or_move() ->
     end.
 
 ensure_version_ok({ok, DiscVersion}) ->
-    DesiredVersion = rabbit_version:desired_version(),
+    DesiredVersion = rabbit_version:desired(),
     case rabbit_version:'=~='(DesiredVersion, DiscVersion) of
         true  -> ok;
         false -> throw({error, {schema_mismatch,
                                 DesiredVersion, DiscVersion}})
     end;
 ensure_version_ok({error, _}) ->
-    ok = rabbit_version:write_desired_version().
+    ok = rabbit_version:record_desired().
 
 create_schema() ->
     mnesia:stop(),
@@ -501,7 +501,7 @@ create_schema() ->
                           cannot_start_mnesia),
     ok = create_tables(),
     ok = ensure_schema_integrity(),
-    ok = rabbit_version:write_desired_version().
+    ok = rabbit_version:record_desired().
 
 move_db() ->
     mnesia:stop(),
