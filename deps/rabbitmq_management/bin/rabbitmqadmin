@@ -172,8 +172,8 @@ def make_parser():
 
 def assert_usage(expr, error):
     if not expr:
-        print "\nERROR: {0}\n".format(error)
-        print "{0} --help for help\n".format(os.path.basename(sys.argv[0]))
+        output("\nERROR: {0}\n".format(error))
+        output("{0} --help for help\n".format(os.path.basename(sys.argv[0])))
         sys.exit(1)
 
 def column_sort_key(col):
@@ -196,9 +196,20 @@ def main():
     method = getattr(mgmt, "invoke_%s" % args[0])
     method()
 
-def die(str):
-    sys.stderr.write("*** {0}".format(str))
+def output(s):
+    print maybe_utf8(s, sys.stdout)
+
+def die(s):
+    sys.stderr.write(maybe_utf8("*** {0}".format(s), sys.stderr))
     exit(1)
+
+def maybe_utf8(s, stream):
+    if stream.isatty():
+        # It will have an encoding, which Python will respect
+        return s
+    else:
+        # It won't have an encoding, and Python will pick ASCII by default
+        return s.encode('utf-8')
 
 class Management:
     def __init__(self, options, args):
@@ -242,7 +253,7 @@ class Management:
 
     def verbose(self, string):
         if self.options.verbose:
-            print string
+            output(string)
 
     def get_arg(self):
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
@@ -373,11 +384,11 @@ def format_list(json_list, columns, options):
     format = options.format
     formatter = None
     if format == "raw_json":
-        print json_list
+        output(json_list)
         return
     elif format == "pretty_json":
         enc = json.JSONEncoder(False, False, True, True, True, 2)
-        print enc.encode(json.loads(json_list))
+        output(enc.encode(json.loads(json_list)))
         return
     else:
         formatter = FORMATS[format]
@@ -389,7 +400,7 @@ def format_list(json_list, columns, options):
 class Lister:
     def verbose(self, string):
         if self.options.verbose:
-            print string
+            output(string)
 
     def display(self, json_list):
         depth = sys.maxint
@@ -425,7 +436,7 @@ class Lister:
 
         def add_to_row(col, val):
             if col in column_ix:
-                row[column_ix[col]] = str(val)
+                row[column_ix[col]] = unicode(val)
 
         if len(self.columns) == 0:
             for item in items:
@@ -459,7 +470,7 @@ class TSVList(Lister):
             line = ""
             for cell in row:
                 line += cell + "\t"
-            print line
+            output(line)
 
 class LongList(Lister):
     def __init__(self, columns, options):
@@ -471,12 +482,12 @@ class LongList(Lister):
         max_width = 0
         for col in columns:
             max_width = max(max_width, len(col))
-        fmt = "{0:>" + str(max_width) + "}: {1}"
-        print sep
+        fmt = "{0:>" + unicode(max_width) + "}: {1}"
+        output(sep)
         for i in xrange(0, len(table)):
             for j in xrange(0, len(columns)):
-                print fmt.format(columns[j], table[i][j])
-            print sep
+                output(fmt.format(columns[j], table[i][j]))
+            output(sep)
 
 class TableList(Lister):
     def __init__(self, columns, options):
@@ -504,15 +515,15 @@ class TableList(Lister):
     def ascii_row(self, col_widths, row, align):
         txt = "|"
         for i in xrange(0, len(col_widths)):
-            fmt = " {0:" + align + str(col_widths[i]) + "} "
+            fmt = " {0:" + align + unicode(col_widths[i]) + "} "
             txt += fmt.format(row[i]) + "|"
-        print txt
+        output(txt)
 
     def ascii_bar(self, col_widths):
         txt = "+"
         for w in col_widths:
             txt += ("-" * (w + 2)) + "+"
-        print txt
+        output(txt)
 
 class KeyValueList(Lister):
     def __init__(self, columns, options):
@@ -524,7 +535,7 @@ class KeyValueList(Lister):
             row = []
             for j in xrange(0, len(columns)):
                 row.append("{0}=\"{1}\"".format(columns[j], table[i][j]))
-            print " ".join(row)
+            output(" ".join(row))
 
 # TODO handle spaces etc in completable names
 class BashList(Lister):
@@ -541,7 +552,7 @@ class BashList(Lister):
             res = []
             for row in table:
                 res.append(row[ix])
-            print " ".join(res)
+            output(" ".join(res))
 
 FORMATS = {
     'raw_json'    : None, # Special cased
@@ -648,7 +659,7 @@ _rabbitmqadmin()
 }
 complete -F _rabbitmqadmin rabbitmqadmin
 """
-    print script
+    output(script)
 
 if __name__ == "__main__":
     main()

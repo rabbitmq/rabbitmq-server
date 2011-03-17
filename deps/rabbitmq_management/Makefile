@@ -23,8 +23,8 @@ EXTRA_TARGETS=$(wildcard $(TEMPLATES_DIR)/*.ejs) \
 
 include ../include.mk
 
-priv/www-cli/rabbitmqadmin:
-	cp bin/rabbitmqadmin $@
+priv/www-cli/rabbitmqadmin: bin/rabbitmqadmin
+	cp $< $@
 
 test: cleantest
 

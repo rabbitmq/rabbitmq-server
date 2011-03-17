@@ -660,9 +660,10 @@ function sync_post(sammy, path_template) {
 }
 
 function sync_req(type, params0, path_template) {
-    var params = params_magic(params0);
+    var params;
     var path;
     try {
+        params = params_magic(params0);
         path = fill_path_template(path_template, params);
     } catch (e) {
         show_popup('warn', e);
@@ -745,8 +746,9 @@ var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
 var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
 
 function params_magic(params) {
-    return maybe_remove_password(
-        collapse_multifields(params));
+    return check_password(
+             maybe_remove_password(
+               collapse_multifields(params)));
 }
 
 function collapse_multifields(params0) {
@@ -778,6 +780,17 @@ function collapse_multifields(params0) {
             }
         }
     }
+    return params;
+}
+
+function check_password(params) {
+    if (params['password'] != undefined) {
+        if (params['password'] != params['password_confirm']) {
+            throw("Passwords do not match.");
+        }
+        delete params['password_confirm'];
+    }
+
     return params;
 }
 

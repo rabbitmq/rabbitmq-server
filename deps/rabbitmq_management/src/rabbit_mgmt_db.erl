@@ -212,7 +212,7 @@ handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
     Qs1 = queue_stats(Qs0, FineSpecs, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
-    {reply, Qs2, State};
+    {reply, adjust_hibernated_memory_use(Qs2), State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -615,3 +615,22 @@ channel_stats(Objs, FineSpecs, Tables) ->
                          fun (Props) -> {'_', pget(pid, Props)} end, Tables),
                        fine_stats_fun(FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
+
+%%----------------------------------------------------------------------------
+
+%% We do this when retrieving the queue record rather than when
+%% storing it since the memory use will drop *after* we find out about
+%% hibernation, so to do it when we receive a queue stats event would
+%% be fiddly and racy. This should be quite cheap though.
+adjust_hibernated_memory_use(Qs) ->
+    Pids = [rabbit_misc:string_to_pid(pget(pid, Q)) ||
+               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
+    {Mem, _BadNodes} = delegate:invoke(
+                         Pids, fun (Pid) -> process_info(Pid, memory) end),
+    MemDict = dict:from_list(
+                [{list_to_binary(rabbit_misc:pid_to_string(P)), M} ||
+                    {P, M} <- Mem]),
+    [case dict:find(pget(pid, Q), MemDict) of
+         error        -> Q;
+         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
+     end || Q <- Qs].
