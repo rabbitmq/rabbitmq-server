@@ -335,12 +335,13 @@ maybe_auto_delete(XName, Bindings, Deletions) ->
         [] ->
             add_deletion(XName, {undefined, not_deleted, Bindings}, Deletions);
         [X] ->
-            add_deletion(XName, {X, not_deleted, Bindings},
-                         case rabbit_exchange:maybe_auto_delete(X) of
-                             not_deleted           -> Deletions;
-                             {deleted, Deletions1} -> combine_deletions(
-                                                        Deletions, Deletions1)
-                         end)
+            case rabbit_exchange:maybe_auto_delete(X) of
+                not_deleted ->
+                    add_deletion(XName, {X, not_deleted, Bindings}, Deletions);
+                {deleted, Deletions1} ->
+                    add_deletion(XName, {X, deleted, Bindings},
+                                 combine_deletions(Deletions, Deletions1))
+            end
     end.
 
 delete_forward_routes(Route) ->
