@@ -838,7 +838,10 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
     %% queues discarding the message?
     %%
     {Delivered, Confirm, State1} = attempt_delivery(Delivery, State),
-    reply(Delivered, maybe_record_confirm_message(Confirm, State1));
+    reply(Delivered, case Delivered of
+                         true  -> maybe_record_confirm_message(Confirm, State1);
+                         false -> State1
+                     end);
 
 handle_call({deliver, Delivery}, From, State) ->
     %% Synchronous, "mandatory" delivery mode. Reply asap.
