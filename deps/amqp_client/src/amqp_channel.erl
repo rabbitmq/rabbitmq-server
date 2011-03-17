@@ -383,16 +383,8 @@ handle_info({'DOWN', _, process, DefaultConsumer, Reason},
     {noreply, State#state{default_consumer = none}}.
 
 %% @private
-terminate(Reason, #state{rpc_requests = RpcQueue}) ->
-    case queue:is_empty(RpcQueue) of
-        false -> ?LOG_WARN("Channel (~p): RPC queue was not empty on "
-                           "terminate~n", [self()]),
-                 case Reason of
-                     normal -> exit(rpc_queue_not_empty_on_terminate);
-                     _      -> ok
-                 end;
-        true  -> ok
-    end.
+terminate(_Reason, _State) ->
+    ok.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
