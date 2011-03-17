@@ -313,36 +313,37 @@ with_channel(VHost, ReqData, Context, Fun) ->
 with_channel(VHost, ReqData,
              Context = #context{ user = #user { username = Username },
                                  password = Password }, Node, Fun) ->
-    try
-        Params = #amqp_params{username     = Username,
-                              password     = Password,
-                              node         = Node,
-                              virtual_host = VHost},
-        case amqp_connection:start(direct, Params) of
-            {ok, Conn} ->
-                {ok, Ch} = amqp_connection:open_channel(Conn),
-                Res = Fun(Ch),
-                catch amqp_channel:close(Ch),
-                catch amqp_connection:close(Conn),
-                Res;
-            {error, auth_failure} ->
-                not_authorised(<<"">>, ReqData, Context);
-            {error, {nodedown, N}} ->
-                bad_request(
-                  list_to_binary(
-                    io_lib:format("Node ~s could not be contacted", [N])),
-                 ReqData, Context)
-        end
-    catch
-        exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
-            not_found(Reason, ReqData, Context);
-        exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
-            not_authorised(Reason, ReqData, Context);
-        exit:{{ServerClose, Code, Reason}, _}
-          when ServerClose =:= server_initiated_close;
-               ServerClose =:= server_initiated_hard_close ->
-            bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
-                        ReqData, Context)
+    Params = #amqp_params{username     = Username,
+                          password     = Password,
+                          node         = Node,
+                          virtual_host = VHost},
+    case amqp_connection:start(direct, Params) of
+        {ok, Conn} ->
+            {ok, Ch} = amqp_connection:open_channel(Conn),
+            try
+                Fun(Ch)
+            catch
+                exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
+                    not_found(Reason, ReqData, Context);
+                exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
+                    not_authorised(Reason, ReqData, Context);
+                exit:{{ServerClose, Code, Reason}, _}
+                  when ServerClose =:= server_initiated_close;
+                       ServerClose =:= server_initiated_hard_close ->
+                    bad_request(list_to_binary(io_lib:format("~p ~s",
+                                                             [Code, Reason])),
+                                ReqData, Context)
+            after
+            catch amqp_channel:close(Ch),
+            catch amqp_connection:close(Conn)
+            end;
+        {error, auth_failure} ->
+            not_authorised(<<"">>, ReqData, Context);
+        {error, {nodedown, N}} ->
+            bad_request(
+              list_to_binary(
+                io_lib:format("Node ~s could not be contacted", [N])),
+              ReqData, Context)
     end.
 
 all_or_one_vhost(ReqData, Fun) ->
