@@ -1147,7 +1147,7 @@ orddict_store(Key, Val, Dict) ->
     orddict:store(Key, Val, Dict).
 
 update_pending_confirms(Fun, CRef,
-                        State = #msstate { clients       = Clients,
+                        State = #msstate { clients         = Clients,
                                            cref_to_msg_ids = CTM }) ->
     case dict:fetch(CRef, Clients) of
         {undefined,    _CloseFDsFun} -> State;
