@@ -182,7 +182,6 @@ primary_upgrade(Upgrades, Nodes) ->
       mnesia,
       Upgrades,
       fun () ->
-              rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
               force_tables(),
               case Others of
                   [] -> ok;
@@ -227,7 +226,8 @@ maybe_upgrade_local() ->
         {error, version_not_available} -> version_not_available;
         {error, _} = Err               -> throw(Err);
         {ok, []}                       -> ok;
-        {ok, Upgrades}                 -> apply_upgrades(local, Upgrades,
+        {ok, Upgrades}                 -> mnesia:stop(),
+                                          apply_upgrades(local, Upgrades,
                                                          fun () -> ok end)
     end.
 
@@ -249,6 +249,7 @@ apply_upgrades(Scope, Upgrades, Fun) ->
                     ok = file:delete(lock_filename(BackupDir)),
                     info("~s upgrades: Mnesia dir backed up to ~p~n",
                          [Scope, BackupDir]),
+                    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
                     Fun(),
                     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
                     info("~s upgrades: All upgrades applied successfully~n",
