@@ -16,7 +16,8 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0]).
+-export([maybe_backup/0, maybe_upgrade_mnesia/0, maybe_upgrade_local/0,
+         maybe_remove_backup/0]).
 
 -include("rabbit.hrl").
 
@@ -27,8 +28,10 @@
 
 -ifdef(use_specs).
 
+-spec(maybe_backup/0 :: () -> 'ok').
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
 -spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
+-spec(maybe_remove_backup/0 :: () -> 'ok').
 
 -endif.
 
@@ -91,11 +94,66 @@
 
 %% -------------------------------------------------------------------
 
+maybe_backup() ->
+    case backup_required() of
+        true -> backup();
+        _    -> ok
+    end.
+
+backup() ->
+    rabbit:prepare(), %% Ensure we have logs for this
+    LockFile = lock_filename(dir()),
+    case rabbit_misc:lock_file(LockFile) of
+        ok ->
+            BackupDir = backup_dir(),
+            case rabbit_mnesia:copy_db(BackupDir) of
+                ok ->
+                    %% We need to make the backup after creating the
+                    %% lock file so that it protects us from trying to
+                    %% overwrite the backup. Unfortunately this means
+                    %% the lock file exists in the backup too, which
+                    %% is not intuitive. Remove it.
+                    ok = file:delete(lock_filename(BackupDir)),
+                    info("upgrades: Mnesia dir backed up to ~p~n", [BackupDir]);
+                {error, E} ->
+                    %% If we can't backup, the upgrade hasn't started
+                    %% hence we don't need the lockfile since the real
+                    %% mnesia dir is the good one.
+                    ok = file:delete(LockFile),
+                    throw({could_not_back_up_mnesia_dir, E})
+            end;
+        {error, eexist} ->
+            throw({error, previous_upgrade_failed})
+    end.
+
+
+maybe_remove_backup() ->
+    case file:read_file_info(backup_dir()) of
+        {ok, _} -> remove_backup();
+        _       -> ok
+    end.
+
+remove_backup() ->
+    LockFile = lock_filename(dir()),
+    BackupDir = backup_dir(),
+    ok = rabbit_misc:recursive_delete([BackupDir]),
+    info("upgrades: Mnesia backup removed~n", []),
+    ok = file:delete(LockFile).
+
+backup_required() ->
+    case {rabbit_version:upgrades_required(mnesia),
+          rabbit_version:upgrades_required(local)} of
+        {{ok, []}, {ok, []}} -> false;
+        {_,        {ok, _}}  -> true;
+        {{ok, _},  _}        -> true;
+        _                    -> false
+    end.
+
 maybe_upgrade_mnesia() ->
+    maybe_backup(),
     AllNodes = rabbit_mnesia:all_clustered_nodes(),
     case rabbit_version:upgrades_required(mnesia) of
         {error, version_not_available} ->
-            rabbit:prepare(), %% Ensure we have logs for this
             case AllNodes of
                 [_] -> ok;
                 _   -> die("Cluster upgrade needed but upgrading from "
@@ -227,45 +285,18 @@ maybe_upgrade_local() ->
         {ok, Upgrades}                 -> mnesia:stop(),
                                           apply_upgrades(local, Upgrades,
                                                          fun () -> ok end)
-    end.
+    end,
+    maybe_remove_backup().
 
 %% -------------------------------------------------------------------
 
 apply_upgrades(Scope, Upgrades, Fun) ->
-    LockFile = lock_filename(dir()),
-    case rabbit_misc:lock_file(LockFile) of
-        ok ->
-            BackupDir = dir() ++ "-upgrade-backup",
-            info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
-            case rabbit_mnesia:copy_db(BackupDir) of
-                ok ->
-                    %% We need to make the backup after creating the
-                    %% lock file so that it protects us from trying to
-                    %% overwrite the backup. Unfortunately this means
-                    %% the lock file exists in the backup too, which
-                    %% is not intuitive. Remove it.
-                    ok = file:delete(lock_filename(BackupDir)),
-                    info("~s upgrades: Mnesia dir backed up to ~p~n",
-                         [Scope, BackupDir]),
-                    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-                    Fun(),
-                    [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
-                    info("~s upgrades: All upgrades applied successfully~n",
-                         [Scope]),
-                    ok = rabbit_version:record_desired_for_scope(Scope),
-                    ok = rabbit_misc:recursive_delete([BackupDir]),
-                    info("~s upgrades: Mnesia backup removed~n", [Scope]),
-                    ok = file:delete(LockFile);
-                {error, E} ->
-                    %% If we can't backup, the upgrade hasn't started
-                    %% hence we don't need the lockfile since the real
-                    %% mnesia dir is the good one.
-                    ok = file:delete(LockFile),
-                    throw({could_not_back_up_mnesia_dir, E})
-            end;
-        {error, eexist} ->
-            throw({error, previous_upgrade_failed})
-    end.
+    info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    Fun(),
+    [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
+    info("~s upgrades: All upgrades applied successfully~n", [Scope]),
+    ok = rabbit_version:record_desired_for_scope(Scope).
 
 apply_upgrade(Scope, {M, F}) ->
     info("~s upgrades: Applying ~w:~w~n", [Scope, M, F]),
@@ -276,6 +307,7 @@ apply_upgrade(Scope, {M, F}) ->
 dir() -> rabbit_mnesia:dir().
 
 lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
+backup_dir() -> dir() ++ "-upgrade-backup".
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet
