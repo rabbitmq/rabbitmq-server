@@ -16,7 +16,7 @@
 
 -module(rabbit_version).
 
--export([recorded/0, '=~='/2, desired/0, desired_for_scope/1,
+-export([recorded/0, matches/2, desired/0, desired_for_scope/1,
          record_desired/0, record_desired_for_scope/1,
          upgrades_required/1]).
 
@@ -32,7 +32,7 @@
 -type(version() :: [atom()]).
 
 -spec(recorded/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
--spec('=~='/2 :: ([A], [A]) -> boolean()).
+-spec(matches/2 :: ([A], [A]) -> boolean()).
 -spec(desired/0 :: () -> version()).
 -spec(desired_for_scope/1 :: (scope()) -> scope_version()).
 -spec(record_desired/0 :: () -> 'ok').
@@ -79,7 +79,7 @@ record_for_scope(Scope, ScopeVersion) ->
 
 %% -------------------------------------------------------------------
 
-'=~='(VerA, VerB) ->
+matches(VerA, VerB) ->
     lists:usort(VerA) =:= lists:usort(VerB).
 
 %% -------------------------------------------------------------------

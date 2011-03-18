@@ -209,7 +209,7 @@ upgrade_mode(AllNodes) ->
                           [mnesia]) of
                 {badrpc, {'EXIT', {undef, _}}} -> ErrFun(unknown_old_version);
                 {badrpc, Reason}               -> ErrFun({unknown, Reason});
-                CV                             -> case rabbit_version:'=~='(
+                CV                             -> case rabbit_version:matches(
                                                          MyVersion, CV) of
                                                       true  -> secondary;
                                                       false -> ErrFun(CV)

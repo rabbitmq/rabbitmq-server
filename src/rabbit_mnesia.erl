@@ -485,7 +485,7 @@ schema_ok_or_move() ->
 
 ensure_version_ok({ok, DiscVersion}) ->
     DesiredVersion = rabbit_version:desired(),
-    case rabbit_version:'=~='(DesiredVersion, DiscVersion) of
+    case rabbit_version:matches(DesiredVersion, DiscVersion) of
         true  -> ok;
         false -> throw({error, {version_mismatch, DesiredVersion, DiscVersion}})
     end;
