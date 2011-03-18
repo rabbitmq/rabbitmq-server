@@ -29,7 +29,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2]).
+-export([description/0, route/2, serialise_events/0]).
 -export([validate/1, create/2, recover/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
@@ -42,6 +42,8 @@
 description() ->
     [{name, <<"x-federation">>},
      {description, <<"Federation exchange">>}].
+
+serialise_events() -> true.
 
 route(X, Delivery) ->
     with_module(X, fun (M) -> M:route(X, Delivery) end).
@@ -76,30 +78,38 @@ delete(?TX, X, Bs) ->
 delete(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
 
-add_binding(?TX, X, B = #binding{destination = Dest}) ->
+add_binding(transaction, X, B) ->
+    with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
+add_binding(Serial, X, B = #binding{destination = Dest}) ->
     %% TODO add bindings only if needed.
     case is_federation_exchange(Dest) of
         true  -> ok;
-        false -> call(X, {add_binding, B})
+        false -> call(X, {enqueue, Serial, {add_binding, B}})
     end,
-    with_module(X, fun (M) -> M:add_binding(?TX, X, B) end);
-add_binding(Tx, X, B) ->
-    with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
+    with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
 
-remove_bindings(?TX, X, Bs) ->
+remove_bindings(transaction, X, Bs) ->
+    with_module(X, fun (M) -> M:remove_bindings(transaction, X, Bs) end);
+remove_bindings(Serial, X, Bs) ->
     [case is_federation_exchange(Dest) of
          true  -> ok;
-         false -> call(X, {remove_binding, B})
+         false -> call(X, {enqueue, Serial, {remove_binding, B}})
      end || B = #binding{destination = Dest} <- Bs],
-    with_module(X, fun (M) -> M:remove_bindings(?TX, X, Bs) end);
-remove_bindings(Tx, X, Bs) ->
-    with_module(X, fun (M) -> M:remove_bindings(Tx, X, Bs) end).
+    with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
 assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
                         NewArgs) ->
     rabbit_misc:assert_args_equivalence(Args, NewArgs, Name,
                                         [<<"upstream">>, <<"type">>]),
     with_module(X, fun (M) -> M:assert_args_equivalence(X, Args) end).
+
+%%----------------------------------------------------------------------------
+
+serial(Serial, X) ->
+    case with_module(X, fun (M) -> M:serialise_events() end) of
+        true  -> Serial;
+        false -> none
+    end.
 
 %%----------------------------------------------------------------------------
 

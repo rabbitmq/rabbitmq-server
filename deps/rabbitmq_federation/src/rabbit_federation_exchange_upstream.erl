@@ -35,6 +35,8 @@
                 channel,
                 queue,
                 internal_exchange,
+                last_serial,
+                waiting_cmds = gb_trees:empty(),
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange}).
@@ -78,32 +80,14 @@ handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
-handle_call({add_binding, Binding}, _From, State) ->
-    add_binding(Binding, State),
-    {reply, ok, State};
-
-handle_call({remove_binding, #binding{source      = Source,
-                                      destination = Dest,
-                                      key         = Key,
-                                      args        = Args}}, _From,
-            State = #state{connection = Conn, queue = Q,
-                           upstream = #upstream{exchange = X}}) ->
-    case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
-                           Key == Key2 andalso Args == Args2
-                   end,
-                   rabbit_binding:list_for_source(Source)) of
-        true  -> ok;
-        false -> with_disposable_channel(
-                   Conn,
-                   fun (Ch) ->
-                           amqp_channel:call(
-                             Ch, #'exchange.unbind'{destination = Q,
-                                                    source      = X,
-                                                    routing_key = Key,
-                                                    arguments   = Args})
-                   end)
-    end,
-    {reply, ok, State};
+handle_call({enqueue, Serial, Cmd}, From,
+            State = #state{last_serial = Last, waiting_cmds = Waiting}) ->
+    case Last of
+        undefined -> handle_command(Cmd, From, State#state{last_serial = Last});
+        _         -> Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
+                     play_back_commands(Serial, From,
+                                        State#state{waiting_cmds = Waiting1})
+    end;
 
 handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
     with_disposable_channel(
@@ -170,6 +154,44 @@ terminate(_Reason, #state{downstream_channel    = DCh,
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
+
+%%----------------------------------------------------------------------------
+
+handle_command({add_binding, Binding}, _From, State) ->
+    add_binding(Binding, State),
+    {reply, ok, State};
+
+handle_command({remove_binding, #binding{source      = Source,
+                                         key         = Key,
+                                         args        = Args}}, _From,
+            State = #state{connection = Conn, queue = Q,
+                           upstream = #upstream{exchange = X}}) ->
+    case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
+                           Key == Key2 andalso Args == Args2
+                   end,
+                   rabbit_binding:list_for_source(Source)) of
+        true  -> ok;
+        false -> with_disposable_channel(
+                   Conn,
+                   fun (Ch) ->
+                           amqp_channel:call(
+                             Ch, #'exchange.unbind'{destination = Q,
+                                                    source      = X,
+                                                    routing_key = Key,
+                                                    arguments   = Args})
+                   end)
+    end,
+    {reply, ok, State}.
+
+play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
+    case gb_trees:take_smallest(Waiting) of
+        {Serial, Cmd, Waiting1} ->
+            State1 = State#state{waiting_cmds = Waiting1},
+            handle_command(Cmd, From, State1),
+            play_back_commands(Serial + 1, From, State1);
+        _ ->
+            ok
+    end.
 
 %%----------------------------------------------------------------------------
 

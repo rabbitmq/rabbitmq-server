@@ -3,6 +3,8 @@ WARNING
 
 This is all very experimental. You have been warned.
 
+You need branch bug23939 of the server!
+
 Generic build instructions are at:
         http://www.rabbitmq.com/plugin-development.html
 
