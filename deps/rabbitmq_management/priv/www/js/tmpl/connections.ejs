@@ -5,10 +5,11 @@
 <table class="list">
  <thead>
   <tr>
-   <th colspan="<% if (nodes_interesting) { %>4<% } else { %>3<% } %>">Network</th>
+   <th colspan="<% if (nodes_interesting) { %>5<% } else { %>4<% } %>">Network</th>
    <th colspan="<% if (vhosts_interesting) { %>4<% } else { %>3<% } %>">Overview</th>
   </tr>
   <tr>
+    <th><%= fmt_sort('Protocol',     'protocol') %></th>
     <th><%= fmt_sort('Peer address', 'name') %></th>
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',         'node') %></th>
@@ -29,6 +30,7 @@
     var connection = connections[i];
 %>
   <tr<%= alt_rows(i)%>>
+    <td><%= connection.protocol %></td>
     <td><%= link_conn(connection.name) %></td>
 <% if (nodes_interesting) { %>
     <td><%= connection.node %></td>

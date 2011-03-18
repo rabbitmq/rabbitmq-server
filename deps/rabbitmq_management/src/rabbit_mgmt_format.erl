@@ -22,6 +22,7 @@
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
 -export([to_basic_properties/1]).
+-export([connection/1, addr/1, port/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -68,6 +69,12 @@ ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 ipb(unknown) -> unknown;
 ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
+addr(Addr) when is_list(Addr); is_atom(Addr) -> print("~s", Addr);
+addr(Addr) when is_tuple(Addr)               -> ip(Addr).
+
+port(Port) when is_number(Port) -> Port;
+port(Port)                      -> print("~w", Port).
+
 properties(unknown) -> unknown;
 properties(Table)   -> {struct, [{Name, tuple(Value)} ||
                                     {Name, Value} <- Table]}.
@@ -95,10 +102,19 @@ tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
 tuple(Term)                       -> Term.
 
-protocol(unknown)                  -> unknown;
-protocol({Major, Minor, 0})        -> print("~w-~w", [Major, Minor]);
-protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
-                                            [Major, Minor, Revision]).
+protocol(unknown) ->
+    unknown;
+protocol(Version = {_Major, _Minor, _Revision}) ->
+    protocol({'AMQP', Version});
+protocol({Family, Version}) ->
+    print("~s ~s", [Family, protocol_version(Version)]).
+
+protocol_version(Arbitrary)
+  when is_list(Arbitrary)                  -> Arbitrary;
+protocol_version({Major, Minor})           -> io_lib:format("~B-~B", [Major, Minor]);
+protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
+protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
+                                                    [Major, Minor, Revision]).
 
 timestamp_ms(unknown) ->
     unknown;
@@ -221,6 +237,14 @@ type_val(X)                   -> throw({unhandled_type, X}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
+
+connection(Props) ->
+    case proplists:get_value(name, Props, unknown) of
+        unknown -> print("~s:~w",
+                         [addr(proplists:get_value(peer_address, Props)),
+                          port(proplists:get_value(peer_port,    Props))]);
+        Name      -> Name
+    end.
 
 exchange(X) ->
     format(X, [{fun resource/1,   [name]},
