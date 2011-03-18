@@ -21,7 +21,7 @@
 -export([start_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
-         write/3, read/2, contains/2, remove/2, release/2, sync/3]).
+         write/3, read/2, contains/2, remove/2, sync/3]).
 
 -export([sync/1, set_maximum_since_use/2,
          has_readers/2, combine_files/3, delete_file/2]). %% internal
@@ -153,7 +153,6 @@
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (rabbit_types:msg_id(), client_msstate()) -> boolean()).
 -spec(remove/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
--spec(release/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
 -spec(sync/3 ::
         ([rabbit_types:msg_id()], fun (() -> any()), client_msstate()) -> 'ok').
 
@@ -457,8 +456,6 @@ contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     server_cast(CState, {remove, CRef, MsgIds}).
-release([],   _CState) -> ok;
-release(MsgIds, CState) -> server_cast(CState, {release, MsgIds}).
 sync(MsgIds, K, CState) -> server_cast(CState, {sync, MsgIds, K}).
 
 sync(Server) ->
@@ -780,12 +777,6 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                State, MsgIds),
     noreply(maybe_compact(client_confirm(CRef, gb_sets:from_list(MsgIds),
                                          removed, State1)));
-
-handle_cast({release, MsgIds}, State =
-                #msstate { dedup_cache_ets = DedupCacheEts }) ->
-    lists:foreach(
-      fun (MsgId) -> decrement_cache(DedupCacheEts, MsgId) end, MsgIds),
-    noreply(State);
 
 handle_cast({sync, MsgIds, K},
             State = #msstate { current_file        = CurFile,
