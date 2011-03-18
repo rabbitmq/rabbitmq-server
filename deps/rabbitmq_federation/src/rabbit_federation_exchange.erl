@@ -87,7 +87,10 @@ add_binding(Tx, X, B) ->
     with_module(X, fun (M) -> M:add_binding(Tx, X, B) end).
 
 remove_bindings(?TX, X, Bs) ->
-    [maybe_unbind_upstreams(X, B) || B <- Bs],
+    [case is_federation_exchange(Dest) of
+         true  -> ok;
+         false -> call(X, {remove_binding, B})
+     end || B = #binding{destination = Dest} <- Bs],
     with_module(X, fun (M) -> M:remove_bindings(?TX, X, Bs) end);
 remove_bindings(Tx, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(Tx, X, Bs) end).
@@ -117,21 +120,6 @@ is_federation_exchange(Name = #resource{kind = exchange}) ->
     rabbit_federation_util:has_purpose_arg(Name);
 is_federation_exchange(_) ->
     false.
-
-maybe_unbind_upstreams(X, Binding = #binding{source      = Source,
-                                             destination = Dest,
-                                             key         = Key,
-                                             args        = Args}) ->
-    case is_federation_exchange(Dest) of
-        true  -> ok;
-        false -> case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
-                                        Key == Key2 andalso Args == Args2
-                                end,
-                                rabbit_binding:list_for_source(Source)) of
-                     true  -> ok;
-                     false -> call(X, {remove_binding, Binding})
-                 end
-    end.
 
 %%----------------------------------------------------------------------------
 

@@ -82,19 +82,27 @@ handle_call({add_binding, Binding}, _From, State) ->
     add_binding(Binding, State),
     {reply, ok, State};
 
-handle_call({remove_binding, #binding{key = Key, args = Args}}, _From,
+handle_call({remove_binding, #binding{source      = Source,
+                                      destination = Dest,
+                                      key         = Key,
+                                      args        = Args}}, _From,
             State = #state{connection = Conn, queue = Q,
                            upstream = #upstream{exchange = X}}) ->
-    %% We may already be unbound if e.g. someone has deleted the upstream
-    %% exchange
-    with_disposable_channel(
-      Conn,
-      fun (Ch) ->
-              amqp_channel:call(Ch, #'exchange.unbind'{destination = Q,
-                                                       source      = X,
-                                                       routing_key = Key,
-                                                       arguments   = Args})
-      end),
+    case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
+                           Key == Key2 andalso Args == Args2
+                   end,
+                   rabbit_binding:list_for_source(Source)) of
+        true  -> ok;
+        false -> with_disposable_channel(
+                   Conn,
+                   fun (Ch) ->
+                           amqp_channel:call(
+                             Ch, #'exchange.unbind'{destination = Q,
+                                                    source      = X,
+                                                    routing_key = Key,
+                                                    arguments   = Args})
+                   end)
+    end,
     {reply, ok, State};
 
 handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
