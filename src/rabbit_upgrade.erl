@@ -112,8 +112,7 @@ maybe_upgrade_mnesia() ->
                 primary   -> primary_upgrade(Upgrades, AllNodes);
                 secondary -> secondary_upgrade(AllNodes)
             end
-    end,
-    ok = rabbit_mnesia:delete_previously_running_disc_nodes().
+    end.
 
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
@@ -140,24 +139,23 @@ upgrade_mode(AllNodes) ->
                         [])
             end;
         [Another|_] ->
-            ClusterVersion =
-                case rpc:call(Another, rabbit_version, desired_for_scope,
-                              [mnesia]) of
-                    {badrpc, {'EXIT', {undef, _}}} -> unknown_old_version;
-                    {badrpc, Reason}               -> {unknown, Reason};
-                    V                              -> V
-                end,
             MyVersion = rabbit_version:desired_for_scope(mnesia),
-            case rabbit_version:'=~='(ClusterVersion, MyVersion) of
-                true ->
-                    %% The other node(s) have upgraded already, I am not the
-                    %% upgrader
-                    secondary;
-                false ->
-                    %% The other node(s) are running an unexpected version.
-                    die("Cluster upgrade needed but other nodes are "
-                        "running ~p~nand I want ~p",
-                        [ClusterVersion, MyVersion])
+            ErrFun = fun (ClusterVersion) ->
+                             %% The other node(s) are running an
+                             %% unexpected version.
+                             die("Cluster upgrade needed but other nodes are "
+                                 "running ~p~nand I want ~p",
+                                 [ClusterVersion, MyVersion])
+                     end,
+            case rpc:call(Another, rabbit_version, desired_for_scope,
+                          [mnesia]) of
+                {badrpc, {'EXIT', {undef, _}}} -> ErrFun(unknown_old_version);
+                {badrpc, Reason}               -> ErrFun({unknown, Reason});
+                CV                             -> case rabbit_version:'=~='(
+                                                         MyVersion, CV) of
+                                                      true  -> secondary;
+                                                      false -> ErrFun(CV)
+                                                  end
             end
     end.
 
