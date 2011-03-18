@@ -110,6 +110,8 @@ $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_c
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	dialyzer --plt $(BASIC_PLT) --no_native \
+	  -Wunmatched_returns -Werror_handling -Wbehaviours \
+	  -Wunderspecs \
 	  -Wrace_conditions $(BEAM_TARGETS)
 
 # rabbit.plt is used by rabbitmq-erlang-client's dialyze make target
