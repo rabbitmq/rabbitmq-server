@@ -307,5 +307,6 @@ conditional_delete(X = #exchange{name = XName}) ->
 unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
+    ok = mnesia:delete({rabbit_exchange_serial, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
