@@ -16,8 +16,7 @@
 
 -module(rabbit_upgrade).
 
--export([maybe_backup/0, maybe_upgrade_mnesia/0, maybe_upgrade_local/0,
-         maybe_remove_backup/0]).
+-export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0]).
 
 -include("rabbit.hrl").
 
@@ -28,10 +27,8 @@
 
 -ifdef(use_specs).
 
--spec(maybe_backup/0 :: () -> 'ok').
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
 -spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
--spec(maybe_remove_backup/0 :: () -> 'ok').
 
 -endif.
 
@@ -94,13 +91,13 @@
 
 %% -------------------------------------------------------------------
 
-maybe_backup() ->
+maybe_take_backup() ->
     case backup_required() of
-        true -> backup();
+        true -> take_backup();
         _    -> ok
     end.
 
-backup() ->
+take_backup() ->
     rabbit:prepare(), %% Ensure we have logs for this
     LockFile = lock_filename(dir()),
     case rabbit_misc:lock_file(LockFile) of
@@ -128,17 +125,15 @@ backup() ->
 
 
 maybe_remove_backup() ->
-    case file:read_file_info(backup_dir()) of
+    case filelib:is_dir(backup_dir()) of
         {ok, _} -> remove_backup();
         _       -> ok
     end.
 
 remove_backup() ->
-    LockFile = lock_filename(dir()),
-    BackupDir = backup_dir(),
-    ok = rabbit_misc:recursive_delete([BackupDir]),
+    ok = rabbit_misc:recursive_delete([backup_dir()]),
     info("upgrades: Mnesia backup removed~n", []),
-    ok = file:delete(LockFile).
+    ok = file:delete(lock_filename(dir())).
 
 backup_required() ->
     case {rabbit_version:upgrades_required(mnesia),
@@ -150,7 +145,7 @@ backup_required() ->
     end.
 
 maybe_upgrade_mnesia() ->
-    maybe_backup(),
+    maybe_take_backup(),
     AllNodes = rabbit_mnesia:all_clustered_nodes(),
     case rabbit_version:upgrades_required(mnesia) of
         {error, version_not_available} ->
@@ -278,15 +273,16 @@ node_running(Node) ->
 %% -------------------------------------------------------------------
 
 maybe_upgrade_local() ->
-    case rabbit_version:upgrades_required(local) of
-        {error, version_not_available} -> version_not_available;
-        {error, _} = Err               -> throw(Err);
-        {ok, []}                       -> ok;
-        {ok, Upgrades}                 -> mnesia:stop(),
-                                          apply_upgrades(local, Upgrades,
-                                                         fun () -> ok end)
-    end,
-    maybe_remove_backup().
+    Res = case rabbit_version:upgrades_required(local) of
+              {error, version_not_available} -> version_not_available;
+              {error, _} = Err               -> throw(Err);
+              {ok, []}                       -> ok;
+              {ok, Upgrades}                 -> mnesia:stop(),
+                                                apply_upgrades(local, Upgrades,
+                                                               fun () -> ok end)
+          end,
+    maybe_remove_backup(),
+    Res.
 
 %% -------------------------------------------------------------------
 
