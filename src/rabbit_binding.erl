@@ -331,17 +331,18 @@ group_bindings_fold(Fun, SrcName, Acc, Removed, Bindings) ->
     group_bindings_fold(Fun, Fun(SrcName, Bindings, Acc), Removed).
 
 maybe_auto_delete(XName, Bindings, Deletions) ->
-    case mnesia:read({rabbit_exchange, XName}) of
-        [] ->
-            add_deletion(XName, {undefined, not_deleted, Bindings}, Deletions);
-        [X] ->
-            add_deletion(XName, {X, not_deleted, Bindings},
-                         case rabbit_exchange:maybe_auto_delete(X) of
-                             not_deleted           -> Deletions;
-                             {deleted, Deletions1} -> combine_deletions(
-                                                        Deletions, Deletions1)
-                         end)
-    end.
+    {Entry, Deletions1} =
+        case mnesia:read({rabbit_exchange, XName}) of
+            []  -> {{undefined, not_deleted, Bindings}, Deletions};
+            [X] -> case rabbit_exchange:maybe_auto_delete(X) of
+                       not_deleted ->
+                           {{X, not_deleted, Bindings}, Deletions};
+                       {deleted, Deletions2} ->
+                           {{X, deleted, Bindings},
+                            combine_deletions(Deletions, Deletions2)}
+                   end
+        end,
+    add_deletion(XName, Entry, Deletions1).
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
