@@ -19,7 +19,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2, serialise_events/0]).
+-export([description/0, route/2, serialise_events/1]).
 -export([validate/1, create/2, recover/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -35,11 +35,10 @@ description() ->
     [{name, <<"fanout">>},
      {description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
 
-serialise_events() -> false.
-
 route(#exchange{name = Name}, _Delivery) ->
     rabbit_router:match_routing_key(Name, ['_']).
 
+serialise_events(_X) -> false.
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 recover(_X, _Bs) -> ok.

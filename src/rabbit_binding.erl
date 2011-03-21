@@ -449,7 +449,7 @@ pd_callback(Arg, CB, X, Bindings) ->
     ok = rabbit_exchange:callback(X, CB, [Arg, X, Bindings]).
 
 serial(X) ->
-    case rabbit_exchange:callback(X, serialise_events, []) of
+    case rabbit_exchange:callback(X, serialise_events, [X]) of
         true  -> next_serial(X);
         false -> none
     end.
