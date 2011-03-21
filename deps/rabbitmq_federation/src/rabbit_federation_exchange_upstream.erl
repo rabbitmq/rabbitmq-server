@@ -35,7 +35,6 @@
                 channel,
                 queue,
                 internal_exchange,
-                last_serial,
                 waiting_cmds = gb_trees:empty(),
                 downstream_connection,
                 downstream_channel,
@@ -81,13 +80,10 @@ handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
 handle_call({enqueue, Serial, Cmd}, From,
-            State = #state{last_serial = Last, waiting_cmds = Waiting}) ->
-    case Last of
-        undefined -> handle_command(Cmd, From, State#state{last_serial = Last});
-        _         -> Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
-                     play_back_commands(Serial, From,
-                                        State#state{waiting_cmds = Waiting1})
-    end;
+            State = #state{waiting_cmds = Waiting}) ->
+    Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
+    {reply, ok,
+     play_back_commands(Serial, From, State#state{waiting_cmds = Waiting1})};
 
 handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
     with_disposable_channel(
@@ -159,7 +155,7 @@ terminate(_Reason, #state{downstream_channel    = DCh,
 
 handle_command({add_binding, Binding}, _From, State) ->
     add_binding(Binding, State),
-    {reply, ok, State};
+    State;
 
 handle_command({remove_binding, #binding{source      = Source,
                                          key         = Key,
@@ -181,16 +177,19 @@ handle_command({remove_binding, #binding{source      = Source,
                                                     arguments   = Args})
                    end)
     end,
-    {reply, ok, State}.
+    State.
 
 play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
-    case gb_trees:take_smallest(Waiting) of
-        {Serial, Cmd, Waiting1} ->
-            State1 = State#state{waiting_cmds = Waiting1},
-            handle_command(Cmd, From, State1),
-            play_back_commands(Serial + 1, From, State1);
-        _ ->
-            ok
+    case gb_trees:is_empty(Waiting) of
+        false -> case gb_trees:take_smallest(Waiting) of
+                     {Serial, Cmd, Waiting1} ->
+                         State1 = State#state{waiting_cmds = Waiting1},
+                         State2 = handle_command(Cmd, From, State1),
+                         play_back_commands(Serial + 1, From, State2);
+                     _ ->
+                         State
+                 end;
+        true  -> State
     end.
 
 %%----------------------------------------------------------------------------
