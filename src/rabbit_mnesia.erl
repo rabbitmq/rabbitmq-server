@@ -18,7 +18,7 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/1, force_cluster/1, reset/0, force_reset/0, init_db/2,
+         cluster/1, force_cluster/1, reset/0, force_reset/0, init_db/3,
          is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
@@ -45,7 +45,7 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
--spec(init_db/2 :: ([node()], boolean()) -> 'ok').
+-spec(init_db/3 :: ([node()], boolean(), boolean()) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(force_cluster/1 :: ([node()]) -> 'ok').
@@ -90,7 +90,7 @@ status() ->
 init() ->
     ok = ensure_mnesia_running(),
     ok = ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), true),
+    ok = init_db(read_cluster_nodes_config(), true, true),
     ok.
 
 is_db_empty() ->
@@ -112,7 +112,7 @@ cluster(ClusterNodes, Force) ->
     ok = ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
-        ok = init_db(ClusterNodes, Force),
+        ok = init_db(ClusterNodes, Force, true),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         mnesia:stop()
@@ -413,7 +413,7 @@ delete_previously_running_disc_nodes() ->
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
-init_db(ClusterNodes, Force) ->
+init_db(ClusterNodes, Force, DoLocalUpgrades) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
@@ -451,13 +451,18 @@ init_db(ClusterNodes, Force) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    case rabbit_upgrade:maybe_upgrade_local() of
-                        ok ->
-                            ok;
-                        %% If we're just starting up a new node we won't have
-                        %% a version
-                        version_not_available ->
-                            ok = rabbit_version:record_desired()
+                    case DoLocalUpgrades of
+                        true ->
+                            case rabbit_upgrade:maybe_upgrade_local() of
+                                ok ->
+                                    ok;
+                                %% If we're just starting up a new
+                                %% node we won't have a version
+                                version_not_available ->
+                                    ok = rabbit_version:record_desired()
+                            end;
+                        false ->
+                            ok
                     end,
                     ensure_schema_integrity()
             end;
