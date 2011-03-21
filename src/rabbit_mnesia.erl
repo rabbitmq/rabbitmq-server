@@ -413,7 +413,7 @@ delete_previously_running_disc_nodes() ->
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
-init_db(ClusterNodes, Force, DoLocalUpgrades) ->
+init_db(ClusterNodes, Force, DoSecondaryLocalUpgrades) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
@@ -451,18 +451,16 @@ init_db(ClusterNodes, Force, DoLocalUpgrades) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    case DoLocalUpgrades of
-                        true ->
-                            case rabbit_upgrade:maybe_upgrade_local() of
-                                ok ->
-                                    ok;
-                                %% If we're just starting up a new
-                                %% node we won't have a version
-                                version_not_available ->
-                                    ok = rabbit_version:record_desired()
-                            end;
-                        false ->
-                            ok
+                    case DoSecondaryLocalUpgrades of
+                        true  -> case rabbit_upgrade:maybe_upgrade_local() of
+                                     ok ->
+                                         ok;
+                                     %% If we're just starting up a new
+                                     %% node we won't have a version
+                                     version_not_available ->
+                                         ok = rabbit_version:record_desired()
+                                 end;
+                        false -> ok
                     end,
                     ensure_schema_integrity()
             end;
