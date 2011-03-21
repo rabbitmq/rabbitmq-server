@@ -273,16 +273,15 @@ node_running(Node) ->
 %% -------------------------------------------------------------------
 
 maybe_upgrade_local() ->
-    Res = case rabbit_version:upgrades_required(local) of
-              {error, version_not_available} -> version_not_available;
-              {error, _} = Err               -> throw(Err);
-              {ok, []}                       -> ok;
-              {ok, Upgrades}                 -> mnesia:stop(),
-                                                apply_upgrades(local, Upgrades,
-                                                               fun () -> ok end)
-          end,
-    maybe_remove_backup(),
-    Res.
+    case rabbit_version:upgrades_required(local) of
+        {error, version_not_available} -> version_not_available;
+        {error, _} = Err               -> throw(Err);
+        {ok, []}                       -> maybe_remove_backup();
+        {ok, Upgrades}                 -> mnesia:stop(),
+                                          apply_upgrades(local, Upgrades,
+                                                         fun () -> ok end),
+                                          maybe_remove_backup()
+    end.
 
 %% -------------------------------------------------------------------
 
