@@ -36,9 +36,9 @@ start_link(Args) ->
 go(Pid) ->
     Args = rabbit_federation_exchange_info:args(info(Pid)),
     supervisor:start_child(
-      Pid, {sup, {rabbit_federation_exchange_upstream_sup, start_link, [Args]},
+      Pid, {sup, {rabbit_federation_link_sup, start_link, [Args]},
             transient, ?MAX_WAIT, supervisor,
-            [rabbit_federation_exchange_upstream_sup]}).
+            [rabbit_federation_link_sup]}).
 
 %%----------------------------------------------------------------------------
 

@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_exchange_upstream).
+-module(rabbit_federation_link).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").

@@ -115,7 +115,7 @@ serial(Serial, X) ->
 
 call(#exchange{ name = Downstream }, Msg) ->
     SupPid = rabbit_federation_db:sup_for_exchange(Downstream),
-    rabbit_federation_exchange_upstream_sup:call_all(SupPid, Msg).
+    rabbit_federation_link_sup:call_all(SupPid, Msg).
 
 with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.

@@ -14,14 +14,14 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_exchange_upstream_sup).
+-module(rabbit_federation_link_sup).
 
 -behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_federation.hrl").
 
-%% Supervises the upstreams for an exchange.
+%% Supervises the upstream links for an exchange.
 
 -export([start_link/1]).
 -export([init/1]).
@@ -44,8 +44,8 @@ init({Upstreams, DownstreamX, Durable}) ->
     {ok, {{one_for_one, 2, 2}, Specs}}.
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, DownstreamX, Durable) ->
-    {Upstream, {rabbit_federation_exchange_upstream, start_link,
+    {Upstream, {rabbit_federation_link, start_link,
                 [{Upstream, DownstreamX, Durable}]},
      {transient, Delay},
      ?MAX_WAIT, worker,
-     [rabbit_federation_exchange_upstream]}.
+     [rabbit_federation_link]}.

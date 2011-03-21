@@ -38,4 +38,4 @@ routing_test() ->
     ok.
 
 add(Table) ->
-    rabbit_federation_exchange_upstream:add_routing_to_headers(Table, ?INFO).
+    rabbit_federation_link:add_routing_to_headers(Table, ?INFO).
