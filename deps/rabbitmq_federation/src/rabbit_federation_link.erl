@@ -86,8 +86,7 @@ handle_call({enqueue, Serial, Cmd}, From,
      play_back_commands(Serial, From, State#state{waiting_cmds = Waiting1})};
 
 handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
-    with_disposable_channel(
-      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end),
+    disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
     {stop, normal, ok, State};
 
 handle_call(Msg, _From, State) ->
@@ -167,15 +166,11 @@ handle_command({remove_binding, #binding{source      = Source,
                    end,
                    rabbit_binding:list_for_source(Source)) of
         true  -> ok;
-        false -> with_disposable_channel(
-                   Conn,
-                   fun (Ch) ->
-                           amqp_channel:call(
-                             Ch, #'exchange.unbind'{destination = Q,
-                                                    source      = X,
-                                                    routing_key = Key,
-                                                    arguments   = Args})
-                   end)
+        false -> disposable_channel_call(
+                   Conn, #'exchange.unbind'{destination = Q,
+                                            source      = X,
+                                            routing_key = Key,
+                                            arguments   = Args})
     end,
     State.
 
@@ -294,21 +289,17 @@ upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
     <<Name/binary, " ", Suffix/binary>>.
 
 delete_upstream_queue(Conn, Q) ->
-    with_disposable_channel(
-      Conn, fun (Ch) -> amqp_channel:call(Ch, #'queue.delete'{queue = Q}) end).
+    disposable_channel_call(Conn, #'queue.delete'{queue = Q}).
 
 delete_upstream_exchange(Conn, X) ->
-    with_disposable_channel(
-      Conn, fun (Ch) ->
-                    amqp_channel:call(Ch, #'exchange.delete'{exchange = X})
-            end).
+    disposable_channel_call(Conn, #'exchange.delete'{exchange = X}).
 
 %%----------------------------------------------------------------------------
 
-with_disposable_channel(Conn, Fun) ->
+disposable_channel_call(Conn, Method) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
-        Fun(Ch)
+        amqp_channel:call(Ch, Method)
     catch exit:{{server_initiated_close, _, _}, _} ->
             ok
     end,
