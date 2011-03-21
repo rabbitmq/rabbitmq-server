@@ -126,8 +126,8 @@ take_backup() ->
 
 maybe_remove_backup() ->
     case filelib:is_dir(backup_dir()) of
-        {ok, _} -> remove_backup();
-        _       -> ok
+        true -> ok = remove_backup();
+        _    -> ok
     end.
 
 remove_backup() ->
