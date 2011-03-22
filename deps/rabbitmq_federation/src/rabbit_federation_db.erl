@@ -43,7 +43,7 @@ set_sup_for_exchange(X, Pid) ->
     ok = dets:insert(file(), {{pid, X}, Pid}).
 
 forget_exchange(X) ->
-    true = dets:delete(file(), {pid, X}).
+    ok = dets:delete(file(), {pid, X}).
 
 %%----------------------------------------------------------------------------
 
