@@ -80,12 +80,12 @@ handle_msg([], From, {test_msg, Num}) ->
                        {ok, Num}   -> ok;
                        {ok, Num1} when Num < Num1 ->
                            exit({{from, From},
-                                 {duplicate_delivery_of, Num1},
-                                 {expecting, Num}});
+                                 {duplicate_delivery_of, Num},
+                                 {expecting, Num1}});
                        {ok, Num1} ->
                            exit({{from, From},
-                                 {missing_delivery_of, Num},
-                                 {received_early, Num1}});
+                                 {received_early, Num},
+                                 {expecting, Num1}});
                        error ->
                            exit({{from, From},
                                  {received_premature_delivery, Num}})
