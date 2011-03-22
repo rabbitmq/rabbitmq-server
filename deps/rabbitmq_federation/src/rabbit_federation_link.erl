@@ -158,15 +158,15 @@ handle_command({add_binding, Binding}, _From, State) ->
 
 handle_command({remove_binding, B = #binding{key  = Key,
                                              args = Args}}, _From,
-               State = #state{connection = Conn, queue = Q,
+               State = #state{channel = Ch, internal_exchange = InternalX,
                               upstream = #upstream{exchange = X}}) ->
     case check_remove_binding(B, State) of
         {true,  State1} -> ok;
-        {false, State1} -> disposable_channel_call(
-                             Conn, #'exchange.unbind'{destination = Q,
-                                                      source      = X,
-                                                      routing_key = Key,
-                                                      arguments   = Args})
+        {false, State1} -> amqp_channel:call(
+                             Ch, #'exchange.unbind'{destination = InternalX,
+                                                    source      = X,
+                                                    routing_key = Key,
+                                                    arguments   = Args})
     end,
     State1.
 
