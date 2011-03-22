@@ -150,10 +150,13 @@
 %% responsive.
 %%
 %% In the queue we keep track of both messages that are pending
-%% delivery and messages that are pending acks. This ensures that
-%% purging (deleting the former) and deletion (deleting the former and
-%% the latter) are both cheap and do require any scanning through qi
-%% segments.
+%% delivery and messages that are pending acks. In the event of a
+%% queue purge, we only need to load qi segments if the queue has
+%% elements in deltas (i.e. it came under significant memory
+%% pressure). In the event of a queue deletion, in addition to the
+%% preceding, by keeping track of pending acks in RAM, we do not need
+%% to search through qi segments looking for messages that are yet to
+%% be acknowledged.
 %%
 %% Pending acks are recorded in memory either as the tuple {SeqId,
 %% MsgId, MsgProps} (tuple-form) or as the message itself (message-
