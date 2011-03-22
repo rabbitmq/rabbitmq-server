@@ -36,6 +36,7 @@
                 queue,
                 internal_exchange,
                 waiting_cmds = gb_trees:empty(),
+                bindings,
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange}).
@@ -156,23 +157,19 @@ handle_command({add_binding, Binding}, _From, State) ->
     add_binding(Binding, State),
     State;
 
-handle_command({remove_binding, #binding{source      = Source,
-                                         key         = Key,
-                                         args        = Args}}, _From,
-            State = #state{connection = Conn, queue = Q,
-                           upstream = #upstream{exchange = X}}) ->
-    case lists:any(fun (#binding{ key = Key2, args = Args2 } ) ->
-                           Key == Key2 andalso Args == Args2
-                   end,
-                   rabbit_binding:list_for_source(Source)) of
-        true  -> ok;
-        false -> disposable_channel_call(
-                   Conn, #'exchange.unbind'{destination = Q,
-                                            source      = X,
-                                            routing_key = Key,
-                                            arguments   = Args})
+handle_command({remove_binding, B = #binding{key  = Key,
+                                             args = Args}}, _From,
+               State = #state{connection = Conn, queue = Q,
+                              upstream = #upstream{exchange = X}}) ->
+    case check_remove_binding(B, State) of
+        {true,  State1} -> ok;
+        {false, State1} -> disposable_channel_call(
+                             Conn, #'exchange.unbind'{destination = Q,
+                                                      source      = X,
+                                                      routing_key = Key,
+                                                      arguments   = Args})
     end,
-    State.
+    State1.
 
 play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
     case gb_trees:is_empty(Waiting) of
@@ -207,6 +204,31 @@ add_binding(#binding{key = Key, args = Args},
                                            source      = X,
                                            routing_key = Key,
                                            arguments   = Args}).
+
+bindings_map(Bs) ->
+    lists:foldl(
+      fun (B = #binding{destination = Dest}, Dict) ->
+              K = key(B),
+              case dict:find(K, Dict) of
+                  {ok, S} -> dict:store(K, sets:add_element(Dest, S), Dict);
+                  error   -> dict:store(K, sets:from_list([Dest]), Dict)
+              end
+      end,
+      dict:new(), Bs).
+
+check_remove_binding(B = #binding{destination = Dest},
+                     State = #state{bindings = Bs}) ->
+    K = key(B),
+    Dests = sets:del_element(Dest, dict:fetch(K, Bs)),
+    case sets:size(Dest) of
+        0 -> {false, State#state{bindings = dict:erase(K, Bs)}};
+        _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
+    end.
+
+key(#binding{source      = Source,
+             key         = Key,
+             args        = Args}) ->
+    {Source, Key, Args}.
 
 %%----------------------------------------------------------------------------
 
@@ -263,9 +285,11 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
         auto_delete = true,
         arguments   = [rabbit_federation_util:purpose_arg()]}),
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
-    State1 = State#state{queue = Q, internal_exchange = InternalX},
-    [add_binding(B, State1) ||
-        B <- rabbit_binding:list_for_source(DownstreamX)],
+    Bindings = rabbit_binding:list_for_source(DownstreamX),
+    State1 = State#state{queue             = Q,
+                         internal_exchange = InternalX,
+                         bindings          = bindings_map(Bindings)},
+    [add_binding(B, State1) || B <- Bindings],
     rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
