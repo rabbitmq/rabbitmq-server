@@ -136,8 +136,11 @@ smart_unbind_test() ->
                                    [<<"upstream">>]),
               Q1 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              Q3 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               delete_queue(Ch, Q2),
+              unbind_queue(Ch, Q3, <<"downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
+              delete_queue(Ch, Q3),
               delete_exchange(Ch, <<"downstream">>),
               delete_exchange(Ch, <<"upstream">>)
       end).

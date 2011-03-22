@@ -36,7 +36,7 @@
                 queue,
                 internal_exchange,
                 waiting_cmds = gb_trees:empty(),
-                bindings,
+                bindings = dict:new(),
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange}).
@@ -154,8 +154,7 @@ terminate(_Reason, #state{downstream_channel    = DCh,
 %%----------------------------------------------------------------------------
 
 handle_command({add_binding, Binding}, _From, State) ->
-    add_binding(Binding, State),
-    State;
+    add_binding(Binding, State);
 
 handle_command({remove_binding, B = #binding{key  = Key,
                                              args = Args}}, _From,
@@ -197,30 +196,33 @@ open(Type, Params) ->
         E -> E
     end.
 
-add_binding(#binding{key = Key, args = Args},
-            #state{channel = Ch, internal_exchange = InternalX,
-                   upstream = #upstream{exchange = X}}) ->
-    amqp_channel:call(Ch, #'exchange.bind'{destination = InternalX,
-                                           source      = X,
-                                           routing_key = Key,
-                                           arguments   = Args}).
+add_binding(B = #binding{key = Key, args = Args},
+            State = #state{channel = Ch, internal_exchange = InternalX,
+                           upstream = #upstream{exchange = X}}) ->
+    case check_add_binding(B, State) of
+        {true,  State1} -> ok;
+        {false, State1} -> amqp_channel:call(
+                             Ch, #'exchange.bind'{destination = InternalX,
+                                                  source      = X,
+                                                  routing_key = Key,
+                                                  arguments   = Args})
+    end,
+    State1.
 
-bindings_map(Bs) ->
-    lists:foldl(
-      fun (B = #binding{destination = Dest}, Dict) ->
-              K = key(B),
-              case dict:find(K, Dict) of
-                  {ok, S} -> dict:store(K, sets:add_element(Dest, S), Dict);
-                  error   -> dict:store(K, sets:from_list([Dest]), Dict)
-              end
-      end,
-      dict:new(), Bs).
+check_add_binding(B = #binding{destination = Dest},
+                  State = #state{bindings = Bs}) ->
+    K = key(B),
+    {Res, Set} = case dict:find(K, Bs) of
+                     {ok, Dests} -> {true,  sets:add_element(Dest, Dests)};
+                     error       -> {false, sets:from_list([Dest])}
+                 end,
+    {Res, State#state{bindings = dict:store(K, Set, Bs)}}.
 
 check_remove_binding(B = #binding{destination = Dest},
                      State = #state{bindings = Bs}) ->
     K = key(B),
     Dests = sets:del_element(Dest, dict:fetch(K, Bs)),
-    case sets:size(Dest) of
+    case sets:size(Dests) of
         0 -> {false, State#state{bindings = dict:erase(K, Bs)}};
         _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
     end.
@@ -285,15 +287,16 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
         auto_delete = true,
         arguments   = [rabbit_federation_util:purpose_arg()]}),
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
-    Bindings = rabbit_binding:list_for_source(DownstreamX),
     State1 = State#state{queue             = Q,
-                         internal_exchange = InternalX,
-                         bindings          = bindings_map(Bindings)},
-    [add_binding(B, State1) || B <- Bindings],
+                         internal_exchange = InternalX},
+    State2 = lists:foldl(fun (B, State0) ->
+                                 add_binding(B, State0)
+                         end,
+                         State1, rabbit_binding:list_for_source(DownstreamX)),
     rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
-    State1.
+    State2.
 
 upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
                                         virtual_host = DownstreamVHost}) ->
