@@ -528,6 +528,7 @@ move_db() ->
     ok.
 
 copy_db(Destination) ->
+    ok = ensure_mnesia_not_running(),
     rabbit_misc:recursive_copy(dir(), Destination).
 
 create_tables() ->

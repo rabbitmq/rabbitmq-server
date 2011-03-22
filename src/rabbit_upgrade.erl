@@ -91,7 +91,7 @@
 
 %% -------------------------------------------------------------------
 
-ensure_backup() ->
+ensure_backup_taken() ->
     case filelib:is_file(lock_filename()) of
         false -> case filelib:is_dir(backup_dir()) of
                      false -> ok = take_backup();
@@ -109,7 +109,7 @@ take_backup() ->
         {error, E} -> throw({could_not_back_up_mnesia_dir, E})
     end.
 
-maybe_remove_backup() ->
+ensure_backup_removed() ->
     case filelib:is_dir(backup_dir()) of
         true -> ok = remove_backup();
         _    -> ok
@@ -135,6 +135,7 @@ maybe_upgrade_mnesia() ->
             ok;
         {ok, Upgrades} ->
             rabbit:prepare(), %% Ensure we have logs for this
+            ok = ensure_backup_taken(),
             case upgrade_mode(AllNodes) of
                 primary   -> primary_upgrade(Upgrades, AllNodes);
                 secondary -> secondary_upgrade(AllNodes)
@@ -203,18 +204,18 @@ die(Msg, Args) ->
 
 primary_upgrade(Upgrades, Nodes) ->
     Others = Nodes -- [node()],
-    apply_upgrades(
-      mnesia,
-      Upgrades,
-      fun () ->
-              force_tables(),
-              case Others of
-                  [] -> ok;
-                  _  -> info("mnesia upgrades: Breaking cluster~n", []),
-                        [{atomic, ok} = mnesia:del_table_copy(schema, Node)
-                         || Node <- Others]
-              end
-      end),
+    ok = apply_upgrades(
+           mnesia,
+           Upgrades,
+           fun () ->
+                   force_tables(),
+                   case Others of
+                       [] -> ok;
+                       _  -> info("mnesia upgrades: Breaking cluster~n", []),
+                             [{atomic, ok} = mnesia:del_table_copy(schema, Node)
+                              || Node <- Others]
+                   end
+           end),
     ok.
 
 force_tables() ->
@@ -250,17 +251,17 @@ maybe_upgrade_local() ->
     case rabbit_version:upgrades_required(local) of
         {error, version_not_available} -> version_not_available;
         {error, _} = Err               -> throw(Err);
-        {ok, []}                       -> maybe_remove_backup();
+        {ok, []}                       -> ok = ensure_backup_removed();
         {ok, Upgrades}                 -> mnesia:stop(),
-                                          apply_upgrades(local, Upgrades,
-                                                         fun () -> ok end),
-                                          maybe_remove_backup()
+                                          ok = ensure_backup_taken(),
+                                          ok = apply_upgrades(local, Upgrades,
+                                                              fun () -> ok end),
+                                          ok = ensure_backup_removed()
     end.
 
 %% -------------------------------------------------------------------
 
 apply_upgrades(Scope, Upgrades, Fun) ->
-    ensure_backup(),
     ok = rabbit_misc:lock_file(lock_filename()),
     info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
