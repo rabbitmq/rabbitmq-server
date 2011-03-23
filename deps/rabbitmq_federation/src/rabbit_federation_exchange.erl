@@ -35,10 +35,6 @@
 
 %%----------------------------------------------------------------------------
 
--define(TX, false).
-
-%%----------------------------------------------------------------------------
-
 description() ->
     [{name, <<"x-federation">>},
      {description, <<"Federation exchange">>}].
@@ -61,22 +57,22 @@ validate(X = #exchange{arguments = Args}) ->
     end,
     with_module(X, fun (M) -> M:validate(X) end).
 
-create(?TX, X) ->
+create(transaction, X) ->
+    with_module(X, fun (M) -> M:create(transaction, X) end);
+create(Serial, X) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:create(?TX, X) end);
-create(Tx, X) ->
-    with_module(X, fun (M) -> M:create(Tx, X) end).
+    with_module(X, fun (M) -> M:create(serial(Serial, X), X) end).
 
 recover(X, Bs) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:recover(X, Bs) end).
 
-delete(?TX, X, Bs) ->
+delete(transaction, X, Bs) ->
+    with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
+delete(Serial, X, Bs) ->
     call(X, stop),
     ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:delete(?TX, X, Bs) end);
-delete(Tx, X, Bs) ->
-    with_module(X, fun (M) -> M:delete(Tx, X, Bs) end).
+    with_module(X, fun (M) -> M:delete(serial(Serial, X), X, Bs) end).
 
 add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
