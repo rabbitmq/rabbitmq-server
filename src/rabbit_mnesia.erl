@@ -78,8 +78,8 @@ status() ->
      {running_nodes, running_clustered_nodes()}].
 
 init() ->
-    ok = ensure_mnesia_running(),
-    ok = ensure_mnesia_dir(),
+    ensure_mnesia_running(),
+    ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true),
     ok.
 
@@ -98,8 +98,8 @@ force_cluster(ClusterNodes) ->
 %% node.  If Force is false, only connections to online nodes are
 %% allowed.
 cluster(ClusterNodes, Force) ->
-    ok = ensure_mnesia_not_running(),
-    ok = ensure_mnesia_dir(),
+    ensure_mnesia_not_running(),
+    ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
         ok = init_db(ClusterNodes, Force),
@@ -455,7 +455,7 @@ create_schema() ->
     rabbit_misc:ensure_ok(mnesia:start(),
                           cannot_start_mnesia),
     ok = create_tables(),
-    ok = ensure_schema_integrity(),
+    ensure_schema_integrity(),
     ok = rabbit_upgrade:write_version().
 
 move_db() ->
@@ -476,7 +476,7 @@ move_db() ->
         {error, Reason} -> throw({error, {cannot_backup_mnesia,
                                           MnesiaDir, BackupDir, Reason}})
     end,
-    ok = ensure_mnesia_dir(),
+    ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok.
 
@@ -561,12 +561,12 @@ wait_for_tables(TableNames) ->
     end.
 
 reset(Force) ->
-    ok = ensure_mnesia_not_running(),
+    ensure_mnesia_not_running(),
     Node = node(),
     case Force of
         true  -> ok;
         false ->
-            ok = ensure_mnesia_dir(),
+            ensure_mnesia_dir(),
             rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
             {Nodes, RunningNodes} =
                 try
