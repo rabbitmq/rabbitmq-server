@@ -135,7 +135,7 @@ maybe_upgrade_mnesia() ->
             ok;
         {ok, Upgrades} ->
             rabbit:prepare(), %% Ensure we have logs for this
-            ok = ensure_backup_taken(),
+            ensure_backup_taken(),
             case upgrade_mode(AllNodes) of
                 primary   -> primary_upgrade(Upgrades, AllNodes);
                 secondary -> secondary_upgrade(AllNodes)
@@ -251,12 +251,14 @@ maybe_upgrade_local() ->
     case rabbit_version:upgrades_required(local) of
         {error, version_not_available} -> version_not_available;
         {error, _} = Err               -> throw(Err);
-        {ok, []}                       -> ok = ensure_backup_removed();
+        {ok, []}                       -> ensure_backup_removed(),
+                                          ok;
         {ok, Upgrades}                 -> mnesia:stop(),
-                                          ok = ensure_backup_taken(),
+                                          ensure_backup_taken(),
                                           ok = apply_upgrades(local, Upgrades,
                                                               fun () -> ok end),
-                                          ok = ensure_backup_removed()
+                                          ensure_backup_removed(),
+                                          ok
     end.
 
 %% -------------------------------------------------------------------

@@ -437,8 +437,9 @@ init_db(ClusterNodes, Force, DoSecondaryLocalUpgrades) ->
                     %% We're the first node up
                     case rabbit_upgrade:maybe_upgrade_local() of
                         ok                    -> ensure_schema_integrity();
-                        version_not_available -> schema_ok_or_move()
-                    end;
+                        version_not_available -> ok = schema_ok_or_move()
+                    end,
+                    ok;
                 {[AnotherNode|_], _} ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
@@ -462,7 +463,8 @@ init_db(ClusterNodes, Force, DoSecondaryLocalUpgrades) ->
                                  end;
                         false -> ok
                     end,
-                    ensure_schema_integrity()
+                    ensure_schema_integrity(),
+                    ok
             end;
         {error, Reason} ->
             %% one reason we may end up here is if we try to join
