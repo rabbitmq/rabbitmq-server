@@ -72,7 +72,8 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) -> 'ok').
+-spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) ->
+                        boolean() | 'ok').
 
 -endif.
 
