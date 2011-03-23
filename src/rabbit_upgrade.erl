@@ -220,12 +220,14 @@ force_tables() ->
     [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
 
 secondary_upgrade(AllNodes) ->
+    %% must do this before we wipe out schema
+    IsDiscNode = is_disc_node(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
     %% Note that we cluster with all nodes, rather than all disc nodes
     %% (as we can't know all disc nodes at this point). This is safe as
     %% we're not writing the cluster config, just setting up Mnesia.
-    ClusterNodes = case is_disc_node() of
+    ClusterNodes = case IsDiscNode of
                        true  -> AllNodes;
                        false -> AllNodes -- [node()]
                    end,
