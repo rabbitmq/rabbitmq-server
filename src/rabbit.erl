@@ -192,7 +192,8 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers().
+    ok = ensure_working_log_handlers(),
+    ok = rabbit_upgrade:maybe_upgrade_mnesia().
 
 start() ->
     try
