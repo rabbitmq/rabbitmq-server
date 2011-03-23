@@ -70,6 +70,9 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     {ok, _RoutingRes, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey, false, false, none,
                              #'P_basic'{content_type = <<"text/plain">>,
+                                        %% NB: 0-9-1 says it's a "64 bit POSIX
+                                        %% timestamp". That's second
+                                        %% resolution, not millisecond.
                                         timestamp    =
                                             rabbit_misc:now_ms() div 1000},
                              list_to_binary(io_lib:format(Format, Data))),
