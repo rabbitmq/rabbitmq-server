@@ -97,17 +97,43 @@ delete_upstream_queue_on_delete_test() ->
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"delivered">>)
       end, ?UPSTREAM_DOWNSTREAM).
 
-smart_unbind_test() ->
+unbind_on_delete_test() ->
     with_ch(
       fun (Ch) ->
               Q1 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"downstream">>, <<"key">>),
-              Q3 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               delete_queue(Ch, Q2),
-              unbind_queue(Ch, Q3, <<"downstream">>, <<"key">>),
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
-              delete_queue(Ch, Q3)
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>)
       end, ?UPSTREAM_DOWNSTREAM).
+
+unbind_on_unbind_test() ->
+    with_ch(
+      fun (Ch) ->
+              Q1 = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              Q2 = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              unbind_queue(Ch, Q2, <<"downstream">>, <<"key">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
+              delete_queue(Ch, Q2)
+      end, ?UPSTREAM_DOWNSTREAM).
+
+%% In order to test that unbinds get sent we deliberately set up a
+%% broken config - with topic upstream and fanout downstream. You
+%% shouldn't really do this, but it lets us see "extra" messages that
+%% get sent.
+unbind_gets_transmitted_test() ->
+    with_ch(
+      fun (Ch) ->
+              Q11 = bind_queue(Ch, <<"downstream">>, <<"key1">>),
+              Q12 = bind_queue(Ch, <<"downstream">>, <<"key1">>),
+              Q21 = bind_queue(Ch, <<"downstream">>, <<"key2">>),
+              Q22 = bind_queue(Ch, <<"downstream">>, <<"key2">>),
+              [delete_queue(Ch, Q) || Q <- [Q12, Q21, Q22]],
+              publish(Ch, <<"upstream">>, <<"key1">>, <<"YES">>),
+              publish(Ch, <<"upstream">>, <<"key2">>, <<"NO">>),
+              expect(Ch, Q11, [<<"YES">>]),
+              expect_empty(Ch, Q11)
+      end, [x(<<"upstream">>),
+            fed(<<"downstream">>, [<<"upstream">>], <<"fanout">>)]).
 
 no_loop_test() ->
     with_ch(
@@ -200,16 +226,21 @@ x(Name) ->
                         durable  = true}.
 
 fed(Name, Upstreams) ->
-    fed(Name, Upstreams, 5672).
+    fed(Name, Upstreams, <<"topic">>, 5672).
 
+fed(Name, Upstreams, Type) when is_binary(Type) ->
+    fed(Name, Upstreams, Type, 5672);
 fed(Name, Upstreams, Port) ->
+    fed(Name, Upstreams, <<"topic">>, Port).
+
+fed(Name, Upstreams, Type, Port) ->
     #'exchange.declare'{
         exchange  = Name,
         durable   = true,
         type      = <<"x-federation">>,
         arguments = [{<<"upstreams">>, array,
                       [{table, to_table(U, Port)} || U <- Upstreams]},
-                     {<<"type">>,      longstr, <<"topic">>}]
+                     {<<"type">>,      longstr, Type}]
     }.
 
 declare_queue(Ch) ->
