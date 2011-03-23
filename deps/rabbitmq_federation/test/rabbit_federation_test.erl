@@ -280,7 +280,8 @@ publish(Ch, X, Key, Payload) ->
                       #amqp_msg { payload = Payload }).
 
 expect(Ch, Q, Payloads) ->
-    amqp_channel:subscribe(Ch, #'basic.consume'{ queue = Q }, self()),
+    amqp_channel:subscribe(Ch, #'basic.consume'{ queue  = Q,
+                                                 no_ack = true}, self()),
     receive
         #'basic.consume_ok'{ consumer_tag = CTag } -> ok
     end,
