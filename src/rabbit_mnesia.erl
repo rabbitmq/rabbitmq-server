@@ -45,7 +45,7 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
--spec(init_db/3 :: ([node()], boolean(), boolean()) -> 'ok').
+-spec(init_db/3 :: ([node()], boolean(), rabbit_misc:thunk('ok')) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(force_cluster/1 :: ([node()]) -> 'ok').
@@ -90,7 +90,8 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), true, true),
+    ok = init_db(read_cluster_nodes_config(), true,
+                 fun maybe_upgrade_local_or_record_desired/0),
     ok.
 
 is_db_empty() ->
@@ -112,7 +113,7 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
-        ok = init_db(ClusterNodes, Force, true),
+        ok = init_db(ClusterNodes, Force, fun () -> ok end),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         mnesia:stop()
@@ -410,7 +411,7 @@ delete_previously_running_nodes() ->
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
-init_db(ClusterNodes, Force, DoSecondaryLocalUpgrades) ->
+init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
@@ -449,17 +450,7 @@ init_db(ClusterNodes, Force, DoSecondaryLocalUpgrades) ->
                                                        true  -> disc;
                                                        false -> ram
                                                    end),
-                    case DoSecondaryLocalUpgrades of
-                        true  -> case rabbit_upgrade:maybe_upgrade_local() of
-                                     ok ->
-                                         ok;
-                                     %% If we're just starting up a new
-                                     %% node we won't have a version
-                                     version_not_available ->
-                                         ok = rabbit_version:record_desired()
-                                 end;
-                        false -> ok
-                    end,
+                    ok = SecondaryPostMnesiaFun(),
                     ensure_schema_integrity(),
                     ok
             end;
@@ -468,6 +459,14 @@ init_db(ClusterNodes, Force, DoSecondaryLocalUpgrades) ->
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
+    end.
+
+maybe_upgrade_local_or_record_desired() ->
+    case rabbit_upgrade:maybe_upgrade_local() of
+        ok                    -> ok;
+        %% If we're just starting up a new node we won't have a
+        %% version
+        version_not_available -> ok = rabbit_version:record_desired()
     end.
 
 schema_ok_or_move() ->
