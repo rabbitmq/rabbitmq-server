@@ -113,7 +113,8 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
-        ok = init_db(ClusterNodes, Force, fun () -> ok end),
+        ok = init_db(ClusterNodes, Force,
+                     fun maybe_upgrade_local_or_record_desired/0),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         mnesia:stop()
