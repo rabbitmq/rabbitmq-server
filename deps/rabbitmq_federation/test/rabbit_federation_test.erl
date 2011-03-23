@@ -19,86 +19,61 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(UPSTREAM_DOWNSTREAM, [<<"upstream">>,
+                              {<<"downstream">>, [<<"upstream">>]}]).
+
 simple_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
-                                   [<<"upstream">>]),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-              delete_exchange(Ch, <<"downstream">>),
-              delete_exchange(Ch, <<"upstream">>)
-      end).
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
+      end, ?UPSTREAM_DOWNSTREAM).
 
+%% downstream-conf is created by configuration, points to upstream-conf.
 conf_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream-conf">>, <<"topic">>),
               Q = bind_queue(Ch, <<"downstream-conf">>, <<"key">>),
-              publish_expect(Ch, <<"upstream-conf">>, <<"key">>, Q, <<"HELLO">>),
-              delete_exchange(Ch, <<"upstream-conf">>)
-      end).
+              publish_expect(Ch, <<"upstream-conf">>, <<"key">>, Q, <<"HELLO">>)
+      end, [<<"upstream-conf">>]).
 
 multiple_upstreams_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream1">>, <<"direct">>),
-              declare_exchange(Ch, <<"upstream2">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
-                                   [<<"upstream1">>,
-                                    <<"upstream2">>]),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream1">>, <<"key">>, Q, <<"HELLO1">>),
-              publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>),
-              delete_exchange(Ch, <<"downstream">>),
-              delete_exchange(Ch, <<"upstream1">>),
-              delete_exchange(Ch, <<"upstream2">>)
-      end).
+              publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>)
+      end, [<<"upstream1">>,
+            <<"upstream2">>,
+            {<<"downstream">>, [<<"upstream1">>, <<"upstream2">>]}]).
 
 multiple_downstreams_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream1">>, <<"direct">>),
-              declare_exchange(Ch, <<"upstream2">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream1">>, <<"direct">>,
-                                   [<<"upstream1">>]),
-              declare_fed_exchange(Ch, <<"downstream12">>, <<"direct">>,
-                                   [<<"upstream1">>,
-                                    <<"upstream2">>]),
-              Q1 = bind_queue(Ch, <<"downstream1">>, <<"key">>),
-              Q12 = bind_queue(Ch, <<"downstream12">>, <<"key">>),
-              publish(Ch, <<"upstream1">>, <<"key">>, <<"HELLO1">>),
+              Q1 = bind_queue(Ch, <<"downstream">>, <<"key">>),
+              Q12 = bind_queue(Ch, <<"downstream2">>, <<"key">>),
+              publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO1">>),
               publish(Ch, <<"upstream2">>, <<"key">>, <<"HELLO2">>),
               expect(Ch, Q1, [<<"HELLO1">>]),
-              expect(Ch, Q12, [<<"HELLO1">>, <<"HELLO2">>]),
-              delete_exchange(Ch, <<"downstream1">>),
-              delete_exchange(Ch, <<"downstream12">>),
-              delete_exchange(Ch, <<"upstream1">>),
-              delete_exchange(Ch, <<"upstream2">>)
-      end).
+              expect(Ch, Q12, [<<"HELLO1">>, <<"HELLO2">>])
+      end, ?UPSTREAM_DOWNSTREAM ++
+          [<<"upstream2">>,
+           {<<"downstream2">>, [<<"upstream">>, <<"upstream2">>]}]).
 
 e2e_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream">>, <<"fanout">>),
-              declare_fed_exchange(Ch, <<"downstream1">>, <<"fanout">>,
-                                   [<<"upstream">>]),
-              declare_exchange(Ch, <<"downstream2">>, <<"direct">>),
-              bind_exchange(Ch, <<"downstream2">>, <<"downstream1">>, <<"">>),
+              bind_exchange(Ch, <<"downstream2">>, <<"downstream">>, <<"key">>),
               Q = bind_queue(Ch, <<"downstream2">>, <<"key">>),
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>),
-              delete_exchange(Ch, <<"downstream1">>),
-              delete_exchange(Ch, <<"downstream2">>),
-              delete_exchange(Ch, <<"upstream">>)
-      end).
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>)
+      end, ?UPSTREAM_DOWNSTREAM ++ [<<"downstream2">>]).
 
 validation_test() ->
     Upstream = [{<<"host">>, longstr, <<"localhost">>}],
     T = fun (U) ->
                 {<<"upstreams">>, array, [{table, U}]}
         end,
-    Type = {<<"type">>, longstr, <<"direct">>},
+    Type = {<<"type">>, longstr, <<"topic">>},
 
     assert_bad([T(Upstream)]),
     assert_bad([T(Upstream), {<<"type">>, long,    42}]),
@@ -114,44 +89,29 @@ validation_test() ->
 delete_upstream_queue_on_delete_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
-                                   [<<"upstream">>]),
               bind_queue(Ch, <<"downstream">>, <<"key">>),
               delete_exchange(Ch, <<"downstream">>),
               publish(Ch, <<"upstream">>, <<"key">>, <<"lost">>),
-              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
-                                   [<<"upstream">>]),
+              declare_exchange(Ch, {<<"downstream">>, [<<"upstream">>]}),
               Q = bind_queue(Ch, <<"downstream">>, <<"key">>),
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"delivered">>),
-              delete_exchange(Ch, <<"downstream">>),
-              delete_exchange(Ch, <<"upstream">>)
-      end).
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"delivered">>)
+      end, ?UPSTREAM_DOWNSTREAM).
 
 smart_unbind_test() ->
     with_ch(
       fun (Ch) ->
-              declare_exchange(Ch, <<"upstream">>, <<"direct">>),
-              declare_fed_exchange(Ch, <<"downstream">>, <<"direct">>,
-                                   [<<"upstream">>]),
               Q1 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               Q3 = bind_queue(Ch, <<"downstream">>, <<"key">>),
               delete_queue(Ch, Q2),
               unbind_queue(Ch, Q3, <<"downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
-              delete_queue(Ch, Q3),
-              delete_exchange(Ch, <<"downstream">>),
-              delete_exchange(Ch, <<"upstream">>)
-      end).
+              delete_queue(Ch, Q3)
+      end, ?UPSTREAM_DOWNSTREAM).
 
 no_loop_test() ->
     with_ch(
       fun (Ch) ->
-              declare_fed_exchange(Ch, <<"one">>, <<"direct">>,
-                                   [<<"two">>]),
-              declare_fed_exchange(Ch, <<"two">>, <<"direct">>,
-                                   [<<"one">>]),
               Q1 = bind_queue(Ch, <<"one">>, <<"key">>),
               Q2 = bind_queue(Ch, <<"two">>, <<"key">>),
               publish(Ch, <<"one">>, <<"key">>, <<"Hello from one">>),
@@ -159,13 +119,12 @@ no_loop_test() ->
               expect(Ch, Q1, [<<"Hello from one">>, <<"Hello from two">>]),
               expect(Ch, Q2, [<<"Hello from one">>, <<"Hello from two">>]),
               expect_empty(Ch, Q1),
-              expect_empty(Ch, Q2),
-              delete_exchange(Ch, <<"one">>),
-              delete_exchange(Ch, <<"two">>)
-      end).
+              expect_empty(Ch, Q2)
+      end, [{<<"one">>, [<<"two">>]},
+            {<<"two">>, [<<"one">>]}]).
 
-%% Downstream: port 5672, has federation
-%% Upstream:   port 5673, may not have federation
+%% %% Downstream: port 5672, has federation
+%% %% Upstream:   port 5673, may not have federation
 
 restart_upstream_test_() ->
     {timeout, 15, fun restart_upstream/0}.
@@ -173,9 +132,10 @@ restart_upstream_test_() ->
 restart_upstream() ->
     with_2ch(
       fun (Downstream, Upstream) ->
-              declare_exchange(Upstream, <<"upstream">>, <<"direct">>),
-              declare_fed_exchange(Downstream, <<"downstream">>, <<"direct">>,
-                                   [<<"upstream">>], 5673),
+              declare_exchange(Upstream, <<"upstream">>),
+              declare_exchange(Downstream,
+                               {<<"downstream">>, [<<"upstream">>], 5673}),
+
               Qstays = bind_queue(Downstream, <<"downstream">>, <<"stays">>),
               Qgoes = bind_queue(Downstream, <<"downstream">>, <<"goes">>),
               stop_other_node(),
@@ -191,16 +151,19 @@ restart_upstream() ->
               expect(Downstream, Qstays, [<<"STAYS">>]),
               expect(Downstream, Qcomes, [<<"COMES">>]),
               expect_empty(Downstream, Qgoes),
+
               delete_exchange(Downstream, <<"downstream">>),
               delete_exchange(Upstream1, <<"upstream">>)
       end).
 
 %%----------------------------------------------------------------------------
 
-with_ch(Fun) ->
+with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(network),
     {ok, Ch} = amqp_connection:open_channel(Conn),
+    [declare_exchange(Ch, X) || X <- Xs],
     Fun(Ch),
+    [delete_exchange(Ch, X) || X <- Xs],
     amqp_connection:close(Conn),
     ok.
 
@@ -223,10 +186,15 @@ stop_other_node() ->
     ?assertCmd("make stop-other-node"),
     timer:sleep(1000).
 
-declare_fed_exchange(Ch, X, Type, Upstreams) ->
-    declare_fed_exchange(Ch, X, Type, Upstreams, 5672).
+to_table(U, Port) ->
+    [{<<"host">>,         longstr, <<"localhost">>},
+     {<<"port">>,         long,    Port},
+     {<<"exchange">>,     longstr, U}].
 
-declare_fed_exchange(Ch, X, Type, Upstreams, Port) ->
+declare_exchange(Ch, {X, Upstreams}) ->
+    declare_exchange(Ch, {X, Upstreams, 5672});
+
+declare_exchange(Ch, {X, Upstreams, Port}) ->
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange  = X,
@@ -234,17 +202,12 @@ declare_fed_exchange(Ch, X, Type, Upstreams, Port) ->
         type      = <<"x-federation">>,
         arguments = [{<<"upstreams">>, array,
                       [{table, to_table(U, Port)} || U <- Upstreams]},
-                     {<<"type">>,      longstr, Type}]
-       }).
+                     {<<"type">>,      longstr, <<"topic">>}]
+       });
 
-to_table(U, Port) ->
-    [{<<"host">>,         longstr, <<"localhost">>},
-     {<<"port">>,         long,    Port},
-     {<<"exchange">>,     longstr, U}].
-
-declare_exchange(Ch, X, Type) ->
+declare_exchange(Ch, X) ->
     amqp_channel:call(Ch, #'exchange.declare'{ exchange = X,
-                                               type     = Type,
+                                               type     = <<"topic">>,
                                                durable  = true}).
 
 declare_queue(Ch) ->
@@ -271,6 +234,12 @@ bind_queue(Ch, X, Key) ->
     Q = declare_queue(Ch),
     bind_queue(Ch, Q, X, Key),
     Q.
+
+delete_exchange(Ch, {X, _}) ->
+    delete_exchange(Ch, X);
+
+delete_exchange(Ch, {X, _, _}) ->
+    delete_exchange(Ch, X);
 
 delete_exchange(Ch, X) ->
     amqp_channel:call(Ch, #'exchange.delete'{ exchange = X }).
@@ -315,7 +284,7 @@ expect_empty(Ch, Q) ->
 %%----------------------------------------------------------------------------
 
 assert_good(Args) ->
-    with_ch(fun (Ch) -> test_args(Ch, Args) end).
+    with_ch(fun (Ch) -> test_args(Ch, Args) end, []).
 
 assert_bad(Args) ->
     with_ch(fun (Ch) ->
@@ -326,7 +295,7 @@ assert_bad(Args) ->
                                  _}, _} ->
                             ok
                     end
-            end).
+            end, []).
 
 test_args(Ch, Args) ->
     amqp_channel:call(Ch, #'exchange.declare'{
