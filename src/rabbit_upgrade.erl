@@ -101,7 +101,6 @@ ensure_backup_taken() ->
     end.
 
 take_backup() ->
-    rabbit:prepare(), %% Ensure we have logs for this
     BackupDir = backup_dir(),
     case rabbit_mnesia:copy_db(BackupDir) of
         ok         -> info("upgrades: Mnesia dir backed up to ~p~n",
@@ -134,12 +133,11 @@ maybe_upgrade_mnesia() ->
         {ok, []} ->
             ok;
         {ok, Upgrades} ->
-            rabbit:prepare(), %% Ensure we have logs for this
             ensure_backup_taken(),
-            case upgrade_mode(AllNodes) of
-                primary   -> primary_upgrade(Upgrades, AllNodes);
-                secondary -> secondary_upgrade(AllNodes)
-            end
+            ok = case upgrade_mode(AllNodes) of
+                     primary   -> primary_upgrade(Upgrades, AllNodes);
+                     secondary -> secondary_upgrade(AllNodes)
+                 end
     end.
 
 upgrade_mode(AllNodes) ->
