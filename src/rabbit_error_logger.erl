@@ -70,6 +70,7 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     {ok, _RoutingRes, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey, false, false, none,
                              #'P_basic'{content_type = <<"text/plain">>,
-                                        timestamp    = rabbit_misc:timestamp()},
+                                        timestamp    =
+                                            rabbit_misc:now_ms() div 1000},
                              list_to_binary(io_lib:format(Format, Data))),
     ok.
