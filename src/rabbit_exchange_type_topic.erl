@@ -56,11 +56,11 @@ recover(_Exchange, Bs) ->
               lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
       end).
 
-delete(true, #exchange{name = X}, _Bs) ->
+delete(transaction, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
     trie_remove_all_bindings(X),
     ok;
-delete(false, _Exchange, _Bs) ->
+delete(none, _Exchange, _Bs) ->
     ok.
 
 add_binding(transaction, _Exchange, Binding) ->

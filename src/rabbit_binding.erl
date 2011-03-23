@@ -415,7 +415,10 @@ process_deletions(Deletions, transaction) ->
               pd_callback(transaction, remove_bindings, X, Bindings),
               dict:store(X, serial(X), Acc)
       end,
-      fun rabbit_misc:const_ok/1,
+      fun (X, Bindings, Acc) ->
+              pd_callback(transaction, delete, X, Bindings),
+              dict:store(X, serial(X), Acc)
+      end,
       Deletions, dict:new(), true);
 
 process_deletions(Deletions, Serials) ->
@@ -424,8 +427,10 @@ process_deletions(Deletions, Serials) ->
               pd_callback(dict:fetch(X, Serials), remove_bindings, X, Bindings),
               Acc
       end,
-      fun (X) ->
-              rabbit_event:notify(exchange_deleted, [{name, X#exchange.name}])
+      fun (X, Bindings, Acc) ->
+              pd_callback(dict:fetch(X, Serials), delete, X, Bindings),
+              rabbit_event:notify(exchange_deleted, [{name, X#exchange.name}]),
+              Acc
       end,
       Deletions, ok, false).
 
@@ -439,9 +444,7 @@ process_deletions(NotDeletedFun, DeletedFun, Deletions, Acc0, Tx) ->
                   not_deleted ->
                       NotDeletedFun(X, FlatBindings, Acc);
                   deleted ->
-                      DeletedFun(X),
-                      pd_callback(Tx, delete, X, Bindings),
-                      Acc
+                      DeletedFun(X, FlatBindings, Acc)
               end
       end, Acc0, Deletions).
 

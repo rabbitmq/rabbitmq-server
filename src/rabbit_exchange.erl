@@ -126,7 +126,15 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              callback(Exchange, create, [Tx, Exchange]),
+              S = case Tx of
+                      true  -> transaction;
+                      false -> case callback(Exchange, serialise_events,
+                                             [Exchange]) of
+                                   true  -> 0;
+                                   false -> none
+                               end
+                  end,
+              callback(Exchange, create, [S, Exchange]),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
