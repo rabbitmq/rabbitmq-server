@@ -144,7 +144,7 @@ maybe_upgrade_mnesia() ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:read_previously_running_disc_nodes(),
+            AfterUs = rabbit_mnesia:read_previously_running_nodes(),
             case {is_disc_node(), AfterUs} of
                 {true, []}  ->
                     primary;
@@ -152,14 +152,11 @@ upgrade_mode(AllNodes) ->
                     Filename = rabbit_mnesia:running_nodes_filename(),
                     die("Cluster upgrade needed but other disc nodes shut "
                         "down after this one.~nPlease first start the last "
-                        "disc node to shut down.~nThe disc nodes that were "
-                        "still running when this one shut down are:~n~n"
-                        " ~p~n~nNote: if several disc nodes were shut down "
-                        "simultaneously they may all~nshow this message. "
-                        "In which case, remove the lock file on one of them "
-                        "and~nstart that node. The lock file on this node "
-                        "is:~n~n ~s ",
-                        [AfterUs, Filename]);
+                        "disc node to shut down.~n~nNote: if several disc "
+                        "nodes were shut down simultaneously they may "
+                        "all~nshow this message. In which case, remove "
+                        "the lock file on one of them and~nstart that node. "
+                        "The lock file on this node is:~n~n ~s ", [Filename]);
                 {false, _} ->
                     die("Cluster upgrade needed but this is a ram node.~n"
                         "Please first start the last disc node to shut down.",

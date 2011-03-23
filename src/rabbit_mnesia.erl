@@ -22,8 +22,8 @@
          is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
-         record_running_disc_nodes/0, read_previously_running_disc_nodes/0,
-         delete_previously_running_disc_nodes/0, running_nodes_filename/0]).
+         record_running_nodes/0, read_previously_running_nodes/0,
+         delete_previously_running_nodes/0, running_nodes_filename/0]).
 
 -export([table_names/0]).
 
@@ -61,9 +61,9 @@
 -spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
 -spec(create_cluster_nodes_config/1 :: ([node()]) ->  'ok').
 -spec(read_cluster_nodes_config/0 :: () ->  [node()]).
--spec(record_running_disc_nodes/0 :: () ->  'ok').
--spec(read_previously_running_disc_nodes/0 :: () ->  [node()]).
--spec(delete_previously_running_disc_nodes/0 :: () ->  'ok').
+-spec(record_running_nodes/0 :: () ->  'ok').
+-spec(read_previously_running_nodes/0 :: () ->  [node()]).
+-spec(delete_previously_running_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
 
 -endif.
@@ -380,18 +380,15 @@ delete_cluster_nodes_config() ->
 running_nodes_filename() ->
     filename:join(dir(), "nodes_running_at_shutdown").
 
-record_running_disc_nodes() ->
+record_running_nodes() ->
     FileName = running_nodes_filename(),
-    Nodes = sets:to_list(
-              sets:intersection(
-                sets:from_list(nodes_of_type(disc_copies)),
-                sets:from_list(running_clustered_nodes()))) -- [node()],
+    Nodes = running_clustered_nodes() -- [node()],
     %% Don't check the result: we're shutting down anyway and this is
     %% a best-effort-basis.
     rabbit_misc:write_term_file(FileName, [Nodes]),
     ok.
 
-read_previously_running_disc_nodes() ->
+read_previously_running_nodes() ->
     FileName = running_nodes_filename(),
     case rabbit_misc:read_term_file(FileName) of
         {ok, [Nodes]}   -> Nodes;
@@ -400,7 +397,7 @@ read_previously_running_disc_nodes() ->
                                           FileName, Reason}})
     end.
 
-delete_previously_running_disc_nodes() ->
+delete_previously_running_nodes() ->
     FileName = running_nodes_filename(),
     case file:delete(FileName) of
         ok              -> ok;
