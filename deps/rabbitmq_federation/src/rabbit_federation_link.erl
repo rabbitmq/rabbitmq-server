@@ -156,19 +156,8 @@ terminate(_Reason, #state{downstream_channel    = DCh,
 handle_command({add_binding, Binding}, _From, State) ->
     add_binding(Binding, State);
 
-handle_command({remove_binding, B = #binding{key  = Key,
-                                             args = Args}}, _From,
-               State = #state{channel = Ch, internal_exchange = InternalX,
-                              upstream = #upstream{exchange = X}}) ->
-    case check_remove_binding(B, State) of
-        {true,  State1} -> ok;
-        {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.unbind'{destination = InternalX,
-                                                    source      = X,
-                                                    routing_key = Key,
-                                                    arguments   = Args})
-    end,
-    State1.
+handle_command({remove_binding, Binding}, _From, State) ->
+    remove_binding(Binding, State).
 
 play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
     case gb_trees:is_empty(Waiting) of
@@ -217,6 +206,19 @@ check_add_binding(B = #binding{destination = Dest},
                      error       -> {false, sets:from_list([Dest])}
                  end,
     {Res, State#state{bindings = dict:store(K, Set, Bs)}}.
+
+remove_binding(B = #binding{key = Key, args = Args},
+               State = #state{channel = Ch, internal_exchange = InternalX,
+                              upstream = #upstream{exchange = X}}) ->
+    case check_remove_binding(B, State) of
+        {true,  State1} -> ok;
+        {false, State1} -> amqp_channel:call(
+                             Ch, #'exchange.unbind'{destination = InternalX,
+                                                    source      = X,
+                                                    routing_key = Key,
+                                                    arguments   = Args})
+    end,
+    State1.
 
 check_remove_binding(B = #binding{destination = Dest},
                      State = #state{bindings = Bs}) ->
