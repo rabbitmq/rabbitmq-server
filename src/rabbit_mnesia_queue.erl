@@ -36,10 +36,6 @@
 
 -record(tx, { to_pub, to_ack }).
 
--record(q_record, { seq_id, msg_status }).
-
--record(p_record, { seq_id, msg_status }).
-
 -include("rabbit.hrl").
 
 -type(maybe(T) :: nothing | {just, T}).
@@ -73,7 +69,7 @@
 -spec delete_nonpersistent_msgs(atom()) -> ok.
 
 -spec(internal_fetch(true, state()) -> fetch_result(ack());
-          (false, state()) -> fetch_result(undefined)).
+                    (false, state()) -> fetch_result(undefined)).
 
 -spec internal_tx_commit([pub()],
                          [seq_id()],
@@ -124,20 +120,30 @@ stop() -> ok.
 init(QueueName, IsDurable, Recover, _AsyncCallback, _SyncCallback) ->
     {QTable, PTable} = tables(QueueName),
     case Recover of
-        false -> {atomic, ok} = mnesia:delete_table(QTable),
-                 {atomic, ok} = mnesia:delete_table(PTable);
+        false -> case mnesia:delete_table(QTable) of
+                     {atomic, ok} -> ok;
+                     {aborted, {no_exists, QTable}} -> ok
+                 end,
+                 case mnesia:delete_table(PTable) of
+                     {atomic, ok} -> ok;
+                     {aborted, {no_exists, PTable}} -> ok
+                 end;
         true -> ok
     end,
-    create_table(QTable, 'q_record', 'ordered_set', record_info(fields,
-                                                                q_record)),
-    create_table(PTable, 'p_record', 'set', record_info(fields, p_record)),
+    ok = create_table(
+           QTable,
+           'msg_status',
+           'ordered_set',
+           record_info(fields, msg_status)),
+    ok = create_table(
+           PTable, 'msg_status', 'set', record_info(fields, msg_status)),
     {atomic, State} =
         mnesia:transaction(
           fun () ->
                   case IsDurable of
-                      false -> clear_table(QTable),
-                               clear_table(PTable);
-                      true -> delete_nonpersistent_msgs(QTable)
+                      false -> ok = clear_table(QTable),
+                               ok = clear_table(PTable);
+                      true -> ok = delete_nonpersistent_msgs(QTable)
                   end,
                   NextSeqId = case mnesia:first(QTable) of
                                   '$end_of_table' -> 0;
@@ -158,8 +164,8 @@ terminate(State = #state { q_table = QTable, p_table = PTable }) ->
 
 delete_and_terminate(State = #state { q_table = QTable, p_table = PTable }) ->
     {atomic, _} =
-        mnesia:transaction(fun () -> clear_table(QTable),
-                                     clear_table(PTable)
+        mnesia:transaction(fun () -> ok = clear_table(QTable),
+                                     ok = clear_table(PTable)
                            end),
     {atomic, ok} = mnesia:dump_tables([QTable, PTable]),
     State.
@@ -167,7 +173,7 @@ delete_and_terminate(State = #state { q_table = QTable, p_table = PTable }) ->
 purge(State = #state { q_table = QTable }) ->
     {atomic, Result} =
         mnesia:transaction(fun () -> LQ = length(mnesia:all_keys(QTable)),
-                                     clear_table(QTable),
+                                     ok = clear_table(QTable),
                                      {LQ, State}
                            end),
     Result.
@@ -191,7 +197,7 @@ publish_delivered(true,
     {atomic, State1} =
         mnesia:transaction(
           fun () ->
-                  add_pending_ack(MsgStatus, State),
+                  ok = add_pending_ack(MsgStatus, State),
                   State #state { next_seq_id = SeqId + 1 }
           end),
     {SeqId, confirm([{Msg, Props}], State1)}.
@@ -310,8 +316,7 @@ clear_table(Table) ->
 delete_nonpersistent_msgs(QTable) ->
     lists:foreach(
       fun (Key) ->
-              [#q_record { seq_id = Key, msg_status = MsgStatus }] =
-                  mnesia:read(QTable, Key, 'read'),
+              [MsgStatus] = mnesia:read(QTable, Key, 'read'),
               case MsgStatus of
                   #msg_status { msg = #basic_message {
                                   is_persistent = true }} -> ok;
@@ -344,10 +349,7 @@ internal_publish(Msg,
       msg = Msg,
       props = Props,
       is_delivered = IsDelivered },
-    ok = mnesia:write(
-           QTable,
-           #q_record { seq_id = SeqId, msg_status = MsgStatus },
-           'write'),
+    ok = mnesia:write(QTable, MsgStatus, 'write'),
     State #state { next_seq_id = SeqId + 1 }.
 
 internal_ack(SeqIds, State) ->
@@ -368,8 +370,7 @@ internal_dropwhile(Pred, State) ->
 q_pop(#state { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
-        SeqId -> [#q_record { seq_id = SeqId, msg_status = MsgStatus }] =
-                     mnesia:read(QTable, SeqId, 'read'),
+        SeqId -> [MsgStatus] = mnesia:read(QTable, SeqId, 'read'),
                  ok = mnesia:delete(QTable, SeqId, 'write'),
                  {just, MsgStatus}
     end.
@@ -377,8 +378,7 @@ q_pop(#state { q_table = QTable }) ->
 q_peek(#state { q_table = QTable }) ->
     case mnesia:first(QTable) of
         '$end_of_table' -> nothing;
-        SeqId -> [#q_record { seq_id = SeqId, msg_status = MsgStatus }] =
-                     mnesia:read(QTable, SeqId, 'read'),
+        SeqId -> [MsgStatus] = mnesia:read(QTable, SeqId, 'read'),
                  {just, MsgStatus}
     end.
 
@@ -387,7 +387,7 @@ post_pop(true,
            seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
          State = #state { q_table = QTable }) ->
     LQ = length(mnesia:all_keys(QTable)),
-    add_pending_ack(MsgStatus #msg_status { is_delivered = true }, State),
+    ok = add_pending_ack(MsgStatus #msg_status { is_delivered = true }, State),
     {Msg, IsDelivered, SeqId, LQ};
 post_pop(false,
          #msg_status { msg = Msg, is_delivered = IsDelivered },
@@ -395,18 +395,14 @@ post_pop(false,
     LQ = length(mnesia:all_keys(QTable)),
     {Msg, IsDelivered, undefined, LQ}.
 
-add_pending_ack(MsgStatus = #msg_status { seq_id = SeqId },
-                #state { p_table = PTable }) ->
-    ok = mnesia:write(PTable,
-                      #p_record { seq_id = SeqId, msg_status = MsgStatus },
-                      'write'),
+add_pending_ack(MsgStatus, #state { p_table = PTable }) ->
+    ok = mnesia:write(PTable, MsgStatus, 'write'),
     ok.
 
 del_pending_acks(F, SeqIds, State = #state { p_table = PTable }) ->
     lists:foldl(
       fun (SeqId, S) ->
-              [#p_record { msg_status = MsgStatus }] =
-                  mnesia:read(PTable, SeqId, 'read'),
+              [MsgStatus] = mnesia:read(PTable, SeqId, 'read'),
               ok = mnesia:delete(PTable, SeqId, 'write'),
               F(MsgStatus, S)
       end,

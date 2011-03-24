@@ -43,11 +43,10 @@
                           confirmed :: gb_set(),
                           txn_dict :: dict() }).
 
--type(msg_status() ::
-        #msg_status { seq_id :: seq_id(),
-                      msg :: rabbit_types:basic_message(),
-                      props :: rabbit_types:message_properties(),
-                      is_delivered :: boolean() }).
+-type(msg_status() :: #msg_status { seq_id :: seq_id(),
+                                    msg :: rabbit_types:basic_message(),
+                                    props :: rabbit_types:message_properties(),
+                                    is_delivered :: boolean() }).
 
 -type(tx() :: #tx { to_pub :: [pub()],
                     to_ack :: [seq_id()] }).
