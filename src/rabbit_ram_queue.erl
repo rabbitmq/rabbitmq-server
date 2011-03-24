@@ -155,7 +155,7 @@ init(_QueueName, _IsDurable, _Recover, _asyncCallback, _SyncCallback) ->
              q_len = 0,
              pending_acks = dict:new(),
              next_seq_id = 0,
-	     confirmed = gb_sets:new(),
+             confirmed = gb_sets:new(),
              txn_dict = dict:new() }.
 
 %% ----------------------------------------------------------------------------
@@ -495,7 +495,7 @@ internal_dropwhile(Pred, State = #state { q = Q, q_len = QLen }) ->
 
 post_pop(true,
          MsgStatus = #msg_status {
-	   seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
+           seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
          State = #state { q_len = QLen, pending_acks = PendingAcks }) ->
     MsgStatus1 = MsgStatus #msg_status { is_delivered = true },
     {{Msg, IsDelivered, SeqId, QLen},

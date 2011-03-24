@@ -212,7 +212,9 @@ terminate(State) -> State #state { pending_acks = dict:new() }.
 %% -spec(delete_and_terminate/1 :: (state()) -> state()).
 
 delete_and_terminate(State = #state { q_file_names = QFileNames }) ->
-    lists:foreach(fun file:delete/1, queue:to_list(QFileNames)),
+    lists:foreach(
+      fun (filename) -> ok = file:delete(filename) end,
+      queue:to_list(QFileNames)),
     State #state { q0 = queue:new(),
                    q0_len = 0,
                    q_file_names = queue:new(),
@@ -228,7 +230,9 @@ delete_and_terminate(State = #state { q_file_names = QFileNames }) ->
 %% -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 
 purge(State = #state { q_file_names = QFileNames }) ->
-    lists:foreach(fun file:delete/1, queue:to_list(QFileNames)),
+    lists:foreach(
+      fun (filename) -> ok = file:delete(filename) end,
+      queue:to_list(QFileNames)),
     {internal_len(State),
      State #state { q0 = queue:new(),
                     q0_len = 0,
@@ -551,7 +555,7 @@ internal_dropwhile(Pred, State) ->
 
 post_pop(true,
          MsgStatus = #msg_status {
-	   seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
+           seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
          State = #state { pending_acks = PendingAcks }) ->
     MsgStatus1 = MsgStatus #msg_status { is_delivered = true },
     {{Msg, IsDelivered, SeqId, internal_len(State)},
@@ -599,10 +603,11 @@ push_q0(State = #state { dir = Dir,
     if Q0Len < ?FILE_BATCH_SIZE -> State;
        true ->
             FileName = Dir ++ "/" ++ integer_to_list(FileId),
-            Worker ! {write_behind, FileName, term_to_binary(Q0)},
+            _ = (Worker ! {write_behind, FileName, term_to_binary(Q0)}),
             case queue:is_empty(QFileNames) of
                 true ->
-                    Worker ! {read_ahead, FileName };
+                    _ = (Worker ! {read_ahead, FileName }),
+                    ok;
                 false -> ok
             end,
             State #state { next_file_id = FileId + 1,
@@ -626,14 +631,12 @@ pull_q1(State = #state { q0 = Q0,
     if Q1Len > 0 -> State;
        QFileNamesLen > 0 ->
             {{value, FileName}, QFileNames1} = queue:out(QFileNames),
-            Worker ! {read, FileName},
-            receive
-                {binary, Binary} ->
-                    ok
-            end,
+            _ = (Worker ! {read, FileName}),
+            receive {binary, Binary} -> ok end,
             case queue:out(QFileNames1) of
                 {{value, FileName1}, _} ->
-                    Worker ! {read_ahead, FileName1};
+                    _ = (Worker ! {read_ahead, FileName1}),
+                    ok;
                 _ -> ok
             end,
             State #state { q_file_names = QFileNames1,
@@ -707,8 +710,8 @@ confirm(Pubs, State = #state { confirmed = Confirmed }) ->
     end.
 
 %% ----------------------------------------------------------------------------
-%% Background worker process for speeding up demo, currently with no
-%% mechanisms for shutdown
+%% Background worker process (non-OTP) for speeding up demo by about
+%% 10%, currently with no mechanism for shutdown
 %% ----------------------------------------------------------------------------
 
 -spec spawn_worker() -> pid().
@@ -716,19 +719,19 @@ confirm(Pubs, State = #state { confirmed = Confirmed }) ->
 spawn_worker() -> Parent = self(),
                   spawn(fun() -> worker(Parent, nothing) end).
 
--spec worker(pid(), maybe({string(), binary()})) -> none().
+-spec worker(pid(), maybe({string(), binary()})) -> no_return().
 
-worker(Parent, State) ->
+worker(Parent, Contents) ->
     receive
         {write_behind, FileName, Binary} ->
             ok = file:write_file(FileName, Binary),
-            worker(Parent, State);
+            worker(Parent, Contents);
         {read_ahead, FileName} ->
             {ok, Binary} = file:read_file(FileName),
             ok = file:delete(FileName),
             worker(Parent, {just, {FileName, Binary}});
         {read, FileName} ->
-            {just, {FileName, Binary}} = State,
-            Parent ! {binary, Binary},
+            {just, {FileName, Binary}} = Contents,
+            (Parent ! {binary, Binary}),
             worker(Parent, nothing)
     end.
