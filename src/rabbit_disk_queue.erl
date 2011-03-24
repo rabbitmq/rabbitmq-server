@@ -90,6 +90,56 @@
 
 -include("rabbit_backing_queue_spec.hrl").
 
+-spec(internal_fetch(true, state()) -> {fetch_result(ack()), state()};
+                    (false, state()) -> {fetch_result(undefined), state()}).
+
+-spec internal_tx_commit([pub()],
+                         [seq_id()],
+                         message_properties_transformer(),
+                         state()) ->
+                                state().
+
+-spec internal_publish(rabbit_types:basic_message(),
+                       rabbit_types:message_properties(),
+                       boolean(),
+                       state()) ->
+                              state().
+
+-spec(internal_ack/2 :: ([seq_id()], state()) -> state()).
+
+-spec(internal_dropwhile/2 ::
+        (fun ((rabbit_types:message_properties()) -> boolean()), state())
+        -> state()).
+
+-spec(post_pop(true, msg_status(), state()) -> {fetch_result(ack()), state()};
+              (false, msg_status(), state()) ->
+                 {fetch_result(undefined), state()}).
+
+-spec del_pending_acks(fun ((msg_status(), state()) -> state()),
+                       [seq_id()],
+                       state()) ->
+                    state().
+
+-spec push_q0(state()) -> state().
+
+-spec pull_q1(state()) -> state().
+
+-spec dir({resource, binary(), queue, binary()}) -> string().
+
+-spec internal_len(state()) -> non_neg_integer().
+
+-spec lookup_tx(rabbit_types:txn(), dict()) -> tx().
+
+-spec store_tx(rabbit_types:txn(), tx(), dict()) -> dict().
+
+-spec erase_tx(rabbit_types:txn(), dict()) -> dict().
+
+-spec confirm([pub()], state()) -> state().
+
+-spec spawn_worker() -> pid().
+
+-spec worker(pid(), maybe({string(), binary()})) -> no_return().
+
 start(_DurableQueues) -> ok.
 
 stop() -> ok.
@@ -228,9 +278,6 @@ status(State = #state { pending_acks = PendingAcks,
      {next_seq_id, NextSeqId},
      {acks, dict:size(PendingAcks)}].
 
--spec(internal_fetch(true, state()) -> {fetch_result(ack()), state()};
-                    (false, state()) -> {fetch_result(undefined), state()}).
-
 internal_fetch(AckRequired, State) ->
     State1 = #state { q1 = Q, q1_len = QLen } = pull_q1(State),
     case queue:out(Q) of
@@ -241,12 +288,6 @@ internal_fetch(AckRequired, State) ->
                      State1 #state { q1 = Q1, q1_len = QLen - 1 })
     end.
 
--spec internal_tx_commit([pub()],
-                         [seq_id()],
-                         message_properties_transformer(),
-                         state()) ->
-                                state().
-
 internal_tx_commit(Pubs, SeqIds, PropsF, State) ->
     State1 = internal_ack(SeqIds, State),
     lists:foldl(
@@ -255,12 +296,6 @@ internal_tx_commit(Pubs, SeqIds, PropsF, State) ->
       end,
       State1,
       lists:reverse(Pubs)).
-
--spec internal_publish(rabbit_types:basic_message(),
-                       rabbit_types:message_properties(),
-                       boolean(),
-                       state()) ->
-                              state().
 
 internal_publish(Msg,
                  Props,
@@ -274,14 +309,8 @@ internal_publish(Msg,
                            q0_len = Q0Len + 1,
                            next_seq_id = SeqId + 1 }).
 
--spec(internal_ack/2 :: ([seq_id()], state()) -> state()).
-
 internal_ack(SeqIds, State) ->
     del_pending_acks(fun (_, S) -> S end, SeqIds, State).
-
--spec(internal_dropwhile/2 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()), state())
-        -> state()).
 
 internal_dropwhile(Pred, State) ->
     State1 = #state { q1 = Q, q1_len = QLen } = pull_q1(State),
@@ -296,10 +325,6 @@ internal_dropwhile(Pred, State) ->
             end
     end.
 
--spec(post_pop(true, msg_status(), state()) -> {fetch_result(ack()), state()};
-              (false, msg_status(), state()) ->
-                 {fetch_result(undefined), state()}).
-
 post_pop(true,
          MsgStatus = #msg_status {
            seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
@@ -313,11 +338,6 @@ post_pop(false,
          State) ->
     {{Msg, IsDelivered, undefined, internal_len(State)}, State}.
 
--spec del_pending_acks(fun ((msg_status(), state()) -> state()),
-                       [seq_id()],
-                       state()) ->
-                    state().
-
 del_pending_acks(F, SeqIds, State) ->
     lists:foldl(
       fun (SeqId, S = #state { pending_acks = PendingAcks }) ->
@@ -327,8 +347,6 @@ del_pending_acks(F, SeqIds, State) ->
       end,
       State,
       SeqIds).
-
--spec push_q0(state()) -> state().
 
 push_q0(State = #state { dir = Dir,
                          next_file_id = FileId,
@@ -353,8 +371,6 @@ push_q0(State = #state { dir = Dir,
                            q_file_names = queue:in(FileName, QFileNames),
                            q_file_names_len = QFileNamesLen + 1 }
     end.
-
--spec pull_q1(state()) -> state().
 
 pull_q1(State = #state { q0 = Q0,
                          q0_len = Q0Len,
@@ -384,37 +400,25 @@ pull_q1(State = #state { q0 = Q0,
        true -> State
     end.
 
--spec dir({resource, binary(), queue, binary()}) -> string().
-
 dir({resource, VHost, queue, Name}) ->
     VHost2 = re:split(binary_to_list(VHost), "[/]", [{return, list}]),
     Name2 = re:split(binary_to_list(Name), "[/]", [{return, list}]),
     Str = lists:flatten(io_lib:format("~999999999999p", [{VHost2, Name2}])),
     "/Users/john/Desktop/" ++ Str.
 
--spec internal_len(state()) -> non_neg_integer().
-
 internal_len(#state { q0_len = Q0Len,
                       q_file_names_len = QFileNamesLen,
                       q1_len = Q1Len }) ->
     Q0Len + ?FILE_BATCH_SIZE * QFileNamesLen + Q1Len.
-
--spec lookup_tx(rabbit_types:txn(), dict()) -> tx().
 
 lookup_tx(Txn, TxnDict) -> case dict:find(Txn, TxnDict) of
                                error -> #tx { to_pub = [], to_ack = [] };
                                {ok, Tx} -> Tx
                            end.
 
--spec store_tx(rabbit_types:txn(), tx(), dict()) -> dict().
-
 store_tx(Txn, Tx, TxnDict) -> dict:store(Txn, Tx, TxnDict).
 
--spec erase_tx(rabbit_types:txn(), dict()) -> dict().
-
 erase_tx(Txn, TxnDict) -> dict:erase(Txn, TxnDict).
-
--spec confirm([pub()], state()) -> state().
 
 confirm(Pubs, State = #state { confirmed = Confirmed }) ->
     MsgIds =
@@ -427,12 +431,8 @@ confirm(Pubs, State = #state { confirmed = Confirmed }) ->
                    gb_sets:union(Confirmed, gb_sets:from_list(MsgIds)) }
     end.
 
--spec spawn_worker() -> pid().
-
 spawn_worker() -> Parent = self(),
                   spawn(fun() -> worker(Parent, nothing) end).
-
--spec worker(pid(), maybe({string(), binary()})) -> no_return().
 
 worker(Parent, Contents) ->
     receive

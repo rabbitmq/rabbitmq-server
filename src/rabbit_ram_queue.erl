@@ -57,6 +57,44 @@
 
 -include("rabbit_backing_queue_spec.hrl").
 
+-spec(internal_fetch(true, state()) -> {fetch_result(ack()), state()};
+                    (false, state()) -> {fetch_result(undefined), state()}).
+
+-spec internal_tx_commit([pub()],
+                         [seq_id()],
+                         message_properties_transformer(),
+                         state()) ->
+                                state().
+
+-spec internal_publish(rabbit_types:basic_message(),
+                       rabbit_types:message_properties(),
+                       boolean(),
+                       state()) ->
+                              state().
+
+-spec(internal_ack/2 :: ([seq_id()], state()) -> state()).
+
+-spec(internal_dropwhile/2 ::
+        (fun ((rabbit_types:message_properties()) -> boolean()), state())
+        -> state()).
+
+-spec(post_pop(true, msg_status(), state()) -> {fetch_result(ack()), state()};
+              (false, msg_status(), state()) ->
+                 {fetch_result(undefined), state()}).
+
+-spec del_pending_acks(fun ((msg_status(), state()) -> state()),
+                       [seq_id()],
+                        state()) ->
+                    state().
+
+-spec lookup_tx(rabbit_types:txn(), dict()) -> tx().
+
+-spec store_tx(rabbit_types:txn(), tx(), dict()) -> dict().
+
+-spec erase_tx(rabbit_types:txn(), dict()) -> dict().
+
+-spec confirm([pub()], state()) -> state().
+
 start(_DurableQueues) -> ok.
 
 stop() -> ok.
@@ -159,9 +197,6 @@ status(#state { q_len = QLen,
                 next_seq_id = NextSeqId }) ->
     [{len, QLen}, {next_seq_id, NextSeqId}, {acks, dict:size(PendingAcks)}].
 
--spec(internal_fetch(true, state()) -> {fetch_result(ack()), state()};
-                    (false, state()) -> {fetch_result(undefined), state()}).
-
 internal_fetch(AckRequired, State = #state { q = Q, q_len = QLen }) ->
     case queue:out(Q) of
         {empty, _} -> {empty, State};
@@ -171,12 +206,6 @@ internal_fetch(AckRequired, State = #state { q = Q, q_len = QLen }) ->
                      State #state { q = Q1, q_len = QLen - 1 })
     end.
 
--spec internal_tx_commit([pub()],
-                         [seq_id()],
-                         message_properties_transformer(),
-                         state()) ->
-                                state().
-
 internal_tx_commit(Pubs, SeqIds, PropsF, State) ->
     State1 = internal_ack(SeqIds, State),
     lists:foldl(
@@ -185,12 +214,6 @@ internal_tx_commit(Pubs, SeqIds, PropsF, State) ->
       end,
       State1,
       lists:reverse(Pubs)).
-
--spec internal_publish(rabbit_types:basic_message(),
-                       rabbit_types:message_properties(),
-                       boolean(),
-                       state()) ->
-                              state().
 
 internal_publish(Msg,
                  Props,
@@ -203,14 +226,8 @@ internal_publish(Msg,
                    q_len = QLen + 1,
                    next_seq_id = SeqId + 1 }.
 
--spec(internal_ack/2 :: ([seq_id()], state()) -> state()).
-
 internal_ack(SeqIds, State) ->
     del_pending_acks(fun (_, S) -> S end, SeqIds, State).
-
--spec(internal_dropwhile/2 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()), state())
-        -> state()).
 
 internal_dropwhile(Pred, State = #state { q = Q, q_len = QLen }) ->
     case queue:out(Q) of
@@ -223,10 +240,6 @@ internal_dropwhile(Pred, State = #state { q = Q, q_len = QLen }) ->
                 false -> State
             end
     end.
-
--spec(post_pop(true, msg_status(), state()) -> {fetch_result(ack()), state()};
-              (false, msg_status(), state()) ->
-                 {fetch_result(undefined), state()}).
 
 post_pop(true,
          MsgStatus = #msg_status {
@@ -241,11 +254,6 @@ post_pop(false,
          State = #state { q_len = QLen }) ->
     {{Msg, IsDelivered, undefined, QLen}, State}.
 
--spec del_pending_acks(fun ((msg_status(), state()) -> state()),
-                       [seq_id()],
-                        state()) ->
-                    state().
-
 del_pending_acks(F, SeqIds, State) ->
     lists:foldl(
       fun (SeqId, S = #state { pending_acks = PendingAcks }) ->
@@ -256,22 +264,14 @@ del_pending_acks(F, SeqIds, State) ->
       State,
       SeqIds).
 
--spec lookup_tx(rabbit_types:txn(), dict()) -> tx().
-
 lookup_tx(Txn, TxnDict) -> case dict:find(Txn, TxnDict) of
                                error -> #tx { to_pub = [], to_ack = [] };
                                {ok, Tx} -> Tx
                            end.
 
--spec store_tx(rabbit_types:txn(), tx(), dict()) -> dict().
-
 store_tx(Txn, Tx, TxnDict) -> dict:store(Txn, Tx, TxnDict).
 
--spec erase_tx(rabbit_types:txn(), dict()) -> dict().
-
 erase_tx(Txn, TxnDict) -> dict:erase(Txn, TxnDict).
-
--spec confirm([pub()], state()) -> state().
 
 confirm(Pubs, State = #state { confirmed = Confirmed }) ->
     MsgIds =
