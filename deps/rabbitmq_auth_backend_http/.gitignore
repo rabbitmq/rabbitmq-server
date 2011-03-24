@@ -1,1 +1,6 @@
 *~
+ebin/*.beam
+ebin/*.app
+build/deps
+dist
+*.pyc

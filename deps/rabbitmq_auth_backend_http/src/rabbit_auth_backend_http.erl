@@ -83,10 +83,12 @@ q(PathName, Args) ->
 escape(K, V) ->
     atom_to_list(K) ++ "=" ++ escape(V).
 
-escape(Str) when is_binary(Str) ->
-    escape(binary_to_list(Str));
-escape(Str) when is_list(Str) ->
-    edoc_lib:escape_uri(Str).
+escape(V) when is_binary(V) ->
+    escape(binary_to_list(V));
+escape(V) when is_atom(V) ->
+    escape(atom_to_list(V));
+escape(V) when is_list(V) ->
+    edoc_lib:escape_uri(V).
 
 parse_resp(Resp) ->
     case string:to_lower(string:strip(Resp)) of
