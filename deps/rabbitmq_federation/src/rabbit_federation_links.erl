@@ -14,31 +14,30 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_link_sup).
+-module(rabbit_federation_links).
 
--behaviour(supervisor2).
-
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_federation.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
-%% Supervises the upstream links for an exchange.
+-export([go_all/0]).
+-export([add_binding/3, remove_binding/3, stop/1]).
 
--export([start_link/1]).
--export([init/1]).
+go_all() ->
+    [{ok, _} = rabbit_federation_exchange_sup:go(Pid) ||
+     {_, Pid, _, _} <- supervisor:which_children(?SUPERVISOR)].
 
-start_link(Args) ->
-    supervisor2:start_link(?MODULE, Args).
+add_binding(Serial, X, B) ->
+    call(X, {enqueue, Serial, {add_binding, B}}).
+
+remove_binding(Serial, X, B) ->
+    call(X, {enqueue, Serial, {remove_binding, B}}).
+
+stop(X) ->
+    call(X, stop).
 
 %%----------------------------------------------------------------------------
 
-init({Upstreams, DownstreamX, Durable}) ->
-    rabbit_federation_db:set_sup_for_exchange(DownstreamX, self()),
-    Specs = [spec(Upstream, DownstreamX, Durable) || Upstream <- Upstreams],
-    {ok, {{one_for_one, 2, 2}, Specs}}.
-
-spec(Upstream = #upstream{reconnect_delay = Delay}, DownstreamX, Durable) ->
-    {Upstream, {rabbit_federation_link, start_link,
-                [{Upstream, DownstreamX, Durable}]},
-     {transient, Delay},
-     ?MAX_WAIT, worker,
-     [rabbit_federation_link]}.
+call(#exchange{ name = Downstream }, Msg) ->
+    Sup = rabbit_federation_db:sup_for_exchange(Downstream),
+    [gen_server2:call(Pid, Msg, infinity) ||
+        {_, Pid, _, _} <- supervisor2:which_children(Sup), Pid =/= undefined].

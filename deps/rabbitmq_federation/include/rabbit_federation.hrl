@@ -19,3 +19,5 @@
                    prefetch_count,
                    reconnect_delay,
                    queue_expires}).
+
+-define(SUPERVISOR, rabbit_federation_sup).

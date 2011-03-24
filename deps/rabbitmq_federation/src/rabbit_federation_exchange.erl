@@ -70,7 +70,7 @@ recover(X, Bs) ->
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
 delete(Serial, X, Bs) ->
-    call(X, stop),
+    rabbit_federation_links:stop(X),
     ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:delete(serial(Serial, X), X, Bs) end).
 
@@ -80,7 +80,7 @@ add_binding(Serial, X, B = #binding{destination = Dest}) ->
     %% TODO add bindings only if needed.
     case is_federation_exchange(Dest) of
         true  -> ok;
-        false -> call(X, {enqueue, Serial, {add_binding, B}})
+        false -> rabbit_federation_links:add_binding(Serial, X, B)
     end,
     with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
 
@@ -89,7 +89,7 @@ remove_bindings(transaction, X, Bs) ->
 remove_bindings(Serial, X, Bs) ->
     [case is_federation_exchange(Dest) of
          true  -> ok;
-         false -> call(X, {enqueue, Serial, {remove_binding, B}})
+         false -> rabbit_federation_links:remove_binding(Serial, X, B)
      end || B = #binding{destination = Dest} <- Bs],
     with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
@@ -108,10 +108,6 @@ serial(Serial, X) ->
     end.
 
 %%----------------------------------------------------------------------------
-
-call(#exchange{ name = Downstream }, Msg) ->
-    SupPid = rabbit_federation_db:sup_for_exchange(Downstream),
-    rabbit_federation_link_sup:call_all(SupPid, Msg).
 
 with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.

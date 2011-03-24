@@ -20,13 +20,12 @@
 
 %% Supervises everything. There is just one of these.
 
+-include("rabbit_federation.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/0, start_child/1, stop_child/1, go_all/0]).
+-export([start_link/0, start_child/1, stop_child/1]).
 
 -export([init/1]).
-
--define(SUPERVISOR, ?MODULE).
 
 %% This supervisor needs to be part of the rabbit application since
 %% a) it needs to be in place when exchange recovery takes place
@@ -59,10 +58,6 @@ stop_child(Args) ->
     ok = supervisor:terminate_child(?SUPERVISOR, id(Args)),
     ok = supervisor:delete_child(?SUPERVISOR, id(Args)),
     ok.
-
-go_all() ->
-    [{ok, _} = rabbit_federation_exchange_sup:go(Pid) ||
-     {_, Pid, _, _} <- supervisor:which_children(?SUPERVISOR)].
 
 %%----------------------------------------------------------------------------
 
