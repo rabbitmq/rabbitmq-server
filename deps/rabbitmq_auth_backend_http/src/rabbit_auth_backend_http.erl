@@ -35,36 +35,47 @@ description() ->
 %%--------------------------------------------------------------------
 
 check_user_login(Username, AuthProps) ->
-    case http_get(q(user_path, [{username, Username}|AuthProps])) of
-        true           -> {ok, #user{username     = Username,
-                                     is_admin     = true,
+    case http_get(q(user_path, [{username, Username}|AuthProps]),
+                  ["deny", "allow", "admin"]) of
+        {error, _} = E -> E;
+        deny           -> {refused, "Denied by HTTP plugin", []};
+        Resp           -> {ok, #user{username     = Username,
+                                     is_admin     = Resp =:= admin,
                                      auth_backend = ?MODULE,
-                                     impl         = none}};
-        false          -> {refused, "", []};
-        {error, _} = E -> E
+                                     impl         = none}}
     end.
 
 check_vhost_access(#user{username = Username}, VHost, Permission) ->
-    http_get(q(vhost_path, [{username,   Username},
-                            {vhost,      VHost},
-                            {permission, Permission}])).
+    bool_req(vhost_path, [{username,   Username},
+                          {vhost,      VHost},
+                          {permission, Permission}]).
 
 check_resource_access(#user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
-    http_get(q(resource_path, [{username,   Username},
-                               {vhost,      VHost},
-                               {resource,   Type},
-                               {name,       Name},
-                               {permission, Permission}])).
+    bool_req(resource_path, [{username,   Username},
+                             {vhost,      VHost},
+                             {resource,   Type},
+                             {name,       Name},
+                             {permission, Permission}]).
 
 %%--------------------------------------------------------------------
 
+bool_req(PathName, Props) ->
+    case http_get(q(PathName, Props)) of
+        deny  -> false;
+        allow -> true;
+        E     -> E
+    end.
+
 http_get(Path) ->
+    http_get(Path, ["allow", "deny"]).
+
+http_get(Path, Allowed) ->
     case httpc:request(get, {Path, []}, ?HTTPC_OPTS, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
-                200 -> case parse_resp(Body) of
+                200 -> case parse_resp(Body, Allowed) of
                            {error, _} = E -> E;
                            Resp           -> Resp
                        end;
@@ -90,11 +101,11 @@ escape(V) when is_atom(V) ->
 escape(V) when is_list(V) ->
     edoc_lib:escape_uri(V).
 
-parse_resp(Resp) ->
-    case string:to_lower(string:strip(Resp)) of
-        "true"  -> true;
-        "false" -> false;
-        _       -> {error, {response, Resp}}
+parse_resp(Resp, Allowed) ->
+    Resp1 = string:to_lower(string:strip(Resp)),
+    case lists:member(Resp1, Allowed) of
+        true  -> list_to_atom(Resp1);
+        false -> {error, {response, Resp}}
     end.
 
 %%--------------------------------------------------------------------

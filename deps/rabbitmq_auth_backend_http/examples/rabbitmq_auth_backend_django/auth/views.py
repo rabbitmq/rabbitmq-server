@@ -5,12 +5,16 @@ def user(request):
     if 'username' in request.GET and 'password' in request.GET:
         username = request.GET['username']
         password = request.GET['password']
-        if authenticate(username=username, password=password):
-            return HttpResponse("true")
-    return HttpResponse("false")
+        user = authenticate(username=username, password=password)
+        if user:
+            if user.is_superuser:
+                return HttpResponse("admin")
+            else:
+                return HttpResponse("allow")
+    return HttpResponse("deny")
 
 def vhost(request):
-    return HttpResponse("true")
+    return HttpResponse("allow")
 
 def resource(request):
-    return HttpResponse("true")
+    return HttpResponse("allow")
