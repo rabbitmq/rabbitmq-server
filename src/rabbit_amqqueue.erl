@@ -214,7 +214,13 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                       case mnesia:read({rabbit_durable_queue, QueueName}) of
                           []  -> ok = store_queue(Q),
                                  B = add_default_binding(Q),
-                                 fun (Tx) -> B(Tx), Q end;
+                                 fun (Tx) ->
+                                         R = B(Tx),
+                                         case Tx of
+                                             transaction -> R;
+                                             _           -> Q
+                                         end
+                                 end;
                           %% Q exists on stopped node
                           [_] -> rabbit_misc:const(not_found)
                       end;
@@ -433,8 +439,8 @@ internal_delete(QueueName) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> rabbit_misc:const({error, not_found});
                   [_] -> Deletions = internal_delete1(QueueName),
-                         fun (Tx) -> ok = rabbit_binding:process_deletions(
-                                            Deletions, Tx)
+                         fun (Tx) -> rabbit_binding:process_deletions(
+                                       Deletions, Tx)
                          end
               end
       end).
