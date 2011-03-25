@@ -18,7 +18,8 @@
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
--export([bad_request/3, id/2, parse_bool/1, parse_int/1]).
+-export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
+         parse_int/1]).
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2]).

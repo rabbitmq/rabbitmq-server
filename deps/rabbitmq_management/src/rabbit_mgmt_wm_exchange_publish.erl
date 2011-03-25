@@ -82,9 +82,7 @@ good(MRef, Routed, ReqData, Context) ->
     rabbit_mgmt_util:reply([{routed, Routed}], ReqData, Context).
 
 bad({server_initiated_close, Code, Reason}, ReqData, Context) ->
-    rabbit_mgmt_util:bad_request(
-      list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
-      ReqData, Context).
+    rabbit_mgmt_util:bad_request_exception(Code, Reason, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
