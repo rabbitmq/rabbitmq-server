@@ -102,7 +102,10 @@
             </select>
           </td>
         </tr>
-<% if (nodes_interesting) { %>
+<%
+  if (nodes_interesting) {
+   var nodes = JSON.parse(sync_get('/nodes'));
+%>
         <tr>
           <th><label>On node:</label></th>
           <td>
