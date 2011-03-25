@@ -330,9 +330,11 @@ with_channel(VHost, ReqData,
                 exit:{{ServerClose, Code, Reason}, _}
                   when ServerClose =:= server_initiated_close;
                        ServerClose =:= server_initiated_hard_close ->
-                    bad_request(list_to_binary(io_lib:format("~p ~s",
-                                                             [Code, Reason])),
-                                ReqData, Context)
+                    bad_request_exception(Code, Reason, ReqData, Context);
+                exit:{{connection_closing, {ServerClose, Code, Reason}}, _}
+                  when ServerClose =:= server_initiated_close;
+                       ServerClose =:= server_initiated_hard_close ->
+                    bad_request_exception(Code, Reason, ReqData, Context)
             after
             catch amqp_channel:close(Ch),
             catch amqp_connection:close(Conn)
@@ -345,6 +347,10 @@ with_channel(VHost, ReqData,
                 io_lib:format("Node ~s could not be contacted", [N])),
               ReqData, Context)
     end.
+
+bad_request_exception(Code, Reason, ReqData, Context) ->
+    bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
+                ReqData, Context).
 
 all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
