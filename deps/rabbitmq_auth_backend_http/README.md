@@ -47,8 +47,10 @@ A minimal configuration file might look like:
 
 # What must my web server do?
 
-This plugin will make GET requests against the URIs listed in the
-configuration file. It will add query string parameters as follows:
+This plugin requires that your web server respond to requests in a
+certain predefined format. It will make GET requests against the URIs
+listed in the configuration file. It will add query string parameters
+as follows:
 
 ### user_path
 
@@ -80,7 +82,9 @@ containing a single word:
 
 # Debugging
 
-Check the RabbitMQ logs.
+Check the RabbitMQ logs if things don't seem to be working
+properly. Look for log messages containing "rabbit_auth_backend_http
+failed".
 
 # Example
 
