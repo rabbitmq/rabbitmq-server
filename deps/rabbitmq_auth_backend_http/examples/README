@@ -2,8 +2,9 @@ rabbitmq_auth_backend_django is a very very simple Django application
 that rabbitmq-auth-backend-http can authenticate against. It's really
 not designed to be anything other than an example.
 
-Run start.sh to launch it. You will probably need to hack start.sh if
-you are not running Debian / Ubuntu.
+Run start.sh to launch it after installing Django somehow (e.g. sudo
+apt-get install python-django). You may need to hack start.sh if you
+are not running Debian / Ubuntu.
 
 The app will create a SQLite database in /tmp/. It uses the standard
 Django authentication database. All users get access to all vhosts and

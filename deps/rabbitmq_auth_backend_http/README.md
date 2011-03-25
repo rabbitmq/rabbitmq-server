@@ -84,9 +84,10 @@ Check the RabbitMQ logs.
 
 # Example
 
-In `examples/rabbitmq_auth_backend_django` there's a very simple Django
-app that can be used for authentication. On Debian / Ubuntu you
-should be able to run start.sh to launch it. It's really not designed
-to be anything other than an example.
+In `examples/rabbitmq_auth_backend_django` there's a very simple
+Django app that can be used for authentication. On Debian / Ubuntu you
+should be able to run start.sh to launch it after installing the
+python-django package. It's really not designed to be anything other
+than an example.
 
 See `examples/README` for slightly more information.
