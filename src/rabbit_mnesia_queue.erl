@@ -111,6 +111,8 @@
 
 -spec erase_tx(rabbit_types:txn(), dict()) -> dict().
 
+-spec table_length(atom()) -> non_neg_integer().
+
 -spec confirm([pub()], state()) -> state().
 
 start(_DurableQueues) -> ok.
@@ -172,7 +174,7 @@ delete_and_terminate(State = #state { q_table = QTable, p_table = PTable }) ->
 
 purge(State = #state { q_table = QTable }) ->
     {atomic, Result} =
-        mnesia:transaction(fun () -> LQ = length(mnesia:all_keys(QTable)),
+        mnesia:transaction(fun () -> LQ = table_length(QTable),
                                      ok = clear_table(QTable),
                                      {LQ, State}
                            end),
@@ -263,13 +265,12 @@ requeue(SeqIds, PropsF, State) ->
     Result.
 
 len(#state { q_table = QTable }) ->
-    {atomic, Result} =
-        mnesia:transaction(fun () -> length(mnesia:all_keys(QTable)) end),
+    {atomic, Result} = mnesia:transaction(fun () -> table_length(QTable) end),
     Result.
 
 is_empty(#state { q_table = QTable }) ->
     {atomic, Result} =
-        mnesia:transaction(fun () -> 0 == length(mnesia:all_keys(QTable)) end),
+        mnesia:transaction(fun () -> 0 == table_length(QTable) end),
     Result.
 
 set_ram_duration_target(_, State) -> State.
@@ -287,9 +288,9 @@ status(#state { q_table = QTable,
                 next_seq_id = NextSeqId }) ->
     {atomic, Result} =
         mnesia:transaction(
-          fun () -> LQ = length(mnesia:all_keys(QTable)),
-                    LP = length(mnesia:all_keys(PTable)),
-                    [{len, LQ}, {next_seq_id, NextSeqId}, {acks, LP}]
+          fun () -> [{len, table_length(QTable)},
+                     {next_seq_id, NextSeqId},
+                     {acks, table_length(PTable)}]
           end),
     Result.
 
@@ -307,23 +308,22 @@ create_table(Table, RecordName, Type, Attributes) ->
     end.
 
 clear_table(Table) ->
-    case mnesia:first(Table) of
-        '$end_of_table' -> ok;
-        Key -> ok = mnesia:delete(Table, Key, 'write'),
-               clear_table(Table)
-    end.
+    mnesia:foldl(fun (#msg_status { seq_id = SeqId }, ok) ->
+                         ok = mnesia:delete(Table, SeqId, 'write')
+                 end,
+                 ok,
+                 Table).
 
 delete_nonpersistent_msgs(QTable) ->
-    lists:foreach(
-      fun (Key) ->
-              [MsgStatus] = mnesia:read(QTable, Key, 'read'),
-              case MsgStatus of
-                  #msg_status { msg = #basic_message {
-                                  is_persistent = true }} -> ok;
-                  _ -> ok = mnesia:delete(QTable, Key, 'write')
-              end
-      end,
-      mnesia:all_keys(QTable)).
+    mnesia:foldl(fun (MsgStatus = #msg_status { seq_id = SeqId }, ok) ->
+                         case MsgStatus of
+                             #msg_status { msg = #basic_message {
+                                             is_persistent = true }} -> ok;
+                             _ -> ok = mnesia:delete(QTable, SeqId, 'write')
+                         end
+                 end,
+                 ok,
+                 QTable).
 
 internal_fetch(AckRequired, State) ->
     case q_pop(State) of
@@ -386,14 +386,13 @@ post_pop(true,
          MsgStatus = #msg_status {
            seq_id = SeqId, msg = Msg, is_delivered = IsDelivered },
          State = #state { q_table = QTable }) ->
-    LQ = length(mnesia:all_keys(QTable)),
+    LQ = table_length(QTable),
     ok = add_pending_ack(MsgStatus #msg_status { is_delivered = true }, State),
     {Msg, IsDelivered, SeqId, LQ};
 post_pop(false,
          #msg_status { msg = Msg, is_delivered = IsDelivered },
          #state { q_table = QTable }) ->
-    LQ = length(mnesia:all_keys(QTable)),
-    {Msg, IsDelivered, undefined, LQ}.
+    {Msg, IsDelivered, undefined, table_length(QTable)}.
 
 add_pending_ack(MsgStatus, #state { p_table = PTable }) ->
     ok = mnesia:write(PTable, MsgStatus, 'write').
@@ -423,6 +422,8 @@ lookup_tx(Txn, TxnDict) ->
 store_tx(Txn, Tx, TxnDict) -> dict:store(Txn, Tx, TxnDict).
 
 erase_tx(Txn, TxnDict) -> dict:erase(Txn, TxnDict).
+
+table_length(Table) -> mnesia:foldl(fun (_, N) -> N + 1 end, 0, Table).
 
 confirm(Pubs, State = #state { confirmed = Confirmed }) ->
     MsgIds =
