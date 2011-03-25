@@ -31,14 +31,12 @@ start_link(Args) ->
 
 %%----------------------------------------------------------------------------
 
-init({Upstreams, DownstreamX, Durable}) ->
-    rabbit_federation_db:set_sup_for_exchange(DownstreamX, self()),
-    Specs = [spec(Upstream, DownstreamX, Durable) || Upstream <- Upstreams],
+init({Upstreams, X}) ->
+    Specs = [spec(Upstream, X) || Upstream <- Upstreams],
     {ok, {{one_for_one, 2, 2}, Specs}}.
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, DownstreamX, Durable) ->
-    {Upstream, {rabbit_federation_link, start_link,
-                [{Upstream, DownstreamX, Durable}]},
+spec(Upstream = #upstream{reconnect_delay = Delay}, X) ->
+    {Upstream, {rabbit_federation_link, start_link, [{Upstream, X}]},
      {transient, Delay},
      ?MAX_WAIT, worker,
      [rabbit_federation_link]}.

@@ -125,12 +125,11 @@ is_federation_exchange(_) ->
 
 %%----------------------------------------------------------------------------
 
-exchange_to_sup_args(#exchange{ name = Downstream, durable = Durable,
-                                arguments = Args }) ->
+exchange_to_sup_args(X = #exchange{name = Name, arguments = Args}) ->
     {array, UpstreamTables} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    Upstreams = [rabbit_federation_util:upstream_from_table(U, Downstream) ||
+    Upstreams = [rabbit_federation_util:upstream_from_table(U, Name) ||
                     {table, U} <- UpstreamTables],
-    {Upstreams, Downstream, Durable}.
+    {Upstreams, X}.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of

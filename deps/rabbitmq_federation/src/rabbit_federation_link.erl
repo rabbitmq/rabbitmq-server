@@ -48,11 +48,17 @@ start_link(Args) ->
 
 %%----------------------------------------------------------------------------
 
-init(Args) ->
-    gen_server2:cast(self(), {init, Args}),
-    {ok, not_started}.
+init(Args = {_, X}) ->
+    join(rabbit_federation_exchanges),
+    join({rabbit_federation_exchange, X}),
+    {ok, {not_started, Args}}.
 
-handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
+join(Name) ->
+    pg2_fixed:create(Name),
+    ok = pg2_fixed:join(Name, self()).
+
+handle_cast(go, S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
+                                                        durable = Durable}}}) ->
     case open(direct, rabbit_federation_util:local_params()) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
@@ -79,6 +85,9 @@ handle_cast({init, {Upstream, DownstreamX, Durable}}, S0 = not_started) ->
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
+
+handle_call({enqueue, _, _}, _From, State = {not_started, _}) ->
+    {reply, ok, State};
 
 handle_call({enqueue, Serial, Cmd}, From,
             State = #state{waiting_cmds = Waiting}) ->
@@ -140,7 +149,7 @@ handle_info(Msg, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(_Reason, not_started) ->
+terminate(_Reason, {not_started, _}) ->
     ok;
 
 terminate(_Reason, #state{downstream_channel    = DCh,

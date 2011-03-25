@@ -20,11 +20,13 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([go_all/0]).
--export([add_binding/3, remove_binding/3, stop/1]).
+-export([add_binding/3, remove_binding/3, go/1, stop/1]).
 
 go_all() ->
-    [{ok, _} = rabbit_federation_exchange_sup:go(Pid) ||
-     {_, Pid, _, _} <- supervisor:which_children(?SUPERVISOR)].
+    cast_all(go).
+
+go(X) ->
+    cast(X, go).
 
 add_binding(Serial, X, B) ->
     call(X, {enqueue, Serial, {add_binding, B}}).
@@ -37,7 +39,17 @@ stop(X) ->
 
 %%----------------------------------------------------------------------------
 
-call(#exchange{ name = Downstream }, Msg) ->
-    Sup = rabbit_federation_db:sup_for_exchange(Downstream),
-    [gen_server2:call(Pid, Msg, infinity) ||
-        {_, Pid, _, _} <- supervisor2:which_children(Sup), Pid =/= undefined].
+call(X = #exchange{}, Msg) ->
+    [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
+
+cast(X = #exchange{}, Msg) ->
+    [gen_server2:cast(Pid, Msg) || Pid <- x(X)].
+
+cast_all(Msg) ->
+    [gen_server2:cast(Pid, Msg) || Pid <- all()].
+
+all() ->
+    pg2_fixed:get_members(rabbit_federation_exchanges).
+
+x(X) ->
+    pg2_fixed:get_members({rabbit_federation_exchange, X}).

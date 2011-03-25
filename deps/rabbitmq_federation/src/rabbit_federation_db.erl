@@ -16,8 +16,7 @@
 
 -module(rabbit_federation_db).
 
--export([init/0, sup_for_exchange/1, set_sup_for_exchange/2,
-         forget_exchange/1]).
+-export([init/0]).
 
 -export([get_active_suffix/2, set_active_suffix/3]).
 
@@ -34,16 +33,6 @@ init() ->
                    ok = file:delete(F),
                    {ok, F} = dets:open_file(F, Args)
     end.
-
-sup_for_exchange(X) ->
-    [{_, Pid}] = dets:lookup(file(), {pid, X}),
-    Pid.
-
-set_sup_for_exchange(X, Pid) ->
-    ok = dets:insert(file(), {{pid, X}, Pid}).
-
-forget_exchange(X) ->
-    ok = dets:delete(file(), {pid, X}).
 
 %%----------------------------------------------------------------------------
 
