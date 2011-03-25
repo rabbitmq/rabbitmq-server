@@ -13,6 +13,10 @@ conceptually very simple.
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
 
+Binary packages are available at github in the downloads section.
+
+This plugin does not depend on any others.
+
 # Enabling the plugin
 
 To enable the plugin, set the value of the `auth_backends` configuration item
