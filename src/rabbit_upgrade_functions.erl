@@ -26,7 +26,7 @@
 -rabbit_upgrade({internal_exchanges,    mnesia, []}).
 -rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
 -rabbit_upgrade({topic_trie,            mnesia, []}).
--rabbit_upgrade({exchange_event_serialisation, mnesia, []}).
+-rabbit_upgrade({exchange_event_serial, mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -38,7 +38,7 @@
 -spec(internal_exchanges/0 :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
 -spec(topic_trie/0 :: () -> 'ok').
--spec(exchange_event_serialisation/0 :: () -> 'ok').
+-spec(exchange_event_serial/0 :: () -> 'ok').
 
 -endif.
 
@@ -103,7 +103,7 @@ topic_trie() ->
                                        {attributes, [trie_binding, value]},
                                        {type, ordered_set}]).
 
-exchange_event_serialisation() ->
+exchange_event_serial() ->
     create(rabbit_exchange_serial, [{record_name, exchange_serial},
                                     {attributes, [name, serial]}]).
 
