@@ -5,6 +5,9 @@ authentication (determining who can log in) and authorisation
 (determining what permissions they have) by making requests to an HTTP
 server.
 
+As with all authentication plugins, this one requires rabbitmq-server
+2.3.1 or later.
+
 Note: it's at an early stage of development, although it's
 conceptually very simple.
 
@@ -13,7 +16,7 @@ conceptually very simple.
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
 
-Binary packages are available at github in the downloads section.
+**Binary packages are available at github in the downloads section.**
 
 This plugin does not depend on any others.
 
