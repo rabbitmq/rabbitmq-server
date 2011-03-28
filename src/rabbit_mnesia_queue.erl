@@ -159,17 +159,14 @@ init(QueueName, IsDurable, Recover, _AsyncCallback, _SyncCallback) ->
           end),
     State.
 
-terminate(State = #state { q_table = QTable, p_table = PTable }) ->
+terminate(State = #state { p_table = PTable }) ->
     {atomic, ok} = mnesia:clear_table(PTable),
-    {atomic, ok} = mnesia:dump_tables([QTable, PTable]),
     State.
 
 delete_and_terminate(State = #state { q_table = QTable, p_table = PTable }) ->
-    {atomic, _} =
-        mnesia:transaction(fun () -> ok = clear_table(QTable),
-                                     ok = clear_table(PTable)
-                           end),
-    {atomic, ok} = mnesia:dump_tables([QTable, PTable]),
+    {atomic, _} = mnesia:transaction(fun () -> ok = clear_table(QTable),
+                                               ok = clear_table(PTable)
+                                     end),
     State.
 
 purge(State = #state { q_table = QTable }) ->
@@ -298,7 +295,7 @@ create_table(Table, RecordName, Type, Attributes) ->
     case mnesia:create_table(Table, [{record_name, RecordName},
                                      {type, Type},
                                      {attributes, Attributes},
-                                     {ram_copies, [node()]}]) of
+                                     {disc_copies, [node()]}]) of
         {atomic, ok} -> ok;
         {aborted, {already_exists, Table}} ->
             RecordName = mnesia:table_info(Table, record_name),
