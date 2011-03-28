@@ -408,16 +408,16 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
 
 process_deletions(Deletions) ->
     Serials = dict:fold(
-                fun (_XName, {X, Deleted, Bindings}, Acc) ->
+                fun (XName, {X, Deleted, Bindings}, Acc) ->
                         FlatBindings = lists:flatten(Bindings),
                         pd_callback(transaction, X, Deleted, FlatBindings),
-                        dict:store(X, rabbit_exchange:serial(X), Acc)
+                        dict:store(XName, rabbit_exchange:serial(X), Acc)
                 end, Deletions, dict:new()),
     fun() ->
             dict:fold(
               fun (XName, {X, Deleted, Bindings}, ok) ->
                       FlatBindings = lists:flatten(Bindings),
-                      Serial = dict:fetch(X, Serials),
+                      Serial = dict:fetch(XName, Serials),
                       pd_callback(Serial, X, Deleted, FlatBindings),
                       [rabbit_event:notify(binding_deleted, info(B)) ||
                           B <- FlatBindings],
