@@ -433,11 +433,7 @@ internal_delete(QueueName) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> rabbit_misc:const({error, not_found});
                   [_] -> Deletions = internal_delete1(QueueName),
-                         Serials = rabbit_binding:process_deletions(
-                                     Deletions, transaction),
-                         fun () -> rabbit_binding:process_deletions(
-                                     Deletions, Serials)
-                         end
+                         rabbit_binding:process_deletions(Deletions)
               end
       end).
 
@@ -471,12 +467,9 @@ on_node_down(Node) ->
                                        #amqqueue{name = QueueName, pid = Pid}
                                            <- mnesia:table(rabbit_queue),
                                        node(Pid) == Node])),
-                Dels1 = lists:foldl(fun rabbit_binding:combine_deletions/2,
-                                    rabbit_binding:new_deletions(), Dels),
-                Serials = rabbit_binding:process_deletions(Dels1, transaction),
-                fun () ->
-                        rabbit_binding:process_deletions(Dels1, Serials)
-                end
+                rabbit_binding:process_deletions(
+                  lists:foldl(fun rabbit_binding:combine_deletions/2,
+                              rabbit_binding:new_deletions(), Dels))
       end).
 
 delete_queue(QueueName) ->

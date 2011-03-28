@@ -290,13 +290,9 @@ delete0(XName, Fun) ->
       fun (X) ->
               case Fun(X) of
                   {deleted, X, Bs, Deletions} ->
-                      Dels1 = rabbit_binding:add_deletion(
-                                XName, {X, deleted, Bs}, Deletions),
-                      Serials = rabbit_binding:process_deletions(
-                                  Dels1, transaction),
-                      fun () ->
-                              rabbit_binding:process_deletions(Dels1, Serials)
-                      end;
+                      rabbit_binding:process_deletions(
+                        rabbit_binding:add_deletion(
+                          XName, {X, deleted, Bs}, Deletions));
                   {error, _InUseOrNotFound} = E ->
                       rabbit_misc:const(E)
               end
