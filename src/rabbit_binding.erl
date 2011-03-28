@@ -122,19 +122,22 @@ add(Binding, InnerFun) ->
               case InnerFun(Src, Dst) of
                   ok ->
                       case mnesia:read({rabbit_route, B}) of
-                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
-                                                   fun mnesia:write/3),
-                                 fun (Tx) ->
-                                         ok = rabbit_exchange:callback(
-                                                Src, add_binding, [Tx, Src, B]),
-                                         process_addition(Src, B, Tx)
-                                 end;
-                          [_] -> fun rabbit_misc:const_ok/1
+                          []  -> add_notify(Src, Dst, B);
+                          [_] -> fun rabbit_misc:const_ok/0
                       end;
                   {error, _} = Err ->
                       rabbit_misc:const(Err)
               end
       end).
+
+add_notify(Src, Dst, B) ->
+    ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:write/3),
+    ok = rabbit_exchange:callback(Src, add_binding, [transaction, Src, B]),
+    Serial = serial(Src),
+    fun () ->
+            ok = rabbit_exchange:callback(Src, add_binding, [Serial, Src, B]),
+            ok = rabbit_event:notify(binding_created, info(B))
+    end.
 
 remove(Binding, InnerFun) ->
     binding_action(
@@ -160,7 +163,8 @@ remove(Binding, InnerFun) ->
                   {error, _} = Err ->
                       rabbit_misc:const(Err);
                   {ok, Deletions} ->
-                      fun (Tx) -> process_deletions(Deletions, Tx) end
+                      Serials = process_deletions(Deletions, transaction),
+                      fun () -> process_deletions(Deletions, Serials) end
               end
       end).
 
@@ -403,12 +407,6 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
     {anything_but(undefined, X1, X2),
      anything_but(not_deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
-
-process_addition(Src, _B, transaction) ->
-    serial(Src);
-
-process_addition(_Src, B, _Serial) ->
-    ok = rabbit_event:notify(binding_created, info(B)).
 
 process_deletions(Deletions, transaction) ->
     process_deletions(

@@ -270,28 +270,36 @@ process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->
     {WorkList, SeenXs, [QName | QNames]}.
 
-call_with_exchange(XName, Fun, PrePostCommitFun) ->
+call_with_exchange(XName, Fun) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> Result = case mnesia:read({rabbit_exchange, XName}) of
-                             []  -> {error, not_found};
-                             [X] -> Fun(X)
-                         end,
-                fun(Tx) -> PrePostCommitFun(Result, Tx) end
+      fun () -> case mnesia:read({rabbit_exchange, XName}) of
+                    []  -> rabbit_misc:const({error, not_found});
+                    [X] -> Fun(X)
+                end
       end).
 
 delete(XName, IfUnused) ->
+    delete0(XName, case IfUnused of
+                       true  -> fun conditional_delete/1;
+                       false -> fun unconditional_delete/1
+                   end).
+
+delete0(XName, Fun) ->
     call_with_exchange(
       XName,
-      case IfUnused of
-          true  -> fun conditional_delete/1;
-          false -> fun unconditional_delete/1
-      end,
-      fun ({deleted, X, Bs, Deletions}, Tx) ->
-              rabbit_binding:process_deletions(
-                rabbit_binding:add_deletion(
-                  XName, {X, deleted, Bs}, Deletions), Tx);
-          (Error = {error, _InUseOrNotFound}, _Tx) ->
-              Error
+      fun (X) ->
+              case Fun(X) of
+                  {deleted, X, Bs, Deletions} ->
+                      Dels1 = rabbit_binding:add_deletion(
+                                XName, {X, deleted, Bs}, Deletions),
+                      Serials = rabbit_binding:process_deletions(
+                                  Dels1, transaction),
+                      fun () ->
+                              rabbit_binding:process_deletions(Dels1, Serials)
+                      end;
+                  {error, _InUseOrNotFound} = E ->
+                      rabbit_misc:const(E)
+              end
       end).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
