@@ -466,18 +466,17 @@ drop_expired(QPid) ->
     gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> qlc:e(qlc:q([delete_queue(QueueName) ||
-                                #amqqueue{name = QueueName, pid = Pid}
-                                    <- mnesia:table(rabbit_queue),
-                                node(Pid) == Node]))
-      end,
-      fun (Deletions, Tx) ->
-              rabbit_binding:process_deletions(
-                lists:foldl(fun rabbit_binding:combine_deletions/2,
-                            rabbit_binding:new_deletions(),
-                            Deletions),
-                Tx)
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () -> Dels = qlc:e(qlc:q([delete_queue(QueueName) ||
+                                       #amqqueue{name = QueueName, pid = Pid}
+                                           <- mnesia:table(rabbit_queue),
+                                       node(Pid) == Node])),
+                Dels1 = lists:foldl(fun rabbit_binding:combine_deletions/2,
+                                    rabbit_binding:new_deletions(), Dels),
+                Serials = rabbit_binding:process_deletions(Dels1, transaction),
+                fun () ->
+                        rabbit_binding:process_deletions(Dels1, Serials)
+                end
       end).
 
 delete_queue(QueueName) ->
