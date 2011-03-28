@@ -131,7 +131,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              callback(Exchange, create, [Tx, Exchange]),
+              ok = (type_to_module(Type)):create(Tx, Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
