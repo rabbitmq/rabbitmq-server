@@ -871,4 +871,3 @@ is_process_alive(Pid) ->
         true -> true;
         _    -> false
     end.
-
