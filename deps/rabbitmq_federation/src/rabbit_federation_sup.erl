@@ -41,16 +41,12 @@ start_link() ->
     rabbit_federation_db:init(),
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
-start_child(Args = {_, X}) ->
+start_child(Args) ->
     {ok, Pid} = supervisor:start_child(
                   ?SUPERVISOR,
                   {id(Args), {rabbit_federation_link_sup, start_link, [Args]},
                    transient, ?MAX_WAIT, supervisor,
                    [rabbit_federation_link_sup]}),
-    case federation_up() of
-        true  -> rabbit_federation_links:go(X);
-        false -> ok
-    end,
     {ok, Pid}.
 
 stop_child(Args) ->
@@ -59,10 +55,6 @@ stop_child(Args) ->
     ok.
 
 %%----------------------------------------------------------------------------
-
-federation_up() ->
-    lists:keysearch(rabbit_federation, 1,
-                    application:which_applications(infinity)) =/= false.
 
 id(Args) ->
     Args.

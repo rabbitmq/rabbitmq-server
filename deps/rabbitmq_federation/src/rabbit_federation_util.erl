@@ -20,7 +20,7 @@
 -include("rabbit_federation.hrl").
 
 -export([purpose_arg/0, has_purpose_arg/1, upstream_from_table/2,
-         local_params/0]).
+         local_params/0, federation_up/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -32,15 +32,15 @@ has_purpose_arg(X) ->
     rabbit_misc:table_lookup(Args, <<"x-purpose">>) ==
         {longstr, <<"federation">>}.
 
-%%----------------------------------------------------------------------------
+federation_up() ->
+    lists:keysearch(rabbit_federation, 1,
+                    application:which_applications(infinity)) =/= false.
 
 local_params() ->
     {ok, U} = application:get_env(rabbit_federation, local_username),
     {ok, P} = application:get_env(rabbit_federation, local_password),
     #amqp_params{username = list_to_binary(U),
                  password = list_to_binary(P)}.
-
-%%----------------------------------------------------------------------------
 
 upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
     TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
@@ -54,6 +54,8 @@ upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
                 [P|_] -> P
             end,
     upstream_from_properties(Props, DX, DVHost).
+
+%%----------------------------------------------------------------------------
 
 %% For all the props in Props1, does Props2 match?
 all_match(Props1, Props2) ->

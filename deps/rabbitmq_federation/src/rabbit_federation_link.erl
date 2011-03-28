@@ -49,39 +49,24 @@ start_link(Args) ->
 %%----------------------------------------------------------------------------
 
 init(Args = {_, X}) ->
-    join(rabbit_federation_exchanges),
-    join({rabbit_federation_exchange, X}),
+    rabbit_federation_links:join(rabbit_federation_exchanges),
+    rabbit_federation_links:join({rabbit_federation_exchange, X}),
+    gen_server2:cast(self(), maybe_go),
     {ok, {not_started, Args}}.
 
-join(Name) ->
-    pg2_fixed:create(Name),
-    ok = pg2_fixed:join(Name, self()).
-
-handle_cast(go, S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
-                                                        durable = Durable}}}) ->
-    case open(direct, rabbit_federation_util:local_params()) of
-        {ok, DConn, DCh} ->
-            #'confirm.select_ok'{} =
-                amqp_channel:call(DCh, #'confirm.select'{}),
-            amqp_channel:register_confirm_handler(DCh, self()),
-            case open(network, Upstream#upstream.params) of
-                {ok, Conn, Ch} ->
-                    State = #state{downstream_connection = DConn,
-                                   downstream_channel    = DCh,
-                                   downstream_exchange   = DownstreamX,
-                                   upstream              = Upstream,
-                                   connection            = Conn,
-                                   channel               = Ch},
-                    State1 = consume_from_upstream_queue(State, Durable),
-                    State2 = ensure_upstream_bindings(State1),
-                    {noreply, State2};
-                E ->
-                    ensure_closed(DConn, DCh),
-                    {stop, E, S0}
-            end;
-        E ->
-            {stop, E, S0}
+handle_cast(maybe_go, S0 = {not_started, _Args}) ->
+    case rabbit_federation_util:federation_up() of
+        true  -> go(S0);
+        false -> {noreply, S0}
     end;
+
+handle_cast(go, S0 = {not_started, _Args}) ->
+    go(S0);
+
+%% There's a small race - I think we can realise federation is up
+%% before go_all gets invoked. Ignore.
+handle_cast(go, State) ->
+    {noreply, State};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -244,6 +229,32 @@ key(#binding{source      = Source,
     {Source, Key, Args}.
 
 %%----------------------------------------------------------------------------
+
+go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
+                                           durable = Durable}}}) ->
+    case open(direct, rabbit_federation_util:local_params()) of
+        {ok, DConn, DCh} ->
+            #'confirm.select_ok'{} =
+               amqp_channel:call(DCh, #'confirm.select'{}),
+            amqp_channel:register_confirm_handler(DCh, self()),
+            case open(network, Upstream#upstream.params) of
+                {ok, Conn, Ch} ->
+                    State = #state{downstream_connection = DConn,
+                                   downstream_channel    = DCh,
+                                   downstream_exchange   = DownstreamX,
+                                   upstream              = Upstream,
+                                   connection            = Conn,
+                                   channel               = Ch},
+                    State1 = consume_from_upstream_queue(State, Durable),
+                    State2 = ensure_upstream_bindings(State1),
+                    {noreply, State2};
+                E ->
+                    ensure_closed(DConn, DCh),
+                    {stop, E, S0}
+            end;
+        E ->
+            {stop, E, S0}
+    end.
 
 consume_from_upstream_queue(State = #state{upstream            = Upstream,
                                            connection          = Conn,
