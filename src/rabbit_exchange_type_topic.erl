@@ -20,7 +20,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2, serialise_events/1]).
+-export([description/0, route/2, serialise_events/0]).
 -export([validate/1, create/2, recover/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -46,7 +46,7 @@ route(#exchange{name = X},
                       mnesia:async_dirty(fun trie_match/2, [X, Words])
                   end || RKey <- Routes]).
 
-serialise_events(_X) -> false.
+serialise_events() -> false.
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 

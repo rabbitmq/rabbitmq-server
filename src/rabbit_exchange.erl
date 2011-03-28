@@ -20,7 +20,7 @@
 
 -export([recover/0, declare/6, lookup/1, lookup_or_die/1, list/1, info_keys/0,
          info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
--export([callback/3]).
+-export([callback/3, serialise_events/1]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
 -export([assert_equivalence/6, assert_args_equivalence/2, check_type/1]).
@@ -72,9 +72,8 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) ->
-                        boolean() | 'ok').
-
+-spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) -> 'ok').
+-spec(serialise_events/1:: (rabbit_types:exchange()) -> boolean()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -129,8 +128,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
       fun ({new, Exchange}, Tx) ->
               S = case Tx of
                       true  -> transaction;
-                      false -> case callback(Exchange, serialise_events,
-                                             [Exchange]) of
+                      false -> case serialise_events(Exchange) of
                                    true  -> 0;
                                    false -> none
                                end
@@ -306,6 +304,9 @@ maybe_auto_delete(#exchange{auto_delete = true} = X) ->
 
 callback(#exchange{type = XType}, Fun, Args) ->
     apply(type_to_module(XType), Fun, Args).
+
+serialise_events(#exchange{type = XType}) ->
+    apply(type_to_module(XType), serialise_events, []).
 
 conditional_delete(X = #exchange{name = XName}) ->
     case rabbit_binding:has_for_source(XName) of

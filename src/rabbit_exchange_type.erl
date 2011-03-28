@@ -25,7 +25,7 @@ behaviour_info(callbacks) ->
      %% Should Rabbit ensure that all events delivered to an individual exchange
      %% this can be serialised? (they might still be delivered out
      %% of order, but there'll be a serial number).
-     {serialise_events, 1},
+     {serialise_events, 0},
 
      {route, 2},
 
