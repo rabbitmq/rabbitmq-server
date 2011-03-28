@@ -412,40 +412,34 @@ process_addition(_Src, B, _Serial) ->
 
 process_deletions(Deletions, transaction) ->
     process_deletions(
-      fun (X, Bindings, Acc) ->
-              pd_callback(transaction, remove_bindings, X, Bindings),
-              dict:store(X, serial(X), Acc)
-      end,
-      fun (X, Bindings, Acc) ->
-              pd_callback(transaction, delete, X, Bindings),
+      fun (Mode, X, Bindings, Acc) ->
+              pd_callback(transaction, Mode, X, Bindings),
               dict:store(X, serial(X), Acc)
       end,
       Deletions, dict:new(), true);
 
 process_deletions(Deletions, Serials) ->
     process_deletions(
-      fun (X, Bindings, Acc) ->
-              pd_callback(dict:fetch(X, Serials), remove_bindings, X, Bindings),
-              Acc
-      end,
-      fun (X, Bindings, Acc) ->
-              pd_callback(dict:fetch(X, Serials), delete, X, Bindings),
-              rabbit_event:notify(exchange_deleted, [{name, X#exchange.name}]),
+      fun (Mode, X, Bindings, Acc) ->
+              pd_callback(dict:fetch(X, Serials), Mode, X, Bindings),
+              case Mode of
+                  delete -> rabbit_event:notify(exchange_deleted,
+                                                [{name, X#exchange.name}]);
+                  _      -> ok
+              end,
               Acc
       end,
       Deletions, ok, false).
 
-process_deletions(NotDeletedFun, DeletedFun, Deletions, Acc0, Tx) ->
+process_deletions(Fun, Deletions, Acc0, Tx) ->
     dict:fold(
       fun (_XName, {X, Deleted, Bindings}, Acc) ->
               FlatBindings = lists:flatten(Bindings),
               [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
                   B <- FlatBindings],
               case Deleted of
-                  not_deleted ->
-                      NotDeletedFun(X, FlatBindings, Acc);
-                  deleted ->
-                      DeletedFun(X, FlatBindings, Acc)
+                  not_deleted -> Fun(remove_bindings, X, FlatBindings, Acc);
+                  deleted     -> Fun(delete, X, FlatBindings, Acc)
               end
       end, Acc0, Deletions).
 
