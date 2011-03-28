@@ -122,7 +122,9 @@ add(Binding, InnerFun) ->
               case InnerFun(Src, Dst) of
                   ok ->
                       case mnesia:read({rabbit_route, B}) of
-                          []  -> add_notify(Src, Dst, B);
+                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
+                                                   fun mnesia:write/3),
+                                 add_notify(Src, B);
                           [_] -> fun rabbit_misc:const_ok/0
                       end;
                   {error, _} = Err ->
@@ -130,12 +132,11 @@ add(Binding, InnerFun) ->
               end
       end).
 
-add_notify(Src, Dst, B) ->
-    ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:write/3),
-    ok = rabbit_exchange:callback(Src, add_binding, [transaction, Src, B]),
-    Serial = rabbit_exchange:serial(Src),
+add_notify(X, B) ->
+    ok = rabbit_exchange:callback(X, add_binding, [transaction, X, B]),
+    Serial = rabbit_exchange:serial(X),
     fun () ->
-            ok = rabbit_exchange:callback(Src, add_binding, [Serial, Src, B]),
+            ok = rabbit_exchange:callback(X, add_binding, [Serial, X, B]),
             ok = rabbit_event:notify(binding_created, info(B))
     end.
 
