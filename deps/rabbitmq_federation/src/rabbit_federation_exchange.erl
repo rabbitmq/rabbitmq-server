@@ -29,7 +29,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2, serialise_events/1]).
+-export([description/0, route/2, serialise_events/0]).
 -export([validate/1, create/2, recover/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
@@ -39,7 +39,7 @@ description() ->
     [{name, <<"x-federation">>},
      {description, <<"Federation exchange">>}].
 
-serialise_events(_X) -> true.
+serialise_events() -> true.
 
 route(X, Delivery) ->
     with_module(X, fun (M) -> M:route(X, Delivery) end).
@@ -102,7 +102,7 @@ assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
 %%----------------------------------------------------------------------------
 
 serial(Serial, X) ->
-    case with_module(X, fun (M) -> M:serialise_events(X) end) of
+    case with_module(X, fun (M) -> M:serialise_events() end) of
         true  -> Serial;
         false -> none
     end.
