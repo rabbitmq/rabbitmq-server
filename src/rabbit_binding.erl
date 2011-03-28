@@ -21,7 +21,7 @@
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
-         process_deletions/2]).
+         process_deletions/1]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
@@ -77,7 +77,7 @@
         (rabbit_types:binding_destination()) -> deletions()).
 -spec(remove_transient_for_destination/1 ::
         (rabbit_types:binding_destination()) -> deletions()).
--spec(process_deletions/2 :: (deletions(), boolean()) -> 'ok').
+-spec(process_deletions/1 :: (deletions()) -> 'ok').
 -spec(combine_deletions/2 :: (deletions(), deletions()) -> deletions()).
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
                          {'undefined' | rabbit_types:exchange(),
@@ -122,20 +122,22 @@ add(Binding, InnerFun) ->
               case InnerFun(Src, Dst) of
                   ok ->
                       case mnesia:read({rabbit_route, B}) of
-                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
-                                                   fun mnesia:write/3),
-                                 fun (Tx) ->
-                                         ok = rabbit_exchange:callback(
-                                                Src, add_binding, [Tx, Src, B]),
-                                         rabbit_event:notify_if(
-                                           not Tx, binding_created, info(B))
-                                 end;
-                          [_] -> fun rabbit_misc:const_ok/1
+                          []  -> add_notify(Src, Dst, B);
+                          [_] -> fun rabbit_misc:const_ok/0
                       end;
                   {error, _} = Err ->
                       rabbit_misc:const(Err)
               end
       end).
+
+add_notify(Src, Dst, B) ->
+    ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:write/3),
+    ok = rabbit_exchange:callback(Src, add_binding, [transaction, Src, B]),
+    Serial = serial(Src),
+    fun () ->
+            ok = rabbit_exchange:callback(Src, add_binding, [Serial, Src, B]),
+            ok = rabbit_event:notify(binding_created, info(B))
+    end.
 
 remove(Binding, InnerFun) ->
     binding_action(
@@ -158,10 +160,8 @@ remove(Binding, InnerFun) ->
                           end
                   end,
               case Result of
-                  {error, _} = Err ->
-                      rabbit_misc:const(Err);
-                  {ok, Deletions} ->
-                      fun (Tx) -> ok = process_deletions(Deletions, Tx) end
+                  {error, _} = Err -> rabbit_misc:const(Err);
+                  {ok, Deletions}  -> process_deletions(Deletions)
               end
       end).
 
@@ -405,19 +405,46 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      anything_but(not_deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
 
-process_deletions(Deletions, Tx) ->
-    dict:fold(
-      fun (_XName, {X, Deleted, Bindings}, ok) ->
-              FlatBindings = lists:flatten(Bindings),
-              [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
-                  B <- FlatBindings],
-              case Deleted of
-                  not_deleted ->
-                      rabbit_exchange:callback(X, remove_bindings,
-                                               [Tx, X, FlatBindings]);
-                  deleted ->
-                      rabbit_event:notify_if(not Tx, exchange_deleted,
-                                             [{name, X#exchange.name}]),
-                      rabbit_exchange:callback(X, delete, [Tx, X, FlatBindings])
-              end
-      end, ok, Deletions).
+process_deletions(Deletions) ->
+    Serials = dict:fold(
+                fun (_XName, {X, Deleted, Bindings}, Acc) ->
+                        FlatBindings = lists:flatten(Bindings),
+                        pd_callback(transaction, X, Deleted, FlatBindings),
+                        dict:store(X, serial(X), Acc)
+                end, Deletions, dict:new()),
+    fun() ->
+            dict:fold(
+              fun (XName, {X, Deleted, Bindings}, ok) ->
+                      FlatBindings = lists:flatten(Bindings),
+                      Serial = dict:fetch(X, Serials),
+                      pd_callback(Serial, X, Deleted, FlatBindings),
+                      [rabbit_event:notify(binding_deleted, info(B)) ||
+                          B <- FlatBindings],
+                      case Deleted of
+                          deleted -> ok = rabbit_event:notify(
+                                            exchange_deleted, [{name, XName}]);
+                          _       -> ok
+                      end
+              end, Deletions, ok)
+    end.
+
+pd_callback(Arg, X, Deleted, Bindings) ->
+    ok = rabbit_exchange:callback(X, case Deleted of
+                                         not_deleted -> remove_bindings;
+                                         deleted     -> delete
+                                     end, [Arg, X, Bindings]).
+
+serial(X) ->
+    case rabbit_exchange:serialise_events(X) of
+        true  -> next_serial(X);
+        false -> none
+    end.
+
+next_serial(#exchange{name = Name}) ->
+    Serial = case mnesia:read(rabbit_exchange_serial, Name, write) of
+                 []                             -> 1;
+                 [#exchange_serial{serial = S}] -> S + 1
+             end,
+    mnesia:write(rabbit_exchange_serial,
+                 #exchange_serial{name = Name, serial = Serial}, write),
+    Serial.

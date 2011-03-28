@@ -22,7 +22,7 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         publish/2, delete/2]).
+         publish/2, delete/2, serialise_events/1]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
 
@@ -72,10 +72,10 @@
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
                               rabbit_types:error('in_use')).
+-spec(serialise_events/1:: (rabbit_types:exchange()) -> boolean()).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
-
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -131,6 +131,13 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
+              S = case Tx of
+                      true  -> transaction;
+                      false -> case serialise_events(Exchange) of
+                                   true  -> 0;
+                                   false -> none
+                               end
+                  end,
               ok = (type_to_module(Type)):create(Tx, Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
@@ -263,28 +270,36 @@ process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->
     {WorkList, SeenXs, [QName | QNames]}.
 
-call_with_exchange(XName, Fun, PrePostCommitFun) ->
-    rabbit_misc:execute_mnesia_transaction(
+call_with_exchange(XName, Fun) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> case mnesia:read({rabbit_exchange, XName}) of
-                    []  -> {error, not_found};
+                    []  -> rabbit_misc:const({error, not_found});
                     [X] -> Fun(X)
                 end
-      end, PrePostCommitFun).
+      end).
 
 delete(XName, IfUnused) ->
+    delete0(XName, case IfUnused of
+                       true  -> fun conditional_delete/1;
+                       false -> fun unconditional_delete/1
+                   end).
+
+delete0(XName, Fun) ->
     call_with_exchange(
       XName,
-      case IfUnused of
-          true  -> fun conditional_delete/1;
-          false -> fun unconditional_delete/1
-      end,
-      fun ({deleted, X, Bs, Deletions}, Tx) ->
-              ok = rabbit_binding:process_deletions(
-                     rabbit_binding:add_deletion(
-                       XName, {X, deleted, Bs}, Deletions), Tx);
-          (Error = {error, _InUseOrNotFound}, _Tx) ->
-              Error
+      fun (X) ->
+              case Fun(X) of
+                  {deleted, X, Bs, Deletions} ->
+                      rabbit_binding:process_deletions(
+                        rabbit_binding:add_deletion(
+                          XName, {X, deleted, Bs}, Deletions));
+                  {error, _InUseOrNotFound} = E ->
+                      rabbit_misc:const(E)
+              end
       end).
+
+serialise_events(#exchange{type = XType}) ->
+    apply(type_to_module(XType), serialise_events, []).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
@@ -303,6 +318,7 @@ conditional_delete(X = #exchange{name = XName}) ->
 unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_durable_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange, XName}),
+    ok = mnesia:delete({rabbit_exchange_serial, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 

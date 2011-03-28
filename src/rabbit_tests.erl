@@ -694,8 +694,8 @@ test_topic_matching() ->
 
 exchange_op_callback(X, Fun, ExtraArgs) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
-    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+      fun () -> rabbit_exchange:callback(X, Fun, [transaction, X] ++ ExtraArgs) end),
+    rabbit_exchange:callback(X, Fun, [none, X] ++ ExtraArgs).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
