@@ -280,12 +280,10 @@ call_with_exchange(XName, Fun) ->
       end).
 
 delete(XName, IfUnused) ->
-    delete0(XName, case IfUnused of
-                       true  -> fun conditional_delete/1;
-                       false -> fun unconditional_delete/1
-                   end).
-
-delete0(XName, Fun) ->
+    Fun = case IfUnused of
+              true  -> fun conditional_delete/1;
+              false -> fun unconditional_delete/1
+          end,
     call_with_exchange(
       XName,
       fun (X) ->
