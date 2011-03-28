@@ -445,11 +445,10 @@ serial(X) ->
     end.
 
 next_serial(#exchange{name = Name}) ->
-    Prev = case mnesia:read(rabbit_exchange_serial, Name, write) of
-               []                             -> 0;
-               [#exchange_serial{serial = S}] -> S
-           end,
-    Serial = Prev + 1,
+    Serial = case mnesia:read(rabbit_exchange_serial, Name, write) of
+                 []                             -> 1;
+                 [#exchange_serial{serial = S}] -> S + 1
+             end,
     mnesia:write(rabbit_exchange_serial,
                  #exchange_serial{name = Name, serial = Serial}, write),
     Serial.
