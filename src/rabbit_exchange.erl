@@ -22,9 +22,9 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         publish/2, delete/2, serialise_events/1]).
-%% this must be run inside a mnesia tx
--export([maybe_auto_delete/1]).
+         publish/2, delete/2]).
+%% these must be run inside a mnesia tx
+-export([maybe_auto_delete/1, serial/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -72,10 +72,11 @@
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
                               rabbit_types:error('in_use')).
--spec(serialise_events/1:: (rabbit_types:exchange()) -> boolean()).
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
+-spec(serial/1:: (rabbit_types:exchange()) -> 'none' | pos_integer()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -298,9 +299,6 @@ delete0(XName, Fun) ->
               end
       end).
 
-serialise_events(#exchange{type = XType}) ->
-    apply(type_to_module(XType), serialise_events, []).
-
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
 maybe_auto_delete(#exchange{auto_delete = true} = X) ->
@@ -321,6 +319,21 @@ unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_exchange_serial, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
+
+serial(#exchange{name = XName, type = XType}) ->
+    case (type_to_module(XType)):serialise_events() of
+        true  -> next_serial(XName);
+        false -> none
+    end.
+
+next_serial(XName) ->
+    Serial1 = case mnesia:read(rabbit_exchange_serial, XName, write) of
+                  []                                  -> 1;
+                  [#exchange_serial{serial = Serial}] -> Serial + 1
+              end,
+    mnesia:write(rabbit_exchange_serial,
+                 #exchange_serial{name = XName, serial = Serial1}, write),
+    Serial1.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->

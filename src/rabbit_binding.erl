@@ -133,7 +133,7 @@ add(Binding, InnerFun) ->
 add_notify(Src, Dst, B) ->
     ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:write/3),
     ok = rabbit_exchange:callback(Src, add_binding, [transaction, Src, B]),
-    Serial = serial(Src),
+    Serial = rabbit_exchange:serial(Src),
     fun () ->
             ok = rabbit_exchange:callback(Src, add_binding, [Serial, Src, B]),
             ok = rabbit_event:notify(binding_created, info(B))
@@ -410,7 +410,7 @@ process_deletions(Deletions) ->
                 fun (_XName, {X, Deleted, Bindings}, Acc) ->
                         FlatBindings = lists:flatten(Bindings),
                         pd_callback(transaction, X, Deleted, FlatBindings),
-                        dict:store(X, serial(X), Acc)
+                        dict:store(X, rabbit_exchange:serial(X), Acc)
                 end, Deletions, dict:new()),
     fun() ->
             dict:fold(
@@ -433,18 +433,3 @@ pd_callback(Arg, X, Deleted, Bindings) ->
                                          not_deleted -> remove_bindings;
                                          deleted     -> delete
                                      end, [Arg, X, Bindings]).
-
-serial(X) ->
-    case rabbit_exchange:serialise_events(X) of
-        true  -> next_serial(X);
-        false -> none
-    end.
-
-next_serial(#exchange{name = Name}) ->
-    Serial = case mnesia:read(rabbit_exchange_serial, Name, write) of
-                 []                             -> 1;
-                 [#exchange_serial{serial = S}] -> S + 1
-             end,
-    mnesia:write(rabbit_exchange_serial,
-                 #exchange_serial{name = Name, serial = Serial}, write),
-    Serial.
