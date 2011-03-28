@@ -406,33 +406,29 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      [Bindings1 | Bindings2]}.
 
 process_deletions(Deletions) ->
-    Serials = process_deletions(
-                fun (Deleted, X, Bindings, Acc) ->
-                        pd_callback(transaction, Deleted, X, Bindings),
+    Serials = dict:fold(
+                fun (_XName, {X, Deleted, Bindings}, Acc) ->
+                        FlatBindings = lists:flatten(Bindings),
+                        pd_callback(transaction, X, Deleted, FlatBindings),
                         dict:store(X, serial(X), Acc)
                 end, Deletions, dict:new()),
     fun() ->
-            process_deletions(
-              fun (Deleted, X, Bindings, Acc) ->
+            dict:fold(
+              fun (XName, {X, Deleted, Bindings}, ok) ->
+                      FlatBindings = lists:flatten(Bindings),
+                      Serial = dict:fetch(X, Serials),
+                      pd_callback(Serial, X, Deleted, FlatBindings),
                       [rabbit_event:notify(binding_deleted, info(B)) ||
-                          B <- Bindings],
-                      pd_callback(dict:fetch(X, Serials), Deleted, X, Bindings),
+                          B <- FlatBindings],
                       case Deleted of
-                          deleted -> rabbit_event:notify(
-                                       exchange_deleted,
-                                       [{name, X#exchange.name}]);
+                          deleted -> ok = rabbit_event:notify(
+                                            exchange_deleted, [{name, XName}]);
                           _       -> ok
-                      end,
-                      Acc
+                      end
               end, Deletions, ok)
     end.
 
-process_deletions(Fun, Deletions, Acc0) ->
-    dict:fold(fun (_XName, {X, Deleted, Bindings}, Acc) ->
-                      Fun(Deleted, X, lists:flatten(Bindings), Acc)
-              end, Acc0, Deletions).
-
-pd_callback(Arg, Deleted, X, Bindings) ->
+pd_callback(Arg, X, Deleted, Bindings) ->
     ok = rabbit_exchange:callback(X, case Deleted of
                                          not_deleted -> remove_bindings;
                                          deleted     -> delete
