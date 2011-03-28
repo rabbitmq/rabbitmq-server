@@ -113,8 +113,9 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
                   auto_delete = AutoDelete,
                   internal    = Internal,
                   arguments   = Args},
+    XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
-    ok = (type_to_module(Type)):validate(X),
+    ok = XT:validate(X),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:wread({rabbit_exchange, XName}) of
@@ -131,14 +132,13 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              S = case Tx of
-                      true  -> transaction;
-                      false -> case serialise_events(Exchange) of
-                                   true  -> 0;
-                                   false -> none
-                               end
-                  end,
-              ok = (type_to_module(Type)):create(Tx, Exchange),
+              ok = XT:create(case Tx of
+                                 true  -> transaction;
+                                 false -> case XT:serialise_events() of
+                                              true  -> 0;
+                                              false -> none
+                                          end
+                             end, Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
