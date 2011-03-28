@@ -410,35 +410,33 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
 
 process_deletions(Deletions, transaction) ->
     process_deletions(
-      fun (Mode, X, Bindings, Acc) ->
-              pd_callback(transaction, Mode, X, Bindings),
+      fun (Event, X, Bindings, Acc) ->
+              pd_callback(transaction, Event, X, Bindings),
               dict:store(X, serial(X), Acc)
       end,
-      Deletions, dict:new(), true);
+      Deletions, dict:new());
 
 process_deletions(Deletions, Serials) ->
     process_deletions(
-      fun (Mode, X, Bindings, Acc) ->
-              pd_callback(dict:fetch(X, Serials), Mode, X, Bindings),
-              case Mode of
+      fun (Event, X, Bindings, Acc) ->
+              [rabbit_event:notify(binding_deleted, info(B)) || B <- Bindings],
+              pd_callback(dict:fetch(X, Serials), Event, X, Bindings),
+              case Event of
                   delete -> rabbit_event:notify(exchange_deleted,
                                                 [{name, X#exchange.name}]);
                   _      -> ok
               end,
               Acc
       end,
-      Deletions, ok, false).
+      Deletions, ok).
 
-process_deletions(Fun, Deletions, Acc0, Tx) ->
+process_deletions(Fun, Deletions, Acc0) ->
     dict:fold(
       fun (_XName, {X, Deleted, Bindings}, Acc) ->
-              FlatBindings = lists:flatten(Bindings),
-              [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
-                  B <- FlatBindings],
-              case Deleted of
-                  not_deleted -> Fun(remove_bindings, X, FlatBindings, Acc);
-                  deleted     -> Fun(delete, X, FlatBindings, Acc)
-              end
+              Fun(case Deleted of
+                      not_deleted -> remove_bindings;
+                      deleted     -> delete
+                  end, X, lists:flatten(Bindings), Acc)
       end, Acc0, Deletions).
 
 pd_callback(Arg, CB, X, Bindings) ->
