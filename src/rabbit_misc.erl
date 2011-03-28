@@ -54,7 +54,7 @@
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([lock_file/1]).
--export([const_ok/1, const/1]).
+-export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 
@@ -191,7 +191,7 @@
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
--spec(const_ok/1 :: (any()) -> 'ok').
+-spec(const_ok/0 :: () -> 'ok').
 -spec(const/1 :: (A) -> const(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
@@ -409,13 +409,8 @@ execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
 execute_mnesia_tx_with_tail(TxFun) ->
     case mnesia:is_transaction() of
         true  -> execute_mnesia_transaction(TxFun);
-        false -> TailFun = execute_mnesia_transaction(
-                             fun () ->
-                                     TailFun1 = TxFun(),
-                                     TailFun1(true),
-                                     TailFun1
-                             end),
-                 TailFun(false)
+        false -> TailFun = execute_mnesia_transaction(TxFun),
+                 TailFun()
     end.
 
 ensure_ok(ok, _) -> ok;
@@ -847,8 +842,8 @@ lock_file(Path) ->
                  ok = file:close(Lock)
     end.
 
-const_ok(_) -> ok.
-const(X) -> fun (_) -> X end.
+const_ok() -> ok.
+const(X) -> fun () -> X end.
 
 %% Format IPv4-mapped IPv6 addresses as IPv4, since they're what we see
 %% when IPv6 is enabled but not used (i.e. 99% of the time).

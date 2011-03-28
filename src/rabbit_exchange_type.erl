@@ -21,6 +21,13 @@
 behaviour_info(callbacks) ->
     [
      {description, 0},
+
+     %% Should Rabbit ensure that all binding events that are
+     %% delivered to an individual exchange can be serialised? (they
+     %% might still be delivered out of order, but there'll be a
+     %% serial number).
+     {serialise_events, 0},
+
      {route, 2},
 
      %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
