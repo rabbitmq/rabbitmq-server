@@ -410,8 +410,7 @@ process_deletions(Deletions) ->
                 fun (Deleted, X, Bindings, Acc) ->
                         pd_callback(transaction, Deleted, X, Bindings),
                         dict:store(X, serial(X), Acc)
-                end,
-                Deletions, dict:new()),
+                end, Deletions, dict:new()),
     fun() ->
             process_deletions(
               fun (Deleted, X, Bindings, Acc) ->
@@ -425,15 +424,13 @@ process_deletions(Deletions) ->
                           _       -> ok
                       end,
                       Acc
-              end,
-              Deletions, ok)
+              end, Deletions, ok)
     end.
 
 process_deletions(Fun, Deletions, Acc0) ->
-    dict:fold(
-      fun (_XName, {X, Deleted, Bindings}, Acc) ->
-              Fun(Deleted, X, lists:flatten(Bindings), Acc)
-      end, Acc0, Deletions).
+    dict:fold(fun (_XName, {X, Deleted, Bindings}, Acc) ->
+                      Fun(Deleted, X, lists:flatten(Bindings), Acc)
+              end, Acc0, Deletions).
 
 pd_callback(Arg, Deleted, X, Bindings) ->
     ok = rabbit_exchange:callback(X, case Deleted of
