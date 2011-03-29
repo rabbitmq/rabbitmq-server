@@ -40,8 +40,8 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([read_term_file/1, write_term_file/2]).
--export([write_file/3, run_ok_monad/2]).
+-export([read_term_file/1, write_term_file/2, write_file/3]).
+-export([eval_ok_monad/2, exec_ok_monad/2, run_ok_monad/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
@@ -163,8 +163,10 @@
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
 -spec(write_file/3 :: (file:filename(), boolean(), binary()) -> ok_or_error()).
--spec(run_ok_monad/2 :: ([ok_monad_fun()], any()) ->
+-spec(eval_ok_monad/2 :: ([ok_monad_fun()], any()) ->
                              rabbit_types:ok_or_error(any())).
+-spec(exec_ok_monad/2 :: ([ok_monad_fun()], any()) -> any()).
+-spec(run_ok_monad/2 :: ([ok_monad_fun()], any()) -> any()).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
@@ -531,7 +533,7 @@ write_file(Path, Append, Binary) when is_binary(Binary) ->
                                       true  -> [read];
                                       false -> []
                                   end],
-    run_ok_monad(
+    eval_ok_monad(
       [fun (ok)  -> file:open(Path, Modes) end,
        fun (Hdl) -> run_ok_monad(
                       [fun (ok)   -> file:position(Hdl, eof) end,
@@ -540,17 +542,29 @@ write_file(Path, Append, Binary) when is_binary(Binary) ->
                        fun (_Pos) -> file:close(Hdl)         end], ok)
        end], ok).
 
-run_ok_monad([], _State) ->
-    ok;
+eval_ok_monad(Funs, State) ->
+    case run_ok_monad(Funs, State) of
+        {ok, _State1} -> ok;
+        Error         -> Error
+    end.
+
+exec_ok_monad(Funs, State) ->
+    case run_ok_monad(Funs, State) of
+        {ok, State1} -> State1;
+        Error        -> Error
+    end.
+
+run_ok_monad([], State) ->
+    {ok, State};
 run_ok_monad([Fun|Funs], State) ->
     {F, H} = case Fun of
                  {_F, _H} = Tuple -> Tuple;
-                 _                -> {Fun, fun (Err) -> Err end}
+                 _                -> {Fun, fun (Err) -> {error, Err} end}
              end,
     case F(State) of
         ok             -> run_ok_monad(Funs, State);
         {ok, State1}   -> run_ok_monad(Funs, State1);
-        {error, Error} -> {error, H(Error)}
+        {error, Error} -> H(Error)
     end.
 
 append_file(File, Suffix) ->
@@ -563,11 +577,11 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    run_ok_monad([fun (ok)  -> file:open([File, Suffix], [append]) end,
-                  fun (Hdl) -> file:close(Hdl) end], ok);
+    eval_ok_monad([fun (ok)  -> file:open([File, Suffix], [append]) end,
+                   fun (Hdl) -> file:close(Hdl) end], ok);
 append_file(File, _, Suffix) ->
-    run_ok_monad([fun (ok)   -> file:read_file(File) end,
-                  fun (Data) -> write_file(File ++ Suffix, true, Data) end],
+    eval_ok_monad([fun (ok)   -> file:read_file(File) end,
+                   fun (Data) -> write_file(File ++ Suffix, true, Data) end],
                  ok).
 
 ensure_parent_dirs_exist(Filename) ->
@@ -717,7 +731,7 @@ version_compare(A,  B) ->
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
 recursive_delete(Files) ->
-    run_ok_monad(
+    eval_ok_monad(
       [fun (ok) -> recursive_delete1(Path) end || Path <- Files], ok).
 
 recursive_delete1(Path) ->
@@ -729,11 +743,11 @@ recursive_delete1(Path) ->
                 {error, Err}    -> {error, {Path, Err}}
             end;
         true ->
-            ErrHdlr = fun (Err) -> {Path, Err} end,
-            run_ok_monad(
+            ErrHdlr = fun (Err) -> {error, {Path, Err}} end,
+            eval_ok_monad(
               [{fun (ok) -> file:list_dir(Path) end, ErrHdlr},
                fun (FileNames) ->
-                       run_ok_monad(
+                       eval_ok_monad(
                          [fun (ok) ->
                                   recursive_delete1(filename:join(Path, FileName))
                           end || FileName <- FileNames], ok)
@@ -748,12 +762,12 @@ recursive_copy(Src, Dest) ->
                      {error, enoent} -> ok; %% Path doesn't exist anyway
                      {error, Err}    -> {error, {Src, Dest, Err}}
                  end;
-        true  -> ErrHdlr = fun (Err) -> {Src, Dest, Err} end,
-                 run_ok_monad(
+        true  -> ErrHdlr = fun (Err) -> {error, {Src, Dest, Err}} end,
+                 eval_ok_monad(
                    [{fun (ok) -> file:list_dir(Src) end, ErrHdlr},
                     {fun (_FileNames) -> file:make_dir(Dest) end, ErrHdlr},
                     fun (FileNames) ->
-                            run_ok_monad(
+                            eval_ok_monad(
                               [fun (ok) ->
                                        recursive_copy(
                                          filename:join(Src, FileName),
