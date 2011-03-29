@@ -555,15 +555,12 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    case file:open([File, Suffix], [append]) of
-        {ok, Fd} -> file:close(Fd);
-        Error    -> Error
-    end;
+    run_ok_monad([fun (ok)  -> file:open([File, Suffix], [append]) end,
+                  fun (Hdl) -> file:close(Hdl) end], ok);
 append_file(File, _, Suffix) ->
-    case file:read_file(File) of
-        {ok, Data} -> write_file(File ++ Suffix, true, Data);
-        Error      -> Error
-    end.
+    run_ok_monad([fun (ok)   -> file:read_file(File) end,
+                  fun (Data) -> write_file(File ++ Suffix, true, Data) end],
+                 ok).
 
 ensure_parent_dirs_exist(Filename) ->
     case filelib:ensure_dir(Filename) of
