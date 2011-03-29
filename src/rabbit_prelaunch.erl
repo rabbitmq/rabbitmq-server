@@ -261,8 +261,8 @@ duplicate_node_check(NodeStr) ->
         {error, EpmdReason} ->
             Tip = case EpmdReason of
                       address ->
-                          io_lib:format("(Unable to connect to epmd on host " ++
-                                            "~p using tcp port 4369.)",
+                          io_lib:format("(Unable to connect to epmd on " ++
+                                            "host ~p.)",
                                         [NodeHost]);
                       nxdomain ->
                           io_lib:format("(Can't resolve host ~p.)",
