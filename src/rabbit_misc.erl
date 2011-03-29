@@ -63,7 +63,8 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1, const/1, ok_monad_fun/0]).
+-export_type([resource_name/0, thunk/1, const/1,
+              ok_monad_fun_tuple/0, ok_monad_fun/0, ok_monad_error_fun/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -77,8 +78,12 @@
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
+
+-type(ok_monad_fun_tuple() ::
+        ok_monad_fun() | {ok_monad_fun(), ok_monad_error_fun()}).
 -type(ok_monad_fun() ::
         fun((any()) -> 'ok' | rabbit_types:ok_or_error2(any(), any()))).
+-type(ok_monad_error_fun() :: fun((any()) -> any())).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -177,9 +182,10 @@
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
         -> boolean()).
 -spec(recursive_delete/1 ::
-        ([file:filename()]) -> rabbit_types:ok_or_error(any())).
--spec(recursive_copy/2 ::
-        (file:filename(), file:filename()) -> rabbit_types:ok_or_error(any())).
+        ([file:filename()])
+        -> rabbit_types:ok_or_error({file:filename(), any()})).
+-spec(recursive_copy/2 :: (file:filename(), file:filename())
+        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
@@ -537,10 +543,14 @@ write_file(Path, Append, Binary) when is_binary(Binary) ->
 run_ok_monad([], _State) ->
     ok;
 run_ok_monad([Fun|Funs], State) ->
-    case Fun(State) of
-        ok                    -> run_ok_monad(Funs, State);
-        {ok, State1}          -> run_ok_monad(Funs, State1);
-        {error, _Err} = Error -> Error
+    {F, H} = case Fun of
+                 {_F, _H} = Tuple -> Tuple;
+                 _                -> {Fun, fun (Err) -> Err end}
+             end,
+    case F(State) of
+        ok             -> run_ok_monad(Funs, State);
+        {ok, State1}   -> run_ok_monad(Funs, State1);
+        {error, Error} -> {error, H(Error)}
     end.
 
 append_file(File, Suffix) ->
@@ -719,15 +729,16 @@ recursive_delete1(Path) ->
                 {error, Err}    -> {error, {Path, Err}}
             end;
         true ->
+            ErrHdlr = fun (Err) -> {Path, Err} end,
             run_ok_monad(
-              [fun (ok) -> file:list_dir(Path) end,
+              [{fun (ok) -> file:list_dir(Path) end, ErrHdlr},
                fun (FileNames) ->
                        run_ok_monad(
                          [fun (ok) ->
                                   recursive_delete1(filename:join(Path, FileName))
                           end || FileName <- FileNames], ok)
                end,
-               fun (_FileNames) -> file:del_dir(Path) end], ok)
+               {fun (_FileNames) -> file:del_dir(Path) end, ErrHdlr}], ok)
     end.
 
 recursive_copy(Src, Dest) ->
@@ -737,9 +748,10 @@ recursive_copy(Src, Dest) ->
                      {error, enoent} -> ok; %% Path doesn't exist anyway
                      {error, Err}    -> {error, {Src, Dest, Err}}
                  end;
-        true  -> run_ok_monad(
-                   [fun (ok) -> file:list_dir(Src) end,
-                    fun (_FileNames) -> file:make_dir(Dest) end,
+        true  -> ErrHdlr = fun (Err) -> {Src, Dest, Err} end,
+                 run_ok_monad(
+                   [{fun (ok) -> file:list_dir(Src) end, ErrHdlr},
+                    {fun (_FileNames) -> file:make_dir(Dest) end, ErrHdlr},
                     fun (FileNames) ->
                             run_ok_monad(
                               [fun (ok) ->
