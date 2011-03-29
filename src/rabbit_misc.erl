@@ -66,7 +66,7 @@
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
--type(const(T) :: fun((any()) -> T)).
+-type(const(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()

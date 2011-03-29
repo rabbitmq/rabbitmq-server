@@ -139,8 +139,8 @@
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit() |
-                    fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
-                                        rabbit_types:connection_exit())).
+                    fun (() -> rabbit_types:ok_or_error('not_found') |
+                               rabbit_types:connection_exit())).
 -spec(run_backing_queue/2 ::
         (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(run_backing_queue_async/2 ::
