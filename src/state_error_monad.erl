@@ -27,7 +27,7 @@ eval(Funs, State) ->
 exec(Funs, State) ->
     case run(Funs, ok, State) of
         {error, _Err} = Error -> Error;
-        {_Result, State}      -> State
+        {_Result, State1}     -> State1
     end.
 
 run([], Result, State) ->
