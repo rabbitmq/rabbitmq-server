@@ -142,17 +142,18 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
-    case rabbit_registry:binary_to_type(TypeBin) of
-        {error, not_found} ->
+    case state_error_monad:run(
+           [fun (ok, nostate) -> rabbit_registry:binary_to_type(TypeBin) end,
+            fun (T,  nostate) -> {set_state, T} end,
+            fun (ok, T) -> rabbit_registry:lookup_module(exchange, T) end],
+           ok, nostate) of
+        {{ok, _Module}, T} -> T;
+        {error, {nostate, not_found}} ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
-        T ->
-            case rabbit_registry:lookup_module(exchange, T) of
-                {error, not_found} -> rabbit_misc:protocol_error(
-                                        command_invalid,
-                                        "invalid exchange type '~s'", [T]);
-                {ok, _Module}      -> T
-            end
+        {error, {T, not_found}} ->
+            rabbit_misc:protocol_error(
+              command_invalid, "invalid exchange type '~s'", [T])
     end.
 
 assert_equivalence(X = #exchange{ durable     = Durable,
