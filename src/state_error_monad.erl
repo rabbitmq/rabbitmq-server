@@ -36,6 +36,6 @@ run([Fun|Funs], Result, State) ->
     case Fun(Result, State) of
         {error, Err}        -> {error, {State, Err}};
         {set_state, State1} -> run(Funs, ok, State1);
-        {inject, Funs1}     -> run(Funs1 ++ Funs, ok, State);
+        {join, Funs1}       -> run(Funs1 ++ Funs, ok, State);
         Result1             -> run(Funs, Result1, State)
     end.
