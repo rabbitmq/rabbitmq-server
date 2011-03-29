@@ -90,11 +90,11 @@ behaviour_info(callbacks) ->
      %%
      %% It is legal for the same message id to appear in the results
      %% of multiple calls to drain_confirmed, which means that the
-     %% backing queue is not required to keep track of the which
-     %% messages it has already confirmed. The confirm will be issued
-     %% to the publisher the first time the message id appears in the
-     %% result of drain_confirmed. All subsequent appearances of that
-     %% message id will be ignored.
+     %% backing queue is not required to keep track of which messages
+     %% it has already confirmed. The confirm will be issued to the
+     %% publisher the first time the message id appears in the result
+     %% of drain_confirmed. All subsequent appearances of that message
+     %% id will be ignored.
      {drain_confirmed, 1},
 
      %% Drop messages from the head of the queue while the supplied
