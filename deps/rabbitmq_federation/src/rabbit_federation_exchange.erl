@@ -59,9 +59,9 @@ validate(X = #exchange{arguments = Args}) ->
 
 create(transaction, X) ->
     with_module(X, fun (M) -> M:create(transaction, X) end);
-create(Serial, X) ->
+create(none, X) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:create(serial(Serial, X), X) end).
+    with_module(X, fun (M) -> M:create(none, X) end).
 
 recover(X, Bs) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
@@ -69,10 +69,10 @@ recover(X, Bs) ->
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
-delete(Serial, X, Bs) ->
+delete(none, X, Bs) ->
     rabbit_federation_links:stop(X),
     ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:delete(serial(Serial, X), X, Bs) end).
+    with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
 add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
