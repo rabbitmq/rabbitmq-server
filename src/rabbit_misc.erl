@@ -41,6 +41,7 @@
 -export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
+-export([write_file/3, run_ok_monad/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
@@ -62,7 +63,7 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1, const/1]).
+-export_type([resource_name/0, thunk/1, const/1, ok_monad_fun/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -76,6 +77,8 @@
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
+-type(ok_monad_fun() ::
+        fun((any()) -> 'ok' | rabbit_types:ok_or_error2(any(), any()))).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -154,6 +157,9 @@
 -spec(read_term_file/1 ::
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
+-spec(write_file/3 :: (file:filename(), boolean(), binary()) -> ok_or_error()).
+-spec(run_ok_monad/2 :: ([ok_monad_fun()], any()) ->
+                             rabbit_types:ok_or_error(any())).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
@@ -513,8 +519,31 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
 read_term_file(File) -> file:consult(File).
 
 write_term_file(File, Terms) ->
-    file:write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
-                                             Term <- Terms])).
+    write_file(File, false, list_to_binary([io_lib:format("~w.~n", [Term]) ||
+                                               Term <- Terms])).
+
+write_file(Path, Append, Binary) when is_binary(Binary) ->
+    Modes = [binary, write, raw | case Append of
+                                      true  -> [read];
+                                      false -> []
+                                  end],
+    run_ok_monad(
+      [fun (ok)  -> file:open(Path, Modes) end,
+       fun (Hdl) -> run_ok_monad(
+                      [fun (ok)   -> file:position(Hdl, eof) end,
+                       fun (_Pos) -> file:write(Hdl, Binary) end,
+                       fun (_Pos) -> file:sync(Hdl)          end,
+                       fun (_Pos) -> file:close(Hdl)         end], ok)
+       end], ok).
+
+run_ok_monad([], _State) ->
+    ok;
+run_ok_monad([Fun|Funs], State) ->
+    case Fun(State) of
+        ok                    -> run_ok_monad(Funs, State);
+        {ok, State1}          -> run_ok_monad(Funs, State1);
+        {error, _Err} = Error -> Error
+    end.
 
 append_file(File, Suffix) ->
     case file:read_file_info(File) of
@@ -532,7 +561,7 @@ append_file(File, 0, Suffix) ->
     end;
 append_file(File, _, Suffix) ->
     case file:read_file(File) of
-        {ok, Data} -> file:write_file([File, Suffix], Data, [append]);
+        {ok, Data} -> write_file(File ++ Suffix, true, Data);
         Error      -> Error
     end.
 
