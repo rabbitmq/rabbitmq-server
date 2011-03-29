@@ -175,7 +175,7 @@ handle_call(connect, _From,
             server_misbehaved(self(), AmqpError),
             {reply, Error, after_connect(Params, State1)};
         {error, _} = Error ->
-            {stop, Error, Error, State0}
+            {stop, {shutdown, Error}, Error, State0}
     end;
 handle_call({command, Command}, From, State = #state{closing = Closing}) ->
     case Closing of false -> handle_command(Command, From, State);
@@ -258,7 +258,7 @@ handle_method(#'connection.close_ok'{}, State = #state{closing = Closing}) ->
     case Closing of #closing{from = none} -> ok;
                     #closing{from = From} -> gen_server:reply(From, ok)
     end,
-    {stop, closing_to_reason(Closing), State};
+    {stop, {shutdown, closing_to_reason(Closing)}, State};
 handle_method(Other, State) ->
     server_misbehaved_close(#amqp_error{name        = command_invalid,
                                         explanation = "unexpected method on "
