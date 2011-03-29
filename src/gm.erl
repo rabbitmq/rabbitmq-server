@@ -516,7 +516,8 @@ flush(Server) ->
 
 
 init([GroupName, Module, Args]) ->
-    random:seed(now()),
+    {MegaSecs, Secs, MicroSecs} = now(),
+    random:seed(MegaSecs, Secs, MicroSecs),
     gen_server2:cast(self(), join),
     Self = self(),
     {ok, #state { self             = Self,

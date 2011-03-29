@@ -35,7 +35,7 @@ with_state(Fun) ->
 
 inc() ->
     case 1 + get(count) of
-        100000 -> Now = os:timestamp(),
+        100000 -> Now = now(),
                   Start = put(ts, Now),
                   Diff = timer:now_diff(Now, Start),
                   Rate = 100000 / (Diff / 1000000),
@@ -48,7 +48,7 @@ joined([], Members) ->
     io:format("Joined ~p (~p members)~n", [self(), length(Members)]),
     put(state, dict:from_list([{Member, empty} || Member <- Members])),
     put(count, 0),
-    put(ts, os:timestamp()),
+    put(ts, now()),
     ok.
 
 members_changed([], Births, Deaths) ->
@@ -101,7 +101,8 @@ terminate([], Reason) ->
 spawn_member() ->
     spawn_link(
       fun () ->
-              random:seed(now()),
+              {MegaSecs, Secs, MicroSecs} = now(),
+              random:seed(MegaSecs, Secs, MicroSecs),
               %% start up delay of no more than 10 seconds
               timer:sleep(random:uniform(10000)),
               {ok, Pid} = gm:start_link(?MODULE, ?MODULE, []),

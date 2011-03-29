@@ -428,10 +428,18 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                                     {CMs, MTC0}
                             end
                     end, {gb_trees:empty(), MTC}, MsgIds),
-    gb_trees:map(fun(ChPid, MsgSeqNos) ->
-                         rabbit_channel:confirm(ChPid, MsgSeqNos)
-                 end, CMs),
+    gb_trees_foreach(fun(ChPid, MsgSeqNos) ->
+                             rabbit_channel:confirm(ChPid, MsgSeqNos)
+                     end, CMs),
     State#q{msg_id_to_channel = MTC1}.
+
+gb_trees_foreach(_, none) ->
+    ok;
+gb_trees_foreach(Fun, {Key, Val, It}) ->
+    Fun(Key, Val),
+    gb_trees_foreach(Fun, gb_trees:next(It));
+gb_trees_foreach(Fun, Tree) ->
+    gb_trees_foreach(Fun, gb_trees:next(gb_trees:iterator(Tree))).
 
 gb_trees_cons(Key, Value, Tree) ->
     case gb_trees:lookup(Key, Tree) of
