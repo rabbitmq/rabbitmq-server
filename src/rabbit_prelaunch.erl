@@ -259,17 +259,12 @@ duplicate_node_check(NodeStr) ->
                 false -> ok
             end;
         {error, EpmdReason} ->
-            Tip = case EpmdReason of
-                      address ->
-                          io_lib:format("(Unable to connect to epmd on "
-                                        "host ~p.)", [NodeHost]);
-                      nxdomain ->
-                          io_lib:format("(Can't resolve host ~p.)",
-                                        [NodeHost]);
-                      _ -> []
-                  end,
-            terminate("unexpected epmd error: ~p ~s~n",
-                      [EpmdReason, Tip])
+            terminate("epmd error for host ~p: ~p (~s)~n",
+                      [NodeHost, EpmdReason,
+                       case EpmdReason of
+                           address -> "unable to establish tcp connection";
+                           _       -> inet:format_error(EpmdReason)
+                       end])
     end.
 
 terminate(Fmt, Args) ->
