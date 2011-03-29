@@ -533,14 +533,14 @@ write_file(Path, Append, Binary) when is_binary(Binary) ->
                                       true  -> [read];
                                       false -> []
                                   end],
-    eval_ok_monad(
-      [fun (ok)  -> file:open(Path, Modes) end,
-       fun (Hdl) -> run_ok_monad(
-                      [fun (ok)   -> file:position(Hdl, eof) end,
-                       fun (_Pos) -> file:write(Hdl, Binary) end,
-                       fun (_Pos) -> file:sync(Hdl)          end,
-                       fun (_Pos) -> file:close(Hdl)         end], ok)
-       end], ok).
+    state_error_monad:eval(
+      [fun (ok,         nostate) -> file:open(Path, Modes)  end,
+       fun ({ok, Hdl},  nostate) -> {set_state, Hdl}        end,
+       fun (ok,         Hdl)     -> file:position(Hdl, eof) end,
+       fun ({ok, _Pos}, _Hdl)    -> ok                      end,
+       fun (ok,         Hdl)     -> file:write(Hdl, Binary) end,
+       fun (ok,         Hdl)     -> file:sync(Hdl)          end,
+       fun (ok,         Hdl)     -> file:close(Hdl)         end], nostate).
 
 eval_ok_monad(Funs, State) ->
     case run_ok_monad(Funs, State) of
@@ -577,12 +577,14 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    eval_ok_monad([fun (ok)  -> file:open([File, Suffix], [append]) end,
-                   fun (Hdl) -> file:close(Hdl) end], ok);
+    state_error_monad:eval(
+      [fun (ok,        nostate) -> file:open([File, Suffix], [append]) end,
+       fun ({ok, Hdl}, nostate) -> file:close(Hdl) end], nostate);
 append_file(File, _, Suffix) ->
-    eval_ok_monad([fun (ok)   -> file:read_file(File) end,
-                   fun (Data) -> write_file(File ++ Suffix, true, Data) end],
-                 ok).
+    state_error_monad:eval(
+      [fun (ok,         nostate) -> file:read_file(File) end,
+       fun ({ok, Data}, nostate) -> write_file(File ++ Suffix, true, Data) end],
+      nostate).
 
 ensure_parent_dirs_exist(Filename) ->
     case filelib:ensure_dir(Filename) of
@@ -731,29 +733,28 @@ version_compare(A,  B) ->
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
 recursive_delete(Files) ->
-    eval_ok_monad(
-      [fun (ok) -> recursive_delete1(Path) end || Path <- Files], ok).
+    state_error_monad:eval(
+      lists:append([recursive_delete1(Path) || Path <- Files]), nostate).
 
 recursive_delete1(Path) ->
-    case filelib:is_dir(Path) of
-        false ->
-            case file:delete(Path) of
-                ok              -> ok;
-                {error, enoent} -> ok; %% Path doesn't exist anyway
-                {error, Err}    -> {error, {Path, Err}}
-            end;
-        true ->
-            ErrHdlr = fun (Err) -> {error, {Path, Err}} end,
-            eval_ok_monad(
-              [{fun (ok) -> file:list_dir(Path) end, ErrHdlr},
-               fun (FileNames) ->
-                       eval_ok_monad(
-                         [fun (ok) ->
-                                  recursive_delete1(filename:join(Path, FileName))
-                          end || FileName <- FileNames], ok)
-               end,
-               {fun (_FileNames) -> file:del_dir(Path) end, ErrHdlr}], ok)
-    end.
+    [fun (ok,    _State) -> {set_state, Path} end,
+     fun (ok,    _Path)  -> filelib:is_dir(Path) end,
+     fun (false, _Path)  ->
+             case file:delete(Path) of
+                 ok               -> ok;
+                 {error, enoent}  -> ok; %% Path doesn't exist anyway
+                 {error, _} = Err -> Err
+             end;
+         (true,  _Path)  ->
+             {inject, [fun (ok, _Path) -> file:list_dir(Path) end,
+                       fun ({ok, FileNames}, _Path) ->
+                               {inject, lists:append(
+                                          [recursive_delete1(
+                                             filename:join(Path, FileName)) ||
+                                              FileName <- FileNames])}
+                       end,
+                       fun (ok, _Path) -> file:del_dir(Path) end]}
+     end].
 
 recursive_copy(Src, Dest) ->
     case filelib:is_dir(Src) of
