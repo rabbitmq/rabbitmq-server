@@ -24,7 +24,7 @@
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2, delete/2]).
 %% these must be run inside a mnesia tx
--export([maybe_auto_delete/1, serial/1]).
+-export([maybe_auto_delete/1, serial/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +75,8 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(serial/1:: (rabbit_types:exchange()) -> 'none' | pos_integer()).
+-spec(serial/2:: (rabbit_types:exchange(), 'exchange' | 'binding')
+                 -> 'none' | pos_integer()).
 
 -endif.
 
@@ -86,7 +87,7 @@
 recover() ->
     Xs = rabbit_misc:table_fold(
            fun (X, Acc) ->
-                   ok = mnesia:write(rabbit_exchange, X, write),
+                   write_exchange(X),
                    [X | Acc]
            end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
@@ -121,7 +122,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
       fun () ->
               case mnesia:wread({rabbit_exchange, XName}) of
                   [] ->
-                      ok = mnesia:write(rabbit_exchange, X, write),
+                      write_exchange(X),
                       ok = case Durable of
                                true  -> mnesia:write(rabbit_durable_exchange,
                                                      X, write);
@@ -135,10 +136,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
       fun ({new, Exchange}, Tx) ->
               ok = XT:create(case Tx of
                                  true  -> transaction;
-                                 false -> case XT:serialise_events() of
-                                              true  -> 0;
-                                              false -> none
-                                          end
+                                 false -> none
                              end, Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
@@ -147,6 +145,14 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
           (Err, _Tx) ->
               Err
       end).
+
+write_exchange(X = #exchange{name = Name, type = XT}) ->
+    ok = mnesia:write(rabbit_exchange, X, write),
+    case (type_to_module(XT)):serialise_events() of
+        true  -> S = #exchange_serial{name = Name, serial = 0},
+                 ok = mnesia:write(rabbit_exchange_serial, S, write);
+        false -> ok
+    end.
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
@@ -318,20 +324,22 @@ unconditional_delete(X = #exchange{name = XName}) ->
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 
-serial(#exchange{name = XName, type = XType}) ->
+serial(#exchange{}, exchange) ->
+    none;
+
+serial(#exchange{name = XName, type = XType}, binding) ->
     case (type_to_module(XType)):serialise_events() of
         true  -> next_serial(XName);
         false -> none
     end.
 
 next_serial(XName) ->
-    Serial1 = case mnesia:read(rabbit_exchange_serial, XName, write) of
-                  []                                  -> 1;
-                  [#exchange_serial{serial = Serial}] -> Serial + 1
-              end,
-    mnesia:write(rabbit_exchange_serial,
-                 #exchange_serial{name = XName, serial = Serial1}, write),
-    Serial1.
+    [#exchange_serial{serial = S}] =
+        mnesia:read(rabbit_exchange_serial, XName, write),
+    Serial = S + 1,
+    ok = mnesia:write(rabbit_exchange_serial,
+                      #exchange_serial{name = XName, serial = Serial}, write),
+    Serial.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->

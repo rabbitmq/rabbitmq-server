@@ -16,17 +16,18 @@
 
 -ifdef(use_specs).
 
--type(serial() :: pos_integer() | 'transaction' | 'none').
+-type(tx() :: 'transaction' | 'none').
+-type(serial() :: pos_integer() | tx()).
 
 -spec(description/0 :: () -> [{atom(), any()}]).
 -spec(serialise_events/0 :: () -> boolean()).
 -spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                  -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(create/2 :: (serial(), rabbit_types:exchange()) -> 'ok').
+-spec(create/2 :: (tx(), rabbit_types:exchange()) -> 'ok').
 -spec(recover/2 :: (rabbit_types:exchange(),
                     [rabbit_types:binding()]) -> 'ok').
--spec(delete/3 :: (serial(), rabbit_types:exchange(),
+-spec(delete/3 :: (tx(), rabbit_types:exchange(),
                    [rabbit_types:binding()]) -> 'ok').
 -spec(add_binding/3 :: (serial(), rabbit_types:exchange(),
                         rabbit_types:binding()) -> 'ok').

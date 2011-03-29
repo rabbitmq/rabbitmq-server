@@ -134,7 +134,7 @@ add(Binding, InnerFun) ->
 
 add_notify(X, B) ->
     ok = rabbit_exchange:callback(X, add_binding, [transaction, X, B]),
-    Serial = rabbit_exchange:serial(X),
+    Serial = rabbit_exchange:serial(X, binding),
     fun () ->
             ok = rabbit_exchange:callback(X, add_binding, [Serial, X, B]),
             ok = rabbit_event:notify(binding_created, info(B))
@@ -411,7 +411,11 @@ process_deletions(Deletions) ->
                 fun (XName, {X, Deleted, Bindings}, Acc) ->
                         FlatBindings = lists:flatten(Bindings),
                         pd_callback(transaction, X, Deleted, FlatBindings),
-                        dict:store(XName, rabbit_exchange:serial(X), Acc)
+                        dict:store(XName, rabbit_exchange:serial(
+                                            X, case Deleted of
+                                                   deleted     -> exchange;
+                                                   not_deleted -> binding
+                                               end), Acc)
                 end, dict:new(), Deletions),
     fun() ->
             dict:fold(
