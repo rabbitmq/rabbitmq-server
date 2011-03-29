@@ -746,14 +746,14 @@ recursive_delete1(Path) ->
                  {error, _} = Err -> Err
              end;
          (true,  _Path)  ->
-             {inject, [fun (ok, _Path) -> file:list_dir(Path) end,
-                       fun ({ok, FileNames}, _Path) ->
-                               {inject, lists:append(
-                                          [recursive_delete1(
-                                             filename:join(Path, FileName)) ||
-                                              FileName <- FileNames])}
-                       end,
-                       fun (ok, _Path) -> file:del_dir(Path) end]}
+             {join, [fun (ok, _Path) -> file:list_dir(Path) end,
+                     fun ({ok, FileNames}, _Path) ->
+                             {join, lists:append(
+                                      [recursive_delete1(
+                                         filename:join(Path, FileName)) ||
+                                          FileName <- FileNames])}
+                     end,
+                     fun (ok, _Path) -> file:del_dir(Path) end]}
      end].
 
 recursive_copy(Src, Dest) ->
