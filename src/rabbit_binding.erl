@@ -407,38 +407,28 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      [Bindings1 | Bindings2]}.
 
 process_deletions(Deletions) ->
-    Serials = dict:fold(
-                fun (XName, {X, Deleted, Bindings}, Acc) ->
-                        FlatBindings = lists:flatten(Bindings),
-                        pd_callback(transaction, X, Deleted, FlatBindings),
-                        case Deleted of
-                            deleted     -> Acc;
-                            not_deleted -> dict:store(XName,
-                                                      rabbit_exchange:serial(X),
-                                                      Acc)
-                        end
-                end, dict:new(), Deletions),
+    AugmentedDeletions =
+        dict:map(fun (_XName, {X, deleted, Bindings}) ->
+                         Bs = lists:flatten(Bindings),
+                         pd_callback(transaction, X, delete, Bs),
+                         {X, deleted, Bs, none};
+                     (_XName, {X, not_deleted, Bindings}) ->
+                         Bs = lists:flatten(Bindings),
+                         pd_callback(transaction, X, remove_bindings, Bs),
+                         {X, not_deleted, Bs, rabbit_exchange:serial(X)}
+                 end, Deletions),
     fun() ->
-            dict:fold(
-              fun (XName, {X, Deleted, Bindings}, ok) ->
-                      FlatBindings = lists:flatten(Bindings),
-                      Serial = case Deleted of
-                                   deleted     -> none;
-                                   not_deleted -> dict:fetch(XName, Serials)
-                               end,
-                      pd_callback(Serial, X, Deleted, FlatBindings),
-                      [rabbit_event:notify(binding_deleted, info(B)) ||
-                          B <- FlatBindings],
-                      case Deleted of
-                          deleted -> ok = rabbit_event:notify(
-                                            exchange_deleted, [{name, XName}]);
-                          _       -> ok
-                      end
-              end, ok, Deletions)
+            dict:fold(fun (XName, {X, deleted, Bs, Serial}, ok) ->
+                              ok = rabbit_event:notify(
+                                     exchange_deleted, [{name, XName}]),
+                              del_notify(Bs),
+                              pd_callback(Serial, X, delete, Bs);
+                          (_XName, {X, not_deleted, Bs, Serial}, ok) ->
+                              del_notify(Bs),
+                              pd_callback(Serial, X, remove_bindings, Bs)
+                      end, ok, AugmentedDeletions)
     end.
 
-pd_callback(Arg, X, Deleted, Bindings) ->
-    ok = rabbit_exchange:callback(X, case Deleted of
-                                         not_deleted -> remove_bindings;
-                                         deleted     -> delete
-                                     end, [Arg, X, Bindings]).
+del_notify(Bs) -> [rabbit_event:notify(binding_deleted, info(B)) || B <- Bs].
+
+pd_callback(Arg, X, F, Bs) -> ok = rabbit_exchange:callback(X, F, [Arg, X, Bs]).
