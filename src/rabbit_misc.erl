@@ -177,11 +177,9 @@
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
         -> boolean()).
 -spec(recursive_delete/1 ::
-        ([file:filename()])
-        -> rabbit_types:ok_or_error({file:filename(), any()})).
+        ([file:filename()]) -> rabbit_types:ok_or_error(any())).
 -spec(recursive_copy/2 ::
-        (file:filename(), file:filename())
-        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
+        (file:filename(), file:filename()) -> rabbit_types:ok_or_error(any())).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
@@ -739,24 +737,17 @@ recursive_copy(Src, Dest) ->
                      {error, enoent} -> ok; %% Path doesn't exist anyway
                      {error, Err}    -> {error, {Src, Dest, Err}}
                  end;
-        true  -> case file:list_dir(Src) of
-                     {ok, FileNames} ->
-                         case file:make_dir(Dest) of
-                             ok ->
-                                 lists:foldl(
-                                   fun (FileName, ok) ->
-                                           recursive_copy(
-                                             filename:join(Src, FileName),
-                                             filename:join(Dest, FileName));
-                                       (_FileName, Error) ->
-                                           Error
-                                   end, ok, FileNames);
-                             {error, Err} ->
-                                 {error, {Src, Dest, Err}}
-                         end;
-                     {error, Err} ->
-                         {error, {Src, Dest, Err}}
-                 end
+        true  -> run_ok_monad(
+                   [fun (ok) -> file:list_dir(Src) end,
+                    fun (_FileNames) -> file:make_dir(Dest) end,
+                    fun (FileNames) ->
+                            run_ok_monad(
+                              [fun (ok) ->
+                                       recursive_copy(
+                                         filename:join(Src, FileName),
+                                         filename:join(Dest, FileName))
+                               end || FileName <- FileNames], ok)
+                    end], ok)
     end.
 
 dict_cons(Key, Value, Dict) ->
