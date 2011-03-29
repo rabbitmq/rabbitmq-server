@@ -1444,11 +1444,13 @@ store_recovery_terms(Terms, Dir) ->
 
 read_recovery_terms(Dir) ->
     Path = filename:join(Dir, ?CLEAN_FILENAME),
-    ErrHdlr = fun (Error) -> {false, Error} end,
-    rabbit_misc:exec_ok_monad(
-      [{fun (ok) -> rabbit_misc:read_term_file(Path) end, ErrHdlr},
-       {fun (_Terms) -> file:delete(Path) end, ErrHdlr},
-       fun (Terms) -> {ok, {true, Terms}} end], ok).
+    case state_error_monad:exec(
+           [fun (ok, _Path) -> rabbit_misc:read_term_file(Path) end,
+            fun ({ok, Terms}, nostate) -> {set_state, Terms} end,
+            fun (ok, _Terms) -> file:delete(Path) end], Path) of
+        {error, Error} -> {false, Error};
+        Terms          -> {true,  Terms}
+    end.
 
 store_file_summary(Tid, Dir) ->
     ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
