@@ -16,7 +16,7 @@
 
 -module(rabbit_prelaunch).
 
--export([start/0, stop/0]).
+-export([start/0, stop/0, duplicate_node_check/1]).
 
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
@@ -258,8 +258,19 @@ duplicate_node_check(NodeStr) ->
                         terminate(?ERROR_CODE);
                 false -> ok
             end;
-        {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
-                                         [EpmdReason])
+        {error, EpmdReason} ->
+            Tip = case EpmdReason of
+                      address ->
+                          io_lib:format("(Unable to connect to epmd on host " ++
+                                            "~p using tcp port 4369.)",
+                                        [NodeHost]);
+                      nxdomain ->
+                          io_lib:format("(Can't resolve host ~p.)",
+                                        [NodeHost]);
+                      _ -> []
+                  end,
+            terminate("unexpected epmd error: ~p ~s~n",
+                      [EpmdReason, Tip])
     end.
 
 terminate(Fmt, Args) ->
