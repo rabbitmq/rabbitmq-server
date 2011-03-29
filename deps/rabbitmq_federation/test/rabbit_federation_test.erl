@@ -319,8 +319,8 @@ assert_bad(Args) ->
                     try
                         test_args(Ch, Args),
                         exit({exception_not_thrown, Args})
-                    catch exit:{{server_initiated_close, ?PRECONDITION_FAILED,
-                                 _}, _} ->
+                    catch exit:{{shutdown, {server_initiated_close,
+                                            ?PRECONDITION_FAILED, _}}, _} ->
                             ok
                     end
             end, []).

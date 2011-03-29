@@ -349,7 +349,7 @@ disposable_channel_call(Conn, Method) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
         amqp_channel:call(Ch, Method)
-    catch exit:{{server_initiated_close, _, _}, _} ->
+    catch exit:{{shutdown, {server_initiated_close, _, _}}, _} ->
             ok
     end,
     ensure_closed(Ch).
