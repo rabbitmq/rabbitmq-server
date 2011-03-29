@@ -1443,13 +1443,13 @@ store_recovery_terms(Terms, Dir) ->
     rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
 
 read_recovery_terms(Dir) ->
-    Path = filename:join(Dir, ?CLEAN_FILENAME),
     case state_error_monad:exec(
-           [fun (ok, _Path) -> rabbit_misc:read_term_file(Path) end,
-            fun ({ok, Terms}, nostate) -> {set_state, Terms} end,
-            fun (ok, _Terms) -> file:delete(Path) end], Path) of
+           [fun (ok, Path) -> rabbit_misc:read_term_file(Path) end,
+            fun ({ok, Terms}, Path) -> {set_state, {Path, Terms}} end,
+            fun (ok, {Path, _Terms}) -> file:delete(Path) end],
+           filename:join(Dir, ?CLEAN_FILENAME)) of
         {error, Error} -> {false, Error};
-        Terms          -> {true,  Terms}
+        {_Path, Terms} -> {true,  Terms}
     end.
 
 store_file_summary(Tid, Dir) ->
