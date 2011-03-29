@@ -709,37 +709,27 @@ version_compare(A,  B) ->
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
 recursive_delete(Files) ->
-    lists:foldl(fun (Path,  ok                   ) -> recursive_delete1(Path);
-                    (_Path, {error, _Err} = Error) -> Error
-                end, ok, Files).
+    run_ok_monad(
+      [fun (ok) -> recursive_delete1(Path) end || Path <- Files], ok).
 
 recursive_delete1(Path) ->
     case filelib:is_dir(Path) of
-        false -> case file:delete(Path) of
-                     ok              -> ok;
-                     {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, Err}    -> {error, {Path, Err}}
-                 end;
-        true  -> case file:list_dir(Path) of
-                     {ok, FileNames} ->
-                         case lists:foldl(
-                                fun (FileName, ok) ->
-                                        recursive_delete1(
-                                          filename:join(Path, FileName));
-                                    (_FileName, Error) ->
-                                        Error
-                                end, ok, FileNames) of
-                             ok ->
-                                 case file:del_dir(Path) of
-                                     ok           -> ok;
-                                     {error, Err} -> {error, {Path, Err}}
-                                 end;
-                             {error, _Err} = Error ->
-                                 Error
-                         end;
-                     {error, Err} ->
-                         {error, {Path, Err}}
-                 end
+        false ->
+            case file:delete(Path) of
+                ok              -> ok;
+                {error, enoent} -> ok; %% Path doesn't exist anyway
+                {error, Err}    -> {error, {Path, Err}}
+            end;
+        true ->
+            run_ok_monad(
+              [fun (ok) -> file:list_dir(Path) end,
+               fun (FileNames) ->
+                       run_ok_monad(
+                         [fun (ok) ->
+                                  recursive_delete1(filename:join(Path, FileName))
+                          end || FileName <- FileNames], ok)
+               end,
+               fun (_FileNames) -> file:del_dir(Path) end], ok)
     end.
 
 recursive_copy(Src, Dest) ->
