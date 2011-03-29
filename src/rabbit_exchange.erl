@@ -24,7 +24,7 @@
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2, delete/2]).
 %% these must be run inside a mnesia tx
--export([maybe_auto_delete/1, serial/2]).
+-export([maybe_auto_delete/1, serial/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -75,8 +75,7 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(serial/2:: (rabbit_types:exchange(), 'exchange' | 'binding')
-                 -> 'none' | pos_integer()).
+-spec(serial/1:: (rabbit_types:exchange()) -> 'none' | pos_integer()).
 
 -endif.
 
@@ -324,10 +323,7 @@ unconditional_delete(X = #exchange{name = XName}) ->
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 
-serial(#exchange{}, exchange) ->
-    none;
-
-serial(#exchange{name = XName, type = XType}, binding) ->
+serial(#exchange{name = XName, type = XType}) ->
     case (type_to_module(XType)):serialise_events() of
         true  -> next_serial(XName);
         false -> none
