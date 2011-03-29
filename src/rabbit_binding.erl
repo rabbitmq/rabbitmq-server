@@ -412,7 +412,7 @@ process_deletions(Deletions) ->
                         FlatBindings = lists:flatten(Bindings),
                         pd_callback(transaction, X, Deleted, FlatBindings),
                         dict:store(XName, rabbit_exchange:serial(X), Acc)
-                end, Deletions, dict:new()),
+                end, dict:new(), Deletions),
     fun() ->
             dict:fold(
               fun (XName, {X, Deleted, Bindings}, ok) ->
@@ -426,7 +426,7 @@ process_deletions(Deletions) ->
                                             exchange_deleted, [{name, XName}]);
                           _       -> ok
                       end
-              end, Deletions, ok)
+              end, ok, Deletions)
     end.
 
 pd_callback(Arg, X, Deleted, Bindings) ->
