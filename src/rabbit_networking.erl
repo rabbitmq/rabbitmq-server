@@ -361,34 +361,32 @@ port_to_listeners(Port) ->
 ipv6_status(TestPort) ->
     IPv4 = [inet,  {ip, {0,0,0,0}}],
     IPv6 = [inet6, {ip, {0,0,0,0,0,0,0,0}}],
-    case gen_tcp:listen(TestPort, IPv6) of
-        {ok, LSock6} ->
-            case gen_tcp:listen(TestPort, IPv4) of
-                {ok, LSock4} ->
-                    %% Dual stack
-                    gen_tcp:close(LSock6),
-                    gen_tcp:close(LSock4),
-                    dual_stack;
-                %% Checking the error here would only let us
-                %% distinguish single stack IPv6 / IPv4 vs IPv6 only,
-                %% which we figure out below anyway.
-                {error, _} ->
-                    gen_tcp:close(LSock6),
-                    case gen_tcp:listen(TestPort, IPv4) of
-                        %% Single stack
-                        {ok, LSock4}            -> gen_tcp:close(LSock4),
-                                                   single_stack;
-                        %% IPv6-only machine. Welcome to the future.
-                        {error, eafnosupport}   -> ipv6_only;
-                        %% Dual stack machine with something already
-                        %% on IPv4.
-                        {error, _}              -> ipv6_status(TestPort + 1)
-                    end
-            end;
-        {error, eafnosupport} ->
+    case state_error_monad:run(
+           [fun (ok, nostate) -> gen_tcp:listen(TestPort, IPv6) end,
+            fun ({ok, LSock6}, nostate) -> {set_state, LSock6} end,
+            fun (ok, _LSock6) -> gen_tcp:listen(TestPort, IPv4) end,
+            fun ({ok, LSock4}, LSock6) -> gen_tcp:close(LSock6), %% Dual stack
+                                          gen_tcp:close(LSock4),
+                                          dual_stack
+            end], ok, nostate) of
+        {error, {nostate, eafnosupport}} ->
             %% IPv4-only machine. Welcome to the 90s.
             ipv4_only;
-        {error, _} ->
+        {error, {nostate, _}} ->
             %% Port in use
-            ipv6_status(TestPort + 1)
+            ipv6_status(TestPort + 1);
+        {error, {LSock6, _}} ->
+            %% Checking the error here would only let us distinguish
+            %% single stack IPv6 / IPv4 vs IPv6 only, which we figure
+            %% out below anyway.
+            gen_tcp:close(LSock6),
+            case gen_tcp:listen(TestPort, IPv4) of
+                %% Single stack
+                {ok, LSock4}          -> gen_tcp:close(LSock4),
+                                         single_stack;
+                %% IPv6-only machine. Welcome to the future.
+                {error, eafnosupport} -> ipv6_only;
+                %% Dual stack machine with something already on IPv4.
+                {error, _}            -> ipv6_status(TestPort + 1)
+            end
     end.
