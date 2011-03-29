@@ -738,22 +738,22 @@ recursive_delete(Files) ->
 
 recursive_delete1(Path) ->
     [fun (ok,    _State) -> {set_state, Path} end,
-     fun (ok,    _Path)  -> filelib:is_dir(Path) end,
-     fun (false, _Path)  ->
-             case file:delete(Path) of
+     fun (ok,    Path1)  -> filelib:is_dir(Path1) end,
+     fun (false, Path1)  ->
+             case file:delete(Path1) of
                  ok               -> ok;
                  {error, enoent}  -> ok; %% Path doesn't exist anyway
                  {error, _} = Err -> Err
              end;
-         (true,  _Path)  ->
-             {join, [fun (ok, _Path) -> file:list_dir(Path) end,
-                     fun ({ok, FileNames}, _Path) ->
+         (true,  Path1)  ->
+             {join, [fun (ok, Path2) -> file:list_dir(Path2) end,
+                     fun ({ok, FileNames}, Path2) ->
                              {join, lists:append(
                                       [recursive_delete1(
-                                         filename:join(Path, FileName)) ||
+                                         filename:join(Path2, FileName)) ||
                                           FileName <- FileNames])}
                      end,
-                     fun (ok, _Path) -> file:del_dir(Path) end]}
+                     fun (ok, _OtherPath) -> file:del_dir(Path1) end]}
      end].
 
 recursive_copy(Src, Dest) ->
