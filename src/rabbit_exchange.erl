@@ -18,12 +18,13 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/6, lookup/1, lookup_or_die/1, list/1, info_keys/0,
-         info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
--export([callback/3]).
+-export([recover/0, callback/3, declare/6,
+         assert_equivalence/6, assert_args_equivalence/2, check_type/1,
+         lookup/1, lookup_or_die/1, list/1,
+         info_keys/0, info/1, info/2, info_all/1, info_all/2,
+         publish/2, delete/2]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
--export([assert_equivalence/6, assert_args_equivalence/2, check_type/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -33,8 +34,10 @@
 
 -type(name() :: rabbit_types:r('exchange')).
 -type(type() :: atom()).
+-type(fun_name() :: atom()).
 
 -spec(recover/0 :: () -> 'ok').
+-spec(callback/3:: (rabbit_types:exchange(), fun_name(), [any()]) -> 'ok').
 -spec(declare/6 ::
         (name(), type(), boolean(), boolean(), boolean(),
          rabbit_framing:amqp_table())
@@ -72,7 +75,6 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(callback/3:: (rabbit_types:exchange(), atom(), [any()]) -> 'ok').
 
 -endif.
 
@@ -101,6 +103,9 @@ recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
 recover_with_bindings([], [], []) ->
     ok.
 
+callback(#exchange{type = XType}, Fun, Args) ->
+    apply(type_to_module(XType), Fun, Args).
+
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = #exchange{name        = XName,
                   type        = Type,
@@ -126,7 +131,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              callback(Exchange, create, [Tx, Exchange]),
+              ok = (type_to_module(Type)):create(Tx, Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
@@ -134,11 +139,6 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
           (Err, _Tx) ->
               Err
       end).
-
-%% Used with atoms from records; e.g., the type is expected to exist.
-type_to_module(T) ->
-    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
-    Module.
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
@@ -294,9 +294,6 @@ maybe_auto_delete(#exchange{auto_delete = true} = X) ->
         {deleted, X, [], Deletions} -> {deleted, Deletions}
     end.
 
-callback(#exchange{type = XType}, Fun, Args) ->
-    apply(type_to_module(XType), Fun, Args).
-
 conditional_delete(X = #exchange{name = XName}) ->
     case rabbit_binding:has_for_source(XName) of
         false  -> unconditional_delete(X);
@@ -308,3 +305,8 @@ unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_exchange, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
+
+%% Used with atoms from records; e.g., the type is expected to exist.
+type_to_module(T) ->
+    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
+    Module.
