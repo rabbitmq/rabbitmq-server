@@ -757,25 +757,31 @@ recursive_delete1(Path) ->
      end].
 
 recursive_copy(Src, Dest) ->
-    case filelib:is_dir(Src) of
-        false -> case file:copy(Src, Dest) of
-                     {ok, _Bytes}    -> ok;
-                     {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, Err}    -> {error, {Src, Dest, Err}}
-                 end;
-        true  -> ErrHdlr = fun (Err) -> {error, {Src, Dest, Err}} end,
-                 eval_ok_monad(
-                   [{fun (ok) -> file:list_dir(Src) end, ErrHdlr},
-                    {fun (_FileNames) -> file:make_dir(Dest) end, ErrHdlr},
-                    fun (FileNames) ->
-                            eval_ok_monad(
-                              [fun (ok) ->
-                                       recursive_copy(
-                                         filename:join(Src, FileName),
-                                         filename:join(Dest, FileName))
-                               end || FileName <- FileNames], ok)
-                    end], ok)
-    end.
+    state_error_monad:eval(recursive_copy1(Src, Dest), nostate).
+
+recursive_copy1(Src, Dest) ->
+    [fun (ok, _State)        -> {set_state, {Src, Dest}} end,
+     fun (ok, {Src1, Dest1}) ->
+             case filelib:is_dir(Src1) of
+                 false ->
+                     case file:copy(Src1, Dest1) of
+                         {ok, _Bytes}     -> ok;
+                         {error, enoent}  -> ok; %% Path doesn't exist anyway
+                         {error, _} = Err -> Err
+                     end;
+                 true ->
+                     {join,
+                      [fun (ok, {_Src2, Dest2}) -> file:make_dir(Dest2) end,
+                       fun (ok, {Src2, _Dest2}) -> file:list_dir(Src2) end,
+                       fun ({ok, FileNames}, {Src2, Dest2}) ->
+                               {join, lists:append(
+                                        [recursive_copy1(
+                                           filename:join(Src2, FileName),
+                                           filename:join(Dest2, FileName)) ||
+                                            FileName <- FileNames])}
+                       end]}
+             end
+     end].
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
