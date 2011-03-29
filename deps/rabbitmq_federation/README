@@ -42,7 +42,9 @@ requiring clustering. This is useful for the following reasons:
 3) Brokers can contain federated and local-only components - you don't
    need to federate everything if you don't want to.
 
-4) Ultimately, greater scalability should be possible.
+4) Ultimately, greater scalability should be possible, since in future
+   more complex routing tompolgy will avoid the need for n^2 connections
+   between n brokers.
 
 For the time being, the plugin provides a federated exchange
 type. Other features might appear in the future. In particular this
@@ -150,7 +152,8 @@ virtual_host
 And can contain the following options:
 
 username
-  - user to connect as. Default is "guest".
+  - user to connect as. Default is "guest". The user will need the
+    ability to create and bind exchanges and queues.
 
 password
   - password to use. Default is "guest".
@@ -180,7 +183,9 @@ The ssl_options parameter specifies how to make client SSL
 connections. See the Erlang client documentation for more details.
 
 The local_username and local_password parameters specify how to
-connect to the local broker. The default for both is "guest".
+connect to the local broker. The default for both is "guest". This
+user will need the ability to publish messages to the downstream
+exchange.
 
 Declaring Federation Exchanges Over AMQP
 ========================================
