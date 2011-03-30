@@ -163,7 +163,7 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -298,7 +298,7 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]}));
+                             list_vhost_permissions, [VHost]})).
 
 %%----------------------------------------------------------------------------
 
