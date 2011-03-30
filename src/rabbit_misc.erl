@@ -404,7 +404,7 @@ execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
                        end), false).
 
 %% Like execute_mnesia_transaction/2, but TxFun is expected to return a
-%% TailFun which gets called immediately before and after the tx commit
+%% TailFun which gets called (only) immediately after the tx commit
 execute_mnesia_tx_with_tail(TxFun) ->
     case mnesia:is_transaction() of
         true  -> execute_mnesia_transaction(TxFun);
