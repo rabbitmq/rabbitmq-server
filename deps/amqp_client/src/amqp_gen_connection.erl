@@ -203,7 +203,7 @@ handle_cast(channels_terminated, State) ->
 handle_cast({hard_error_in_channel, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: channel (~p) received hard error ~p "
               "from server~n", [self(), Pid, Reason]),
-    {stop, Reason, State};
+    {stop, {shutdown, Reason}, State};
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p~n",
              [self(), Pid, Reason]),
