@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
+-export([start_link/2, open_channel/4, set_channel_max/2, is_empty/1,
          num_channels/1, pass_frame/3, signal_connection_closing/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -40,8 +40,9 @@
 start_link(Connection, ChSupSup) ->
     gen_server:start_link(?MODULE, [Connection, ChSupSup], []).
 
-open_channel(ChMgr, ProposedNumber, InfraArgs) ->
-    gen_server:call(ChMgr, {open_channel, ProposedNumber, InfraArgs}, infinity).
+open_channel(ChMgr, ProposedNumber, Consumer, InfraArgs) ->
+    gen_server:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
+                    infinity).
 
 set_channel_max(ChMgr, ChannelMax) ->
     gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
@@ -71,9 +72,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     State.
 
-handle_call({open_channel, ProposedNumber, InfraArgs}, _,
+handle_call({open_channel, ProposedNumber, Consumer, InfraArgs}, _,
             State = #state{closing = false}) ->
-    handle_open_channel(ProposedNumber, InfraArgs, State);
+    handle_open_channel(ProposedNumber, Consumer, InfraArgs, State);
 handle_call(is_empty, _, State) ->
     {reply, internal_is_empty(State), State};
 handle_call(num_channels, _, State) ->
@@ -93,13 +94,13 @@ handle_info({'DOWN', _, process, Pid, Reason}, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-handle_open_channel(ProposedNumber, InfraArgs,
+handle_open_channel(ProposedNumber, Consumer, InfraArgs,
                     State = #state{channel_sup_sup = ChSupSup}) ->
     case new_number(ProposedNumber, State) of
         {ok, Number} ->
             {ok, _ChSup, {Ch, AState}} =
                 amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
-                                                       Number),
+                                                       Number, Consumer),
             NewState = internal_register(Number, Ch, AState, State),
             erlang:monitor(process, Ch),
             {reply, {ok, Ch}, NewState};

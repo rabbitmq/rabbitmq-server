@@ -27,7 +27,7 @@
 
 -include("amqp_client.hrl").
 
--export([open_channel/1, open_channel/2]).
+-export([open_channel/1, open_channel/2, open_channel/3]).
 -export([start/1, start/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
@@ -108,7 +108,10 @@ start(Type, AmqpParams) ->
 %% @doc Invokes open_channel(ConnectionPid, none). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none).
+    open_channel(ConnectionPid, none, ?DEFAULT_CONSUMER).
+
+open_channel(ConnectionPid, {_ConsumerModule, _ConsumerArgs} = Consumer) ->
+    open_channel(ConnectionPid, none, Consumer);
 
 %% @spec (ConnectionPid, ChannelNumber) -> {ok, ChannelPid} | {error, Error}
 %% where
@@ -123,7 +126,11 @@ open_channel(ConnectionPid) ->
 %% value is 0.<br/>
 %% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber) ->
-    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber).
+    open_channel(ConnectionPid, ChannelNumber, ?DEFAULT_CONSUMER).
+
+open_channel(ConnectionPid, ChannelNumber,
+             {_ConsumerModule, _ConsumerArgs} = Consumer) ->
+    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber, Consumer).
 
 %% @spec (ConnectionPid) -> ok | Error
 %% where
