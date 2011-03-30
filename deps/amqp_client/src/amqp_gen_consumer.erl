@@ -29,11 +29,13 @@
 
 %% init: called when channel is started.
 %% handle_consume_ok: called on each basic.consume_ok
-%% handle_cancel_ok: called on each basic.cancel_ok
+%% handle_cancel_ok: called on each basic.cancel_ok (sent by the server)
+%% handle_cancel: called on each basic.cancel (sent by the server)
 %% handle_deliver: called on each basic.deliver
-%% handle_info: called on amqp_channel:send_to_consumer/2
+%% handle_message: called on amqp_channel:send_to_consumer/2
 %% terminate: called after channel has shut down
 
+%% @private
 behaviour_info(callbacks) ->
     [
      %% init(Args) -> {ok, InitialState}
@@ -42,14 +44,17 @@ behaviour_info(callbacks) ->
      %% handle_consume(#'basic.consume_ok'{}, State) -> {ok, NewState}
      {handle_consume_ok, 2},
 
-     %% handle_cancel(#'basic.cancel_ok'{}, State) -> {ok, NewState}
+     %% handle_cancel_ok(#'basic.cancel_ok'{}, State) -> {ok, NewState}
      {handle_cancel_ok, 2},
-     
+
+     %% handle_cancel(#'basic.cancel'{}, State) -> {ok, NewState}
+     {handle_cancel, 2},
+
      %% handle_deliver(#'basic.deliver', #amqp_msg{}, State} -> {ok, NewState}
      {handle_deliver, 3},
 
-     %% handle_info(Message, State) -> {ok, NewState}
-     {handle_info, 2},
+     %% handle_message(Message, State) -> {ok, NewState}
+     {handle_message, 2},
 
      %% terminate(Reason, State) -> _
      {terminate, 2}

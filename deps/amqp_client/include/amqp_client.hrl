@@ -23,7 +23,7 @@
 -define(PROTOCOL, rabbit_framing_amqp_0_9_1).
 
 -define(MAX_CHANNEL_NUMBER, 65535).
--define(DEFAULT_CONSUMER, {undefined, undefined}).
+-define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
