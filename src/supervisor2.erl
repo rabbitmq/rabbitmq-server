@@ -38,6 +38,10 @@
 %%    child is a supervisor and it exits normally (i.e. with reason of
 %%    'shutdown') then the child's parent also exits normally.
 %%
+%% 5) Added an exception to reporting: If a child has MaxR = 0 and it
+%%    terminates with reason {shutdown, _}, then supervisor2 behaves
+%%    as supervisor *except* it does not report anything to error_logger.
+%%
 %% All modifications are (C) 2010-2011 VMware, Inc.
 %%
 %% %CopyrightBegin%
@@ -542,8 +546,7 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
             {ok, state_del_child(Child, NState)}
     end;
 do_restart(permanent, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
-    restart(Child, State);
+    maybe_report_and_restart(Reason, Child, State);
 do_restart(intrinsic, normal, Child, State) ->
     {shutdown, state_del_child(Child, State)};
 do_restart(intrinsic, shutdown, Child = #child{child_type = supervisor},
@@ -557,12 +560,23 @@ do_restart(_, shutdown, Child, State) ->
     {ok, NState};
 do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
-    report_error(child_terminated, Reason, Child, State#state.name),
-    restart(Child, State);
+    maybe_report_and_restart(Reason, Child, State);
 do_restart(temporary, Reason, Child, State) ->
-    report_error(child_terminated, Reason, Child, State#state.name),
+    maybe_report(Reason, Child, State),
     NState = state_del_child(Child, State),
     {ok, NState}.
+
+maybe_report_and_restart({shutdown, _}, Child, State = #state{intensity = 0}) ->
+    {terminate, NState} = add_restart(State),
+    {shutdown, state_del_child(Child, NState)};
+maybe_report_and_restart(Reason, Child, State) ->
+    report_error(child_terminated, Reason, Child, State#state.name),
+    restart(Child, State).
+
+maybe_report({shutdown, _}, _Child, #state{intensity = 0}) ->
+    ok;
+maybe_report(Reason, Child, State) ->
+    report_error(child_terminated, Reason, Child, State#state.name).
 
 restart(Child, State) ->
     case add_restart(State) of
