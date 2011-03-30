@@ -1178,9 +1178,15 @@ test_server_status() ->
 
     passed.
 
-test_spawn(Receiver) ->
+test_writer(Pid) ->
+    receive
+        shutdown               -> ok;
+        {send_command, Method} -> Pid ! Method, test_writer(Pid)
+    end.
+
+test_spawn() ->
     Me = self(),
-    Writer = spawn(fun () -> Receiver(Me) end),
+    Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], self(),
@@ -1197,15 +1203,6 @@ user(Username) ->
           auth_backend = rabbit_auth_backend_internal,
           impl         = #internal_user{username = Username,
                                         is_admin = true}}.
-
-test_statistics_receiver(Pid) ->
-    receive
-        shutdown ->
-            ok;
-        {send_command, Method} ->
-            Pid ! Method,
-            test_statistics_receiver(Pid)
-    end.
 
 test_statistics_event_receiver(Pid) ->
     receive
@@ -1228,17 +1225,8 @@ test_statistics_receive_event1(Ch, Matcher) ->
     after 1000 -> throw(failed_to_receive_event)
     end.
 
-test_confirms_receiver(Pid) ->
-    receive
-        shutdown ->
-            ok;
-        {send_command, Method} ->
-            Pid ! Method,
-            test_confirms_receiver(Pid)
-    end.
-
 test_confirms() ->
-    {_Writer, Ch} = test_spawn(fun test_confirms_receiver/1),
+    {_Writer, Ch} = test_spawn(),
     DeclareBindDurableQueue =
         fun() ->
                 rabbit_channel:do(Ch, #'queue.declare'{durable = true}),
@@ -1311,7 +1299,7 @@ test_statistics() ->
     %% by far the most complex code though.
 
     %% Set up a channel and queue
-    {_Writer, Ch} = test_spawn(fun test_statistics_receiver/1),
+    {_Writer, Ch} = test_spawn(),
     rabbit_channel:do(Ch, #'queue.declare'{}),
     QName = receive #'queue.declare_ok'{queue = Q0} ->
                     Q0
@@ -1462,18 +1450,8 @@ test_delegates_sync(SecondaryNode) ->
 
     passed.
 
-test_queue_cleanup_receiver(Pid) ->
-    receive
-        shutdown ->
-            ok;
-        {send_command, Method} ->
-            Pid ! Method,
-            test_queue_cleanup_receiver(Pid)
-    end.
-
-
 test_queue_cleanup(_SecondaryNode) ->
-    {_Writer, Ch} = test_spawn(fun test_queue_cleanup_receiver/1),
+    {_Writer, Ch} = test_spawn(),
     rabbit_channel:do(Ch, #'queue.declare'{ queue = ?CLEANUP_QUEUE_NAME }),
     receive #'queue.declare_ok'{queue = ?CLEANUP_QUEUE_NAME} ->
             ok
